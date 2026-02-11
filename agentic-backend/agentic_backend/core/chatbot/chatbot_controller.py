@@ -48,7 +48,7 @@ from agentic_backend.application_context import (
     get_configuration,
     get_rebac_engine,
 )
-from agentic_backend.common.structures import AgentSettings, FrontendSettings
+from agentic_backend.common.structures import FrontendSettings
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
@@ -219,7 +219,7 @@ class FrontendConfigDTO(BaseModel):
 
 
 class CreateSessionPayload(BaseModel):
-    agent_name: Optional[str] = None
+    agent_id: Optional[str] = None
     title: Optional[str] = None
 
 
@@ -289,19 +289,6 @@ def get_user_permissions(
     Return a flat list of 'resource:action' strings the user is allowed to perform.:
     """
     return rbac_provider.list_permissions_for_user(current_user)
-
-
-@router.get(
-    "/chatbot/agenticflows",
-    description="Get the list of available agentic flows",
-    summary="Get the list of available agentic flows",
-)
-def get_agentic_flows(
-    user: KeycloakUser = Depends(get_current_user),
-    agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
-) -> List[AgentSettings]:
-    flows = agent_manager.get_agentic_flows()
-    return flows
 
 
 def _update_tokens_from_request(
@@ -413,7 +400,7 @@ async def websocket_chatbot_question(
             session_callback=ws_session_callback,
             session_id=payload.session_id,
             exchange_id=payload.exchange_id,
-            agent_name=payload.agent_name,
+            agent_id=payload.agent_id,
             resume_payload=payload.payload or {},
             runtime_context=runtime_context,
         )
@@ -440,7 +427,7 @@ async def websocket_chatbot_question(
             session_callback=ws_session_callback,
             session_id=payload.session_id,
             message=payload.message,
-            agent_name=payload.agent_name,
+            agent_id=payload.agent_id,
             runtime_context=runtime_context,
             client_exchange_id=payload.client_exchange_id,
         )
@@ -538,8 +525,8 @@ async def websocket_chatbot_question(
                     getattr(parsed, "exchange_id", None)
                     if hasattr(parsed, "exchange_id")
                     else None,
-                    getattr(parsed, "agent_name", None)
-                    if hasattr(parsed, "agent_name")
+                    getattr(parsed, "agent_id", None)
+                    if hasattr(parsed, "agent_id")
                     else None,
                     parsed.runtime_context is not None,
                 )
@@ -570,7 +557,7 @@ async def websocket_chatbot_question(
                 #             "[CHATBOT] Deep search ignored because RAG scope is general-only."
                 #         )
                 #     else:
-                #         base_settings = agent_manager.get_agent_settings(ask.agent_name)
+                #         base_settings = agent_manager.get_agent_settings(ask.agent_id)
                 #         delegate_to = (
                 #             base_settings.metadata.get("deep_search_delegate_to")
                 #             if base_settings and base_settings.metadata
@@ -578,16 +565,16 @@ async def websocket_chatbot_question(
                 #         )
                 #         if delegate_to:
                 #             if agent_manager.get_agent_settings(delegate_to):
-                #                 target_agent_name = delegate_to
+                #                 target_agent_id = delegate_to
                 #                 logger.info(
                 #                     "[CHATBOT] Deep search enabled; delegating %s request to %s.",
-                #                     ask.agent_name,
+                #                     ask.agent_id,
                 #                     delegate_to,
                 #                 )
                 #             else:
                 #                 logger.warning(
                 #                     "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
-                #                     ask.agent_name,
+                #                     ask.agent_id,
                 #                     delegate_to,
                 #                 )
 
@@ -706,13 +693,13 @@ async def create_session(
 ) -> SessionSchema:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
-            "[CHATBOT] create_session start user=%s agent_name=%s title=%s",
+            "[CHATBOT] create_session start user=%s agent_id=%s title=%s",
             user.uid,
-            payload.agent_name,
+            payload.agent_id,
             payload.title,
         )
     return await session_orchestrator.create_empty_session(
-        user=user, agent_name=payload.agent_name, title=payload.title
+        user=user, agent_id=payload.agent_id, title=payload.title
     )
 
 

@@ -31,7 +31,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 from fred_core import (
     BaseLogStore,
@@ -212,16 +212,6 @@ def get_temporal_client_provider() -> TemporalClientProvider:
     return get_app_context().get_temporal_client_provider()
 
 
-def get_enabled_agent_names() -> List[str]:
-    """
-    Retrieves a list of enabled agent names from the application context.
-
-    Returns:
-        List[str]: List of enabled agent names.
-    """
-    return get_app_context().get_enabled_agent_names()
-
-
 def get_app_context() -> "ApplicationContext":
     """
     Retrieves the global application context instance.
@@ -241,11 +231,8 @@ def get_default_model() -> BaseLanguageModel:
     """
     Retrieves the default AI model instance.
 
-    Args:
-        agent_name (str): The name of the agent.
-
     Returns:
-        BaseLanguageModel: The AI model configured for the agent.
+        BaseLanguageModel: The default AI model.
     """
     return get_app_context().get_default_model()
 
@@ -444,17 +431,6 @@ class ApplicationContext:
                 type(self._default_model_instance).__name__,
             )
         return self._default_model_instance
-
-    # --- Agent classes ---
-
-    def get_enabled_agent_names(self) -> List[str]:
-        """
-        Retrieves a list of enabled agent names from the configuration.
-
-        Returns:
-            List[str]: List of enabled agent names.
-        """
-        return [agent.name for agent in self.configuration.ai.agents if agent.enabled]
 
     def get_pg_async_engine(self):
         """
@@ -681,11 +657,12 @@ class ApplicationContext:
                 PostgresAgentStore,
             )
 
-            return PostgresAgentStore(
+            self._agent_store_instance = PostgresAgentStore(
                 engine=self.get_pg_async_engine(),
                 table_name=store_config.table,
                 prefix=store_config.prefix or "",
             )
+            return self._agent_store_instance
         else:
             raise ValueError(
                 f"Unsupported sessions storage backend {type(store_config)}"
@@ -850,7 +827,7 @@ class ApplicationContext:
         )
 
         # Agents
-        enabled_agents = [a.name for a in cfg.ai.agents if a.enabled]
+        enabled_agents = [a.id for a in cfg.ai.agents if a.enabled]
         logger.info(
             "  🤖 Agents enabled: %d%s",
             len(enabled_agents),

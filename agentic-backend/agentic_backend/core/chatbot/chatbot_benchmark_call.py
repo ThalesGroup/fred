@@ -181,7 +181,7 @@ async def handle_chatbot_baseline_websocket(
                     session_id = client_request.get("session_id")
                     if session_id is not None:
                         ask = ChatAskInput(
-                            agent_name=client_request.get("agent_name")
+                            agent_id=client_request.get("agent_id")
                             or "openai-baseline",
                             message=msg_value,
                             session_id=session_id,
@@ -216,7 +216,7 @@ async def handle_chatbot_baseline_websocket(
             with kpi.timer(
                 "app.phase_latency_ms",
                 dims={
-                    "agent_name": ask.agent_name or "baseline",
+                    "agent_id": ask.agent_id or "baseline",
                     "phase": "llm_invoke",
                 },
                 actor=KPIActor(type="system", user_id=None, groups=None),
@@ -283,7 +283,7 @@ async def handle_chatbot_baseline_websocket(
         session = SessionSchema(
             id=session_id,
             user_id=user.uid,
-            agent_name=ask.agent_name or "openai-baseline",
+            agent_id=ask.agent_id or "openai-baseline",
             title=ask.message[:80] or "openai-baseline",
             updated_at=datetime.utcnow(),
             next_rank=assistant_message.rank + 1,

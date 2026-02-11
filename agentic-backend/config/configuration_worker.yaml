@@ -108,15 +108,18 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - name: "OpsWorker"
+    - id: "OpsWorker"
+      name: "OpsWorker"
       type: "agent"
       class_path: "agentic_backend.academy.08_business_workflow.business_ops_worker.OpsWorker"
       enabled: true
-    - name: "SalesWorker"
+    - id: "SalesWorker"
+      name: "SalesWorker"
       type: "agent"
       class_path: "agentic_backend.academy.08_business_workflow.business_sales_worker.SalesWorker"
       enabled: true
-    - name: "Georges"
+    - id: "Georges"
+      name: "Georges"
       type: "agent"
       class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
       enabled: true

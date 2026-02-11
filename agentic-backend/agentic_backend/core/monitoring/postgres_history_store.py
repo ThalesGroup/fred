@@ -312,7 +312,7 @@ class PostgresHistoryStore(BaseHistoryStore):
             "exchange_id": msg.exchange_id,
             "rank": msg.rank,
             "metadata.model": None,
-            "metadata.agent_name": None,
+            "metadata.agent_id": None,
             "metadata.finish_reason": None,
             "metadata.token_usage.input_tokens": None,
             "metadata.token_usage.output_tokens": None,
@@ -321,7 +321,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         md = msg.metadata or None
         if md:
             out["metadata.model"] = md.model
-            out["metadata.agent_name"] = md.agent_name
+            out["metadata.agent_id"] = md.agent_id
             out["metadata.finish_reason"] = getattr(md, "finish_reason", None)
             tu: Optional[ChatTokenUsage] = getattr(md, "token_usage", None)
             if tu:

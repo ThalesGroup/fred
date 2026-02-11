@@ -17,11 +17,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { usePermissions } from "../../security/usePermissions";
 import {
   FieldSpec,
   McpServerRef,
-  useDeleteAgentAgenticV1AgentsNameDeleteMutation,
+  useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { TagsInput } from "./AgentTagsInput";
@@ -40,17 +39,18 @@ type TopLevelTuningState = {
 type Props = {
   open: boolean;
   agent: AnyAgent | null;
+  canDelete?: boolean;
+
   onClose: () => void;
   onSaved?: () => void;
   onDeleted?: () => void;
 };
-export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Props) {
+export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDeleted }: Props) {
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const { can } = usePermissions();
-  const canDeleteAgents = can("agents", "delete");
-  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsNameDeleteMutation();
+
+  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation();
   // State for dynamic fields
   const [fields, setFields] = useState<FieldSpec[]>([]);
   // State for top-level Tuning properties
@@ -77,9 +77,8 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
       });
       const normalizedRefs =
         (agent.tuning.mcp_servers ?? []).map((ref) => ({
-          // Backend serializes as {id: "..."}; OpenAPI type uses {name: "..."}.
-          name: (ref as any).name ?? (ref as any).id,
-          require_tools: (ref as any).require_tools ?? [],
+          id: ref.id,
+          require_tools: ref.require_tools ?? [],
         })) ?? [];
       setMcpServerRefs(normalizedRefs);
     } else {
@@ -109,7 +108,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
     }));
   };
 
-  const handleSave = async (isGlobal: boolean) => {
+  const handleSave = async () => {
     if (!agent) return;
 
     // 1. Construct the new AgentTuning object by merging all parts
@@ -125,9 +124,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
       mcp_servers: mcpServerRefs,
     };
 
-    console.log("Saving agent tuning", newTuning, "with global scope:", isGlobal);
-
-    await updateTuning(agent, newTuning, isGlobal);
+    await updateTuning(agent, newTuning);
     onSaved?.();
     onClose();
   };
@@ -141,7 +138,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
       message: t("agentHub.confirmDeleteMessage"),
       onConfirm: async () => {
         try {
-          await triggerDeleteAgent({ name: agent.name }).unwrap();
+          await triggerDeleteAgent({ agentId: agent.id }).unwrap();
           onDeleted?.();
           onClose();
         } catch (err) {
@@ -245,7 +242,7 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
               color="error"
               startIcon={<DeleteIcon />}
               onClick={handleDelete}
-              disabled={!canDeleteAgents}
+              disabled={!canDelete}
             >
               {t("common.delete")}
             </Button>
@@ -257,18 +254,9 @@ export function AgentEditDrawer({ open, agent, onClose, onSaved, onDeleted }: Pr
             <Button
               variant="contained"
               disabled={isSaveDisabled}
-              onClick={() => handleSave(false)} // Pass false for user-specific
+              onClick={handleSave}
             >
-              {t("agentEditDrawer.saveUser")}
-            </Button>
-
-            <Button
-              variant="contained"
-              color="secondary" // Use a different color to highlight global scope
-              disabled={isSaveDisabled}
-              onClick={() => handleSave(true)} // Pass true for global scope
-            >
-              {t("agentEditDrawer.saveGlobal")}
+              {t("common.save")}
             </Button>
           </Stack>
         </Box>

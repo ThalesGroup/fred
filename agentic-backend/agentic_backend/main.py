@@ -113,6 +113,7 @@ def create_app() -> FastAPI:
             session_store=get_session_store(),
             attachments_store=application_context.get_session_attachment_store(),
             agent_factory=agent_factory,
+            agent_manager=agent_manager,
             history_store=application_context.get_history_store(),
             kpi=application_context.get_kpi_writer(),
         )
@@ -173,6 +174,8 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
+    agent_controller.register_exception_handlers(app)
+
     allowed_origins = list(
         {_norm_origin(o) for o in configuration.security.authorized_origins}
     )

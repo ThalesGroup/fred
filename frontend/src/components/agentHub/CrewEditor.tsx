@@ -44,14 +44,14 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
 
   const crew = leader?.crew || [];
   const candidates = useMemo(
-    () => allAgents.filter((a) => a.type === "agent" && !crew.includes(a.name)).map((a) => a.name),
+    () => allAgents.filter((a) => a.type === "agent" && !crew.includes(a.id)).map((a) => a.id),
     [allAgents, crew],
   );
 
   const removeMember = async (name: string) => {
     if (!leader) return;
     const next = crew.filter((n) => n !== name);
-    await updateLeaderCrew(leader, next, true); // FIXME Mark as global update for now
+    await updateLeaderCrew(leader, next);
     onSaved?.();
     onClose(); // Close after removing a member
   };
@@ -59,7 +59,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
   const addMember = async () => {
     if (!leader || !newMember) return;
     const next = Array.from(new Set([...crew, newMember]));
-    await updateLeaderCrew(leader, next, true); // FIXME Mark as global update for now
+    await updateLeaderCrew(leader, next);
     setNewMember("");
     onSaved?.();
     onClose(); // Close after adding a member
@@ -67,7 +67,7 @@ export function CrewEditor({ open, leader, allAgents, onClose, onSaved }: Props)
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Crew for {leader?.name}</DialogTitle>
+      <DialogTitle>Crew for {leader?.id}</DialogTitle>
       <DialogContent>
         <Typography variant="subtitle2">Current members</Typography>
         <Stack direction="row" flexWrap="wrap" gap={1} sx={{ my: 1 }}>

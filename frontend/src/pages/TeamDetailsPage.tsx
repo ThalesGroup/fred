@@ -2,16 +2,18 @@ import { Avatar, Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
+import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { capitalize } from "../utils/capitalize";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
-  // todo: uncomment when we add agent tab back
-  // const { agentsNicknamePlural } = useFrontendProperties();
+  const { agentsNicknamePlural } = useFrontendProperties();
 
   const { teamId } = useParams<{ teamId: string }>();
   const { data: team, isLoading } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery(
@@ -38,12 +40,11 @@ export function TeamDetailsPage() {
   };
 
   const tabs: TabConfig[] = [
-    // todo: add back when this tabs are ready:
-    // {
-    //   label: capitalize(agentsNicknamePlural || "..."),
-    //   path: `/team/${teamId}/${agentsNicknamePlural}`,
-    //   component: <TeamAgentHub />,
-    // },
+    {
+      label: capitalize(agentsNicknamePlural || "..."),
+      path: `/team/${teamId}/${agentsNicknamePlural}`,
+      component: <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />,
+    },
     {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,

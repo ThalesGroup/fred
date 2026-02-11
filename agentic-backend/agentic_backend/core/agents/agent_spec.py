@@ -17,7 +17,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 FieldType = Literal[
     "string",
@@ -118,14 +118,9 @@ class MCPServerRef(BaseModel):
     - Resolution (URL/transport/env) is done at runtime per env/tenant/user.
     """
 
-    model_config = ConfigDict(
-        validate_by_name=True,
-        validate_by_alias=True,
-    )
-
     id: str = Field(
-        ..., alias="name", serialization_alias="id"
-    )  # Accept "name" when deserializing for backward compatibility but always serialize as "id"
+        ..., validation_alias=AliasChoices("id", "name")
+    )  # Accept both "id" and "name" on input for backward compatibility; always serializes as "id"
     require_tools: list[str] = []  # optional: "os.*", "kpi.*" capabilities
 
 

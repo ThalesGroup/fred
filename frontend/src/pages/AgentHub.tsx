@@ -15,14 +15,13 @@
 import { Box, Fade } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePermissions } from "../security/usePermissions";
 
 import { TopBar } from "../common/TopBar";
 import { AgentGridManager } from "../components/agentHub/AgentGridManager";
 
 // OpenAPI
 import {
-  useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
+  useLazyListAgentsAgenticV1AgentsGetQuery,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
 } from "../slices/agentic/agenticOpenApi";
 
@@ -39,17 +38,12 @@ export const AgentHub = () => {
   const [agents, setAgents] = useState<AnyAgent[]>([]);
   const [showElements, setShowElements] = useState(false);
 
-  const [triggerGetFlows, { isLoading }] = useLazyGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const [triggerGetFlows, { isLoading }] = useLazyListAgentsAgenticV1AgentsGetQuery();
   const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
-
-  // RBAC utils
-  const { can } = usePermissions();
-  const canEditAgents = can("agents", "update");
-  const canCreateAgents = can("agents", "create");
 
   const fetchAgents = async () => {
     try {
-      const flows = (await triggerGetFlows().unwrap()) as unknown as AnyAgent[];
+      const flows = (await triggerGetFlows({ ownerFilter: "personal" }).unwrap()) as unknown as AnyAgent[];
       setAgents(flows);
     } catch (err) {
       console.error("Error fetching agents:", err);
@@ -108,14 +102,15 @@ export const AgentHub = () => {
             <AgentGridManager
               agents={agents}
               isLoading={isLoading}
-              canEdit={canEditAgents}
-              canCreate={canCreateAgents}
-              canDelete={canEditAgents}
               onRefetchAgents={fetchAgents}
               showRestoreButton={true}
               onRestore={handleRestore}
               isRestoring={isRestoring}
               showA2ACard={true}
+              // For now, all users can manager their personal agents
+              canEdit={true}
+              canCreate={true}
+              canDelete={true}
             />
           </Box>
         </Fade>

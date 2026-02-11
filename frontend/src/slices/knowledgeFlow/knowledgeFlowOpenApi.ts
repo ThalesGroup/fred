@@ -2366,6 +2366,7 @@ export type TeamPermission =
   | "can_read"
   | "can_update_info"
   | "can_update_resources"
+  | "can_update_agents"
   | "can_read_members"
   | "can_administer_members"
   | "can_administer_managers"

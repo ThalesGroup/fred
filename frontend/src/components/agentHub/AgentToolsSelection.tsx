@@ -21,7 +21,7 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
       refetchOnFocus: true,
       refetchOnReconnect: true,
     });
-  const refIds = new Set(mcpServerRefs.map((ref) => (ref as any).name ?? (ref as any).id));
+  const refIds = new Set(mcpServerRefs.map((ref) => ref.id));
 
   if (isFetchingMcpServers) {
     return <div>Loading tools...</div>;
@@ -48,11 +48,11 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
               selected={refIds.has(conf.id)}
               onSelectedChange={(selected) => {
                 if (selected) {
-                  onMcpServerRefsChange([...mcpServerRefs, { name: conf.id }]);
+                  onMcpServerRefsChange([...mcpServerRefs, { id: conf.id }]);
                 } else {
                   onMcpServerRefsChange(
                     mcpServerRefs.filter((ref) => {
-                      const refId = (ref as any).name ?? (ref as any).id;
+                      const refId = ref.id;
                       return refId !== conf.id;
                     }),
                   );

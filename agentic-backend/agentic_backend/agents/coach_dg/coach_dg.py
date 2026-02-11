@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 TUNING = AgentTuning(
     role="Sparring Partner",
     description="An executive-level sparring partner for employees ",
-    mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-mcp-text")],
+    mcp_servers=[MCPServerRef(id="mcp-knowledge-flow-mcp-text")],
     tags=[],
     fields=[
         FieldSpec(

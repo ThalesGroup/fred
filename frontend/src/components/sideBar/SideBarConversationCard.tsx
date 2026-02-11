@@ -93,7 +93,7 @@ export function SideBarConversationCard({ session, refetchSessions }: SideBarCon
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               <PersonIcon sx={{ fontSize: "1rem", color: theme.palette.primary.main }} />
               <Typography variant="caption" sx={{ color: theme.palette.primary.main }}>
-                {session.agents.length > 0 ? session.agents[0] : "..."}
+                {session.agents.length > 0 ? session.agents[0].name || "?" : "..."}
               </Typography>
             </Box>
             <Typography variant="caption" color="textDisabled">

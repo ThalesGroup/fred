@@ -18,8 +18,8 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel
 
@@ -28,16 +28,55 @@ from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
     AgentSettings,
 )
-from agentic_backend.common.utils import log_exception
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
     AgentUpdatesDisabled,
 )
-from agentic_backend.core.agents.agent_service import AgentService
+from agentic_backend.core.agents.agent_service import (
+    AgentService,
+    MissingTeamIdError,
+    OwnerFilter,
+)
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
+
+
+def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(MissingTeamIdError)
+    async def missing_team_id_handler(
+        request: Request, exc: MissingTeamIdError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(AgentAlreadyExistsException)
+    async def agent_already_exists_handler(
+        request: Request, exc: AgentAlreadyExistsException
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(MCPClientConnectionException)
+    async def mcp_client_connection_handler(
+        request: Request, exc: MCPClientConnectionException
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=502, content={"detail": f"MCP connection failed: {exc.reason}"}
+        )
+
+    @app.exception_handler(MCPConnectionError)
+    async def mcp_connection_error_handler(
+        request: Request, exc: MCPConnectionError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=502, content={"detail": f"MCP connection failed: {exc.reason}"}
+        )
+
+    @app.exception_handler(AgentUpdatesDisabled)
+    async def agent_updates_disabled_handler(
+        request: Request, exc: AgentUpdatesDisabled
+    ) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -50,18 +89,6 @@ def get_mcp_manager(request: Request) -> McpServerManager:
     if manager is None:
         raise HTTPException(status_code=500, detail="MCP manager not initialized")
     return manager
-
-
-def handle_exception(e: Exception) -> HTTPException | Exception:
-    if isinstance(e, AgentAlreadyExistsException):
-        return HTTPException(status_code=409, detail=str(e))
-    if isinstance(e, MCPClientConnectionException) or isinstance(e, MCPConnectionError):
-        return HTTPException(
-            status_code=502, detail=f"MCP connection failed: {e.reason}"
-        )
-    if isinstance(e, AgentUpdatesDisabled):
-        return HTTPException(status_code=403, detail=str(e))
-    return HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @dataclass
@@ -125,8 +152,26 @@ router = APIRouter(tags=["Agents"])
 class CreateAgentRequest(BaseModel):
     name: str
     type: str = "basic"
+    team_id: str | None = None
     a2a_base_url: str | None = None
     a2a_token: str | None = None
+
+
+@router.get(
+    "/agents",
+    summary="Get the list of available agents",
+    response_model=list[AgentSettings],
+)
+async def list_agents(
+    owner_filter: Optional[OwnerFilter] = None,
+    team_id: Optional[str] = None,
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> list[AgentSettings]:
+    service = AgentService(agent_manager=agent_manager)
+    return await service.list_agents(
+        user=user, owner_filter=owner_filter, team_id=team_id
+    )
 
 
 @router.post(
@@ -138,53 +183,42 @@ async def create_agent(
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
-    try:
-        service = AgentService(agent_manager=agent_manager)
-        await service.create_agent(
-            user,
-            request.name,
-            agent_type=request.type,
-            a2a_base_url=request.a2a_base_url,
-            a2a_token=request.a2a_token,
-        )
-    except Exception as e:
-        log_exception(e)
-        raise handle_exception(e)
+    service = AgentService(agent_manager=agent_manager)
+    await service.create_agent(
+        user,
+        request.name,
+        agent_type=request.type,
+        team_id=request.team_id,
+        a2a_base_url=request.a2a_base_url,
+        a2a_token=request.a2a_token,
+    )
 
 
 @router.put(
     "/agents/update",
-    summary="Update an agent. Only the tuning part is upfatable",
+    summary="Update an agent. Only the tuning part is updatable",
 )
 async def update_agent(
     agent_settings: AgentSettings,
-    is_global: bool = False,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
-    try:
-        service = AgentService(agent_manager=agent_manager)
-        return await service.update_agent(user, agent_settings, is_global=is_global)
-    except Exception as e:
-        log_exception(e)
-        raise handle_exception(e)
+    service = AgentService(agent_manager=agent_manager)
+    return await service.update_agent(user, agent_settings)
 
 
 @router.delete(
-    "/agents/{name}",
-    summary="Delete a dynamic agent by name",
+    "/agents/{agent_id}",
+    summary="Delete a dynamic agent by ID",
+    status_code=204,
 )
 async def delete_agent(
-    name: str,
+    agent_id: str,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
-    try:
-        service = AgentService(agent_manager=agent_manager)
-        return await service.delete_agent(user=user, agent_name=name)
-    except Exception as e:
-        log_exception(e)
-        raise handle_exception(e)
+    service = AgentService(agent_manager=agent_manager)
+    await service.delete_agent(user=user, agent_id=agent_id)
 
 
 @router.post(
@@ -197,12 +231,8 @@ async def restore_agents(
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ):
-    try:
-        service = AgentService(agent_manager=agent_manager)
-        await service.restore_static_agents(user=user, force_overwrite=force_overwrite)
-    except Exception as e:
-        log_exception(e)
-        raise handle_exception(e)
+    service = AgentService(agent_manager=agent_manager)
+    await service.restore_static_agents(user=user, force_overwrite=force_overwrite)
 
 
 @router.get(
@@ -214,11 +244,7 @@ async def list_mcp_servers(
     user: KeycloakUser = Depends(get_current_user),
     mcp_manager: McpServerManager = Depends(get_mcp_manager),
 ):
-    try:
-        return mcp_manager.list_servers()
-    except Exception as e:
-        log_exception(e)
-        raise handle_exception(e)
+    return mcp_manager.list_servers()
 
 
 @router.get(
@@ -247,8 +273,8 @@ async def runtime_source_by_object(
     # 👇 CHANGE: Access the registry via the getter function
     obj = get_runtime_source_registry().get(key)
     if obj is None and key.startswith("agent."):
-        agent_name = key.split(".", 1)[1]
-        agent_settings = agent_manager.get_agent_settings(agent_name)
+        agent_id = key.split(".", 1)[1]
+        agent_settings = agent_manager.get_agent_settings(agent_id)
         if agent_settings and agent_settings.class_path:
             obj = _import_class(agent_settings.class_path)
     if obj is None:

@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 TUNING = AgentTuning(
     role="Powerpoint Maker",
     description="Extracts information from project documents to fill a given PowerPoint template.",
-    mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-mcp-text")],
+    mcp_servers=[MCPServerRef(id="mcp-knowledge-flow-mcp-text")],
     tags=[],
     fields=[
         FieldSpec(
@@ -427,7 +427,7 @@ class SlideMaker(AgentFlow):
                 upload_result = await self.upload_user_blob(
                     key=final_key,
                     file_content=f_out,
-                    filename=f"Generated_Slide_{self.get_name()}.pptx",
+                    filename=f"Generated_Slide_{self.get_id()}.pptx",
                     content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
 

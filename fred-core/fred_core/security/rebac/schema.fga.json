@@ -123,6 +123,7 @@
               { "type": "team" }
             ]
           },
+          "read": {},
           "update": {}
         }
       },
@@ -141,6 +142,19 @@
           }
         },
         "owner": { "this": {} },
+        "read": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "owner" } },
+              {
+                "tupleToUserset": {
+                  "computedUserset": { "relation": "member" },
+                  "tupleset": { "relation": "owner" }
+                }
+              }
+            ]
+          }
+        },
         "update": {
           "union": {
             "child": [

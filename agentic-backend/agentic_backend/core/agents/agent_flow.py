@@ -157,7 +157,7 @@ class AgentFlow:
         if self.compiled_graph is not None:
             logger.debug(
                 "[AGENT_FLOW] Reusing cached compiled graph for agent=%s",
-                self.get_name(),
+                self.get_id(),
             )
             return self.compiled_graph
 
@@ -170,7 +170,7 @@ class AgentFlow:
         cp = checkpointer or self.streaming_memory
         logger.info(
             "[AGENT_FLOW] Compiling graph for agent=%s with checkpointer=%s",
-            self.get_name(),
+            self.get_id(),
             type(cp).__name__,
         )
         self.compiled_graph = self._graph.compile(checkpointer=cp)
@@ -306,7 +306,7 @@ class AgentFlow:
         # Inject optional middlewares (e.g., HumanInTheLoop) if configured on the agent
         logger.info(
             "[AGENT_FLOW] astream_updates start agent=%s thread_id=%s using_memory_saver=%s",
-            self.get_name(),
+            self.get_id(),
             (self.run_config.get("configurable") or {}).get("thread_id"),
             True,
         )
@@ -314,7 +314,7 @@ class AgentFlow:
         compiled = self.get_compiled_graph(checkpointer=self.streaming_memory)
         logger.info(
             "[AGENT_FLOW] astream_updates compiled graph agent=%s checkpointer=%s",
-            self.get_name(),
+            self.get_id(),
             type(self.streaming_memory).__name__,
         )
 
@@ -363,7 +363,7 @@ class AgentFlow:
         Each line shows:
             [index] role/type | content preview | tool_call_id(s)
         """
-        label = f"Messages history for agent '{self.get_name()}'"
+        label = f"Messages history for agent '{self.get_id()}'"
         log_agent_message_summary(messages, label=label)
 
     @staticmethod
@@ -492,13 +492,13 @@ class AgentFlow:
         """Return the current effective AgentTuning for this instance."""
         return self._tuning
 
-    def get_name(self) -> str:
+    def get_id(self) -> str:
         """
         Return the agent's name.
         This is the primary identifier for the agent. In particular, it is used
         to identify the agent in a leader's crew.
         """
-        return self.agent_settings.name
+        return self.agent_settings.id
 
     def get_description(self) -> str:
         """
@@ -576,7 +576,7 @@ class AgentFlow:
             raise WorkspaceRetrievalError(error_msg)
 
     def _default_agent_id(self) -> str:
-        return self.agent_settings.name or type(self).__name__
+        return self.agent_settings.id or type(self).__name__
 
     async def fetch_asset_text(
         self,
@@ -924,7 +924,7 @@ class AgentFlow:
         self, extra: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Optional[str]]:
         dims: Dict[str, Optional[str]] = {
-            "agent_id": self.agent_settings.name or type(self).__name__
+            "agent_id": self.agent_settings.id or type(self).__name__
         }
         session_id = getattr(self.runtime_context, "session_id", None)
         if session_id:
@@ -972,7 +972,7 @@ class AgentFlow:
 
     def __str__(self) -> str:
         """String representation of the agent."""
-        return f"{self.agent_settings.name}"
+        return f"{self.agent_settings.id}"
 
     # -----------------------------
     # Tuning field readers (typed)

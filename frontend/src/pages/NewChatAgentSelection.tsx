@@ -6,7 +6,7 @@ import { AnyAgent } from "../common/agent";
 import { AgentTile } from "../components/chatbot/AgentTile";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
-import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { useListAgentsAgenticV1AgentsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export function NewChatAgentSelection() {
@@ -23,11 +23,16 @@ export function NewChatAgentSelection() {
     data: rawAgents,
     isLoading: agentLoading,
     isError: agentError,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-  });
+  } = useListAgentsAgenticV1AgentsGetQuery(
+    {},
+    {
+      refetchOnMountOrArgChange: true,
+    },
+  );
 
   const agents = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgents), [rawAgents]);
+
+  const enabledAgents = agents.filter((a) => a.enabled);
 
   return (
     <Box sx={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -45,7 +50,7 @@ export function NewChatAgentSelection() {
           {t("newChat.selectAgentTitle", { userName: username })}
         </Typography>
 
-        {/* Your agents */}
+        {/* Your agents title */}
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center" }}>
           <Typography variant="subtitle1" color="textSecondary">
             {/* Todo: use nickname */}
@@ -75,7 +80,7 @@ export function NewChatAgentSelection() {
             )}
 
             {/* Agent list */}
-            {!agentLoading && !agentError && agents.map((agent) => <AgentTile key={agent.name} agent={agent} />)}
+            {!agentLoading && !agentError && enabledAgents.map((agent) => <AgentTile key={agent.id} agent={agent} />)}
           </Box>
         </Box>
       </Box>

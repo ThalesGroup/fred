@@ -16,6 +16,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional, cast
 
+from fred_core import TODO_PASS_REAL_USER
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
@@ -119,7 +120,8 @@ class AgentTaskRunner:
 
         # 2. Agent Initialization
         agent, _ = await self._agent_factory.create_and_init(
-            agent_name=task_input.target_ref,
+            TODO_PASS_REAL_USER,  # todo: pass the real user here to work in prod
+            agent_id=task_input.target_ref,
             runtime_context=runtime_context,
             session_id=session_id,
         )

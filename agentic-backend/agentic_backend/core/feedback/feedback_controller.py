@@ -39,7 +39,7 @@ class FeedbackPayload(BaseModel):
     comment: Optional[str] = None
     message_id: str = Field(..., alias="messageId")
     session_id: str = Field(..., alias="sessionId")
-    agent_name: str = Field(..., alias="agentName")
+    agent_id: str = Field(..., alias="agentName")
 
     class Config:
         populate_by_name = True
@@ -70,7 +70,7 @@ async def post_feedback(
         id=str(uuid.uuid4()),
         session_id=payload.session_id,
         message_id=payload.message_id,
-        agent_name=payload.agent_name,
+        agent_id=payload.agent_id,
         rating=payload.rating,
         comment=payload.comment,
         created_at=datetime.utcnow(),

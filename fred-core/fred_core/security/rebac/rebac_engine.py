@@ -77,6 +77,7 @@ class TeamPermission(str, Enum):
     CAN_READ = "can_read"
     CAN_UPDATE_INFO = "can_update_info"
     CAN_UPDATE_RESOURCES = "can_update_resources"
+    CAN_UPDATE_AGENTS = "can_update_agents"
     CAN_READ_MEMEBERS = "can_read_members"
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
     CAN_ADMINISTER_MANAGERS = "can_administer_managers"
@@ -86,8 +87,14 @@ class TeamPermission(str, Enum):
 class AgentPermission(str, Enum):
     """Agent permissions encoded in the graph."""
 
+    READ = "read"
     UPDATE = "update"
     DELETE = "delete"
+
+    # "owner" is a relation in the FGA schema, not a permission,
+    # but openfga does not make distinction so we add it here
+    # to use lookup_resources on it (for owner-based filtering).
+    OWNER = RelationType.OWNER.value
 
 
 RebacPermission = (

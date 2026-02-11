@@ -22,6 +22,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Uni
 from fred_core import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,  # Unchanged, as requested
 )
@@ -196,7 +197,7 @@ class ChatMetadata(BaseModel):
     # Keep your VectorSearchHit untouched
     sources: List[VectorSearchHit] = Field(default_factory=list)
 
-    agent_name: Optional[str] = None
+    agent_id: Optional[str] = None
     latency_ms: Optional[int] = None
     finish_reason: Optional[FinishReason] = None
     runtime_context: Optional[RuntimeContext] = None
@@ -209,7 +210,7 @@ class ChatMetadata(BaseModel):
 
 
 class BaseWsInput(BaseModel):
-    agent_name: str
+    agent_id: str
     runtime_context: Optional[RuntimeContext] = None
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
@@ -261,7 +262,7 @@ class ChatMessage(BaseModel):
 class SessionSchema(BaseModel):
     id: str
     user_id: str
-    agent_name: str | None = None
+    agent_id: str | None = None
     title: str
     updated_at: datetime
     next_rank: int | None = None
@@ -273,8 +274,17 @@ class AttachmentRef(BaseModel):
     name: str
 
 
+class AgentRef(BaseModel, frozen=True):
+    id: str
+    name: str
+
+    @classmethod
+    def from_agent(cls, agent: AgentSettings) -> "AgentRef":
+        return cls(id=agent.id, name=agent.name)
+
+
 class SessionWithFiles(SessionSchema):
-    agents: set[str]  # Set of all agents used in this conversation
+    agents: set[AgentRef]  # Set of all agents used in this conversation
     file_names: List[str] = []
     attachments: List[AttachmentRef] = []
 

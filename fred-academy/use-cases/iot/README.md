@@ -291,7 +291,8 @@ To add a static agent in Fred: in `agentic-backend/config/configuration.yaml`, a
 
 ```yaml
 agents:
-  - name: "agent_name"
+  - id: "toto"
+    name: "Toto"
     type: "agent"
     class_path: "agentic_backend.agents.agent_folder.python_filename.agent_class_name"
     enabled: true

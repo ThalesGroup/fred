@@ -67,7 +67,7 @@ class MCPRuntime:
             if not server_configuration:
                 logger.warning(
                     "[MCP][%s] Server '%s' not found or disabled in global MCP configuration. Skipping.",
-                    self.agent_instance.get_name(),
+                    self.agent_instance.get_id(),
                     s.id,
                 )
                 continue
@@ -84,7 +84,7 @@ class MCPRuntime:
 
         logger.info(
             "[MCP]agent=%s mcp_servers=%s (enabled only)",
-            self.agent_instance.get_name(),
+            self.agent_instance.get_id(),
             [s.id for s in self.available_servers],
         )
 
@@ -100,7 +100,7 @@ class MCPRuntime:
         if not self.available_servers or len(self.available_servers) == 0:
             logger.info(
                 "agent=%s init: No MCP server configuration found in tunings. Skipping MCP client connection.",
-                self.agent_instance.get_name(),
+                self.agent_instance.get_id(),
             )
             # We allow the agent to run, but without MCP tools.
             return
@@ -118,7 +118,7 @@ class MCPRuntime:
         runtime_context: RuntimeContext = self.agent_instance.runtime_context
         self._lifecycle_task = asyncio.create_task(
             self._run_lifecycle(runtime_context),
-            name=f"mcp[{self.agent_instance.get_name()}]",
+            name=f"mcp[{self.agent_instance.get_id()}]",
         )
 
         # 3) Wait until connected or error
@@ -145,7 +145,7 @@ class MCPRuntime:
                 interceptors.append(ExpiredTokenRetryInterceptor(refresh_cb))
 
             new_client = await get_connected_mcp_client_for_agent(
-                agent_name=self.agent_instance.get_name(),
+                agent_id=self.agent_instance.get_id(),
                 mcp_servers=self.available_servers,
                 runtime_context=runtime_context,
                 tool_interceptors=interceptors,
@@ -158,18 +158,18 @@ class MCPRuntime:
                 self.toolkit.tools = tools
                 logger.info(
                     "[MCP] agent=%s init: Prefetched and cached %d tools.",
-                    self.agent_instance.get_name(),
+                    self.agent_instance.get_id(),
                     len(tools),
                 )
             except Exception:
                 logger.warning(
                     "[MCP] agent=%s init: Failed to prefetch tools; toolkit will attempt best-effort discovery later.",
-                    self.agent_instance.get_name(),
+                    self.agent_instance.get_id(),
                     exc_info=True,
                 )
             logger.info(
                 "[MCP] agent=%s init: Successfully built and connected client.",
-                self.agent_instance.get_name(),
+                self.agent_instance.get_id(),
             )
             # Signal readiness
             if self._ready_event:
@@ -186,7 +186,7 @@ class MCPRuntime:
                 self._ready_event.set()
             logger.exception(
                 "[MCP] agent=%s lifecycle error during init.",
-                self.agent_instance.get_name(),
+                self.agent_instance.get_id(),
             )
         finally:
             # Close client in the SAME task that opened it
@@ -204,7 +204,7 @@ class MCPRuntime:
         if not self.toolkit:
             logger.warning(
                 "[MCP] agent=%s get_tools: Toolkit is None. Returning empty list.",
-                self.agent_instance.get_name(),
+                self.agent_instance.get_id(),
             )
             return []
 
@@ -228,7 +228,7 @@ class MCPRuntime:
         """
         logger.debug(
             "[MCP] agent=%s aclose: Shutting down MCPRuntime and closing client.",
-            self.agent_instance.get_name(),
+            self.agent_instance.get_id(),
         )
         # If lifecycle task exists, signal and await it to close contexts safely
         if self._lifecycle_task:
@@ -248,5 +248,5 @@ class MCPRuntime:
             self.toolkit = None
         logger.info(
             "[MCP] agent=%s aclose: MCP shutdown complete.",
-            self.agent_instance.get_name(),
+            self.agent_instance.get_id(),
         )

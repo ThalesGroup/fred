@@ -18,7 +18,8 @@ Fred uses **OpenFGA** as the ReBAC engine (compatible with the Zanzibar model).
 - [Deploy OpenFGA](https://openfga.dev/docs/getting-started/setup-openfga/overview) (localy, with Docker, on Kubernetes...) and provide an API token to the ReBAC engine (see `token_env_var` below).
 
 Keycloak options (see [KEYCLOAK.md](./KEYCLOAK.md) for more details):
-- The `knowledge-flow` client needs `realm-management: query-users, query-groups, view-users, manage-users` and `account: view-groups` to be able to list users and groups from Keycloak
+- The `knowledge-flow` and `agentic`client needs `realm-management: query-users, query-groups, view-users` and `account: view-groups` to be able to list users and groups from Keycloak
+- `knowledge-flow` needs in addition `realm-management: manage-users` client roles to be able to add/remove users from groups
 - Keycloak must send the `groups` claim in access tokens (see `groups-scope` client scope in [KEYCLOAK.md](./KEYCLOAK.md)).
 
 ## Configuration

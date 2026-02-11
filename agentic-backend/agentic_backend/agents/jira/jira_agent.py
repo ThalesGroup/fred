@@ -95,7 +95,7 @@ class JiraAgent(AgentFlow):
     tuning = AgentTuning(
         role="Jira backlog and test builder",
         description="Extracts requirements and user stories from project documents to fill a Jira board and build Zephyr tests.",
-        mcp_servers=[MCPServerRef(name="mcp-knowledge-flow-mcp-text")],
+        mcp_servers=[MCPServerRef(id="mcp-knowledge-flow-mcp-text")],
         tags=[],
         fields=[
             FieldSpec(

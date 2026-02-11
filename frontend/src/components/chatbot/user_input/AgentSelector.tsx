@@ -111,8 +111,8 @@ export function AgentPopoverPicker({ currentAgent, agents, onSelectNewAgent }: A
       {agents.map((agent) => {
         const tooltipDescription = [agent.tuning.role, agent.tuning.description].filter(Boolean).join("\n");
         return (
-          <DetailedTooltip key={agent.name} label={agent.name} description={tooltipDescription} placement="right">
-            <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.name === currentAgent.name}>
+          <DetailedTooltip key={agent.id} label={agent.name} description={tooltipDescription} placement="right">
+            <ListItemButton onClick={() => onSelectNewAgent(agent)} selected={agent.id === currentAgent.id}>
               <AgentChipWithIcon agent={agent} />
             </ListItemButton>
           </DetailedTooltip>

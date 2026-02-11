@@ -29,6 +29,7 @@ import { useLazyGetRuntimeSourceTextQuery } from "../../slices/agentic/agenticSo
 import { LoadingSpinner } from "../../utils/loadingSpinner";
 import { useToast } from "../ToastProvider";
 
+import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { A2aCardDialog } from "./A2aCardDialog";
 import { AgentCard } from "./AgentCard";
 import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
@@ -40,6 +41,9 @@ interface AgentGridManagerProps {
   // Data
   agents: AnyAgent[];
   isLoading?: boolean;
+
+  // Ownership
+  teamId?: string;
 
   // Permissions
   canEdit?: boolean;
@@ -64,9 +68,10 @@ interface AgentGridManagerProps {
 export const AgentGridManager = ({
   agents,
   isLoading = false,
+  teamId,
   canEdit = false,
   canCreate = false,
-  canDelete = false, // Reserved for future use
+  canDelete = false,
   onRefetchAgents,
   showRestoreButton = false,
   onRestore,
@@ -74,8 +79,6 @@ export const AgentGridManager = ({
   showA2ACard = true,
   emptyStateMessage,
 }: AgentGridManagerProps) => {
-  // Suppress unused variable warning - canDelete is part of the API but not yet used internally
-  void canDelete;
   const theme = useTheme();
   const { t } = useTranslation();
   const { showError } = useToast();
@@ -121,16 +124,16 @@ export const AgentGridManager = ({
   };
 
   const handleInspectCode = async (agent: AnyAgent) => {
-    const AGENT_CODE_KEY = `agent.${agent.name}`;
+    const AGENT_CODE_KEY = `agent.${agent.id}`;
 
-    setCodeDrawer({ open: true, title: `Fetching Source: ${agent.name}...`, content: null });
+    setCodeDrawer({ open: true, title: `Fetching Source: ${agent.id}...`, content: null });
 
     try {
       const code = await triggerGetSource({ key: AGENT_CODE_KEY }).unwrap();
 
       setCodeDrawer({
         open: true,
-        title: `Source: ${agent.name}`,
+        title: `Source: ${agent.id}`,
         content: code,
       });
     } catch (error: any) {
@@ -141,7 +144,7 @@ export const AgentGridManager = ({
 
       showError({
         summary: "Code Inspection Failed",
-        detail: `Could not retrieve source for ${agent.name}. Details: ${detail}`,
+        detail: `Could not retrieve source for ${agent.id}. Details: ${detail}`,
       });
     }
   };
@@ -156,7 +159,7 @@ export const AgentGridManager = ({
       });
       return;
     }
-    setA2aCardView({ open: true, card, agentName: agent.name });
+    setA2aCardView({ open: true, card, agentName: agent.id });
   };
 
   // Action handlers wired to card
@@ -194,6 +197,8 @@ export const AgentGridManager = ({
     }
   };
 
+  const { showAgentRegisterA2A, showAgentRestoreFromConfiguration } = useFrontendProperties();
+
   return (
     <>
       <CardContent sx={{ p: { xs: 2, md: 3 } }}>
@@ -206,7 +211,7 @@ export const AgentGridManager = ({
             {/* Toolbar */}
             <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
               <Box sx={{ display: "flex", gap: 1 }}>
-                {showRestoreButton && onRestore && (
+                {showAgentRestoreFromConfiguration && showRestoreButton && onRestore && (
                   <Button
                     variant="outlined"
                     startIcon={<RefreshIcon />}
@@ -216,14 +221,16 @@ export const AgentGridManager = ({
                     {t("agentHub.restoreButton")}
                   </Button>
                 )}
-                <Button
-                  variant="outlined"
-                  startIcon={<CloudQueueIcon />}
-                  onClick={canCreate ? handleOpenRegisterA2AAgent : undefined}
-                  disabled={!canCreate}
-                >
-                  {t("agentHub.registerA2A")}
-                </Button>
+                {showAgentRegisterA2A && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<CloudQueueIcon />}
+                    onClick={canCreate ? handleOpenRegisterA2AAgent : undefined}
+                    disabled={!canCreate}
+                  >
+                    {t("agentHub.registerA2A")}
+                  </Button>
+                )}
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}
@@ -239,7 +246,7 @@ export const AgentGridManager = ({
             {agents.length > 0 ? (
               <Grid2 container spacing={2}>
                 {agents.map((agent) => (
-                  <Grid2 key={agent.name} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
+                  <Grid2 key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                     <Fade in timeout={500}>
                       <Box sx={{ width: "100%" }}>
                         <AgentCard
@@ -286,6 +293,7 @@ export const AgentGridManager = ({
                 }}
                 initialType={createModalType}
                 disableTypeToggle
+                teamId={teamId}
               />
             )}
 
@@ -300,6 +308,7 @@ export const AgentGridManager = ({
 
       {/* Drawers / Modals */}
       <AgentEditDrawer
+        canDelete={canDelete}
         open={editOpen}
         agent={selected}
         onClose={() => setEditOpen(false)}
@@ -317,7 +326,7 @@ export const AgentGridManager = ({
         <AgentConfigWorkspaceManagerDrawer
           isOpen={assetManagerOpen}
           onClose={handleCloseAssetManager}
-          agentId={agentForAssetManagement.name}
+          agentId={agentForAssetManagement.id}
         />
       )}
 

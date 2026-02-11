@@ -59,7 +59,7 @@ class AgentLoader:
             if not agent_cfg.class_path:
                 logger.warning(
                     "No class_path for static agent '%s' — skipping.",
-                    agent_cfg.name,
+                    agent_cfg.id,
                 )
                 continue
             try:
@@ -68,14 +68,14 @@ class AgentLoader:
                     logger.error(
                         "Class '%s' is not AgentFlow for '%s'",
                         agent_cfg.class_path,
-                        agent_cfg.name,
+                        agent_cfg.id,
                     )
                     continue
                 inst: AgentFlow = cls(agent_settings=agent_cfg)
                 instances.append(inst)
             except Exception as e:
                 logger.exception(
-                    "❌ Failed to construct static agent '%s': %s", agent_cfg.name, e
+                    "❌ Failed to construct static agent '%s': %s", agent_cfg.id, e
                 )
 
         return instances
@@ -87,18 +87,18 @@ class AgentLoader:
         """
         out: List[AgentFlow] = []
 
-        for agent_settings in await self.store.load_all_global_scope():
+        for agent_settings in await self.store.load_all():
             if not agent_settings.class_path:
                 logger.warning(
                     "agent=%s No class_path found — deleting stale entry from store.",
-                    agent_settings.name,
+                    agent_settings.id,
                 )
                 try:
-                    await self.store.delete(agent_settings.name)
+                    await self.store.delete(agent_settings.id)
                 except Exception:
                     logger.exception(
                         "agent=%s Failed to delete stale entry without class_path",
-                        agent_settings.name,
+                        agent_settings.id,
                     )
                 continue
 
@@ -107,14 +107,14 @@ class AgentLoader:
                 if not issubclass(cls, AgentFlow):
                     logger.error(
                         "agent=%s class=%s is not AgentFlow",
-                        agent_settings.name,
+                        agent_settings.id,
                         agent_settings.class_path,
                     )
                     continue
 
                 logger.debug(
                     "agent=%s class=%s loaded",
-                    agent_settings.name,
+                    agent_settings.id,
                     agent_settings.class_path,
                 )
                 inst: AgentFlow = cls(agent_settings=agent_settings)
@@ -122,23 +122,23 @@ class AgentLoader:
             except ModuleNotFoundError:
                 logger.error(
                     "agent=%s Failed to load persisted agent (ModuleNotFoundError). Removing stale entry from store.",
-                    agent_settings.name,
+                    agent_settings.id,
                 )
                 try:
-                    await self.store.delete(agent_settings.name)
+                    await self.store.delete(agent_settings.id)
                     logger.info(
                         "agent=%s Successfully deleted stale agent from persistent store.",
-                        agent_settings.name,
+                        agent_settings.id,
                     )
                 except Exception:
                     logger.exception(
                         "agent=%s Failed to delete stale agent from persistent store.",
-                        agent_settings.name,
+                        agent_settings.id,
                     )
             except Exception as e:
                 logger.exception(
                     "agent=%s Failed to load persisted agent: %s",
-                    agent_settings.name,
+                    agent_settings.id,
                     e,
                 )
 
