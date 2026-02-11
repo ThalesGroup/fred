@@ -15,6 +15,7 @@
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {
   Box,
   CircularProgress,
@@ -34,11 +35,19 @@ export interface ProgressStep {
   error?: string;
 }
 
-export interface ProgressStepperProps {
-  steps: ProgressStep[];
+export interface ProgressFileStatus {
+  processing?: boolean;
+  retrying?: boolean;
+  failed?: boolean;
+  completedWithRetry?: boolean;
 }
 
-export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
+export interface ProgressStepperProps {
+  steps: ProgressStep[];
+  fileStatuses?: Record<string, ProgressFileStatus>;
+}
+
+export const ProgressStepper = ({ steps, fileStatuses }: ProgressStepperProps) => {
   if (!steps.length) return null;
 
   const stepsByFile = steps.reduce(
@@ -92,6 +101,39 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
           </Typography>
 
           <Divider sx={{ mb: 1 }} />
+
+          {fileStatuses?.[filename]?.retrying && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <CircularProgress size={18} color="warning" thickness={6} />
+              <Typography variant="body2" color="warning.main">
+                Retrying after failure...
+              </Typography>
+            </Box>
+          )}
+          {fileStatuses?.[filename]?.processing && !fileStatuses?.[filename]?.retrying && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <CircularProgress size={18} color="primary" thickness={6} />
+              <Typography variant="body2" color="text.secondary">
+                Processing...
+              </Typography>
+            </Box>
+          )}
+          {fileStatuses?.[filename]?.failed && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <ErrorOutlineIcon color="error" fontSize="small" />
+              <Typography variant="body2" color="error">
+                Processing failed
+              </Typography>
+            </Box>
+          )}
+          {fileStatuses?.[filename]?.completedWithRetry && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <WarningAmberIcon color="warning" fontSize="small" />
+              <Typography variant="body2" color="warning.main">
+                Completed after retry
+              </Typography>
+            </Box>
+          )}
 
           <Stepper activeStep={fileSteps.length} orientation="vertical" sx={{ pl: 1 }}>
             {fileSteps.map((step, index) => (

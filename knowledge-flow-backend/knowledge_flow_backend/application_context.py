@@ -92,6 +92,7 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVect
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
+from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
 
 # Union of supported processor base classes
 BaseProcessorType = Union[BaseMarkdownProcessor, BaseTabularProcessor]
@@ -264,6 +265,7 @@ class ApplicationContext:
     _tag_store_instance: Optional[BaseTagStore] = None
     _team_metadata_store_instance: Optional[BaseTeamMetadataStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
+    _task_store_instance: Optional["BaseWorkflowTaskStore"] = None
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
@@ -704,6 +706,24 @@ class ApplicationContext:
             )
             return self._metadata_store_instance
         raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
+
+    def get_task_store(self) -> "BaseWorkflowTaskStore":
+        if self._task_store_instance is not None:
+            return self._task_store_instance
+
+        store_config = get_configuration().storage.task_store
+        if isinstance(store_config, PostgresTableConfig):
+            from knowledge_flow_backend.features.scheduler.store.postgres_task_store import (
+                PostgresWorkflowTaskStore,
+            )
+
+            self._task_store_instance = PostgresWorkflowTaskStore(
+                engine=self.get_async_sql_engine(),
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
+            return self._task_store_instance
+        raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
 
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:

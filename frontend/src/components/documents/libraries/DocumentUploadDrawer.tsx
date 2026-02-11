@@ -19,11 +19,18 @@ import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
-import { streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
-import { ProgressStep } from "../../ProgressStepper";
+import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
+import { ProcessDocumentsProgressResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { ProgressFileStatus, ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
 import { DocumentUploadProgressModal } from "./DocumentUploadProgressModal";
+
+const isSummaryDone = (summary: ProcessDocumentsProgressResponse) => {
+  if (summary.total_documents <= 0) return false;
+  const completed = summary.documents_fully_processed + summary.documents_failed + summary.documents_missing;
+  return completed >= summary.total_documents;
+};
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
@@ -45,6 +52,11 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [tempFiles, setTempFiles] = useState<File[]>([]);
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
+  const [progressSummaryByFile, setProgressSummaryByFile] = useState<
+    Record<string, ProcessDocumentsProgressResponse>
+  >({});
+  const [documentUidByFile, setDocumentUidByFile] = useState<Record<string, string>>({});
+  const [failedDocumentUids, setFailedDocumentUids] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
@@ -52,6 +64,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
 
   const stepDelayMs = 180;
   const displayIndexRef = useRef(0);
+  const stepKeysRef = useRef<Set<string>>(new Set());
 
   const totalUploads = useMemo(() => {
     if (totalFilesCount) return totalFilesCount;
@@ -64,21 +77,65 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const processedCount = useMemo(() => {
     const terminalStatuses = new Set(["finished", "error", "ignored"]);
     const latestStatusByFile = new Map<string, string>();
+    const summaryDoneFiles = new Set<string>();
+
+    Object.entries(progressSummaryByFile).forEach(([filename, summary]) => {
+      if (isSummaryDone(summary)) {
+        summaryDoneFiles.add(filename);
+      }
+    });
 
     uploadProgressSteps.forEach((step) => {
       if (!step.filename) return;
       latestStatusByFile.set(step.filename, step.status);
     });
 
-    let processed = 0;
-    latestStatusByFile.forEach((status) => {
+    let processed = summaryDoneFiles.size;
+    latestStatusByFile.forEach((status, filename) => {
+      if (summaryDoneFiles.has(filename)) return;
       if (terminalStatuses.has(status)) processed += 1;
     });
     return processed;
-  }, [uploadProgressSteps]);
+  }, [progressSummaryByFile, uploadProgressSteps]);
+
+  const fileStatuses = useMemo(() => {
+    const statuses: Record<string, ProgressFileStatus> = {};
+    const filenames = new Set<string>();
+
+    uploadProgressSteps.forEach((step) => {
+      if (step.filename) filenames.add(step.filename);
+    });
+    Object.keys(progressSummaryByFile).forEach((filename) => filenames.add(filename));
+
+    filenames.forEach((filename) => {
+      const summary = progressSummaryByFile[filename];
+      const documentUid = documentUidByFile[filename];
+      const doc = summary?.documents?.find((item) => item.document_uid === documentUid);
+      if (!doc) return;
+
+      const hadFailure = Boolean(documentUid && failedDocumentUids[documentUid]);
+      const isDone = doc.fully_processed;
+      const isFailedNow = doc.has_failed;
+      const retrying = hadFailure && !isDone && !isFailedNow;
+      const processing = !isDone && !isFailedNow;
+
+      statuses[filename] = {
+        retrying,
+        processing: processing && !retrying,
+        failed: isFailedNow && !retrying,
+        completedWithRetry: hadFailure && isDone,
+      };
+    });
+
+    return statuses;
+  }, [documentUidByFile, failedDocumentUids, progressSummaryByFile, uploadProgressSteps]);
 
   const progressPercent = totalUploads ? Math.round((processedCount / totalUploads) * 100) : 0;
-  const isUploadFinished = totalUploads > 0 && processedCount === totalUploads && !isLoading;
+  const hasInProgressStep = useMemo(
+    () => uploadProgressSteps.some((step) => step.status === "in_progress"),
+    [uploadProgressSteps],
+  );
+  const isUploadFinished = totalUploads > 0 && processedCount === totalUploads && !isLoading && !hasInProgressStep;
 
   const { getRootProps, getInputProps, open } = useDropzone({
     noKeyboard: true,
@@ -106,10 +163,14 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const hardReset = () => {
     setTempFiles([]);
     setUploadProgressSteps([]);
+    setProgressSummaryByFile({});
+    setDocumentUidByFile({});
+    setFailedDocumentUids({});
     setIsLoading(false);
     setShowProgressModal(false);
     setTotalFilesCount(0);
     displayIndexRef.current = 0;
+    stepKeysRef.current = new Set();
   };
 
   const handleClose = () => {
@@ -120,7 +181,11 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const handleAddFiles = async () => {
     setIsLoading(true);
     setUploadProgressSteps([]);
+    setProgressSummaryByFile({});
+    setDocumentUidByFile({});
+    setFailedDocumentUids({});
     displayIndexRef.current = 0;
+    stepKeysRef.current = new Set();
     const filesCount = tempFiles.length;
     setTotalFilesCount(filesCount);
     setShowProgressModal(filesCount > 0);
@@ -132,13 +197,38 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
             file,
             uploadMode,
             (progress) => {
+              const stepFilename = progress.filename || file.name;
               const step: ProgressStep = {
                 step: progress.step,
                 status: progress.status,
-                filename: file.name,
+                filename: stepFilename,
                 error: progress.error,
               };
-              const delay = displayIndexRef.current * stepDelayMs;
+              if (progress.document_uid) {
+                setDocumentUidByFile((prev) => ({
+                  ...prev,
+                  [stepFilename]: progress.document_uid as string,
+                }));
+              }
+              const stepKey = `${stepFilename}::${step.step}`;
+              const isKnownStep = stepKeysRef.current.has(stepKey);
+              if (!isKnownStep) {
+                stepKeysRef.current.add(stepKey);
+              }
+              if (isKnownStep) {
+                setUploadProgressSteps((prev) => {
+                  const existingIndex = prev.findIndex((s) => s.step === step.step && s.filename === step.filename);
+                  if (existingIndex !== -1) {
+                    const updated = [...prev];
+                    updated[existingIndex] = step;
+                    return updated;
+                  }
+                  return prev;
+                });
+                return;
+              }
+
+              const delay = uploadMode === "process" ? 0 : Math.min(displayIndexRef.current * stepDelayMs, 500);
               displayIndexRef.current += 1;
               window.setTimeout(() => {
                 setUploadProgressSteps((prev) => {
@@ -153,6 +243,23 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
               }, delay);
             },
             metadata,
+            (summaryUpdate: UploadProcessProgressSummary) => {
+              setProgressSummaryByFile((prev) => ({
+                ...prev,
+                [summaryUpdate.filename]: summaryUpdate.summary,
+              }));
+              if (summaryUpdate.summary.documents?.length) {
+                setFailedDocumentUids((prev) => {
+                  const next = { ...prev };
+                  summaryUpdate.summary.documents.forEach((doc) => {
+                    if (doc.has_failed) {
+                      next[doc.document_uid] = true;
+                    }
+                  });
+                  return next;
+                });
+              }
+            },
           );
         } catch (e: any) {
           console.error("Error uploading file:", e);
@@ -305,6 +412,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         totalUploads={totalUploads}
         progressPercent={progressPercent}
         steps={uploadProgressSteps}
+        fileStatuses={fileStatuses}
         isUploadFinished={isUploadFinished}
       />
     </Drawer>

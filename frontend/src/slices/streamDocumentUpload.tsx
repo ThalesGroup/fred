@@ -15,19 +15,22 @@
 import { getConfig } from "../common/config";
 import { store } from "../common/store";
 import { KeyCloakService } from "../security/KeycloakService";
-import {
-  GetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetApiResponse,
-  knowledgeFlowApi,
-} from "./knowledgeFlow/knowledgeFlowOpenApi";
+import { knowledgeFlowApi, ProcessDocumentsProgressResponse } from "./knowledgeFlow/knowledgeFlowOpenApi";
 import { ProcessingProgress } from "../types/ProcessingProgress";
 
 const UPLOAD_PROCESS_POLL_INTERVAL_MS = 2000;
 const UPLOAD_PROCESS_POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
+export interface UploadProcessProgressSummary {
+  filename: string;
+  workflowId: string;
+  summary: ProcessDocumentsProgressResponse;
+}
+
 async function pollUploadProcessProgress(
   workflowId: string,
   fileName: string,
-  onProgress: (update: ProcessingProgress) => void,
+  onProgressSummary?: (update: UploadProcessProgressSummary) => void,
 ): Promise<void> {
   const startedAt = Date.now();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -40,54 +43,28 @@ async function pollUploadProcessProgress(
             { workflowId },
             { subscribe: false },
           ),
-        ).unwrap()) as GetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetApiResponse;
+        ).unwrap()) as ProcessDocumentsProgressResponse;
+        onProgressSummary?.({ filename: fileName, workflowId, summary: progress });
         const hasFailed = progress.documents_failed > 0;
         const hasSucceeded =
           progress.total_documents > 0 &&
           progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >= progress.total_documents;
 
         if (hasSucceeded && hasFailed) {
-          onProgress({
-            step: "scheduler processing",
-            status: "error",
-            filename: fileName,
-            error: "Scheduler processing failed",
-          });
           resolve();
           return;
         }
 
         if (hasSucceeded) {
-          onProgress({
-            step: "scheduler processing",
-            status: "success",
-            filename: fileName,
-          });
-          onProgress({
-            step: "Finished",
-            status: "finished",
-            filename: fileName,
-          });
           resolve();
           return;
         }
 
         if (Date.now() - startedAt >= UPLOAD_PROCESS_POLL_TIMEOUT_MS) {
-          onProgress({
-            step: "scheduler processing",
-            status: "error",
-            filename: fileName,
-            error: "Timed out waiting for scheduler completion",
-          });
           resolve();
           return;
         }
 
-        onProgress({
-          step: "scheduler processing",
-          status: "in_progress",
-          filename: fileName,
-        });
         timeoutId = setTimeout(poll, UPLOAD_PROCESS_POLL_INTERVAL_MS);
       } catch (e) {
         reject(e);
@@ -105,6 +82,7 @@ export async function streamUploadOrProcessDocument(
   mode: "upload" | "process",
   onProgress: (update: ProcessingProgress) => void,
   metadata?: Record<string, any>,
+  onProgressSummary?: (update: UploadProcessProgressSummary) => void,
 ): Promise<void> {
   const token = KeyCloakService.GetToken();
   const formData = new FormData();
@@ -163,6 +141,6 @@ export async function streamUploadOrProcessDocument(
   }
 
   if (mode === "process" && workflowId) {
-    await pollUploadProcessProgress(workflowId, file.name, onProgress);
+    await pollUploadProcessProgress(workflowId, file.name, onProgressSummary);
   }
 }

@@ -61,10 +61,14 @@ class IngestionTaskService:
             # otherwise create a local one from configuration.
             self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)
             self._task_queue = scheduler_config.temporal.task_queue
+            from knowledge_flow_backend.application_context import ApplicationContext
+
+            workflow_task_store = ApplicationContext.get_instance().get_task_store()
             self._scheduler = TemporalScheduler(
                 scheduler_config,
                 self._metadata_service,
                 self._client_provider,
+                workflow_task_store=workflow_task_store,
             )
         else:
             raise ValueError(f"Unsupported scheduler backend: {scheduler_config.backend}")

@@ -399,6 +399,10 @@ class StorageConfig(BaseModel):
     tag_store: StoreConfig
     kpi_store: StoreConfig
     metadata_store: StoreConfig
+    task_store: Optional[StoreConfig] = Field(
+        default=None,
+        description="Task store backend (optional; scheduler may fall back to defaults).",
+    )
     tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
