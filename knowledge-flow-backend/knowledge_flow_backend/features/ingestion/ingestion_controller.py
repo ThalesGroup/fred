@@ -333,7 +333,7 @@ class IngestionController:
                 continue
             yield IngestionController._progress_event(
                 step=STEP_PROCESSING,
-                status=Status.ERROR,
+                status=Status.FAILED,
                 filename=filename,
                 document_uid=document_uid,
                 error=error_text,
@@ -455,7 +455,7 @@ class IngestionController:
                 error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
-                yield self._progress_event(step=current_step, status=Status.ERROR, filename=filename, error=error_message)
+                yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
             finally:
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
                 kpi.emit(
@@ -606,10 +606,10 @@ class IngestionController:
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
                 for filename, _, _ in scheduled_candidates:
-                    yield self._progress_event(step=current_step, status=Status.ERROR, error=error_message, filename=filename)
+                    yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
 
         timer_dims["status"] = "ok" if success == total else "error"
-        overall_status = Status.SUCCESS if success == total else Status.ERROR
+        overall_status = Status.SUCCESS if success == total else Status.FAILED
         done_payload: dict = {"step": "done", "status": overall_status}
         if last_error:
             done_payload["error"] = last_error
@@ -902,12 +902,12 @@ class IngestionController:
                         error_message = self._format_exception_message(e)
                         yield self._progress_event(
                             step=current_step,
-                            status=Status.ERROR,
+                            status=Status.FAILED,
                             filename=filename,
                             error=error_message,
                         )
 
-                overall_status = Status.SUCCESS if success == total else Status.ERROR
+                overall_status = Status.SUCCESS if success == total else Status.FAILED
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"
 
             return StreamingResponse(event_stream(), media_type="application/x-ndjson")

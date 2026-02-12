@@ -65,7 +65,7 @@ export const DocumentUploadProgressModal: React.FC<DocumentUploadProgressModalPr
       }
     });
 
-    const failures = Array.from(latestByFile.values()).filter((step) => step.status === "error");
+    const failures = Array.from(latestByFile.values()).filter((step) => step.status === "failed");
     const knownFailures = new Set(failures.map((step) => step.filename));
 
     if (fileStatuses) {
@@ -74,7 +74,7 @@ export const DocumentUploadProgressModal: React.FC<DocumentUploadProgressModalPr
         failures.push({
           filename,
           step: "processing",
-          status: "error",
+          status: "failed",
           error: "Processing failed",
         });
       });
