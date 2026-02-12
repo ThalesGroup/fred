@@ -37,6 +37,7 @@ import {
   useCreateAgentAgenticV1AgentsCreatePostMutation,
 } from "../../slices/agentic/agenticOpenApi";
 
+import { KeyCloakService } from "../../security/KeycloakService";
 import { useToast } from "../ToastProvider";
 
 const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
@@ -61,6 +62,7 @@ const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
         ),
     ]),
     a2a_token: z.string().optional(),
+    class_path: z.string().optional(),
   });
 
 type FormData = z.infer<ReturnType<typeof createSimpleAgentSchema>>;
@@ -85,6 +87,8 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
   const { t } = useTranslation();
   const schema = createSimpleAgentSchema(t);
   const { showError, showSuccess } = useToast();
+  const userRoles = KeyCloakService.GetUserRoles();
+  const isAdmin = userRoles.includes("admin");
   const [createAgent, { isLoading }] = useCreateAgentAgenticV1AgentsCreatePostMutation();
 
   const {
@@ -99,6 +103,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       type: initialType,
       a2a_base_url: "",
       a2a_token: "",
+      class_path: "",
     },
   });
   const watchType = useWatch({ control, name: "type", defaultValue: initialType });
@@ -119,6 +124,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       team_id: teamId,
       a2a_base_url: data.type === "a2a_proxy" ? data.a2a_base_url?.trim() || undefined : undefined,
       a2a_token: data.type === "a2a_proxy" ? data.a2a_token?.trim() || undefined : undefined,
+      class_path: data.class_path?.trim() || undefined,
     };
 
     try {
@@ -187,6 +193,25 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     )}
                   />
                 </FormControl>
+              </Grid2>
+            )}
+
+            {isAdmin && !isA2aType && (
+              <Grid2 size={12}>
+                <Controller
+                  name="class_path"
+                  control={control}
+                  render={({ field: f }) => (
+                    <TextField
+                      {...f}
+                      fullWidth
+                      size="small"
+                      label={t("agentHub.fields.classPath")}
+                      placeholder="my_module.agents.MyCustomAgent"
+                      helperText={t("agentHub.fields.classPathHelp")}
+                    />
+                  )}
+                />
               </Grid2>
             )}
 

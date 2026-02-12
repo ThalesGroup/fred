@@ -97,12 +97,19 @@ class AgentPermission(str, Enum):
     OWNER = RelationType.OWNER.value
 
 
+class OrganizationPermission(str, Enum):
+    """Organization-level permissions encoded in the graph."""
+
+    CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
+
+
 RebacPermission = (
     TagPermission
     | DocumentPermission
     | ResourcePermission
     | TeamPermission
     | AgentPermission
+    | OrganizationPermission
 )
 
 
@@ -117,6 +124,8 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.TEAM
     if isinstance(permission, AgentPermission):
         return Resource.AGENT
+    if isinstance(permission, OrganizationPermission):
+        return Resource.ORGANIZATION
     raise ValueError(f"Unsupported permission type: {permission!r}")
 
 
