@@ -112,10 +112,7 @@ class ProcessingPipeline:
         message_raw = processor_result.get("message")
         message = str(message_raw).strip() if message_raw is not None else ""
         suffix = f": {message}" if message else ""
-        raise InputConversionError(
-            f"Input processor '{processor_name}' reported status='{status}' "
-            f"for '{input_path.name}'{suffix}"
-        )
+        raise InputConversionError(f"Input processor '{processor_name}' reported status='{status}' for '{input_path.name}'{suffix}")
 
     @staticmethod
     def _validate_preview_output(
@@ -134,18 +131,12 @@ class ProcessingPipeline:
                 return
 
         details: list[str] = []
-        generated_files = sorted(
-            item.name for item in output_dir.iterdir() if item.is_file()
-        ) if output_dir.exists() else []
+        generated_files = sorted(item.name for item in output_dir.iterdir() if item.is_file()) if output_dir.exists() else []
         if generated_files:
             details.append(f"generated_files={generated_files}")
 
         details_suffix = f" ({'; '.join(details)})" if details else ""
-        raise ValueError(
-            f"Input processor '{processor_name}' failed to generate a non-empty preview "
-            f"for '{input_path.name}' in '{output_dir}'. Expected one of "
-            f"{preview_candidates}.{details_suffix}"
-        )
+        raise ValueError(f"Input processor '{processor_name}' failed to generate a non-empty preview for '{input_path.name}' in '{output_dir}'. Expected one of {preview_candidates}.{details_suffix}")
 
     def _get_input_processor(self, suffix: str) -> BaseInputProcessor:
         suffix = suffix.lower()

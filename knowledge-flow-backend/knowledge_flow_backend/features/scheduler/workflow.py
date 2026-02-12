@@ -56,12 +56,7 @@ class CreatePullFileMetadata:
     @workflow.run
     async def run(self, file: Any) -> Any:
         workflow.logger.info("[SCHEDULER] CreatePullFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity(
-            "create_pull_file_metadata",
-            args=[file],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("create_pull_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -69,12 +64,7 @@ class GetPushFileMetadata:
     @workflow.run
     async def run(self, file: Any) -> Any:
         workflow.logger.info("[SCHEDULER] GetPushFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity(
-            "get_push_file_metadata",
-            args=[file],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("get_push_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -82,12 +72,7 @@ class LoadPullFile:
     @workflow.run
     async def run(self, file: Any, metadata: Any) -> str:
         workflow.logger.info("[SCHEDULER] LoadPullFile: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity(
-            "load_pull_file",
-            args=[file, metadata],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("load_pull_file", args=[file, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -95,12 +80,7 @@ class LoadPushFile:
     @workflow.run
     async def run(self, file: Any, metadata: Any) -> str:
         workflow.logger.info("[SCHEDULER] LoadPushFile: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity(
-            "load_push_file",
-            args=[file, metadata],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("load_push_file", args=[file, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -108,12 +88,7 @@ class InputProcess:
     @workflow.run
     async def run(self, user: Any, input_file: str, metadata: Any) -> Any:
         workflow.logger.info("[SCHEDULER] InputProcess: %s", input_file)
-        return await workflow.execute_activity(
-            "input_process",
-            args=[user, input_file, metadata],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("input_process", args=[user, input_file, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -121,36 +96,21 @@ class OutputProcess:
     @workflow.run
     async def run(self, file: Any, metadata: Any) -> None:
         workflow.logger.info("[SCHEDULER] OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
-        await workflow.execute_activity(
-            "output_process",
-            args=[file, metadata, False],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        await workflow.execute_activity("output_process", args=[file, metadata, False], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
 class FastStoreVectors:
     @workflow.run
     async def run(self, payload):
-        return await workflow.execute_activity(
-            "fast_store_vectors",
-            args=[payload],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("fast_store_vectors", args=[payload], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
 class FastDeleteVectors:
     @workflow.run
     async def run(self, payload):
-        return await workflow.execute_activity(
-            "fast_delete_vectors",
-            args=[payload],
-            schedule_to_close_timeout=timedelta(minutes=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
-        )
+        return await workflow.execute_activity("fast_delete_vectors", args=[payload], schedule_to_close_timeout=timedelta(minutes=1), retry_policy=RetryPolicy(maximum_attempts=2))
 
 
 @workflow.defn
@@ -162,10 +122,7 @@ class ProcessFile:
         provisional_uid = _wf_document_uid(file)
 
         await workflow.execute_activity(
-            "record_current_document",
-            args=[workflow_id, provisional_uid, display_name],
-            schedule_to_close_timeout=timedelta(hours=1),
-            retry_policy=RetryPolicy(maximum_attempts=2)
+            "record_current_document", args=[workflow_id, provisional_uid, display_name], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
         if is_pull:
@@ -180,7 +137,7 @@ class ProcessFile:
                 "record_current_document",
                 args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
                 schedule_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=2)
+                retry_policy=RetryPolicy(maximum_attempts=2),
             )
             local_file_path = await workflow.execute_child_workflow(
                 LoadPullFile.run,
@@ -200,7 +157,7 @@ class ProcessFile:
                 "record_current_document",
                 args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
                 schedule_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=2)
+                retry_policy=RetryPolicy(maximum_attempts=2),
             )
             local_file_path = await workflow.execute_child_workflow(
                 LoadPushFile.run,
@@ -265,7 +222,7 @@ class Process:
                 "record_workflow_status",
                 args=[workflow_id, "COMPLETED", None, last_document_uid, last_filename],
                 schedule_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=2)
+                retry_policy=RetryPolicy(maximum_attempts=2),
             )
             return "success"
         except Exception as exc:
@@ -275,7 +232,7 @@ class Process:
                     "record_workflow_status",
                     args=[workflow_id, "FAILED", error_message, last_document_uid, last_filename],
                     schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=2)
+                    retry_policy=RetryPolicy(maximum_attempts=2),
                 )
             except Exception:
                 workflow.logger.exception("[SCHEDULER] Failed to record workflow failure", exc_info=True)
