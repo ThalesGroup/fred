@@ -800,12 +800,13 @@ class SessionOrchestrator:
                 msg.metadata.agent_id for msg in history if msg.metadata.agent_id
             }
             all_settings = await asyncio.gather(
-                *(self.agent_manager.get_agent_settings(agent_id) for agent_id in agents_ids)
+                *(
+                    self.agent_manager.get_agent_settings(agent_id)
+                    for agent_id in agents_ids
+                )
             )
             agents = {
-                AgentRef.from_agent(settings)
-                for settings in all_settings
-                if settings
+                AgentRef.from_agent(settings) for settings in all_settings if settings
             }
 
             files_names: list[str] = []

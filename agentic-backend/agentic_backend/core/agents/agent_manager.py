@@ -232,7 +232,9 @@ class AgentManager:
 
         # 3. Reconcile: for static agents, merge YAML settings with persisted tunings
         #    and save to the store so all workers see consistent state.
-        for agent_id, (static_settings, static_tunings) in sorted(static_catalogue.items()):
+        for agent_id, (static_settings, static_tunings) in sorted(
+            static_catalogue.items()
+        ):
             persisted = persisted_state.get(agent_id)
 
             if persisted and persisted.tuning:
