@@ -167,12 +167,14 @@ class BaseScheduler(ABC):
                 continue
 
             stages = metadata.processing.stages or {}
-            has_failed = any(status == ProcessingStatus.FAILED for status in stages.values())
             preview_done = stages.get(ProcessingStage.PREVIEW_READY) == ProcessingStatus.DONE
             vectorized_done = stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
             sql_indexed_done = stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE
             # Consider a file processed if it has reached the vectorization or sql indexation stage successfully.
             fully_processed = vectorized_done or sql_indexed_done
+            # Keep failed=true only for terminally unfinished documents.
+            stage_failed = any(status == ProcessingStatus.FAILED for status in stages.values())
+            has_failed = stage_failed and not fully_processed
 
             if preview_done:
                 documents_with_preview += 1
@@ -208,3 +210,21 @@ class BaseScheduler(ABC):
             documents_failed=documents_failed,
             documents=documents,
         )
+
+    async def get_workflow_execution_status(self, workflow_id: str) -> Optional[object]:
+        """
+        Optional backend-specific workflow execution status.
+
+        Temporal scheduler overrides this to expose WorkflowExecutionStatus from
+        Temporal's describe API. Other backends can keep the default (None).
+        """
+        return None
+
+    async def get_workflow_last_error(self, workflow_id: str) -> Optional[str]:
+        """
+        Optional backend-specific workflow error details.
+
+        Temporal scheduler can expose the latest persisted workflow error from
+        its task store. Other backends can keep the default (None).
+        """
+        return None

@@ -226,7 +226,7 @@ class Process:
             )
             return "success"
         except Exception as exc:
-            error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
+            error_message = str(exc).strip() or "No error message"
             try:
                 await workflow.execute_activity(
                     "record_workflow_status",
