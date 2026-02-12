@@ -75,6 +75,9 @@ applications:
           showAgentCode: false
 
       ai:
+        # Increase max number of session per users
+        max_concurrent_sessions_per_user: 1000
+
         # Set KF right url
         knowledge_flow_url: "https://prism-ui-prd.six.cloud.thales/knowledge-flow/v1"
 
@@ -139,7 +142,7 @@ applications:
             name: "mcp.servers.search_documents.name"
             description: "mcp.servers.search_documents.description"
             transport: "streamable_http"
-            url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           # - id: "mcp-knowledge-flow-mcp-tabular"
@@ -154,7 +157,7 @@ applications:
             description: "mcp.servers.filesystem.description"
             enabled: true
             transport: "streamable_http"
-            url: "http://localhost:8111/knowledge-flow/v1/mcp-fs"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           # - id: "mcp-knowledge-flow-opensearch-ops"
@@ -278,7 +281,7 @@ applications:
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   knowledge-flow-backend: &knowledgeFlowBackend
-    replicaCount: 4
+    replicaCount: 1
 
     # Set Carma registry and PRISM tag
     image:
