@@ -66,6 +66,7 @@ type config struct {
 	InsecureTLS        bool
 	AllowEmptyTok      bool
 	DebugEvents        bool
+	RampDuration       time.Duration
 }
 
 type result struct {
@@ -125,19 +126,28 @@ func main() {
 			sessionIDs = ids
 		}
 
+		// Optional ramp-up: spread client starts evenly over RampDuration
+		delayPerClient := time.Duration(0)
+		if cfg.RampDuration > 0 && cfg.Clients > 1 {
+			delayPerClient = cfg.RampDuration / time.Duration(cfg.Clients-1)
+		}
 		for i := 0; i < cfg.Clients; i++ {
 			wg.Add(1)
 			sessionID := ""
 			if len(sessionIDs) > 0 {
 				sessionID = sessionIDs[i]
 			}
-			go func(id string) {
+			startDelay := delayPerClient * time.Duration(i)
+			go func(id string, d time.Duration) {
 				defer wg.Done()
+				if d > 0 {
+					time.Sleep(d)
+				}
 				resList := runClientPersistent(cfg, id)
 				for _, r := range resList {
 					results <- r
 				}
-			}(sessionID)
+			}(sessionID, startDelay)
 		}
 		wg.Wait()
 		close(results)
@@ -201,12 +211,13 @@ func parseFlags() config {
 	sessionURLFlag := flag.String("session-url", "", "HTTP session endpoint URL (optional)")
 	sessionTitleFlag := flag.String("session-title", "Benchmark", "Session title to skip auto-title")
 	createSessionFlag := flag.Bool("create-session", true, "Create a session before asking (when no session is provided)")
-	prepareSessionsFlag := flag.Bool("prepare-sessions", true, "Pre-create one session per client before measuring")
+	prepareSessionsFlag := flag.Bool("prepare-sessions", false, "Pre-create one session per client before measuring")
 	prepareConcurrencyFlag := flag.Int("prepare-concurrency", 20, "Concurrent session creates/deletes during preparation/cleanup")
 	deleteSessionFlag := flag.Bool("delete-session", true, "Delete sessions created by the benchmark when done")
-	clientsFlag := flag.Int("clients", 10, "Concurrent clients")
+	rampDurationFlag := flag.Duration("ramp-duration", 10*time.Second, "Optional stagger for client start (e.g. 10s spreads clients evenly over 10 seconds)")
+	clientsFlag := flag.Int("clients", 150, "Concurrent clients")
 	requestsFlag := flag.Int("requests", 0, "Total requests (defaults to clients)")
-	requestsPerClientFlag := flag.Int("requests-per-client", 1, "Requests per client (sequential mode)")
+	requestsPerClientFlag := flag.Int("requests-per-client", 10, "Requests per client (sequential mode)")
 	timeoutFlag := flag.Duration("timeout", 90*time.Second, "Timeout per request")
 	insecureFlag := flag.Bool("insecure", false, "Skip TLS verification for wss://")
 	allowEmptyTok := flag.Bool("allow-empty-token", false, "Allow missing token (not recommended)")
@@ -247,6 +258,7 @@ func parseFlags() config {
 		InsecureTLS:        *insecureFlag,
 		AllowEmptyTok:      *allowEmptyTok,
 		DebugEvents:        *debugEvents,
+		RampDuration:       *rampDurationFlag,
 	}
 }
 

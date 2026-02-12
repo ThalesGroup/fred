@@ -118,24 +118,11 @@ class PostgresHistoryStore(BaseHistoryStore):
     async def save_with_conn(
         self, conn, session_id: str, messages: List[ChatMessage], user_id: str
     ) -> None:
-        """
-        Same as save(), but reuses the provided AsyncConnection so callers can
-        group history + session writes in one transaction.
-        """
+        # Prepare all values first
+        all_values = []
         for i, msg in enumerate(messages):
-            parts_json = [
-                p.model_dump(mode="json", exclude_none=True) for p in (msg.parts or [])
-            ]
-            metadata_json = (
-                msg.metadata.model_dump(mode="json", exclude_none=True)
-                if msg.metadata
-                else {}
-            )
-
-            await self.store.upsert(
-                conn,
-                self.table,
-                values={
+            all_values.append(
+                {
                     "session_id": session_id,
                     "user_id": user_id,
                     "rank": msg.rank if msg.rank is not None else i,
@@ -145,11 +132,31 @@ class PostgresHistoryStore(BaseHistoryStore):
                     if isinstance(msg.channel, Channel)
                     else msg.channel,
                     "exchange_id": msg.exchange_id,
-                    "parts_json": parts_json,
-                    "metadata_json": metadata_json,
-                },
-                pk_cols=["session_id", "user_id", "rank"],
+                    "parts_json": [
+                        p.model_dump(mode="json", exclude_none=True)
+                        for p in (msg.parts or [])
+                    ],
+                    "metadata_json": msg.metadata.model_dump(
+                        mode="json", exclude_none=True
+                    )
+                    if msg.metadata
+                    else {},
+                }
             )
+
+        # Robust batch upsert (SQLAlchemy native)
+        # This is much faster than the loop as it sends 1 command for N rows.
+        from sqlalchemy.dialects.postgresql import insert
+
+        stmt = insert(self.table).values(all_values)
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["session_id", "user_id", "rank"],
+            set_={
+                k: stmt.excluded[k]
+                for k in ["parts_json", "metadata_json", "timestamp"]
+            },
+        )
+        await conn.execute(upsert_stmt)
 
     async def get(self, session_id: str) -> List[ChatMessage]:
         async with self.store.begin() as conn:

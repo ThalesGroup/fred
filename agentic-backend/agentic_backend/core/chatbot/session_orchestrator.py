@@ -47,6 +47,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from requests import HTTPError
+from sqlalchemy import text
 
 from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
@@ -532,11 +533,46 @@ class SessionOrchestrator:
 
             session.updated_at = _utcnow_dt()
             session.next_rank = base_rank + len(all_msgs)
+
+            t0 = time.perf_counter()
             async with phase_timer(self.kpi, "persist_tx"), pg_async_tx() as conn:
+                t1 = time.perf_counter()
+                await conn.execute(text("SET LOCAL synchronous_commit TO OFF"))
+
                 await self.history_store.save_with_conn(
                     conn, session.id, all_msgs, user.uid
                 )
                 await self.session_store.save_with_conn(conn, session)
+
+                t2 = time.perf_counter()
+
+            pool_wait_ms = (t1 - t0) * 1000.0
+            sql_ms = (t2 - t1) * 1000.0
+            num_history_rows = len(all_msgs)
+            num_sql_statements = num_history_rows + 1  # history rows + session upsert
+            # Emit as gauges (snapshot per exchange) to track pool wait vs SQL time
+            self.kpi.gauge(
+                "persist_pool_wait_ms",
+                pool_wait_ms,
+                dims={"phase": "persist", "agent": agent_name},
+                actor=actor,
+            )
+            self.kpi.gauge(
+                "persist_sql_ms",
+                sql_ms,
+                dims={"phase": "persist", "agent": agent_name},
+                actor=actor,
+            )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[PERSIST_METRICS] session=%s exchange=%s pool_wait_ms=%.1f sql_ms=%.1f history_rows=%d statements=%d",
+                    session.id,
+                    exchange_id,
+                    pool_wait_ms,
+                    sql_ms,
+                    num_history_rows,
+                    num_sql_statements,
+                )
             # Keep cache in sync for sticky sessions
             self.session_cache.touch_session(session.id, session)
             if logger.isEnabledFor(logging.DEBUG):
