@@ -274,7 +274,7 @@ async def runtime_source_by_object(
     obj = get_runtime_source_registry().get(key)
     if obj is None and key.startswith("agent."):
         agent_id = key.split(".", 1)[1]
-        agent_settings = agent_manager.get_agent_settings(agent_id)
+        agent_settings = await agent_manager.get_agent_settings(agent_id)
         if agent_settings and agent_settings.class_path:
             obj = _import_class(agent_settings.class_path)
     if obj is None:

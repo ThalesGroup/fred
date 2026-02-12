@@ -25,7 +25,6 @@ from agentic_backend.common.structures import (
     Configuration,
     Leader,
 )
-from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
@@ -36,9 +35,6 @@ from agentic_backend.core.agents.store.base_agent_store import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# agentic_backend/core/agents/agent_service.py (or exceptions.py if you have one)
 
 
 class AgentUpdatesDisabled(Exception):
@@ -56,16 +52,15 @@ class AgentAlreadyExistsException(Exception):
 
 class AgentManager:
     """
-    Manages the full lifecycle of AI agents (leaders and experts), including:
+    Manages the full lifecycle of AI agents (leaders and experts).
 
-    - Loading static agents from configuration at startup.
-    - Persisting new agents to storage (e.g., DuckDB).
-    - Rehydrating all persisted agents at runtime (with class instantiation and async init).
-    - Registering agents into in-memory maps for routing and discovery.
-    - Injecting expert agents into leader agents.
-    - Providing runtime agent discovery (e.g., for the UI).
+    The persistent store (Postgres) is the single source of truth — no in-memory
+    cache is kept, making the manager safe for multi-worker / multi-replica deployments.
 
-    Supports both statically declared agents (via configuration.yaml) and dynamically created ones.
+    Responsibilities:
+    - Reconciling static agents (configuration.yaml) with persisted state at bootstrap.
+    - Creating, updating, and deleting dynamic agents via the store.
+    - Providing runtime agent discovery (e.g., for the UI) by querying the store.
     """
 
     def __init__(
@@ -74,37 +69,14 @@ class AgentManager:
         self.config = config
         self.store = store
         self.loader = agent_loader
-        self.agent_settings: Dict[str, AgentSettings] = {}
-        self.agent_instances: Dict[str, AgentFlow] = {}
         self.use_static_config_only = config.ai.use_static_config_only
         logger.info(
             "[AGENTS] AgentManager initialized with static_config_only=%s",
             self.use_static_config_only,
         )
 
-    def get_agent_settings(self, agent_id: str) -> AgentSettings | None:
-        return self.agent_settings.get(agent_id)
-
-    def get_agentic_flows(self) -> List[AgentSettings]:
-        flows: List[AgentSettings] = []
-        for settings in self.agent_settings.values():
-            # Normalize chat options to explicit boolean defaults (all False unless opted-in)
-            try:
-                settings.chat_options = AgentChatOptions(
-                    **(
-                        settings.chat_options.model_dump(exclude_none=True)
-                        if settings.chat_options
-                        else {}
-                    )
-                )
-            except Exception:
-                logger.debug(
-                    "[AGENTS] Failed to normalize chat options for %s",
-                    settings.id,
-                    exc_info=True,
-                )
-            flows.append(settings)
-        return flows
+    async def get_agent_settings(self, agent_id: str) -> AgentSettings | None:
+        return await self.store.get(agent_id)
 
     @staticmethod
     def _chat_options_from_tuning(tuning: AgentTuning) -> AgentChatOptions:
@@ -130,21 +102,11 @@ class AgentManager:
             # Fallback to static configuration if manager unavailable (e.g., early boot)
             return [s for s in get_mcp_configuration().servers if s.enabled]
 
-    def log_current_settings(self):
-        for agent_id, settings in self.agent_settings.items():
-            tuning = settings.tuning
-            logger.debug(
-                "[AGENTS] agent=%s current_tuning=%s",
-                agent_id,
-                tuning.dump() if tuning else "N/A",
-            )
-
     async def create_dynamic_agent(
         self, agent_settings: AgentSettings, agent_tuning: AgentTuning
     ) -> None:
         """
-        Registers a new dynamic agent into the runtime catalog.
-        Note: This does not persist the agent; use the AgentService for that.
+        Creates a new dynamic agent and persists it to the store.
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
@@ -156,23 +118,19 @@ class AgentManager:
             )
 
         await self.store.save(agent_settings, agent_tuning)
-
-        self.agent_settings[agent_settings.id] = agent_settings
         logger.info("[AGENTS] agent=%s registered as dynamic agent.", agent_settings.id)
 
     async def update_agent(self, new_settings: AgentSettings) -> bool:
         """
-        Contract:
-        - Update tuning/settings in memory + persist.
-        - If `enabled=False`: close & unregister.
-        - Leaders: crew changes are honored by a deterministic rewire pass.
+        Updates an agent's settings and tuning in the persistent store.
+        Leaders: crew changes are logged for observability.
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
 
         if new_settings.type == "leader":
             new_leader_settings = cast(Leader, new_settings)
-            old_leader_settings = cast(Leader, self.agent_settings.get(new_settings.id))
+            old_leader_settings = cast(Leader, await self.store.get(new_settings.id))
             if old_leader_settings:
                 old_crew = set(old_leader_settings.crew or [])
                 new_crew = set(new_leader_settings.crew or [])
@@ -183,7 +141,6 @@ class AgentManager:
                         old_crew,
                         new_crew,
                     )
-                    # If the crew has changed, we need to rewire the agent's connections
 
         agent_id = new_settings.id
         tunings = new_settings.tuning
@@ -199,30 +156,28 @@ class AgentManager:
                 agent_id,
                 exc_info=True,
             )
-        # 1) Persist source of truth (DB)
         try:
             await self.store.save(new_settings, tunings)
         except Exception:
             logger.exception(
-                "Failed to persist agent '%s'; continuing with runtime update.",
+                "Failed to persist agent '%s'.",
                 agent_id,
             )
             return False
 
-        self.agent_settings[agent_id] = new_settings
         return True
 
     async def delete_agent(self, agent_id: str) -> bool:
         """
-        Deletes an agent from the persistent store and unregisters it from runtime.
+        Deletes an agent from the persistent store.
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
 
-        settings = self.agent_settings.pop(agent_id, None)
-        if not settings:
+        existing = await self.store.get(agent_id)
+        if not existing:
             logger.warning(
-                "[AGENTS] agent=%s deleted but not found in memory.", agent_id
+                "[AGENTS] agent=%s not found in store, nothing to delete.", agent_id
             )
             return False
 
@@ -233,36 +188,26 @@ class AgentManager:
                 "[AGENTS] agent=%s could not be deleted from persistent store.",
                 agent_id,
             )
-            # We don't return False here because it's still removed from runtime
-            # and in-memory catalogs, which is the primary goal.
+            return False
 
         return True
 
     async def bootstrap(self):
         """
-        Bootstraps the agent manager by loading agents from both static configuration
-        and persisted storage, reconciling any conflicts, and registering them into
-        the runtime catalog.
+        Bootstraps the agent manager by loading agents from static configuration,
+        reconciling with persisted storage, and saving the merged result to the store.
+
+        The store is the single source of truth for all workers/replicas.
 
         The principles are simple:
-        1. Static agents (from configuration.yaml) define the base settings. They provide together with their hard-coded defaults the default tunings.
+        1. Static agents (from configuration.yaml) define the base settings and default tunings.
         2. Persisted agents (from the database) override tunings for static agents.
-        3. Dynamically created agents (persisted-only) are loaded as-is from the database.
-
+        3. Dynamically created agents (persisted-only) are kept as-is in the database.
         """
-        # 1. Load and Map Data
+        # 1. Load static agent definitions from YAML (instantiates classes to get default tunings)
         static_instances = self.loader.load_static()
-        if self.use_static_config_only:
-            logger.warning(
-                "[AGENTS] 'use_static_config_only' is ENABLED. Skipping all persistent agent configuration (DB)."
-            )
-            persisted_instances = []
-        else:
-            persisted_instances = await self.loader.load_persisted()
 
         static_catalogue: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
-        persisted_state: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
-        agents_to_load: Dict[str, AgentSettings] = {}
         for instance in static_instances:
             agent_id = instance.get_id()
             settings = instance.get_agent_settings()
@@ -274,92 +219,47 @@ class AgentManager:
                 settings.class_path,
             )
 
-        # Seed statics into the store on first boot only (so deletes persist)
-        if not self.use_static_config_only and not await self.store.static_seeded():
-            for agent_id, (settings, tunings) in static_catalogue.items():
-                try:
-                    await self.store.save(settings, tunings)
-                    logger.info(
-                        "[AGENTS] Seeded static agent '%s' into store", agent_id
-                    )
-                except Exception:
-                    logger.exception(
-                        "[AGENTS] Failed to seed static agent '%s'", agent_id
-                    )
-            await self.store.mark_static_seeded()
-
-        for instance in persisted_instances:
-            agent_id = instance.get_id()
-            settings = instance.get_agent_settings()
-            tunings = instance.get_agent_tunings()
-            persisted_state[agent_id] = (settings, tunings)
-            logger.info(
-                "[AGENTS] agent=%s loaded from persistent store. Class: %s",
-                agent_id,
-                settings.class_path,
+        # 2. Load persisted state directly from the store (no class instantiation needed)
+        persisted_state: Dict[str, AgentSettings] = {}
+        if not self.use_static_config_only:
+            persisted_agents = await self.store.load_all()
+            persisted_state = {agent.id: agent for agent in persisted_agents}
+        else:
+            logger.warning(
+                "[AGENTS] 'use_static_config_only' is ENABLED. "
+                "Skipping persisted agent overrides."
             )
 
-        # ----------------------------------------------------------------------
-        # 2. Reconcile and Log Decisions
-        # ----------------------------------------------------------------------
+        # 3. Reconcile: for static agents, merge YAML settings with persisted tunings
+        #    and save to the store so all workers see consistent state.
+        for agent_id, (static_settings, static_tunings) in sorted(
+            static_catalogue.items()
+        ):
+            persisted = persisted_state.get(agent_id)
 
-        all_ids = set(static_catalogue.keys()) | set(persisted_state.keys())
-        for agent_id in sorted(list(all_ids)):
-            is_static = agent_id in static_catalogue
-            is_persisted = agent_id in persisted_state
-
-            if is_static and is_persisted:
-                # CONFLICT: Static agent exists AND user has saved a persisted state (usually tuning)
-                static_settings, _ = static_catalogue[agent_id]
-                _, persisted_tunings = persisted_state[agent_id]
-
+            if persisted and persisted.tuning:
                 logger.info(
-                    "[AGENTS] agent=%s found in YAML and persistent store. Using persisted tunings.",
+                    "[AGENTS] agent=%s found in YAML and store. Merging with persisted tunings.",
                     agent_id,
                 )
-                final_settings = static_settings.model_copy(
-                    update={"tuning": persisted_tunings}
-                )
-                agents_to_load[agent_id] = final_settings
-
-            elif is_static and not is_persisted:
-                # STATIC-ONLY: Agent is defined in code but has no user changes
-                static_settings, static_tunings = static_catalogue[agent_id]
-
+                effective_tuning = persisted.tuning
+            else:
                 logger.info(
-                    "[AGENTS] agent=%s is only defined in YAML configuration. Using it as is.",
+                    "[AGENTS] agent=%s using YAML defaults.",
                     agent_id,
                 )
-                final_settings = static_settings.model_copy(
-                    update={"tuning": static_tunings}
-                )
-                agents_to_load[agent_id] = final_settings
+                effective_tuning = static_tunings
 
-            elif is_persisted and not is_static:
-                # PERSISTED-ONLY: Agent was created dynamically (e.g., via UI) and stored in DB
-                persisted_settings, persisted_tunings = persisted_state[agent_id]
-
-                logger.info(
-                    "[AGENTS] agent=%s loaded from persistent store. Delete it from the database to remove it from runtime.",
-                    agent_id,
-                )
-                agents_to_load[agent_id] = persisted_settings
-                final_settings = persisted_settings.model_copy(
-                    update={"tuning": persisted_tunings}
-                )
-                agents_to_load[agent_id] = final_settings
-
-        for agent_id, settings in agents_to_load.items():
-            logger.info(
-                "[AGENTS] agent=%s registered into runtime catalog",
-                agent_id,
+            final_settings = static_settings.model_copy(
+                update={"tuning": effective_tuning}
             )
-            logger.info(
-                "[AGENTS] agent=%s tuning=%s",
-                agent_id,
-                settings.tuning.dump() if settings.tuning else "N/A",
-            )
-            self.agent_settings[agent_id] = settings
+
+            try:
+                await self.store.save(final_settings, effective_tuning)
+            except Exception:
+                logger.exception(
+                    "[AGENTS] Failed to save reconciled settings for '%s'", agent_id
+                )
 
     async def restore_static_agents(self, *, force_overwrite: bool = True) -> None:
         """
@@ -421,7 +321,5 @@ class AgentManager:
                 )
 
         await self.store.mark_static_seeded()
-        # Re-bootstrap to refresh in-memory catalog with restored entries
-        self.agent_settings = {}
-        self.agent_instances = {}
+        # Re-bootstrap to reconcile static agents with the store
         await self.bootstrap()
