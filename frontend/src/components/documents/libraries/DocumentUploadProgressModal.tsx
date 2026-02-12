@@ -27,7 +27,7 @@ import {
 } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ProgressStep, ProgressStepper } from "../../ProgressStepper";
+import { ProgressFileStatus, ProgressStep, ProgressStepper } from "../../ProgressStepper";
 
 interface DocumentUploadProgressModalProps {
   open: boolean;
@@ -37,6 +37,7 @@ interface DocumentUploadProgressModalProps {
   totalUploads: number;
   progressPercent: number;
   steps: ProgressStep[];
+  fileStatuses?: Record<string, ProgressFileStatus>;
   isUploadFinished: boolean;
 }
 
@@ -48,6 +49,7 @@ export const DocumentUploadProgressModal: React.FC<DocumentUploadProgressModalPr
   totalUploads,
   progressPercent,
   steps,
+  fileStatuses,
   isUploadFinished,
 }) => {
   const { t } = useTranslation();
@@ -62,8 +64,24 @@ export const DocumentUploadProgressModal: React.FC<DocumentUploadProgressModalPr
         latestByFile.set(step.filename, step);
       }
     });
-    return Array.from(latestByFile.values()).filter((step) => step.status === "error");
-  }, [steps]);
+
+    const failures = Array.from(latestByFile.values()).filter((step) => step.status === "error");
+    const knownFailures = new Set(failures.map((step) => step.filename));
+
+    if (fileStatuses) {
+      Object.entries(fileStatuses).forEach(([filename, status]) => {
+        if (!status?.failed || knownFailures.has(filename)) return;
+        failures.push({
+          filename,
+          step: "processing",
+          status: "error",
+          error: "Processing failed",
+        });
+      });
+    }
+
+    return failures;
+  }, [fileStatuses, steps]);
 
   useEffect(() => {
     if (!showDetails || !open) return;
@@ -122,7 +140,7 @@ export const DocumentUploadProgressModal: React.FC<DocumentUploadProgressModalPr
 
         <Box sx={{ maxHeight: "50vh", overflowY: "auto", pr: 0.5 }} ref={detailsScrollRef}>
           <Collapse in={showDetails} unmountOnExit>
-            <ProgressStepper steps={steps} />
+            <ProgressStepper steps={steps} fileStatuses={fileStatuses} />
           </Collapse>
         </Box>
 

@@ -171,9 +171,8 @@ class BaseScheduler(ABC):
             preview_done = stages.get(ProcessingStage.PREVIEW_READY) == ProcessingStatus.DONE
             vectorized_done = stages.get(ProcessingStage.VECTORIZED) == ProcessingStatus.DONE
             sql_indexed_done = stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE
-            # Consider PREVIEW_READY as terminal success for pipelines that do not
-            # produce vector/sql stages (or where those stages are optional).
-            fully_processed = preview_done or vectorized_done or sql_indexed_done
+            # Consider a file processed if it has reached the vectorization or sql indexation stage successfully.
+            fully_processed = vectorized_done or sql_indexed_done
 
             if preview_done:
                 documents_with_preview += 1

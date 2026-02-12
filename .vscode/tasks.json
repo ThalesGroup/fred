@@ -2,57 +2,57 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "agentic-backend-dev",
-      "type": "shell",
-      "command": "make run",
-      "options": { "cwd": "${workspaceFolder}/agentic_backend" },
-      "problemMatcher": []
+      "label": "Agentic + Knowledge + Frontend",
+      "dependsOn": [
+        "agentic-backend",
+        "knowledge-flow-backend",
+        "frontend"
+      ],
+      "dependsOrder": "parallel"
     },
     {
-      "label": "agentic-backend-prod",
+      "label": "agentic-backend",
       "type": "shell",
-      "command": "make run-prod",
-      "options": { "cwd": "${workspaceFolder}/agentic_backend" },
-      "problemMatcher": []
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
+      "options": { "cwd": "${workspaceFolder}/agentic-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
     },
     {
-      "label": "knowledge-flow-backend-dev",
+      "label": "knowledge-flow-backend",
       "type": "shell",
-      "command": "make run",
-      "options": { "cwd": "${workspaceFolder}/knowledge_flow_backend" },
-      "problemMatcher": []
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
+      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
     },
     {
-      "label": "knowledge-flow-backend-prod",
+      "label": "knowledge-flow temporal worker",
       "type": "shell",
-      "command": "make run-prod",
-      "options": { "cwd": "${workspaceFolder}/knowledge_flow_backend" },
-      "problemMatcher": []
+      "command": "make run-worker",
+      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
     },
     {
       "label": "frontend",
       "type": "shell",
-      "command": "make run",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:5173 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
       "options": { "cwd": "${workspaceFolder}/frontend" },
-      "problemMatcher": []
-    },
-    {
-      "label": "run-all-dev",
-      "dependsOn": [
-        "knowledge-flow-backend-dev",
-        "agentic-backend-dev",
-        "frontend"
-      ],
-      "dependsOrder": "parallel"
-    },
-    {
-      "label": "run-all-prod",
-      "dependsOn": [
-        "knowledge-flow-backend-prod",
-        "agentic-backend-prod",
-        "frontend"
-      ],
-      "dependsOrder": "parallel"
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
     }
   ]
 }

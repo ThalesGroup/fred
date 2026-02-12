@@ -37,6 +37,8 @@ from knowledge_flow_backend.features.scheduler.activities import (
     load_pull_file,
     load_push_file,
     output_process,
+    record_current_document,
+    record_workflow_status,
 )
 from knowledge_flow_backend.features.scheduler.workflow import (
     CreatePullFileMetadata,
@@ -92,6 +94,8 @@ async def run_worker(config: TemporalSchedulerConfig):
             output_process,
             fast_store_vectors,
             fast_delete_vectors,
+            record_current_document,
+            record_workflow_status,
         ],
         activity_executor=executor,
     )

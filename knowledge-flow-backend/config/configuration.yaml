@@ -211,6 +211,10 @@ storage:
   metadata_store:
     type: "postgres"
     table: metadata
+  task_store:
+    type: "postgres"
+    table: workflow_tasks
+    prefix: "sched_"
   vector_store:
     type: chroma
   tabular_stores:

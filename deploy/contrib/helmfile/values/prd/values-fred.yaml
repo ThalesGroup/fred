@@ -214,7 +214,9 @@ applications:
         log_store:
           type: "opensearch"
           index: log-index
-
+        task_store:
+          type: "postgres"
+          table: agentic-tasks
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   frontend:
@@ -275,7 +277,7 @@ applications:
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-  knowledge-flow-backend:
+  knowledge-flow-backend: &knowledgeFlowBackend
     replicaCount: 4
 
     # Set Carma registry and PRISM tag
@@ -292,7 +294,7 @@ applications:
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
 
-    configuration:
+    configuration: &knowledgeFlowBackendConfiguration
       processing:
         # disable image processing for now (todo: enable it)
         process_images: false
@@ -302,9 +304,16 @@ applications:
       # Set Keycloak url
       security: *security-configuration
 
-      # Disable scheduler (todo: enable after Temporal install)
+      # Enable scheduler
       scheduler:
-        enabled: false
+        enabled: true
+        backend: "temporal"
+        temporal:
+          host: temporal-frontend:7233
+          namespace: "default"
+          task_queue: "ingestion"
+          workflow_prefix: "pipeline"
+          connect_timeout_seconds: 5
 
       # Set Minio connection params
       content_storage: &content-storage
@@ -362,7 +371,9 @@ applications:
         log_store:
           type: "opensearch"
           index: log-index
-
+        task_store:
+          type: "postgres"
+          table: workflow-tasks
         # Set tabular store to opensearch
         tabular_stores:
           base_database:
@@ -403,3 +414,21 @@ applications:
           periodSeconds: 20
           timeoutSeconds: 600
           failureThreshold: 20
+
+
+    knowledge-flow-worker:
+      <<: *knowledgeFlowBackend
+      enabled: true
+      replicaCount: 3
+      configurationFileName: configuration_worker.yaml
+      env:
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: ENV_FILE
+          value: "/app/config/.env"
+        - name: CONFIG_FILE
+          value: "/app/config/configuration_worker.yaml"
+      configuration:
+        <<: *knowledgeFlowBackendConfiguration
+        app:
+          metrics_enabled: false

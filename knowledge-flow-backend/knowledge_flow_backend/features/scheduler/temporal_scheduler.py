@@ -21,14 +21,17 @@ from uuid import uuid4
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
 from fred_core.scheduler import TemporalClientProvider
-from temporalio.client import Client
+from temporalio.client import Client, WorkflowExecutionStatus
 
 from knowledge_flow_backend.common.structures import SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
+    DocumentProgress,
     PipelineDefinition,
 )
+from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
+from knowledge_flow_backend.features.scheduler.store.task_structures import WorkflowTaskNotFoundError
 from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, Process
 
 logger = logging.getLogger(__name__)
@@ -47,11 +50,13 @@ class TemporalScheduler(BaseScheduler):
         scheduler_config: SchedulerConfig,
         metadata_service: MetadataService,
         temporal_client_provider: Optional[TemporalClientProvider] = None,
+        workflow_task_store: Optional[BaseWorkflowTaskStore] = None,
     ) -> None:
         super().__init__(metadata_service)
         self._scheduler_config = scheduler_config
         # Prefer a shared Temporal client provider (mirrors agentic backend pattern)
         self._client_provider = temporal_client_provider or TemporalClientProvider(scheduler_config.temporal)
+        self._workflow_task_store = workflow_task_store
 
     async def start_document_processing(
         self,
@@ -100,4 +105,81 @@ class TemporalScheduler(BaseScheduler):
             payload,
             id=f"fast-delete-{uuid4().hex}",
             task_queue=self._scheduler_config.temporal.task_queue,
+        )
+
+    async def get_progress(self, user: KeycloakUser, workflow_id: Optional[str]):
+        base_progress = await super().get_progress(user, workflow_id)
+
+        if self._workflow_task_store is None:
+            return base_progress
+
+        effective_workflow_id = workflow_id
+        if effective_workflow_id is None:
+            with self._lock:
+                effective_workflow_id = self._last_workflow_by_user.get(user.uid)
+
+        if not effective_workflow_id:
+            return base_progress
+
+        try:
+            client: Client = await self._client_provider.get_client()
+            handle = client.get_workflow_handle(effective_workflow_id)
+            description = await handle.describe()
+        except Exception as exc:
+            logger.warning("[SCHEDULER] Failed to describe workflow_id=%s: %s", effective_workflow_id, exc)
+            return base_progress
+
+        if description.status not in {
+            WorkflowExecutionStatus.FAILED,
+            WorkflowExecutionStatus.CANCELED,
+            WorkflowExecutionStatus.TERMINATED,
+            WorkflowExecutionStatus.TIMED_OUT,
+        }:
+            return base_progress
+
+        try:
+            task = await self._workflow_task_store.get(effective_workflow_id)
+        except WorkflowTaskNotFoundError:
+            return base_progress
+
+        current_uid = task.current_document_uid
+        if not current_uid:
+            return base_progress
+
+        documents = list(base_progress.documents)
+        updated = False
+        for idx, doc in enumerate(documents):
+            if doc.document_uid != current_uid:
+                continue
+            if doc.fully_processed:
+                return base_progress
+            if not doc.has_failed:
+                documents[idx] = doc.model_copy(update={"has_failed": True})
+                updated = True
+            break
+        else:
+            documents.append(
+                DocumentProgress(
+                    document_uid=current_uid,
+                    stages={},
+                    fully_processed=False,
+                    has_failed=True,
+                )
+            )
+            updated = True
+
+        if not updated:
+            return base_progress
+
+        documents_failed = sum(1 for doc in documents if doc.has_failed)
+        documents_found = len(documents)
+        documents_missing = max(base_progress.total_documents - documents_found, 0)
+
+        return base_progress.model_copy(
+            update={
+                "documents": documents,
+                "documents_failed": documents_failed,
+                "documents_found": documents_found,
+                "documents_missing": documents_missing,
+            }
         )
