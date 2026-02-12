@@ -1188,7 +1188,8 @@
   },
   "newChat": {
     "yourAgents": "Your agents",
-    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
+    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
+    "loadingAgentError": "Unable to load your agents."
   },
   "comingSoon": {
     "title": "{{siteDisplayName}} is coming soon.",
