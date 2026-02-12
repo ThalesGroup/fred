@@ -47,11 +47,13 @@ class IngestionTaskService:
         scheduler_config: SchedulerConfig,
         metadata_service: MetadataService,
         temporal_client_provider: Optional[TemporalClientProvider] = None,
+        max_parallelism: int = 1,
     ) -> None:
         self._scheduler_config = scheduler_config
         self._metadata_service = metadata_service
         self._client_provider = temporal_client_provider
         self._task_queue: Optional[str] = None
+        self._max_parallelism = max(1, int(max_parallelism))
 
         backend = scheduler_config.backend.lower()
         if backend == "memory":
@@ -87,6 +89,7 @@ class IngestionTaskService:
         definition = PipelineDefinition(
             name=pipeline_name,
             files=[FileToProcess.from_file_to_process_without_user(f, user) for f in files],
+            max_parallelism=self._max_parallelism,
         )
         handle = await self._scheduler.start_document_processing(
             user=user,

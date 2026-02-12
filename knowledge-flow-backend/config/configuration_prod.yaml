@@ -24,6 +24,7 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  max_ingestion_workers: 3
 
 processing:
   generate_summary: false
