@@ -32,12 +32,12 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 )
 from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
 from knowledge_flow_backend.features.scheduler.store.task_structures import WorkflowTaskNotFoundError
+from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, Process
 from knowledge_flow_backend.features.scheduler.workflow_status import (
     is_non_terminal_status,
     is_terminal_failure_status,
     normalize_workflow_status,
 )
-from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, Process
 
 logger = logging.getLogger(__name__)
 
@@ -155,10 +155,7 @@ class TemporalScheduler(BaseScheduler):
             # per-document failures caused by retried child workflows/activities.
             if base_progress.documents_failed == 0:
                 return base_progress
-            documents = [
-                doc.model_copy(update={"has_failed": False}) if doc.has_failed else doc
-                for doc in base_progress.documents
-            ]
+            documents = [doc.model_copy(update={"has_failed": False}) if doc.has_failed else doc for doc in base_progress.documents]
             return base_progress.model_copy(
                 update={
                     "documents": documents,
