@@ -80,7 +80,7 @@ def _class_path(obj_or_type: Union[type, object]) -> str:
 
 class AgentService:
     def __init__(self, agent_manager: AgentManager):
-        self.store = get_agent_store()
+        self.agent_store = get_agent_store()
         self.agent_manager = agent_manager
         self.rebac = get_rebac_engine()
 
@@ -90,7 +90,7 @@ class AgentService:
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
     ) -> List[AgentSettings]:
-        agents = self.agent_manager.get_agentic_flows()
+        agents = await self.agent_store.load_all()
 
         authorized_ids = await self._resolve_authorized_agent_ids(
             user, owner_filter, team_id
@@ -107,7 +107,7 @@ class AgentService:
             user, AgentPermission.READ, agent_id
         )
 
-        return self.agent_manager.get_agent_settings(agent_id)
+        return await self.agent_manager.get_agent_settings(agent_id)
 
     async def create_agent(
         self,
@@ -188,7 +188,6 @@ class AgentService:
         )
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
-        self.agent_manager.log_current_settings()
 
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
         await self.rebac.check_user_permission_or_raise(
