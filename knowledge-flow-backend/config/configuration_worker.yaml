@@ -132,6 +132,11 @@ storage:
     port: 5432
     database: fred
     username: fred
+    pool_size: 2
+    max_overflow: 0
+    pool_timeout: 30
+    pool_recycle: 1800
+    pool_pre_ping: true
 
   opensearch:
     host: https://localhost:9200
@@ -162,6 +167,10 @@ storage:
   metadata_store:
     type: "postgres"
     table: metadata
+  task_store:
+    type: "postgres"
+    table: workflow_tasks
+    prefix: "sched_"
 
   vector_store:
     type: opensearch

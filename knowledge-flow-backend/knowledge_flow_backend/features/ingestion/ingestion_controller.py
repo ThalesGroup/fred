@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import dataclasses
 import inspect
 import json
@@ -57,6 +58,13 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 
 logger = logging.getLogger(__name__)
 
+STEP_UPLOAD_PREPARATION = "upload preparation"
+STEP_QUEUED_FOR_PROCESSING = "queued for processing"
+STEP_PROCESSING = "processing"
+STEP_FINISHED = "Finished"
+SCHEDULER_PROGRESS_POLL_INTERVAL_MS = 2000
+SCHEDULER_PROGRESS_POLL_TIMEOUT_MS = 30 * 60 * 1000
+
 
 class IngestionInput(BaseModel):
     tags: List[str] = []
@@ -72,6 +80,12 @@ class ProcessingProgress(BaseModel):
         filename (str): The name of the file being processed.
         status (str): The status of the processing operation.
         document_uid (Optional[str]): A unique identifier for the document, if available.
+
+    Steps are emitted as high-level phases:
+        - upload preparation
+        - queued for processing
+        - processing
+        - Finished
     """
 
     step: str
@@ -316,7 +330,7 @@ class IngestionController:
             file_started = time.perf_counter()
             file_status = "error"
             file_type = pathlib.Path(filename).suffix.lstrip(".") or None
-            current_step = "metadata extraction"
+            current_step = STEP_UPLOAD_PREPARATION
             try:
                 output_temp_dir = input_temp_file.parent.parent
 
@@ -329,25 +343,9 @@ class IngestionController:
                 )
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
-                yield ProcessingProgress(step=current_step, status=Status.SUCCESS, filename=filename).model_dump_json() + "\n"
-
-                current_step = "input content saving"
-                yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                 self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-                yield (
-                    ProcessingProgress(
-                        step=current_step,
-                        status=Status.SUCCESS,
-                        filename=filename,
-                        document_uid=metadata.document_uid,
-                    ).model_dump_json()
-                    + "\n"
-                )
 
                 if scheduler_task_service is None:
-                    current_step = "input processing"
-                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                    metadata = await input_process(user=user, input_file=str(input_temp_file), metadata=metadata)
                     yield (
                         ProcessingProgress(
                             step=current_step,
@@ -358,7 +356,9 @@ class IngestionController:
                         + "\n"
                     )
 
-                    current_step = "output processing"
+                    current_step = STEP_PROCESSING
+                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                    metadata = await input_process(user=user, input_file=str(input_temp_file), metadata=metadata)
                     file_to_process = FileToProcess(
                         document_uid=metadata.document_uid,
                         external_path=None,
@@ -366,7 +366,6 @@ class IngestionController:
                         tags=tags,
                         processed_by=user,
                     )
-                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                     metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
                     yield (
                         ProcessingProgress(
@@ -379,7 +378,7 @@ class IngestionController:
                     )
                     yield (
                         ProcessingProgress(
-                            step="Finished",
+                            step=STEP_FINISHED,
                             status=Status.FINISHED,
                             filename=filename,
                             document_uid=metadata.document_uid,
@@ -389,8 +388,6 @@ class IngestionController:
                     success += 1
                     file_status = "ok"
                 else:
-                    current_step = "metadata saving"
-                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                     await self.service.save_metadata(user, metadata=metadata)
                     yield (
                         ProcessingProgress(
@@ -429,8 +426,7 @@ class IngestionController:
                 )
 
         if scheduler_task_service is not None and scheduled_candidates:
-            current_step = "scheduler submission"
-            yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename="scheduler").model_dump_json() + "\n"
+            current_step = STEP_QUEUED_FOR_PROCESSING
             try:
                 workflow_id: str | None = None
                 files_to_schedule = [
@@ -450,18 +446,125 @@ class IngestionController:
                 )
                 workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
-                success += len(scheduled_candidates)
-                yield (
-                    json.dumps(
-                        {
-                            "step": current_step,
-                            "status": Status.SUCCESS,
-                            "filename": "scheduler",
-                            "workflow_id": workflow_id,
-                        }
+                for filename, document_uid, _ in scheduled_candidates:
+                    yield (
+                        json.dumps(
+                            {
+                                "step": current_step,
+                                "status": Status.SUCCESS,
+                                "filename": filename,
+                                "document_uid": document_uid,
+                                "workflow_id": workflow_id,
+                            }
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
+                # Emit initial processing status so the UI shows a spinner immediately.
+                for filename, document_uid, _ in scheduled_candidates:
+                    yield (
+                        ProcessingProgress(
+                            step=STEP_PROCESSING,
+                            status=Status.IN_PROGRESS,
+                            filename=filename,
+                            document_uid=document_uid,
+                        ).model_dump_json()
+                        + "\n"
+                    )
+
+                filename_by_uid = {document_uid: filename for filename, document_uid, _ in scheduled_candidates}
+                finished_uids: set[str] = set()
+                had_failure: set[str] = set()
+                started_at = time.monotonic()
+
+                while True:
+                    elapsed_ms = (time.monotonic() - started_at) * 1000.0
+                    if elapsed_ms >= SCHEDULER_PROGRESS_POLL_TIMEOUT_MS:
+                        for document_uid, filename in filename_by_uid.items():
+                            if document_uid in finished_uids:
+                                continue
+                            yield (
+                                ProcessingProgress(
+                                    step=STEP_PROCESSING,
+                                    status=Status.ERROR,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                    error="Timed out waiting for processing",
+                                ).model_dump_json()
+                                + "\n"
+                            )
+                        break
+
+                    progress = await self.service.get_processing_progress(
+                        user=user,
+                        scheduler_task_service=scheduler_task_service,
+                        workflow_id=workflow_id,
+                    )
+                    progress_by_uid = {doc.document_uid: doc for doc in progress.documents}
+
+                    for document_uid, filename in filename_by_uid.items():
+                        if document_uid in finished_uids:
+                            continue
+                        doc = progress_by_uid.get(document_uid)
+                        if doc is None:
+                            # Not visible yet in metadata store; keep waiting.
+                            continue
+
+                        if doc.fully_processed:
+                            message = "Completed after retry" if document_uid in had_failure else None
+                            yield (
+                                ProcessingProgress(
+                                    step=STEP_PROCESSING,
+                                    status=Status.SUCCESS,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                    error=message,
+                                ).model_dump_json()
+                                + "\n"
+                            )
+                            yield (
+                                ProcessingProgress(
+                                    step=STEP_FINISHED,
+                                    status=Status.FINISHED,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                ).model_dump_json()
+                                + "\n"
+                            )
+                            finished_uids.add(document_uid)
+                            continue
+
+                        if doc.has_failed:
+                            had_failure.add(document_uid)
+                            yield (
+                                ProcessingProgress(
+                                    step=STEP_PROCESSING,
+                                    status=Status.ERROR,
+                                    filename=filename,
+                                    document_uid=document_uid,
+                                    error="Processing failed",
+                                ).model_dump_json()
+                                + "\n"
+                            )
+                            continue
+
+                        retry_message = "Retrying after failure" if document_uid in had_failure else None
+                        yield (
+                            ProcessingProgress(
+                                step=STEP_PROCESSING,
+                                status=Status.IN_PROGRESS,
+                                filename=filename,
+                                document_uid=document_uid,
+                                error=retry_message,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+
+                    if len(finished_uids) >= len(filename_by_uid):
+                        break
+
+                    await asyncio.sleep(SCHEDULER_PROGRESS_POLL_INTERVAL_MS / 1000.0)
+
+                success += len(finished_uids)
             except Exception as e:
                 error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
                 last_error = error_message
@@ -730,7 +833,7 @@ class IngestionController:
             async def event_stream():
                 success = 0
                 for filename, input_temp_file in preloaded_files:
-                    current_step = "metadata extraction"
+                    current_step = STEP_UPLOAD_PREPARATION
                     try:
                         yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         metadata = await self.service.extract_metadata(
@@ -739,31 +842,8 @@ class IngestionController:
                             tags=tags,
                             source_tag=source_tag,
                         )
-                        yield (
-                            ProcessingProgress(
-                                step=current_step,
-                                status=Status.SUCCESS,
-                                filename=filename,
-                                document_uid=metadata.document_uid,
-                            ).model_dump_json()
-                            + "\n"
-                        )
-                        current_step = "input content saving"
-                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         output_temp_dir = input_temp_file.parent.parent
                         self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-                        yield (
-                            ProcessingProgress(
-                                step=current_step,
-                                status=Status.SUCCESS,
-                                filename=filename,
-                                document_uid=metadata.document_uid,
-                            ).model_dump_json()
-                            + "\n"
-                        )
-
-                        current_step = "metadata saving"
-                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
                         await self.service.save_metadata(user, metadata=metadata)
                         yield (
                             ProcessingProgress(
@@ -776,7 +856,7 @@ class IngestionController:
                         )
                         yield (
                             ProcessingProgress(
-                                step="Finished",
+                                step=STEP_FINISHED,
                                 status=Status.FINISHED,
                                 filename=filename,
                                 document_uid=metadata.document_uid,
