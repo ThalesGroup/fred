@@ -7,9 +7,9 @@ from knowledge_flow_backend.application_context import EXTENSION_CATEGORY, Appli
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
     BaseInputProcessor,
-    InputConversionError,
     BaseMarkdownProcessor,
     BaseTabularProcessor,
+    InputConversionError,
 )
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor

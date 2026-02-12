@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import pathlib
 import tempfile
-import asyncio
 
 from fred_core import KeycloakUser
 from temporalio import activity, exceptions

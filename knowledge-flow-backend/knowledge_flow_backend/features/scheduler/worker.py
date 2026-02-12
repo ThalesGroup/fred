@@ -49,8 +49,8 @@ from knowledge_flow_backend.features.scheduler.workflow import (
     LoadPullFile,
     LoadPushFile,
     OutputProcess,
-    ProcessFile,
     Process,
+    ProcessFile,
 )
 
 logger = logging.getLogger(__name__)
