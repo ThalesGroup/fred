@@ -418,6 +418,8 @@ applications:
   knowledge-flow-worker:
     <<: *knowledgeFlowBackend
     enabled: true
+    deployment:
+      enabled: true  
     replicaCount: 3
     configurationFileName: configuration_worker.yaml
     env:
