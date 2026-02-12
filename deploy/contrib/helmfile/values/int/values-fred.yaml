@@ -166,11 +166,11 @@ applications:
       storage:
         # Set Postgres connection params
         postgres: &storage-postgres
-          host: "postgresql-primary"
+          host: "postgresql"
           port: 5432
           database: fred
           # todo: use fred user
-          username: postgres
+          username: fred
 
 
         # Set Opensearch connection params
