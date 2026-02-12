@@ -60,6 +60,7 @@ class CreatePullFileMetadata:
             "create_pull_file_metadata",
             args=[file],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -72,6 +73,7 @@ class GetPushFileMetadata:
             "get_push_file_metadata",
             args=[file],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -84,6 +86,7 @@ class LoadPullFile:
             "load_pull_file",
             args=[file, metadata],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -96,6 +99,7 @@ class LoadPushFile:
             "load_push_file",
             args=[file, metadata],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -108,6 +112,7 @@ class InputProcess:
             "input_process",
             args=[user, input_file, metadata],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -120,6 +125,7 @@ class OutputProcess:
             "output_process",
             args=[file, metadata, False],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -131,6 +137,7 @@ class FastStoreVectors:
             "fast_store_vectors",
             args=[payload],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -141,7 +148,8 @@ class FastDeleteVectors:
         return await workflow.execute_activity(
             "fast_delete_vectors",
             args=[payload],
-            schedule_to_close_timeout=timedelta(seconds=30),
+            schedule_to_close_timeout=timedelta(minutes=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
 
@@ -157,6 +165,7 @@ class ProcessFile:
             "record_current_document",
             args=[workflow_id, provisional_uid, display_name],
             schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=2)
         )
 
         if is_pull:
@@ -171,6 +180,7 @@ class ProcessFile:
                 "record_current_document",
                 args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
                 schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=2)
             )
             local_file_path = await workflow.execute_child_workflow(
                 LoadPullFile.run,
@@ -190,6 +200,7 @@ class ProcessFile:
                 "record_current_document",
                 args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
                 schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=2)
             )
             local_file_path = await workflow.execute_child_workflow(
                 LoadPushFile.run,
@@ -254,6 +265,7 @@ class Process:
                 "record_workflow_status",
                 args=[workflow_id, "COMPLETED", None, last_document_uid, last_filename],
                 schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=2)
             )
             return "success"
         except Exception as exc:
@@ -263,6 +275,7 @@ class Process:
                     "record_workflow_status",
                     args=[workflow_id, "FAILED", error_message, last_document_uid, last_filename],
                     schedule_to_close_timeout=timedelta(hours=1),
+                    retry_policy=RetryPolicy(maximum_attempts=2)
                 )
             except Exception:
                 workflow.logger.exception("[SCHEDULER] Failed to record workflow failure", exc_info=True)
