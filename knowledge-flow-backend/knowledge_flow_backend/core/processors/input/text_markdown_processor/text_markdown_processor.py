@@ -38,6 +38,7 @@ class TextMarkdownProcessor(BaseMarkdownProcessor):
         This keeps behavior consistent across all input processors so downstream
         steps (preview/vectorization) can always look for output.md.
         """
+        output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
         with open(file_path, "r", encoding="utf-8") as f_in, open(md_path, "w", encoding="utf-8") as f_out:
             f_out.write(f_in.read())
