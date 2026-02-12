@@ -2,6 +2,9 @@ environments:
   prd:
     values:
       - namespace: dc2-wd1-six-prd-kns-pri
+  int:
+    values:
+      - namespace: dc2-wd1-six-int-kns-pri
 ---
 helmDefaults:
   createNamespace: false
