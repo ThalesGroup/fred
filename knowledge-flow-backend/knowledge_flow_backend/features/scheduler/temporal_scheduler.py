@@ -32,7 +32,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 )
 from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
 from knowledge_flow_backend.features.scheduler.store.task_structures import WorkflowTaskNotFoundError
-from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, Process
+from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, ProcessPull, ProcessPush
 from knowledge_flow_backend.features.scheduler.workflow_status import (
     is_non_terminal_status,
     is_terminal_failure_status,
@@ -69,12 +69,18 @@ class TemporalScheduler(BaseScheduler):
         definition: PipelineDefinition,
         background_tasks: Optional[BackgroundTasks] = None,  # kept for interface symmetry, not used
     ) -> WorkflowHandle:
+        has_pull = any(file.is_pull() for file in definition.files)
+        has_push = any(file.is_push() for file in definition.files)
+        if has_pull and has_push:
+            raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
+
         handle = self._register_workflow(user, definition)
 
         client: Client = await self._client_provider.get_client()
 
+        workflow_run = ProcessPull.run if has_pull else ProcessPush.run
         workflow_handle = await client.start_workflow(
-            Process.run,
+            workflow_run,
             definition,
             id=handle.workflow_id,
             task_queue=self._scheduler_config.temporal.task_queue,

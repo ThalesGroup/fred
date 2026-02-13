@@ -48,7 +48,8 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     BaseVectorStore,
 )
 from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
-from knowledge_flow_backend.features.scheduler.activities import input_process, output_process
+from knowledge_flow_backend.features.scheduler.activities import output_process
+from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcess,
@@ -408,7 +409,7 @@ class IngestionController:
 
                     current_step = STEP_PROCESSING
                     yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                    metadata = await input_process(user=user, input_file=str(input_temp_file), metadata=metadata)
+                    metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file))
                     file_to_process = FileToProcess(
                         document_uid=metadata.document_uid,
                         external_path=None,

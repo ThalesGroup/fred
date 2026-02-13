@@ -56,7 +56,7 @@ ARG GROUP_ID=1000
 
 # System deps (minimal)
 RUN apt-get update && \
-    apt-get install -y curl pandoc inkscape libgl1 libmagic1 --no-install-recommends && \
+    apt-get install -y curl pandoc inkscape libgl1 libmagic1 poppler-utils --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
 # Create user
@@ -73,15 +73,17 @@ ENV PATH="/app/venv/bin:$PATH"
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 
 # Download the crossencoder model
-ENV SENTENCE_TRANSFORMERS_HOME=/app/models
 ENV RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-12-v2
-ENV HF_HOME=/app/models
-RUN mkdir -p ${HF_HOME}
+ENV HF_HOME=/home/${USER_NAME}/.cache/huggingface
+ENV SENTENCE_TRANSFORMERS_HOME=${HF_HOME}
+RUN mkdir -p ${HF_HOME} && chown -R ${USER_ID}:${GROUP_ID} /home/${USER_NAME}/.cache
 
+USER ${USER_NAME}
 RUN python -c "\
 from sentence_transformers import CrossEncoder; \
 import os; \
 CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['HF_HOME'])"
+USER root
 
 # Set working directory
 WORKDIR /app

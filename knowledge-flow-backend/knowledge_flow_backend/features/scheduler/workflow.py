@@ -40,6 +40,10 @@ def _wf_document_uid(file: Any) -> str | None:
     return f"pull-{source_tag}-{hash_val}"
 
 
+def _wf_is_pull(file: Any) -> bool:
+    return _wf_get(file, "external_path", None) is not None
+
+
 def _wf_child_id(prefix: str, file: Any, file_index: int) -> str:
     """
     Build a deterministic, collision-resistant child workflow id.
@@ -51,12 +55,77 @@ def _wf_child_id(prefix: str, file: Any, file_index: int) -> str:
     return f"{prefix}-{file_index}-{digest}"
 
 
+def _wf_file_kind_summary(files: list[Any]) -> tuple[bool, bool]:
+    has_pull = any(_wf_is_pull(file) for file in files)
+    has_push = any(not _wf_is_pull(file) for file in files)
+    return has_pull, has_push
+
+
+async def _wf_run_parent_pipeline(
+    *,
+    definition: Any,
+    child_workflow_run,
+    child_prefix: str,
+) -> str:
+    pipeline_name = _wf_get(definition, "name", "unknown")
+    files = _wf_get(definition, "files", []) or []
+    max_parallelism = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
+    workflow.logger.info("[SCHEDULER] Ingesting pipeline: %s", pipeline_name)
+    workflow_id = workflow.info().workflow_id
+    last_document_uid: str | None = None
+    last_filename: str | None = None
+
+    try:
+        for batch_start in range(0, len(files), max_parallelism):
+            batch = files[batch_start : batch_start + max_parallelism]
+            handles = []
+            for offset, file in enumerate(batch):
+                file_index = batch_start + offset
+                handle = await workflow.start_child_workflow(
+                    child_workflow_run,
+                    args=[workflow_id, file, file_index],
+                    id=_wf_child_id(child_prefix, file, file_index),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                )
+                handles.append(handle)
+
+            for handle in handles:
+                result = await handle
+                if isinstance(result, dict):
+                    doc_uid = result.get("document_uid")
+                    filename = result.get("filename")
+                    if isinstance(doc_uid, str) and doc_uid:
+                        last_document_uid = doc_uid
+                    if isinstance(filename, str) and filename:
+                        last_filename = filename
+
+        await workflow.execute_activity(
+            "record_workflow_status",
+            args=[workflow_id, "COMPLETED", None, last_document_uid, last_filename],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        return "success"
+    except Exception as exc:
+        error_message = str(exc).strip() or "No error message"
+        try:
+            await workflow.execute_activity(
+                "record_workflow_status",
+                args=[workflow_id, "FAILED", error_message, last_document_uid, last_filename],
+                schedule_to_close_timeout=timedelta(hours=1),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+        except Exception:
+            workflow.logger.exception("[SCHEDULER] Failed to record workflow failure", exc_info=True)
+        raise
+
+
 @workflow.defn
 class CreatePullFileMetadata:
     @workflow.run
     async def run(self, file: Any) -> Any:
         workflow.logger.info("[SCHEDULER] CreatePullFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity("create_pull_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
+        return await workflow.execute_activity("create_pull_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 @workflow.defn
@@ -64,31 +133,28 @@ class GetPushFileMetadata:
     @workflow.run
     async def run(self, file: Any) -> Any:
         workflow.logger.info("[SCHEDULER] GetPushFileMetadata: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity("get_push_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
+        return await workflow.execute_activity("get_push_file_metadata", args=[file], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 @workflow.defn
-class LoadPullFile:
+class PullInputProcess:
     @workflow.run
-    async def run(self, file: Any, metadata: Any) -> str:
-        workflow.logger.info("[SCHEDULER] LoadPullFile: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity("load_pull_file", args=[file, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
+    async def run(self, user: Any, metadata: Any) -> Any:
+        workflow.logger.info("[SCHEDULER] PullInputProcess")
+        return await workflow.execute_activity("pull_input_process", args=[user, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 @workflow.defn
-class LoadPushFile:
-    @workflow.run
-    async def run(self, file: Any, metadata: Any) -> str:
-        workflow.logger.info("[SCHEDULER] LoadPushFile: %s", _wf_get(file, "display_name", "unknown"))
-        return await workflow.execute_activity("load_push_file", args=[file, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
-
-
-@workflow.defn
-class InputProcess:
+class PushInputProcess:
     @workflow.run
     async def run(self, user: Any, input_file: str, metadata: Any) -> Any:
-        workflow.logger.info("[SCHEDULER] InputProcess: %s", input_file)
-        return await workflow.execute_activity("input_process", args=[user, input_file, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
+        workflow.logger.info("[SCHEDULER] PushInputProcess: %s", input_file or "<resolve-on-worker>")
+        return await workflow.execute_activity(
+            "push_input_process",
+            args=[user, metadata, input_file],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
 
 
 @workflow.defn
@@ -96,144 +162,138 @@ class OutputProcess:
     @workflow.run
     async def run(self, file: Any, metadata: Any) -> None:
         workflow.logger.info("[SCHEDULER] OutputProcess: %s", _wf_get(file, "display_name", "unknown"))
-        await workflow.execute_activity("output_process", args=[file, metadata, False], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
+        await workflow.execute_activity("output_process", args=[file, metadata, False], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 @workflow.defn
 class FastStoreVectors:
     @workflow.run
     async def run(self, payload):
-        return await workflow.execute_activity("fast_store_vectors", args=[payload], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2))
+        return await workflow.execute_activity("fast_store_vectors", args=[payload], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 @workflow.defn
 class FastDeleteVectors:
     @workflow.run
     async def run(self, payload):
-        return await workflow.execute_activity("fast_delete_vectors", args=[payload], schedule_to_close_timeout=timedelta(minutes=1), retry_policy=RetryPolicy(maximum_attempts=2))
+        return await workflow.execute_activity("fast_delete_vectors", args=[payload], schedule_to_close_timeout=timedelta(minutes=1), retry_policy=RetryPolicy(maximum_attempts=1))
 
 
 @workflow.defn
-class ProcessFile:
+class ProcessPullFile:
     @workflow.run
     async def run(self, workflow_id: str, file: Any, file_index: int) -> dict:
         display_name = _wf_get(file, "display_name", None) or "unknown"
-        is_pull = _wf_get(file, "external_path", None) is not None
+        if not _wf_is_pull(file):
+            raise ValueError(f"ProcessPullFile received a push file: {display_name}")
+
         provisional_uid = _wf_document_uid(file)
 
         await workflow.execute_activity(
-            "record_current_document", args=[workflow_id, provisional_uid, display_name], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=2)
+            "record_current_document", args=[workflow_id, provisional_uid, display_name], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1)
         )
 
-        if is_pull:
-            workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
-            metadata = await workflow.execute_child_workflow(
-                CreatePullFileMetadata.run,
-                args=[file],
-                id=_wf_child_id("CreatePullFileMetadata", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-            await workflow.execute_activity(
-                "record_current_document",
-                args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
-                schedule_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-            local_file_path = await workflow.execute_child_workflow(
-                LoadPullFile.run,
-                args=[file, metadata],
-                id=_wf_child_id("LoadPullFile", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-        else:
-            workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
-            metadata = await workflow.execute_child_workflow(
-                GetPushFileMetadata.run,
-                args=[file],
-                id=_wf_child_id("GetPushFileMetadata", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-            await workflow.execute_activity(
-                "record_current_document",
-                args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
-                schedule_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-            local_file_path = await workflow.execute_child_workflow(
-                LoadPushFile.run,
-                args=[file, metadata],
-                id=_wf_child_id("LoadPushFile", file, file_index),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-
+        workflow.logger.info("[SCHEDULER] Processing pull file: %s", display_name)
         metadata = await workflow.execute_child_workflow(
-            InputProcess.run,
-            args=[_wf_get(file, "processed_by"), local_file_path, metadata],
-            id=_wf_child_id("InputProcess", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=2),
+            CreatePullFileMetadata.run,
+            args=[file],
+            id=_wf_child_id("CreatePullFileMetadata", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        await workflow.execute_activity(
+            "record_current_document",
+            args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        metadata = await workflow.execute_child_workflow(
+            PullInputProcess.run,
+            args=[_wf_get(file, "processed_by"), metadata],
+            id=_wf_child_id("PullInputProcess", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
         )
         await workflow.execute_child_workflow(
             OutputProcess.run,
             args=[file, metadata],
             id=_wf_child_id("OutputProcess", file, file_index),
-            retry_policy=RetryPolicy(maximum_attempts=2),
+            retry_policy=RetryPolicy(maximum_attempts=1),
         )
         workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
         return {"document_uid": _wf_get(metadata, "document_uid"), "filename": display_name}
 
 
 @workflow.defn
-class Process:
+class ProcessPushFile:
+    @workflow.run
+    async def run(self, workflow_id: str, file: Any, file_index: int) -> dict:
+        display_name = _wf_get(file, "display_name", None) or "unknown"
+        if _wf_is_pull(file):
+            raise ValueError(f"ProcessPushFile received a pull file: {display_name}")
+
+        provisional_uid = _wf_document_uid(file)
+
+        await workflow.execute_activity(
+            "record_current_document", args=[workflow_id, provisional_uid, display_name], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1)
+        )
+
+        workflow.logger.info("[SCHEDULER] Processing push file: %s", display_name)
+        metadata = await workflow.execute_child_workflow(
+            GetPushFileMetadata.run,
+            args=[file],
+            id=_wf_child_id("GetPushFileMetadata", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        await workflow.execute_activity(
+            "record_current_document",
+            args=[workflow_id, _wf_get(metadata, "document_uid"), display_name],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        metadata = await workflow.execute_child_workflow(
+            PushInputProcess.run,
+            args=[_wf_get(file, "processed_by"), "", metadata],
+            id=_wf_child_id("PushInputProcess", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        await workflow.execute_child_workflow(
+            OutputProcess.run,
+            args=[file, metadata],
+            id=_wf_child_id("OutputProcess", file, file_index),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
+        workflow.logger.info("[SCHEDULER] Completed file: %s", display_name)
+        return {"document_uid": _wf_get(metadata, "document_uid"), "filename": display_name}
+
+
+@workflow.defn
+class ProcessPush:
     @workflow.run
     async def run(self, definition: Any) -> str:
-        pipeline_name = _wf_get(definition, "name", "unknown")
         files = _wf_get(definition, "files", []) or []
-        max_parallelism = max(1, int(_wf_get(definition, "max_parallelism", 1) or 1))
-        workflow.logger.info(f"[SCHEDULER] Ingesting pipeline: {pipeline_name}")
-        workflow_id = workflow.info().workflow_id
-        last_document_uid: str | None = None
-        last_filename: str | None = None
+        has_pull, has_push = _wf_file_kind_summary(files)
+        if has_pull:
+            raise ValueError("ProcessPush received at least one pull file. Submit push and pull in separate workflow requests.")
+        if not has_push and files:
+            raise ValueError("ProcessPush received files but none are recognized as push.")
+        return await _wf_run_parent_pipeline(
+            definition=definition,
+            child_workflow_run=ProcessPushFile.run,
+            child_prefix="ProcessPushFile",
+        )
 
-        try:
-            for batch_start in range(0, len(files), max_parallelism):
-                batch = files[batch_start : batch_start + max_parallelism]
-                handles = []
-                for offset, file in enumerate(batch):
-                    file_index = batch_start + offset
-                    handle = await workflow.start_child_workflow(
-                        ProcessFile.run,
-                        args=[workflow_id, file, file_index],
-                        id=_wf_child_id("ProcessFile", file, file_index),
-                        retry_policy=RetryPolicy(maximum_attempts=2),
-                    )
-                    handles.append(handle)
 
-                for handle in handles:
-                    result = await handle
-                    if isinstance(result, dict):
-                        doc_uid = result.get("document_uid")
-                        filename = result.get("filename")
-                        if isinstance(doc_uid, str) and doc_uid:
-                            last_document_uid = doc_uid
-                        if isinstance(filename, str) and filename:
-                            last_filename = filename
-
-            await workflow.execute_activity(
-                "record_workflow_status",
-                args=[workflow_id, "COMPLETED", None, last_document_uid, last_filename],
-                schedule_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=2),
-            )
-            return "success"
-        except Exception as exc:
-            error_message = str(exc).strip() or "No error message"
-            try:
-                await workflow.execute_activity(
-                    "record_workflow_status",
-                    args=[workflow_id, "FAILED", error_message, last_document_uid, last_filename],
-                    schedule_to_close_timeout=timedelta(hours=1),
-                    retry_policy=RetryPolicy(maximum_attempts=2),
-                )
-            except Exception:
-                workflow.logger.exception("[SCHEDULER] Failed to record workflow failure", exc_info=True)
-            raise
+@workflow.defn
+class ProcessPull:
+    @workflow.run
+    async def run(self, definition: Any) -> str:
+        files = _wf_get(definition, "files", []) or []
+        has_pull, has_push = _wf_file_kind_summary(files)
+        if has_push:
+            raise ValueError("ProcessPull received at least one push file. Submit push and pull in separate workflow requests.")
+        if not has_pull and files:
+            raise ValueError("ProcessPull received files but none are recognized as pull.")
+        return await _wf_run_parent_pipeline(
+            definition=definition,
+            child_workflow_run=ProcessPullFile.run,
+            child_prefix="ProcessPullFile",
+        )

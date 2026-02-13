@@ -27,14 +27,17 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
 from knowledge_flow_backend.features.scheduler.activities import (
-    create_pull_file_metadata,
-    get_push_file_metadata,
-    input_process,
-    load_pull_file,
-    load_push_file,
     output_process,
 )
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
+from knowledge_flow_backend.features.scheduler.pull_files_activities import (
+    create_pull_file_metadata,
+    pull_input_process,
+)
+from knowledge_flow_backend.features.scheduler.push_files_activities import (
+    get_push_file_metadata,
+    push_input_process,
+)
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
 )
@@ -47,6 +50,52 @@ from knowledge_flow_backend.features.scheduler.workflow_status import (
 logger = logging.getLogger(__name__)
 
 
+def _split_file_kinds(definition: PipelineDefinition) -> tuple[bool, bool]:
+    has_pull = any(file.is_pull() for file in definition.files)
+    has_push = any(file.is_push() for file in definition.files)
+    return has_pull, has_push
+
+
+async def _run_push_ingestion_pipeline(definition: PipelineDefinition) -> str:
+    simulated_delay_seconds = 0
+    logger.info(
+        "Starting local PUSH ingestion pipeline for %d file(s) with simulated delay of %d seconds per file",
+        len(definition.files),
+        simulated_delay_seconds,
+    )
+
+    for file in definition.files:
+        logger.info("[SCHEDULER][IN_MEMORY] Processing push file %s via local ingestion pipeline", file.display_name)
+        if simulated_delay_seconds > 0:
+            time.sleep(simulated_delay_seconds)
+
+        metadata = await get_push_file_metadata(file)
+        metadata = await push_input_process(user=file.processed_by, metadata=metadata, input_file="")
+        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+
+    return "success"
+
+
+async def _run_pull_ingestion_pipeline(definition: PipelineDefinition) -> str:
+    simulated_delay_seconds = 0
+    logger.info(
+        "Starting local PULL ingestion pipeline for %d file(s) with simulated delay of %d seconds per file",
+        len(definition.files),
+        simulated_delay_seconds,
+    )
+
+    for file in definition.files:
+        logger.info("[SCHEDULER][IN_MEMORY] Processing pull file %s via local ingestion pipeline", file.external_path)
+        if simulated_delay_seconds > 0:
+            time.sleep(simulated_delay_seconds)
+
+        metadata = await create_pull_file_metadata(file)
+        metadata = await pull_input_process(user=file.processed_by, metadata=metadata)
+        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+
+    return "success"
+
+
 async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
     """
     Local, in-process ingestion pipeline used when Temporal is disabled.
@@ -54,32 +103,12 @@ async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
     This mirrors the behavior of the Temporal workflow but executes synchronously
     in a background thread managed by FastAPI's BackgroundTasks.
     """
-    # Simulate slower per-file processing so that UI progress indicators remain
-    # visible during local development/demo.
-    simulated_delay_seconds = 0
-    logger.info(
-        "Starting local ingestion pipeline for %d file(s) with simulated delay of %d seconds per file",
-        len(definition.files),
-        simulated_delay_seconds,
-    )
-
-    for file in definition.files:
-        logger.info("[SCHEDULER][IN_MEMORY] Processing file %s (pull=%s) via local ingestion pipeline", file.external_path, file.is_pull())
-
-        if simulated_delay_seconds > 0:
-            time.sleep(simulated_delay_seconds)
-
-        if file.is_pull():
-            metadata = await create_pull_file_metadata(file)
-            local_file_path = await load_pull_file(file, metadata)
-        else:
-            metadata = await get_push_file_metadata(file)
-            local_file_path = await load_push_file(file, metadata)
-
-        metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
-
-    return "success"
+    has_pull, has_push = _split_file_kinds(definition)
+    if has_pull and has_push:
+        raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
+    if has_pull:
+        return await _run_pull_ingestion_pipeline(definition)
+    return await _run_push_ingestion_pipeline(definition)
 
 
 class InMemoryScheduler(BaseScheduler):

@@ -590,9 +590,10 @@ class ApplicationContext:
             except Exception as e:
                 logging.error(f"[CROSSENCODER][OFFLINE] The configuration is missing : Error: {e}")
                 logging.error("[CROSSENCODER][OFFLINE] Loading a default model : cross-encoder/ms-marco-MiniLM-L-12-v2")
+                default_cache = str(Path.home() / ".cache" / "huggingface")
                 return CrossEncoder(
                     model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2",
-                    cache_folder="/app/models",
+                    cache_folder=default_cache,
                     local_files_only=True,
                 )
 
