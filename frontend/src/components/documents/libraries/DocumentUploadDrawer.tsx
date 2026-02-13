@@ -56,7 +56,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     Record<string, ProcessDocumentsProgressResponse>
   >({});
   const [documentUidByFile, setDocumentUidByFile] = useState<Record<string, string>>({});
-  const [failedDocumentUids, setFailedDocumentUids] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
@@ -75,7 +74,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   }, [tempFiles, totalFilesCount, uploadProgressSteps]);
 
   const processedCount = useMemo(() => {
-    const terminalStatuses = new Set(["finished", "error", "ignored"]);
+    const terminalStatuses = new Set(["finished", "failed", "ignored"]);
     const latestStatusByFile = new Map<string, string>();
     const summaryDoneFiles = new Set<string>();
 
@@ -113,22 +112,18 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       const doc = summary?.documents?.find((item) => item.document_uid === documentUid);
       if (!doc) return;
 
-      const hadFailure = Boolean(documentUid && failedDocumentUids[documentUid]);
       const isDone = doc.fully_processed;
       const isFailedNow = doc.has_failed;
-      const retrying = hadFailure && !isDone && !isFailedNow;
       const processing = !isDone && !isFailedNow;
 
       statuses[filename] = {
-        retrying,
-        processing: processing && !retrying,
-        failed: isFailedNow && !retrying,
-        completedWithRetry: hadFailure && isDone,
+        processing,
+        failed: isFailedNow,
       };
     });
 
     return statuses;
-  }, [documentUidByFile, failedDocumentUids, progressSummaryByFile, uploadProgressSteps]);
+  }, [documentUidByFile, progressSummaryByFile, uploadProgressSteps]);
 
   const progressPercent = totalUploads ? Math.round((processedCount / totalUploads) * 100) : 0;
   const hasInProgressStep = useMemo(
@@ -165,7 +160,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setUploadProgressSteps([]);
     setProgressSummaryByFile({});
     setDocumentUidByFile({});
-    setFailedDocumentUids({});
     setIsLoading(false);
     setShowProgressModal(false);
     setTotalFilesCount(0);
@@ -183,7 +177,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setUploadProgressSteps([]);
     setProgressSummaryByFile({});
     setDocumentUidByFile({});
-    setFailedDocumentUids({});
     displayIndexRef.current = 0;
     stepKeysRef.current = new Set();
     const filesCount = tempFiles.length;
@@ -248,17 +241,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
                 ...prev,
                 [summaryUpdate.filename]: summaryUpdate.summary,
               }));
-              if (summaryUpdate.summary.documents?.length) {
-                setFailedDocumentUids((prev) => {
-                  const next = { ...prev };
-                  summaryUpdate.summary.documents.forEach((doc) => {
-                    if (doc.has_failed) {
-                      next[doc.document_uid] = true;
-                    }
-                  });
-                  return next;
-                });
-              }
             },
           );
         } catch (e: any) {

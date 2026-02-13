@@ -380,6 +380,8 @@
     "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
   },
   "agentEditDrawer": {
+    "nameLabel": "Nom",
+    "nameHelperText": "Le nom d'affichage de l'agent.",
     "roleHelperText": "Le rôle obligatoire de l'agent pour la découverte (ex. 'Analyste Financier')",
     "descriptionHelperText": "La description obligatoire de l'agent.",
     "tagsHelperText": "Tags utilisés pour la catégorisation et le filtrage.",
@@ -422,6 +424,8 @@
       "a2aBaseUrl": "URL de base A2A",
       "a2aBaseUrlRequired": "L'URL de base A2A est requise pour un agent A2A.",
       "a2aToken": "Jeton A2A (optionnel)",
+      "classPath": "Chemin de classe personnalisé",
+      "classPathHelp": "Chemin complet de la classe Python (ex : mon_module.MonAgent). Laisser vide pour le défaut.",
       "optional": "Optionnel",
       "icon": "Icône",
       "tags": "Tags",

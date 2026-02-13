@@ -33,6 +33,11 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
 from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
 from knowledge_flow_backend.features.scheduler.store.task_structures import WorkflowTaskNotFoundError
 from knowledge_flow_backend.features.scheduler.workflow import FastDeleteVectors, FastStoreVectors, Process
+from knowledge_flow_backend.features.scheduler.workflow_status import (
+    is_non_terminal_status,
+    is_terminal_failure_status,
+    normalize_workflow_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +112,30 @@ class TemporalScheduler(BaseScheduler):
             task_queue=self._scheduler_config.temporal.task_queue,
         )
 
+    async def get_workflow_execution_status(self, workflow_id: str) -> Optional[WorkflowExecutionStatus]:
+        """
+        Return Temporal execution status using the describe API.
+        """
+        try:
+            client: Client = await self._client_provider.get_client()
+            handle = client.get_workflow_handle(workflow_id)
+            description = await handle.describe()
+            return description.status
+        except Exception as exc:
+            logger.warning("[SCHEDULER] Failed to describe workflow_id=%s: %s", workflow_id, exc)
+            return None
+
+    async def get_workflow_last_error(self, workflow_id: str) -> Optional[str]:
+        if self._workflow_task_store is None:
+            return None
+        try:
+            task = await self._workflow_task_store.get(workflow_id)
+        except WorkflowTaskNotFoundError:
+            return None
+        return task.last_error
+
     async def get_progress(self, user: KeycloakUser, workflow_id: Optional[str]):
         base_progress = await super().get_progress(user, workflow_id)
-
-        if self._workflow_task_store is None:
-            return base_progress
 
         effective_workflow_id = workflow_id
         if effective_workflow_id is None:
@@ -121,20 +145,27 @@ class TemporalScheduler(BaseScheduler):
         if not effective_workflow_id:
             return base_progress
 
-        try:
-            client: Client = await self._client_provider.get_client()
-            handle = client.get_workflow_handle(effective_workflow_id)
-            description = await handle.describe()
-        except Exception as exc:
-            logger.warning("[SCHEDULER] Failed to describe workflow_id=%s: %s", effective_workflow_id, exc)
+        description_status = await self.get_workflow_execution_status(effective_workflow_id)
+        if description_status is None:
             return base_progress
 
-        if description.status not in {
-            WorkflowExecutionStatus.FAILED,
-            WorkflowExecutionStatus.CANCELED,
-            WorkflowExecutionStatus.TERMINATED,
-            WorkflowExecutionStatus.TIMED_OUT,
-        }:
+        status_name = normalize_workflow_status(description_status)
+        if is_non_terminal_status(status_name):
+            # While parent workflow is still running, do not surface transient
+            # per-document failures caused by retried child workflows/activities.
+            if base_progress.documents_failed == 0:
+                return base_progress
+            documents = [doc.model_copy(update={"has_failed": False}) if doc.has_failed else doc for doc in base_progress.documents]
+            return base_progress.model_copy(
+                update={
+                    "documents": documents,
+                    "documents_failed": 0,
+                }
+            )
+
+        if not is_terminal_failure_status(status_name):
+            return base_progress
+        if self._workflow_task_store is None:
             return base_progress
 
         try:

@@ -315,31 +315,6 @@ class SlideMaker(AgentFlow):
         )
 
         @after_model
-        def extract_text_from_thinking_model(state, runtime):
-            """Extract text content from thinking model response and update state"""
-            messages = state.get("messages", [])
-            if not messages:
-                return None
-
-            last_message = messages[-1]
-
-            # If content is already a string, no processing needed
-            if isinstance(last_message.content, str):
-                return None
-
-            # Handle thinking model content blocks
-            if isinstance(last_message.content, list):
-                for block in last_message.content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text_content = block.get("text", "")
-                        if text_content:
-                            # Update the last message with extracted text
-                            last_message.content = text_content
-                            return {"messages": messages}
-
-            return None
-
-        @after_model
         def validate_tool_calls(state, runtime):
             """Validate tool calls and provide feedback if malformed"""
             return tool_call_validator(state, runtime)
@@ -349,10 +324,7 @@ class SlideMaker(AgentFlow):
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[template_tool, validator_tool, *self.mcp.get_tools()],
             checkpointer=checkpointer,
-            middleware=[
-                extract_text_from_thinking_model,
-                validate_tool_calls,
-            ],
+            middleware=[validate_tool_calls],
         )
 
     def get_validator_tool(self):

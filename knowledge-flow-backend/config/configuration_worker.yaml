@@ -6,6 +6,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
+  max_ingestion_workers: 3
 
 security:
   m2m:

@@ -15,7 +15,6 @@
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import {
   Box,
   CircularProgress,
@@ -37,9 +36,7 @@ export interface ProgressStep {
 
 export interface ProgressFileStatus {
   processing?: boolean;
-  retrying?: boolean;
   failed?: boolean;
-  completedWithRetry?: boolean;
 }
 
 export interface ProgressStepperProps {
@@ -47,7 +44,7 @@ export interface ProgressStepperProps {
   fileStatuses?: Record<string, ProgressFileStatus>;
 }
 
-export const ProgressStepper = ({ steps, fileStatuses }: ProgressStepperProps) => {
+export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
   if (!steps.length) return null;
 
   const stepsByFile = steps.reduce(
@@ -66,7 +63,7 @@ export const ProgressStepper = ({ steps, fileStatuses }: ProgressStepperProps) =
       case "success":
       case "finished":
         return <CheckCircleIcon color="success" fontSize="medium" />;
-      case "error":
+      case "failed":
         return <ErrorOutlineIcon color="error" fontSize="medium" />;
       default:
         return <HourglassEmptyIcon color="disabled" fontSize="medium" />;
@@ -102,43 +99,10 @@ export const ProgressStepper = ({ steps, fileStatuses }: ProgressStepperProps) =
 
           <Divider sx={{ mb: 1 }} />
 
-          {fileStatuses?.[filename]?.retrying && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              <CircularProgress size={18} color="warning" thickness={6} />
-              <Typography variant="body2" color="warning.main">
-                Retrying after failure...
-              </Typography>
-            </Box>
-          )}
-          {fileStatuses?.[filename]?.processing && !fileStatuses?.[filename]?.retrying && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              <CircularProgress size={18} color="primary" thickness={6} />
-              <Typography variant="body2" color="text.secondary">
-                Processing...
-              </Typography>
-            </Box>
-          )}
-          {fileStatuses?.[filename]?.failed && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              <ErrorOutlineIcon color="error" fontSize="small" />
-              <Typography variant="body2" color="error">
-                Processing failed
-              </Typography>
-            </Box>
-          )}
-          {fileStatuses?.[filename]?.completedWithRetry && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              <WarningAmberIcon color="warning" fontSize="small" />
-              <Typography variant="body2" color="warning.main">
-                Completed after retry
-              </Typography>
-            </Box>
-          )}
-
           <Stepper activeStep={fileSteps.length} orientation="vertical" sx={{ pl: 1 }}>
             {fileSteps.map((step, index) => (
               <Step key={index}>
-                <StepLabel icon={getIcon(step.status)} error={step.status === "error"}>
+                <StepLabel icon={getIcon(step.status)} error={step.status === "failed"}>
                   <Typography
                     variant="body1"
                     fontWeight="medium"
@@ -149,7 +113,7 @@ export const ProgressStepper = ({ steps, fileStatuses }: ProgressStepperProps) =
                       maxWidth: "calc(100% - 32px)",
                     }}
                   >
-                    {step.step}
+                    {step.status === "failed" ? "Failed" : step.step}
                   </Typography>
                 </StepLabel>
                 <StepContent>

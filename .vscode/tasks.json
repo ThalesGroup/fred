@@ -2,11 +2,12 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Agentic + Knowledge + Frontend",
+      "label": "Agentic + Knowledge + Frontend + kf worker",
       "dependsOn": [
         "agentic-backend",
         "knowledge-flow-backend",
-        "frontend"
+        "frontend",
+        "kf worker"
       ],
       "dependsOrder": "parallel"
     },
@@ -35,7 +36,7 @@
       "presentation": { "panel": "new", "reveal": "always" }
     },
     {
-      "label": "knowledge-flow temporal worker",
+      "label": "kf worker",
       "type": "shell",
       "command": "make run-worker",
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
