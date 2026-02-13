@@ -321,7 +321,6 @@ export default function SideBar() {
           </Box>
           <Box
             sx={{
-              flexGrow: 1,
               overflowY: "auto",
               overflowX: "hidden",
               scrollbarWidth: "none",
