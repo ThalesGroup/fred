@@ -17,7 +17,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fred_core.sql import AsyncBaseSqlStore
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    run_ddl_with_advisory_lock,
+)
 from sqlalchemy import JSON, Column, DateTime, MetaData, String, Table, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -35,6 +39,7 @@ class PostgresSessionStore(BaseSessionStore):
     def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "sessions_"):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         metadata = MetaData()
         self.table = Table(
@@ -49,8 +54,12 @@ class PostgresSessionStore(BaseSessionStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                await conn.run_sync(metadata.create_all)
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         import asyncio
 

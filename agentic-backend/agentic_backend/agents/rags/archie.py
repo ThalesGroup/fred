@@ -410,7 +410,7 @@ class Archie(AgentFlow):
                     "Archie: runtime_context.session_id is missing; attached-file retrieval will be skipped."
                 )
             async with self.phase("vector_search"):
-                hits: List[VectorSearchHit] = self.search_client.search(
+                hits: List[VectorSearchHit] = await self.search_client.search(
                     question=augmented_question,
                     top_k=top_k,
                     document_library_tags_ids=doc_tag_ids,

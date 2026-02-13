@@ -20,7 +20,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-import requests
+import httpx
 
 from agentic_backend.common.kf_base_client import KfBaseClient
 
@@ -50,7 +50,7 @@ class KfFastTextClient(KfBaseClient):
             refresh_user_access_token=refresh_user_access_token,
         )
 
-    def extract_text_from_bytes(
+    async def extract_text_from_bytes(
         self,
         *,
         filename: str,
@@ -73,16 +73,17 @@ class KfFastTextClient(KfBaseClient):
         mime = mime or mimetypes.guess_type(filename)[0] or "application/octet-stream"
         files = {"file": (filename, io.BytesIO(content), mime)}
         data = {"options_json": json.dumps(options)}
-        r: requests.Response = self._request_with_token_refresh(
+        r: httpx.Response = await self._request_with_token_refresh(
             method="POST",
             path="/fast/text?format=text",
+            phase_name="kf_fast_text_extract_bytes",
             files=files,
             data=data,
         )
         r.raise_for_status()
         return r.text or ""
 
-    def ingest_text_from_bytes(
+    async def ingest_text_from_bytes(
         self,
         *,
         filename: str,
@@ -103,26 +104,28 @@ class KfFastTextClient(KfBaseClient):
             "session_id": session_id or "",
             "scope": scope,
         }
-        r: requests.Response = self._request_with_token_refresh(
+        r: httpx.Response = await self._request_with_token_refresh(
             method="POST",
             path="/fast/ingest",
+            phase_name="kf_fast_ingest_bytes",
             files=files,
             data=data,
         )
         r.raise_for_status()
         return r.json()
 
-    def delete_ingested_vectors(self, document_uid: str) -> None:
+    async def delete_ingested_vectors(self, document_uid: str) -> None:
         """
         Delete vectors created via the fast ingest path.
         """
-        r: requests.Response = self._request_with_token_refresh(
+        r: httpx.Response = await self._request_with_token_refresh(
             method="DELETE",
             path=f"/fast/ingest/{document_uid}",
+            phase_name="kf_fast_ingest_delete",
         )
         r.raise_for_status()
 
-    def extract_text(
+    async def extract_text(
         self,
         file_path: Path,
         *,
@@ -142,9 +145,10 @@ class KfFastTextClient(KfBaseClient):
         with file_path.open("rb") as f:
             files = {"file": (file_path.name, f, mime)}
             data = {"options_json": json.dumps(options)}
-            r: requests.Response = self._request_with_token_refresh(
+            r: httpx.Response = await self._request_with_token_refresh(
                 method="POST",
                 path="/fast/text?format=text",
+                phase_name="kf_fast_text_extract_file",
                 files=files,
                 data=data,
             )

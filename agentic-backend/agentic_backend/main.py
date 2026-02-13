@@ -22,12 +22,13 @@ Entrypoint for the Agentic Backend App.
 import asyncio
 import contextlib
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
-from fred_core.kpi import emit_process_kpis
+from fred_core.kpi import KPIActor, KPIWriter, emit_process_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -59,6 +60,26 @@ from agentic_backend.scheduler.scheduler_controller import AgentTasksController
 # -----------------------
 
 logger = logging.getLogger(__name__)
+
+
+async def loop_lag_probe(
+    kpi: KPIWriter, actor: KPIActor, interval_s: float = 0.1
+) -> None:
+    """Gauge event-loop lag: schedule a no-op and measure wake-up delay."""
+    while True:
+        start = time.perf_counter()
+        await asyncio.sleep(0)
+        lag_ms = (time.perf_counter() - start) * 1000.0
+        try:
+            kpi.gauge(
+                "event_loop_lag_ms",
+                lag_ms,
+                dims={"phase": "loop"},
+                actor=actor,
+            )
+        except Exception:  # noqa: BLE001 - best-effort metric
+            logger.debug("[LOOP_LAG] gauge emit failed", exc_info=True)
+        await asyncio.sleep(interval_s)
 
 
 def _norm_origin(o) -> str:
@@ -117,6 +138,19 @@ def create_app() -> FastAPI:
             history_store=application_context.get_history_store(),
             kpi=application_context.get_kpi_writer(),
         )
+
+        # Event-loop lag monitor to attribute wall-clock waits not spent in DB/LLM
+        try:
+            kpi_actor = KPIActor(type="system")
+            asyncio.create_task(
+                loop_lag_probe(
+                    application_context.get_kpi_writer(),
+                    actor=kpi_actor,
+                    interval_s=0.1,
+                )
+            )
+        except Exception:
+            logger.debug("[LOOP_LAG] probe init failed", exc_info=True)
         process_kpi_task = None
         kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
         if kpi_interval_env:

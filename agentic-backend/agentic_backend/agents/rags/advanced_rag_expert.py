@@ -362,7 +362,7 @@ class AdvancedRico(AgentFlow):
                 "agent.step_latency_ms",
                 dims={"step": "vector_search", "policy": search_policy},
             ):
-                hits: List[VectorSearchHit] = self.search_client.search(
+                hits: List[VectorSearchHit] = await self.search_client.search(
                     question=question or "",
                     top_k=top_k,
                     document_library_tags_ids=document_library_tags_ids,
@@ -459,7 +459,7 @@ class AdvancedRico(AgentFlow):
         top_r = self.get_tuned_int("rerankink.top_r", default=6)
 
         with self.kpi_timer("agent.step_latency_ms", dims={"step": "rerank"}):
-            reranked_documents = self.search_client.rerank(
+            reranked_documents = await self.search_client.rerank(
                 question=question, documents=documents, top_r=top_r
             )
 

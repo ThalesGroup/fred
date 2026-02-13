@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -239,7 +240,8 @@ class LogGenius(AgentFlow):
 
         if include_kf:
             try:
-                result = self.kf_logs.query(log_query)
+                loop = asyncio.get_event_loop()
+                result = loop.run_until_complete(self.kf_logs.query(log_query))
                 events.extend(self._snap("knowledge_flow", result.events))
             except Exception as e:
                 logger.warning("LogGenius: knowledge-flow logs query failed: %s", e)

@@ -18,7 +18,12 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from fred_core.sql import AsyncBaseSqlStore, json_for_engine
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    json_for_engine,
+    run_ddl_with_advisory_lock,
+)
 from pydantic import TypeAdapter
 from sqlalchemy import Column, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -41,6 +46,7 @@ class PostgresMcpServerStore(BaseMcpServerStore):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
         self._seed_marker_id = "__static_seeded__"
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         json_type = json_for_engine(self.store.engine)
 
@@ -54,8 +60,12 @@ class PostgresMcpServerStore(BaseMcpServerStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                await conn.run_sync(metadata.create_all)
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         try:
             loop = asyncio.get_running_loop()

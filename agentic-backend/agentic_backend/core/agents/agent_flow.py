@@ -18,7 +18,6 @@ import sys
 import tempfile
 import time
 from datetime import datetime
-from functools import partial
 from importlib.resources import files
 from pathlib import Path
 from typing import (
@@ -587,12 +586,10 @@ class AgentFlow:
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            fn = partial(
-                self.storage_client.fetch_user_text,
+            return await self.storage_client.fetch_user_text(
                 asset_key,
                 access_token,
             )
-            return await get_app_context().run_in_executor(fn)
         except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             return f"[Asset Retrieval Error: {e.args[0]}]"
@@ -615,13 +612,11 @@ class AgentFlow:
         if not access_token:
             access_token = self.refresh_user_access_token()
 
-        fn = partial(
-            self.storage_client.fetch_agent_config_text,
+        return await self.storage_client.fetch_agent_config_text(
             asset_key,
             access_token,
             agent_id or self._default_agent_id(),
         )
-        return await get_app_context().run_in_executor(fn)
 
     async def _fetch_blob(
         self,
@@ -632,12 +627,10 @@ class AgentFlow:
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            fn = partial(
-                self.storage_client.fetch_user_blob,
+            return await self.storage_client.fetch_user_blob(
                 asset_key,
                 access_token,
             )
-            return await get_app_context().run_in_executor(fn)
         except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             raise
@@ -668,13 +661,11 @@ class AgentFlow:
             getattr(self.runtime_context, "access_token", None)
             or self.refresh_user_access_token()
         )
-        fn = partial(
-            self.storage_client.fetch_agent_config_blob,
+        blob = await self.storage_client.fetch_agent_config_blob(
             asset_key,
             access_token,
             agent_id or self._default_agent_id(),
         )
-        blob = await get_app_context().run_in_executor(fn)
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix or Path(blob.filename).suffix
         ) as f:
@@ -705,15 +696,13 @@ class AgentFlow:
             "UPLOADING_ASSET: Attempting to upload asset to user store: %s", key
         )
         try:
-            # Use get_app_context().run_in_executor to safely run the blocking client call
-            fn = partial(
-                self.storage_client.upload_user_blob,
+            # Upload via Knowledge Flow workspace client
+            result = await self.storage_client.upload_user_blob(
                 key,
                 file_content,
                 filename,
                 content_type,
             )
-            result = await get_app_context().run_in_executor(fn)
             logger.info(
                 "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d, document_uid: %s",
                 result.key,

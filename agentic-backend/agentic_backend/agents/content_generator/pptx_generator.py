@@ -424,7 +424,7 @@ class Sloan(AgentFlow):
                 raise RuntimeError(
                     "Runtime context missing session_id; required for scoped retrieval."
                 )
-            hits: List[VectorSearchHit] = self.search_client.search(
+            hits: List[VectorSearchHit] = await self.search_client.search(
                 question=question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,

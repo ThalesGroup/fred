@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -58,8 +59,12 @@ def _fetch_body(
                 access_token=access_token,
             )
             client.base_url = kf_base.rstrip("/")
-            client.timeout = (timeout, timeout)
-            resp = client._request_with_token_refresh("GET", f"/resources/{rid}")
+            loop = asyncio.get_event_loop()
+            resp = loop.run_until_complete(
+                client._request_with_token_refresh(
+                    "GET", f"/resources/{rid}", phase_name="kf_resource_fetch"
+                )
+            )
         else:
             logger.warning(
                 "No access token available for knowledge-flow resource fetch (rid=%s).",

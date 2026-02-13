@@ -12,6 +12,8 @@ from fred_core.sql.base_sql import (
     create_async_engine_from_config,
     create_engine_from_config,
     json_for_engine,
+    run_ddl_with_advisory_lock,
+    advisory_lock_key,
 )
 from fred_core.sql.mixin import PydanticJsonMixin, SeedMarkerMixin
 
@@ -23,4 +25,6 @@ __all__ = [
     "PydanticJsonMixin",
     "SeedMarkerMixin",
     "json_for_engine",
+    "run_ddl_with_advisory_lock",
+    "advisory_lock_key",
 ]

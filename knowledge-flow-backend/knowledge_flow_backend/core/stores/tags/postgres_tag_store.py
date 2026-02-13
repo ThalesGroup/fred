@@ -18,7 +18,13 @@ import asyncio
 import logging
 from typing import Any, List
 
-from fred_core.sql import AsyncBaseSqlStore, PydanticJsonMixin, json_for_engine
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    PydanticJsonMixin,
+    advisory_lock_key,
+    json_for_engine,
+    run_ddl_with_advisory_lock,
+)
 from sqlalchemy import Column, DateTime, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -41,6 +47,7 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
     def __init__(self, engine: AsyncEngine, table_name: str, prefix: str):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         json_type = json_for_engine(self.store.engine)
 
@@ -61,8 +68,12 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                await conn.run_sync(metadata.create_all)
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         try:
             loop = asyncio.get_running_loop()

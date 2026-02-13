@@ -396,7 +396,7 @@ class Rico(AgentFlow):
 
             # 2) Vector search
             async with self.phase("vector_search"):
-                hits: List[VectorSearchHit] = self.search_client.search(
+                hits: List[VectorSearchHit] = await self.search_client.search(
                     question=augmented_question,
                     top_k=top_k,
                     document_library_tags_ids=doc_tag_ids,

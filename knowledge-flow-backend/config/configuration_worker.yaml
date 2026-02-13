@@ -8,6 +8,11 @@ app:
   reload_dir: "."
   max_ingestion_workers: 3
 
+processing:
+  generate_summary: false
+  use_gpu: true
+  process_images: false
+
 security:
   m2m:
     enabled: false

@@ -18,7 +18,12 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
-from fred_core.sql import AsyncBaseSqlStore, json_for_engine
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    json_for_engine,
+    run_ddl_with_advisory_lock,
+)
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -78,6 +83,7 @@ class PostgresHistoryStore(BaseHistoryStore):
     def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "history_"):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         json_type = json_for_engine(self.store.engine)
 
@@ -98,8 +104,12 @@ class PostgresHistoryStore(BaseHistoryStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                await conn.run_sync(metadata.create_all)
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         try:
             loop = asyncio.get_running_loop()
@@ -118,24 +128,11 @@ class PostgresHistoryStore(BaseHistoryStore):
     async def save_with_conn(
         self, conn, session_id: str, messages: List[ChatMessage], user_id: str
     ) -> None:
-        """
-        Same as save(), but reuses the provided AsyncConnection so callers can
-        group history + session writes in one transaction.
-        """
+        # Prepare all values first
+        all_values = []
         for i, msg in enumerate(messages):
-            parts_json = [
-                p.model_dump(mode="json", exclude_none=True) for p in (msg.parts or [])
-            ]
-            metadata_json = (
-                msg.metadata.model_dump(mode="json", exclude_none=True)
-                if msg.metadata
-                else {}
-            )
-
-            await self.store.upsert(
-                conn,
-                self.table,
-                values={
+            all_values.append(
+                {
                     "session_id": session_id,
                     "user_id": user_id,
                     "rank": msg.rank if msg.rank is not None else i,
@@ -145,11 +142,31 @@ class PostgresHistoryStore(BaseHistoryStore):
                     if isinstance(msg.channel, Channel)
                     else msg.channel,
                     "exchange_id": msg.exchange_id,
-                    "parts_json": parts_json,
-                    "metadata_json": metadata_json,
-                },
-                pk_cols=["session_id", "user_id", "rank"],
+                    "parts_json": [
+                        p.model_dump(mode="json", exclude_none=True)
+                        for p in (msg.parts or [])
+                    ],
+                    "metadata_json": msg.metadata.model_dump(
+                        mode="json", exclude_none=True
+                    )
+                    if msg.metadata
+                    else {},
+                }
             )
+
+        # Robust batch upsert (SQLAlchemy native)
+        # This is much faster than the loop as it sends 1 command for N rows.
+        from sqlalchemy.dialects.postgresql import insert
+
+        stmt = insert(self.table).values(all_values)
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["session_id", "user_id", "rank"],
+            set_={
+                k: stmt.excluded[k]
+                for k in ["parts_json", "metadata_json", "timestamp"]
+            },
+        )
+        await conn.execute(upsert_stmt)
 
     async def get(self, session_id: str) -> List[ChatMessage]:
         async with self.store.begin() as conn:
