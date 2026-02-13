@@ -23,7 +23,6 @@ import {
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-import { TagsInput } from "./AgentTagsInput";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 
@@ -155,7 +154,8 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
     });
   };
 
-  const isSaveDisabled = isLoading || !agent || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description;
+  const isSaveDisabled =
+    isLoading || !agent || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description;
 
   return (
     <Drawer
@@ -227,12 +227,12 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
               helperText={t("agentEditDrawer.descriptionHelperText")}
             />
 
-            <TagsInput
+            {/* <TagsInput
               label={t("agentEditDrawer.tagsLabel")}
               helperText={t("agentEditDrawer.tagsHelperText")}
               value={topLevelTuning.tags}
               onChange={(next) => onTopLevelChange("tags", next)}
-            />
+            /> */}
 
             <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
 
@@ -275,11 +275,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
             <Button variant="outlined" onClick={onClose}>
               {t("dialogs.cancel")}
             </Button>
-            <Button
-              variant="contained"
-              disabled={isSaveDisabled}
-              onClick={handleSave}
-            >
+            <Button variant="contained" disabled={isSaveDisabled} onClick={handleSave}>
               {t("common.save")}
             </Button>
           </Stack>
