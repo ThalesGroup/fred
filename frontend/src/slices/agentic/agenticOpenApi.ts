@@ -641,6 +641,7 @@ export type CreateAgentRequest = {
   team_id?: string | null;
   a2a_base_url?: string | null;
   a2a_token?: string | null;
+  class_path?: string | null;
 };
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
