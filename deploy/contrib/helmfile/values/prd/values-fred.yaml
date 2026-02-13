@@ -30,7 +30,6 @@ global:
       patrick.moran@thalesgroup.com
       murielle.josse@thalesgroup.com
       mathieu.juliensaintamand@thalesgroup.com
-      mathieu.juliensaintamand@thalesgroup.com
       julien.giraud@thalesgroup.com
       stephane.elmabrouk@thalesgroup.com
       thierry.betmont@thalesgroup.com
@@ -158,6 +157,7 @@ global:
       julien.bouchet@thalesgroup.com
       rodrigue.bourel@thalesgroup.com
       zoe.le-bris@thalesgroup.com
+      ines.khoudour@thalesgroup.com
 
 applications:
   agentic-backend:
@@ -166,7 +166,7 @@ applications:
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
-      tag: &prism-tag "0.0.23-prism"
+      tag: &prism-tag "0.0.20-prism-rc"
     imagePullSecrets: &carma-pull-secret
       - name: "carma-pull-secret"
 
@@ -224,8 +224,9 @@ applications:
           showAgentRegisterA2A: false
           showAgentRestoreFromConfiguration: false
           showAgentCode: false
-          allowAgentSwitchInOneConversation: false
-          showAgentDisableButton: false
+          # todo: uncomment when using `0.0.23-prism`
+          # allowAgentSwitchInOneConversation: false
+          # showAgentDisableButton: false
 
       ai:
         # Increase max number of session per users
