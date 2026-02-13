@@ -23,6 +23,8 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
+from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
+from knowledge_flow_backend.features.scheduler.scheduler_structures import ProcessDocumentsProgressResponse
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +83,7 @@ class IngestionService:
             versions.append(max(0, int(version)))
         return versions
 
-    def _apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
+    async def _apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Ensure the incoming document gets a suffix-based version within its primary folder/tag.
         """
@@ -92,7 +94,7 @@ class IngestionService:
         if primary_tag:
             filters = {"tags": {"tag_ids": [primary_tag]}}
 
-        existing_docs = self.metadata_service.metadata_store.get_all_metadata(filters)
+        existing_docs = await self.metadata_service.metadata_store.get_all_metadata(filters)
         existing_versions = self._existing_versions(canonical_name, primary_tag, existing_docs)
 
         # Prevent cascading (2), (3)… — keep at most one alternate version (1)
@@ -152,7 +154,7 @@ class IngestionService:
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    def extract_metadata(self, user: KeycloakUser, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
+    async def extract_metadata(self, user: KeycloakUser, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
@@ -164,7 +166,7 @@ class IngestionService:
 
         # Step 1: run processor
         metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
-        metadata = self._apply_versioning(metadata)
+        metadata = await self._apply_versioning(metadata)
 
         # Step 2: enrich/clean metadata
         if source_config:
@@ -214,3 +216,14 @@ class IngestionService:
             if candidate.exists() and candidate.is_file():
                 return candidate
         raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid} did you generate an output file named 'output.md' or 'table.csv'?")
+
+    @authorize(Action.PROCESS, Resource.DOCUMENTS)
+    async def get_processing_progress(
+        self,
+        user: KeycloakUser,
+        scheduler_task_service: IngestionTaskService | None,
+        workflow_id: str | None,
+    ) -> ProcessDocumentsProgressResponse:
+        if scheduler_task_service is None:
+            raise ValueError("Scheduler backend is disabled")
+        return await scheduler_task_service.get_progress(user=user, workflow_id=workflow_id)

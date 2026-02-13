@@ -183,7 +183,7 @@ class MiniLLMOrchestrator(LeaderFlow):
 
         # --- A. Check for available experts (NEW LOGIC) ---
         if not self.experts:
-            error_message = f"Agent **{self.get_name()}** cannot route because its crew is empty. Please add experts to its crew configuration."
+            error_message = f"Agent **{self.get_id()}** cannot route because its crew is empty. Please add experts to its crew configuration."
             logger.error(
                 f"NODE: route - Crew is empty. Aborting execution: {error_message}"
             )

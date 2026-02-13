@@ -96,6 +96,13 @@ class AgentChatOptions(BaseModel):
             "for this message (session-scoped context)."
         ),
     )
+    include_corpus_in_search: bool = Field(
+        default=True,
+        description=(
+            "Allow vector search on corpus documents. If false, corpus retrieval is disabled "
+            "for this agent even when the client requests it."
+        ),
+    )
     record_audio_files: bool = Field(
         default=False,
         description=(
@@ -139,6 +146,7 @@ class BaseAgent(BaseModel):
     - Agents created from UI can omit `class_path`.
     """
 
+    id: str
     name: str
     enabled: bool = True
     class_path: Optional[str] = None  # None → dynamic/UI agent
@@ -159,14 +167,14 @@ class BaseAgent(BaseModel):
     @classmethod
     def warn_on_deprecated_mcp_servers(cls, v: List[MCPServerConfiguration], info):
         """Logs a warning if the deprecated agent-level mcp_servers field is used."""
-        # Only log if the deprecated field was actually provided with content and we can infer the agent name
-        if v and info.data.get("name"):
+        # Only log if the deprecated field was actually provided with content and we can infer the agent id
+        if v and info.data.get("id"):
             logger.warning(
                 "DEPRECATION WARNING for agent '%s': 'mcp_servers' is deprecated. "
                 "Please migrate the full MCP server configuration to the global 'mcp' "
                 "section in your configuration file and update the agent's tuning "
                 "to use 'mcp_servers' (references).",
-                info.data.get("name"),
+                info.data.get("id"),
             )
         return v
 
@@ -186,13 +194,13 @@ class Leader(BaseAgent):
     """
     Why this subclass:
     - Crew membership is defined *once*, at the leader level, to avoid drift.
-    - You can include by names and/or by tags; optional excludes too.
+    - You can include by IDs and/or by tags; optional excludes too.
     """
 
     type: Literal["leader"] = "leader"
     crew: List[str] = Field(
         default_factory=list,
-        description="Names of agents in this leader's crew (if any).",
+        description="IDs of agents in this leader's crew (if any).",
     )
 
 
@@ -224,6 +232,12 @@ class AIConfig(BaseModel):
     max_concurrent_agents: int = Field(
         1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
+    )
+    max_concurrent_sessions_per_user: int = Field(
+        10,
+        description=(
+            "Maximum number of concurrent sessions allowed per user. This is used to prevent abuse and manage resource usage."
+        ),
     )
     max_attached_files_per_user: int = Field(
         20,
@@ -267,6 +281,13 @@ class Properties(BaseModel):
     agentsNicknamePlural: str = "agents"
     agentIconPath: str | None = None
     contactSupportLink: str | None = None
+    agentIconName: str | None = Field(
+        default=None,
+        description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
+    )
+    showAgentRegisterA2A: bool = True
+    showAgentRestoreFromConfiguration: bool = True
+    showAgentCode: bool = True
 
 
 class FrontendSettings(BaseModel):

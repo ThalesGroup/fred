@@ -20,7 +20,7 @@ from pathlib import Path
 
 from markitdown import MarkItDown
 
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_markdown_structures import (
     LiteMarkdownOptions,
@@ -252,15 +252,12 @@ class LiteDocxMarkdownProcessor(BaseMarkdownProcessor):
 
             engine = (result.extras or {}).get("engine") if isinstance(result.extras, dict) else None
             message = f"Lite DOCX conversion succeeded (engine={engine})" if engine else "Lite DOCX conversion succeeded."
-            status = "ok"
-        except Exception as e:  # noqa: BLE001
-            logger.error("LiteDocxMarkdownProcessor: conversion failed for %s: %s", file_path, e)
-            status = "error"
-            message = str(e)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("LiteDocxMarkdownProcessor: conversion failed for %s", file_path)
+            raise InputConversionError(f"LiteDocxMarkdownProcessor failed for '{file_path.name}': {exc}") from exc
 
         return {
             "doc_dir": str(output_dir),
             "md_file": str(output_markdown_path),
-            "status": status,
             "message": message,
         }

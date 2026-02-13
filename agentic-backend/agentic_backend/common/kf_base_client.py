@@ -95,10 +95,10 @@ class KfBaseClient:
             "path": path,
         }
         if self._agent:
-            agent_name = getattr(self._agent, "agent_settings", None)
+            agent_settings = getattr(self._agent, "agent_settings", None)
             agent_label = None
-            if agent_name is not None:
-                agent_label = getattr(agent_name, "name", None)
+            if agent_settings is not None:
+                agent_label = getattr(agent_settings, "id", None)
             dims["agent_id"] = agent_label or type(self._agent).__name__
             session_id = getattr(
                 getattr(self._agent, "runtime_context", None), "session_id", None

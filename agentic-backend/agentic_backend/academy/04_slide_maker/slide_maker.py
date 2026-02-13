@@ -192,7 +192,7 @@ class SlideMaker(AgentFlow):
                 upload_result = await self.upload_user_blob(
                     key=final_key,
                     file_content=f_out,
-                    filename=f"Generated_Slide_{self.get_name()}.pptx",
+                    filename=f"Generated_Slide_{self.get_id()}.pptx",
                     content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
 

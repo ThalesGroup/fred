@@ -1,7 +1,7 @@
 # Deployment Guide – OpenSearch Requirements for Fred
 
 **Use this guide only if you choose OpenSearch as your vector backend.**  
-Fred now supports PostgreSQL/pgvector as an alternative. When you pick OpenSearch, the constraints below are **mandatory**; otherwise Fred will raise a `ValueError` at startup and **refuse to run**.
+Default dev mode uses SQLite + ChromaDB; production can use PostgreSQL/pgvector instead of OpenSearch. If you do pick OpenSearch, the constraints below are **mandatory**; otherwise Fred will raise a `ValueError` at startup and **refuse to run**.
 
 ---
 

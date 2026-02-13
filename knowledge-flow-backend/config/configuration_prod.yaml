@@ -24,6 +24,7 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  max_ingestion_workers: 3
 
 processing:
   generate_summary: false
@@ -203,11 +204,28 @@ crossencoder_model:
 #     azure_tenant_id: "your-tenant-id"
 
 storage:
+
+  tabular_stores:
+    base_database:
+      type: "sql"
+      mode: "read_and_write"
+      driver: "postgresql+psycopg2"
+      host: "localhost"
+      port: 5432
+      database: "data"
+      path: null # (important: remove the `path` default value)
+      username: "tabular"
+
   postgres:
     host: localhost
     port: 5432
     database: fred
     username: fred
+    pool_size: 2
+    max_overflow: 0
+    pool_timeout: 30
+    pool_recycle: 1800
+    pool_pre_ping: true
 
   opensearch:
     host: https://localhost:9200
@@ -238,6 +256,10 @@ storage:
   metadata_store:
     type: "postgres"
     table: metadata
+  task_store:
+    type: "postgres"
+    table: workflow_tasks
+    prefix: "sched_"
 
   vector_store:
     type: opensearch
@@ -251,13 +273,6 @@ storage:
     type: "opensearch"
     index: log-index
 
-  tabular_stores:
-    base_database: # Minimal configuration to enable CSV document ingestion
-      type: "sql"
-      driver: "duckdb"
-      database: "base_database"
-      path: "~/.fred/knowledge-flow/db.duckdb"
-      mode: "read_and_write"
 
 mcp:
   reports_enabled: true

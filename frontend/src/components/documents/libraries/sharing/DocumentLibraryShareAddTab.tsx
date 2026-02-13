@@ -8,20 +8,16 @@ import {
   InputAdornment,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ShareTargetResource,
   TagWithItemsId,
   UserTagRelation,
   useShareTagKnowledgeFlowV1TagsTagIdSharePostMutation,
 } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { DocumentLibraryPendingRecipientsList } from "../DocumentLibraryPendingRecipientsList";
-import { DocumentLibraryShareGroupTree } from "./DocumentLibraryShareGroupTree";
 import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
 import { DocumentLibraryShareUsersList } from "./DocumentLibraryShareUsersList";
 
@@ -32,7 +28,6 @@ interface DocumentLibraryShareAddTabProps {
 
 export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibraryShareAddTabProps) {
   const { t } = useTranslation();
-  const [audience, setAudience] = React.useState<ShareTargetResource>("user");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [pendingRecipients, setPendingRecipients] = React.useState<DocumentLibraryPendingRecipient[]>([]);
   const [isSharing, setIsSharing] = React.useState(false);
@@ -75,7 +70,6 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
 
       setPendingRecipients([]);
       setSearchQuery("");
-      setAudience("user");
       onShared?.();
     } catch (error) {
       const status = (error as any)?.status ?? (error as any)?.originalStatus ?? (error as any)?.data?.status;
@@ -122,17 +116,6 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
         disabled={isSharing}
       />
 
-      <ToggleButtonGroup
-        value={audience}
-        exclusive
-        onChange={(_, value) => value && setAudience(value)}
-        color="primary"
-        disabled={isSharing}
-      >
-        <ToggleButton value="user">{t("documentLibraryShareDialog.usersToggle")}</ToggleButton>
-        <ToggleButton value="group">{t("documentLibraryShareDialog.groupsToggle")}</ToggleButton>
-      </ToggleButtonGroup>
-
       <Box
         sx={{
           display: "grid",
@@ -148,22 +131,13 @@ export function DocumentLibraryShareAddTab({ tag, onShared }: DocumentLibrarySha
             overflowY: "auto",
           }}
         >
-          {audience === "user" ? (
-            <DocumentLibraryShareUsersList
-              searchQuery={searchQuery}
-              selectedIds={selectedIds}
-              disabled={isSharing}
-              onAdd={handleAddRecipient}
-              tagId={tag.id}
-            />
-          ) : (
-            <DocumentLibraryShareGroupTree
-              searchQuery={searchQuery}
-              selectedIds={selectedIds}
-              disabled={isSharing}
-              onAdd={handleAddRecipient}
-            />
-          )}
+          <DocumentLibraryShareUsersList
+            searchQuery={searchQuery}
+            selectedIds={selectedIds}
+            disabled={isSharing}
+            onAdd={handleAddRecipient}
+            tagId={tag.id}
+          />
         </Box>
 
         <Divider />

@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fred_core import KeycloakUser, get_current_user
 from pydantic import BaseModel, Field
 
@@ -39,7 +39,7 @@ class FeedbackPayload(BaseModel):
     comment: Optional[str] = None
     message_id: str = Field(..., alias="messageId")
     session_id: str = Field(..., alias="sessionId")
-    agent_name: str = Field(..., alias="agentName")
+    agent_id: str = Field(..., alias="agentName")
 
     class Config:
         populate_by_name = True
@@ -70,13 +70,13 @@ async def post_feedback(
         id=str(uuid.uuid4()),
         session_id=payload.session_id,
         message_id=payload.message_id,
-        agent_name=payload.agent_name,
+        agent_id=payload.agent_id,
         rating=payload.rating,
         comment=payload.comment,
         created_at=datetime.utcnow(),
         user_id=user.uid,
     )
-    service.add_feedback(user, feedback_record)
+    await service.add_feedback(user, feedback_record)
     return  # implicit 204
 
 
@@ -89,7 +89,7 @@ async def get_feedback(
     user: KeycloakUser = Depends(get_current_user),
     service: FeedbackService = Depends(get_feedback_service),
 ):
-    return service.get_feedback(user)
+    return await service.get_feedback(user)
 
 
 @router.delete(
@@ -102,7 +102,5 @@ async def delete_feedback(
     user: KeycloakUser = Depends(get_current_user),
     service: FeedbackService = Depends(get_feedback_service),
 ):
-    deleted = service.delete_feedback(user, feedback_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Feedback entry not found")
+    await service.delete_feedback(user, feedback_id)
     return  # implicit 204

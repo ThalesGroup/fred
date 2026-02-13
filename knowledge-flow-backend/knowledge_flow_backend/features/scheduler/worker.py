@@ -29,17 +29,30 @@ from temporalio.worker import Worker
 
 from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
 from knowledge_flow_backend.features.scheduler.activities import (
+    create_pull_file_metadata,
+    fast_delete_vectors,
+    fast_store_vectors,
     get_push_file_metadata,
     input_process,
+    load_pull_file,
+    load_push_file,
     output_process,
+    record_current_document,
+    record_workflow_status,
 )
-from knowledge_flow_backend.features.scheduler.workflow import GetPushFileMetadata, InputProcess, OutputProcess, Process
+from knowledge_flow_backend.features.scheduler.workflow import (
+    CreatePullFileMetadata,
+    FastDeleteVectors,
+    FastStoreVectors,
+    GetPushFileMetadata,
+    InputProcess,
+    LoadPullFile,
+    LoadPushFile,
+    OutputProcess,
+    Process,
+    ProcessFile,
+)
 
-# Use basic logging instead of rich within the Temporal worker
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -64,14 +77,27 @@ async def run_worker(config: TemporalSchedulerConfig):
         task_queue=config.task_queue,
         workflows=[
             Process,
+            ProcessFile,
+            CreatePullFileMetadata,
             GetPushFileMetadata,
+            LoadPullFile,
+            LoadPushFile,
             InputProcess,
             OutputProcess,
+            FastStoreVectors,
+            FastDeleteVectors,
         ],
         activities=[
+            create_pull_file_metadata,
             get_push_file_metadata,
+            load_pull_file,
+            load_push_file,
             input_process,
             output_process,
+            fast_store_vectors,
+            fast_delete_vectors,
+            record_current_document,
+            record_workflow_status,
         ],
         activity_executor=executor,
     )

@@ -17,8 +17,8 @@ import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
-import { AppsScheduler } from "../pages/AppsScheduler";
 import Chat from "../pages/Chat";
+import { ComingSoon } from "../pages/ComingSoon.tsx";
 import DataHub from "../pages/DataHub";
 import GraphHub from "../pages/GraphHub.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
@@ -33,6 +33,8 @@ import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { Profile } from "../pages/Profile";
 import RebacBackfill from "../pages/RebacBackfill";
 import Runtime from "../pages/Runtime";
+import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
+import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
 
 const basename = getConfig().frontend_basename;
@@ -59,6 +61,14 @@ export const routes: RouteObject[] = [
       {
         path: "chat/:sessionId",
         element: <Chat />,
+      },
+      {
+        path: "teams",
+        element: <TeamsPage />,
+      },
+      {
+        path: "team/:teamId/*",
+        element: <TeamDetailsPage />,
       },
       {
         path: "monitoring/kpis",
@@ -148,10 +158,6 @@ export const routes: RouteObject[] = [
         path: "tools",
         element: <McpHub />,
       },
-      {
-        path: "apps/scheduler",
-        element: <AppsScheduler />,
-      },
     ].filter(Boolean),
   },
   {
@@ -159,12 +165,8 @@ export const routes: RouteObject[] = [
     element: <Unauthorized />,
   },
   {
-    path: "/knowledge",
-    element: (
-      <RootLayout>
-        <KnowledgeHub />
-      </RootLayout>
-    ),
+    path: "coming-soon",
+    element: <ComingSoon />,
   },
   {
     path: "*",

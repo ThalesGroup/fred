@@ -339,9 +339,7 @@ class Rico(AgentFlow):
                 )
                 messages = [sys_msg, *history, human_msg]
                 messages = self.with_chat_context_text(messages)
-                with self.kpi_timer(
-                    "agent.step_latency_ms", dims={"step": "answer_general_only"}
-                ):
+                async with self.phase("answer_general_only"):
                     answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
 
@@ -397,10 +395,7 @@ class Rico(AgentFlow):
             )
 
             # 2) Vector search
-            with self.kpi_timer(
-                "agent.step_latency_ms",
-                dims={"step": "vector_search", "policy": search_policy},
-            ):
+            async with self.phase("vector_search"):
                 hits: List[VectorSearchHit] = self.search_client.search(
                     question=augmented_question,
                     top_k=top_k,
@@ -439,9 +434,7 @@ class Rico(AgentFlow):
                 messages = [HumanMessage(content=warn)]
                 messages = self.with_chat_context_text(messages)
 
-                with self.kpi_timer(
-                    "agent.step_latency_ms", dims={"step": "answer_no_results"}
-                ):
+                async with self.phase("answer_no_results"):
                     return {"messages": [await self.model.ainvoke(messages)]}
 
             # 3) Deterministic ordering + fill ranks
@@ -494,9 +487,7 @@ class Rico(AgentFlow):
                 human_msg = HumanMessage(content=no_sources_text)
                 messages = [sys_msg, *history, human_msg]
                 messages = self.with_chat_context_text(messages)
-                with self.kpi_timer(
-                    "agent.step_latency_ms", dims={"step": "answer_no_sources"}
-                ):
+                async with self.phase("answer_no_sources"):
                     answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
 
@@ -552,9 +543,7 @@ class Rico(AgentFlow):
                 len(sys_msg.content),
                 len(human_msg.content),
             )
-            with self.kpi_timer(
-                "agent.step_latency_ms", dims={"step": "answer_with_sources"}
-            ):
+            async with self.phase("answer_with_sources"):
                 answer = await self.model.ainvoke(messages)
 
             # 6) Attach rich sources metadata for the UI

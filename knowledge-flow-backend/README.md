@@ -43,6 +43,18 @@ If you start it s follows the default configuration is developper friendly and o
 the [configuration page](./config/README.md)
 to use another setup.
 
+### Database credentials (prod vs tabular)
+
+- **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.  
+  - User/host/db come from `storage.postgres` in `configuration*.yaml`.  
+  - Password comes from `FRED_POSTGRES_PASSWORD` (or an explicit `password:` in the YAML).
+- **Tabular storage (`storage.tabular_stores`)**: used only for CSV/Excel ingestion + statistic/tabular MCP APIs.  
+  - Each tabular entry is an `SQLStorageConfig`.  
+  - Password comes from, in order: the YAML `password` field, `TABULAR_POSTGRES_PASSWORD`, then legacy `SQL_PASSWORD`.  
+  - This store is separate from the core Postgres store; you can use a different database/user for safety.
+
+Tip: set both env vars in `config/.env` for production and keep the tabular DB/user isolated from the core DB.
+
 ```bash
 git clone https://github.com/ThalesGroup/knowledge-flow.git
 cd knowledge-flow

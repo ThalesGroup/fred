@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 // OpenAPI types
 import { AnyAgent } from "../../common/agent";
 import { AgentChipWithIcon } from "../../common/AgentChip";
+import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
 
@@ -64,6 +65,8 @@ export const AgentCard = ({
   const hasA2aCard = Boolean(agent.metadata && (agent.metadata as any).a2a_card);
   const isA2A = Boolean(agent.metadata && (agent.metadata as any).a2a_base_url);
   const a2aBorder = theme.palette.success.main;
+
+  const { showAgentCode } = useFrontendProperties();
 
   return (
     <Card
@@ -209,7 +212,7 @@ export const AgentCard = ({
               </IconButton>
             </SimpleTooltip>
           )}
-          {!isA2A && onInspectCode && (
+          {!isA2A && showAgentCode && onInspectCode && (
             <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
               <IconButton
                 size="small"

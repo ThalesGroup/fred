@@ -78,6 +78,7 @@ class ImageProcessor(BaseMarkdownProcessor):
         Generate a minimal markdown file containing the image title and metadata.
         This allows the image to be searchable by its filename.
         """
+        output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
         image_title = file_path.stem
 
@@ -96,4 +97,4 @@ This is an image asset that can be used in templates. Search for "{image_title}"
 
         logger.info(f"Created markdown file for image: {file_path.name}")
 
-        return {"doc_dir": str(output_dir), "md_file": str(md_path), "image_title": image_title, "status": "success"}
+        return {"doc_dir": str(output_dir), "md_file": str(md_path), "image_title": image_title}

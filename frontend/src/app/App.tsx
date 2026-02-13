@@ -21,8 +21,8 @@ import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
 import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "../components/ToastProvider";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { darkTheme, lightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 
@@ -119,27 +119,21 @@ const LoadingScreen = ({
 
 function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
+  const { siteDisplayName, faviconName, logoName, faviconNameDark, logoNameDark } = useFrontendProperties();
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
-  const siteDisplayName = frontendConfig?.frontend_settings?.properties?.siteDisplayName || "Fred";
-  const faviconName =
-    frontendConfig?.frontend_settings?.properties?.faviconName ||
-    frontendConfig?.frontend_settings?.properties?.logoName ||
-    "fred";
-  const faviconNameDark =
-    frontendConfig?.frontend_settings?.properties?.faviconNameDark ||
-    frontendConfig?.frontend_settings?.properties?.logoNameDark ||
-    "fred-dark";
+  const displayName = siteDisplayName || "Fred";
+  const favicon = faviconName || logoName || "fred";
+  const faviconDark = faviconNameDark || logoNameDark || "fred-dark";
   const baseUrl = (import.meta.env.BASE_URL ?? "/").endsWith("/")
     ? (import.meta.env.BASE_URL ?? "/")
     : `${import.meta.env.BASE_URL ?? "/"}/`;
 
   useEffect(() => {
-    document.title = siteDisplayName;
-    const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    favicon.href = `${baseUrl}images/${darkMode ? faviconNameDark : faviconName}.svg`;
-  }, [baseUrl, siteDisplayName, faviconName, faviconNameDark, darkMode]);
+    document.title = displayName;
+    const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
+    faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;
+  }, [baseUrl, displayName, favicon, faviconDark, darkMode]);
 
   useEffect(() => {
     import("../common/router").then((mod) => {
@@ -151,9 +145,9 @@ function FredUiContent() {
     return (
       <LoadingScreen
         label={t("app.loading.router", "Fred démarre...")}
-        logoName={faviconName}
-        logoNameDark={faviconNameDark}
-        alt={siteDisplayName}
+        logoName={favicon}
+        logoNameDark={faviconDark}
+        alt={displayName}
       />
     );
 
@@ -162,9 +156,9 @@ function FredUiContent() {
       fallback={
         <LoadingScreen
           label={t("app.loading.ui", "L'interface Fred se prépare...")}
-          logoName={faviconName}
-          logoNameDark={faviconNameDark}
-          alt={siteDisplayName}
+          logoName={favicon}
+          logoNameDark={faviconDark}
+          alt={displayName}
         />
       }
     >

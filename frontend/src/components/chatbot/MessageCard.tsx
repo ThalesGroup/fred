@@ -90,7 +90,7 @@ export default function MessageCard({
         comment,
         messageId: message.exchange_id,
         sessionId: message.session_id,
-        agentName: agent.name ?? t("chat.common.unknown"),
+        agentName: agent.id ?? t("chat.common.unknown"),
       },
     }).then((result) => {
       if (result.error) {
@@ -201,7 +201,7 @@ export default function MessageCard({
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
           <Grid2 size="auto" paddingTop={2}>
-            <SimpleTooltip title={`${agent.name}: ${agent.tuning.role}`}>
+            <SimpleTooltip title={`${agent.id}: ${agent.tuning.role}`}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                 <AgentChipMini agent={agent} />
                 {pending && (

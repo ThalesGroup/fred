@@ -48,7 +48,7 @@ from agentic_backend.application_context import (
     get_configuration,
     get_rebac_engine,
 )
-from agentic_backend.common.structures import AgentSettings, FrontendSettings
+from agentic_backend.common.structures import FrontendSettings
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
@@ -219,7 +219,7 @@ class FrontendConfigDTO(BaseModel):
 
 
 class CreateSessionPayload(BaseModel):
-    agent_name: Optional[str] = None
+    agent_id: Optional[str] = None
     title: Optional[str] = None
 
 
@@ -289,19 +289,6 @@ def get_user_permissions(
     Return a flat list of 'resource:action' strings the user is allowed to perform.:
     """
     return rbac_provider.list_permissions_for_user(current_user)
-
-
-@router.get(
-    "/chatbot/agenticflows",
-    description="Get the list of available agentic flows",
-    summary="Get the list of available agentic flows",
-)
-def get_agentic_flows(
-    user: KeycloakUser = Depends(get_current_user),
-    agent_manager: AgentManager = Depends(get_agent_manager),  # Inject the dependency
-) -> List[AgentSettings]:
-    flows = agent_manager.get_agentic_flows()
-    return flows
 
 
 def _update_tokens_from_request(
@@ -413,7 +400,7 @@ async def websocket_chatbot_question(
             session_callback=ws_session_callback,
             session_id=payload.session_id,
             exchange_id=payload.exchange_id,
-            agent_name=payload.agent_name,
+            agent_id=payload.agent_id,
             resume_payload=payload.payload or {},
             runtime_context=runtime_context,
         )
@@ -440,7 +427,7 @@ async def websocket_chatbot_question(
             session_callback=ws_session_callback,
             session_id=payload.session_id,
             message=payload.message,
-            agent_name=payload.agent_name,
+            agent_id=payload.agent_id,
             runtime_context=runtime_context,
             client_exchange_id=payload.client_exchange_id,
         )
@@ -452,19 +439,22 @@ async def websocket_chatbot_question(
         ):
             raise WebSocketDisconnect
 
+    last_session_id: str | None = None
+
     try:
         while True:
             # We loop here receiving and replying with the same WebSocket connection
             client_request = None
             try:
                 client_request = await websocket.receive_json()
-                logger.debug(
-                    "[CHATBOT WS] recv raw session_id=%s payload=%s",
-                    client_request.get("session_id")
-                    if isinstance(client_request, dict)
-                    else None,
-                    client_request,
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[CHATBOT] recv raw session_id=%s payload=%s",
+                        client_request.get("session_id")
+                        if isinstance(client_request, dict)
+                        else None,
+                        client_request,
+                    )
 
                 async def ws_callback(msg_dict: dict):
                     # Callback to stream agent tokens/messages back to the client
@@ -522,6 +512,10 @@ async def websocket_chatbot_question(
                     refresh_token=active_refresh_token,
                     user=user,
                 )
+                if isinstance(parsed, ChatAskInput):
+                    last_session_id = parsed.session_id or last_session_id
+                elif isinstance(parsed, HumanResumeInput):
+                    last_session_id = parsed.session_id or last_session_id
                 logger.info(
                     "[CHATBOT WS] parsed type=%s session_id=%s exchange_id=%s agent=%s has_runtime_ctx=%s",
                     type(parsed).__name__,
@@ -531,8 +525,8 @@ async def websocket_chatbot_question(
                     getattr(parsed, "exchange_id", None)
                     if hasattr(parsed, "exchange_id")
                     else None,
-                    getattr(parsed, "agent_name", None)
-                    if hasattr(parsed, "agent_name")
+                    getattr(parsed, "agent_id", None)
+                    if hasattr(parsed, "agent_id")
                     else None,
                     parsed.runtime_context is not None,
                 )
@@ -563,7 +557,7 @@ async def websocket_chatbot_question(
                 #             "[CHATBOT] Deep search ignored because RAG scope is general-only."
                 #         )
                 #     else:
-                #         base_settings = agent_manager.get_agent_settings(ask.agent_name)
+                #         base_settings = agent_manager.get_agent_settings(ask.agent_id)
                 #         delegate_to = (
                 #             base_settings.metadata.get("deep_search_delegate_to")
                 #             if base_settings and base_settings.metadata
@@ -571,16 +565,16 @@ async def websocket_chatbot_question(
                 #         )
                 #         if delegate_to:
                 #             if agent_manager.get_agent_settings(delegate_to):
-                #                 target_agent_name = delegate_to
+                #                 target_agent_id = delegate_to
                 #                 logger.info(
                 #                     "[CHATBOT] Deep search enabled; delegating %s request to %s.",
-                #                     ask.agent_name,
+                #                     ask.agent_id,
                 #                     delegate_to,
                 #                 )
                 #             else:
                 #                 logger.warning(
                 #                     "[CHATBOT] Deep search requested for %s but delegate '%s' is not configured; falling back.",
-                #                     ask.agent_name,
+                #                     ask.agent_id,
                 #                     delegate_to,
                 #                 )
 
@@ -641,6 +635,16 @@ async def websocket_chatbot_question(
         except Exception:
             logger.debug("WebSocket close failed", exc_info=True)
             pass
+    finally:
+        if last_session_id:
+            try:
+                await session_orchestrator.release_session(last_session_id)
+            except Exception:
+                logger.debug(
+                    "Session release failed for session_id=%s",
+                    last_session_id,
+                    exc_info=True,
+                )
 
 
 @router.websocket("/chatbot/query/ws-baseline")
@@ -667,11 +671,13 @@ async def websocket_chatbot_openai_baseline(websocket: WebSocket):
     description="Get the list of active chatbot sessions.",
     summary="Get the list of active chatbot sessions.",
 )
-def get_sessions(
+async def get_sessions(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[SessionWithFiles]:
-    return session_orchestrator.get_sessions(user)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("[CHATBOT] get_sessions start user=%s", user.uid)
+    return await session_orchestrator.get_sessions(user)
 
 
 @router.post(
@@ -680,13 +686,20 @@ def get_sessions(
     summary="Create chatbot session.",
     response_model=SessionSchema,
 )
-def create_session(
+async def create_session(
     payload: CreateSessionPayload = Body(default_factory=CreateSessionPayload),
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> SessionSchema:
-    return session_orchestrator.create_empty_session(
-        user=user, agent_name=payload.agent_name, title=payload.title
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] create_session start user=%s agent_id=%s title=%s",
+            user.uid,
+            payload.agent_id,
+            payload.title,
+        )
+    return await session_orchestrator.create_empty_session(
+        user=user, agent_id=payload.agent_id, title=payload.title
     )
 
 
@@ -696,7 +709,7 @@ def create_session(
     summary="Get the history of a chatbot session.",
     response_model=List[ChatMessage],
 )
-def get_session_history(
+async def get_session_history(
     session_id: str,
     limit: Optional[int] = Query(None, ge=1),
     offset: int = Query(0, ge=0),
@@ -705,7 +718,13 @@ def get_session_history(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[ChatMessage]:
-    history = session_orchestrator.get_session_history(
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_session_history start session=%s user=%s",
+            session_id,
+            user.uid,
+        )
+    history = await session_orchestrator.get_session_history(
         session_id=session_id,
         user=user,
         limit=limit,
@@ -727,7 +746,7 @@ def get_session_history(
     summary="Get a single chatbot message.",
     response_model=ChatMessage,
 )
-def get_session_message(
+async def get_session_message(
     session_id: str,
     rank: int,
     text_limit: Optional[int] = Query(None, ge=1),
@@ -735,13 +754,14 @@ def get_session_message(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> ChatMessage:
-    logger.info(
-        "[CHATBOT] get_session_message start session=%s rank=%s user=%s",
-        session_id,
-        rank,
-        user.uid,
-    )
-    message = session_orchestrator.get_session_message(session_id, rank, user)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_session_message start session=%s rank=%s user=%s",
+            session_id,
+            rank,
+            user.uid,
+        )
+    message = await session_orchestrator.get_session_message(session_id, rank, user)
     if text_limit is not None or text_offset > 0:
         message = _paginate_message_text(
             message, text_offset=text_offset, text_limit=text_limit
@@ -764,12 +784,18 @@ class SessionPreferencesPayload(BaseModel):
     response_model=dict,
     tags=["Chatbot"],
 )
-def get_session_preferences(
+async def get_session_preferences(
     session_id: str,
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
     user: KeycloakUser = Depends(get_current_user),
 ):
-    return session_orchestrator.get_session_preferences(session_id, user)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_session_preferences start session=%s user=%s",
+            session_id,
+            user.uid,
+        )
+    return await session_orchestrator.get_session_preferences(session_id, user)
 
 
 @router.put(
@@ -777,13 +803,19 @@ def get_session_preferences(
     response_model=dict,
     tags=["Chatbot"],
 )
-def update_session_preferences(
+async def update_session_preferences(
     session_id: str,
     payload: SessionPreferencesPayload,
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
     user: KeycloakUser = Depends(get_current_user),
 ):
-    return session_orchestrator.update_session_preferences(
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] update_session_preferences start session=%s user=%s",
+            session_id,
+            user.uid,
+        )
+    return await session_orchestrator.update_session_preferences(
         session_id, user, payload.preferences
     )
 
@@ -833,6 +865,13 @@ async def get_file_summary(
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> dict:
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "[CHATBOT] get_file_summary start session=%s attachment=%s user=%s",
+            session_id,
+            attachment_id,
+            user.uid,
+        )
     return await session_orchestrator.get_attachment_summary(
         user=user, session_id=session_id, attachment_id=attachment_id
     )

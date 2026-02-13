@@ -34,8 +34,14 @@ export interface ProgressStep {
   error?: string;
 }
 
+export interface ProgressFileStatus {
+  processing?: boolean;
+  failed?: boolean;
+}
+
 export interface ProgressStepperProps {
   steps: ProgressStep[];
+  fileStatuses?: Record<string, ProgressFileStatus>;
 }
 
 export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
@@ -57,7 +63,7 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
       case "success":
       case "finished":
         return <CheckCircleIcon color="success" fontSize="medium" />;
-      case "error":
+      case "failed":
         return <ErrorOutlineIcon color="error" fontSize="medium" />;
       default:
         return <HourglassEmptyIcon color="disabled" fontSize="medium" />;
@@ -96,7 +102,7 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
           <Stepper activeStep={fileSteps.length} orientation="vertical" sx={{ pl: 1 }}>
             {fileSteps.map((step, index) => (
               <Step key={index}>
-                <StepLabel icon={getIcon(step.status)} error={step.status === "error"}>
+                <StepLabel icon={getIcon(step.status)} error={step.status === "failed"}>
                   <Typography
                     variant="body1"
                     fontWeight="medium"
@@ -107,7 +113,7 @@ export const ProgressStepper = ({ steps }: ProgressStepperProps) => {
                       maxWidth: "calc(100% - 32px)",
                     }}
                   >
-                    {step.step}
+                    {step.status === "failed" ? "Failed" : step.step}
                   </Typography>
                 </StepLabel>
                 <StepContent>

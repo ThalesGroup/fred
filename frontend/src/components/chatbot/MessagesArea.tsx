@@ -47,7 +47,7 @@ function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
   return (
     <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
       <Grid2 size="auto" paddingTop={2}>
-        <SimpleTooltip title={`${agent.name}: ${agent.tuning.role}`}>
+        <SimpleTooltip title={`${agent.id}: ${agent.tuning.role}`}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
             <AgentChipMini agent={agent} />
             <Box sx={{ display: "flex", alignItems: "center", transform: "translateY(1px) scale(0.9)" }}>
@@ -77,8 +77,8 @@ function Area({
   const [highlightUid, setHighlightUid] = React.useState<string | null>(null);
 
   const resolveAgent = (msg: ChatMessage): AnyAgent => {
-    const agentName = msg.metadata?.agent_name ?? currentAgent.name;
-    return agents.find((agent) => agent.name === agentName) ?? currentAgent;
+    const agentName = msg.metadata?.agent_id ?? currentAgent.id;
+    return agents.find((agent) => agent.id === agentName) ?? currentAgent;
   };
 
   const content = useMemo(() => {

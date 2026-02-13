@@ -21,14 +21,27 @@ from typing import List, Optional
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
+from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryDocumentInput, LibraryOutputProcessor
-from knowledge_flow_backend.features.scheduler.activities import create_pull_file_metadata, get_push_file_metadata, input_process, load_pull_file, load_push_file, output_process
+from knowledge_flow_backend.features.scheduler.activities import (
+    create_pull_file_metadata,
+    get_push_file_metadata,
+    input_process,
+    load_pull_file,
+    load_push_file,
+    output_process,
+)
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
+)
+from knowledge_flow_backend.features.scheduler.workflow_status import (
+    WORKFLOW_STATUS_COMPLETED,
+    WORKFLOW_STATUS_FAILED,
+    WORKFLOW_STATUS_RUNNING,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,13 +72,12 @@ async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
         if file.is_pull():
             metadata = await create_pull_file_metadata(file)
             local_file_path = await load_pull_file(file, metadata)
-            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
         else:
             metadata = await get_push_file_metadata(file)
             local_file_path = await load_push_file(file, metadata)
-            metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
-            _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
+
+        metadata = await input_process(user=file.processed_by, input_file=local_file_path, metadata=metadata)
+        _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
     return "success"
 
@@ -78,6 +90,50 @@ class InMemoryScheduler(BaseScheduler):
     - Executes the ingestion pipeline locally via BackgroundTasks.
     """
 
+    def __init__(self, metadata_service):
+        super().__init__(metadata_service)
+        self._workflow_status_by_id: dict[str, str] = {}
+        self._workflow_last_error_by_id: dict[str, str | None] = {}
+
+    @staticmethod
+    def _format_exception_message(exc: BaseException) -> str:
+        return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
+
+    def _set_workflow_state(
+        self,
+        *,
+        workflow_id: str,
+        status: str,
+        last_error: str | None,
+    ) -> None:
+        with self._lock:
+            self._workflow_status_by_id[workflow_id] = status
+            self._workflow_last_error_by_id[workflow_id] = last_error
+
+    async def _run_pipeline_with_status_tracking(self, workflow_id: str, definition: PipelineDefinition) -> None:
+        try:
+            await _run_ingestion_pipeline(definition)
+        except Exception as exc:
+            error_message = self._format_exception_message(exc)
+            logger.error(
+                "[SCHEDULER][IN_MEMORY] Pipeline workflow_id=%s failed: %s",
+                workflow_id,
+                error_message,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            self._set_workflow_state(
+                workflow_id=workflow_id,
+                status=WORKFLOW_STATUS_FAILED,
+                last_error=error_message,
+            )
+            return
+
+        self._set_workflow_state(
+            workflow_id=workflow_id,
+            status=WORKFLOW_STATUS_COMPLETED,
+            last_error=None,
+        )
+
     async def start_document_processing(
         self,
         user: KeycloakUser,
@@ -85,13 +141,21 @@ class InMemoryScheduler(BaseScheduler):
         background_tasks: Optional[BackgroundTasks] = None,
     ) -> WorkflowHandle:
         handle = self._register_workflow(user, definition)
+        workflow_id = handle.workflow_id
+        self._set_workflow_state(
+            workflow_id=workflow_id,
+            status=WORKFLOW_STATUS_RUNNING,
+            last_error=None,
+        )
 
+        # In request/response endpoints we prefer FastAPI/Starlette BackgroundTasks.
+        # In streaming endpoints, callers can pass background_tasks=None to run inline.
         if background_tasks is not None:
-            background_tasks.add_task(_run_ingestion_pipeline, definition)
+            background_tasks.add_task(self._run_pipeline_with_status_tracking, workflow_id, definition)
         else:
             # Fallback for non-HTTP contexts; this will block the caller.
             logger.warning("[SCHEDULER][IN_MEMORY] BackgroundTasks not provided, running ingestion pipeline synchronously")
-            await _run_ingestion_pipeline(definition)
+            await self._run_pipeline_with_status_tracking(workflow_id, definition)
 
         return handle
 
@@ -180,3 +244,48 @@ class InMemoryScheduler(BaseScheduler):
         module_name, class_name = class_path.rsplit(".", 1)
         module = __import__(module_name, fromlist=[class_name])
         return getattr(module, class_name)
+
+    async def store_fast_vectors(self, payload: dict) -> dict:
+        docs_payload = payload.get("documents") or []
+        if not isinstance(docs_payload, list):
+            raise ValueError("payload.documents must be a list")
+
+        context = ApplicationContext.get_instance()
+        embedder = context.get_embedder()
+        vector_store = context.get_create_vector_store(embedder)
+
+        docs: list[Document] = []
+        for item in docs_payload:
+            if not isinstance(item, dict):
+                continue
+            page_content = str(item.get("page_content") or "")
+            metadata = item.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            docs.append(Document(page_content=page_content, metadata=metadata))
+
+        if not docs:
+            return {"chunks": 0}
+
+        ids = vector_store.add_documents(docs)
+        chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+        return {"chunks": chunks}
+
+    async def delete_fast_vectors(self, payload: dict) -> dict:
+        document_uid = payload.get("document_uid")
+        if not document_uid:
+            raise ValueError("payload.document_uid is required")
+
+        context = ApplicationContext.get_instance()
+        embedder = context.get_embedder()
+        vector_store = context.get_create_vector_store(embedder)
+        vector_store.delete_vectors_for_document(document_uid=document_uid)
+        return {"status": "ok", "document_uid": document_uid}
+
+    async def get_workflow_execution_status(self, workflow_id: str) -> Optional[str]:
+        with self._lock:
+            return self._workflow_status_by_id.get(workflow_id)
+
+    async def get_workflow_last_error(self, workflow_id: str) -> Optional[str]:
+        with self._lock:
+            return self._workflow_last_error_by_id.get(workflow_id)

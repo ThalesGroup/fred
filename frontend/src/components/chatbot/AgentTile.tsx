@@ -21,7 +21,7 @@ export function AgentTile({ agent }: AgentTileProps) {
   const agentColor = THEME_COLOR_MAP(theme)[colorHint];
 
   return (
-    <InvisibleLink to={`/new-chat/${encodeURIComponent(agent.name)}`}>
+    <InvisibleLink to={`/new-chat/${encodeURIComponent(agent.id)}`}>
       <Paper
         elevation={2}
         sx={{
@@ -39,12 +39,12 @@ export function AgentTile({ agent }: AgentTileProps) {
             pl: 2,
             gap: 1.5,
             py: 2,
-            width: "200px",
+            width: "240px",
             height: "100%",
           }}
         >
           {/* Icon */}
-          <AgentIcon sx={{ color: agentColor, width: 32 }} />
+          <AgentIcon sx={{ color: agentColor, width: 28 }} />
 
           {/* Name + role */}
           <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>

@@ -122,7 +122,6 @@ def test_convert_file_to_markdown(image_processor):
         result = image_processor.convert_file_to_markdown(image_path, output_dir, document_uid="test-uid-123")
 
         # Check result
-        assert result["status"] == "success"
         assert "doc_dir" in result
         assert "md_file" in result
         assert result["image_title"] == "Nvidia"

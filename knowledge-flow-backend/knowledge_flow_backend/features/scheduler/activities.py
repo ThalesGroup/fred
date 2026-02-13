@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import pathlib
 import tempfile
@@ -19,7 +20,7 @@ import tempfile
 from fred_core import KeycloakUser
 from temporalio import activity, exceptions
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
+from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
-        metadata = ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
+        metadata = await ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.source.pull_location = file.external_path
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
 
@@ -89,7 +90,7 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
 
 @activity.defn
-async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
+async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PUSH_FILE] Loading file uid={metadata.document_uid}")
 
@@ -103,13 +104,14 @@ async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> pat
     output_dir.mkdir(exist_ok=True)
 
     # 🗂️ Download input file
-    ingestion_service.get_local_copy(file.processed_by, metadata, working_dir)
+    await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
     input_file = next(input_dir.glob("*"))
-    return input_file
+    # Temporal payloads must be JSON-serializable.
+    return str(input_file)
 
 
 @activity.defn
-async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pathlib.Path:
+async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] Fetching file uid={metadata.document_uid}")
 
@@ -125,17 +127,18 @@ async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> pat
     from knowledge_flow_backend.application_context import ApplicationContext
 
     loader = ApplicationContext.get_instance().get_content_loader(metadata.source_tag)
-    full_path = loader.fetch_by_relative_path(metadata.pull_location, input_dir)
+    full_path = await asyncio.to_thread(loader.fetch_by_relative_path, metadata.pull_location, input_dir)
 
     if not full_path.exists() or not full_path.is_file():
         raise FileNotFoundError(f"File not found after fetch: {full_path}")
 
     logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] File copied to working dir: path={full_path}")
-    return full_path
+    # Temporal payloads must be JSON-serializable.
+    return str(full_path)
 
 
 @activity.defn
-async def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: DocumentMetadata) -> DocumentMetadata:
+async def input_process(user: KeycloakUser, input_file: str, metadata: DocumentMetadata) -> DocumentMetadata:
     """
     Processes the provided local input file and saves the metadata.
     This method generates the output files (preview, markdown, CSV) and
@@ -153,15 +156,25 @@ async def input_process(user: KeycloakUser, input_file: pathlib.Path, metadata: 
     input_dir.mkdir(exist_ok=True)
     output_dir.mkdir(exist_ok=True)
 
-    # Process the file
-    ingestion_service.process_input(user, input_file, output_dir, metadata)
-    ingestion_service.save_output(user, metadata=metadata, output_dir=output_dir)
+    try:
+        metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
+        await ingestion_service.save_metadata(user, metadata=metadata)
 
-    metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-    await ingestion_service.save_metadata(user, metadata=metadata)
+        # Process the file
+        await asyncio.to_thread(ingestion_service.process_input, user, pathlib.Path(input_file), output_dir, metadata)
+        await asyncio.to_thread(ingestion_service.save_output, user, metadata, output_dir)
 
-    logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] completed uid={metadata.document_uid}")
-    return metadata
+        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        await ingestion_service.save_metadata(user, metadata=metadata)
+
+        logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] completed uid={metadata.document_uid}")
+        return metadata
+    except Exception as e:
+        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+        metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
+        await ingestion_service.save_metadata(user, metadata=metadata)
+        logger.exception(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] failed uid={metadata.document_uid}", exc_info=True)
+        raise
 
 
 @activity.defn
@@ -177,25 +190,162 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     ingestion_service = IngestionService()
 
     # ✅ For both push and pull, restore what was saved (input/output)
-    ingestion_service.get_local_copy(file.processed_by, metadata, working_dir)
+    await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
 
-    # 📄 Locate preview file
-    preview_file = ingestion_service.get_preview_file(file.processed_by, metadata, output_dir)
+    output_stage: ProcessingStage | None = None
+    try:
+        # 📄 Locate preview file
+        preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
+        if ApplicationContext.get_instance().is_tabular_file(preview_file.name):
+            output_stage = ProcessingStage.SQL_INDEXED
+        else:
+            output_stage = ProcessingStage.VECTORIZED
 
-    if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
-        from knowledge_flow_backend.common.structures import InMemoryVectorStorage
+        metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
+        await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
-        vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
-        if isinstance(vector_store, InMemoryVectorStorage) and not accept_memory_storage:
-            raise exceptions.ApplicationError(
-                "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
-                non_retryable=True,
-            )
-    # Proceed with the output processing
-    metadata = ingestion_service.process_output(file.processed_by, output_dir=output_dir, input_file_name=preview_file.name, input_file_metadata=metadata)
+        if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
+            from knowledge_flow_backend.common.structures import InMemoryVectorStorage
 
-    # Save the updated metadata
-    await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+            vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
+            if isinstance(vector_store, InMemoryVectorStorage) and not accept_memory_storage:
+                raise exceptions.ApplicationError(
+                    "❌ Vectorization from temporal activity is not allowed with an in-memory vector store. Please configure a persistent vector store like OpenSearch.",
+                    non_retryable=True,
+                )
+        # Proceed with the output processing
+        metadata = await asyncio.to_thread(
+            ingestion_service.process_output,
+            file.processed_by,
+            preview_file.name,
+            output_dir,
+            metadata,
+        )
 
-    logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
-    return metadata
+        # Save the updated metadata
+        await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+
+        logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
+        return metadata
+    except Exception as e:
+        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+        stage = output_stage or ProcessingStage.PREVIEW_READY
+        metadata.mark_stage_error(stage, error_message)
+        await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+        logger.exception(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed uid={metadata.document_uid}", exc_info=True)
+        raise
+
+
+@activity.defn
+async def record_current_document(
+    workflow_id: str,
+    document_uid: str | None,
+    filename: str | None,
+) -> None:
+    logger = activity.logger
+    logger.info(
+        "[SCHEDULER][ACTIVITY][RECORD_CURRENT_DOCUMENT] workflow_id=%s document_uid=%s",
+        workflow_id,
+        document_uid,
+    )
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    store = ApplicationContext.get_instance().get_task_store()
+    await store.upsert_current_document(
+        workflow_id=workflow_id,
+        document_uid=document_uid,
+        filename=filename,
+    )
+
+
+@activity.defn
+async def record_workflow_status(
+    workflow_id: str,
+    status: str,
+    error: str | None = None,
+    document_uid: str | None = None,
+    filename: str | None = None,
+) -> None:
+    logger = activity.logger
+    logger.info(
+        "[SCHEDULER][ACTIVITY][RECORD_WORKFLOW_STATUS] workflow_id=%s status=%s",
+        workflow_id,
+        status,
+    )
+    from knowledge_flow_backend.application_context import ApplicationContext
+    from knowledge_flow_backend.features.scheduler.store.task_structures import WorkflowTaskStatus
+
+    parsed_status = status if isinstance(status, WorkflowTaskStatus) else WorkflowTaskStatus(status)
+    store = ApplicationContext.get_instance().get_task_store()
+    if document_uid or filename:
+        await store.upsert_current_document(
+            workflow_id=workflow_id,
+            document_uid=document_uid,
+            filename=filename,
+        )
+    await store.update_status(
+        workflow_id=workflow_id,
+        status=parsed_status,
+        last_error=error,
+    )
+
+
+@activity.defn
+async def fast_store_vectors(payload: dict) -> dict:
+    """
+    Store fast-ingest chunks into the configured vector store.
+    Payload shape:
+      {
+        "documents": [{"page_content": str, "metadata": dict}, ...]
+      }
+    """
+    logger = activity.logger
+    docs_payload = payload.get("documents") or []
+    if not isinstance(docs_payload, list):
+        raise ValueError("payload.documents must be a list")
+
+    from langchain_core.documents import Document
+
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    context = ApplicationContext.get_instance()
+    embedder = context.get_embedder()
+    vector_store = context.get_create_vector_store(embedder)
+
+    docs = []
+    for item in docs_payload:
+        if not isinstance(item, dict):
+            continue
+        page_content = str(item.get("page_content") or "")
+        metadata = item.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        docs.append(Document(page_content=page_content, metadata=metadata))
+
+    if not docs:
+        return {"chunks": 0}
+
+    ids = vector_store.add_documents(docs)
+    chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
+    logger.info("[SCHEDULER][ACTIVITY][FAST_STORE_VECTORS] Stored %d chunks", chunks)
+    return {"chunks": chunks}
+
+
+@activity.defn
+async def fast_delete_vectors(payload: dict) -> dict:
+    """
+    Delete all vectors for a fast-ingested document.
+    Payload: {"document_uid": "<uid>"}
+    """
+    document_uid = payload.get("document_uid")
+    if not document_uid:
+        raise ValueError("payload.document_uid is required")
+
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    context = ApplicationContext.get_instance()
+    embedder = context.get_embedder()
+    vector_store = context.get_create_vector_store(embedder)
+    vector_store.delete_vectors_for_document(document_uid=document_uid)
+    activity.logger.info("[SCHEDULER][ACTIVITY][FAST_DELETE_VECTORS] Deleted vectors for %s", document_uid)
+    return {"status": "ok", "document_uid": document_uid}

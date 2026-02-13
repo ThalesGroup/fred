@@ -16,6 +16,7 @@ from openfga_sdk.client.models.list_users_request import ClientListUsersRequest
 from openfga_sdk.client.models.tuple import ClientTuple
 from openfga_sdk.client.models.write_conflict_opts import (
     ClientWriteRequestOnDuplicateWrites,
+    ClientWriteRequestOnMissingDeletes,
     ConflictOptions,
 )
 from openfga_sdk.client.models.write_request import (
@@ -222,9 +223,6 @@ class OpenFgaRebacEngine(RebacEngine):
         client = await self.get_client()
 
         userFilters = [UserTypeFilter(type=subject_type.value)]
-        # When a group acts as a subject we must point to its "member" relation set.
-        if subject_type == Resource.GROUP:
-            userFilters[0].relation = "member"
 
         body = ClientListUsersRequest(
             object=FgaObject(type=resource.type.value, id=resource.id),
@@ -360,8 +358,10 @@ class OpenFgaRebacEngine(RebacEngine):
                 "authorization_model_id", self._authorization_model_id
             )
 
+        # Make writes and deletes idempotant
         filtered_options["conflict"] = ConflictOptions(
             on_duplicate_writes=ClientWriteRequestOnDuplicateWrites.IGNORE,
+            on_missing_deletes=ClientWriteRequestOnMissingDeletes.IGNORE,
         )
 
         return filtered_options
@@ -370,10 +370,6 @@ class OpenFgaRebacEngine(RebacEngine):
     def _relation_to_tuple(relation: Relation) -> ClientTuple:
         subject_id = OpenFgaRebacEngine._reference_to_openfga_id(relation.subject)
         object_id = OpenFgaRebacEngine._reference_to_openfga_id(relation.resource)
-
-        # When a group acts as a subject we must point to its "member" relation set.
-        if relation.subject.type == Resource.GROUP:
-            subject_id += "#member"
 
         return ClientTuple(
             user=subject_id,

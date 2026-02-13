@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { TagWithItemsId } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { TagWithItemsId, TagWithPermissions } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 // ---------- Types ----------
 export type TagNode = {
   name: string; // path segment (e.g., "SIX")
   full: string; // full path (e.g., "SIX/DEV")
   children: Map<string, TagNode>;
-  tagsHere: TagWithItemsId[]; // tags that end exactly at this node
+  tagsHere: TagWithPermissions[]; // tags that end exactly at this node
 };
 
 // ---------- Path helpers ----------
@@ -28,7 +28,7 @@ export function fullPath(t: Pick<TagWithItemsId, "name" | "path">): string {
 }
 
 // ---------- Tree building ----------
-export function buildTree(tags: TagWithItemsId[]): TagNode {
+export function buildTree(tags: TagWithPermissions[]): TagNode {
   const root: TagNode = { name: "", full: "", children: new Map(), tagsHere: [] };
   for (const t of tags) {
     const p = fullPath(t);

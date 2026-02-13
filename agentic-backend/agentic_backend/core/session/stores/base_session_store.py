@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Any, List
 
 from agentic_backend.core.chatbot.chat_schema import (
     SessionSchema,
@@ -22,29 +22,44 @@ from agentic_backend.core.chatbot.chat_schema import (
 
 class BaseSessionStore(ABC):
     @abstractmethod
-    def save(self, session: SessionSchema) -> None:
+    async def save(self, session: SessionSchema) -> None:
         """
         Save a session to the storage.
         """
         pass
 
     @abstractmethod
-    def get(self, session_id: str) -> SessionSchema | None:
+    async def get(self, session_id: str) -> SessionSchema | None:
         """
         Retrieve a session by its ID.
         """
         pass
 
     @abstractmethod
-    def delete(self, session_id: str) -> None:
+    async def delete(self, session_id: str) -> None:
         """
         Delete a session by its ID.
         """
         pass
 
     @abstractmethod
-    def get_for_user(self, user_id: str) -> List[SessionSchema]:
+    async def get_for_user(self, user_id: str) -> List[SessionSchema]:
         """
         Retrieve all sessions for a specific user.
+        """
+        pass
+
+    @abstractmethod
+    async def count_for_user(self, user_id: str) -> int:
+        """
+        Return how many sessions exist for the given user_id.
+        Should be efficient (COUNT in the backend, not full fetch).
+        """
+        pass
+
+    @abstractmethod
+    async def save_with_conn(self, conn: Any, session: SessionSchema) -> None:
+        """
+        Reuse an existing DB connection/transaction.
         """
         pass

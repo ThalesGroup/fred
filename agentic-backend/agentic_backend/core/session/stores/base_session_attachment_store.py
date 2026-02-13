@@ -14,13 +14,14 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 
 
 @dataclass
-class SessionAttachmentRecord:
+class SessionAttachmentRecord(ABC):
     session_id: str
     attachment_id: str
     name: str
@@ -37,22 +38,32 @@ class BaseSessionAttachmentStore:
     Persistence contract for session-scoped attachment summaries.
     """
 
-    def save(
+    @abstractmethod
+    async def save(
         self, record: SessionAttachmentRecord
     ) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
+        pass
 
-    def list_for_session(
+    @abstractmethod
+    async def list_for_session(
         self, session_id: str
     ) -> List[SessionAttachmentRecord]:  # pragma: no cover - interface
-        raise NotImplementedError
+        pass
 
-    def delete(
+    @abstractmethod
+    async def delete(
         self, session_id: str, attachment_id: str
     ) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
+        pass
 
-    def delete_for_session(
+    @abstractmethod
+    async def delete_for_session(
         self, session_id: str
     ) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
+        pass
+
+    @abstractmethod
+    async def count_for_sessions(
+        self, session_ids: List[str]
+    ) -> int:  # pragma: no cover - interface
+        pass

@@ -13,17 +13,17 @@
 // limitations under the License.
 import { Box, CircularProgress, Grid2, Typography } from "@mui/material";
 import { useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { AnyAgent } from "../common/agent";
 import ChatBot from "../components/chatbot/ChatBot";
 
-import { useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { useListAgentsAgenticV1AgentsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
 export default function Chat() {
-  const { sessionId, 'agent-id': agentId } = useParams<{ sessionId?: string; 'agent-id'?: string }>();
+  const { sessionId, "agent-id": agentId } = useParams<{ sessionId?: string; "agent-id"?: string }>();
   const navigate = useNavigate();
   const { i18n } = useTranslation();
 
@@ -32,11 +32,14 @@ export default function Chat() {
     isLoading: flowsLoading,
     isError: flowsError,
     error: flowsErrObj,
-  } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
+  } = useListAgentsAgenticV1AgentsGetQuery(
+    {},
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
   const enabledAgents = (agentsFromServer ?? []).filter(
@@ -53,7 +56,7 @@ export default function Chat() {
     // Decode the URL-encoded agent name
     const decodedAgentId = decodeURIComponent(agentId);
 
-    const match = enabledAgents.find((a) => a.name === decodedAgentId);
+    const match = enabledAgents.find((a) => a.id === decodedAgentId);
     if (!match) {
       console.warn(`[CHAT] Agent "${decodedAgentId}" not found in enabled agents. Defaulting to first agent.`);
     }

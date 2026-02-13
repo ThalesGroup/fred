@@ -30,9 +30,9 @@ class InvalidCacheError(FileNotFoundError): ...
 
 
 class MCPClientConnectionException(Exception):
-    def __init__(self, agent_name: str, reason: str):
-        super().__init__(f"Failed to connect MCP client for '{agent_name}': {reason}")
-        self.agent_name = agent_name
+    def __init__(self, agent_id: str, reason: str):
+        super().__init__(f"Failed to connect MCP client for '{agent_id}': {reason}")
+        self.agent_id = agent_id
         self.reason = reason
 
 

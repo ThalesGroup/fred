@@ -18,10 +18,12 @@ import inspect
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser, VectorSearchHit
+from fred_core.kpi import BaseKPIWriter
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
@@ -147,6 +149,17 @@ def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
     return hits
 
 
+def _additional_kwargs_emptyish(raw: Any) -> bool:
+    """
+    Treat provider extras as empty when they only contain falsy values
+    (e.g., {'refusal': None}) or are not a dict.
+    This allows the fast path to be taken for plain answers.
+    """
+    if not isinstance(raw, dict):
+        return True
+    return all(v in (None, "", [], {}, False) for v in raw.values())
+
+
 class InterruptRaised(Exception):
     """Internal control-flow exception for LangGraph interrupts."""
 
@@ -192,7 +205,7 @@ class StreamTranscoder:
         key: str,
         session_id: str,
         exchange_id: str,
-        agent_name: str,
+        agent_id: str,
         interrupt_handler: Optional[InterruptHandler],
         checkpointer: Optional[Any],
     ) -> None:
@@ -323,7 +336,7 @@ class StreamTranscoder:
             logger.info(
                 "[TRANSCODER] No checkpoint found in interrupt payload (agent=%s session=%s). "
                 "Assuming server-side persistence via thread_id.",
-                agent_name,
+                agent_id,
                 session_id,
             )
 
@@ -338,7 +351,7 @@ class StreamTranscoder:
             except Exception as ve:
                 logger.error(
                     "[TRANSCODER] HITL payload invalid agent=%s session=%s exchange=%s err=%s payload=%s",
-                    agent_name,
+                    agent_id,
                     session_id,
                     exchange_id,
                     ve,
@@ -375,7 +388,7 @@ class StreamTranscoder:
         input_messages: List[AnyMessage],
         session_id: str,
         exchange_id: str,
-        agent_name: str,
+        agent_id: str,
         base_rank: int,
         start_seq: int,
         callback: CallbackType,
@@ -383,17 +396,31 @@ class StreamTranscoder:
         runtime_context: RuntimeContext,
         interrupt_handler: Optional[InterruptHandler] = None,
         resume_payload: Optional[Dict[str, Any]] = None,
+        kpi: Optional[BaseKPIWriter] = None,
     ) -> List[ChatMessage]:
-        logger.info(
-            "[TRANSCODER] start agent=%s session=%s exchange=%s base_rank=%s start_seq=%s interrupt_handler=%s resume=%s",
-            agent_name,
-            session_id,
-            exchange_id,
-            base_rank,
-            start_seq,
-            interrupt_handler is not None,
-            resume_payload is not None,
-        )
+        """
+        Run a LangGraph compiled graph and transcode its streamed events into ChatMessage objects emitted via the callback.
+
+        This method is key for performance. If it takes too much CPU time, the global agentic performance will be impacted. In the best case
+        it should be mostly waiting on the agent's async generator and emitting messages, with minimal processing in between.
+        """
+        t_first_event: Optional[float] = None
+        events_seen = 0
+        emit_time_total = 0.0
+        emit_count = 0
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "[TRANSCODER] start agent=%s session=%s exchange=%s base_rank=%s start_seq=%s interrupt_handler=%s resume=%s",
+                agent_id,
+                session_id,
+                exchange_id,
+                base_rank,
+                start_seq,
+                interrupt_handler is not None,
+                resume_payload is not None,
+            )
+
         config: RunnableConfig = {
             "configurable": {
                 "thread_id": session_id,
@@ -409,12 +436,6 @@ class StreamTranscoder:
         if resume_payload and isinstance(resume_payload, dict):
             resume_payload.pop("checkpoint_id", None)
             resume_payload.pop("checkpoint", None)
-
-        logger.debug(
-            "[TRANSCODER] run_config configurable=%s resume_payload_keys=%s",
-            config.get("configurable"),
-            list(resume_payload.keys()) if isinstance(resume_payload, dict) else None,
-        )
 
         # If Langfuse is configured, add the callback handler
         if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
@@ -432,7 +453,7 @@ class StreamTranscoder:
         graph_input: Any
         if resume_payload is not None:
             graph_input = Command(resume=resume_payload)
-            logger.info(
+            logger.debug(
                 "[TRANSCODER] resume mode: passing Command(resume=...) as input"
             )
         else:
@@ -443,15 +464,20 @@ class StreamTranscoder:
                 state=graph_input,
                 config=config,
             ):
+                events_seen += 1
+                if t_first_event is None:
+                    t_first_event = time.monotonic()
                 # Handle LangGraph interrupt events explicitly
                 key = next(iter(event))
-                logger.info(
-                    "[TRANSCODER] event key=%s session=%s exchange=%s agent=%s",
-                    key,
-                    session_id,
-                    exchange_id,
-                    agent_name,
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[TRANSCODER] event key=%s session=%s exchange=%s agent=%s",
+                        key,
+                        session_id,
+                        exchange_id,
+                        agent_id,
+                    )
+
                 # LangGraph can emit "interrupt" or "__interrupt__" depending on source.
                 if key in {"interrupt", "__interrupt__"}:
                     await self._handle_interrupt(
@@ -459,7 +485,7 @@ class StreamTranscoder:
                         key=key,
                         session_id=session_id,
                         exchange_id=exchange_id,
-                        agent_name=agent_name,
+                        agent_id=agent_id,
                         interrupt_handler=interrupt_handler,
                         checkpointer=getattr(agent, "streaming_memory", None),
                     )
@@ -489,17 +515,26 @@ class StreamTranscoder:
                     # ---------- TOOL CALLS ----------
                     tool_calls = extract_tool_calls(msg)
                     if tool_calls:
-                        logger.info(
-                            "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
-                            session_id,
-                            exchange_id,
-                            len(tool_calls),
-                            [
-                                {"id": tc.get("call_id"), "name": tc.get("name")}
-                                for tc in tool_calls
-                            ],
-                        )
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
+                                session_id,
+                                exchange_id,
+                                len(tool_calls),
+                                [
+                                    {"id": tc.get("call_id"), "name": tc.get("name")}
+                                    for tc in tool_calls
+                                ],
+                            )
                         for tc in tool_calls:
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(
+                                    "[TRANSCODER][TOOL_CALLS][MSG] session=%s exchange=%s call_id=%s name=%s",
+                                    session_id,
+                                    exchange_id,
+                                    tc.get("call_id"),
+                                    tc.get("name"),
+                                )
                             tc_msg = ChatMessage(
                                 session_id=session_id,
                                 exchange_id=exchange_id,
@@ -517,7 +552,7 @@ class StreamTranscoder:
                                 metadata=ChatMetadata(
                                     model=model_name,
                                     token_usage=token_usage,
-                                    agent_name=agent_name,
+                                    agent_id=agent_id,
                                     finish_reason=finish_reason,
                                     extras=raw_md.get("extras", {}),
                                     sources=sources_payload,  # Use synthesized sources if any],
@@ -525,7 +560,10 @@ class StreamTranscoder:
                             )
                             out.append(tc_msg)
                             seq += 1
+                            emit_start = time.monotonic()
                             await self._emit(callback, tc_msg)
+                            emit_time_total += time.monotonic() - emit_start
+                            emit_count += 1
                         # A message with tool_calls doesn't carry user-visible text
                         # in our protocol; continue to next msg.
                         continue
@@ -537,27 +575,30 @@ class StreamTranscoder:
                             or raw_md.get("tool_call_id")
                             or "t?"
                         )
-                        logger.info(
-                            "[TRANSCODER][TOOL_RESULT_EVT] session=%s exchange=%s call_id=%s raw_type=%s",
-                            session_id,
-                            exchange_id,
-                            call_id,
-                            type(getattr(msg, "content", None)).__name__,
-                        )
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "[TRANSCODER][TOOL_RESULT_EVT] session=%s exchange=%s call_id=%s raw_type=%s",
+                                session_id,
+                                exchange_id,
+                                call_id,
+                                type(getattr(msg, "content", None)).__name__,
+                            )
                         raw_content = getattr(msg, "content", None)
                         new_hits = _extract_vector_search_hits(raw_content)
                         if new_hits is not None:
-                            logger.info(
-                                "[TRANSCODER] tool_result call_id=%s vector_hits=%d",
-                                call_id,
-                                len(new_hits),
-                            )
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(
+                                    "[TRANSCODER] tool_result call_id=%s vector_hits=%d",
+                                    call_id,
+                                    len(new_hits),
+                                )
                             pending_sources_payload = new_hits
                         else:
-                            logger.info(
-                                "[TRANSCODER] tool_result call_id=%s vector_hits=0 (no parse)",
-                                call_id,
-                            )
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(
+                                    "[TRANSCODER] tool_result call_id=%s vector_hits=0 (no parse)",
+                                    call_id,
+                                )
 
                         content_str = raw_content or ""
                         if not isinstance(content_str, str):
@@ -579,14 +620,17 @@ class StreamTranscoder:
                                 )
                             ],
                             metadata=ChatMetadata(
-                                agent_name=agent_name,
+                                agent_id=agent_id,
                                 extras=raw_md.get("extras") or {},
                                 sources=sources_payload,
                             ),
                         )
                         out.append(tr_msg)
                         seq += 1
+                        emit_start = time.monotonic()
                         await self._emit(callback, tr_msg)
+                        emit_time_total += time.monotonic() - emit_start
+                        emit_count += 1
                         continue
 
                     # ---------- TEXTUAL / SYSTEM ----------
@@ -599,18 +643,20 @@ class StreamTranscoder:
                     }.get(lc_type, Role.assistant)
 
                     content = getattr(msg, "content", "")
-                    logger.debug(
-                        "[TRANSCODER][TEXT] session=%s exchange=%s role=%s channel_candidate=%s content_preview=%s",
-                        session_id,
-                        exchange_id,
-                        role,
-                        lc_type,
-                        (
-                            str(content)[:80].replace("\n", " ")
-                            if isinstance(content, str)
-                            else type(content).__name__
-                        ),
-                    )
+
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "[TRANSCODER][TEXT] session=%s exchange=%s role=%s channel_candidate=%s content_preview=%s",
+                            session_id,
+                            exchange_id,
+                            role,
+                            lc_type,
+                            (
+                                str(content)[:80].replace("\n", " ")
+                                if isinstance(content, str)
+                                else type(content).__name__
+                            ),
+                        )
 
                     # CRITICAL FIX: Check msg.parts for structured content first.
                     lc_parts = getattr(msg, "parts", []) or []
@@ -625,7 +671,8 @@ class StreamTranscoder:
 
                     # Append any structured UI payloads (LinkPart/GeoPart...)
                     additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
-                    parts.extend(hydrate_fred_parts(additional_kwargs))
+                    if additional_kwargs:
+                        parts.extend(hydrate_fred_parts(additional_kwargs))
 
                     # Optional thought trace (developer-facing, not part of final answer)
                     if "thought" in raw_md:
@@ -642,13 +689,16 @@ class StreamTranscoder:
                                 channel=Channel.thought,
                                 parts=[TextPart(text=str(thought_txt))],
                                 metadata=ChatMetadata(
-                                    agent_name=agent_name,
+                                    agent_id=agent_id,
                                     extras=raw_md.get("extras") or {},
                                 ),
                             )
                             out.append(tmsg)
                             seq += 1
+                            emit_start = time.monotonic()
                             await self._emit(callback, tmsg)
+                            emit_time_total += time.monotonic() - emit_start
+                            emit_count += 1
 
                     # Channel selection
                     if role == Role.assistant:
@@ -691,27 +741,30 @@ class StreamTranscoder:
                             # Some agents put sources in the vector-search tool result, not on the final AIMessage.
                             # In that case, carry the tool-result sources forward into the final message metadata.
                             sources_payload = pending_sources_payload
-                            logger.debug(
-                                "[TRANSCODER][SOURCES] final: adopted %d pending sources from tool_result",
-                                pending_sources,
-                            )
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(
+                                    "[TRANSCODER][SOURCES] final: adopted %d pending sources from tool_result",
+                                    pending_sources,
+                                )
                         elif existing_sources > 0:
                             # Sources already present on the final AIMessage (citations can still appear in text either way).
-                            logger.debug(
-                                "[TRANSCODER][SOURCES] final: kept %d existing sources (pending_sources=%s)",
-                                existing_sources,
-                                pending_sources
-                                if pending_sources_payload is not None
-                                else "none",
-                            )
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(
+                                    "[TRANSCODER][SOURCES] final: kept %d existing sources (pending_sources=%s)",
+                                    existing_sources,
+                                    pending_sources
+                                    if pending_sources_payload is not None
+                                    else "none",
+                                )
                         else:
                             # No sources anywhere: neither provided by agent metadata nor parsed from tool results.
-                            logger.debug(
-                                "[TRANSCODER][SOURCES] final: no sources present (pending_sources=%s)",
-                                pending_sources
-                                if pending_sources_payload is not None
-                                else "none",
-                            )
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(
+                                    "[TRANSCODER][SOURCES] final: no sources present (pending_sources=%s)",
+                                    pending_sources
+                                    if pending_sources_payload is not None
+                                    else "none",
+                                )
                         pending_sources_payload = None
 
                         msg_v2 = ChatMessage(
@@ -725,7 +778,7 @@ class StreamTranscoder:
                             metadata=ChatMetadata(
                                 model=model_name,
                                 token_usage=token_usage,
-                                agent_name=agent_name,
+                                agent_id=agent_id,
                                 finish_reason=finish_reason,
                                 extras=raw_md.get("extras") or {},
                                 sources=sources_payload,
@@ -733,12 +786,15 @@ class StreamTranscoder:
                         )
                         out.append(msg_v2)
                         seq += 1
+                        emit_start = time.monotonic()
                         await self._emit(callback, msg_v2)
+                        emit_time_total += time.monotonic() - emit_start
+                        emit_count += 1
         except InterruptRaised as ir:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
                 "StreamTranscoder: interrupt raised agent=%s session=%s exchange=%s",
-                agent_name,
+                agent_id,
                 session_id,
                 exchange_id,
             )
@@ -749,13 +805,12 @@ class StreamTranscoder:
             # Preserve partial transcript so far; caller decides how to surface the failure.
             logger.exception(
                 "[TRANSCODER] stream failure agent=%s session=%s exchange=%s msgs=%d",
-                agent_name,
+                agent_id,
                 session_id,
                 exchange_id,
                 len(out),
             )
             raise StreamAgentError(out, e) from e
-
         return out
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:

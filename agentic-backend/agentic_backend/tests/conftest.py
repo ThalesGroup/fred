@@ -95,6 +95,7 @@ def minimal_generalist_config() -> Configuration:
             restore_max_exchanges=20,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
+            max_concurrent_sessions_per_user=10,
             max_attached_files_per_user=10,
             max_attached_file_size_mb=10,
             default_chat_model=ModelConfiguration(
@@ -110,12 +111,14 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
+                    id="Georges",
                     name="Georges",
                     class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,
                 ),
                 # Include a basic flow named 'Fred' to satisfy tests expecting it
                 Agent(
+                    id="Fred",
                     name="Fred",
                     class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
                     enabled=True,

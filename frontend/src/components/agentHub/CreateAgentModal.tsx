@@ -71,6 +71,7 @@ interface CreateAgentModalProps {
   onCreated: () => void;
   initialType?: "basic" | "a2a_proxy";
   disableTypeToggle?: boolean;
+  teamId?: string;
 }
 
 export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
@@ -79,6 +80,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
   onCreated,
   initialType = "basic",
   disableTypeToggle = false,
+  teamId,
 }) => {
   const { t } = useTranslation();
   const schema = createSimpleAgentSchema(t);
@@ -114,6 +116,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
     const req: CreateAgentRequest = {
       name: data.name.trim(),
       type: data.type,
+      team_id: teamId,
       a2a_base_url: data.type === "a2a_proxy" ? data.a2a_base_url?.trim() || undefined : undefined,
       a2a_token: data.type === "a2a_proxy" ? data.a2a_token?.trim() || undefined : undefined,
     };

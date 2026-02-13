@@ -169,7 +169,7 @@ class BaseEvaluator(ABC):
     async def setup_agent(
         self,
         agent_type: Type[AgentFlow],
-        agent_name: str,
+        agent_id: str,
         doc_lib_ids: list[str] | None = None,
     ):
         """
@@ -177,18 +177,18 @@ class BaseEvaluator(ABC):
 
         Args:
             agent_type (Type[AgentFlow]): The type of agent to initialize.
-            agent_name (str): The name of the agent to retrieve settings for.
+            agent_id (str): The id of the agent to retrieve settings for.
             doc_lib_ids (list[str] | None, optional): List of document library IDs to set in the runtime context. Default is None.
 
         Returns:
             Any: The compiled graph of the initialized agent.
         """
         agents = get_configuration().ai.agents
-        settings = next((a for a in agents if a.name == agent_name), None)
+        settings = next((a for a in agents if a.id == agent_id), None)
 
         if not settings:
-            available = [a.name for a in agents]
-            raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
+            available = [a.id for a in agents]
+            raise ValueError(f"Agent '{agent_id}' not found. Available: {available}")
 
         agent = agent_type(settings)
         await agent.async_init(runtime_context=RuntimeContext())
@@ -285,17 +285,17 @@ class BaseEvaluator(ABC):
     @abstractmethod
     async def run_evaluation(
         self,
-        agent_name: str,
+        agent_id: str,
         doc_lib_ids: list[str] | None = None,
     ):
         pass
 
-    async def main(self, agent_name: str):
+    async def main(self, agent_id: str):
         """
         Main function to run the evaluation process for a specified agent.
 
         Args:
-            agent_name (str): The name of the agent to evaluate.
+            agent_id (str): The id of the agent to evaluate.
 
         Returns:
             int: Exit status code (0 for success, 1 for error).
@@ -327,7 +327,7 @@ class BaseEvaluator(ABC):
             self.load_dataset()
 
             results = await self.run_evaluation(
-                agent_name=agent_name,
+                agent_id=agent_id,
                 doc_lib_ids=doc_lib_ids,
             )
 

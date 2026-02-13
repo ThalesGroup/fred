@@ -37,6 +37,12 @@ from knowledge_flow_backend.core.processors.input.common.enrichment import norma
 logger = logging.getLogger(__name__)
 
 
+class InputConversionError(RuntimeError):
+    """
+    Raised when an input processor cannot generate a usable preview artifact.
+    """
+
+
 class BaseInputProcessor(ABC):
     """
     Base class for all processors that handle file metadata extraction and processing.
@@ -247,6 +253,7 @@ class BaseMarkdownProcessor(BaseInputProcessor):
         """
         Convert the input file to Markdown and save it in the output directory.
         Returns a dict of paths or facts discovered (optional).
+        Must raise on failure instead of returning a "status=error" payload.
         """
         pass
 

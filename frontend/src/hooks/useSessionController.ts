@@ -17,8 +17,8 @@ import { AnyAgent } from "../common/agent";
 import {
   SessionSchema,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
-  useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+  useListAgentsAgenticV1AgentsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
@@ -54,7 +54,7 @@ function saveMap(map: AgentBySessionMap) {
 
 export function useSessionController() {
   // ---- Remote data ----
-  const { data: flowsData, isLoading: flowsLoading } = useGetAgenticFlowsAgenticV1ChatbotAgenticflowsGetQuery();
+  const { data: flowsData, isLoading: flowsLoading } = useListAgentsAgenticV1AgentsGetQuery({});
   const {
     data: sessionsData,
     isLoading: sessionsLoading,
@@ -82,22 +82,22 @@ export function useSessionController() {
       const chosen = draftAgenticFlow ?? agents[0];
       L.info("resolveFlow: NO session → using", {
         source: draftAgenticFlow ? "draft" : "default[0]",
-        name: chosen?.name,
+        name: chosen?.id,
       });
       return chosen;
     }
 
     const mappedName = agentBySession[currentSession.id];
-    const resolved = mappedName ? agents.find((f) => f.name === mappedName) : null;
+    const resolved = mappedName ? agents.find((f) => f.id === mappedName) : null;
 
     const finalFlow = resolved ?? agents[0] ?? null;
 
     L.info("resolveFlow: WITH session", {
       sessionId: currentSession.id,
       mappedName,
-      resolved: resolved ? { name: resolved.name, nickname: resolved.name } : null,
-      fallback: !resolved && agents[0] ? { name: agents[0].name, nickname: agents[0].name } : null,
-      final: finalFlow ? { name: finalFlow.name, nickname: finalFlow.name } : null,
+      resolved: resolved ? { name: resolved.id, nickname: resolved.id } : null,
+      fallback: !resolved && agents[0] ? { name: agents[0].id, nickname: agents[0].id } : null,
+      final: finalFlow ? { name: finalFlow.id, nickname: finalFlow.id } : null,
     });
 
     return finalFlow;
@@ -110,7 +110,7 @@ export function useSessionController() {
       setAgents(normalizedAgents);
       L.group(
         "HYDRATE flows",
-        normalizedAgents.map((f) => ({ name: f.name, role: f.tuning.role })),
+        normalizedAgents.map((f) => ({ name: f.id, role: f.tuning.role })),
       );
     }
   }, [flowsLoading, flowsData]);
@@ -166,16 +166,16 @@ export function useSessionController() {
 
   const selectAgenticFlowForCurrentSession = (flow: AnyAgent) => {
     if (!currentSession) {
-      L.info("selectAgent: NO session → stage draft", { name: flow.name });
+      L.info("selectAgent: NO session → stage draft", { name: flow.id });
       setDraftAgenticFlow(flow);
       return;
     }
-    L.info("selectAgent: WITH session → bind to session", { sessionId: currentSession.id, name: flow.name });
+    L.info("selectAgent: WITH session → bind to session", { sessionId: currentSession.id, name: flow.id });
     setAgentBySession((prev) => {
-      const defaultName = agents[0]?.name;
+      const defaultName = agents[0]?.id;
       const existing = prev[currentSession.id];
       // allow overriding default with explicit user click
-      const nextName = existing && defaultName && existing === defaultName ? flow.name : flow.name;
+      const nextName = existing && defaultName && existing === defaultName ? flow.id : flow.id;
       const next = { ...prev, [currentSession.id]: nextName };
       saveMap(next);
       return next;
@@ -231,12 +231,12 @@ export function useSessionController() {
   };
 
   const bindDraftAgentToSessionId = (sessionId: string) => {
-    console.log("🧭 bindDraftAgentToSessionId", { sessionId, draft: draftAgenticFlow?.name });
+    console.log("🧭 bindDraftAgentToSessionId", { sessionId, draft: draftAgenticFlow?.id });
 
     setAgentBySession((prev) => {
       const already = prev[sessionId];
-      const defaultName = agents[0]?.name;
-      const draftName = draftAgenticFlow?.name;
+      const defaultName = agents[0]?.id;
+      const draftName = draftAgenticFlow?.id;
 
       // If someone pre-bound the default (e.g., Fred), allow overriding it with user's draft
       if (already) {
@@ -268,7 +268,7 @@ export function useSessionController() {
 
     // Consume draft only here (not in updateOrAddSession)
     if (draftAgenticFlow) {
-      console.log("🧭 bindDraftAgentToSessionId: consume draft", { draft: draftAgenticFlow.name });
+      console.log("🧭 bindDraftAgentToSessionId: consume draft", { draft: draftAgenticFlow.id });
       setDraftAgenticFlow(null);
     }
   };

@@ -89,7 +89,7 @@ Key benefit: the controller stays transport‑only; orchestration and runtime lo
 
 ## 4) Agent Lifecycle & Caching
 
-- Cache key: `(session_id, agent_name)` using a thread‑safe LRU with a bounded size from configuration
+- Cache key: `(session_id, agent_id)` using a thread‑safe LRU with a bounded size from configuration
 - On reuse, always refresh the runtime context (tokens can change across requests)
 - Fresh builds apply authoritative settings from AgentManager, then call `async_init`
 - LeaderFlow builds a crew by instantiating and initializing each expert agent once; the crew is passed to the leader’s `async_init`

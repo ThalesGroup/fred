@@ -19,11 +19,8 @@ from typing import Literal, Optional
 from fred_core import BaseModelWithId, RelationType, Resource, TagPermission
 from pydantic import BaseModel, Field, field_validator
 
-from knowledge_flow_backend.features.groups.groups_structures import GroupSummary
 from knowledge_flow_backend.features.resources.structures import ResourceKind
 from knowledge_flow_backend.features.users.users_structures import UserSummary
-
-VALID_RESOURCE_KIND_IN_TAG = {}
 
 
 class TagType(str, Enum):
@@ -49,12 +46,14 @@ class TagCreate(BaseModel):
     """
     name: leaf segment (e.g. 'HR')
     path: optional parent path (e.g. 'Sales'); full path becomes 'Sales/HR'
+    team_id: optional team ID. If provided, the tag is owned by the team instead of the user.
     """
 
     name: str
     path: Optional[str] = None
     description: Optional[str] = None
     type: TagType
+    team_id: Optional[str] = None
 
     @field_validator("path")
     @classmethod
@@ -113,6 +112,16 @@ class TagWithItemsId(Tag):
         return cls(**tag.model_dump(), item_ids=item_ids)
 
 
+class TagWithPermissions(TagWithItemsId):
+    """Tag with user-specific permissions included."""
+
+    permissions: list[TagPermission] = Field(default_factory=list)
+
+    @classmethod
+    def from_tag_with_items(cls, tag: TagWithItemsId, permissions: list[TagPermission]) -> "TagWithPermissions":
+        return cls(**tag.model_dump(), permissions=permissions)
+
+
 # Subset of RelationType for user-tag relations
 class UserTagRelation(str, Enum):
     OWNER = RelationType.OWNER.value
@@ -126,7 +135,6 @@ class UserTagRelation(str, Enum):
 # Subset of valid Resource you can share a tag with
 class ShareTargetResource(str, Enum):
     USER = Resource.USER.value
-    GROUP = Resource.GROUP.value
 
     def to_resource(self) -> Resource:
         return Resource(self.value)
@@ -138,22 +146,28 @@ class TagShareRequest(BaseModel):
     relation: UserTagRelation
 
 
-class TagPermissionsResponse(BaseModel):
-    permissions: list[TagPermission]
-
-
 class TagMemberUser(BaseModel):
     type: Literal["user"] = "user"
     relation: UserTagRelation
     user: UserSummary
 
 
-class TagMemberGroup(BaseModel):
-    type: Literal["group"] = "group"
-    relation: UserTagRelation
-    group: GroupSummary
-
-
 class TagMembersResponse(BaseModel):
     users: list[TagMemberUser] = Field(default_factory=list)
-    groups: list[TagMemberGroup] = Field(default_factory=list)
+
+
+class OwnerFilter(str, Enum):
+    """Filter tags by ownership type.
+
+    - PERSONAL: tags where the user is directly owner/editor/viewer (not via team)
+    - TEAM: tags owned by a specific team (requires team_id parameter)
+    """
+
+    PERSONAL = "personal"
+    TEAM = "team"
+
+
+class MissingTeamIdError(Exception):
+    """Raised when owner_filter is 'team' but no team_id is provided."""
+
+    pass

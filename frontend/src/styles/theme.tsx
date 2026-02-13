@@ -140,6 +140,10 @@ const darkTheme = createTheme({
     secondary: {
       main: "#a2a9ffff",
     },
+    error: {
+      // Lighten a bit the error color
+      main: "#e57373",
+    },
   },
   typography: {
     markdown: markdownDefaults,

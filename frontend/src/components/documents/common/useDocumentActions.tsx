@@ -41,18 +41,28 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   const [progress, setProgress] = useState<ProcessDocumentsProgressResponse | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [workflowId, setWorkflowId] = useState<string | undefined>(undefined);
+  const PROCESS_POLL_INTERVAL_MS = 2000;
+  const PROCESS_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+
+  const isProcessingDone = (res: ProcessDocumentsProgressResponse) => {
+    if (res.total_documents <= 0) return false;
+    const completed = res.documents_fully_processed + res.documents_failed + res.documents_missing;
+    return completed >= res.total_documents;
+  };
 
   const clearProgress = () => {
     // Debug: user cleared progress manually
     console.log("[useDocumentActions] clearProgress called, clearing progress and stopping polling");
     setIsProcessing(false);
     setProgress(null);
+    setWorkflowId(undefined);
   };
 
   const refreshProgress = async () => {
     console.log("[useDocumentActions] refreshProgress triggered");
     try {
-      const req: ProcessDocumentsProgressRequest = {};
+      const req: ProcessDocumentsProgressRequest = { workflow_id: workflowId };
       const args: ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg = {
         processDocumentsProgressRequest: req,
       };
@@ -61,9 +71,8 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
       console.log("[useDocumentActions] Manual progress response:", res);
       setProgress(res);
 
-      const finished = res.documents_fully_processed + res.documents_failed;
-      const done = res.documents_found > 0 && finished === res.documents_found;
-      setIsProcessing(!done && res.documents_found > 0);
+      const done = isProcessingDone(res);
+      setIsProcessing(!done && res.total_documents > 0);
     } catch (error: any) {
       console.error("[useDocumentActions] refreshProgress error:", error);
       showError({
@@ -83,11 +92,21 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = Date.now();
 
     const poll = async () => {
       if (cancelled) return;
       try {
-        const req: ProcessDocumentsProgressRequest = {};
+        if (Date.now() - startedAt >= PROCESS_POLL_TIMEOUT_MS) {
+          showError({
+            summary: "Progress tracking timeout",
+            detail: "Polling stopped after timeout.",
+          });
+          setIsProcessing(false);
+          return;
+        }
+
+        const req: ProcessDocumentsProgressRequest = { workflow_id: workflowId };
         const args: ProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostApiArg = {
           processDocumentsProgressRequest: req,
         };
@@ -98,8 +117,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         console.log("[useDocumentActions] Poll progress response:", res);
         setProgress(res);
 
-        const finished = res.documents_fully_processed + res.documents_failed;
-        const done = res.documents_found > 0 && finished === res.documents_found;
+        const done = isProcessingDone(res);
 
         if (done) {
           console.log("[useDocumentActions] Poll detected DONE for all documents, stopping polling");
@@ -108,7 +126,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
           return;
         }
 
-        timeoutId = setTimeout(poll, 2000);
+        timeoutId = setTimeout(poll, PROCESS_POLL_INTERVAL_MS);
       } catch (error: any) {
         if (!cancelled) {
           console.error("[useDocumentActions] Poll error:", error);
@@ -130,7 +148,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
         clearTimeout(timeoutId);
       }
     };
-  }, [isProcessing, fetchProgress, onRefreshData, showError]);
+  }, [isProcessing, fetchProgress, onRefreshData, showError, workflowId]);
 
   const handleProcess = async (files: DocumentMetadata[]) => {
     try {
@@ -158,6 +176,7 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
       console.log("[useDocumentActions] /process-documents response:", result);
       console.log("[useDocumentActions] Started processing workflow", result.workflow_id);
       setProgress(null);
+      setWorkflowId(result.workflow_id);
       setIsProcessing(true);
 
       showInfo({

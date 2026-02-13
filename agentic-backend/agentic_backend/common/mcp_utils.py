@@ -165,7 +165,7 @@ def _build_stdio_kwargs(
 
 
 async def get_connected_mcp_client_for_agent(
-    agent_name: str,
+    agent_id: str,
     mcp_servers: List[MCPServerConfiguration],
     runtime_context: RuntimeContext,
     *,
@@ -182,7 +182,7 @@ async def get_connected_mcp_client_for_agent(
         if transport not in SUPPORTED_TRANSPORTS:
             logger.info(
                 "[MCP][%s] connect init: Unsupported transport '%s' found. Supported transports: %s",
-                agent_name,
+                agent_id,
                 s.transport,
                 SUPPORTED_TRANSPORTS,
             )
@@ -238,7 +238,7 @@ async def get_connected_mcp_client_for_agent(
         except Exception as e:
             logger.warning(
                 "[MCP][%s] connect pre-fail for server=%s: Failed to build connection config: %s",
-                agent_name,
+                agent_id,
                 server.id,
                 e,
             )
@@ -264,7 +264,7 @@ async def get_connected_mcp_client_for_agent(
         try:
             logger.debug(
                 "[MCP][%s] validate name=%s transport=%s endpoint=%s auth=%s",
-                agent_name,
+                agent_id,
                 server.id,
                 transport,
                 url_for_log,
@@ -274,7 +274,7 @@ async def get_connected_mcp_client_for_agent(
             dur_ms = (time.perf_counter() - start) * 1000
             logger.info(
                 "[MCP][%s] connected name=%s transport=%s endpoint=%s tools=%d dur_ms=%.0f",
-                agent_name,
+                agent_id,
                 server.id,
                 transport,
                 url_for_log,
@@ -286,7 +286,7 @@ async def get_connected_mcp_client_for_agent(
             dur_ms = (time.perf_counter() - start) * 1000
             logger.warning(
                 "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
-                agent_name,
+                agent_id,
                 server.id,
                 url_for_log,
                 e.__class__.__name__,
@@ -308,13 +308,13 @@ async def get_connected_mcp_client_for_agent(
             + "Ensure the matching Knowledge Flow controllers are enabled "
             "or disable the MCP server in Agentic configuration."
         )
-        logger.error("[MCP][%s] connection summary: %s", agent_name, reason)
+        logger.error("[MCP][%s] connection summary: %s", agent_id, reason)
         # Nothing to cleanup on the client instance
         raise MCPConnectionError(reason, exceptions)
 
     logger.debug(
         "[MCP][%s] summary: all servers validated, total tools=%d",
-        agent_name,
+        agent_id,
         total_tools,
     )
     return client
