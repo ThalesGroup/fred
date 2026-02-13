@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from tempfile import NamedTemporaryFile
@@ -38,6 +37,11 @@ from knowledge_flow_backend.features.scheduler.activities import (
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
+)
+from knowledge_flow_backend.features.scheduler.workflow_status import (
+    WORKFLOW_STATUS_COMPLETED,
+    WORKFLOW_STATUS_FAILED,
+    WORKFLOW_STATUS_RUNNING,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,16 +82,6 @@ async def _run_ingestion_pipeline(definition: PipelineDefinition) -> str:
     return "success"
 
 
-def _log_pipeline_task_result(task: asyncio.Task[str]) -> None:
-    try:
-        exc = task.exception()
-    except asyncio.CancelledError:
-        logger.warning("[SCHEDULER][IN_MEMORY] Pipeline task was cancelled")
-        return
-    if exc is not None:
-        logger.exception("[SCHEDULER][IN_MEMORY] Pipeline task failed: %s", exc)
-
-
 class InMemoryScheduler(BaseScheduler):
     """
     In-memory implementation of the ingestion workflow client.
@@ -96,6 +90,50 @@ class InMemoryScheduler(BaseScheduler):
     - Executes the ingestion pipeline locally via BackgroundTasks.
     """
 
+    def __init__(self, metadata_service):
+        super().__init__(metadata_service)
+        self._workflow_status_by_id: dict[str, str] = {}
+        self._workflow_last_error_by_id: dict[str, str | None] = {}
+
+    @staticmethod
+    def _format_exception_message(exc: BaseException) -> str:
+        return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
+
+    def _set_workflow_state(
+        self,
+        *,
+        workflow_id: str,
+        status: str,
+        last_error: str | None,
+    ) -> None:
+        with self._lock:
+            self._workflow_status_by_id[workflow_id] = status
+            self._workflow_last_error_by_id[workflow_id] = last_error
+
+    async def _run_pipeline_with_status_tracking(self, workflow_id: str, definition: PipelineDefinition) -> None:
+        try:
+            await _run_ingestion_pipeline(definition)
+        except Exception as exc:
+            error_message = self._format_exception_message(exc)
+            logger.error(
+                "[SCHEDULER][IN_MEMORY] Pipeline workflow_id=%s failed: %s",
+                workflow_id,
+                error_message,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            self._set_workflow_state(
+                workflow_id=workflow_id,
+                status=WORKFLOW_STATUS_FAILED,
+                last_error=error_message,
+            )
+            return
+
+        self._set_workflow_state(
+            workflow_id=workflow_id,
+            status=WORKFLOW_STATUS_COMPLETED,
+            last_error=None,
+        )
+
     async def start_document_processing(
         self,
         user: KeycloakUser,
@@ -103,17 +141,21 @@ class InMemoryScheduler(BaseScheduler):
         background_tasks: Optional[BackgroundTasks] = None,
     ) -> WorkflowHandle:
         handle = self._register_workflow(user, definition)
+        workflow_id = handle.workflow_id
+        self._set_workflow_state(
+            workflow_id=workflow_id,
+            status=WORKFLOW_STATUS_RUNNING,
+            last_error=None,
+        )
 
-        # IMPORTANT: do not rely on FastAPI BackgroundTasks here.
-        # For streaming responses, BackgroundTasks run only after response completion,
-        # which can deadlock progress polling.
+        # In request/response endpoints we prefer FastAPI/Starlette BackgroundTasks.
+        # In streaming endpoints, callers can pass background_tasks=None to run inline.
         if background_tasks is not None:
-            task = asyncio.create_task(_run_ingestion_pipeline(definition))
-            task.add_done_callback(_log_pipeline_task_result)
+            background_tasks.add_task(self._run_pipeline_with_status_tracking, workflow_id, definition)
         else:
             # Fallback for non-HTTP contexts; this will block the caller.
             logger.warning("[SCHEDULER][IN_MEMORY] BackgroundTasks not provided, running ingestion pipeline synchronously")
-            await _run_ingestion_pipeline(definition)
+            await self._run_pipeline_with_status_tracking(workflow_id, definition)
 
         return handle
 
@@ -239,3 +281,11 @@ class InMemoryScheduler(BaseScheduler):
         vector_store = context.get_create_vector_store(embedder)
         vector_store.delete_vectors_for_document(document_uid=document_uid)
         return {"status": "ok", "document_uid": document_uid}
+
+    async def get_workflow_execution_status(self, workflow_id: str) -> Optional[str]:
+        with self._lock:
+            return self._workflow_status_by_id.get(workflow_id)
+
+    async def get_workflow_last_error(self, workflow_id: str) -> Optional[str]:
+        with self._lock:
+            return self._workflow_last_error_by_id.get(workflow_id)

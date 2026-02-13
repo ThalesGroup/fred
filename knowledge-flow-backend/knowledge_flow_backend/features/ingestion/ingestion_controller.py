@@ -480,11 +480,17 @@ class IngestionController:
                     )
                     for filename, document_uid, _ in scheduled_candidates
                 ]
+                scheduler_background_tasks = background_tasks
+                # For streaming responses, FastAPI BackgroundTasks run only after
+                # the stream completes; this would prevent live progress updates
+                # with the in-memory scheduler.
+                if self._scheduler_backend() == "memory":
+                    scheduler_background_tasks = None
                 _, handle = await scheduler_task_service.submit_documents(
                     user=user,
                     pipeline_name="upload_ui_async",
                     files=files_to_schedule,
-                    background_tasks=background_tasks,
+                    background_tasks=scheduler_background_tasks,
                 )
                 workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
