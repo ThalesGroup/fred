@@ -16,9 +16,12 @@ import logging
 from typing import List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from fred_core import KeycloakUser, VectorSearchHit, get_current_user
+from fred_core.kpi import phase_timer
 from pydantic import BaseModel, Field
 
+from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest
 
@@ -42,6 +45,7 @@ class VectorSearchController:
 
     def __init__(self, router: APIRouter):
         self.service = VectorSearchService()
+        self.kpi = get_kpi_writer()
 
         @router.post(
             "/schemas/echo",
@@ -66,17 +70,18 @@ class VectorSearchController:
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
             try:
-                hits = await self.service.search(
-                    question=request.question,
-                    user=user,
-                    top_k=request.top_k,
-                    document_library_tags_ids=request.document_library_tags_ids,
-                    document_uids=request.document_uids,
-                    policy_name=request.search_policy,
-                    session_id=request.session_id,
-                    include_session_scope=request.include_session_scope,
-                    include_corpus_scope=request.include_corpus_scope,
-                )
+                async with phase_timer(self.kpi, "vector_search"):
+                    hits = await self.service.search(
+                        question=request.question,
+                        user=user,
+                        top_k=request.top_k,
+                        document_library_tags_ids=request.document_library_tags_ids,
+                        document_uids=request.document_uids,
+                        policy_name=request.search_policy,
+                        session_id=request.session_id,
+                        include_session_scope=request.include_session_scope,
+                        include_corpus_scope=request.include_corpus_scope,
+                    )
                 return hits
             except Exception as e:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -112,5 +117,11 @@ class VectorSearchController:
             request: RerankRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            documents = self.service.rerank_documents(question=request.question, documents=request.documents, top_r=request.top_r)
+            async with phase_timer(self.kpi, "vector_rerank"):
+                documents = await run_in_threadpool(
+                    self.service.rerank_documents,
+                    question=request.question,
+                    documents=request.documents,
+                    top_r=request.top_r,
+                )
             return documents

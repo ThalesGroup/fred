@@ -142,6 +142,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 use_ssl=self._secure,
                 verify_certs=self._verify_certs,
                 http_auth=(self._username, self._password),
+                pool_maxsize=20,
                 bulk_size=self._bulk_size,
             )
             self._expected_dim = self._get_embedding_dimension()

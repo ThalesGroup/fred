@@ -15,15 +15,15 @@ app:
   base_url: "/knowledge-flow/v1"
   address: "127.0.0.1"
   port: 8111
-  log_level: "info"
+  log_level: "warning"
   reload: false
   reload_dir: "."
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9111
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 10
+  kpi_log_summary_interval_sec: 10.0
+  kpi_log_summary_top_n: 20
   max_ingestion_workers: 3
 
 processing:
@@ -204,7 +204,6 @@ crossencoder_model:
 #     azure_tenant_id: "your-tenant-id"
 
 storage:
-
   tabular_stores:
     base_database:
       type: "sql"
@@ -272,7 +271,6 @@ storage:
   log_store:
     type: "opensearch"
     index: log-index
-
 
 mcp:
   reports_enabled: true

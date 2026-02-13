@@ -25,7 +25,6 @@ from fred_core.sql import (
 )
 from sqlalchemy import Column, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import TIMESTAMP
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
