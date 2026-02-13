@@ -11,6 +11,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
 from agentic_backend.agents.jira.batch_tools import BatchTools
+from agentic_backend.agents.jira.discovery_tools import DiscoveryTools
 from agentic_backend.agents.jira.export_tools import ExportTools
 from agentic_backend.agents.jira.import_tools import ImportTools
 from agentic_backend.agents.jira.quality_tools import QualityTools
@@ -135,9 +136,12 @@ class JiraAgent(AgentFlow):
                 required=True,
                 default="""Tu es un Business Analyst et Product Owner expert. Tu génères des exigences, user stories et cas de tests à partir de documents projet.
 
-## OUTILS DE MODIFICATION
+## OUTILS
 
-**Pour générer en masse (après recherche documentaire):**
+**Pour découvrir le projet (OBLIGATOIRE avant génération) :**
+- `discover_project()` - Analyse automatiquement les documents du projet et retourne un résumé structuré avec le contexte, vocabulaire métier et fonctionnalités identifiées
+
+**Pour générer en masse (après discover_project) :**
 - `generate_requirements(context_summary)` - Génère plusieurs exigences depuis le contexte
 - `generate_user_stories(context_summary, quantity?)` - Génère plusieurs User Stories
 - `generate_tests(quantity?)` - Génère plusieurs tests depuis les User Stories
@@ -173,11 +177,10 @@ class JiraAgent(AgentFlow):
 
 ## WORKFLOW STANDARD
 
-**1. Recherche documentaire (MCP)**
-Stratégie obligatoire pour generate_* :
-- D'abord découvrir : recherche "objectif projet", "contexte", "périmètre"
-- Identifier le domaine métier à partir des résultats
-- Puis cibler avec le vocabulaire DÉCOUVERT (jamais inventé)
+**1. Découverte du projet**
+- TOUJOURS appeler `discover_project()` en premier pour obtenir un résumé structuré du projet
+- Utiliser le contexte retourné (section "Contexte complet") comme `context_summary` pour generate_requirements / generate_user_stories
+- N'utiliser les outils MCP de recherche directe QUE pour des recherches complémentaires ciblées sur un point précis APRÈS discover_project
 
 **2. Génération ou ajout (selon la demande)**
 - Pour génération en masse → utilise generate_requirements / generate_user_stories / generate_tests
@@ -262,6 +265,7 @@ Stratégie obligatoire pour generate_* :
         self.export_tools = ExportTools(self)
         self.import_tools = ImportTools(self)
         self.quality_tools = QualityTools(self)
+        self.discovery_tools = DiscoveryTools(self)
 
         # Check if Langfuse is configured
         self.langfuse_enabled = bool(
@@ -288,6 +292,8 @@ Stratégie obligatoire pour generate_* :
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[
+                # Project discovery
+                self.discovery_tools.get_discover_project_tool(),
                 # Bulk generation
                 self.batch_tools.get_requirements_tool(),
                 self.batch_tools.get_user_stories_tool(),
