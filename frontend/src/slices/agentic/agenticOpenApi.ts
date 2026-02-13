@@ -1045,6 +1045,7 @@ export type Properties = {
   agentIconName?: string | null;
   showAgentRegisterA2A?: boolean;
   showAgentRestoreFromConfiguration?: boolean;
+  showAgentDisableButton?: boolean;
   showAgentCode?: boolean;
   allowAgentSwitchInOneConversation?: boolean;
 };
