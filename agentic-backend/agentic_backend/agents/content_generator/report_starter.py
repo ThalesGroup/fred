@@ -171,12 +171,12 @@ TUNING: AgentTuning = AgentTuning(
 #    Returns ONLY the ChatPromptTemplate. Stores the system text on the agent.
 #    WHY: avoids tuple typing and keeps a simple function contract.
 # ──────────────────────────────────────────────────────────────────────────────
-def _build_prompt(agent: AgentFlow) -> ChatPromptTemplate:
+async def _build_prompt(agent: AgentFlow) -> ChatPromptTemplate:
     persona = agent.get_tuned_text("prompts.persona") or ""
     contract = agent.get_tuned_text("prompts.contract") or ""
     behavior = agent.get_tuned_text("prompts.behavior") or ""
 
-    chat_context = agent.chat_context_text()
+    chat_context = await agent.chat_context_text()
     chat_context_block = (
         f"\n\nCHAT CONTEXT (context-only):\n{chat_context}" if chat_context else ""
     )
@@ -237,7 +237,7 @@ class ReportWriter(AgentFlow):
         Build the graph here, then controllers call get_compiled_graph() to run.
         """
         # 1) Build prompt and capture system text via _build_prompt()
-        prompt = _build_prompt(self)
+        prompt = await _build_prompt(self)
 
         # 2) Bind model with structured output (type-safe contract)
         model = get_default_chat_model()

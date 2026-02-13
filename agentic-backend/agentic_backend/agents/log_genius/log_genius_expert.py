@@ -220,7 +220,7 @@ class LogGenius(AgentFlow):
             for e in events
         ]
 
-    def _fetch_logs(
+    async def _fetch_logs(
         self, log_query: LogQuery
     ) -> Tuple[List[LogEventSnapshot], List[str]]:
         events: List[LogEventSnapshot] = []
@@ -232,7 +232,7 @@ class LogGenius(AgentFlow):
         if include_agentic:
             try:
                 store = get_app_context().get_log_store()
-                result = store.query(log_query)
+                result = await asyncio.to_thread(store.query, log_query)
                 events.extend(self._snap("agentic", result.events))
             except Exception as e:
                 logger.warning("LogGenius: agentic logs query failed: %s", e)
@@ -240,8 +240,7 @@ class LogGenius(AgentFlow):
 
         if include_kf:
             try:
-                loop = asyncio.get_event_loop()
-                result = loop.run_until_complete(self.kf_logs.query(log_query))
+                result = await self.kf_logs.query(log_query)
                 events.extend(self._snap("knowledge_flow", result.events))
             except Exception as e:
                 logger.warning("LogGenius: knowledge-flow logs query failed: %s", e)
@@ -392,7 +391,7 @@ class LogGenius(AgentFlow):
 
         try:
             log_query, window_minutes, max_events = self._build_log_query()
-            events, warnings = self._fetch_logs(log_query)
+            events, warnings = await self._fetch_logs(log_query)
             log_context = self._build_log_context(
                 events=events,
                 warnings=warnings,
@@ -415,7 +414,7 @@ class LogGenius(AgentFlow):
                 if isinstance(m, (HumanMessage, SystemMessage))
             ]
             messages = self.with_system(system_text, history)
-            messages = self.with_chat_context_text(messages)
+            messages = await self.with_chat_context_text(messages)
 
             response = await self.model.ainvoke(messages)
 

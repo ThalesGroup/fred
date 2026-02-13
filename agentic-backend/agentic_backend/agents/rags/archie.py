@@ -314,7 +314,7 @@ class Archie(AgentFlow):
 
         try:
             response_language = get_language(runtime_context) or "français"
-            chat_context = self.chat_context_text()
+            chat_context = await self.chat_context_text()
             include_chat_context = self.get_field_spec(
                 "prompts.include_chat_context"
             ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
@@ -345,7 +345,7 @@ class Archie(AgentFlow):
                     )
                 )
                 messages = [sys_msg, *history, human_msg]
-                messages = self.with_chat_context_text(messages)
+                messages = await self.with_chat_context_text(messages)
                 with self.kpi_timer(
                     "agent.step_latency_ms", dims={"step": "answer_general_only"}
                 ):
@@ -445,7 +445,9 @@ class Archie(AgentFlow):
                     warn = self._render_tuned_prompt(
                         "prompts.no_results", question=question
                     )
-                messages = self.with_chat_context_text([HumanMessage(content=warn)])
+                messages = await self.with_chat_context_text(
+                    [HumanMessage(content=warn)]
+                )
 
                 async with self.phase("answer_no_results"):
                     return {"messages": [await self.model.ainvoke(messages)]}
@@ -499,7 +501,7 @@ class Archie(AgentFlow):
                     )
                 human_msg = HumanMessage(content=no_sources_text)
                 messages = [sys_msg, *history, human_msg]
-                messages = self.with_chat_context_text(messages)
+                messages = await self.with_chat_context_text(messages)
                 async with self.phase("answer_no_sources"):
                     answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
@@ -547,7 +549,7 @@ class Archie(AgentFlow):
 
             # 5) Ask the model
             messages = [sys_msg, *history, human_msg]
-            messages = self.with_chat_context_text(messages)
+            messages = await self.with_chat_context_text(messages)
 
             logger.debug(
                 "[AGENT] invoking model with %d messages (sys_len=%d human_len=%d)",

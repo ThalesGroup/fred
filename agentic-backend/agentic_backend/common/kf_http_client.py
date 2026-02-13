@@ -100,7 +100,10 @@ def close_shared_kf_async_client() -> None:
             try:
                 await client.aclose()
             except Exception:
-                logger.debug("[KF][NET] Suppressed error during async client close", exc_info=True)
+                logger.debug(
+                    "[KF][NET] Suppressed error during async client close",
+                    exc_info=True,
+                )
 
         if loop is not None and loop.is_running() and not loop.is_closed():
             loop.create_task(_close())

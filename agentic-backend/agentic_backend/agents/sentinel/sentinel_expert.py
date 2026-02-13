@@ -145,7 +145,7 @@ class SentinelExpert(AgentFlow):
 
         # 2) Ask the model with a single SystemMessage prepended
         messages = self.with_system(system_text, state["messages"])
-        messages = self.with_chat_context_text(messages)
+        messages = await self.with_chat_context_text(messages)
 
         try:
             # self.log_message_summary(messages)

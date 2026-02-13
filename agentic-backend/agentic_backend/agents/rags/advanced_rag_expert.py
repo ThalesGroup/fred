@@ -613,7 +613,7 @@ class AdvancedRico(AgentFlow):
         )
 
         # Get optional chat context instructions
-        chat_context_instructions = self.chat_context_text()
+        chat_context_instructions = await self.chat_context_text()
         programmatic_context = state.get("context", None)
 
         # Build prompt template and variables

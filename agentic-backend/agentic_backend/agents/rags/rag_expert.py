@@ -307,7 +307,7 @@ class Rico(AgentFlow):
             runtime_context = self.get_runtime_context()
             rag_scope = get_rag_knowledge_scope(runtime_context)
             response_language = get_language(runtime_context) or "English"
-            chat_context = self.chat_context_text()
+            chat_context = await self.chat_context_text()
             include_chat_context = self.get_field_spec(
                 "prompts.include_chat_context"
             ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
@@ -338,7 +338,7 @@ class Rico(AgentFlow):
                     )
                 )
                 messages = [sys_msg, *history, human_msg]
-                messages = self.with_chat_context_text(messages)
+                messages = await self.with_chat_context_text(messages)
                 async with self.phase("answer_general_only"):
                     answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
@@ -432,7 +432,7 @@ class Rico(AgentFlow):
                         "Try asking about something covered by the selected libraries or upload relevant files."
                     )
                 messages = [HumanMessage(content=warn)]
-                messages = self.with_chat_context_text(messages)
+                messages = await self.with_chat_context_text(messages)
 
                 async with self.phase("answer_no_results"):
                     return {"messages": [await self.model.ainvoke(messages)]}
@@ -486,7 +486,7 @@ class Rico(AgentFlow):
                     )
                 human_msg = HumanMessage(content=no_sources_text)
                 messages = [sys_msg, *history, human_msg]
-                messages = self.with_chat_context_text(messages)
+                messages = await self.with_chat_context_text(messages)
                 async with self.phase("answer_no_sources"):
                     answer = await self.model.ainvoke(messages)
                 return {"messages": [answer]}
@@ -535,7 +535,7 @@ class Rico(AgentFlow):
 
             # 5) Ask the model
             messages = [sys_msg, *history, human_msg]
-            messages = self.with_chat_context_text(messages)
+            messages = await self.with_chat_context_text(messages)
 
             logger.debug(
                 "[AGENT] invoking model with %d messages (sys_len=%d human_len=%d)",

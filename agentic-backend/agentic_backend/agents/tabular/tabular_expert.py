@@ -265,7 +265,7 @@ class Tessa(AgentFlow):
         # Build message sequence
         recent_history = self.recent_messages(state["messages"], max_messages=5)
         messages = self.with_system(system_text, recent_history)
-        messages = self.with_chat_context_text(messages)
+        messages = await self.with_chat_context_text(messages)
 
         try:
             response = await self.model.ainvoke(messages)

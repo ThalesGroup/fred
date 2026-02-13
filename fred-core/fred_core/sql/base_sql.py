@@ -446,9 +446,15 @@ class AsyncBaseSqlStore:
 
 
 def advisory_lock_key(name: str) -> int:
-    """Derive a deterministic 64-bit advisory lock key from a string."""
+    """Derive a deterministic signed 64-bit advisory lock key from a string."""
 
-    return int.from_bytes(hashlib.sha1(name.encode("utf-8")).digest()[:8], "big")
+    # pg_advisory_xact_lock expects a signed bigint.
+    # This hash is only used for deterministic lock-key derivation (non-cryptographic).
+    return int.from_bytes(
+        hashlib.sha1(name.encode("utf-8"), usedforsecurity=False).digest()[:8],
+        "big",
+        signed=True,
+    )
 
 
 async def run_ddl_with_advisory_lock(
@@ -470,13 +476,10 @@ async def run_ddl_with_advisory_lock(
 
     async with engine.begin() as conn:  # type: ignore[misc]
         if conn.dialect.name == "postgresql":
-            try:
-                await conn.execute(
-                    text("SELECT pg_advisory_xact_lock(:lock_id)"),
-                    {"lock_id": lock_key},
-                )
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.debug("[SQL][DDL] Advisory lock not acquired: %s", exc)
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": lock_key},
+            )
 
         try:
             await conn.run_sync(ddl_sync_fn)
