@@ -192,6 +192,9 @@ applications:
         readOnly: true
 
     configuration:
+      app:
+        log_level: "warning"
+
       # Set Keycloak url
       security: &security-configuration
         m2m:
@@ -453,6 +456,9 @@ applications:
     extraVolumeMounts: *ssl-extra-volume-mounts
 
     configuration: &knowledgeFlowBackendConfiguration
+      app:
+        log_level: "warning"
+
       processing:
         # disable image processing for now (todo: enable it)
         process_images: false
@@ -582,7 +588,7 @@ applications:
     configurationFileName: configuration_worker.yaml
     env:
       - name: LOG_LEVEL
-        value: "INFO"
+        value: "WARNING"
       - name: ENV_FILE
         value: "/app/config/.env"
       - name: CONFIG_FILE
