@@ -33,7 +33,7 @@ const (
 type askPayload struct {
 	SessionID        string `json:"session_id,omitempty"`
 	Message          string `json:"message"`
-	AgentName        string `json:"agent_name"`
+	AgentID          string `json:"agent_id"`
 	ClientExchangeID string `json:"client_exchange_id,omitempty"`
 }
 
@@ -50,7 +50,7 @@ type config struct {
 	URL                string
 	Token              string
 	TokenInQuery       bool
-	Agent              string
+	AgentID            string
 	Message            string
 	SessionID          string
 	SessionURL         string
@@ -195,7 +195,7 @@ func parseFlags() config {
 	urlFlag := flag.String("url", "ws://localhost:8000/agentic/v1/chatbot/query/ws", "WebSocket URL")
 	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
 	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
-	agentFlag := flag.String("agent", "Georges", "Agent name")
+	agentFlag := flag.String("agent", "Georges", "Agent ID (matches configuration.yaml)")
 	messageFlag := flag.String("message", "Hello", "Prompt message")
 	sessionFlag := flag.String("session", "", "Session ID (optional)")
 	sessionURLFlag := flag.String("session-url", "", "HTTP session endpoint URL (optional)")
@@ -231,7 +231,7 @@ func parseFlags() config {
 		URL:                strings.TrimSpace(*urlFlag),
 		Token:              token,
 		TokenInQuery:       *tokenInQuery,
-		Agent:              strings.TrimSpace(*agentFlag),
+		AgentID:            strings.TrimSpace(*agentFlag),
 		Message:            *messageFlag,
 		SessionID:          strings.TrimSpace(*sessionFlag),
 		SessionURL:         strings.TrimSpace(*sessionURLFlag),
@@ -322,7 +322,7 @@ func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sess
 	payload := askPayload{
 		SessionID:        sessionID,
 		Message:          cfg.Message,
-		AgentName:        cfg.Agent,
+		AgentID:          cfg.AgentID,
 		ClientExchangeID: newExchangeID(),
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -380,7 +380,7 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 
 	fmt.Printf("\n%s\n", style("WS BENCH CONFIG", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	fmt.Printf("%s %s\n", style("Agent:", colorDim), cfg.Agent)
+	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
 	fmt.Printf("%s %s\n", style("Mode:", colorDim), mode)
 	fmt.Printf("%s %d\n", style("Clients:", colorDim), effectiveClients)
 	fmt.Printf("%s %d\n", style("Total requests:", colorDim), totalRequests)
@@ -459,7 +459,7 @@ func runOnceWithSession(cfg config, sessionID string) result {
 	payload := askPayload{
 		SessionID:        sessionID,
 		Message:          cfg.Message,
-		AgentName:        cfg.Agent,
+		AgentID:          cfg.AgentID,
 		ClientExchangeID: newExchangeID(),
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -537,8 +537,8 @@ func createSession(ctx context.Context, cfg config) (string, error) {
 	}
 
 	payload := map[string]string{
-		"agent_name": cfg.Agent,
-		"title":      cfg.SessionTitle,
+		"agent_id": cfg.AgentID,
+		"title":    cfg.SessionTitle,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -784,7 +784,7 @@ func printSummary(cfg config, total int, durations []time.Duration, errorCount i
 	fmt.Printf("\n%s\n", style("WS BENCH SUMMARY", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Outcome:", colorDim), style(outcome, colorBold, outcomeColor))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	fmt.Printf("%s %s\n", style("Agent:", colorDim), cfg.Agent)
+	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
 	fmt.Printf("%s %d\n", style("Total requests:", colorDim), total)
 	fmt.Printf("%s %d\n", style("Concurrent clients:", colorDim), cfg.Clients)
 	if cfg.RequestsPerClient > 0 {
