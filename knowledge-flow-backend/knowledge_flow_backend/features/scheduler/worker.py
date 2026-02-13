@@ -82,6 +82,13 @@ class _WorkerRoleSpec:
     activities: tuple[Callable, ...]
 
 
+@dataclass
+class _MergedQueueSpec:
+    roles: list[str]
+    workflows: list[type]
+    activities: list[Callable]
+
+
 def _dedupe_ordered(items: Sequence) -> list:
     return list(OrderedDict((item, None) for item in items).keys())
 
@@ -116,24 +123,25 @@ def _role_specs(config: TemporalSchedulerConfig) -> list[_WorkerRoleSpec]:
         return [spec for spec in base_specs if spec.role == config.worker_role]
 
     # Merge specs by queue for backward compatibility when all queues are identical.
-    by_queue: dict[str, dict[str, object]] = {}
+    by_queue: dict[str, _MergedQueueSpec] = {}
     for spec in base_specs:
         if spec.task_queue not in by_queue:
-            by_queue[spec.task_queue] = {
-                "roles": [spec.role],
-                "workflows": list(spec.workflows),
-                "activities": list(spec.activities),
-            }
+            by_queue[spec.task_queue] = _MergedQueueSpec(
+                roles=[spec.role],
+                workflows=list(spec.workflows),
+                activities=list(spec.activities),
+            )
             continue
-        by_queue[spec.task_queue]["roles"].append(spec.role)
-        by_queue[spec.task_queue]["workflows"].extend(spec.workflows)
-        by_queue[spec.task_queue]["activities"].extend(spec.activities)
+        merged = by_queue[spec.task_queue]
+        merged.roles.append(spec.role)
+        merged.workflows.extend(spec.workflows)
+        merged.activities.extend(spec.activities)
 
     merged_specs: list[_WorkerRoleSpec] = []
     for queue, data in by_queue.items():
-        roles = "+".join(data["roles"])  # type: ignore[index]
-        workflows = tuple(_dedupe_ordered(data["workflows"]))  # type: ignore[index]
-        activities = tuple(_dedupe_ordered(data["activities"]))  # type: ignore[index]
+        roles = "+".join(data.roles)
+        workflows = tuple(_dedupe_ordered(data.workflows))
+        activities = tuple(_dedupe_ordered(data.activities))
         merged_specs.append(
             _WorkerRoleSpec(
                 role=roles,

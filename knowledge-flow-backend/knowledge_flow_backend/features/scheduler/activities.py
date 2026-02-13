@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def _activity_log(stage: str, message: str, **fields: object) -> None:
+    payload: dict[str, object]
     try:
         info = activity.info()
         payload = {
