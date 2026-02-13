@@ -35,6 +35,7 @@ import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpe
 
 // Import the new sub-components
 import { AnyAgent } from "../../../common/agent.ts";
+import { useFrontendProperties } from "../../../hooks/useFrontendProperties.ts";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips.tsx";
 import { AgentChatOptions, type RuntimeContext } from "../../../slices/agentic/agenticOpenApi.ts";
 import { AgentSelector } from "./AgentSelector.tsx";
@@ -158,6 +159,9 @@ function UserInput(
     setDisplayAudioController(true);
     inputRef.current?.focus();
   };
+
+  const { allowAgentSwitchInOneConversation } = useFrontendProperties();
+
   return (
     <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       <Box
@@ -169,31 +173,35 @@ function UserInput(
           gap: 1,
         }}
       >
-        {isHydratingSession ? (
-          <Box
-            sx={{
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: "16px",
-              background: theme.palette.background.paper,
-              paddingX: 2,
-              paddingY: 0.5,
-              display: "flex",
-              gap: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              alignSelf: "flex-start",
-              color: theme.palette.text.secondary,
-            }}
-          >
-            {t("common.loading", "Loading")}…
-          </Box>
-        ) : (
-          <AgentSelector
-            agents={agents}
-            currentAgent={currentAgent}
-            onSelectNewAgent={(agent) => onSelectNewAgent(agent)}
-            sx={{ alignSelf: "flex-start" }}
-          />
+        {allowAgentSwitchInOneConversation && (
+          <>
+            {isHydratingSession ? (
+              <Box
+                sx={{
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: "16px",
+                  background: theme.palette.background.paper,
+                  paddingX: 2,
+                  paddingY: 0.5,
+                  display: "flex",
+                  gap: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  alignSelf: "flex-start",
+                  color: theme.palette.text.secondary,
+                }}
+              >
+                {t("common.loading", "Loading")}…
+              </Box>
+            ) : (
+              <AgentSelector
+                agents={agents}
+                currentAgent={currentAgent}
+                onSelectNewAgent={(agent) => onSelectNewAgent(agent)}
+                sx={{ alignSelf: "flex-start" }}
+              />
+            )}
+          </>
         )}
 
         <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>

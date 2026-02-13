@@ -79,7 +79,7 @@ ai:
   max_concurrent_agents: 1024
 
   # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
-  max_concurrent_sessions_per_user: 10
+  max_concurrent_sessions_per_user: 999999
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20

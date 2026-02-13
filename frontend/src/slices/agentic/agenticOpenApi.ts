@@ -1045,6 +1045,7 @@ export type Properties = {
   showAgentRegisterA2A?: boolean;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentCode?: boolean;
+  allowAgentSwitchInOneConversation?: boolean;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
