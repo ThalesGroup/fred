@@ -383,7 +383,7 @@ applications:
     ingress:
       annotations:
         # Increase max file upload size
-        nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+        nginx.ingress.kubernetes.io/proxy-body-size: 60m
         nginx.org/proxy-connect-timeout: 300s
         nginx.org/proxy-read-timeout: 300s
       hosts:
