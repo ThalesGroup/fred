@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import importlib
 import logging
 from enum import Enum
 from typing import List, Optional, Tuple, Union
@@ -24,9 +25,11 @@ from a2a.client.errors import A2AClientJSONError
 from a2a.types import AgentCard
 from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
 from fred_core import (
+    ORGANIZATION_ID,
     Action,
     AgentPermission,
     KeycloakUser,
+    OrganizationPermission,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -43,6 +46,7 @@ from agentic_backend.common.structures import (
     AgentSettings,
 )
 from agentic_backend.core.agents.a2a_proxy_agent import A2AProxyAgent
+from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
@@ -70,6 +74,46 @@ class MissingTeamIdError(Exception):
     """Raised when owner_filter is 'team' but no team_id is provided."""
 
     pass
+
+
+class InvalidClassPathError(Exception):
+    """Raised when a class_path is not a valid, importable module.Class."""
+
+    pass
+
+
+def _validate_class_path(class_path: str) -> type[AgentFlow]:
+    """Validate that class_path is importable and inherits from AgentFlow.
+
+    Returns the resolved class on success.
+    Raises InvalidClassPathError if the path is invalid.
+    """
+    try:
+        module_name, class_name = class_path.rsplit(".", 1)
+    except ValueError:
+        raise InvalidClassPathError(
+            f"Invalid class_path format (expected module.Class): {class_path}"
+        )
+
+    try:
+        module = importlib.import_module(module_name)
+    except Exception as exc:
+        raise InvalidClassPathError(
+            f"Cannot import module '{module_name}': {exc}"
+        ) from exc
+
+    if not hasattr(module, class_name):
+        raise InvalidClassPathError(
+            f"Class '{class_name}' not found in module '{module_name}'"
+        )
+
+    cls = getattr(module, class_name)
+    if not isinstance(cls, type) or not issubclass(cls, AgentFlow):
+        raise InvalidClassPathError(
+            f"Class '{class_name}' must be a subclass of AgentFlow"
+        )
+
+    return cls
 
 
 def _class_path(obj_or_type: Union[type, object]) -> str:
@@ -118,6 +162,7 @@ class AgentService:
         team_id: Optional[str] = None,
         a2a_base_url: Optional[str] = None,
         a2a_token: Optional[str] = None,
+        class_path: Optional[str] = None,
     ):
         """
         Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
@@ -127,6 +172,20 @@ class AgentService:
             await self.rebac.check_user_permission_or_raise(
                 user, TeamPermission.CAN_UPDATE_AGENTS, team_id
             )
+
+        # If class_path is provided, check permission first (avoid leaking class info), then validate
+        resolved_agent_cls: type[AgentFlow] | None = None
+        if class_path:
+            if agent_type == "a2a_proxy":
+                raise InvalidClassPathError(
+                    "class_path cannot be set for a2a_proxy agents"
+                )
+            await self.rebac.check_user_permission_or_raise(
+                user,
+                OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+                ORGANIZATION_ID,
+            )
+            resolved_agent_cls = _validate_class_path(class_path)
 
         agent_id = str(uuid4())
 
@@ -151,18 +210,21 @@ class AgentService:
             )
             await self.agent_manager.create_dynamic_agent(agent_settings, tuning)
         else:
+            default_tuning = (
+                resolved_agent_cls.tuning if resolved_agent_cls else BASIC_REACT_TUNING
+            )
             agent_settings = Agent(
                 id=agent_id,
                 name=name,
-                class_path=_class_path(BasicReActAgent),
-                enabled=False,  # Start disabled until fully initialized
-                tuning=BASIC_REACT_TUNING,  # default tuning
+                class_path=class_path or _class_path(BasicReActAgent),
+                enabled=True,
+                tuning=default_tuning,
                 # Start with all chat options off by default; UI can toggle them later.
                 chat_options=AgentChatOptions(),
                 mcp_servers=[],  # Empty list by default; to be configured later
             )
             await self.agent_manager.create_dynamic_agent(
-                agent_settings, BASIC_REACT_TUNING
+                agent_settings, default_tuning
             )
 
         # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
@@ -186,6 +248,17 @@ class AgentService:
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
+
+        # Check class_path change
+        if agent_settings.class_path is not None:
+            current = await self.agent_manager.get_agent_settings(agent_settings.id)
+            if current and current.class_path != agent_settings.class_path:
+                await self.rebac.check_user_permission_or_raise(
+                    user,
+                    OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+                    ORGANIZATION_ID,
+                )
+                _validate_class_path(agent_settings.class_path)
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
 

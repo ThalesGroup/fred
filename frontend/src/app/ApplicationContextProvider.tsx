@@ -43,7 +43,7 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
     "ApplicationContextProvider.isSidebarCollapsed",
     false,
   );
-  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
+  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "dark");
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
   const darkMode = computeDarkMode(themeMode, systemDarkMode);
 

@@ -35,6 +35,7 @@ from agentic_backend.core.agents.agent_manager import (
 )
 from agentic_backend.core.agents.agent_service import (
     AgentService,
+    InvalidClassPathError,
     MissingTeamIdError,
     OwnerFilter,
 )
@@ -77,6 +78,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: AgentUpdatesDisabled
     ) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidClassPathError)
+    async def invalid_class_path_handler(
+        request: Request, exc: InvalidClassPathError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -155,6 +162,7 @@ class CreateAgentRequest(BaseModel):
     team_id: str | None = None
     a2a_base_url: str | None = None
     a2a_token: str | None = None
+    class_path: str | None = None
 
 
 @router.get(
@@ -191,6 +199,7 @@ async def create_agent(
         team_id=request.team_id,
         a2a_base_url=request.a2a_base_url,
         a2a_token=request.a2a_token,
+        class_path=request.class_path,
     )
 
 

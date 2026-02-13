@@ -64,7 +64,7 @@ class UserStory(BaseModel):
     issue_type: Literal["Story", "Task", "Bug"] | None = Field(
         default="Story", description="Jira issue type"
     )
-    priority: Literal["High", "Medium", "Low"] = Field(
+    priority: Literal["Haute", "Moyenne", "Basse"] = Field(
         description="Story priority level"
     )
     epic_name: str | None = Field(
@@ -165,8 +165,8 @@ class QuickUserStory(BaseModel):
     description: str = Field(
         description="User story in format: En tant que [persona], je veux [action], afin de [bénéfice]"
     )
-    priority: Literal["High", "Medium", "Low"] = Field(
-        default="Medium", description="Story priority level"
+    priority: Literal["Haute", "Moyenne", "Basse"] = Field(
+        default="Moyenne", description="Story priority level"
     )
     story_points: int | None = Field(
         default=None,

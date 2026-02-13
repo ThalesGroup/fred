@@ -80,7 +80,7 @@ userStoriesSchema = {
             },
             "priority": {
                 "type": "string",
-                "enum": ["High", "Medium", "Low"],
+                "enum": ["Haute", "Moyenne", "Basse"],
                 "description": "Story priority level",
             },
             "epic_name": {

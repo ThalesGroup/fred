@@ -8,6 +8,7 @@
           "admin": { "directly_related_user_types": [{ "type": "user" }] },
           "can_create_agent": {},
           "can_create_team": {},
+          "can_edit_agent_class_path": {},
           "editor": { "directly_related_user_types": [{ "type": "user" }] },
           "viewer": { "directly_related_user_types": [{ "type": "user" }] }
         }
@@ -16,6 +17,9 @@
         "admin": { "this": {} },
         "can_create_agent": { "computedUserset": { "relation": "editor" } },
         "can_create_team": { "computedUserset": { "relation": "admin" } },
+        "can_edit_agent_class_path": {
+          "computedUserset": { "relation": "admin" }
+        },
         "editor": {
           "union": {
             "child": [

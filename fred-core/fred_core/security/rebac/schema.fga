@@ -12,6 +12,7 @@ type organization
 
   define can_create_team: admin
   define can_create_agent: editor
+  define can_edit_agent_class_path: admin
 
 
 type team
