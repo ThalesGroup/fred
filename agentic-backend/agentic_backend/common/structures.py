@@ -287,6 +287,7 @@ class Properties(BaseModel):
     )
     showAgentRegisterA2A: bool = True
     showAgentRestoreFromConfiguration: bool = True
+    showAgentDisableButton: bool = True
     showAgentCode: bool = True
     allowAgentSwitchInOneConversation: bool = True
 

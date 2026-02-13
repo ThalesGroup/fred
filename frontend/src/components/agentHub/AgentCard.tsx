@@ -66,7 +66,7 @@ export const AgentCard = ({
   const isA2A = Boolean(agent.metadata && (agent.metadata as any).a2a_base_url);
   const a2aBorder = theme.palette.success.main;
 
-  const { showAgentCode } = useFrontendProperties();
+  const { showAgentCode, showAgentDisableButton } = useFrontendProperties();
 
   return (
     <Card
@@ -238,7 +238,7 @@ export const AgentCard = ({
             </SimpleTooltip>
           )}
 
-          {onToggleEnabled && (
+          {showAgentDisableButton && onToggleEnabled && (
             <SimpleTooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable")}>
               <IconButton
                 size="small"
