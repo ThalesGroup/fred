@@ -542,7 +542,14 @@ class SessionOrchestrator:
             t0 = time.perf_counter()
             async with phase_timer(self.kpi, "persist_tx"), pg_async_tx() as conn:
                 t1 = time.perf_counter()
-                await conn.execute(text("SET LOCAL synchronous_commit TO OFF"))
+                dialect_name = conn.engine.dialect.name
+                if dialect_name == "postgresql":
+                    await conn.execute(text("SET LOCAL synchronous_commit TO OFF"))
+                elif logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[SESSIONS] skip synchronous_commit optimization for dialect=%s",
+                        dialect_name,
+                    )
 
                 await self.history_store.save_with_conn(
                     conn, session.id, all_msgs, user.uid
