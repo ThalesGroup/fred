@@ -379,6 +379,8 @@
     "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
   },
   "agentEditDrawer": {
+    "nameLabel": "Name",
+    "nameHelperText": "The display name of the agent.",
     "roleHelperText": "The agent's mandatory role for discovery (e.g., 'Financial Analyst')",
     "descriptionHelperText": "The agent's mandatory description.",
     "tagsHelperText": "Tags used for categorization and filtering.",
@@ -1190,7 +1192,8 @@
   },
   "newChat": {
     "yourAgents": "Your agents",
-    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?"
+    "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
+    "loadingAgentError": "Unable to load your agents."
   },
   "comingSoon": {
     "title": "{{siteDisplayName}} is coming soon.",

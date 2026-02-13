@@ -150,6 +150,7 @@ class FileToProcess(FileToProcessWithoutUser):
 class PipelineDefinition(BaseModel):
     name: str
     files: List[FileToProcess]
+    max_parallelism: int = 1
 
 
 class ProcessDocumentsRequest(BaseModel):

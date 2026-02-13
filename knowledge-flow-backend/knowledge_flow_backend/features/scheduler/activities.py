@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import pathlib
 import tempfile
@@ -103,7 +104,7 @@ async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> str
     output_dir.mkdir(exist_ok=True)
 
     # 🗂️ Download input file
-    ingestion_service.get_local_copy(file.processed_by, metadata, working_dir)
+    await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
     input_file = next(input_dir.glob("*"))
     # Temporal payloads must be JSON-serializable.
     return str(input_file)
@@ -126,7 +127,7 @@ async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> str
     from knowledge_flow_backend.application_context import ApplicationContext
 
     loader = ApplicationContext.get_instance().get_content_loader(metadata.source_tag)
-    full_path = loader.fetch_by_relative_path(metadata.pull_location, input_dir)
+    full_path = await asyncio.to_thread(loader.fetch_by_relative_path, metadata.pull_location, input_dir)
 
     if not full_path.exists() or not full_path.is_file():
         raise FileNotFoundError(f"File not found after fetch: {full_path}")
@@ -160,8 +161,8 @@ async def input_process(user: KeycloakUser, input_file: str, metadata: DocumentM
         await ingestion_service.save_metadata(user, metadata=metadata)
 
         # Process the file
-        ingestion_service.process_input(user, pathlib.Path(input_file), output_dir, metadata)
-        ingestion_service.save_output(user, metadata=metadata, output_dir=output_dir)
+        await asyncio.to_thread(ingestion_service.process_input, user, pathlib.Path(input_file), output_dir, metadata)
+        await asyncio.to_thread(ingestion_service.save_output, user, metadata, output_dir)
 
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.save_metadata(user, metadata=metadata)
@@ -189,12 +190,12 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     ingestion_service = IngestionService()
 
     # ✅ For both push and pull, restore what was saved (input/output)
-    ingestion_service.get_local_copy(file.processed_by, metadata, working_dir)
+    await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
 
     output_stage: ProcessingStage | None = None
     try:
         # 📄 Locate preview file
-        preview_file = ingestion_service.get_preview_file(file.processed_by, metadata, output_dir)
+        preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
         if ApplicationContext.get_instance().is_tabular_file(preview_file.name):
             output_stage = ProcessingStage.SQL_INDEXED
         else:
@@ -213,11 +214,12 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
                     non_retryable=True,
                 )
         # Proceed with the output processing
-        metadata = ingestion_service.process_output(
+        metadata = await asyncio.to_thread(
+            ingestion_service.process_output,
             file.processed_by,
-            output_dir=output_dir,
-            input_file_name=preview_file.name,
-            input_file_metadata=metadata,
+            preview_file.name,
+            output_dir,
+            metadata,
         )
 
         # Save the updated metadata

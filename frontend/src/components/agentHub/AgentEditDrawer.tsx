@@ -23,7 +23,6 @@ import {
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-import { TagsInput } from "./AgentTagsInput";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 
@@ -51,6 +50,8 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
   const { showConfirmationDialog } = useConfirmationDialog();
 
   const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation();
+  // State for agent name (top-level, outside tuning)
+  const [agentName, setAgentName] = useState("");
   // State for dynamic fields
   const [fields, setFields] = useState<FieldSpec[]>([]);
   // State for top-level Tuning properties
@@ -64,6 +65,9 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
   // --- Effects ---
 
   useEffect(() => {
+    if (agent) {
+      setAgentName(agent.name);
+    }
     if (agent?.tuning) {
       // 1. Initialize dynamic fields (deep clone)
       const fs = agent.tuning.fields ?? [];
@@ -83,6 +87,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
       setMcpServerRefs(normalizedRefs);
     } else {
       // Reset state if agent is null or has no tuning
+      setAgentName("");
       setFields([]);
       setTopLevelTuning({ role: "", description: "", tags: [] });
       setMcpServerRefs([]);
@@ -124,7 +129,8 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
       mcp_servers: mcpServerRefs,
     };
 
-    await updateTuning(agent, newTuning);
+    const updatedAgent = { ...agent, name: agentName };
+    await updateTuning(updatedAgent, newTuning);
     onSaved?.();
     onClose();
   };
@@ -148,7 +154,8 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
     });
   };
 
-  const isSaveDisabled = isLoading || !agent || !topLevelTuning.role || !topLevelTuning.description;
+  const isSaveDisabled =
+    isLoading || !agent || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description;
 
   return (
     <Drawer
@@ -167,6 +174,23 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
         {/* Body (scrollable) */}
         <Box sx={{ p: 2, flex: 1, overflow: "auto" }}>
           <Stack spacing={3}>
+            {/* Agent Name */}
+            <TextField
+              label={t("agentEditDrawer.nameLabel")}
+              size="small"
+              value={agentName}
+              onChange={(e) => setAgentName(e.target.value)}
+              required
+              fullWidth
+              slotProps={{
+                input: {
+                  sx: (theme) => ({
+                    fontSize: theme.typography.body2.fontSize,
+                  }),
+                },
+              }}
+              helperText={t("agentEditDrawer.nameHelperText")}
+            />
             {/* Tuning Core Fields */}
             <TextField
               label="Role"
@@ -203,12 +227,12 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
               helperText={t("agentEditDrawer.descriptionHelperText")}
             />
 
-            <TagsInput
+            {/* <TagsInput
               label={t("agentEditDrawer.tagsLabel")}
               helperText={t("agentEditDrawer.tagsHelperText")}
               value={topLevelTuning.tags}
               onChange={(next) => onTopLevelChange("tags", next)}
-            />
+            /> */}
 
             <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
 
@@ -251,11 +275,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
             <Button variant="outlined" onClick={onClose}>
               {t("dialogs.cancel")}
             </Button>
-            <Button
-              variant="contained"
-              disabled={isSaveDisabled}
-              onClick={handleSave}
-            >
+            <Button variant="contained" disabled={isSaveDisabled} onClick={handleSave}>
               {t("common.save")}
             </Button>
           </Stack>

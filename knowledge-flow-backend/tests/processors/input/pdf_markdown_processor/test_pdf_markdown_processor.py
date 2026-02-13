@@ -56,7 +56,6 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
 
     result = processor.convert_file_to_markdown(sample_pdf_file, output_dir, metadata.document_uid)
 
-    assert result["status"] == "fallback_to_text"
     md_file = Path(result["md_file"])
     assert md_file.exists()
     md_content = md_file.read_text(encoding="utf-8").strip()

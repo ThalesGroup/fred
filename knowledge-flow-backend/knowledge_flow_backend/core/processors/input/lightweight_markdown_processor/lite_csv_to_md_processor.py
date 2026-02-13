@@ -21,7 +21,7 @@ from typing import List
 
 import pandas as pd
 
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.base_lite_md_processor import BaseLiteMdProcessor
 
@@ -145,16 +145,13 @@ class LiteCsvMarkdownProcessor(BaseMarkdownProcessor):
             output_dir.mkdir(parents=True, exist_ok=True)
             output_markdown_path.write_text(markdown, encoding="utf-8")
 
-            status = "ok"
             message = "Lite CSV conversion succeeded."
-        except Exception as e:  # noqa: BLE001
-            logger.error("LiteCsvMarkdownProcessor: conversion failed for %s: %s", file_path, e)
-            status = "error"
-            message = str(e)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("LiteCsvMarkdownProcessor: conversion failed for %s", file_path)
+            raise InputConversionError(f"LiteCsvMarkdownProcessor failed for '{file_path.name}': {exc}") from exc
 
         return {
             "doc_dir": str(output_dir),
             "md_file": str(output_markdown_path),
-            "status": status,
             "message": message,
         }

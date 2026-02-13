@@ -26,7 +26,7 @@ from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
 
 from knowledge_flow_backend.application_context import get_configuration
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         output_markdown_path = output_dir / "output.md"
         torch.device("cpu")
         try:
+            output_dir.mkdir(parents=True, exist_ok=True)
             # Initialize the DocumentConverter with PDF format options
             pipeline_options = PdfPipelineOptions()
 
@@ -157,18 +158,12 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             with open(output_markdown_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
 
-        except Exception as fallback_error:
-            logger.error(f"Fallback text extraction also failed: {fallback_error}")
-            return {
-                "doc_dir": str(output_dir),
-                "md_file": None,
-                "status": "error",
-                "message": str(fallback_error),
-            }
+        except Exception as exc:
+            logger.exception("PDF conversion failed for %s", file_path)
+            raise InputConversionError(f"PdfMarkdownProcessor failed for '{file_path.name}': {exc}") from exc
 
         return {
             "doc_dir": str(output_dir),
             "md_file": str(output_markdown_path),
-            "status": "fallback_to_text",
-            "message": "Conversion to plain text fallback succeeded.",
+            "message": "Conversion to markdown succeeded.",
         }
