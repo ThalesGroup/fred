@@ -9,6 +9,7 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
     BaseInputProcessor,
     BaseMarkdownProcessor,
     BaseTabularProcessor,
+    InputConversionError,
 )
 from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
@@ -87,6 +88,56 @@ class ProcessingPipeline:
     # Helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _validate_markdown_processor_result(
+        *,
+        input_path: pathlib.Path,
+        processor_name: str,
+        processor_result: object | None,
+    ) -> None:
+        """
+        Backward-compatible guard for legacy processors that still return
+        {"status": "error"} instead of raising.
+        """
+        if not isinstance(processor_result, dict):
+            return
+
+        status_raw = processor_result.get("status")
+        if not isinstance(status_raw, str):
+            return
+        status = status_raw.strip().lower()
+        if status not in {"error", "failed", "failure"}:
+            return
+
+        message_raw = processor_result.get("message")
+        message = str(message_raw).strip() if message_raw is not None else ""
+        suffix = f": {message}" if message else ""
+        raise InputConversionError(f"Input processor '{processor_name}' reported status='{status}' for '{input_path.name}'{suffix}")
+
+    @staticmethod
+    def _validate_preview_output(
+        *,
+        output_dir: pathlib.Path,
+        input_path: pathlib.Path,
+        processor_name: str,
+    ) -> None:
+        """
+        Ensure the input stage produced a non-empty preview file.
+        """
+        preview_candidates = ("output.md", "table.csv", "output.txt")
+        for candidate_name in preview_candidates:
+            candidate = output_dir / candidate_name
+            if candidate.exists() and candidate.is_file() and candidate.stat().st_size > 0:
+                return
+
+        details: list[str] = []
+        generated_files = sorted(item.name for item in output_dir.iterdir() if item.is_file()) if output_dir.exists() else []
+        if generated_files:
+            details.append(f"generated_files={generated_files}")
+
+        details_suffix = f" ({'; '.join(details)})" if details else ""
+        raise ValueError(f"Input processor '{processor_name}' failed to generate a non-empty preview for '{input_path.name}' in '{output_dir}'. Expected one of {preview_candidates}.{details_suffix}")
+
     def _get_input_processor(self, suffix: str) -> BaseInputProcessor:
         suffix = suffix.lower()
         if suffix in self.input_processors:
@@ -117,10 +168,25 @@ class ProcessingPipeline:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if isinstance(processor, BaseMarkdownProcessor):
-            processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
+            result = processor.convert_file_to_markdown(input_path, output_dir, metadata.document_uid)
+            self._validate_markdown_processor_result(
+                input_path=input_path,
+                processor_name=processor.__class__.__name__,
+                processor_result=result,
+            )
+            self._validate_preview_output(
+                output_dir=output_dir,
+                input_path=input_path,
+                processor_name=processor.__class__.__name__,
+            )
         elif isinstance(processor, BaseTabularProcessor):
             df = processor.convert_file_to_table(input_path)
             df.to_csv(output_dir / "table.csv", index=False)
+            self._validate_preview_output(
+                output_dir=output_dir,
+                input_path=input_path,
+                processor_name=processor.__class__.__name__,
+            )
         else:
             raise RuntimeError(f"Unknown input processor type for: {input_path}")
 

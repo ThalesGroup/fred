@@ -29,6 +29,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
 )
 from knowledge_flow_backend.features.scheduler.temporal_scheduler import TemporalScheduler
+from knowledge_flow_backend.features.scheduler.workflow_status import normalize_workflow_status
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +48,13 @@ class IngestionTaskService:
         scheduler_config: SchedulerConfig,
         metadata_service: MetadataService,
         temporal_client_provider: Optional[TemporalClientProvider] = None,
+        max_parallelism: int = 1,
     ) -> None:
         self._scheduler_config = scheduler_config
         self._metadata_service = metadata_service
         self._client_provider = temporal_client_provider
         self._task_queue: Optional[str] = None
+        self._max_parallelism = max(1, int(max_parallelism))
 
         backend = scheduler_config.backend.lower()
         if backend == "memory":
@@ -87,6 +90,7 @@ class IngestionTaskService:
         definition = PipelineDefinition(
             name=pipeline_name,
             files=[FileToProcess.from_file_to_process_without_user(f, user) for f in files],
+            max_parallelism=self._max_parallelism,
         )
         handle = await self._scheduler.start_document_processing(
             user=user,
@@ -133,3 +137,22 @@ class IngestionTaskService:
         Delete fast-ingest vectors using the configured scheduler backend.
         """
         return await self._scheduler.delete_fast_vectors(payload)
+
+    async def get_workflow_status(self, *, workflow_id: Optional[str]) -> Optional[str]:
+        """
+        Return backend workflow execution status when available.
+        For Temporal, this uses the workflow describe API.
+        """
+        if not workflow_id:
+            return None
+        raw_status = await self._scheduler.get_workflow_execution_status(workflow_id)
+        return normalize_workflow_status(raw_status)
+
+    async def get_workflow_last_error(self, *, workflow_id: Optional[str]) -> Optional[str]:
+        """
+        Return backend workflow error details when available.
+        For Temporal, this comes from the workflow task store.
+        """
+        if not workflow_id:
+            return None
+        return await self._scheduler.get_workflow_last_error(workflow_id)

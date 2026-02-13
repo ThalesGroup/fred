@@ -641,6 +641,7 @@ export type CreateAgentRequest = {
   team_id?: string | null;
   a2a_base_url?: string | null;
   a2a_token?: string | null;
+  class_path?: string | null;
 };
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
@@ -1045,6 +1046,7 @@ export type Properties = {
   showAgentRegisterA2A?: boolean;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentCode?: boolean;
+  allowAgentSwitchInOneConversation?: boolean;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

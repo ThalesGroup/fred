@@ -33,14 +33,13 @@ export default function SummaryPreview({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
-  const hasSummary = !!summary && (!!summary.abstract || (summary.keywords && summary.keywords.length > 0));
-  if (!hasSummary) return null;
-
   const abstract = summary?.abstract ?? "";
+  const hasSummary = !!summary && (Boolean(abstract) || (summary.keywords?.length ?? 0) > 0);
   const abstractPreview = useMemo(
     () => (abstract.length > previewChars ? abstract.slice(0, previewChars) + "…" : abstract),
     [abstract, previewChars],
   );
+  if (!hasSummary) return null;
 
   return (
     <>

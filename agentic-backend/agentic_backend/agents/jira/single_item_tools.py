@@ -1,6 +1,6 @@
 """Single-item add/remove tools for Jira agent."""
 
-from typing import cast
+import json
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -33,6 +33,11 @@ class SingleItemTools:
     def _get_langfuse_handler(self):
         """Get Langfuse handler from parent agent."""
         return self.agent._get_langfuse_handler()
+
+    def _build_llm_config(self) -> RunnableConfig:
+        """Build a RunnableConfig with Langfuse callback if enabled."""
+        handler = self._get_langfuse_handler()
+        return {"callbacks": [handler]} if handler else {}
 
     async def _expand_requirement(
         self,
@@ -76,15 +81,17 @@ Génère une description de l'exigence qui:
         model = get_default_chat_model().with_structured_output(
             QuickRequirement, method="json_schema"
         )
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-        result = cast(
-            QuickRequirement,
-            await model.ainvoke([SystemMessage(content=prompt)], config=config),
-        )
-        return result.model_dump()
+        try:
+            result = await model.ainvoke(
+                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            )
+            if not isinstance(result, QuickRequirement):
+                result = QuickRequirement.model_validate(result)
+            return result.model_dump()
+        except Exception as e:
+            raise RuntimeError(
+                f"Erreur lors de la génération de l'exigence: {e}"
+            ) from e
 
     async def _expand_user_story(
         self,
@@ -110,22 +117,24 @@ Génère:
 - Description au format "En tant que [persona], je veux [action], afin de [bénéfice]"
 - 2-4 critères d'acceptation avec étapes Gherkin (Étant donné/Quand/Alors)
 - Story points (Fibonacci: 1, 2, 3, 5, 8, 13, 21)
-- Priorité (High/Medium/Low)
+- Priorité (Haute/Moyenne/Basse)
 - 1 à 3 questions de clarification pour lever les ambiguïtés
 """
 
         model = get_default_chat_model().with_structured_output(
             QuickUserStory, method="json_schema"
         )
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-        result = cast(
-            QuickUserStory,
-            await model.ainvoke([SystemMessage(content=prompt)], config=config),
-        )
-        return result.model_dump()
+        try:
+            result = await model.ainvoke(
+                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            )
+            if not isinstance(result, QuickUserStory):
+                result = QuickUserStory.model_validate(result)
+            return result.model_dump()
+        except Exception as e:
+            raise RuntimeError(
+                f"Erreur lors de la génération de la User Story: {e}"
+            ) from e
 
     async def _expand_test(
         self,
@@ -168,15 +177,15 @@ Génère:
         model = get_default_chat_model().with_structured_output(
             QuickTest, method="json_schema"
         )
-        langfuse_handler = self._get_langfuse_handler()
-        config: RunnableConfig = (
-            {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-        )
-        result = cast(
-            QuickTest,
-            await model.ainvoke([SystemMessage(content=prompt)], config=config),
-        )
-        return result.model_dump()
+        try:
+            result = await model.ainvoke(
+                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            )
+            if not isinstance(result, QuickTest):
+                result = QuickTest.model_validate(result)
+            return result.model_dump()
+        except Exception as e:
+            raise RuntimeError(f"Erreur lors de la génération du test: {e}") from e
 
     def get_add_requirement_tool(self):
         """Tool to add a single requirement from a title."""
@@ -436,7 +445,7 @@ Génère:
                     item_type: [{"__remove__": item_id}],
                     "messages": [
                         ToolMessage(
-                            f"✓ {type_labels[item_type]} {item_id} supprimée",
+                            f"✓ {type_labels[item_type]} {item_id} supprimé(e)",
                             tool_call_id=runtime.tool_call_id,
                         )
                     ],
@@ -444,3 +453,730 @@ Génère:
             )
 
         return remove_item
+
+    def get_update_requirement_tool(self):
+        """Tool to update an existing requirement."""
+
+        @tool
+        async def update_requirement(
+            runtime: ToolRuntime,
+            item_id: str,
+            title: str | None = None,
+            description: str | None = None,
+            priority: str | None = None,
+            regenerate_description: bool = False,
+        ):
+            """
+            Met à jour une exigence existante.
+
+            Args:
+                item_id: ID de l'exigence à modifier (ex: "EX-FON-01")
+                title: Nouveau titre (optionnel)
+                description: Nouvelle description (optionnel)
+                priority: Nouvelle priorité - "Haute", "Moyenne", ou "Basse" (optionnel)
+                regenerate_description: Si True, régénère la description à partir du nouveau titre
+            """
+            # Validate item exists
+            requirements = runtime.state.get("requirements") or []
+            existing = None
+            for req in requirements:
+                if req.get("id") == item_id:
+                    existing = req
+                    break
+
+            if not existing:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"❌ Exigence {item_id} non trouvée.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Build update fields
+            update_fields = {}
+
+            if title is not None:
+                update_fields["title"] = title
+
+            if description is not None:
+                update_fields["description"] = description
+            elif regenerate_description and title is not None:
+                # Regenerate description using LLM
+                req_type = "fonctionnelle" if "FON" in item_id else "non-fonctionnelle"
+                expanded = await self._expand_requirement(title, req_type, existing)
+                update_fields["description"] = expanded["description"]
+
+            if priority is not None:
+                # Validate priority
+                valid_priorities = ["Haute", "Moyenne", "Basse"]
+                if priority not in valid_priorities:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["priority"] = priority
+
+            if not update_fields:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "⚠️ Aucun champ à mettre à jour fourni.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Validate with Pydantic (merge with existing to validate full object)
+            merged = {**existing, **update_fields}
+            try:
+                Requirement.model_validate(merged)
+            except Exception as e:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"❌ Erreur de validation: {e}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Return update command
+            return Command(
+                update={
+                    "requirements": [{"__update__": item_id, **update_fields}],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ Exigence {item_id} mise à jour.",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return update_requirement
+
+    def get_update_user_story_tool(self):
+        """Tool to update an existing user story."""
+
+        @tool
+        async def update_user_story(
+            runtime: ToolRuntime,
+            item_id: str,
+            summary: str | None = None,
+            description: str | None = None,
+            epic_name: str | None = None,
+            priority: str | None = None,
+            story_points: int | None = None,
+            labels: list[str] | None = None,
+            requirement_ids: list[str] | None = None,
+            dependencies: list[str] | None = None,
+            acceptance_criteria: list[dict] | None = None,
+            regenerate: bool = False,
+        ):
+            """
+            Met à jour une User Story existante.
+
+            Args:
+                item_id: ID de la User Story à modifier (ex: "US-01")
+                summary: Nouveau titre/résumé (optionnel)
+                description: Nouvelle description (optionnel)
+                epic_name: Nouveau nom d'Epic (optionnel)
+                priority: Nouvelle priorité - "Haute", "Moyenne", ou "Basse" (optionnel)
+                story_points: Nouveaux story points - Fibonacci: 1, 2, 3, 5, 8, 13, 21 (optionnel)
+                labels: Nouvelles étiquettes (optionnel)
+                requirement_ids: Nouveaux IDs d'exigences liées (optionnel)
+                dependencies: Nouvelles dépendances (IDs de User Stories) (optionnel)
+                acceptance_criteria: Nouveaux critères d'acceptation (optionnel)
+                regenerate: Si True, régénère description/critères à partir du nouveau résumé
+            """
+            # Validate item exists
+            user_stories = runtime.state.get("user_stories") or []
+            existing = None
+            for story in user_stories:
+                if story.get("id") == item_id:
+                    existing = story
+                    break
+
+            if not existing:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"❌ User Story {item_id} non trouvée.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Build update fields
+            update_fields = {}
+
+            if summary is not None:
+                update_fields["summary"] = summary
+
+            if description is not None:
+                update_fields["description"] = description
+            elif regenerate and summary is not None:
+                # Regenerate using LLM
+                epic = epic_name or existing.get("epic_name", "Backlog")
+                req_ids = (
+                    requirement_ids
+                    if requirement_ids is not None
+                    else existing.get("requirement_ids")
+                )
+                expanded = await self._expand_user_story(summary, epic, req_ids, None)
+                update_fields["description"] = expanded["description"]
+                if "acceptance_criteria" in expanded:
+                    update_fields["acceptance_criteria"] = expanded[
+                        "acceptance_criteria"
+                    ]
+
+            if epic_name is not None:
+                update_fields["epic_name"] = epic_name
+
+            if priority is not None:
+                valid_priorities = ["Haute", "Moyenne", "Basse"]
+                if priority not in valid_priorities:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["priority"] = priority
+
+            if story_points is not None:
+                if story_points < 1 or story_points > 21:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ Story points invalides: {story_points}. Doit être entre 1 et 21.",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["story_points"] = story_points
+
+            if labels is not None:
+                update_fields["labels"] = labels
+
+            if requirement_ids is not None:
+                # Validate requirement IDs exist
+                requirements = runtime.state.get("requirements") or []
+                existing_req_ids = {r.get("id") for r in requirements}
+                invalid_ids = [
+                    rid for rid in requirement_ids if rid not in existing_req_ids
+                ]
+                if invalid_ids:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ Exigences non trouvées: {', '.join(invalid_ids)}",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["requirement_ids"] = requirement_ids
+
+            if dependencies is not None:
+                # Validate dependencies exist
+                existing_story_ids = {s.get("id") for s in user_stories}
+                invalid_deps = [d for d in dependencies if d not in existing_story_ids]
+                if invalid_deps:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ User Stories non trouvées: {', '.join(invalid_deps)}",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                # Check for self-reference
+                if item_id in dependencies:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    "❌ Dépendance circulaire: une User Story ne peut pas dépendre d'elle-même.",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["dependencies"] = dependencies
+
+            if acceptance_criteria is not None:
+                update_fields["acceptance_criteria"] = acceptance_criteria
+
+            if not update_fields:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "⚠️ Aucun champ à mettre à jour fourni.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Validate with Pydantic
+            merged = {**existing, **update_fields}
+            try:
+                UserStory.model_validate(merged)
+            except Exception as e:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"❌ Erreur de validation: {e}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Return update command
+            return Command(
+                update={
+                    "user_stories": [{"__update__": item_id, **update_fields}],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ User Story {item_id} mise à jour.",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return update_user_story
+
+    def get_update_test_tool(self):
+        """Tool to update an existing test."""
+
+        @tool
+        async def update_test(
+            runtime: ToolRuntime,
+            item_id: str,
+            name: str | None = None,
+            user_story_id: str | None = None,
+            description: str | None = None,
+            preconditions: str | None = None,
+            steps: list[str] | None = None,
+            test_data: list[str] | None = None,
+            priority: str | None = None,
+            test_type: str | None = None,
+            expected_result: str | None = None,
+            regenerate: bool = False,
+        ):
+            """
+            Met à jour un test existant.
+
+            Args:
+                item_id: ID du test à modifier (ex: "SC-01")
+                name: Nouveau nom/titre (optionnel)
+                user_story_id: Nouveau ID de User Story liée (optionnel)
+                description: Nouvelle description (optionnel)
+                preconditions: Nouvelles préconditions (optionnel)
+                steps: Nouvelles étapes Gherkin (optionnel)
+                test_data: Nouvelles données de test (optionnel)
+                priority: Nouvelle priorité - "Haute", "Moyenne", ou "Basse" (optionnel)
+                test_type: Nouveau type - "Nominal", "Limite", ou "Erreur" (optionnel)
+                expected_result: Nouveau résultat attendu (optionnel)
+                regenerate: Si True, régénère le test à partir du nouveau nom
+            """
+            # Validate item exists
+            tests = runtime.state.get("tests") or []
+            existing = None
+            for test in tests:
+                if test.get("id") == item_id:
+                    existing = test
+                    break
+
+            if not existing:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"❌ Test {item_id} non trouvé.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Build update fields
+            update_fields = {}
+
+            if name is not None:
+                update_fields["name"] = name
+
+            if user_story_id is not None:
+                # Validate user story exists
+                user_stories = runtime.state.get("user_stories") or []
+                story_context = None
+                for story in user_stories:
+                    if story.get("id") == user_story_id:
+                        story_context = story
+                        break
+
+                if not story_context:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ User Story {user_story_id} non trouvée.",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["user_story_id"] = user_story_id
+
+            if description is not None:
+                update_fields["description"] = description
+            elif regenerate and name is not None:
+                # Regenerate using LLM
+                us_id = user_story_id or existing.get("user_story_id")
+                ttype = test_type or existing.get("test_type", "Nominal")
+                user_stories = runtime.state.get("user_stories") or []
+                story_context = None
+                for story in user_stories:
+                    if story.get("id") == us_id:
+                        story_context = story
+                        break
+                expanded = await self._expand_test(name, us_id, ttype, story_context)
+                update_fields["description"] = expanded.get("description")
+                if "steps" in expanded:
+                    update_fields["steps"] = expanded["steps"]
+                if "expected_result" in expanded:
+                    update_fields["expected_result"] = expanded["expected_result"]
+
+            if preconditions is not None:
+                update_fields["preconditions"] = preconditions
+
+            if steps is not None:
+                update_fields["steps"] = steps
+
+            if test_data is not None:
+                update_fields["test_data"] = test_data
+
+            if priority is not None:
+                valid_priorities = ["Haute", "Moyenne", "Basse"]
+                if priority not in valid_priorities:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["priority"] = priority
+
+            if test_type is not None:
+                valid_types = ["Nominal", "Limite", "Erreur"]
+                if test_type not in valid_types:
+                    return Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    f"❌ Type de test invalide: {test_type}. Valeurs acceptées: {', '.join(valid_types)}",
+                                    tool_call_id=runtime.tool_call_id,
+                                )
+                            ]
+                        }
+                    )
+                update_fields["test_type"] = test_type
+
+            if expected_result is not None:
+                update_fields["expected_result"] = expected_result
+
+            if not update_fields:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "⚠️ Aucun champ à mettre à jour fourni.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Validate with Pydantic
+            merged = {**existing, **update_fields}
+            try:
+                Test.model_validate(merged)
+            except Exception as e:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"❌ Erreur de validation: {e}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            # Return update command
+            return Command(
+                update={
+                    "tests": [{"__update__": item_id, **update_fields}],
+                    "messages": [
+                        ToolMessage(
+                            f"✓ Test {item_id} mis à jour.",
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ],
+                }
+            )
+
+        return update_test
+
+    def get_read_requirements_tool(self):
+        """Tool to read/inspect requirements."""
+
+        @tool
+        async def get_requirements(
+            runtime: ToolRuntime,
+            ids: str | list[str],
+        ):
+            """
+            Récupère une ou plusieurs exigences pour consultation.
+
+            Args:
+                ids: Liste d'IDs (ex: ["EX-FON-01", "EX-FON-02"]) ou "all" pour toutes les exigences
+            """
+            requirements = runtime.state.get("requirements") or []
+
+            if not requirements:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "ℹ️ Aucune exigence n'existe encore.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if ids == "all":
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"📋 {len(requirements)} exigence(s):\n\n{json.dumps(requirements, indent=2, ensure_ascii=False)}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if not isinstance(ids, list):
+                ids = [ids]
+
+            found = []
+            missing = []
+            for item_id in ids:
+                item = next((r for r in requirements if r.get("id") == item_id), None)
+                if item:
+                    found.append(item)
+                else:
+                    missing.append(item_id)
+
+            message_parts = []
+            if found:
+                message_parts.append(
+                    f"✓ {len(found)} exigence(s) trouvée(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
+                )
+            if missing:
+                message_parts.append(f"⚠️ Non trouvée(s): {', '.join(missing)}")
+
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            "\n\n".join(message_parts),
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        return get_requirements
+
+    def get_read_user_stories_tool(self):
+        """Tool to read/inspect user stories."""
+
+        @tool
+        async def get_user_stories(
+            runtime: ToolRuntime,
+            ids: str | list[str],
+        ):
+            """
+            Récupère une ou plusieurs User Stories pour consultation.
+
+            Args:
+                ids: Liste d'IDs (ex: ["US-01", "US-02"]) ou "all" pour toutes les User Stories
+            """
+            user_stories = runtime.state.get("user_stories") or []
+
+            if not user_stories:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "ℹ️ Aucune User Story n'existe encore.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if ids == "all":
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"📋 {len(user_stories)} User Stor(y/ies):\n\n{json.dumps(user_stories, indent=2, ensure_ascii=False)}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if not isinstance(ids, list):
+                ids = [ids]
+
+            found = []
+            missing = []
+            for item_id in ids:
+                item = next((s for s in user_stories if s.get("id") == item_id), None)
+                if item:
+                    found.append(item)
+                else:
+                    missing.append(item_id)
+
+            message_parts = []
+            if found:
+                message_parts.append(
+                    f"✓ {len(found)} User Stor(y/ies) trouvée(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
+                )
+            if missing:
+                message_parts.append(f"⚠️ Non trouvée(s): {', '.join(missing)}")
+
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            "\n\n".join(message_parts),
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        return get_user_stories
+
+    def get_read_tests_tool(self):
+        """Tool to read/inspect tests."""
+
+        @tool
+        async def get_tests(
+            runtime: ToolRuntime,
+            ids: str | list[str],
+        ):
+            """
+            Récupère un ou plusieurs tests pour consultation.
+
+            Args:
+                ids: Liste d'IDs (ex: ["SC-01", "SC-02"]) ou "all" pour tous les tests
+            """
+            tests = runtime.state.get("tests") or []
+
+            if not tests:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                "ℹ️ Aucun test n'existe encore.",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if ids == "all":
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"📋 {len(tests)} test(s):\n\n{json.dumps(tests, indent=2, ensure_ascii=False)}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            if not isinstance(ids, list):
+                ids = [ids]
+
+            found = []
+            missing = []
+            for item_id in ids:
+                item = next((t for t in tests if t.get("id") == item_id), None)
+                if item:
+                    found.append(item)
+                else:
+                    missing.append(item_id)
+
+            message_parts = []
+            if found:
+                message_parts.append(
+                    f"✓ {len(found)} test(s) trouvé(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
+                )
+            if missing:
+                message_parts.append(f"⚠️ Non trouvé(s): {', '.join(missing)}")
+
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            "\n\n".join(message_parts),
+                            tool_call_id=runtime.tool_call_id,
+                        )
+                    ]
+                }
+            )
+
+        return get_tests

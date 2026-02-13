@@ -55,6 +55,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcessWithoutUser,
     ProcessDocumentsProgressResponse,
 )
+from knowledge_flow_backend.features.scheduler.workflow_status import is_terminal_failure_status
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,55 @@ class IngestionController:
             return "memory"
         return ApplicationContext.get_instance().get_scheduler_backend()
 
+    @staticmethod
+    def _format_exception_message(exc: Exception) -> str:
+        return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
+
+    @staticmethod
+    def _format_parent_workflow_failure(status: Optional[str], detailed_error: Optional[str]) -> str:
+        if detailed_error and detailed_error.strip():
+            return detailed_error.strip()
+        status_text = status or "UNKNOWN"
+        return f"Parent workflow failed ({status_text})"
+
+    @staticmethod
+    def _progress_event(
+        *,
+        step: str,
+        status: Status,
+        filename: str,
+        document_uid: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> str:
+        return (
+            ProcessingProgress(
+                step=step,
+                status=status,
+                filename=filename,
+                document_uid=document_uid,
+                error=error,
+            ).model_dump_json()
+            + "\n"
+        )
+
+    @staticmethod
+    def _iter_pending_document_errors(
+        *,
+        filename_by_uid: dict[str, str],
+        finished_uids: set[str],
+        error_text: str,
+    ):
+        for document_uid, filename in filename_by_uid.items():
+            if document_uid in finished_uids:
+                continue
+            yield IngestionController._progress_event(
+                step=STEP_PROCESSING,
+                status=Status.FAILED,
+                filename=filename,
+                document_uid=document_uid,
+                error=error_text,
+            )
+
     async def _store_fast_vectors(self, *, document_uid: str, docs: list[Document]) -> tuple[str, int]:
         payload = {"documents": [{"page_content": d.page_content, "metadata": d.metadata} for d in docs]}
         if self.scheduler_task_service is None:
@@ -402,18 +452,10 @@ class IngestionController:
                     scheduled_candidates.append((filename, metadata.document_uid, file_type))
                     file_status = "queued"
             except Exception as e:
-                error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
-                yield (
-                    ProcessingProgress(
-                        step=current_step,
-                        status=Status.ERROR,
-                        filename=filename,
-                        error=error_message,
-                    ).model_dump_json()
-                    + "\n"
-                )
+                yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
             finally:
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
                 kpi.emit(
@@ -438,11 +480,17 @@ class IngestionController:
                     )
                     for filename, document_uid, _ in scheduled_candidates
                 ]
+                scheduler_background_tasks = background_tasks
+                # For streaming responses, FastAPI BackgroundTasks run only after
+                # the stream completes; this would prevent live progress updates
+                # with the in-memory scheduler.
+                if self._scheduler_backend() == "memory":
+                    scheduler_background_tasks = None
                 _, handle = await scheduler_task_service.submit_documents(
                     user=user,
                     pipeline_name="upload_ui_async",
                     files=files_to_schedule,
-                    background_tasks=background_tasks,
+                    background_tasks=scheduler_background_tasks,
                 )
                 workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
@@ -473,25 +521,36 @@ class IngestionController:
 
                 filename_by_uid = {document_uid: filename for filename, document_uid, _ in scheduled_candidates}
                 finished_uids: set[str] = set()
-                had_failure: set[str] = set()
                 started_at = time.monotonic()
 
                 while True:
+                    workflow_status = await scheduler_task_service.get_workflow_status(workflow_id=workflow_id)
+                    if is_terminal_failure_status(workflow_status):
+                        detailed_error = await scheduler_task_service.get_workflow_last_error(workflow_id=workflow_id)
+                        if not detailed_error:
+                            # Give task-store status persistence a short grace period.
+                            await asyncio.sleep(0.2)
+                            detailed_error = await scheduler_task_service.get_workflow_last_error(workflow_id=workflow_id)
+                        error_text = self._format_parent_workflow_failure(workflow_status, detailed_error)
+                        last_error = error_text
+                        for event in self._iter_pending_document_errors(
+                            filename_by_uid=filename_by_uid,
+                            finished_uids=finished_uids,
+                            error_text=error_text,
+                        ):
+                            yield event
+                        break
+
                     elapsed_ms = (time.monotonic() - started_at) * 1000.0
                     if elapsed_ms >= SCHEDULER_PROGRESS_POLL_TIMEOUT_MS:
-                        for document_uid, filename in filename_by_uid.items():
-                            if document_uid in finished_uids:
-                                continue
-                            yield (
-                                ProcessingProgress(
-                                    step=STEP_PROCESSING,
-                                    status=Status.ERROR,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                    error="Timed out waiting for processing",
-                                ).model_dump_json()
-                                + "\n"
-                            )
+                        timeout_error = "Timed out waiting for processing"
+                        last_error = timeout_error
+                        for event in self._iter_pending_document_errors(
+                            filename_by_uid=filename_by_uid,
+                            finished_uids=finished_uids,
+                            error_text=timeout_error,
+                        ):
+                            yield event
                         break
 
                     progress = await self.service.get_processing_progress(
@@ -510,53 +569,36 @@ class IngestionController:
                             continue
 
                         if doc.fully_processed:
-                            message = "Completed after retry" if document_uid in had_failure else None
-                            yield (
-                                ProcessingProgress(
-                                    step=STEP_PROCESSING,
-                                    status=Status.SUCCESS,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                    error=message,
-                                ).model_dump_json()
-                                + "\n"
+                            yield self._progress_event(
+                                step=STEP_PROCESSING,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=document_uid,
                             )
-                            yield (
-                                ProcessingProgress(
-                                    step=STEP_FINISHED,
-                                    status=Status.FINISHED,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                ).model_dump_json()
-                                + "\n"
+                            yield self._progress_event(
+                                step=STEP_FINISHED,
+                                status=Status.FINISHED,
+                                filename=filename,
+                                document_uid=document_uid,
                             )
                             finished_uids.add(document_uid)
                             continue
 
                         if doc.has_failed:
-                            had_failure.add(document_uid)
-                            yield (
-                                ProcessingProgress(
-                                    step=STEP_PROCESSING,
-                                    status=Status.ERROR,
-                                    filename=filename,
-                                    document_uid=document_uid,
-                                    error="Processing failed",
-                                ).model_dump_json()
-                                + "\n"
-                            )
-                            continue
-
-                        retry_message = "Retrying after failure" if document_uid in had_failure else None
-                        yield (
-                            ProcessingProgress(
+                            # Keep UI in-progress while parent workflow is running.
+                            yield self._progress_event(
                                 step=STEP_PROCESSING,
                                 status=Status.IN_PROGRESS,
                                 filename=filename,
                                 document_uid=document_uid,
-                                error=retry_message,
-                            ).model_dump_json()
-                            + "\n"
+                            )
+                            continue
+
+                        yield self._progress_event(
+                            step=STEP_PROCESSING,
+                            status=Status.IN_PROGRESS,
+                            filename=filename,
+                            document_uid=document_uid,
                         )
 
                     if len(finished_uids) >= len(filename_by_uid):
@@ -566,14 +608,14 @@ class IngestionController:
 
                 success += len(finished_uids)
             except Exception as e:
-                error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
+                error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
                 for filename, _, _ in scheduled_candidates:
-                    yield ProcessingProgress(step=current_step, status=Status.ERROR, error=error_message, filename=filename).model_dump_json() + "\n"
+                    yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
 
         timer_dims["status"] = "ok" if success == total else "error"
-        overall_status = Status.SUCCESS if success == total else Status.ERROR
+        overall_status = Status.SUCCESS if success == total else Status.FAILED
         done_payload: dict = {"step": "done", "status": overall_status}
         if last_error:
             done_payload["error"] = last_error
@@ -587,11 +629,13 @@ class IngestionController:
         self.embedder = ApplicationContext.get_instance().get_embedder()
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
+        max_parallelism = ApplicationContext.get_instance().get_config().app.max_ingestion_workers
         self.scheduler_task_service: IngestionTaskService | None = None
         if scheduler_cfg.enabled:
             self.scheduler_task_service = IngestionTaskService(
                 scheduler_config=scheduler_cfg,
                 metadata_service=self.service.metadata_service,
+                max_parallelism=max_parallelism,
             )
         logger.info("IngestionController initialized.")
 
@@ -835,7 +879,7 @@ class IngestionController:
                 for filename, input_temp_file in preloaded_files:
                     current_step = STEP_UPLOAD_PREPARATION
                     try:
-                        yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                        yield self._progress_event(step=current_step, status=Status.IN_PROGRESS, filename=filename)
                         metadata = await self.service.extract_metadata(
                             user,
                             file_path=input_temp_file,
@@ -845,40 +889,31 @@ class IngestionController:
                         output_temp_dir = input_temp_file.parent.parent
                         self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                         await self.service.save_metadata(user, metadata=metadata)
-                        yield (
-                            ProcessingProgress(
-                                step=current_step,
-                                status=Status.SUCCESS,
-                                filename=filename,
-                                document_uid=metadata.document_uid,
-                            ).model_dump_json()
-                            + "\n"
+                        yield self._progress_event(
+                            step=current_step,
+                            status=Status.SUCCESS,
+                            filename=filename,
+                            document_uid=metadata.document_uid,
                         )
-                        yield (
-                            ProcessingProgress(
-                                step=STEP_FINISHED,
-                                status=Status.FINISHED,
-                                filename=filename,
-                                document_uid=metadata.document_uid,
-                            ).model_dump_json()
-                            + "\n"
+                        yield self._progress_event(
+                            step=STEP_FINISHED,
+                            status=Status.FINISHED,
+                            filename=filename,
+                            document_uid=metadata.document_uid,
                         )
 
                         success += 1
 
                     except Exception as e:
-                        error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
-                        yield (
-                            ProcessingProgress(
-                                step=current_step,
-                                status=Status.ERROR,
-                                filename=filename,
-                                error=error_message,
-                            ).model_dump_json()
-                            + "\n"
+                        error_message = self._format_exception_message(e)
+                        yield self._progress_event(
+                            step=current_step,
+                            status=Status.FAILED,
+                            filename=filename,
+                            error=error_message,
                         )
 
-                overall_status = Status.SUCCESS if success == total else Status.ERROR
+                overall_status = Status.SUCCESS if success == total else Status.FAILED
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"
 
             return StreamingResponse(event_stream(), media_type="application/x-ndjson")

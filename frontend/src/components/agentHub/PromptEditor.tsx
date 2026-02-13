@@ -31,7 +31,7 @@ type Props = {
 };
 
 export function PromptEditor({ label, value, defaultValue = "", onChange, tokens = [] }: Props) {
-  const [tab, setTab] = useState<"edit" | "preview">("preview");
+  const [tab, setTab] = useState<"edit" | "preview">("edit");
   const theme = useTheme();
 
   // keep a ref to monaco editor instance (optional, when Monaco is present)

@@ -50,6 +50,7 @@ from knowledge_flow_backend.features.scheduler.workflow import (
     LoadPushFile,
     OutputProcess,
     Process,
+    ProcessFile,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ async def run_worker(config: TemporalSchedulerConfig):
         task_queue=config.task_queue,
         workflows=[
             Process,
+            ProcessFile,
             CreatePullFileMetadata,
             GetPushFileMetadata,
             LoadPullFile,

@@ -40,6 +40,7 @@ class Status(str, Enum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     IGNORED = "ignored"
+    FAILED = "failed"
     ERROR = "error"
     FINISHED = "finished"
 

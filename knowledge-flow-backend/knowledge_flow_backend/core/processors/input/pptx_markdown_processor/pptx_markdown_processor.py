@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pptx import Presentation
 
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
         """Converts each slide's text content into Markdown."""
-
+        output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
 
         try:
@@ -63,19 +63,13 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                     slide_texts.append("### Slide\n" + "\n\n".join(slide_md))
 
             content = "\n\n---\n\n".join(slide_texts) if slide_texts else "*No extractable text*"
-            md_path.write_text(content)
+            md_path.write_text(content, encoding="utf-8")
             return {
                 "doc_dir": str(output_dir),
                 "md_file": str(md_path),
-                "status": "success",
                 "message": "PPTX slides converted to Markdown.",
             }
 
-        except Exception as e:
-            logger.error(f"Failed to convert PPTX to Markdown: {e}")
-            return {
-                "doc_dir": str(output_dir),
-                "md_file": None,
-                "status": "error",
-                "message": str(e),
-            }
+        except Exception as exc:
+            logger.exception("Failed to convert PPTX to Markdown: %s", file_path)
+            raise InputConversionError(f"PptxMarkdownProcessor failed for '{file_path.name}': {exc}") from exc

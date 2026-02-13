@@ -24,7 +24,7 @@ import numpy as np
 from docx import Document
 from PIL import Image
 
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 
 logger = logging.getLogger(__name__)
 
@@ -93,19 +93,26 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         images_dir = output_dir
         extra_args = [f"--extract-media={images_dir}", "--preserve-tabs", "--wrap=none", "--reference-links"]
 
-        subprocess.run(
-            [
-                "pandoc",
-                "--to",
-                "markdown",
-                "--to",
-                "markdown_strict",
-                str(file_path),
-                "-o",
-                str(md_path),
-                *extra_args,
-            ],
-        )
+        try:
+            subprocess.run(
+                [
+                    "pandoc",
+                    "--to",
+                    "markdown_strict",
+                    str(file_path),
+                    "-o",
+                    str(md_path),
+                    *extra_args,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            detail = stderr or stdout or str(exc)
+            raise InputConversionError(f"Pandoc DOCX conversion failed for '{file_path.name}': {detail}") from exc
 
         # pypandoc.convert_file(str(file_path), to="markdown_strict+pipe_tables", outputfile=str(md_path), extra_args=extra_args)
 
