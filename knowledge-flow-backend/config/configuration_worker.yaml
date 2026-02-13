@@ -31,8 +31,21 @@ scheduler:
     host: "localhost:7233"
     namespace: "default"
     task_queue: "ingestion"
+    workflow_task_queue: "ingestion-workflow"
+    io_task_queue: "ingestion-io"
+    cpu_task_queue: "ingestion-cpu"
+    worker_role: "all"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    activity_executor_max_workers: 16
+    workflow_task_executor_max_workers: 8
+    max_cached_workflows: 1000
+    max_concurrent_workflow_tasks: 32
+    max_concurrent_activities: 64
+    max_concurrent_workflow_task_polls: 5
+    max_concurrent_activity_task_polls: 5
+    graceful_shutdown_timeout_seconds: 15
+    queue_stats_log_interval_seconds: 0.0
 
 # -----------------------------------------------------------------------------
 # INPUT PROCESSORS

@@ -91,6 +91,9 @@ class IngestionTaskService:
             name=pipeline_name,
             files=[FileToProcess.from_file_to_process_without_user(f, user) for f in files],
             max_parallelism=self._max_parallelism,
+            workflow_task_queue=self._scheduler_config.temporal.get_workflow_task_queue() if self._scheduler_config.backend.lower() == "temporal" else None,
+            io_task_queue=self._scheduler_config.temporal.get_io_task_queue() if self._scheduler_config.backend.lower() == "temporal" else None,
+            cpu_task_queue=self._scheduler_config.temporal.get_cpu_task_queue() if self._scheduler_config.backend.lower() == "temporal" else None,
         )
         handle = await self._scheduler.start_document_processing(
             user=user,

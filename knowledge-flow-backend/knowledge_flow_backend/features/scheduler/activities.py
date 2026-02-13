@@ -16,6 +16,7 @@ import asyncio
 import logging
 import pathlib
 import tempfile
+import time
 
 from fred_core import KeycloakUser
 from temporalio import activity, exceptions
@@ -24,6 +25,25 @@ from knowledge_flow_backend.common.document_structures import DocumentMetadata, 
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
+
+
+def _activity_log(stage: str, message: str, **fields: object) -> None:
+    try:
+        info = activity.info()
+        payload = {
+            "stage": stage,
+            "workflow_id": info.workflow_id,
+            "run_id": info.workflow_run_id,
+            "task_queue": info.task_queue,
+            "attempt": info.attempt,
+        }
+    except Exception:  # noqa: BLE001
+        payload = {
+            "stage": stage,
+        }
+    payload.update(fields)
+    attrs = " ".join(f"{key}={value}" for key, value in payload.items() if value is not None)
+    logger.info("[SCHEDULER][ACTIVITY] %s | %s", message, attrs)
 
 
 def prepare_working_dir(document_uid: str) -> pathlib.Path:
@@ -38,8 +58,7 @@ def prepare_working_dir(document_uid: str) -> pathlib.Path:
 async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     assert file.external_path, "Pull files must have an external path"
     assert file.source_tag, "Pull files must have a source tag"
-    logger = activity.logger
-    logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Starting file={file}")
+    _activity_log("create_pull_file_metadata", "Starting", file=file)
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     ingestion_service = IngestionService()
@@ -52,47 +71,45 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     # Step 2: Fetch local file path from loader (downloads if needed)
     with tempfile.TemporaryDirectory() as tmpdir:
         destination = pathlib.Path(tmpdir)
-        full_path = loader.fetch_by_relative_path(file.external_path, destination)
+        full_path = await asyncio.to_thread(loader.fetch_by_relative_path, file.external_path, destination)
 
         if not full_path.exists() or not full_path.is_file():
             raise FileNotFoundError(f"Pull file not found after fetch: {full_path}")
 
-        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Fetched file path={full_path}")
+        _activity_log("create_pull_file_metadata", "Fetched pull file", full_path=full_path)
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
         metadata = await ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
         metadata.source.pull_location = file.external_path
-        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
+        _activity_log("create_pull_file_metadata", "Metadata extracted", document_uid=metadata.document_uid)
 
         await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
-        logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Metadata extracted and saved uid={metadata.document_uid}")
+        _activity_log("create_pull_file_metadata", "Completed", document_uid=metadata.document_uid)
         return metadata
 
 
 @activity.defn
 async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
-    logger = activity.logger
-    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Starting file={file}")
+    _activity_log("get_push_file_metadata", "Starting", file=file)
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
     ingestion_service = IngestionService()
-    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
+    _activity_log("get_push_file_metadata", "Looking up metadata", document_uid=file.document_uid)
     assert file.document_uid, "Push files must have a document UID"
     metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
     if metadata is None:
-        logger.error(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid={file.document_uid}")
+        activity.logger.error("[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid=%s", file.document_uid)
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
-    logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata found for push file skipping extraction uid={file.document_uid}")
+    _activity_log("get_push_file_metadata", "Completed", document_uid=file.document_uid)
     return metadata
 
 
 @activity.defn
-async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
-    logger = activity.logger
-    logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PUSH_FILE] Loading file uid={metadata.document_uid}")
+def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
+    _activity_log("load_push_file", "Starting", document_uid=metadata.document_uid)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
@@ -104,16 +121,16 @@ async def load_push_file(file: FileToProcess, metadata: DocumentMetadata) -> str
     output_dir.mkdir(exist_ok=True)
 
     # 🗂️ Download input file
-    await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
+    ingestion_service.get_local_copy(file.processed_by, metadata, working_dir)
     input_file = next(input_dir.glob("*"))
+    _activity_log("load_push_file", "Completed", document_uid=metadata.document_uid, input_file=input_file)
     # Temporal payloads must be JSON-serializable.
     return str(input_file)
 
 
 @activity.defn
-async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
-    logger = activity.logger
-    logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] Fetching file uid={metadata.document_uid}")
+def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> str:
+    _activity_log("load_pull_file", "Starting", document_uid=metadata.document_uid)
 
     assert metadata.source_tag, "Missing source_tag in metadata"
     assert metadata.pull_location, "Missing pull_location in metadata"
@@ -127,12 +144,12 @@ async def load_pull_file(file: FileToProcess, metadata: DocumentMetadata) -> str
     from knowledge_flow_backend.application_context import ApplicationContext
 
     loader = ApplicationContext.get_instance().get_content_loader(metadata.source_tag)
-    full_path = await asyncio.to_thread(loader.fetch_by_relative_path, metadata.pull_location, input_dir)
+    full_path = loader.fetch_by_relative_path(metadata.pull_location, input_dir)
 
     if not full_path.exists() or not full_path.is_file():
         raise FileNotFoundError(f"File not found after fetch: {full_path}")
 
-    logger.info(f"[SCHEDULER][ACTIVITY][LOAD_PULL_FILE] File copied to working dir: path={full_path}")
+    _activity_log("load_pull_file", "Completed", document_uid=metadata.document_uid, full_path=full_path)
     # Temporal payloads must be JSON-serializable.
     return str(full_path)
 
@@ -144,8 +161,8 @@ async def input_process(user: KeycloakUser, input_file: str, metadata: DocumentM
     This method generates the output files (preview, markdown, CSV) and
     invokes the ingestion service to save all that to the content store.
     """
-    logger = activity.logger
-    logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] Starting uid={metadata.document_uid}")
+    start = time.perf_counter()
+    _activity_log("input_process", "Starting", document_uid=metadata.document_uid, input_file=input_file)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
@@ -159,28 +176,31 @@ async def input_process(user: KeycloakUser, input_file: str, metadata: DocumentM
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
         await ingestion_service.save_metadata(user, metadata=metadata)
+        activity.heartbeat({"stage": "metadata_saved", "document_uid": metadata.document_uid})
 
         # Process the file
         await asyncio.to_thread(ingestion_service.process_input, user, pathlib.Path(input_file), output_dir, metadata)
         await asyncio.to_thread(ingestion_service.save_output, user, metadata, output_dir)
+        activity.heartbeat({"stage": "output_saved", "document_uid": metadata.document_uid})
 
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.save_metadata(user, metadata=metadata)
 
-        logger.info(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] completed uid={metadata.document_uid}")
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        _activity_log("input_process", "Completed", document_uid=metadata.document_uid, duration_ms=duration_ms)
         return metadata
     except Exception as e:
         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         await ingestion_service.save_metadata(user, metadata=metadata)
-        logger.exception(f"[SCHEDULER][ACTIVITY][INPUT_PROCESS] failed uid={metadata.document_uid}", exc_info=True)
+        activity.logger.exception("[SCHEDULER][ACTIVITY][INPUT_PROCESS] failed uid=%s", metadata.document_uid, exc_info=True)
         raise
 
 
 @activity.defn
 async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
-    logger = activity.logger
-    logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
+    start = time.perf_counter()
+    _activity_log("output_process", "Starting", document_uid=metadata.document_uid)
 
     from knowledge_flow_backend.application_context import ApplicationContext
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
@@ -191,11 +211,19 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
 
     # ✅ For both push and pull, restore what was saved (input/output)
     await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
+    activity.heartbeat({"stage": "local_copy_restored", "document_uid": metadata.document_uid})
 
     output_stage: ProcessingStage | None = None
     try:
         # 📄 Locate preview file
-        preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
+        try:
+            preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
+        except FileNotFoundError as exc:
+            error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
+            metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
+            await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+            raise exceptions.ApplicationError(error_message, non_retryable=True) from exc
+
         if ApplicationContext.get_instance().is_tabular_file(preview_file.name):
             output_stage = ProcessingStage.SQL_INDEXED
         else:
@@ -221,18 +249,20 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
             output_dir,
             metadata,
         )
+        activity.heartbeat({"stage": "processed_output", "document_uid": metadata.document_uid})
 
         # Save the updated metadata
         await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
-        logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        _activity_log("output_process", "Completed", document_uid=metadata.document_uid, duration_ms=duration_ms)
         return metadata
     except Exception as e:
         error_message = f"{type(e).__name__}: {str(e).strip() or 'No error message'}"
         stage = output_stage or ProcessingStage.PREVIEW_READY
         metadata.mark_stage_error(stage, error_message)
         await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
-        logger.exception(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed uid={metadata.document_uid}", exc_info=True)
+        activity.logger.exception("[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed uid=%s", metadata.document_uid, exc_info=True)
         raise
 
 

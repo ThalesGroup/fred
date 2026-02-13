@@ -15,7 +15,7 @@
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
@@ -30,6 +30,14 @@ const isSummaryDone = (summary: ProcessDocumentsProgressResponse) => {
   if (summary.total_documents <= 0) return false;
   const completed = summary.documents_fully_processed + summary.documents_failed + summary.documents_missing;
   return completed >= summary.total_documents;
+};
+
+const PROGRESS_STATUS_RANK: Record<string, number> = {
+  in_progress: 1,
+  success: 2,
+  failed: 3,
+  finished: 4,
+  ignored: 4,
 };
 
 interface DocumentUploadDrawerProps {
@@ -60,10 +68,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [totalFilesCount, setTotalFilesCount] = useState(0);
-
-  const stepDelayMs = 180;
-  const displayIndexRef = useRef(0);
-  const stepKeysRef = useRef<Set<string>>(new Set());
 
   const totalUploads = useMemo(() => {
     if (totalFilesCount) return totalFilesCount;
@@ -163,8 +167,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setIsLoading(false);
     setShowProgressModal(false);
     setTotalFilesCount(0);
-    displayIndexRef.current = 0;
-    stepKeysRef.current = new Set();
   };
 
   const handleClose = () => {
@@ -177,8 +179,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     setUploadProgressSteps([]);
     setProgressSummaryByFile({});
     setDocumentUidByFile({});
-    displayIndexRef.current = 0;
-    stepKeysRef.current = new Set();
     const filesCount = tempFiles.length;
     setTotalFilesCount(filesCount);
     setShowProgressModal(filesCount > 0);
@@ -203,37 +203,23 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
                   [stepFilename]: progress.document_uid as string,
                 }));
               }
-              const stepKey = `${stepFilename}::${step.step}`;
-              const isKnownStep = stepKeysRef.current.has(stepKey);
-              if (!isKnownStep) {
-                stepKeysRef.current.add(stepKey);
-              }
-              if (isKnownStep) {
-                setUploadProgressSteps((prev) => {
-                  const existingIndex = prev.findIndex((s) => s.step === step.step && s.filename === step.filename);
-                  if (existingIndex !== -1) {
-                    const updated = [...prev];
-                    updated[existingIndex] = step;
-                    return updated;
-                  }
-                  return prev;
-                });
-                return;
-              }
-
-              const delay = uploadMode === "process" ? 0 : Math.min(displayIndexRef.current * stepDelayMs, 500);
-              displayIndexRef.current += 1;
-              window.setTimeout(() => {
-                setUploadProgressSteps((prev) => {
-                  const existingIndex = prev.findIndex((s) => s.step === step.step && s.filename === step.filename);
-                  if (existingIndex !== -1) {
-                    const updated = [...prev];
-                    updated[existingIndex] = step;
-                    return updated;
-                  }
+              setUploadProgressSteps((prev) => {
+                const existingIndex = prev.findIndex((s) => s.step === step.step && s.filename === step.filename);
+                if (existingIndex === -1) {
                   return [...prev, step];
-                });
-              }, delay);
+                }
+
+                const current = prev[existingIndex];
+                const currentRank = PROGRESS_STATUS_RANK[current.status] ?? 0;
+                const nextRank = PROGRESS_STATUS_RANK[step.status] ?? 0;
+                if (nextRank < currentRank) {
+                  return prev;
+                }
+
+                const updated = [...prev];
+                updated[existingIndex] = step;
+                return updated;
+              });
             },
             metadata,
             (summaryUpdate: UploadProcessProgressSummary) => {

@@ -72,15 +72,22 @@ class TemporalScheduler(BaseScheduler):
         handle = self._register_workflow(user, definition)
 
         client: Client = await self._client_provider.get_client()
+        workflow_task_queue = definition.workflow_task_queue or self._scheduler_config.temporal.get_workflow_task_queue()
 
         workflow_handle = await client.start_workflow(
             Process.run,
             definition,
             id=handle.workflow_id,
-            task_queue=self._scheduler_config.temporal.task_queue,
+            task_queue=workflow_task_queue,
         )
 
-        logger.info("🛠️ started temporal workflow=%s", workflow_handle.id)
+        logger.info(
+            "🛠️ started temporal workflow=%s task_queue=%s io_task_queue=%s cpu_task_queue=%s",
+            workflow_handle.id,
+            workflow_task_queue,
+            definition.io_task_queue or self._scheduler_config.temporal.get_io_task_queue(),
+            definition.cpu_task_queue or self._scheduler_config.temporal.get_cpu_task_queue(),
+        )
 
         return WorkflowHandle(workflow_id=workflow_handle.id, run_id=workflow_handle.first_execution_run_id)
 
@@ -96,20 +103,22 @@ class TemporalScheduler(BaseScheduler):
 
     async def store_fast_vectors(self, payload: dict) -> dict:
         client: Client = await self._client_provider.get_client()
+        cpu_task_queue = self._scheduler_config.temporal.get_cpu_task_queue()
         return await client.execute_workflow(
             FastStoreVectors.run,
             payload,
             id=f"fast-ingest-{uuid4().hex}",
-            task_queue=self._scheduler_config.temporal.task_queue,
+            task_queue=cpu_task_queue,
         )
 
     async def delete_fast_vectors(self, payload: dict) -> dict:
         client: Client = await self._client_provider.get_client()
+        cpu_task_queue = self._scheduler_config.temporal.get_cpu_task_queue()
         return await client.execute_workflow(
             FastDeleteVectors.run,
             payload,
             id=f"fast-delete-{uuid4().hex}",
-            task_queue=self._scheduler_config.temporal.task_queue,
+            task_queue=cpu_task_queue,
         )
 
     async def get_workflow_execution_status(self, workflow_id: str) -> Optional[WorkflowExecutionStatus]:

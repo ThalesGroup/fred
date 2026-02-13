@@ -26,7 +26,7 @@ from fred_core import (
     SecurityConfiguration,
     StoreConfig,
 )
-from fred_core.common.structures import TemporalSchedulerConfig
+from fred_core.common.structures import TemporalSchedulerConfig as BaseTemporalSchedulerConfig
 from pydantic import BaseModel, Field, model_validator
 
 """
@@ -241,6 +241,85 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose agent filesystem utils endpoints and the corresponding MCP server.",
     )
+
+
+class TemporalSchedulerConfig(BaseTemporalSchedulerConfig):
+    """
+    Knowledge-flow specific Temporal runtime options.
+
+    Backward compatible with fred-core TemporalSchedulerConfig:
+    when queue overrides are not provided, `task_queue` remains the single source of truth.
+    """
+
+    workflow_task_queue: Optional[str] = Field(
+        default=None,
+        description="Queue for parent orchestration workflows (Process/ProcessFile). Defaults to task_queue.",
+    )
+    io_task_queue: Optional[str] = Field(
+        default=None,
+        description="Queue for metadata/load workflow steps. Defaults to workflow_task_queue/task_queue.",
+    )
+    cpu_task_queue: Optional[str] = Field(
+        default=None,
+        description="Queue for CPU-heavy processing steps (input/output/fast ingest). Defaults to workflow_task_queue/task_queue.",
+    )
+    worker_role: Literal["all", "orchestrator", "io", "cpu"] = Field(
+        default="all",
+        description="Worker role to run in this process.",
+    )
+    activity_executor_max_workers: Optional[int] = Field(
+        default=None,
+        description="Max workers for sync activities threadpool. None uses ThreadPoolExecutor default.",
+    )
+    workflow_task_executor_max_workers: Optional[int] = Field(
+        default=None,
+        description="Optional max workers for workflow task executor threadpool.",
+    )
+    max_cached_workflows: int = Field(
+        default=1000,
+        description="Temporal worker max cached workflows.",
+    )
+    max_concurrent_workflow_tasks: Optional[int] = Field(
+        default=None,
+        description="Temporal worker max concurrent workflow tasks.",
+    )
+    max_concurrent_activities: Optional[int] = Field(
+        default=None,
+        description="Temporal worker max concurrent activity tasks.",
+    )
+    max_concurrent_workflow_task_polls: Optional[int] = Field(
+        default=None,
+        description="Temporal worker max concurrent workflow task polls.",
+    )
+    max_concurrent_activity_task_polls: Optional[int] = Field(
+        default=None,
+        description="Temporal worker max concurrent activity task polls.",
+    )
+    max_activities_per_second: Optional[float] = Field(
+        default=None,
+        description="Rate limit activities per worker.",
+    )
+    max_task_queue_activities_per_second: Optional[float] = Field(
+        default=None,
+        description="Rate limit activities per task queue.",
+    )
+    graceful_shutdown_timeout_seconds: int = Field(
+        default=0,
+        description="Temporal worker graceful shutdown timeout in seconds.",
+    )
+    queue_stats_log_interval_seconds: float = Field(
+        default=0.0,
+        description="If > 0, periodically logs Temporal queue backlog/throughput stats every N seconds.",
+    )
+
+    def get_workflow_task_queue(self) -> str:
+        return self.workflow_task_queue or self.task_queue
+
+    def get_io_task_queue(self) -> str:
+        return self.io_task_queue or self.get_workflow_task_queue()
+
+    def get_cpu_task_queue(self) -> str:
+        return self.cpu_task_queue or self.get_workflow_task_queue()
 
 
 class SchedulerConfig(BaseModel):

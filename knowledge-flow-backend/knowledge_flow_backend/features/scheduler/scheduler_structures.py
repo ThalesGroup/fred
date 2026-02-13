@@ -151,6 +151,9 @@ class PipelineDefinition(BaseModel):
     name: str
     files: List[FileToProcess]
     max_parallelism: int = 1
+    workflow_task_queue: Optional[str] = None
+    io_task_queue: Optional[str] = None
+    cpu_task_queue: Optional[str] = None
 
 
 class ProcessDocumentsRequest(BaseModel):
