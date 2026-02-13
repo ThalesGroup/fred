@@ -57,6 +57,8 @@ async def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
         if isinstance(result, BaseException):
             if isinstance(result, KeycloakGetError) and result.response_code == 404:
                 logger.debug("User %s not found in Keycloak.", user_id)
+                # Returning unkown user so that it can be handled throug UI (like removed from a team)
+                summaries[user_id] = UserSummary(id=user_id)
                 continue
             raise result
 
