@@ -66,6 +66,8 @@ global:
       gregoire.mahon@thalesgroup.com
       samuel.cohen@thalesgroup.com
       felicity.dorleans@thalesgroup.com
+      luc.ballot@thalesgroup.com
+      gauthier.baron@thalesgroup.com
       antoine.amouyal@thalesgroup.com
       charlotte.gaia@thalesgroup.com
       nicolas.payneau@thalesgroup.com
@@ -162,7 +164,7 @@ global:
 applications:
   agentic-backend:
     replicaCount: 4
-    
+
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
@@ -428,19 +430,10 @@ applications:
         backend_url_knowledge: "https://prism-ui-prd.six.cloud.thales"
         websocket_url: "ws://prism-ui-prd.six.cloud.thales/fred/chatbot/query"
 
-    # Don't think that's needed (shouldn't be able to change VITE env variable after build)
-    # env:
-    #   - name: VITE_ALLOWED_HOSTS
-    #     value: "prism-knowledge-flow-backend.six"
-    #   - name: VITE_BACKEND_URL_KNOWLEDGE
-    #     value: "http://prism-knowledge-flow-backend-prd.six.cloud.thales"
-    #   - name: VITE_USE_AUTH
-    #     value: "true"
-
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   knowledge-flow-backend: &knowledgeFlowBackend
-    replicaCount: 1
+    replicaCount: 1 # todo: set back to 4 once MCP bug is resolved
 
     # Set Carma registry and PRISM tag
     image:
