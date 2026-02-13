@@ -47,7 +47,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from requests import HTTPError
-from sqlalchemy import text
 
 from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient

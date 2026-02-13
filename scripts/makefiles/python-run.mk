@@ -12,7 +12,7 @@ UVICORN_OPTIONS ?=
 
 .PHONY: run-local
 run-local: UVICORN_FACTORY ?= ${PY_PACKAGE}.main:create_app
-run-local: UVICORN_LOOP ?= asyncio
+run-local: UVICORN_LOOP ?= auto
 run-local: ## Run the app assuming dependencies already exist
 	$(UV) run uvicorn \
 		${UVICORN_FACTORY} \
@@ -26,7 +26,7 @@ run-local: ## Run the app assuming dependencies already exist
 
 .PHONY: run
 run: dev run-local ## run the app, installing dependencies if needed
-
+	
 .PHONY: run-prod
 run-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
 run-prod: run ## run the app with prod like configuration

@@ -264,8 +264,8 @@ storage:
 
   kpi_store:
     type: "log"
-    level: "INFO"
+    level: "DEBUG"
 
   log_store:
     type: "stdout"
-    level: "INFO"
+    level: "DEBUG"
