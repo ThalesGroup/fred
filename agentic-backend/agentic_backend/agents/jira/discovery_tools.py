@@ -32,12 +32,22 @@ MAX_UNIQUE_CHUNKS = 30
 class ProjectDiscovery(BaseModel):
     """Structured summary produced by the discovery LLM call."""
 
-    project_name: str = Field(description="Nom du projet tel que mentionné dans les documents")
-    domain: str = Field(description="Domaine métier du projet (ex: santé, transport, finance, défense…)")
+    project_name: str = Field(
+        description="Nom du projet tel que mentionné dans les documents"
+    )
+    domain: str = Field(
+        description="Domaine métier du projet (ex: santé, transport, finance, défense…)"
+    )
     summary: str = Field(description="Résumé du projet en 2-3 phrases")
-    key_features: list[str] = Field(description="Principales fonctionnalités ou modules identifiés")
-    actors: list[str] = Field(description="Acteurs, utilisateurs ou personas mentionnés")
-    key_vocabulary: list[str] = Field(description="Termes métier importants trouvés dans les documents")
+    key_features: list[str] = Field(
+        description="Principales fonctionnalités ou modules identifiés"
+    )
+    actors: list[str] = Field(
+        description="Acteurs, utilisateurs ou personas mentionnés"
+    )
+    key_vocabulary: list[str] = Field(
+        description="Termes métier importants trouvés dans les documents"
+    )
     raw_context: str = Field(
         description="Synthèse complète et détaillée du contexte projet, à utiliser comme context_summary pour les outils de génération"
     )
@@ -60,7 +70,6 @@ DISCOVERY_PROMPT = """Tu es un analyste expert. À partir des extraits documenta
 7. **raw_context** : synthèse COMPLÈTE et DÉTAILLÉE de tout ce que tu as appris des documents. Ce texte servira de contexte pour générer des exigences et des User Stories — il doit être riche, précis et fidèle aux documents.
 
 ⚠️ N'invente RIEN. Utilise UNIQUEMENT les informations présentes dans les extraits ci-dessus."""
-
 
 
 class DiscoveryTools:
@@ -150,9 +159,7 @@ class DiscoveryTools:
                 )
 
             # Sort by score (descending) and keep top chunks
-            all_chunks.sort(
-                key=lambda c: c.get("score", 0), reverse=True
-            )
+            all_chunks.sort(key=lambda c: c.get("score", 0), reverse=True)
             top_chunks = all_chunks[:MAX_UNIQUE_CHUNKS]
 
             # Format chunks for the LLM
@@ -160,9 +167,7 @@ class DiscoveryTools:
             for i, chunk in enumerate(top_chunks, 1):
                 title = chunk.get("title", "Sans titre")
                 content = chunk.get("content", "")
-                formatted_chunks.append(
-                    f"### Extrait {i} (source: {title})\n{content}"
-                )
+                formatted_chunks.append(f"### Extrait {i} (source: {title})\n{content}")
             chunks_text = "\n\n".join(formatted_chunks)
 
             # Call LLM to produce structured summary
@@ -170,11 +175,7 @@ class DiscoveryTools:
                 ProjectDiscovery, method="json_schema"
             )
             result = await model.ainvoke(
-                [
-                    SystemMessage(
-                        content=DISCOVERY_PROMPT.format(chunks=chunks_text)
-                    )
-                ],
+                [SystemMessage(content=DISCOVERY_PROMPT.format(chunks=chunks_text))],
                 config=self._build_llm_config(),
             )
             if not isinstance(result, ProjectDiscovery):

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Markdown parsing helpers (deterministic, no LLM)
 # ---------------------------------------------------------------------------
 
+
 def _split_into_sections(markdown: str) -> dict[str, str]:
     """Split markdown into named sections by ``## `` headers."""
     sections: dict[str, str] = {}
@@ -44,6 +45,7 @@ def _extract_bold_field(text: str, label: str) -> str | None:
 
 # ---- Requirements ---------------------------------------------------------
 
+
 def _parse_requirements(section_text: str) -> list[dict]:
     results: list[dict] = []
     for item in _split_into_items(section_text):
@@ -51,16 +53,19 @@ def _parse_requirements(section_text: str) -> list[dict]:
         m = re.match(r"(.+?):\s*(.+)", first_line.strip())
         if not m:
             continue
-        results.append({
-            "id": m.group(1).strip(),
-            "title": m.group(2).strip(),
-            "priority": _extract_bullet(rest, "Priorité") or "Moyenne",
-            "description": _extract_bullet(rest, "Description") or "",
-        })
+        results.append(
+            {
+                "id": m.group(1).strip(),
+                "title": m.group(2).strip(),
+                "priority": _extract_bullet(rest, "Priorité") or "Moyenne",
+                "description": _extract_bullet(rest, "Description") or "",
+            }
+        )
     return results
 
 
 # ---- User Stories ---------------------------------------------------------
+
 
 def _parse_acceptance_criteria(text: str) -> list[dict]:
     m = re.search(
@@ -149,6 +154,7 @@ def _parse_user_stories(section_text: str) -> list[dict]:
 
 # ---- Tests ----------------------------------------------------------------
 
+
 def _parse_numbered_steps(text: str) -> list[str]:
     m = re.search(r"\*\*Étapes:\*\*\n(.*?)(?=\n\*\*|\Z)", text, re.DOTALL)
     if not m:
@@ -201,6 +207,7 @@ def _parse_tests(section_text: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Tool class
 # ---------------------------------------------------------------------------
+
 
 class ImportTools:
     """Tools for importing markdown exports back into agent state."""
@@ -304,7 +311,9 @@ class ImportTools:
                 summary_parts.append(f"{len(tests)} test(s)")
 
             summary = ", ".join(summary_parts)
-            mode_label = "fusionné(s)" if mode == "merge" else "importé(s) (remplacement)"
+            mode_label = (
+                "fusionné(s)" if mode == "merge" else "importé(s) (remplacement)"
+            )
             state_update["messages"] = [
                 ToolMessage(
                     f"✓ Import réussi : {summary} {mode_label} depuis le Markdown.",

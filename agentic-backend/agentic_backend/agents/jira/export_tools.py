@@ -430,7 +430,9 @@ class ExportTools:
                 if test_data:
                     test_data_text = "\n".join(test_data)
                     if precondition:
-                        precondition = f"{precondition}\n\nDonnées de test:\n{test_data_text}"
+                        precondition = (
+                            f"{precondition}\n\nDonnées de test:\n{test_data_text}"
+                        )
                     else:
                         precondition = f"Données de test:\n{test_data_text}"
 
@@ -486,7 +488,9 @@ class ExportTools:
                 output_path.unlink(missing_ok=True)
 
             # Build coverage summary for instructions
-            coverage_ids = sorted({t.get("user_story_id", "") for t in tests if t.get("user_story_id")})
+            coverage_ids = sorted(
+                {t.get("user_story_id", "") for t in tests if t.get("user_story_id")}
+            )
             coverage_note = ""
             if coverage_ids:
                 coverage_note = f"\n6. Les issues de Coverage ({', '.join(coverage_ids)}) doivent exister dans le projet Jira"

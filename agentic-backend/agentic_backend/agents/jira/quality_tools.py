@@ -163,7 +163,13 @@ class QualityTools:
         handler = self._get_langfuse_handler()
         return {"callbacks": [handler]} if handler else {}
 
-    def _format_assessment_report(self, title: str, sections: list[tuple[str, list[ChecklistItem]]], summary: str, recommendations: list[str]) -> str:
+    def _format_assessment_report(
+        self,
+        title: str,
+        sections: list[tuple[str, list[ChecklistItem]]],
+        summary: str,
+        recommendations: list[str],
+    ) -> str:
         """Format a structured assessment into a readable report."""
         status_icons = {"OK": "✅", "Partiel": "⚠️", "Manquant": "❌"}
 
@@ -235,15 +241,21 @@ class QualityTools:
 
             # Gather dependency user stories
             dep_ids = story.get("dependencies") or []
-            dependency_stories = [
-                s for s in user_stories if s.get("id") in dep_ids
-            ]
+            dependency_stories = [s for s in user_stories if s.get("id") in dep_ids]
 
             # Build the prompt
             prompt = US_ASSESSMENT_PROMPT.format(
                 user_story_json=json.dumps(story, indent=2, ensure_ascii=False),
-                requirements_json=json.dumps(linked_requirements, indent=2, ensure_ascii=False) if linked_requirements else "Aucune exigence liée.",
-                dependencies_json=json.dumps(dependency_stories, indent=2, ensure_ascii=False) if dependency_stories else "Aucune dépendance déclarée.",
+                requirements_json=json.dumps(
+                    linked_requirements, indent=2, ensure_ascii=False
+                )
+                if linked_requirements
+                else "Aucune exigence liée.",
+                dependencies_json=json.dumps(
+                    dependency_stories, indent=2, ensure_ascii=False
+                )
+                if dependency_stories
+                else "Aucune dépendance déclarée.",
             )
 
             # Call LLM with structured output
@@ -328,16 +340,27 @@ class QualityTools:
                         break
 
             # Find sibling tests (same user story)
-            sibling_tests = [
-                t for t in tests
-                if t.get("user_story_id") == us_id and t.get("id") != test_id
-            ] if us_id else []
+            sibling_tests = (
+                [
+                    t
+                    for t in tests
+                    if t.get("user_story_id") == us_id and t.get("id") != test_id
+                ]
+                if us_id
+                else []
+            )
 
             # Build the prompt
             prompt = TEST_ASSESSMENT_PROMPT.format(
                 test_json=json.dumps(target_test, indent=2, ensure_ascii=False),
-                user_story_json=json.dumps(linked_story, indent=2, ensure_ascii=False) if linked_story else "Aucune User Story liée.",
-                sibling_tests_json=json.dumps(sibling_tests, indent=2, ensure_ascii=False) if sibling_tests else "Aucun autre test pour cette User Story.",
+                user_story_json=json.dumps(linked_story, indent=2, ensure_ascii=False)
+                if linked_story
+                else "Aucune User Story liée.",
+                sibling_tests_json=json.dumps(
+                    sibling_tests, indent=2, ensure_ascii=False
+                )
+                if sibling_tests
+                else "Aucun autre test pour cette User Story.",
             )
 
             # Call LLM with structured output

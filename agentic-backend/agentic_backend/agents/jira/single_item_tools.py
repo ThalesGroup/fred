@@ -89,7 +89,9 @@ Génère une description de l'exigence qui:
                 result = QuickRequirement.model_validate(result)
             return result.model_dump()
         except Exception as e:
-            raise RuntimeError(f"Erreur lors de la génération de l'exigence: {e}") from e
+            raise RuntimeError(
+                f"Erreur lors de la génération de l'exigence: {e}"
+            ) from e
 
     async def _expand_user_story(
         self,
@@ -130,7 +132,9 @@ Génère:
                 result = QuickUserStory.model_validate(result)
             return result.model_dump()
         except Exception as e:
-            raise RuntimeError(f"Erreur lors de la génération de la User Story: {e}") from e
+            raise RuntimeError(
+                f"Erreur lors de la génération de la User Story: {e}"
+            ) from e
 
     async def _expand_test(
         self,
@@ -630,11 +634,17 @@ Génère:
             elif regenerate and summary is not None:
                 # Regenerate using LLM
                 epic = epic_name or existing.get("epic_name", "Backlog")
-                req_ids = requirement_ids if requirement_ids is not None else existing.get("requirement_ids")
+                req_ids = (
+                    requirement_ids
+                    if requirement_ids is not None
+                    else existing.get("requirement_ids")
+                )
                 expanded = await self._expand_user_story(summary, epic, req_ids, None)
                 update_fields["description"] = expanded["description"]
                 if "acceptance_criteria" in expanded:
-                    update_fields["acceptance_criteria"] = expanded["acceptance_criteria"]
+                    update_fields["acceptance_criteria"] = expanded[
+                        "acceptance_criteria"
+                    ]
 
             if epic_name is not None:
                 update_fields["epic_name"] = epic_name
@@ -675,7 +685,9 @@ Génère:
                 # Validate requirement IDs exist
                 requirements = runtime.state.get("requirements") or []
                 existing_req_ids = {r.get("id") for r in requirements}
-                invalid_ids = [rid for rid in requirement_ids if rid not in existing_req_ids]
+                invalid_ids = [
+                    rid for rid in requirement_ids if rid not in existing_req_ids
+                ]
                 if invalid_ids:
                     return Command(
                         update={
