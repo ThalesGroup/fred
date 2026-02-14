@@ -1,8 +1,41 @@
+**v1.2.5** — 2026-02-14
+
+- **Summary**
+
+  This releases brings in key performance improvements. Temporal is now fully supported
+  for running ingestion workloads. Knowledge flow and agentic have been rendered
+  asynchronous and equipped with additional performance metrics.
+
+  In terms of feature, Fred now allow teams to share corpus and agents.
+  Fred ships with an integrated benchmark tools.
+  Last, psotgres (sqlite or real postgres) is now used for persistence. Support for
+  duckdb has been removed.
+
+- **Features**
+
+  - add missing kpi (#1129)
+  - add frontend properties to hide enable/disable agent button (#1139)
+  - allow admin to set class path of agent when creating them (#1133)
+  - Improve jira agent (#1137)
+  - make agent private + allow team to own agents (#1114)
+  - Use temporal as a processing backend for general corpus & fast(attachments) pipeline execution (#1084)
+  - make all postgres connectors truly async (#1104)
+
+- **Improvements**
+
+  - Execute temporal workflows concurrently and handle errors properly (#1127)
+  - add option to pass minio public url + use it to create presigned url (#1111)
+
+- **Bug Fixes**
+
+  - fixed temporal in distributed settings (#1146)
+  - refactor agent manager to work with multi workers/replicas (#1122)
+
 **v1.2.4** — 2026-02-02
 
 - **Summary**
 
-  This features brings in two major features: the support for interrupt to cleanly implement human in the loop
+  This relase brings in two major features: the support for interrupt to cleanly implement human in the loop
   and a clean support for a shared filesystem, exposde to agnt using a well defined workspace
   concept. This allow configuration files or working files to be cleanly exchanged between admins, users
   and agents.
