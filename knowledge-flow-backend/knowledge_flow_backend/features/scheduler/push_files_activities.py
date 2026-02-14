@@ -21,6 +21,7 @@ from fred_core import KeycloakUser
 from temporalio import activity
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ async def push_input_process(
     user: KeycloakUser,
     metadata: DocumentMetadata,
     input_file: str = "",
+    profile: IngestionProcessingProfile | str | None = None,
 ) -> DocumentMetadata:
     """
     Process push-file input and persist generated output in content storage.
@@ -77,6 +79,7 @@ async def push_input_process(
     """
     logger = activity.logger
     logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
+    logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
@@ -113,6 +116,7 @@ async def push_input_process(
                 resolved_input_file,
                 output_dir,
                 metadata,
+                profile,
             )
             await asyncio.to_thread(ingestion_service.save_output, user, metadata, output_dir)
 

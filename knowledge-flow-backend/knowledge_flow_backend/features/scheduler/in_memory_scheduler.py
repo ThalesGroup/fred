@@ -70,7 +70,7 @@ async def _run_push_ingestion_pipeline(definition: PipelineDefinition) -> str:
             time.sleep(simulated_delay_seconds)
 
         metadata = await get_push_file_metadata(file)
-        metadata = await push_input_process(user=file.processed_by, metadata=metadata, input_file="")
+        metadata = await push_input_process(user=file.processed_by, metadata=metadata, input_file="", profile=file.profile)
         _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
     return "success"
@@ -90,7 +90,7 @@ async def _run_pull_ingestion_pipeline(definition: PipelineDefinition) -> str:
             time.sleep(simulated_delay_seconds)
 
         metadata = await create_pull_file_metadata(file)
-        metadata = await pull_input_process(user=file.processed_by, metadata=metadata)
+        metadata = await pull_input_process(user=file.processed_by, metadata=metadata, profile=file.profile)
         _ = await output_process(file=file, metadata=metadata, accept_memory_storage=True)
 
     return "success"

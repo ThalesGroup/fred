@@ -71,6 +71,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
                 preview_file.name,
                 output_dir,
                 metadata,
+                file.profile,
             )
 
             # Save the updated metadata

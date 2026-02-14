@@ -33,6 +33,7 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
+    IngestionProcessingProfile,
     InMemoryVectorStorage,
     LocalContentStorageConfig,
     LocalFilesystemConfig,
@@ -132,22 +133,61 @@ def app_context(monkeypatch, fake_embedder):
             settings={},
         ),
         processing=ProcessingConfig(
-            generate_summary=True,
-            use_gpu=True,
-            process_images=False,
+            default_profile=IngestionProcessingProfile.MEDIUM,
+            profiles=ProcessingConfig.ProfilesConfig(
+                fast=ProcessingConfig.ProfileConfig(
+                    use_gpu=False,
+                    generate_summary=False,
+                    process_images=False,
+                    input_processors=[
+                        ProcessingConfig.ProfileInputProcessorConfig(
+                            suffix=".md",
+                            class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
+                            description="Test markdown input processor for unit tests",
+                        ),
+                        ProcessingConfig.ProfileInputProcessorConfig(
+                            suffix=".docx",
+                            class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
+                            description="Test docx input processor for unit tests",
+                        ),
+                    ],
+                ),
+                medium=ProcessingConfig.ProfileConfig(
+                    use_gpu=False,
+                    generate_summary=True,
+                    process_images=False,
+                    input_processors=[
+                        ProcessingConfig.ProfileInputProcessorConfig(
+                            suffix=".md",
+                            class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
+                            description="Test markdown input processor for unit tests",
+                        ),
+                        ProcessingConfig.ProfileInputProcessorConfig(
+                            suffix=".docx",
+                            class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
+                            description="Test docx input processor for unit tests",
+                        ),
+                    ],
+                ),
+                rich=ProcessingConfig.ProfileConfig(
+                    use_gpu=False,
+                    generate_summary=True,
+                    process_images=False,
+                    input_processors=[
+                        ProcessingConfig.ProfileInputProcessorConfig(
+                            suffix=".md",
+                            class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
+                            description="Test markdown input processor for unit tests",
+                        ),
+                        ProcessingConfig.ProfileInputProcessorConfig(
+                            suffix=".docx",
+                            class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
+                            description="Test docx input processor for unit tests",
+                        ),
+                    ],
+                ),
+            ),
         ),
-        input_processors=[
-            ProcessorConfig(
-                prefix=".md",
-                class_path=f"{TestMarkdownProcessor.__module__}.{TestMarkdownProcessor.__qualname__}",
-                description="Test markdown input processor for unit tests",
-            ),
-            ProcessorConfig(
-                prefix=".docx",
-                class_path=f"{TestDocxProcessor.__module__}.{TestDocxProcessor.__qualname__}",
-                description="Test docx input processor for unit tests",
-            ),
-        ],
         output_processors=[
             ProcessorConfig(
                 prefix=".pdf",

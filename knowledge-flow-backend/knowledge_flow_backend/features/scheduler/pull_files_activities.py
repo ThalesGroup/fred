@@ -21,6 +21,7 @@ from fred_core import KeycloakUser
 from temporalio import activity
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,13 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 
         # Step 3: Extract and save metadata
         ingestion_service = IngestionService()
-        metadata = await ingestion_service.extract_metadata(file.processed_by, full_path, tags=file.tags, source_tag=file.source_tag)
+        metadata = await ingestion_service.extract_metadata(
+            file.processed_by,
+            full_path,
+            tags=file.tags,
+            source_tag=file.source_tag,
+            profile=file.profile,
+        )
         metadata.source.pull_location = file.external_path
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
 
@@ -87,6 +94,7 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
 async def pull_input_process(
     user: KeycloakUser,
     metadata: DocumentMetadata,
+    profile: IngestionProcessingProfile | str | None = None,
 ) -> DocumentMetadata:
     """
     Process pull-file input and persist generated output in content storage.
@@ -94,6 +102,7 @@ async def pull_input_process(
     """
     logger = activity.logger
     logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
+    logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
 
     from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
 
@@ -124,6 +133,7 @@ async def pull_input_process(
                 resolved_input_file,
                 output_dir,
                 metadata,
+                profile,
             )
             await asyncio.to_thread(ingestion_service.save_output, user, metadata, output_dir)
 

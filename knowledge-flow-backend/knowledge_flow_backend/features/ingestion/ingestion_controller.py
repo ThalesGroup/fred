@@ -33,7 +33,12 @@ from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
-from knowledge_flow_backend.common.structures import LibraryProcessorConfig, ProcessorConfig, Status
+from knowledge_flow_backend.common.structures import (
+    IngestionProcessingProfile,
+    LibraryProcessorConfig,
+    ProcessorConfig,
+    Status,
+)
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
@@ -71,6 +76,7 @@ SCHEDULER_PROGRESS_POLL_TIMEOUT_MS = 30 * 60 * 1000
 class IngestionInput(BaseModel):
     tags: List[str] = []
     source_tag: str = "fred"
+    profile: IngestionProcessingProfile | None = None
 
 
 class ProcessingProgress(BaseModel):
@@ -366,6 +372,7 @@ class IngestionController:
         user: KeycloakUser,
         tags: list[str],
         source_tag: str,
+        profile: IngestionProcessingProfile,
         scheduler_task_service: IngestionTaskService | None,
         background_tasks: BackgroundTasks | None,
         kpi: KPIWriter,
@@ -391,6 +398,7 @@ class IngestionController:
                     file_path=input_temp_file,
                     tags=tags,
                     source_tag=source_tag,
+                    profile=profile,
                 )
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
@@ -409,12 +417,13 @@ class IngestionController:
 
                     current_step = STEP_PROCESSING
                     yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                    metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file))
+                    metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file), profile=profile)
                     file_to_process = FileToProcess(
                         document_uid=metadata.document_uid,
                         external_path=None,
                         source_tag=source_tag,
                         tags=tags,
+                        profile=profile,
                         processed_by=user,
                     )
                     metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
@@ -478,6 +487,7 @@ class IngestionController:
                         tags=tags,
                         document_uid=document_uid,
                         display_name=filename,
+                        profile=profile,
                     )
                     for filename, document_uid, _ in scheduled_candidates
                 ]
@@ -657,14 +667,29 @@ class IngestionController:
             Returns the processors currently configured in Fred that can be used
             to build processing pipelines.
 
-            This is derived from the active configuration (input_processors and
-            output_processors), falling back to default output processors when
+            This is derived from processing profiles for inputs and from
+            output_processors (or default output processors) for outputs.
+            It falls back to default output processors when
             no explicit mapping is present.
             """
             app_context = ApplicationContext.get_instance()
             cfg = app_context.get_config()
 
-            input_cfg = [_with_description(pc) for pc in cfg.input_processors]
+            input_cfg_map: dict[tuple[str, str], ProcessorConfig] = {}
+            for profile_name in ("fast", "medium", "rich"):
+                profile_cfg = cfg.processing.get_profile_config(profile_name)
+                for pc in profile_cfg.input_processors:
+                    key = (pc.suffix.lower(), pc.class_path)
+                    if key in input_cfg_map:
+                        continue
+                    input_cfg_map[key] = _with_description(
+                        ProcessorConfig(
+                            prefix=pc.suffix,
+                            class_path=pc.class_path,
+                            description=pc.description,
+                        ),
+                    )
+            input_cfg = sorted(input_cfg_map.values(), key=lambda item: (item.prefix, item.class_path))
 
             # For outputs: if explicit config exists, use it.
             # Otherwise, synthesise ProcessorConfig entries from the default pipeline.
@@ -870,6 +895,7 @@ class IngestionController:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
             source_tag = parsed_input.source_tag
+            profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             preloaded_files = self._preload_uploaded_files(files)
 
@@ -886,6 +912,7 @@ class IngestionController:
                             file_path=input_temp_file,
                             tags=tags,
                             source_tag=source_tag,
+                            profile=profile,
                         )
                         output_temp_dir = input_temp_file.parent.parent
                         self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
@@ -941,6 +968,7 @@ class IngestionController:
                 parsed_input = IngestionInput(**json.loads(metadata_json))
                 tags = parsed_input.tags
                 source_tag = parsed_input.source_tag
+                profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
                 preloaded_files = self._preload_uploaded_files(files)
                 event_stream = self._stream_upload_process(
@@ -948,6 +976,7 @@ class IngestionController:
                     user=user,
                     tags=tags,
                     source_tag=source_tag,
+                    profile=profile,
                     scheduler_task_service=self.scheduler_task_service,
                     background_tasks=background_tasks if self.scheduler_task_service is not None else None,
                     kpi=kpi,

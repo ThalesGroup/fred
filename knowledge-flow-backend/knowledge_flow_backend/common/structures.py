@@ -27,7 +27,7 @@ from fred_core import (
     StoreConfig,
 )
 from fred_core.common.structures import TemporalSchedulerConfig
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -43,6 +43,12 @@ class Status(str, Enum):
     FAILED = "failed"
     ERROR = "error"
     FINISHED = "finished"
+
+
+class IngestionProcessingProfile(str, Enum):
+    FAST = "fast"
+    MEDIUM = "medium"
+    RICH = "rich"
 
 
 class OutputProcessorResponse(BaseModel):
@@ -186,9 +192,100 @@ VectorStorageConfig = Annotated[
 
 
 class ProcessingConfig(BaseModel):
-    use_gpu: bool = Field(default=True, description="Enable/disable GPU usage for processing (if supported by the processor)")
-    process_images: bool = Field(default=True, description="Enable/disable image content extraction")
-    generate_summary: bool = Field(default=True, description="Enable/disable human-centric abstract and keyword generation for documents.")
+    model_config = ConfigDict(extra="forbid")
+
+    class PdfPipelineConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        backend: Literal["dlparse_v4", "pypdfium2"] = Field(
+            default="dlparse_v4",
+            description="PDF backend for Docling conversion.",
+        )
+        images_scale: float = Field(default=2.0, gt=0.0, description="Docling PDF image scaling factor.")
+        generate_picture_images: bool = Field(
+            default=False,
+            description=("Generate extracted picture image assets during PDF conversion. Independent from profile.process_images (image description)."),
+        )
+        generate_page_images: bool = Field(default=False, description="Generate full-page images for PDFs.")
+        generate_table_images: bool = Field(default=False, description="Generate table images for PDFs.")
+        do_table_structure: bool = Field(
+            default=False,
+            description="Enable table structure extraction in the standard Docling PDF pipeline.",
+        )
+        do_ocr: bool = Field(
+            default=False,
+            description="Enable OCR in the standard Docling PDF pipeline.",
+        )
+
+    class ProfileInputProcessorConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        suffix: str = Field(..., description="The file suffix this processor handles (e.g., '.pdf').")
+        class_path: str = Field(..., description="Dotted import path of the processor class.")
+        description: Optional[str] = Field(
+            default=None,
+            min_length=1,
+            description="Human-readable description of the processor purpose shown in the UI.",
+        )
+
+    class ProfileConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        use_gpu: bool = Field(
+            default=True,
+            description="Enable/disable GPU usage for this profile (if supported by the selected processors).",
+        )
+        process_images: bool = Field(
+            default=False,
+            description="Enable/disable semantic image description in markdown for this profile.",
+        )
+        generate_summary: bool = Field(
+            default=False,
+            description="Enable/disable human-centric abstract and keyword generation for this profile.",
+        )
+        pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
+            default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
+            description="PDF processing options for this profile.",
+        )
+        input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
+            default_factory=list,
+            description="Input processors selected for this profile (suffix-specific).",
+        )
+
+    class ProfilesConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        fast: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
+        medium: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
+        rich: "ProcessingConfig.ProfileConfig" = Field(default_factory=lambda: ProcessingConfig.ProfileConfig())
+
+    default_profile: IngestionProcessingProfile = Field(
+        default=IngestionProcessingProfile.MEDIUM,
+        description="Default ingestion processing profile when no request-level profile is provided.",
+    )
+    profiles: ProfilesConfig = Field(
+        default_factory=ProfilesConfig,
+        description="Named ingestion profiles for request-level pipeline/option selection.",
+    )
+
+    def normalize_profile(self, profile: IngestionProcessingProfile | str | None) -> IngestionProcessingProfile:
+        if profile is None:
+            return self.default_profile
+        if isinstance(profile, str):
+            return IngestionProcessingProfile(profile)
+        return profile
+
+    def get_profile_config(self, profile: IngestionProcessingProfile | str | None) -> "ProcessingConfig.ProfileConfig":
+        profile = self.normalize_profile(profile)
+
+        if profile == IngestionProcessingProfile.FAST:
+            return self.profiles.fast
+        if profile == IngestionProcessingProfile.RICH:
+            return self.profiles.rich
+        return self.profiles.medium
+
+    def is_gpu_enabled_any_profile(self) -> bool:
+        return any(self.get_profile_config(profile).use_gpu for profile in IngestionProcessingProfile)
 
 
 class MCPConfig(BaseModel):
@@ -470,12 +567,10 @@ class Configuration(BaseModel):
     vision_model: Optional[ModelConfiguration] = None
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
-    input_processors: List[ProcessorConfig]
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
         description=(
-            "Optional fast-text processors for attachments. Uses the same structure as input_processors, "
-            "but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+            "Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
         ),
     )
     output_processors: Optional[List[ProcessorConfig]] = None
@@ -492,3 +587,12 @@ class Configuration(BaseModel):
         default_factory=lambda: WorkspaceLayoutConfig(),  # type: ignore
         description="Patterns used to build workspace storage paths.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_root_input_processors(cls, values: dict):
+        if isinstance(values, dict) and "input_processors" in values:
+            raise ValueError(
+                "Legacy root field 'input_processors' is no longer supported. Move processors under processing.profiles.<profile>.input_processors.",
+            )
+        return values

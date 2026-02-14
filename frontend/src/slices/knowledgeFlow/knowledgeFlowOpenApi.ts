@@ -2545,10 +2545,12 @@ export type ProcessDocumentsResponse = {
   workflow_id: string;
   run_id?: string | null;
 };
+export type IngestionProcessingProfile = "fast" | "medium" | "rich";
 export type FileToProcessWithoutUser = {
   source_tag: string;
   tags?: string[];
   display_name?: string | null;
+  profile?: IngestionProcessingProfile;
   document_uid?: string | null;
   external_path?: string | null;
   size?: number | null;

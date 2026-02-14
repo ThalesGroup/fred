@@ -61,6 +61,20 @@ def _wf_file_kind_summary(files: list[Any]) -> tuple[bool, bool]:
     return has_pull, has_push
 
 
+def _wf_profile_value(file: Any) -> str | None:
+    raw = _wf_get(file, "profile", None)
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return raw
+    value = getattr(raw, "value", None)
+    if isinstance(value, str):
+        return value
+    if isinstance(raw, (list, tuple)) and raw and all(isinstance(item, str) and len(item) == 1 for item in raw):
+        return "".join(raw)
+    return str(raw)
+
+
 async def _wf_run_parent_pipeline(
     *,
     definition: Any,
@@ -139,19 +153,24 @@ class GetPushFileMetadata:
 @workflow.defn
 class PullInputProcess:
     @workflow.run
-    async def run(self, user: Any, metadata: Any) -> Any:
+    async def run(self, user: Any, metadata: Any, profile: Any = None) -> Any:
         workflow.logger.info("[SCHEDULER] PullInputProcess")
-        return await workflow.execute_activity("pull_input_process", args=[user, metadata], schedule_to_close_timeout=timedelta(hours=1), retry_policy=RetryPolicy(maximum_attempts=1))
+        return await workflow.execute_activity(
+            "pull_input_process",
+            args=[user, metadata, profile],
+            schedule_to_close_timeout=timedelta(hours=1),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )
 
 
 @workflow.defn
 class PushInputProcess:
     @workflow.run
-    async def run(self, user: Any, input_file: str, metadata: Any) -> Any:
+    async def run(self, user: Any, input_file: str, metadata: Any, profile: Any = None) -> Any:
         workflow.logger.info("[SCHEDULER] PushInputProcess: %s", input_file or "<resolve-on-worker>")
         return await workflow.execute_activity(
             "push_input_process",
-            args=[user, metadata, input_file],
+            args=[user, metadata, input_file, profile],
             schedule_to_close_timeout=timedelta(hours=1),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
@@ -208,7 +227,7 @@ class ProcessPullFile:
         )
         metadata = await workflow.execute_child_workflow(
             PullInputProcess.run,
-            args=[_wf_get(file, "processed_by"), metadata],
+            args=[_wf_get(file, "processed_by"), metadata, _wf_profile_value(file)],
             id=_wf_child_id("PullInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
@@ -251,7 +270,7 @@ class ProcessPushFile:
         )
         metadata = await workflow.execute_child_workflow(
             PushInputProcess.run,
-            args=[_wf_get(file, "processed_by"), "", metadata],
+            args=[_wf_get(file, "processed_by"), "", metadata, _wf_profile_value(file)],
             id=_wf_child_id("PushInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )

@@ -21,7 +21,13 @@ tools-check:
 		echo "Install pandoc or use the provided Docker image."; \
 		echo "================================================================================"; \
 	fi
-	@if ! command -v idnkscape >/dev/null 2>&1; then \
+	@if ! command -v pdfinfo >/dev/null 2>&1; then \
+		echo "================================================================================"; \
+		echo "WARNING: poppler/pdfinfo not found on PATH. PDF parsing via unstructured/pdf2image can fail locally."; \
+		echo "Install poppler-utils (provides pdfinfo) or use the provided Docker image."; \
+		echo "================================================================================"; \
+	fi
+	@if ! command -v inkscape >/dev/null 2>&1; then \
 		echo "================================================================================"; \
 		echo "WARNING: inkscape not found on PATH. EMF/SVG conversions will be skipped or fail locally."; \
 		echo "Install inkscape or use the provided Docker image."; \
@@ -36,6 +42,19 @@ run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon
 	ENV_FILE=$(ENV_FILE) \
 	CONFIG_FILE="./config/configuration_worker.yaml" \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
+
+.PHONY: run-worker-docker
+run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost via host network)
+	@echo "🚀 Running the worker in Docker..."
+	docker run --rm -it \
+		--name $(WORKER_CONTAINER_NAME) \
+		--network $(WORKER_DOCKER_NETWORK) \
+		-e CONFIG_FILE=/app/config/configuration_worker.yaml \
+		-v $(realpath config/.env):/app/config/.env:ro \
+		-v $(realpath config/configuration_worker.yaml):/app/config/configuration_worker.yaml:ro \
+		--entrypoint python \
+		$(IMAGE_FULL) \
+		knowledge_flow_backend/main_worker.py
 
 .PHONY: docker-run
 docker-run: ## Run the app in Docker
@@ -81,3 +100,7 @@ build: dev $(TARGET)/.built ## Build current module
 $(TARGET)/.built:
 	@echo "************ UV BUILD PLACEHOLDER ************"
 	touch $@
+
+# Docker worker runtime defaults
+WORKER_CONTAINER_NAME ?= kf-worker
+WORKER_DOCKER_NETWORK ?= host

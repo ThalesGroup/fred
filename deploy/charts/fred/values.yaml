@@ -672,9 +672,95 @@ applications:
         max_ingestion_workers: 3
 
       processing:
-        generate_summary: true
-        use_gpu: true
-        process_images: true
+        default_profile: medium
+        profiles:
+          fast:
+            use_gpu: true
+            generate_summary: false
+            process_images: false
+            pdf:
+              backend: pypdfium2
+              images_scale: 1.0
+              generate_picture_images: false
+              generate_page_images: false
+              generate_table_images: false
+              do_table_structure: false
+              do_ocr: false
+            input_processors:
+              - suffix: ".pdf"
+                class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+              - suffix: ".docx"
+                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+              - suffix: ".pptx"
+                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+              - suffix: ".csv"
+                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+              - suffix: ".txt"
+                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+              - suffix: ".md"
+                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+              - suffix: ".xlsm"
+                class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+              - suffix: ".jsonl"
+                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+          medium:
+            use_gpu: true
+            generate_summary: false
+            process_images: false
+            pdf:
+              backend: dlparse_v4
+              images_scale: 2.0
+              generate_picture_images: false
+              generate_page_images: false
+              generate_table_images: false
+              do_table_structure: false
+              do_ocr: false
+            input_processors:
+              - suffix: ".pdf"
+                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+              - suffix: ".docx"
+                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+              - suffix: ".pptx"
+                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+              - suffix: ".csv"
+                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+              - suffix: ".txt"
+                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+              - suffix: ".md"
+                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+              - suffix: ".xlsm"
+                class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+              - suffix: ".jsonl"
+                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+          rich:
+            use_gpu: true
+            generate_summary: true
+            process_images: true
+            pdf:
+              backend: dlparse_v4
+              images_scale: 2.0
+              generate_picture_images: true
+              generate_page_images: true
+              generate_table_images: false
+              do_table_structure: true
+              do_ocr: true
+            input_processors:
+              - suffix: ".pdf"
+                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+              - suffix: ".docx"
+                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+              - suffix: ".pptx"
+                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+              - suffix: ".csv"
+                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+              - suffix: ".txt"
+                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+              - suffix: ".md"
+                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+              - suffix: ".xlsm"
+                class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+              - suffix: ".jsonl"
+                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       security:
         m2m:
           enabled: true
@@ -709,23 +795,6 @@ applications:
           task_queue: "ingestion"
           workflow_id_prefix: "pipeline"
           connect_timeout_seconds: 5
-      input_processors:
-        - prefix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
-        - prefix: ".docx"
-          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-        - prefix: ".pptx"
-          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-        - prefix: ".csv"
-          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-        - prefix: ".txt"
-          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-        - prefix: ".md"
-          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - prefix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
-        - prefix: ".jsonl"
-          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       content_storage:
         type: local
         root_path: /home/fred-user/.fred/knowledge-flow/content-storage
@@ -967,9 +1036,95 @@ applications:
         kpi_log_summary_top_n: 0
 
       processing:
-        generate_summary: true
-        use_gpu: true
-        process_images: true
+        default_profile: medium
+        profiles:
+          fast:
+            use_gpu: true
+            generate_summary: false
+            process_images: false
+            pdf:
+              backend: pypdfium2
+              images_scale: 1.0
+              generate_picture_images: false
+              generate_page_images: false
+              generate_table_images: false
+              do_table_structure: false
+              do_ocr: false
+            input_processors:
+              - suffix: ".pdf"
+                class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+              - suffix: ".docx"
+                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+              - suffix: ".pptx"
+                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+              - suffix: ".csv"
+                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+              - suffix: ".txt"
+                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+              - suffix: ".md"
+                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+              - suffix: ".xlsm"
+                class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+              - suffix: ".jsonl"
+                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+          medium:
+            use_gpu: true
+            generate_summary: false
+            process_images: false
+            pdf:
+              backend: dlparse_v4
+              images_scale: 2.0
+              generate_picture_images: false
+              generate_page_images: false
+              generate_table_images: false
+              do_table_structure: false
+              do_ocr: false
+            input_processors:
+              - suffix: ".pdf"
+                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+              - suffix: ".docx"
+                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+              - suffix: ".pptx"
+                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+              - suffix: ".csv"
+                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+              - suffix: ".txt"
+                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+              - suffix: ".md"
+                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+              - suffix: ".xlsm"
+                class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+              - suffix: ".jsonl"
+                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+          rich:
+            use_gpu: true
+            generate_summary: true
+            process_images: true
+            pdf:
+              backend: dlparse_v4
+              images_scale: 2.0
+              generate_picture_images: true
+              generate_page_images: true
+              generate_table_images: false
+              do_table_structure: true
+              do_ocr: true
+            input_processors:
+              - suffix: ".pdf"
+                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+              - suffix: ".docx"
+                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+              - suffix: ".pptx"
+                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+              - suffix: ".csv"
+                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+              - suffix: ".txt"
+                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+              - suffix: ".md"
+                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+              - suffix: ".xlsm"
+                class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+              - suffix: ".jsonl"
+                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       security:
         m2m:
           enabled: true
@@ -1004,23 +1159,6 @@ applications:
           task_queue: "ingestion"
           workflow_id_prefix: "pipeline"
           connect_timeout_seconds: 5
-      input_processors:
-        - prefix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
-        - prefix: ".docx"
-          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-        - prefix: ".pptx"
-          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-        - prefix: ".csv"
-          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-        - prefix: ".txt"
-          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-        - prefix: ".md"
-          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - prefix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
-        - prefix: ".jsonl"
-          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
       content_storage:
         type: local
         root_path: /home/fred-user/.fred/knowledge-flow/content-storage
