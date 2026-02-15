@@ -58,6 +58,7 @@ from agentic_backend.core.agents.runtime_context import (
     # get_deep_search_enabled,
     # get_rag_knowledge_scope,
 )
+from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_schema import (
     AwaitingHumanEvent,
     ChatAskInput,
@@ -80,7 +81,6 @@ from agentic_backend.core.chatbot.chat_schema import (
 from agentic_backend.core.chatbot.chatbot_benchmark_call import (
     handle_chatbot_baseline_websocket,
 )
-from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
     MetricsResponse,
