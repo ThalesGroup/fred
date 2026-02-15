@@ -734,7 +734,7 @@ applications:
                 class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
           rich:
             use_gpu: true
-            generate_summary: true
+            generate_summary: false
             process_images: true
             pdf:
               backend: dlparse_v4

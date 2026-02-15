@@ -85,7 +85,7 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
     rich:
       use_gpu: true
-      generate_summary: true
+      generate_summary: false
       process_images: true
       pdf:
         backend: dlparse_v4

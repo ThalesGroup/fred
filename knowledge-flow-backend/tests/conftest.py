@@ -154,7 +154,7 @@ def app_context(monkeypatch, fake_embedder):
                 ),
                 medium=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=True,
+                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(
@@ -171,7 +171,7 @@ def app_context(monkeypatch, fake_embedder):
                 ),
                 rich=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=True,
+                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(

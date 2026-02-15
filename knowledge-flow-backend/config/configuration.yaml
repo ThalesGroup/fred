@@ -120,7 +120,7 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     rich:
       use_gpu: true
-      generate_summary: true
+      generate_summary: false
       process_images: true
       pdf:
         backend: dlparse_v4
