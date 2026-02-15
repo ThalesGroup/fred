@@ -367,38 +367,6 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
-    listAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGet: build.query<
-      ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiResponse,
-      ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/processing/pipelines/available-processors` }),
-    }),
-    registerProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPost: build.mutation<
-      RegisterProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPostApiResponse,
-      RegisterProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/processing/pipelines`,
-        method: "POST",
-        body: queryArg.processingPipelineDefinition,
-      }),
-    }),
-    assignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPost: build.mutation<
-      AssignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPostApiResponse,
-      AssignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/processing/pipelines/assign-library`,
-        method: "POST",
-        body: queryArg.pipelineAssignment,
-      }),
-    }),
-    getLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGet: build.query<
-      GetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetApiResponse,
-      GetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/processing/pipelines/library/${queryArg.libraryTagId}` }),
-    }),
     uploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost: build.mutation<
       UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse,
       UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg
@@ -1228,24 +1196,6 @@ export type DeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserI
   targetUserId: string;
   key: string;
 };
-export type ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiResponse =
-  /** status 200 Successful Response */ AvailableProcessorsResponse;
-export type ListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetApiArg = void;
-export type RegisterProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type RegisterProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPostApiArg = {
-  processingPipelineDefinition: ProcessingPipelineDefinition;
-};
-export type AssignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type AssignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPostApiArg = {
-  pipelineAssignment: PipelineAssignment;
-};
-export type GetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetApiResponse =
-  /** status 200 Successful Response */ ProcessingPipelineInfo;
-export type GetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetApiArg = {
-  libraryTagId: string;
-};
 export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiResponse =
   /** status 200 Successful Response */ any;
 export type UploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostApiArg = {
@@ -1933,42 +1883,6 @@ export type BodyUploadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetU
   /** Logical path inside the agent-user space */
   key?: string | null;
 };
-export type ProcessorConfig = {
-  /** The file extension this processor handles (e.g., '.pdf') */
-  prefix: string;
-  /** Dotted import path of the processor class */
-  class_path: string;
-  /** Human-readable description of the processor purpose shown in the UI. */
-  description?: string | null;
-};
-export type LibraryProcessorConfig = {
-  /** Dotted import path of the library output processor class */
-  class_path: string;
-  /** Human-readable description of the library output processor purpose shown in the UI. */
-  description?: string | null;
-};
-export type AvailableProcessorsResponse = {
-  input_processors: ProcessorConfig[];
-  output_processors: ProcessorConfig[];
-  library_output_processors: LibraryProcessorConfig[];
-};
-export type ProcessingPipelineDefinition = {
-  name: string;
-  input_processors?: ProcessorConfig[] | null;
-  output_processors: ProcessorConfig[];
-  library_output_processors?: LibraryProcessorConfig[] | null;
-};
-export type PipelineAssignment = {
-  library_tag_id: string;
-  pipeline_name: string;
-};
-export type ProcessingPipelineInfo = {
-  name: string;
-  is_default_for_library: boolean;
-  input_processors: ProcessorConfig[];
-  output_processors: ProcessorConfig[];
-  library_output_processors: LibraryProcessorConfig[];
-};
 export type BodyUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPost = {
   files: Blob[];
   metadata_json: string;
@@ -2645,12 +2559,6 @@ export const {
   useDownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetQuery,
   useLazyDownloadAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyGetQuery,
   useDeleteAgentUserFileKnowledgeFlowV1StorageAgentUserAgentIdTargetUserIdKeyDeleteMutation,
-  useListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetQuery,
-  useLazyListAvailableProcessorsKnowledgeFlowV1ProcessingPipelinesAvailableProcessorsGetQuery,
-  useRegisterProcessingPipelineKnowledgeFlowV1ProcessingPipelinesPostMutation,
-  useAssignPipelineToLibraryKnowledgeFlowV1ProcessingPipelinesAssignLibraryPostMutation,
-  useGetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetQuery,
-  useLazyGetLibraryPipelineKnowledgeFlowV1ProcessingPipelinesLibraryLibraryTagIdGetQuery,
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useGetUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGetQuery,

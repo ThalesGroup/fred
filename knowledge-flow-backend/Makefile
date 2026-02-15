@@ -40,7 +40,6 @@ run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
-	CONFIG_FILE="./config/configuration_worker.yaml" \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
 
 .PHONY: run-worker-docker
@@ -49,22 +48,23 @@ run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost v
 	docker run --rm -it \
 		--name $(WORKER_CONTAINER_NAME) \
 		--network $(WORKER_DOCKER_NETWORK) \
-		-e CONFIG_FILE=/app/config/configuration_worker.yaml \
-		-v $(realpath config/.env):/app/config/.env:ro \
-		-v $(realpath config/configuration_worker.yaml):/app/config/configuration_worker.yaml:ro \
+		-v $(realpath config):/app/config:ro \
 		--entrypoint python \
 		$(IMAGE_FULL) \
 		knowledge_flow_backend/main_worker.py
 
-.PHONY: docker-run
-docker-run: ## Run the app in Docker
-	docker run -it \
-		-p $(PORT):$(PORT) \
-		-v ~/.kube/:/home/fred-user/.kube/ \
-		-v $(realpath config/.env):/app/config/.env \
-		-v $(realpath config/configuration.yaml):/app/knowledge-flow-backend/config/configuration.yaml \
-		-e CONFIG_FILE=/app/knowledge-flow-backend/config/configuration.yaml \
+.PHONY: run-docker
+run-docker: ## Run Knowledge Flow API in Docker (uses host network by default)
+	@echo "🚀 Running Knowledge Flow API in Docker..."
+	docker run --rm -it \
+		--name $(API_CONTAINER_NAME) \
+		--network $(API_DOCKER_NETWORK) \
+		-v $(realpath config):/app/config:ro \
+		-v ~/.kube/:/home/fred-user/.kube/:ro \
 		$(IMAGE_FULL)
+
+.PHONY: docker-run
+docker-run: run-docker ## Backward-compatible alias for run-docker
 
 ##@ Docker
 
@@ -104,3 +104,5 @@ $(TARGET)/.built:
 # Docker worker runtime defaults
 WORKER_CONTAINER_NAME ?= kf-worker
 WORKER_DOCKER_NETWORK ?= host
+API_CONTAINER_NAME ?= kf-api
+API_DOCKER_NETWORK ?= host

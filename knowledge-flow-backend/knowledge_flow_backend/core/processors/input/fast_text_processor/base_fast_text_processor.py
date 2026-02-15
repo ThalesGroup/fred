@@ -50,6 +50,7 @@ class FastTextOptions:
     add_page_headings: bool = True
     return_per_page: bool = True
     trim_empty_lines: bool = True
+    fast: bool = False
 
 
 def enforce_max_chars(text: str, max_chars: Optional[int]) -> tuple[str, bool]:

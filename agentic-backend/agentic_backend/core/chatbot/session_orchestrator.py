@@ -20,12 +20,11 @@ import logging
 import re
 import secrets
 import time
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from fastapi import HTTPException, UploadFile, WebSocketDisconnect
+from fastapi import HTTPException, WebSocketDisconnect
 from fred_core import (
     Action,
     AuthorizationError,
@@ -46,7 +45,6 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from requests import HTTPError
 
 from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
@@ -56,6 +54,7 @@ from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
     AgentRef,
@@ -85,7 +84,6 @@ from agentic_backend.core.session.attachement_processing import AttachementProce
 from agentic_backend.core.session.session_cache import CachedSession, SessionCache
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
-    SessionAttachmentRecord,
 )
 from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
@@ -160,6 +158,18 @@ class SessionOrchestrator:
             None
             if self.max_attached_file_size_mb is None
             else self.max_attached_file_size_mb * 1024 * 1024
+        )
+        self.attachment_service = AttachmentService(
+            session_store=self.session_store,
+            attachments_store=self.attachments_store,
+            session_cache=self.session_cache,
+            create_empty_session=lambda user: self.create_empty_session(user=user),
+            get_session=lambda user_id, session_id: self._get_session(
+                user_id=user_id, session_id=session_id
+            ),
+            max_attached_files_per_user=self.max_attached_files_per_user,
+            max_attached_file_size_mb=self.max_attached_file_size_mb,
+            max_attached_file_size_bytes=self.max_attached_file_size_bytes,
         )
 
     async def release_session(self, session_id: str) -> None:
@@ -1244,262 +1254,6 @@ class SessionOrchestrator:
             "size_bytes": record.size_bytes,
             "created_at": record.created_at.isoformat() if record.created_at else None,
             "updated_at": record.updated_at.isoformat() if record.updated_at else None,
-        }
-
-    @authorize(action=Action.CREATE, resource=Resource.MESSAGE_ATTACHMENTS)
-    @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
-    async def add_attachment_from_upload(
-        self,
-        *,
-        user: KeycloakUser,
-        access_token: str,
-        session_id: Optional[str],
-        file: UploadFile,
-        max_chars: int = 12_000,
-        include_tables: bool = True,
-        add_page_headings: bool = False,
-    ) -> dict:
-        """
-        Fred rationale:
-        - Zero temp-files: we stream the uploaded content to Knowledge Flow 'fast/text'.
-        - Store compact text + vectors via Knowledge Flow; no in-memory cache is used.
-        """
-        if not self.attachments_store:
-            logger.error(
-                "[SESSIONS][ATTACH] Attachment uploads disabled: no attachments_store configured."
-            )
-            raise HTTPException(
-                status_code=501,
-                detail={
-                    "code": "attachments_disabled",
-                    "message": "Attachment uploads are disabled (no attachment store configured).",
-                },
-            )
-
-        # Enforce per-user attachment count limit
-        max_files_user = self.max_attached_files_per_user
-        try:
-            if max_files_user is not None and self.attachments_store:
-                total_for_user = 0
-                # Count attachments across all sessions for this user
-                user_sessions = await self.session_store.get_for_user(user.uid)
-                if user_sessions:
-                    session_ids = [s.id for s in user_sessions]
-                    total_for_user = await self.attachments_store.count_for_sessions(
-                        session_ids
-                    )
-
-                if total_for_user >= max_files_user:
-                    raise HTTPException(
-                        status_code=400,
-                        detail={
-                            "code": "attachment_limit_reached",
-                            "message": f"Attachment limit reached ({max_files_user} files per user).",
-                        },
-                    )
-        except HTTPException:
-            raise
-        except Exception:
-            logger.exception("[SESSIONS][ATTACH] Failed to enforce attachment limit")
-        if not file.filename:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "missing_filename",
-                    "message": "Uploaded file must have a filename.",
-                },
-            )
-        size_limit_bytes = self.max_attached_file_size_bytes
-        if size_limit_bytes is not None:
-            content = await file.read(size_limit_bytes + 1)
-            if len(content) > size_limit_bytes:
-                logger.warning(
-                    "[SESSIONS][ATTACH] File too large: %s bytes=%d limit=%d (user=%s)",
-                    file.filename,
-                    len(content),
-                    size_limit_bytes,
-                    user.uid,
-                )
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "code": "attachment_too_large",
-                        "message": f"Attachment exceeds limit ({self.max_attached_file_size_mb} MB).",
-                    },
-                )
-        else:
-            content = await file.read()  # stays in memory
-
-        # If no session_id was provided (first interaction), create one now.
-        # Use a lightweight title based on the filename to keep UX sensible.
-        if not session_id:
-            session = await self.create_empty_session(user=user)
-        else:
-            session = await self._get_session(user_id=user.uid, session_id=session_id)
-
-        # Prevent duplicate filenames within a session (UI convenience + avoids double ingest)
-        try:
-            if self.attachments_store:
-                existing = await self.attachments_store.list_for_session(
-                    session_id=session.id
-                )
-                if any(rec.name == file.filename for rec in existing):
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "attachment_duplicate",
-                            "message": f"Attachment '{file.filename}' already exists in this session.",
-                        },
-                    )
-        except HTTPException:
-            raise
-        except Exception:
-            logger.exception(
-                "[SESSIONS][ATTACH] Failed during duplicate attachment check"
-            )
-
-        # 1) Secure session-mode client for Knowledge Flow (Bearer user token)
-        client = KfFastTextClient(
-            access_token=access_token,
-            # Optional: refresh_user_access_token=lambda: self._refresh_user_token(user)
-        )
-
-        # 2) Ask KF to produce a compact Markdown (text-only) for conversational use
-        try:
-            # Build a compact summary for UI while ingesting full fast text below.
-            summary_md = await client.extract_text_from_bytes(
-                filename=file.filename,
-                content=content,
-                mime=file.content_type,
-                max_chars=max_chars,
-                include_tables=include_tables,
-                add_page_headings=add_page_headings,
-            )
-            summary_md = (summary_md or "").strip()
-            if "\x00" in summary_md:
-                # Some PDFs may surface NUL bytes; strip them to avoid DB errors.
-                summary_md = summary_md.replace("\x00", "")
-            if not summary_md:
-                summary_md = "_(No summary returned by Knowledge Flow)_"
-            logger.info(
-                "[SESSIONS][ATTACH] Received summary for %s bytes=%d chars=%d",
-                file.filename,
-                len(content),
-                len(summary_md),
-            )
-        except HTTPError as exc:  # Upstream format or processing failure
-            status = exc.response.status_code if exc.response is not None else 502
-            upstream_detail = (
-                exc.response.text
-                if getattr(exc, "response", None) is not None
-                else str(exc)
-            )
-            logger.error(
-                "Knowledge Flow rejected attachment %s (user=%s, status=%s, detail=%s)",
-                file.filename,
-                user.uid,
-                status,
-                upstream_detail,
-            )
-            raise HTTPException(
-                status_code=status,
-                detail={
-                    "code": "upload_processing_failed",
-                    "message": f"Failed to process {file.filename}.",
-                    "upstream": upstream_detail,
-                },
-            ) from exc
-
-        # 3) Create a stable attachment_id (UUID v4 is fine here)
-        attachment_id = str(uuid.uuid4())
-
-        # 3b) Ingest into vector store with session/user scoping
-        document_uid: Optional[str] = None
-        try:
-            # Ingest full fast text (per-page) for higher recall; no max_chars cap.
-            ingest_resp = await client.ingest_text_from_bytes(
-                filename=file.filename,
-                content=content,
-                session_id=session.id,
-                scope="session",
-                options={
-                    "max_chars": None,
-                    "include_tables": include_tables,
-                    "add_page_headings": add_page_headings,
-                    "return_per_page": True,
-                },
-            )
-            document_uid = ingest_resp.get("document_uid")
-            logger.info(
-                "[SESSIONS][ATTACH] Ingested vectors doc_uid=%s chunks=%s",
-                document_uid,
-                ingest_resp.get("chunks"),
-            )
-        except HTTPError as exc:
-            logger.error(
-                "[SESSIONS][ATTACH] Vector ingest failed for %s (user=%s): %s",
-                file.filename,
-                user.uid,
-                exc.response.text if exc.response is not None else str(exc),
-            )
-        except Exception:
-            logger.exception(
-                "[SESSIONS][ATTACH] Unexpected error during vector ingest for %s",
-                file.filename,
-            )
-
-        # 4) Persist metadata for UI if configured
-        if self.attachments_store:
-            now = _utcnow_dt()
-            try:
-                record = SessionAttachmentRecord(
-                    session_id=session.id,
-                    attachment_id=attachment_id,
-                    name=file.filename,
-                    summary_md=summary_md,
-                    mime=file.content_type,
-                    size_bytes=len(content),
-                    document_uid=document_uid,
-                    created_at=now,
-                    updated_at=now,
-                )
-                await self.attachments_store.save(record)
-                logger.info(
-                    "[SESSIONS][ATTACH] Persisted summary for session=%s attachment=%s chars=%d",
-                    session.id,
-                    attachment_id,
-                    len(summary_md),
-                )
-                # cache update
-                cached = self.session_cache.get(session.id)
-                if cached:
-                    attachments = (cached.attachments or []) + [record]
-                    self.session_cache.set(
-                        session.id,
-                        CachedSession(session=cached.session, attachments=attachments),
-                    )
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            "[SESSIONS][ATTACH] cache updated after add session=%s attachments=%d",
-                            session.id,
-                            len(attachments),
-                        )
-            except Exception:
-                logger.exception(
-                    "[SESSIONS][ATTACH] Failed to persist attachment summary for session=%s attachment=%s",
-                    session.id,
-                    attachment_id,
-                )
-
-        # 5) Return a minimal DTO for the UI
-        return {
-            "session_id": session.id,
-            "attachment_id": attachment_id,
-            "filename": file.filename,
-            "mime": file.content_type,
-            "size_bytes": len(content),
-            "preview_chars": min(len(summary_md), 300),  # hint for UI
-            "session": session.model_dump(),
         }
 
     # ---------------- Metrics passthrough ----------------

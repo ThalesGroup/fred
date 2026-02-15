@@ -175,7 +175,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
             try:
                 result = self._extract_pages_with_fitz(file_path, opts)
                 logger.info(
-                    "[LITE_MD][PDF][FITZ] file=%s pages=%s chars=%s truncated=%s",
+                    "[LITE_PDF][IMPLEM] fitz page-wise extraction | file=%s pages=%s chars=%s truncated=%s",
                     file_path.name,
                     result.page_count,
                     result.total_chars,
@@ -188,7 +188,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
             # Fall back to whole-doc if page-wise failed
             result = self._extract_with_markitdown(file_path, opts)
             logger.info(
-                "[LITE_MD][PDF][FALLBACK_MARKITDOWN] file=%s pages=%s chars=%s truncated=%s",
+                "[LITE_PDF][IMPLEM] fallback markitdown extraction | file=%s pages=%s chars=%s truncated=%s",
                 file_path.name,
                 result.page_count,
                 result.total_chars,
@@ -200,7 +200,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
         try:
             result = self._extract_with_markitdown(file_path, opts)
             logger.info(
-                "[LITE_MD][PDF][MARKITDOWN] file=%s pages=%s chars=%s truncated=%s",
+                "[LITE_PDF][IMPLEM] markitdown extraction | file=%s pages=%s chars=%s truncated=%s",
                 file_path.name,
                 result.page_count,
                 result.total_chars,
@@ -209,12 +209,12 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
             # If markitdown produced nothing, fall back to page-wise extraction.
             if result.total_chars == 0:
                 logger.warning(
-                    "[LITE_MD][PDF][MARKITDOWN_EMPTY] file=%s — attempting fitz fallback",
+                    "[PROCESSOR][LITE_MD][PDF][MARKITDOWN_EMPTY] file=%s — attempting fitz fallback",
                     file_path.name,
                 )
                 result = self._extract_pages_with_fitz(file_path, opts)
                 logger.info(
-                    "[LITE_MD][PDF][FALLBACK_FITZ_AFTER_MARKITDOWN] file=%s pages=%s chars=%s truncated=%s",
+                    "[LITE_PDF][IMPLEM] fallback fitz after empty markitdown | file=%s pages=%s chars=%s truncated=%s",
                     file_path.name,
                     result.page_count,
                     result.total_chars,
@@ -227,7 +227,7 @@ class LitePdfToMdProcessor(BaseLiteMdProcessor):
         # Fall back to page-wise text if markitdown fails
         result = self._extract_pages_with_fitz(file_path, opts)
         logger.info(
-            "[LITE_MD][PDF][FALLBACK_FITZ] file=%s pages=%s chars=%s truncated=%s",
+            "[LITE_PDF][IMPLEM] fallback fitz extraction | file=%s pages=%s chars=%s truncated=%s",
             file_path.name,
             result.page_count,
             result.total_chars,

@@ -137,12 +137,6 @@ scheduler:
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
 
-# Optional: fast processors used for chat attachments (/fast/text, /fast/ingest).
-# If omitted, defaults to the Unstructured fast processor.
-attachment_processors:
-  - prefix: "*"
-    class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor.FastUnstructuredTextProcessingProcessor
-
 content_storage:
   type: minio
   endpoint: http://localhost:9000

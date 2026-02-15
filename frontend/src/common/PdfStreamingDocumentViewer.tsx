@@ -14,14 +14,11 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
-import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker"; // Vite turns this into a Worker
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import { useAuthToken } from "../security/AuthContext";
-
-pdfjs.GlobalWorkerOptions.workerPort = new PdfWorker();
 
 type Props = {
   document: { document_uid: string; file_name?: string } | null;

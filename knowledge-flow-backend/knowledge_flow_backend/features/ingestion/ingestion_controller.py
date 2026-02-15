@@ -14,7 +14,6 @@
 
 import asyncio
 import dataclasses
-import inspect
 import json
 import json as _json
 import logging
@@ -35,19 +34,23 @@ from pydantic import BaseModel
 from knowledge_flow_backend.application_context import ApplicationContext, get_kpi_writer
 from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
-    LibraryProcessorConfig,
-    ProcessorConfig,
     Status,
 )
-from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
     FastTextResult,
 )
-from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor import FastUnstructuredTextProcessingProcessor
-from knowledge_flow_backend.core.processors.output.base_library_output_processor import LibraryOutputProcessor
-from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor import (
+    FastLiteCsvProcessor,
+)
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor import (
+    FastLiteDocxProcessor,
+)
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
+    FastLitePptxProcessor,
+)
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
@@ -115,122 +118,6 @@ def _dynamic_import_processor(class_path: str):
     return getattr(module, class_name)
 
 
-def _derive_description(class_path: str) -> Optional[str]:
-    """
-    Attempt to build a concise, human-friendly description for a processor class.
-
-    Prefers the first line of the class docstring; falls back to the class name
-    when a docstring is not present.
-    """
-    try:
-        cls = _dynamic_import_processor(class_path)
-    except Exception:
-        logger.debug("Unable to import %s to derive description", class_path, exc_info=True)
-        return None
-
-    explicit = getattr(cls, "description", None)
-    if explicit:
-        return str(explicit)
-
-    getter = getattr(cls, "get_description", None)
-    if callable(getter):
-        try:
-            value = getter()
-            if value:
-                return str(value)
-        except Exception:
-            logger.debug("get_description failed for %s", class_path, exc_info=True)
-
-    doc = inspect.getdoc(cls) or ""
-    if doc:
-        first_line = doc.strip().splitlines()[0]
-        if first_line:
-            return first_line
-    return cls.__name__
-
-
-def _with_description(config: ProcessorConfig) -> ProcessorConfig:
-    """
-    Ensure ProcessorConfig instances always carry a description for UI display.
-    """
-    if config.description:
-        return config
-
-    description = _derive_description(config.class_path)
-    if description:
-        return config.model_copy(update={"description": description})
-    return config
-
-
-def _with_library_description(config: LibraryProcessorConfig) -> LibraryProcessorConfig:
-    """
-    Ensure LibraryProcessorConfig instances always carry a description for UI display.
-    """
-    if config.description:
-        return config
-
-    description = _derive_description(config.class_path)
-    if description:
-        return config.model_copy(update={"description": description})
-    return config
-
-
-class AvailableProcessorsResponse(BaseModel):
-    """
-    Describes the currently configured input and output processors that can be
-    used to assemble processing pipelines.
-    """
-
-    input_processors: List[ProcessorConfig]
-    output_processors: List[ProcessorConfig]
-    library_output_processors: List[LibraryProcessorConfig]
-
-
-class ProcessingPipelineDefinition(BaseModel):
-    """
-    Declarative definition of a processing pipeline.
-
-    For now:
-      - 'name' identifies the pipeline in the runtime registry.
-      - 'input_processors' is optional; if omitted, defaults are used.
-      - 'output_processors' must be provided as a mapping from suffix → list of class paths.
-      - 'library_output_processors' is optional; if provided, these run at library scope.
-    """
-
-    name: str
-    input_processors: Optional[List[ProcessorConfig]] = None
-    output_processors: List[ProcessorConfig]
-    library_output_processors: Optional[List[LibraryProcessorConfig]] = None
-
-
-class PipelineAssignment(BaseModel):
-    """
-    Bind a processing pipeline to a library tag id.
-
-    At runtime this populates ProcessingPipelineManager.tag_to_pipeline so that
-    documents tagged with this library go through the selected pipeline.
-    """
-
-    library_tag_id: str
-    pipeline_name: str
-
-
-class ProcessingPipelineInfo(BaseModel):
-    """
-    Describes the effective processing pipeline for a library.
-
-    Contains the pipeline name, whether it is the default for this library,
-    and the flattened input/output processor configs per extension plus
-    any library-level processors.
-    """
-
-    name: str
-    is_default_for_library: bool
-    input_processors: List[ProcessorConfig]
-    output_processors: List[ProcessorConfig]
-    library_output_processors: List[LibraryProcessorConfig]
-
-
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
     tmp_dir = tempfile.mkdtemp()
     filename = file.filename or "uploaded_file"
@@ -263,13 +150,25 @@ class IngestionController:
         cfg = ApplicationContext.get_instance().get_config()
         registry: Dict[str, Type[BaseFastTextProcessor]] = {}
         if cfg.attachment_processors:
+            # Watch out this makes it possible to configure arbitrary class paths, but since this is an admin-level config and we require the classes to be a known base type.
+            # More importantly the processors in action here must absolutely be fast and lightweight, so we don't want to allow arbitrary processor classes that might do heavy
+            # processing or have large dependencies. These fast processors re used whenever user attach files to their conversations, so they need to be optimized for speed and low resource usage
+            # to keep the user experience smooth.
             for entry in cfg.attachment_processors:
                 cls = _dynamic_import_processor(entry.class_path)
                 if not issubclass(cls, BaseFastTextProcessor):
                     raise TypeError(f"{entry.class_path} is not a BaseFastTextProcessor")
-                registry[entry.prefix.lower()] = cls
+                suffix = entry.suffix.lower()
+                if suffix.startswith("*."):
+                    suffix = suffix[1:]
+                registry[suffix] = cls
         if not registry:
-            registry["*"] = FastUnstructuredTextProcessingProcessor
+            # registry["*"] = FastUnstructuredTextProcessingProcessor
+            registry[".pdf"] = FastLitePdfProcessor
+            registry[".docx"] = FastLiteDocxProcessor
+            registry[".pptx"] = FastLitePptxProcessor
+            registry[".csv"] = FastLiteCsvProcessor
+        logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
     def _get_fast_text_processor(self, filename: str) -> BaseFastTextProcessor:
@@ -650,238 +549,6 @@ class IngestionController:
             )
         logger.info("IngestionController initialized.")
 
-        # ------------------------------------------------------------------
-        # Processing pipeline management endpoints
-        # ------------------------------------------------------------------
-
-        @router.get(
-            "/processing/pipelines/available-processors",
-            tags=["Processing"],
-            summary="List available input/output processors for pipelines",
-            response_model=AvailableProcessorsResponse,
-        )
-        async def list_available_processors(
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> AvailableProcessorsResponse:
-            """
-            Returns the processors currently configured in Fred that can be used
-            to build processing pipelines.
-
-            This is derived from processing profiles for inputs and from
-            output_processors (or default output processors) for outputs.
-            It falls back to default output processors when
-            no explicit mapping is present.
-            """
-            app_context = ApplicationContext.get_instance()
-            cfg = app_context.get_config()
-
-            input_cfg_map: dict[tuple[str, str], ProcessorConfig] = {}
-            for profile_name in ("fast", "medium", "rich"):
-                profile_cfg = cfg.processing.get_profile_config(profile_name)
-                for pc in profile_cfg.input_processors:
-                    key = (pc.suffix.lower(), pc.class_path)
-                    if key in input_cfg_map:
-                        continue
-                    input_cfg_map[key] = _with_description(
-                        ProcessorConfig(
-                            prefix=pc.suffix,
-                            class_path=pc.class_path,
-                            description=pc.description,
-                        ),
-                    )
-            input_cfg = sorted(input_cfg_map.values(), key=lambda item: (item.prefix, item.class_path))
-
-            # For outputs: if explicit config exists, use it.
-            # Otherwise, synthesise ProcessorConfig entries from the default pipeline.
-            if cfg.output_processors:
-                output_cfg = [_with_description(pc) for pc in cfg.output_processors]
-            else:
-                # Use the default pipeline to discover effective output processors
-                from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
-
-                default_pipeline = ProcessingPipeline.build_default(app_context)
-                output_cfg = []
-                for suffix, procs in default_pipeline.output_processors.items():
-                    for proc in procs:
-                        class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                        output_cfg.append(_with_description(ProcessorConfig(prefix=suffix, class_path=class_path)))
-
-            library_output_cfg: List[LibraryProcessorConfig] = [_with_library_description(lp) for lp in cfg.library_output_processors or []]
-
-            # Always expose the summarization output processor for markdown outputs,
-            # so admins can choose to make summarization an explicit pipeline step.
-            try:
-                summary_class_path = "knowledge_flow_backend.core.processors.output.summarizer.summarization_output_processor.SummarizationOutputProcessor"
-                # Avoid duplicates if it is already configured
-                if not any(p.prefix.lower() == ".md" and p.class_path == summary_class_path for p in output_cfg):
-                    output_cfg.append(
-                        _with_description(ProcessorConfig(prefix=".md", class_path=summary_class_path)),
-                    )
-            except Exception:
-                logger.exception("Failed to register SummarizationOutputProcessor in available processors list")
-
-            # Expose a default library-level processor unless already present.
-            try:
-                toc_class_path = "knowledge_flow_backend.core.library_processors.library_toc_output_processor.LibraryTocOutputProcessor"
-                if not any(p.class_path == toc_class_path for p in library_output_cfg):
-                    library_output_cfg.append(_with_library_description(LibraryProcessorConfig(class_path=toc_class_path)))
-            except Exception:
-                logger.exception("Failed to register LibraryTocOutputProcessor in available processors list")
-
-            return AvailableProcessorsResponse(
-                input_processors=input_cfg,
-                output_processors=output_cfg,
-                library_output_processors=library_output_cfg,
-            )
-
-        @router.post(
-            "/processing/pipelines",
-            tags=["Processing"],
-            summary="Register or update a processing pipeline (runtime only)",
-        )
-        async def register_processing_pipeline(
-            definition: ProcessingPipelineDefinition,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            """
-            Register or update a named processing pipeline.
-
-            Notes:
-            - Pipelines are kept in-memory for now (no persistence).
-            - Input processors are optional; when omitted, the default pipeline's
-              input processors are reused.
-            - Output processors must be valid classes importable as BaseOutputProcessor.
-            """
-            pipeline_manager = self.service.pipeline_manager
-
-            from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
-
-            # Start from default pipeline, then override per definition.
-            default_pipeline = pipeline_manager.default_pipeline
-
-            input_map = dict(default_pipeline.input_processors)
-            if definition.input_processors:
-                for pc in definition.input_processors:
-                    cls = _dynamic_import_processor(pc.class_path)
-                    if not issubclass(cls, BaseMarkdownProcessor) and not issubclass(cls, BaseTabularProcessor):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Class {pc.class_path} is not a supported input processor.",
-                        )
-                    input_map[pc.prefix.lower()] = cls()
-
-            output_map: dict[str, list[BaseOutputProcessor]] = {}
-            for pc in definition.output_processors:
-                cls = _dynamic_import_processor(pc.class_path)
-                if not issubclass(cls, BaseOutputProcessor):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Class {pc.class_path} is not a BaseOutputProcessor.",
-                    )
-                output_map.setdefault(pc.prefix.lower(), []).append(cls())
-
-            library_processors: list[LibraryOutputProcessor] = []
-            for lp in definition.library_output_processors or []:
-                cls = _dynamic_import_processor(lp.class_path)
-                if not issubclass(cls, LibraryOutputProcessor):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Class {lp.class_path} is not a LibraryOutputProcessor.",
-                    )
-                library_processors.append(cls())
-
-            pipeline = ProcessingPipeline(
-                name=definition.name,
-                input_processors=input_map,
-                output_processors=output_map,
-                library_output_processors=library_processors,
-            )
-
-            pipeline_manager.pipelines[definition.name] = pipeline
-
-            return {"status": "ok", "name": definition.name}
-
-        @router.post(
-            "/processing/pipelines/assign-library",
-            tags=["Processing"],
-            summary="Assign a processing pipeline to a library tag (runtime only)",
-        )
-        async def assign_pipeline_to_library(
-            assignment: PipelineAssignment,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            """
-            Assign an existing processing pipeline to a given library tag id.
-
-            This updates the in-memory ProcessingPipelineManager.tag_to_pipeline map
-            and affects subsequent ingestions for documents tagged with this library.
-            """
-            pipeline_manager = self.service.pipeline_manager
-
-            if assignment.pipeline_name not in pipeline_manager.pipelines:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Pipeline '{assignment.pipeline_name}' not found.",
-                )
-
-            pipeline_manager.tag_to_pipeline[assignment.library_tag_id] = assignment.pipeline_name
-
-            return {"status": "ok", "library_tag_id": assignment.library_tag_id, "pipeline_name": assignment.pipeline_name}
-
-        @router.get(
-            "/processing/pipelines/library/{library_tag_id}",
-            tags=["Processing"],
-            summary="Get effective processing pipeline for a library tag",
-            response_model=ProcessingPipelineInfo,
-        )
-        async def get_library_pipeline(
-            library_tag_id: str,
-            user: KeycloakUser = Depends(get_current_user),
-        ) -> ProcessingPipelineInfo:
-            """
-            Returns the pipeline currently associated with a library tag id.
-
-            If no explicit pipeline is mapped to this tag, the default pipeline is returned
-            and is_default_for_library is set to True.
-            """
-            pipeline_manager = self.service.pipeline_manager
-
-            # Decide which pipeline name is in effect for this tag id
-            mapped_name = pipeline_manager.tag_to_pipeline.get(library_tag_id)
-            if mapped_name and mapped_name in pipeline_manager.pipelines:
-                pipeline_name = mapped_name
-                is_default = False
-            else:
-                pipeline_name = pipeline_manager.default_pipeline.name
-                is_default = True
-
-            pipeline = pipeline_manager.pipelines.get(pipeline_name, pipeline_manager.default_pipeline)
-
-            # Reconstruct ProcessorConfig lists from instantiated processors
-            input_cfg: List[ProcessorConfig] = []
-            for prefix, proc in pipeline.input_processors.items():
-                class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                input_cfg.append(_with_description(ProcessorConfig(prefix=prefix, class_path=class_path)))
-
-            output_cfg: List[ProcessorConfig] = []
-            for prefix, procs in pipeline.output_processors.items():
-                for proc in procs:
-                    class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                    output_cfg.append(_with_description(ProcessorConfig(prefix=prefix, class_path=class_path)))
-
-            library_output_cfg: List[LibraryProcessorConfig] = []
-            for proc in getattr(pipeline, "library_output_processors", []):
-                class_path = f"{proc.__class__.__module__}.{proc.__class__.__name__}"
-                library_output_cfg.append(_with_library_description(LibraryProcessorConfig(class_path=class_path)))
-
-            return ProcessingPipelineInfo(
-                name=pipeline_name,
-                is_default_for_library=is_default,
-                input_processors=input_cfg,
-                output_processors=output_cfg,
-                library_output_processors=library_output_cfg,
-            )
-
         @router.post(
             "/upload-documents",
             tags=["Processing"],
@@ -1042,6 +709,7 @@ class IngestionController:
                     opts = FastTextOptions(**filtered)
                 except Exception as e:
                     raise HTTPException(status_code=400, detail=f"Invalid options_json: {e}")
+            opts.fast = True
 
             # Extract
             try:
@@ -1065,6 +733,15 @@ class IngestionController:
                         result.page_count,
                         result.truncated,
                     )
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "code": "fast_text_empty_extraction",
+                            "message": f"No text could be extracted from {filename}.",
+                        },
+                    )
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"[FAST TEXT] Extraction failed for {filename}: {e}", exc_info=True)
                 raise HTTPException(status_code=400, detail=str(e))
@@ -1082,7 +759,7 @@ class IngestionController:
 
             if fmt.lower() == "text":
                 return Response(content=result.text, media_type="text/plain; charset=utf-8")
-
+            logger.info(f"[FAST TEXT] Returning JSON result for {filename} with text length {len(result.text or '')}")
             # Default JSON payload
             return {
                 "document_name": result.document_name,
@@ -1101,6 +778,7 @@ class IngestionController:
                 """
                 Extract compact text via the fast processor and store it as vectors with user/session scoping.
                 Uses scheduler backend from configuration (memory or temporal) for vector storage.
+                Returns vector ingest metadata and a compact summary for UI previews.
             """
             ),
         )
@@ -1120,16 +798,27 @@ class IngestionController:
 
             # Parse options
             opts = FastTextOptions()
+            include_summary = True
+            summary_max_chars: Optional[int] = 12_000
             if options_json:
                 try:
                     payload = _json.loads(options_json)
                     if not isinstance(payload, dict):
                         raise ValueError("options_json must be an object")
+                    include_summary = bool(payload.get("include_summary", True))
+                    summary_max_chars_raw = payload.get("summary_max_chars", 12_000)
+                    if summary_max_chars_raw is None:
+                        summary_max_chars = None
+                    else:
+                        summary_max_chars = int(summary_max_chars_raw)
+                        if summary_max_chars <= 0:
+                            summary_max_chars = None
                     allowed = {f.name for f in dataclasses.fields(FastTextOptions)}
                     filtered = {k: v for k, v in payload.items() if k in allowed}
                     opts = FastTextOptions(**filtered)
                 except Exception as e:
                     raise HTTPException(status_code=400, detail=f"Invalid options_json: {e}")
+            opts.fast = True
 
             # Store to temp
             raw_path = uploadfile_to_path(file)
@@ -1147,6 +836,23 @@ class IngestionController:
                     result.truncated,
                 )
                 text = result.text or ""
+                if not text.strip() and not result.pages:
+                    logger.warning(
+                        "[FAST TEXT][INGEST] EMPTY FILE user=%s file=%s (page_count=%s truncated=%s)",
+                        user.uid,
+                        filename,
+                        result.page_count,
+                        result.truncated,
+                    )
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "code": "fast_text_empty_extraction",
+                            "message": f"No text could be extracted from {filename}.",
+                        },
+                    )
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(status_code=400, detail=str(e))
             finally:
@@ -1182,8 +888,6 @@ class IngestionController:
                     docs.append(Document(page_content=p.text or "", metadata=doc_meta))
             else:
                 # Single combined doc fallback
-                if not text.strip():
-                    text = "_(empty markdown extracted)_"
                 chunk_uid = uuid.uuid4().hex
                 doc_meta = {
                     "document_uid": document_uid,
@@ -1217,12 +921,25 @@ class IngestionController:
                 logger.exception("[FAST TEXT][INGEST] Failed to store vectors for %s", filename)
                 raise HTTPException(status_code=500, detail="Failed to store vectors")
 
+            summary_md = ""
+            summary_truncated = False
+            if include_summary:
+                summary_md = (result.text or "").replace("\x00", "").strip()
+                if not summary_md:
+                    summary_md = "_(No summary returned by Knowledge Flow)_"
+                elif summary_max_chars is not None and len(summary_md) > summary_max_chars:
+                    summary_md = summary_md[:summary_max_chars].rstrip() + "\n…"
+                    summary_truncated = True
+
             return {
                 "document_uid": document_uid,
                 "chunks": chunks,
                 "total_chars": result.total_chars,
                 "truncated": result.truncated,
                 "scope": scope,
+                "summary_md": summary_md,
+                "summary_chars": len(summary_md),
+                "summary_truncated": summary_truncated,
             }
 
         @router.delete(

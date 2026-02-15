@@ -10,32 +10,6 @@
                 }
             }
         ],
-        "./knowledge_flow_backend/core/processors/input/pptx_markdown_processor/pptx_markdown_processor.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 34,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 56,
-                    "endColumn": 60,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 46,
-                    "endColumn": 50,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./knowledge_flow_backend/core/stores/vector/weaviate_vector_store.py": [
             {
                 "code": "reportAttributeAccessIssue",

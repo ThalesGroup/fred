@@ -229,7 +229,7 @@ def validate_output_processor_config(config: Configuration):
             cls = getattr(module, class_name)
             if not issubclass(cls, BaseOutputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
-            logger.debug(f"Validated output processor: {entry.class_path} for prefix: {entry.prefix}")
+            logger.debug(f"Validated output processor: {entry.class_path} for prefix: {entry.suffix}")
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
 
@@ -261,7 +261,7 @@ def validate_attachment_processor_config(config: Configuration):
             cls = getattr(module, class_name)
             if not issubclass(cls, BaseFastTextProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseFastTextProcessor")
-            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.prefix)
+            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.suffix)
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Attachment Processor '{entry.class_path}' could not be loaded: {e}")
 
@@ -423,8 +423,8 @@ class ApplicationContext:
             cls = self._dynamic_import(entry.class_path)
             if not issubclass(cls, BaseOutputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseOutputProcessor")
-            logger.debug(f"Loaded output processor: {entry.class_path} for prefix: {entry.prefix}")
-            registry[entry.prefix.lower()] = cls
+            logger.debug(f"Loaded output processor: {entry.class_path} for prefix: {entry.suffix}")
+            registry[entry.suffix.lower()] = cls
         return registry
 
     def get_config(self) -> Configuration:

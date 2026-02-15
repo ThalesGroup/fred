@@ -117,6 +117,16 @@ class AgentManager:
                 f"Agent '{agent_settings.id}' already exists."
             )
 
+        # Keep chat_options consistent with tuning defaults at creation time.
+        try:
+            agent_settings.chat_options = self._chat_options_from_tuning(agent_tuning)
+        except Exception:
+            logger.debug(
+                "[AGENTS] Failed to derive chat_options from tuning for %s at creation time",
+                agent_settings.id,
+                exc_info=True,
+            )
+
         await self.store.save(agent_settings, agent_tuning)
         logger.info("[AGENTS] agent=%s registered as dynamic agent.", agent_settings.id)
 

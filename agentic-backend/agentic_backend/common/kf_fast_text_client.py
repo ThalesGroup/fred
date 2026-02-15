@@ -94,7 +94,7 @@ class KfFastTextClient(KfBaseClient):
     ) -> Dict[str, Any]:
         """
         Fast ingest path: use the fast extractor and store vectors with scoping metadata.
-        Returns the backend payload (document_uid, chunks, etc.).
+        Returns the backend payload (document_uid, chunks, summary_md, etc.).
         """
         options_json = json.dumps(options or {})
         mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
