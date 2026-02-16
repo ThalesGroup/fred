@@ -40,9 +40,9 @@ async def resolve_push_input_file_for_worker(
     metadata: DocumentMetadata,
     working_dir: pathlib.Path,
 ) -> pathlib.Path:
-    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = IngestionService()
+    ingestion_service = get_ingestion_service()
     await asyncio.to_thread(ingestion_service.get_local_copy, user, metadata, working_dir)
     return _first_input_file(working_dir / "input")
 
@@ -51,9 +51,9 @@ async def resolve_push_input_file_for_worker(
 async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Starting file={file}")
-    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = IngestionService()
+    ingestion_service = get_ingestion_service()
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
     metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
@@ -81,9 +81,9 @@ async def push_input_process(
     logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
     logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
 
-    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = IngestionService()
+    ingestion_service = get_ingestion_service()
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)

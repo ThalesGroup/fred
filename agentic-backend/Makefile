@@ -28,6 +28,19 @@ run-worker-prod: dev ## run the Temporal agent worker with production config
 temporal-key: dev ## generate a Temporal payload encryption key
 	$(UV) run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
+.PHONY: run-worker-docker
+run-worker-docker: ## Run the worker in Docker
+	@echo "🚀 Running the worker in Docker..."
+	docker run --rm -it \
+		--name $(WORKER_CONTAINER_NAME) \
+		--network $(WORKER_DOCKER_NETWORK) \
+		-v $(realpath config):/app/config:ro \
+		-e CONFIG_FILE=/app/config/configuration_worker.yaml \
+		-e ENV_FILE=/app/config/.env \
+		--entrypoint python \
+		$(IMAGE_FULL) \
+		-m agentic_backend.main_worker
+
 ##@ Docker
 
 .PHONY: docker-build
@@ -41,9 +54,22 @@ docker-build: ## Build the Docker image
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
 
+.PHONY: run-docker
+run-docker: ## Run the API in Docker
+	@echo "🚀 Running the API in Docker..."
+	docker run --rm -it \
+		--name $(API_CONTAINER_NAME) \
+		--network $(API_DOCKER_NETWORK) \
+		-v $(realpath config):/app/config:ro \
+		-e ENV_FILE=/app/config/.env \
+		$(if $(CONFIG_FILE),-e CONFIG_FILE=$(CONFIG_FILE),) \
+		$(IMAGE_FULL)
+
 .PHONY: docker-run
-docker-run: ## Run the app in Docker
-	docker run -it \
-		-p $(PORT):$(PORT) \
-		-v $(realpath config/configuration.yaml):/app/configuration.yaml \
-		$(IMAGE_FULL) --config-path /app/configuration.yaml
+docker-run: run-docker ## Backward-compatible alias for run-docker
+
+# Docker worker runtime defaults
+WORKER_CONTAINER_NAME ?= agentic-worker
+WORKER_DOCKER_NETWORK ?= host
+API_CONTAINER_NAME ?= agentic-api
+API_DOCKER_NETWORK ?= host

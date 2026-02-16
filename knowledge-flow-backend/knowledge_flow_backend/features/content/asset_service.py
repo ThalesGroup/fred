@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.base_content_store import StoredObjectInfo
-from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.tag.tag_service import TagCreate, TagService, TagType
 
 USER_ASSET_TAG_NAME = "User Assets"
@@ -135,7 +135,7 @@ class AssetService:  # RENAMED from AgentAssetService
 
         # Legacy path: Full ingestion for other scopes (currently unused)
         # This is kept for backward compatibility but may be removed in the future
-        ingestion_service = IngestionService()
+        ingestion_service = get_ingestion_service()
         tag_service = TagService()
 
         # 0️⃣ Get or create the "user_asset" tag (single source of truth)
