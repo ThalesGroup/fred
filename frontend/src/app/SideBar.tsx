@@ -19,7 +19,7 @@ import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, CSSObject, Divider, Paper, styled, Theme } from "@mui/material";
+import { Avatar, Box, CSSObject, Divider, Paper, styled, Theme, Typography } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,6 +36,7 @@ import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewCo
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
+import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
@@ -240,6 +241,19 @@ export default function SideBar() {
       : []),
   ];
 
+  // List user teams
+  // todo: handle loading
+  // todo: handle error
+  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
+  const yourTeams = teams && teams.filter((t) => t.is_member);
+  const teamsMenuItem: SideBarNavigationElement[] =
+    yourTeams?.map((t) => ({
+      key: t.id,
+      label: t.name,
+      url: `team/${t.id}/${agentsNicknamePlural}`,
+      icon: <Avatar src={t.banner_image_url || ""} sx={{ height: "24px", width: "24px" }} />,
+    })) || [];
+
   const logoName = getProperty("logoName") || "fred";
   const logoNameDark = getProperty("logoNameDark") || "fred-dark";
 
@@ -298,6 +312,24 @@ export default function SideBar() {
               <SideBarDivider />
             </>
           )}
+
+          {/* Teams */}
+          <Box sx={{ display: "flex", alignItems: "center", px: 2, pt: 1 }}>
+            <Typography variant="caption" color="textSecondary">
+              {t("sidebar.yourTeamsSectionTitle")}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              overflowY: "auto",
+              overflowX: "hidden",
+              scrollbarWidth: "none",
+              maxHeight: "calc(36px * 5.8)",
+            }}
+          >
+            <SideBarNavigationList menuItems={teamsMenuItem} isSidebarOpen={open} />
+          </Box>
+          <SideBarDivider />
 
           {/* Conversations */}
           <SideBarConversationsSection isSidebarOpen={open} />
