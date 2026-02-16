@@ -1,4 +1,4 @@
-import { Avatar, Box, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
@@ -7,6 +7,7 @@ import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
+import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { capitalize } from "../utils/capitalize";
@@ -74,7 +75,12 @@ export function TeamDetailsPage() {
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, px: 3, py: 2 }}>
         {/* Avatar banner */}
-        <Avatar variant="rounded" src={team?.banner_image_url || ""} sx={{ height: "3.5rem", width: "3.5rem" }} />
+        <TeamAvatar
+          variant="rounded"
+          teamName={team?.name}
+          imageUrl={team?.banner_image_url}
+          sx={{ height: "3.5rem", width: "3.5rem" }}
+        />
 
         {/* Title and description */}
         <Box sx={{ display: "flex", flexDirection: "column" }}>
