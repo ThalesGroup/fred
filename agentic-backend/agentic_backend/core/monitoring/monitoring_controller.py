@@ -72,14 +72,17 @@ async def get_node_numerical_metrics(
             raise HTTPException(400, detail=f"Unsupported aggregation op: {op}")
         agg_mapping.setdefault(field, []).append(op)
 
-    return await session_orchestrator.get_metrics(
-        user,
-        start=start,
-        end=end,
-        precision=precision,
-        groupby=groupby,
-        agg_mapping=agg_mapping,
-    )
+    try:
+        return await session_orchestrator.get_metrics(
+            user,
+            start=start,
+            end=end,
+            precision=precision,
+            groupby=groupby,
+            agg_mapping=agg_mapping,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(

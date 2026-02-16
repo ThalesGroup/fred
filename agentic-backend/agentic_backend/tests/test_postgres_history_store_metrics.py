@@ -89,3 +89,34 @@ async def test_get_chatbot_metrics_binds_datetime_filters():
         datetime(2026, 2, 16, 4, 59, 59, 999000, tzinfo=timezone.utc),
     }
     assert set(timestamp_params.values()) == expected_values
+
+
+@pytest.mark.asyncio
+async def test_get_chatbot_metrics_rejects_invalid_start_timestamp():
+    conn = _FakeConn()
+
+    store = cast(Any, object.__new__(PostgresHistoryStore))
+    store.store = _FakeStore(conn)
+    store.table = Table(
+        "session_history",
+        MetaData(),
+        Column("session_id", String),
+        Column("user_id", String),
+        Column("rank", Integer),
+        Column("timestamp", DateTime(timezone=True)),
+        Column("role", String),
+        Column("channel", String),
+        Column("exchange_id", String),
+        Column("parts_json", String),
+        Column("metadata_json", String),
+    )
+
+    with pytest.raises(ValueError, match=r"Invalid 'start' timestamp"):
+        await cast(PostgresHistoryStore, store).get_chatbot_metrics(
+            start="not-a-datetime",
+            end="2026-02-16T04:59:59.999Z",
+            user_id="u-1",
+            precision="hour",
+            groupby=[],
+            agg_mapping={},
+        )
