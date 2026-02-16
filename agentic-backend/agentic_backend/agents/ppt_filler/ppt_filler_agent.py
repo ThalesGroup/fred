@@ -1,0 +1,207 @@
+"""PPT Filler Agent for extracting data from documents and filling PowerPoint templates."""
+
+import logging
+import os
+
+from langchain.agents import create_agent
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Checkpointer
+
+from agentic_backend.agents.ppt_filler.export_tools import ExportTools
+from agentic_backend.agents.ppt_filler.extraction_tools import ExtractionTools
+from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.common.mcp_runtime import MCPRuntime
+from agentic_backend.common.structures import AgentChatOptions
+from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    FieldSpec,
+    MCPServerRef,
+    UIHints,
+)
+from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.runtime_source import expose_runtime_source
+
+logger = logging.getLogger(__name__)
+
+
+@expose_runtime_source("agent.PptFiller")
+class PptFillerAgent(AgentFlow):
+    """Agent that extracts data from documents to fill PowerPoint templates."""
+
+    tuning = AgentTuning(
+        role="PowerPoint Template Filler",
+        description="Extracts data from resumes and project documents to fill PowerPoint templates with structured information.",
+        mcp_servers=[MCPServerRef(id="mcp-knowledge-flow-mcp-text")],
+        tags=["document", "powerpoint", "extraction"],
+        fields=[
+            FieldSpec(
+                key="ppt.template_key",
+                type="text",
+                title="PowerPoint Template Key",
+                description="Agent asset key for the .pptx template file.",
+                ui=UIHints(group="PowerPoint"),
+                default="ppt_template.pptx",
+            ),
+            FieldSpec(
+                key="prompts.system",
+                type="prompt",
+                title="System Prompt",
+                description="Instructions for the agent on how to extract and fill data",
+                required=True,
+                default="""Tu es un expert en extraction de données professionnelles depuis des documents pour remplir des templates PowerPoint.
+
+## OUTILS DISPONIBLES
+
+**Extraction de données (3 phases):**
+- `extract_enjeux_besoins(context_hint?)` - Extrait le contexte et les missions du projet depuis les documents
+- `extract_cv(project_context?, context_hint?)` - Extrait le CV de l'intervenant (compétences, expériences, formations)
+- `extract_prestation_financiere(context_hint?)` - Extrait les informations financières (prestations, prix, charges)
+
+**Génération du fichier:**
+- `fill_template(enjeux_json, cv_json, prestation_json)` - Génère le fichier PowerPoint avec les données extraites
+
+## WORKFLOW STANDARD
+
+**1. Extraction des enjeux et besoins (EN PREMIER)**
+- Appelle `extract_enjeux_besoins()` pour obtenir le contexte projet
+- Cette étape est OBLIGATOIRE car le contexte sera utilisé pour aligner le CV avec le projet
+- Paramètre `context_hint` optionnel: nom du projet pour cibler la recherche
+
+**2. Extraction du CV**
+- Appelle `extract_cv(project_context=<contexte extrait étape 1>)`
+- Le contexte projet permet d'aligner les compétences et expériences avec le projet
+- Paramètre `context_hint` optionnel: nom du candidat pour cibler la recherche
+- Les compétences sont filtrées selon leur pertinence au projet
+
+**3. Extraction des prestations financières**
+- Appelle `extract_prestation_financiere()`
+- Paramètre `context_hint` optionnel pour cibler la recherche
+
+**4. Génération automatique**
+- Appelle `fill_template()` avec les trois JSON pour générer le PPT
+- Fournis le lien de téléchargement
+
+## RÈGLES CRITIQUES
+
+**1. Ordre d'extraction strict**
+- TOUJOURS extraire enjeux_besoins EN PREMIER
+- Passer le contexte projet à `extract_cv()` pour alignement
+- Ne jamais générer le template sans avoir les trois JSON
+
+**2. Aucune hallucination**
+- Les outils d'extraction utilisent UNIQUEMENT les informations présentes dans les documents
+- Si une information est introuvable → champ vide dans le JSON
+- Ne JAMAIS inventer ou déduire des informations
+
+**3. Format des JSON**
+- Les outils d'extraction retournent des JSON formatés
+- Utilise ces JSON EXACTEMENT comme retournés par les outils
+- Si modification nécessaire, ajuste le JSON de manière cohérente
+
+**4. Gestion des maîtrises**
+- Les niveaux de maîtrise (langues, compétences) sont sur une échelle de 1 à 5
+- 1 = Débutant, 2 = Intermédiaire, 3 = Bon, 4 = Très bon, 5 = Expert
+- Ces niveaux sont convertis automatiquement en emoji (● et ○) lors de la génération
+
+## COMMUNICATION AVEC L'UTILISATEUR
+
+**Pendant l'extraction:**
+- Appelle les outils d'extraction en silence (pas d'annonce "je vais chercher...")
+- Informe uniquement des résultats ("✅ Enjeux et besoins extraits")
+
+**Après extraction:**
+- Informe brièvement l'utilisateur des données extraites
+- Exemple: "Extraction terminée. Génération du PowerPoint en cours..."
+
+**Après génération:**
+- Fournis le lien de téléchargement
+- Résumé: "PPT généré avec les données du projet [nom] et du candidat [poste]"
+
+## ERREURS COURANTES À ÉVITER
+
+❌ Ne jamais appeler fill_template() sans avoir les trois JSON
+❌ Ne jamais montrer les JSON bruts à l'utilisateur
+❌ Ne jamais inventer des données absentes des documents
+❌ Ne jamais extraire le CV sans passer le contexte projet
+
+✅ Toujours respecter l'ordre: enjeux → CV (avec contexte) → prestations → génération automatique
+✅ Toujours procéder directement à la génération après les extractions""",
+                ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ),
+            FieldSpec(
+                key="chat_options.attach_files",
+                type="boolean",
+                title="Allow file attachments",
+                description="Show file upload/attachment controls for this agent.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.libraries_selection",
+                type="boolean",
+                title="Document libraries picker",
+                description="Let users select document libraries/knowledge sources for this agent.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+        ],
+    )
+
+    default_chat_options = AgentChatOptions(
+        attach_files=True,
+        libraries_selection=True,
+        search_rag_scoping=False,
+        search_policy_selection=False,
+        deep_search_delegate=False,
+    )
+
+    async def async_init(self, runtime_context: RuntimeContext):
+        """Initialize agent and tool helpers."""
+        await super().async_init(runtime_context=runtime_context)
+        self.mcp = MCPRuntime(agent=self)
+        await self.mcp.init()
+
+        # Initialize tool helpers
+        self.extraction_tools = ExtractionTools(self)
+        self.export_tools = ExportTools(self)
+
+        # Check if Langfuse is configured
+        self.langfuse_enabled = bool(
+            os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")
+        )
+        if self.langfuse_enabled:
+            logger.info("[PptFillerAgent] Langfuse tracing enabled")
+
+    def _get_langfuse_handler(self) -> LangfuseCallbackHandler | None:
+        """Create a Langfuse callback handler for tracing LLM calls."""
+        if not self.langfuse_enabled:
+            return None
+        return LangfuseCallbackHandler()
+
+    async def aclose(self):
+        """Clean up resources."""
+        await self.mcp.aclose()
+
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
+        """Create the agent graph with all tools."""
+        return create_agent(
+            model=get_default_chat_model(),
+            system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
+            tools=[
+                # Extraction tools
+                self.extraction_tools.get_extract_enjeux_besoins_tool(),
+                self.extraction_tools.get_extract_cv_tool(),
+                self.extraction_tools.get_extract_prestation_financiere_tool(),
+                # Export tool
+                self.export_tools.get_fill_template_tool(),
+                # MCP tools for additional document search if needed
+                *self.mcp.get_tools(),
+            ],
+            checkpointer=checkpointer,
+        )
