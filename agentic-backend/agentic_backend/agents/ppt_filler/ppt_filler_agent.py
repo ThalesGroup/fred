@@ -80,7 +80,16 @@ class PptFillerAgent(AgentFlow):
 - Paramètre `context_hint` optionnel pour cibler la recherche
 
 **4. Génération automatique**
-- Appelle `fill_template()` avec les trois JSON pour générer le PPT
+- Appelle `fill_template(data={...})` avec une structure contenant les trois sections:
+  ```json
+  {
+    "data": {
+      "enjeuxBesoins": {...},
+      "cv": {...},
+      "prestationFinanciere": {...}
+    }
+  }
+  ```
 - Fournis le lien de téléchargement
 
 ## RÈGLES CRITIQUES
@@ -96,9 +105,10 @@ class PptFillerAgent(AgentFlow):
 - Ne JAMAIS inventer ou déduire des informations
 
 **3. Format des JSON**
-- Les outils d'extraction retournent des JSON formatés
-- Utilise ces JSON EXACTEMENT comme retournés par les outils
-- Si modification nécessaire, ajuste le JSON de manière cohérente
+- Les outils d'extraction retournent des JSON avec structure PLATE (formation1, formation2, etc.)
+- Pas de tableaux/listes - les champs sont numérotés (ex: langue1, langue2, langue3)
+- Les JSON sont prêts à être utilisés tels quels dans fill_template
+- Respecte la structure de données attendue par fill_template (voir workflow étape 4)
 
 **4. Gestion des maîtrises**
 - Les niveaux de maîtrise (langues, compétences) sont sur une échelle de 1 à 5
@@ -125,9 +135,11 @@ class PptFillerAgent(AgentFlow):
 ❌ Ne jamais montrer les JSON bruts à l'utilisateur
 ❌ Ne jamais inventer des données absentes des documents
 ❌ Ne jamais extraire le CV sans passer le contexte projet
+❌ Ne jamais oublier la structure `data: {...}` lors de l'appel à fill_template
 
 ✅ Toujours respecter l'ordre: enjeux → CV (avec contexte) → prestations → génération automatique
-✅ Toujours procéder directement à la génération après les extractions""",
+✅ Toujours procéder directement à la génération après les extractions
+✅ Structure correcte: fill_template(data={"enjeuxBesoins": {...}, "cv": {...}, "prestationFinanciere": {...}})""",
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
             FieldSpec(

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Type, get_args, get_origin
+from typing import Type
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
@@ -52,40 +52,12 @@ class ExtractionTools:
     def _get_schema_description(self, model_class: Type[BaseModel]) -> str:
         """
         Build a human-readable field list from a Pydantic model.
-        Recurses into nested models and lists.
+        For flattened models, just lists all fields with their descriptions.
         """
         lines = []
         for field_name, field_info in model_class.model_fields.items():
-            field_type = field_info.annotation
             description = field_info.description or ""
-
-            # Handle list types
-            if field_type is not None and get_origin(field_type) is list:
-                args = get_args(field_type)
-                if args:
-                    inner_type = args[0]
-                    if isinstance(inner_type, type) and issubclass(
-                        inner_type, BaseModel
-                    ):
-                        # Nested model in list
-                        lines.append(
-                            f"- {field_name} (liste de {inner_type.__name__}):"
-                        )
-                        for (
-                            sub_field_name,
-                            sub_field_info,
-                        ) in inner_type.model_fields.items():
-                            sub_desc = sub_field_info.description or ""
-                            lines.append(f"  - {sub_field_name}: {sub_desc}")
-                    else:
-                        # Simple list
-                        lines.append(f"- {field_name} (liste): {description}")
-                else:
-                    # List without type args
-                    lines.append(f"- {field_name} (liste): {description}")
-            else:
-                # Simple field
-                lines.append(f"- {field_name}: {description}")
+            lines.append(f"- {field_name}: {description}")
 
         return "\n".join(lines)
 
@@ -315,10 +287,7 @@ RÈGLES IMPORTANTES:
             if not isinstance(result, CV):
                 result = CV.model_validate(result)
 
-            logger.info(
-                f"Extracted CV: poste={result.poste}, {len(result.formations)} formations, "
-                f"{len(result.experiences)} experiences"
-            )
+            logger.info(f"Extracted CV: poste={result.poste}")
 
             # Return formatted JSON
             json_output = json.dumps(result.model_dump(), ensure_ascii=False, indent=2)
@@ -389,10 +358,7 @@ RÈGLES IMPORTANTES:
             if not isinstance(result, PrestationFinanciere):
                 result = PrestationFinanciere.model_validate(result)
 
-            logger.info(
-                f"Extracted PrestationFinanciere: {len(result.prestations)} prestations, "
-                f"total={result.prixTotal}€"
-            )
+            logger.info(f"Extracted PrestationFinanciere: total={result.prixTotal}€")
 
             # Return formatted JSON
             json_output = json.dumps(result.model_dump(), ensure_ascii=False, indent=2)
