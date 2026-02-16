@@ -220,6 +220,9 @@ class PostgresHistoryStore(BaseHistoryStore):
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
+        start_dt = _normalize_ts(start)
+        end_dt = _normalize_ts(end)
+
         async with self.store.begin() as conn:
             result = await conn.execute(
                 select(
@@ -234,8 +237,8 @@ class PostgresHistoryStore(BaseHistoryStore):
                     self.table.c.metadata_json,
                 )
                 .where(
-                    self.table.c.timestamp >= start,
-                    self.table.c.timestamp <= end,
+                    self.table.c.timestamp >= start_dt,
+                    self.table.c.timestamp <= end_dt,
                     self.table.c.user_id == user_id,
                 )
                 .order_by(self.table.c.timestamp.asc())
