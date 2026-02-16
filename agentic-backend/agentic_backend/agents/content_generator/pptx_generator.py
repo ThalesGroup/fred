@@ -424,7 +424,7 @@ class Sloan(AgentFlow):
                 raise RuntimeError(
                     "Runtime context missing session_id; required for scoped retrieval."
                 )
-            hits: List[VectorSearchHit] = self.search_client.search(
+            hits: List[VectorSearchHit] = await self.search_client.search(
                 question=question,
                 top_k=top_k,
                 document_library_tags_ids=doc_tag_ids,
@@ -437,7 +437,9 @@ class Sloan(AgentFlow):
 
             if not hits:
                 warn = "I did not find any relevant documents. Try rephrasing your question."
-                messages = self.with_chat_context_text([HumanMessage(content=warn)])
+                messages = await self.with_chat_context_text(
+                    [HumanMessage(content=warn)]
+                )
                 return {"messages": [await self.model.ainvoke(messages)]}
 
             hits = sort_hits(hits)
@@ -456,7 +458,7 @@ class Sloan(AgentFlow):
             # ----------------------------------
 
             messages = [sys_msg, human_msg]
-            messages = self.with_chat_context_text(messages)
+            messages = await self.with_chat_context_text(messages)
 
             answer_msg = await self.model.ainvoke(messages)
             answer_text = getattr(answer_msg, "content", "")

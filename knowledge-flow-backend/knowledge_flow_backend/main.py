@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
 
     base_url = configuration.app.base_url
 
-    if not configuration.processing.use_gpu:
+    if not configuration.processing.is_gpu_enabled_any_profile():
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         os.environ["MPS_VISIBLE_DEVICES"] = ""
         import torch

@@ -18,9 +18,13 @@ import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, 
 import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
+import { usePermissions } from "../../../security/usePermissions";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
-import { ProcessDocumentsProgressResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  IngestionProcessingProfile,
+  ProcessDocumentsProgressResponse,
+} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { ProgressFileStatus, ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
@@ -48,8 +52,12 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const { t } = useTranslation();
   const { showError, showInfo } = useToast();
   const theme = useTheme();
+  const { can } = usePermissions();
+  // TODO(security): replace this temporary gate with a dedicated permission for profile selection.
+  const canSelectProcessingProfile = can("document", "update");
 
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
+  const [processingProfile, setProcessingProfile] = useState<IngestionProcessingProfile>("fast");
   const [tempFiles, setTempFiles] = useState<File[]>([]);
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
   const [progressSummaryByFile, setProgressSummaryByFile] = useState<
@@ -186,6 +194,12 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
     try {
       for (const file of tempFiles) {
         try {
+          const requestMetadata = canSelectProcessingProfile
+            ? {
+                ...(metadata || {}),
+                profile: processingProfile,
+              }
+            : { ...(metadata || {}) };
           await streamUploadOrProcessDocument(
             file,
             uploadMode,
@@ -235,7 +249,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
                 });
               }, delay);
             },
-            metadata,
+            requestMetadata,
             (summaryUpdate: UploadProcessProgressSummary) => {
               setProgressSummaryByFile((prev) => ({
                 ...prev,
@@ -300,6 +314,24 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
           <MenuItem value="process">{t("documentLibrary.uploadAndProcess")}</MenuItem>
         </Select>
       </FormControl>
+
+      {canSelectProcessingProfile && (
+        <FormControl fullWidth sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Processing Profile
+          </Typography>
+          <Select
+            value={processingProfile}
+            onChange={(e) => setProcessingProfile(e.target.value as IngestionProcessingProfile)}
+            size="small"
+            sx={{ borderRadius: "8px" }}
+          >
+            <MenuItem value="fast">Fast</MenuItem>
+            <MenuItem value="medium">Medium</MenuItem>
+            <MenuItem value="rich">Rich</MenuItem>
+          </Select>
+        </FormControl>
+      )}
 
       <SimpleTooltip title={t("documentLibrary.uploadDrawerTooltip")} placement="left">
         <Paper

@@ -17,7 +17,11 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from fred_core.sql import AsyncBaseSqlStore
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    run_ddl_with_advisory_lock,
+)
 from pydantic import TypeAdapter
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text, select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -39,6 +43,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
     def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "feedback_"):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         metadata = MetaData()
         self.table = Table(
@@ -56,8 +61,12 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                await conn.run_sync(metadata.create_all)
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
     async def list(self) -> List[FeedbackRecord]:
         async with self.store.begin() as conn:

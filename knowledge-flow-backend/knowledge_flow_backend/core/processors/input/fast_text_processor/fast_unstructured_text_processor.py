@@ -14,6 +14,7 @@
 import logging
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, Dict
 
 from unstructured.partition.auto import partition
 
@@ -36,10 +37,14 @@ class FastUnstructuredTextProcessingProcessor(BaseFastTextProcessor):
     """
 
     def extract(self, file_path: Path, options: FastTextOptions | None = None) -> FastTextResult:
-        logger.info(f"Extracting {file_path} to text")
+        logger.info(f"[PROCESSOR][UNSTRUCTURED] extracting {file_path} to text")
         opts = options or FastTextOptions()
+        partition_kwargs: Dict[str, Any] = {"filename": str(file_path)}
+        if opts.fast:
+            partition_kwargs["strategy"] = "fast"
+            partition_kwargs["skip_infer_table_types"] = ["pdf", "jpg", "png", "xls", "xlsx"]
         try:
-            elements = partition(filename=str(file_path))
+            elements = partition(**partition_kwargs)
             page_map: dict[int, list[str]] = defaultdict(list)
 
             for el in elements:
@@ -153,5 +158,5 @@ class FastUnstructuredTextProcessingProcessor(BaseFastTextProcessor):
                 pages=pages,
             )
         except Exception:
-            logger.exception("Failed to extract %s to text", file_path)
+            logger.exception("[PROCESSOR][UNSTRUCTURED]Failed to extract %s to text", file_path)
             raise

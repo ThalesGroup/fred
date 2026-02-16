@@ -15,10 +15,10 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "debug"
+  log_level: "warning"
   reload: false
   reload_dir: "."
-  metrics_enabled: true
+  metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
   # KPI settings for local benchmarks and debugging.
@@ -27,7 +27,7 @@ app:
   kpi_log_summary_top_n: 20
 
 scheduler:
-  enabled: true
+  enabled: false
   backend: temporal
   temporal:
     host: "localhost:7233"
@@ -78,7 +78,7 @@ ai:
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 1024
   # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
-  max_concurrent_sessions_per_user: 10
+  max_concurrent_sessions_per_user: 1000
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -107,8 +107,8 @@ ai:
         write: 60.0
         pool: 20.0
       http_client_limits:
-        max_connections: 500
-        max_keepalive_connections: 200
+        max_connections: 200
+        max_keepalive_connections: 0
         keepalive_expiry_seconds: 10
       temperature: 0.0
 
@@ -144,6 +144,22 @@ ai:
       enabled: true
       chat_options:
         attach_files: false
+    - id: "Sammy"
+      name: "Sammy"
+      type: "agent"
+      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
+      enabled: true
+    - id: "Rico"
+      name: "Rico"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
+        search_rag_scoping: true
+        deep_search_delegate: false
+        attach_files: true
+        include_corpus_in_search: true # default value, set to false if you want to prevent the agent from searching in the corpus. Coupled with libraries_selection=false gives you an agent only capable of searching through attachments with a disabled widget for searching through the libraries.
 
 mcp:
   servers:
@@ -199,8 +215,8 @@ storage:
     database: fred
     username: fred
     pool_size: 20
-    max_overflow: 20
-    pool_timeout: 30
+    max_overflow: 10
+    pool_timeout: 100
     pool_recycle: 1800
 
   opensearch:
@@ -238,9 +254,9 @@ storage:
     table: tasks
 
   kpi_store:
-    type: "opensearch"
-    index: kpi-index
+    type: "log"
+    level: "DEBUG"
 
   log_store:
-    type: "opensearch"
-    index: log-index
+    type: "stdout"
+    level: "DEBUG"

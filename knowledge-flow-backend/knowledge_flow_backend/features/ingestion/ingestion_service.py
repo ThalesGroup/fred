@@ -21,6 +21,8 @@ from fred_core import Action, KeycloakUser, Resource, authorize
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, SourceType
+from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile, processing_profile_scope
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
@@ -154,14 +156,23 @@ class IngestionService:
         return self.content_store.get_local_copy(metadata.document_uid, target_dir)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    async def extract_metadata(self, user: KeycloakUser, file_path: pathlib.Path, tags: list[str], source_tag: str) -> DocumentMetadata:
+    async def extract_metadata(
+        self,
+        user: KeycloakUser,
+        file_path: pathlib.Path,
+        tags: list[str],
+        source_tag: str,
+        profile: IngestionProcessingProfile | str | None = None,
+    ) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
         to extract metadata. It also validates the metadata to ensure it contains a document UID.
         """
         suffix = file_path.suffix.lower()
-        processor = self.context.get_input_processor_instance(suffix)
+        normalized_profile = coerce_processing_profile(profile)
+        pipeline = self.pipeline_manager.get_pipeline_for_profile(normalized_profile)
+        processor = pipeline.get_input_processor(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
 
         # Step 1: run processor
@@ -185,25 +196,43 @@ class IngestionService:
         return metadata
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    def process_input(self, user: KeycloakUser, input_path: pathlib.Path, output_dir: pathlib.Path, metadata: DocumentMetadata) -> None:
+    def process_input(
+        self,
+        user: KeycloakUser,
+        input_path: pathlib.Path,
+        output_dir: pathlib.Path,
+        metadata: DocumentMetadata,
+        profile: IngestionProcessingProfile | str | None = None,
+    ) -> None:
         """
         Processes an input document from input_path and writes outputs to output_dir.
         Saves metadata.json alongside.
         """
-        pipeline = self.pipeline_manager.get_pipeline_for_metadata(metadata)
-        pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
+        normalized_profile = coerce_processing_profile(profile)
+        with processing_profile_scope(normalized_profile):
+            pipeline = self.pipeline_manager.get_pipeline_for_metadata(metadata, profile=normalized_profile)
+            pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
-    def process_output(self, user: KeycloakUser, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:
+    def process_output(
+        self,
+        user: KeycloakUser,
+        input_file_name: str,
+        output_dir: pathlib.Path,
+        input_file_metadata: DocumentMetadata,
+        profile: IngestionProcessingProfile | str | None = None,
+    ) -> DocumentMetadata:
         """
         Processes data resulting from the input processing.
         """
-        pipeline = self.pipeline_manager.get_pipeline_for_metadata(input_file_metadata)
-        return pipeline.process_output(
-            input_file_name=input_file_name,
-            output_dir=output_dir,
-            input_file_metadata=input_file_metadata,
-        )
+        normalized_profile = coerce_processing_profile(profile)
+        with processing_profile_scope(normalized_profile):
+            pipeline = self.pipeline_manager.get_pipeline_for_metadata(input_file_metadata, profile=normalized_profile)
+            return pipeline.process_output(
+                input_file_name=input_file_name,
+                output_dir=output_dir,
+                input_file_metadata=input_file_metadata,
+            )
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     def get_preview_file(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> pathlib.Path:

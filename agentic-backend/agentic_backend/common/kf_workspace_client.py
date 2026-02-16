@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, BinaryIO, Optional
 
+import httpx
 import requests
 
 from agentic_backend.common.kf_base_client import KfBaseClient
@@ -104,24 +105,27 @@ class KfWorkspaceClient(KfBaseClient):
         return f"/storage/agent-user/{agent_id}/{target_user_id}/upload"
 
     # ---------------- Core operations ----------------
-    def _get_file_stream(self, path: str, access_token: str) -> requests.Response:
-        r = self._request_with_token_refresh(
-            "GET", path, access_token=access_token, stream=True
+    async def _get_file_stream(self, path: str, access_token: str) -> httpx.Response:
+        r = await self._request_with_token_refresh(
+            "GET",
+            path,
+            phase_name="kf_workspace_fetch_stream",
+            access_token=access_token,
+            stream=True,
         )
         r.raise_for_status()
         return r
 
-    def _fetch_text_at_path(self, path: str, access_token: str) -> str:
+    async def _fetch_text_at_path(self, path: str, access_token: str) -> str:
         """Fetch the complete text content of a user file."""
         try:
-            response = self._get_file_stream(path, access_token)
+            response = await self._get_file_stream(path, access_token)
 
-            content_bytes = b""
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    content_bytes += chunk
-            response.close()
-            return content_bytes.decode("utf-8")
+            content = bytearray()
+            async for chunk in response.aiter_bytes():
+                content.extend(chunk)
+            await response.aclose()
+            return bytes(content).decode("utf-8")
 
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
@@ -143,27 +147,31 @@ class KfWorkspaceClient(KfBaseClient):
             ) from e
 
     # -------------- Public dedicated methods --------------
-    def fetch_user_text(self, key: str, access_token: str) -> str:
+    async def fetch_user_text(self, key: str, access_token: str) -> str:
         """Lire un fichier d'échange utilisateur → agent (ex: rapport généré) en texte clair."""
-        return self._fetch_text_at_path(self._path_user_download(key), access_token)
+        return await self._fetch_text_at_path(
+            self._path_user_download(key), access_token
+        )
 
-    def fetch_agent_config_text(
+    async def fetch_agent_config_text(
         self, key: str, access_token: str, agent_id: str
     ) -> str:
         """Lire un fichier de configuration d'agent (ex: template, prompt) en texte clair."""
-        return self._fetch_text_at_path(
+        return await self._fetch_text_at_path(
             self._path_agent_config_download(agent_id, key), access_token
         )
 
-    def fetch_agent_user_text(
+    async def fetch_agent_user_text(
         self, key: str, access_token: str, agent_id: str, target_user_id: str
     ) -> str:
         """Lire une note mémo privée d'un agent pour un utilisateur donné (agent-only)."""
-        return self._fetch_text_at_path(
+        return await self._fetch_text_at_path(
             self._path_agent_user_download(agent_id, target_user_id, key), access_token
         )
 
-    def _fetch_blob_at_path(self, path: str, access_token: str) -> UserStorageBlob:
+    async def _fetch_blob_at_path(
+        self, path: str, access_token: str
+    ) -> UserStorageBlob:
         """
         Why: Return raw bytes + HTTP metadata. The agent decides if it will:
              - inline a small text preview, or
@@ -172,17 +180,15 @@ class KfWorkspaceClient(KfBaseClient):
         Requires access_token for authorization.
         """
         try:
-            resp = self._get_file_stream(path, access_token)
-            try:
-                chunks = []
-                total = 0
-                for chunk in resp.iter_content(chunk_size=8192):
-                    if chunk:
-                        chunks.append(chunk)
-                        total += len(chunk)
-                content = b"".join(chunks)
-            finally:
-                resp.close()
+            resp = await self._get_file_stream(path, access_token)
+            chunks = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                if chunk:
+                    chunks.append(chunk)
+                    total += len(chunk)
+            content = b"".join(chunks)
+            await resp.aclose()
 
             ctype = resp.headers.get("Content-Type", "application/octet-stream")
             disp = resp.headers.get("Content-Disposition", "")
@@ -214,28 +220,30 @@ class KfWorkspaceClient(KfBaseClient):
                 f"Failed to read asset '{path}' ({type(e).__name__})."
             ) from e
 
-    def fetch_user_blob(self, key: str, access_token: str) -> UserStorageBlob:
+    async def fetch_user_blob(self, key: str, access_token: str) -> UserStorageBlob:
         """Récupérer un fichier d'échange utilisateur → agent (binaire + métadonnées)."""
-        return self._fetch_blob_at_path(self._path_user_download(key), access_token)
+        return await self._fetch_blob_at_path(
+            self._path_user_download(key), access_token
+        )
 
-    def fetch_agent_config_blob(
+    async def fetch_agent_config_blob(
         self, key: str, access_token: str, agent_id: str
     ) -> UserStorageBlob:
         """Récupérer un fichier de configuration d'agent (binaire + métadonnées)."""
-        return self._fetch_blob_at_path(
+        return await self._fetch_blob_at_path(
             self._path_agent_config_download(agent_id, key), access_token
         )
 
-    def fetch_agent_user_blob(
+    async def fetch_agent_user_blob(
         self, key: str, access_token: str, agent_id: str, target_user_id: str
     ) -> UserStorageBlob:
         """Récupérer une note privée agent↔utilisateur (binaire + métadonnées)."""
-        return self._fetch_blob_at_path(
+        return await self._fetch_blob_at_path(
             self._path_agent_user_download(agent_id, target_user_id, key), access_token
         )
 
     # ---------------- Uploads ----------------
-    def _upload_blob(
+    async def _upload_blob(
         self,
         path: str,
         key: str,
@@ -251,9 +259,10 @@ class KfWorkspaceClient(KfBaseClient):
         }
         data = {"key": key}
         try:
-            r = self._request_with_token_refresh(
+            r = await self._request_with_token_refresh(
                 "POST",
                 path,
+                phase_name="kf_workspace_upload",
                 files=files,
                 data=data,
             )
@@ -286,7 +295,7 @@ class KfWorkspaceClient(KfBaseClient):
                 f"Failed to upload asset '{key}' ({type(e).__name__})."
             ) from e
 
-    def upload_user_blob(
+    async def upload_user_blob(
         self,
         key: str,
         file_content: bytes | BinaryIO,
@@ -295,9 +304,9 @@ class KfWorkspaceClient(KfBaseClient):
     ) -> UserStorageUploadResult:
         """Déposer un fichier pour un utilisateur (ex: rapport à télécharger)."""
         path = self._path_user_upload()
-        return self._upload_blob(path, key, file_content, filename, content_type)
+        return await self._upload_blob(path, key, file_content, filename, content_type)
 
-    def upload_agent_config_blob(
+    async def upload_agent_config_blob(
         self,
         key: str,
         file_content: bytes | BinaryIO,
@@ -307,9 +316,9 @@ class KfWorkspaceClient(KfBaseClient):
     ) -> UserStorageUploadResult:
         """Déposer un fichier de configuration d'agent (ex: template, prompt)."""
         path = self._path_agent_config_upload(agent_id)
-        return self._upload_blob(path, key, file_content, filename, content_type)
+        return await self._upload_blob(path, key, file_content, filename, content_type)
 
-    def upload_agent_user_blob(
+    async def upload_agent_user_blob(
         self,
         key: str,
         file_content: bytes | BinaryIO,
@@ -320,26 +329,41 @@ class KfWorkspaceClient(KfBaseClient):
     ) -> UserStorageUploadResult:
         """Déposer une note privée pour un utilisateur spécifique (carnet de l'agent)."""
         path = self._path_agent_user_upload(agent_id, target_user_id)
-        return self._upload_blob(path, key, file_content, filename, content_type)
+        return await self._upload_blob(path, key, file_content, filename, content_type)
 
-    def delete_user_blob(self, key: str, access_token: str) -> None:
+    async def delete_user_blob(self, key: str, access_token: str) -> None:
         """Supprimer un fichier côté espace utilisateur."""
         path = self._path_user_download(key)
-        r = self._request_with_token_refresh("DELETE", path, access_token=access_token)
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            path,
+            phase_name="kf_workspace_delete_user",
+            access_token=access_token,
+        )
         r.raise_for_status()
 
-    def delete_agent_config_blob(
+    async def delete_agent_config_blob(
         self, key: str, access_token: str, agent_id: str
     ) -> None:
         """Supprimer un fichier de configuration d'agent."""
         path = self._path_agent_config_download(agent_id, key)
-        r = self._request_with_token_refresh("DELETE", path, access_token=access_token)
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            path,
+            phase_name="kf_workspace_delete_agent_config",
+            access_token=access_token,
+        )
         r.raise_for_status()
 
-    def delete_agent_user_blob(
+    async def delete_agent_user_blob(
         self, key: str, access_token: str, agent_id: str, target_user_id: str
     ) -> None:
         """Supprimer une note privée agent↔utilisateur."""
         path = self._path_agent_user_download(agent_id, target_user_id, key)
-        r = self._request_with_token_refresh("DELETE", path, access_token=access_token)
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            path,
+            phase_name="kf_workspace_delete_agent_user",
+            access_token=access_token,
+        )
         r.raise_for_status()

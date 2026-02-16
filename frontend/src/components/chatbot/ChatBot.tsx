@@ -62,6 +62,47 @@ const MAX_DEBUG_EVENTS = 60;
 
 const ellipsize = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}...` : text);
 
+const parseUpstreamDetail = (value: unknown): string | null => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.detail === "string" && parsed.detail.trim()) return parsed.detail.trim();
+      if (typeof parsed?.message === "string" && parsed.message.trim()) return parsed.message.trim();
+    } catch {
+      // Keep raw when not JSON.
+    }
+    return raw;
+  }
+  if (typeof value === "object") {
+    const maybe = value as { detail?: unknown; message?: unknown };
+    if (typeof maybe.detail === "string" && maybe.detail.trim()) return maybe.detail.trim();
+    if (typeof maybe.message === "string" && maybe.message.trim()) return maybe.message.trim();
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const extractUploadErrorMessage = (err: any): string => {
+  const detail = err?.data?.detail ?? err?.data ?? err?.error;
+  if (typeof detail === "string") return detail;
+  if (typeof detail === "object" && detail) {
+    const message = (detail as any).message || (detail as any).code;
+    const upstream = parseUpstreamDetail((detail as any).upstream);
+    if (message && upstream && upstream !== message) return `${message}\n${upstream}`;
+    if (message) return String(message);
+    if (upstream) return upstream;
+    return JSON.stringify(detail);
+  }
+  return (err as Error)?.message || "Unknown error";
+};
+
 type QueryChatOptions = {
   suppressUserMessage?: boolean;
   traceThought?: string;
@@ -875,13 +916,7 @@ const ChatBot = ({
       onNewSessionCreated(session.id);
       return session.id;
     } catch (err: any) {
-      const detail = err?.data?.detail ?? err?.data ?? err?.error;
-      const errMsg =
-        typeof detail === "string"
-          ? detail
-          : typeof detail === "object" && detail
-            ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
-            : (err as Error)?.message || "Unknown error";
+      const errMsg = extractUploadErrorMessage(err);
       showError({ summary: "Session creation failed", detail: errMsg });
       throw err;
     }
@@ -939,13 +974,7 @@ const ChatBot = ({
               bodyUploadFileAgenticV1ChatbotUploadPost: formData as any,
             }).unwrap();
           } catch (err: any) {
-            const detail = err?.data?.detail ?? err?.data ?? err?.error;
-            const errMsg =
-              typeof detail === "string"
-                ? detail
-                : typeof detail === "object" && detail
-                  ? detail.message || detail.upstream || detail.code || JSON.stringify(detail)
-                  : (err as Error)?.message || "Unknown error";
+            const errMsg = extractUploadErrorMessage(err);
             showError({ summary: "Upload failed", detail: errMsg });
           } finally {
             // no-op

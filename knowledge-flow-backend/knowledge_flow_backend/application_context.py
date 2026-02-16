@@ -183,18 +183,39 @@ def get_filesystem() -> BaseFilesystem:
     return get_app_context().get_filesystem()
 
 
-def validate_input_processor_config(config: Configuration):
-    """Ensure all input processor classes can be imported and subclass BaseProcessor."""
-    for entry in config.input_processors:
-        module_path, class_name = entry.class_path.rsplit(".", 1)
-        try:
-            module = importlib.import_module(module_path)
-            cls = getattr(module, class_name)
-            if not issubclass(cls, BaseInputProcessor):
-                raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
-            logger.debug(f"Validated input processor: {entry.class_path} for prefix: {entry.prefix}")
-        except (ImportError, AttributeError, TypeError) as e:
-            raise ImportError(f"Input Processor '{entry.class_path}' could not be loaded: {e}")
+def validate_profile_input_processor_config(config: Configuration):
+    """Ensure all profile input processor classes can be imported and subclass BaseInputProcessor."""
+    default_profile_cfg = config.processing.get_profile_config(config.processing.default_profile)
+    if not default_profile_cfg.input_processors:
+        raise ValueError(
+            f"processing.profiles.{config.processing.default_profile.value}.input_processors must not be empty",
+        )
+
+    for profile_name in ("fast", "medium", "rich"):
+        profile_cfg = config.processing.get_profile_config(profile_name)
+        seen_suffixes: set[str] = set()
+        for entry in profile_cfg.input_processors:
+            suffix = entry.suffix.lower()
+            if suffix in seen_suffixes:
+                raise ValueError(
+                    f"Duplicate input processor suffix '{suffix}' in processing.profiles.{profile_name}.input_processors",
+                )
+            seen_suffixes.add(suffix)
+
+            module_path, class_name = entry.class_path.rsplit(".", 1)
+            try:
+                module = importlib.import_module(module_path)
+                cls = getattr(module, class_name)
+                if not issubclass(cls, BaseInputProcessor):
+                    raise TypeError(f"{entry.class_path} is not a subclass of BaseInputProcessor")
+                logger.debug(
+                    "Validated profile input processor: %s for profile=%s suffix=%s",
+                    entry.class_path,
+                    profile_name,
+                    suffix,
+                )
+            except (ImportError, AttributeError, TypeError) as e:
+                raise ImportError(f"Input Processor '{entry.class_path}' could not be loaded: {e}")
 
 
 def validate_output_processor_config(config: Configuration):
@@ -208,7 +229,7 @@ def validate_output_processor_config(config: Configuration):
             cls = getattr(module, class_name)
             if not issubclass(cls, BaseOutputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
-            logger.debug(f"Validated output processor: {entry.class_path} for prefix: {entry.prefix}")
+            logger.debug(f"Validated output processor: {entry.class_path} for prefix: {entry.suffix}")
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Output Processor '{entry.class_path}' could not be loaded: {e}")
 
@@ -240,7 +261,7 @@ def validate_attachment_processor_config(config: Configuration):
             cls = getattr(module, class_name)
             if not issubclass(cls, BaseFastTextProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseFastTextProcessor")
-            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.prefix)
+            logger.debug("Validated attachment processor: %s for prefix: %s", entry.class_path, entry.suffix)
         except (ImportError, AttributeError, TypeError) as e:
             raise ImportError(f"Attachment Processor '{entry.class_path}' could not be loaded: {e}")
 
@@ -284,7 +305,7 @@ class ApplicationContext:
             return
 
         self.configuration = configuration
-        validate_input_processor_config(configuration)
+        validate_profile_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         validate_library_output_processor_config(configuration)
         validate_attachment_processor_config(configuration)
@@ -371,13 +392,27 @@ class ApplicationContext:
         cls._instance = None
 
     def _load_input_processor_registry(self) -> Dict[str, Type[BaseInputProcessor]]:
-        registry = {}
-        for entry in self.configuration.input_processors:
+        registry: Dict[str, Type[BaseInputProcessor]] = {}
+        default_profile = self.configuration.processing.default_profile
+        profile_cfg = self.configuration.processing.get_profile_config(default_profile)
+
+        for entry in profile_cfg.input_processors:
             cls = self._dynamic_import(entry.class_path)
             if not issubclass(cls, BaseInputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseProcessor")
-            logger.debug(f"Loaded input processor: {entry.class_path} for prefix: {entry.prefix}")
-            registry[entry.prefix.lower()] = cls
+            suffix = entry.suffix.lower()
+            logger.debug(
+                "Loaded input processor: %s for default profile=%s suffix=%s",
+                entry.class_path,
+                default_profile.value,
+                suffix,
+            )
+            registry[suffix] = cls
+
+        if not registry:
+            raise ValueError(
+                f"No input processors configured for default profile '{default_profile.value}'",
+            )
         return registry
 
     def _load_output_processor_registry(self) -> Dict[str, Type[BaseOutputProcessor]]:
@@ -388,8 +423,8 @@ class ApplicationContext:
             cls = self._dynamic_import(entry.class_path)
             if not issubclass(cls, BaseOutputProcessor):
                 raise TypeError(f"{entry.class_path} is not a subclass of BaseOutputProcessor")
-            logger.debug(f"Loaded output processor: {entry.class_path} for prefix: {entry.prefix}")
-            registry[entry.prefix.lower()] = cls
+            logger.debug(f"Loaded output processor: {entry.class_path} for prefix: {entry.suffix}")
+            registry[entry.suffix.lower()] = cls
         return registry
 
     def get_config(self) -> Configuration:
@@ -408,7 +443,7 @@ class ApplicationContext:
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
         """
         Get the input processor class for a given file extension. The mapping is
-        defined in the configuration.yaml file.
+        resolved from processing.default_profile.input_processors.
         Args:
             extension (str): The file extension for which to get the processor class.
         Returns:
@@ -590,9 +625,10 @@ class ApplicationContext:
             except Exception as e:
                 logging.error(f"[CROSSENCODER][OFFLINE] The configuration is missing : Error: {e}")
                 logging.error("[CROSSENCODER][OFFLINE] Loading a default model : cross-encoder/ms-marco-MiniLM-L-12-v2")
+                default_cache = str(Path.home() / ".cache" / "huggingface")
                 return CrossEncoder(
                     model_name_or_path="cross-encoder/ms-marco-MiniLM-L-12-v2",
-                    cache_folder="/app/models",
+                    cache_folder=default_cache,
                     local_files_only=True,
                 )
 
@@ -980,7 +1016,11 @@ class ApplicationContext:
         Returns:
             bool: True if enabled, False otherwise.
         """
-        return self.configuration.processing.generate_summary
+        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+
+        profile = get_current_processing_profile()
+        profile_cfg = self.configuration.processing.get_profile_config(profile)
+        return profile_cfg.generate_summary
 
     def _log_sensitive(self, name: str, value: Optional[str]):
         logger.info(f"     ↳ {name} set: {'✅' if value else '❌'}")
@@ -1044,12 +1084,24 @@ class ApplicationContext:
             logger.error("     ❌ Unsupported embedding provider: %s", provider)
             raise ValueError(f"Unsupported embedding provider: {provider}")
 
-        processing = self.configuration.processing or {}
+        processing = self.configuration.processing
         # Processing flags (your new simple shape)
         logger.info("  ⚙️ Processing policy:")
-        logger.info("     ↳ use_gpu: %s", processing.use_gpu)
-        logger.info("     ↳ process_images: %s", processing.process_images)
-        logger.info("     ↳ generate_summary: %s", processing.generate_summary)
+        logger.info("     ↳ default_profile: %s", processing.default_profile)
+        logger.info("     ↳ any_profile_use_gpu: %s", processing.is_gpu_enabled_any_profile())
+        for profile_name in ("fast", "medium", "rich"):
+            profile_cfg = processing.get_profile_config(profile_name)
+            logger.info("     ↳ profile.%s.use_gpu: %s", profile_name, profile_cfg.use_gpu)
+            logger.info("     ↳ profile.%s.process_images: %s", profile_name, profile_cfg.process_images)
+            logger.info("     ↳ profile.%s.generate_summary: %s", profile_name, profile_cfg.generate_summary)
+            logger.info("     ↳ profile.%s.pdf.backend: %s", profile_name, profile_cfg.pdf.backend)
+            logger.info("     ↳ profile.%s.pdf.images_scale: %s", profile_name, profile_cfg.pdf.images_scale)
+            logger.info("     ↳ profile.%s.pdf.generate_picture_images: %s", profile_name, profile_cfg.pdf.generate_picture_images)
+            logger.info("     ↳ profile.%s.pdf.generate_page_images: %s", profile_name, profile_cfg.pdf.generate_page_images)
+            logger.info("     ↳ profile.%s.pdf.generate_table_images: %s", profile_name, profile_cfg.pdf.generate_table_images)
+            logger.info("     ↳ profile.%s.pdf.do_table_structure: %s", profile_name, profile_cfg.pdf.do_table_structure)
+            logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
+            logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
         try:

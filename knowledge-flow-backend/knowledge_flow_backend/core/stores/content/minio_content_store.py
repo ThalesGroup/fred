@@ -104,7 +104,7 @@ class MinioStorageBackend(BaseContentStore):
         try:
             self.client = Minio(clean_endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
         except ValueError as e:
-            logger.error(f"❌ Failed to initialize MinIO client: {e}")
+            logger.error(f"[CONTENT][MINIO] Failed to initialize MinIO client: {e}")
             raise
 
         # Create a separate client for presigned URLs when a public endpoint (ingress) is configured.
@@ -122,7 +122,7 @@ class MinioStorageBackend(BaseContentStore):
         for bucket_name in self.buckets:
             if not self.client.bucket_exists(bucket_name):
                 self.client.make_bucket(bucket_name)
-                logger.info(f"[CONTENT] Bucket '{bucket_name}' created successfully.")
+                logger.info(f"[CONTENT][MINIO] Bucket '{bucket_name}' created successfully.")
 
     # ----------------------------------------------------------------------
     # DOCUMENT-RELATED METHODS (Use self.document_bucket)
@@ -138,9 +138,9 @@ class MinioStorageBackend(BaseContentStore):
                 try:
                     # MODIFIED: Use document_bucket
                     self.client.fput_object(self.document_bucket, object_name, str(file_path))
-                    logger.info(f"[CONTENT] object={object_name} to document bucket='{self.document_bucket}'.")
+                    logger.info(f"[CONTENT][MINIO] object={object_name} to document bucket='{self.document_bucket}'.")
                 except S3Error as e:
-                    logger.error(f"[CONTENT] Failed to upload path={file_path}: {e}")
+                    logger.error(f"[CONTENT][MINIO] Failed to upload path={file_path}: {e}")
                     raise ValueError(f"Failed to upload '{file_path}': {e}")
 
     def _upload_folder(self, document_uid: str, local_path: Path, subfolder: str):
@@ -158,9 +158,9 @@ class MinioStorageBackend(BaseContentStore):
                 try:
                     # MODIFIED: Use document_bucket
                     self.client.fput_object(self.document_bucket, object_name, str(file_path))
-                    logger.info(f"[CONTENT] object={object_name} to document bucket='{self.document_bucket}'")
+                    logger.info(f"[CONTENT][MINIO] object={object_name} to document bucket='{self.document_bucket}'")
                 except S3Error as e:
-                    logger.error(f"❌ Failed to upload '{file_path}' as '{object_name}': {e}")
+                    logger.error(f"[CONTENT][MINIO] Failed to upload '{file_path}' as '{object_name}': {e}")
                     raise ValueError(f"Upload failed for '{object_name}': {e}")
 
     def save_input(self, document_uid: str, input_dir: Path) -> None:
@@ -182,12 +182,11 @@ class MinioStorageBackend(BaseContentStore):
                 if obj.object_name is None:
                     raise RuntimeError(f"MinIO object has no name: {obj}")
                 self.client.remove_object(self.document_bucket, obj.object_name)
-                logger.info(f"[CONTENT] Deleted object='{obj.object_name}' from document bucket='{self.document_bucket}'.")
+                logger.info(f"[CONTENT][MINIO] Deleted object='{obj.object_name}' from document bucket='{self.document_bucket}'.")
                 deleted_any = True
 
             if not deleted_any:
-                logger.warning(f"[CONTENT] No objects found to delete for document_uid={document_uid}.")
-
+                logger.warning(f"[CONTENT][MINIO] No objects found to delete for document_uid={document_uid}.")
         except S3Error as e:
             logger.error(f"[CONTENT] Failed to delete objects document_uid={document_uid}: {e}")
             raise ValueError(f"Failed to delete document content from MinIO: {e}")
@@ -207,7 +206,7 @@ class MinioStorageBackend(BaseContentStore):
                     doc_uids.add(prefix)
             return sorted(doc_uids)
         except S3Error as e:
-            logger.warning(f"[CONTENT] Failed to list document prefixes in bucket '{self.document_bucket}': {e}")
+            logger.warning(f"[CONTENT][MINIO] Failed to list document prefixes in bucket '{self.document_bucket}': {e}")
             return []
 
     def get_preview_bytes(self, doc_path: str) -> bytes:
@@ -215,7 +214,7 @@ class MinioStorageBackend(BaseContentStore):
             response = self.client.get_object(self.document_bucket, doc_path)
             return response.read()
         except S3Error as e:
-            logger.error(f"[CONTENT] Error fetching preview path={doc_path}: {e}")
+            logger.error(f"[CONTENT][MINIO] Error fetching preview path={doc_path}: {e}")
             raise FileNotFoundError(f"Preview image not found for document {doc_path}")
 
     def get_media(self, document_uid: str, media_id: str) -> BinaryIO:
@@ -245,10 +244,10 @@ class MinioStorageBackend(BaseContentStore):
                     deleted_any = True
 
                 if not deleted_any:
-                    logger.warning(f"⚠️ No objects found to delete in bucket '{bucket_name}'.")
+                    logger.warning(f"[CONTENT][MINIO] No objects found to delete in bucket '{bucket_name}'.")
 
             except S3Error as e:
-                logger.error(f"❌ Failed to delete objects from bucket '{bucket_name}': {e}")
+                logger.error(f"[CONTENT][MINIO] Failed to delete objects from bucket '{bucket_name}': {e}")
                 raise ValueError(f"Failed to clear content from MinIO bucket '{bucket_name}': {e}")
 
     def get_local_copy(self, document_uid: str, destination_dir: Path) -> Path:
@@ -259,22 +258,22 @@ class MinioStorageBackend(BaseContentStore):
             # MODIFIED: Use document_bucket
             objects = list(self.client.list_objects(self.document_bucket, prefix=f"{document_uid}/", recursive=True))
             if not objects:
-                raise FileNotFoundError(f"No content found for document: {document_uid}")
+                raise FileNotFoundError(f"[CONTENT][MINIO] No content found for document: {document_uid}")
 
             for obj in objects:
                 if obj.object_name is None:
-                    raise RuntimeError(f"MinIO object has no name: {obj}")
+                    raise RuntimeError(f"[CONTENT][MINIO] MinIO object has no name: {obj}")
                 relative_path = Path(obj.object_name).relative_to(document_uid)
                 target_path = destination_dir / relative_path
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 # MODIFIED: Use document_bucket
                 self.client.fget_object(self.document_bucket, obj.object_name, str(target_path))
 
-            logger.info(f"✅ Restored document {document_uid} to {destination_dir}")
+            logger.info(f"[CONTENT][MINIO] Restored document {document_uid} to {destination_dir}")
             return destination_dir
 
         except S3Error as e:
-            logger.error(f"Failed to restore document {document_uid}: {e}")
+            logger.error(f"[CONTENT][MINIO] Failed to restore document {document_uid}: {e}")
             raise
 
     def _get_primary_object_name(self, document_uid: str) -> str:
@@ -283,11 +282,11 @@ class MinioStorageBackend(BaseContentStore):
         # MODIFIED: Use document_bucket
         objects = list(self.client.list_objects(self.document_bucket, prefix=prefix, recursive=True))
         if not objects:
-            raise FileNotFoundError(f"No input content found for document: {document_uid}")
+            raise FileNotFoundError(f"[CONTENT][MINIO] No input content found for document: {document_uid}")
 
         # Assume the first object in the input folder is the primary file
         if objects[0].object_name is None:
-            raise RuntimeError(f"MinIO object has no name: {objects[0]}")
+            raise RuntimeError(f"[CONTENT][MINIO] MinIO object has no name: {objects[0]}")
 
         return objects[0].object_name
 
@@ -304,8 +303,8 @@ class MinioStorageBackend(BaseContentStore):
             file_name = Path(object_name).name
 
             if stat.size is None:
-                logger.error(f"File size is None for {object_name}")
-                raise ValueError(f"File size is None for {object_name}")
+                logger.error(f"[CONTENT][MINIO] File size is None for {object_name}")
+                raise ValueError(f"[CONTENT][MINIO] File size is None for {object_name}")
 
             return FileMetadata(
                 size=stat.size,
@@ -313,8 +312,8 @@ class MinioStorageBackend(BaseContentStore):
                 content_type=stat.content_type,
             )
         except S3Error as e:
-            logger.error(f"Error fetching metadata for {object_name}: {e}")
-            raise FileNotFoundError(f"Failed to retrieve file metadata: {e}")
+            logger.error(f"[CONTENT][MINIO] Error fetching metadata for {object_name}: {e}")
+            raise FileNotFoundError(f"[CONTENT][MINIO] Failed to retrieve file metadata: {e}")
 
     def get_content_range(self, document_uid: str, start: int, length: int) -> BinaryIO:
         object_name = self._get_primary_object_name(document_uid)
@@ -328,8 +327,8 @@ class MinioStorageBackend(BaseContentStore):
             )
             return io.BufferedReader(_ResponseRaw(resp))
         except S3Error as e:
-            logger.error(f"Error fetching range for {object_name} ({start}-{start + length - 1}): {e}")
-            raise FileNotFoundError(f"Failed to retrieve content range: {e}")
+            logger.error(f"[CONTENT][MINIO] Error fetching range for {object_name} ({start}-{start + length - 1}): {e}")
+            raise FileNotFoundError(f"[CONTENT][MINIO] Failed to retrieve content range: {e}")
 
     def get_content(self, document_uid: str) -> BinaryIO:
         object_name = self._get_primary_object_name(document_uid)
@@ -446,7 +445,7 @@ class MinioStorageBackend(BaseContentStore):
             # MODIFIED: Use object_bucket
             it = self.client.list_objects(self.object_bucket, prefix=prefix, recursive=True)
         except S3Error as e:
-            raise RuntimeError(f"list_objects failed for prefix '{prefix}': {e}") from e
+            raise RuntimeError(f"[CONTENT][MINIO] list_objects failed for prefix '{prefix}': {e}") from e
 
         items: List[StoredObjectInfo] = []
         for obj in it:
@@ -500,5 +499,5 @@ class MinioStorageBackend(BaseContentStore):
         except S3Error as e:
             if getattr(e, "code", "") in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
                 raise FileNotFoundError(f"Object not found: {key}") from e
-            logger.error(f"Failed to generate presigned URL for {key}: {e}")
+            logger.error(f"[CONTENT][MINIO] Failed to generate presigned URL for {key}: {e}")
             raise

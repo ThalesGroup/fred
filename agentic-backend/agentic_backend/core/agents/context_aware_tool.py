@@ -18,6 +18,7 @@ from agentic_backend.common.tool_node_utils import normalize_mcp_content
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContextProvider,
     get_document_library_tags_ids,
+    get_vector_search_scopes,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,6 +144,41 @@ class ContextAwareTool(BaseTool):
                 "ContextAwareTool(%s) injecting library filter: %s",
                 self.name,
                 library_ids,
+            )
+
+        session_id = getattr(context, "session_id", None)
+        if (
+            session_id
+            and "session_id" in tool_properties
+            and not kwargs.get("session_id")
+        ):
+            kwargs["session_id"] = session_id
+            logger.info(
+                "ContextAwareTool(%s) injecting session_id: %s",
+                self.name,
+                session_id,
+            )
+
+        include_session_scope, include_corpus_scope = get_vector_search_scopes(context)
+        if (
+            "include_session_scope" in tool_properties
+            and "include_session_scope" not in kwargs
+        ):
+            kwargs["include_session_scope"] = include_session_scope
+            logger.info(
+                "ContextAwareTool(%s) injecting include_session_scope=%s",
+                self.name,
+                include_session_scope,
+            )
+        if (
+            "include_corpus_scope" in tool_properties
+            and "include_corpus_scope" not in kwargs
+        ):
+            kwargs["include_corpus_scope"] = include_corpus_scope
+            logger.info(
+                "ContextAwareTool(%s) injecting include_corpus_scope=%s",
+                self.name,
+                include_corpus_scope,
             )
 
         return kwargs

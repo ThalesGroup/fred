@@ -33,10 +33,13 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fred_core import (
+    Action,
     KeycloakUser,
     RBACProvider,
+    Resource,
     UserSecurity,
     VectorSearchHit,
+    authorize_or_raise,
     decode_jwt,
     get_current_user,
     oauth2_scheme,
@@ -55,6 +58,7 @@ from agentic_backend.core.agents.runtime_context import (
     # get_deep_search_enabled,
     # get_rag_knowledge_scope,
 )
+from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_schema import (
     AwaitingHumanEvent,
     ChatAskInput,
@@ -231,6 +235,11 @@ def get_agent_manager(request: Request) -> AgentManager:
 def get_session_orchestrator(request: Request) -> SessionOrchestrator:
     """Dependency to get the session_orchestrator from app.state."""
     return request.app.state.session_orchestrator
+
+
+def get_attachment_service(request: Request) -> AttachmentService:
+    """Dependency to get the attachment service from app.state.session_orchestrator."""
+    return request.app.state.session_orchestrator.attachment_service
 
 
 def get_agent_manager_ws(websocket: WebSocket) -> AgentManager:
@@ -847,9 +856,11 @@ async def upload_file(
     file: UploadFile = File(...),
     user: KeycloakUser = Depends(get_current_user),
     access_token: str = Security(oauth2_scheme),
-    session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
+    attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> dict:
-    return await session_orchestrator.add_attachment_from_upload(
+    authorize_or_raise(user, Action.CREATE, Resource.MESSAGE_ATTACHMENTS)
+    authorize_or_raise(user, Action.CREATE, Resource.SESSIONS)
+    return await attachment_service.add_attachment_from_upload(
         user=user, access_token=access_token, session_id=session_id, file=file
     )
 

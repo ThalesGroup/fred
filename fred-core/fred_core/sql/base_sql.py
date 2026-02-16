@@ -15,17 +15,19 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
-from sqlalchemy import JSON, Table, create_engine
+from sqlalchemy import JSON, Table, create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncEngine,
@@ -438,3 +440,63 @@ class AsyncBaseSqlStore:
             )
 
         await conn.execute(stmt)
+
+
+# ------------------------- shared DDL helpers -------------------------
+
+
+def advisory_lock_key(name: str) -> int:
+    """Derive a deterministic signed 64-bit advisory lock key from a string."""
+
+    # pg_advisory_xact_lock expects a signed bigint.
+    # This hash is only used for deterministic lock-key derivation (non-cryptographic).
+    return int.from_bytes(
+        hashlib.sha1(name.encode("utf-8"), usedforsecurity=False).digest()[:8],
+        "big",
+        signed=True,
+    )
+
+
+async def run_ddl_with_advisory_lock(
+    engine: AsyncEngine,
+    lock_key: int,
+    ddl_sync_fn: Callable[[Connection], None],
+    logger: logging.Logger,
+    tolerate_exists: bool = True,
+) -> None:
+    """
+    Serialize DDL across uvicorn workers using a Postgres advisory lock.
+    If you start fred on a fresh new platforms, tables are created by the first worker to receive traffic.
+    Without this lock, multiple workers could attempt to create the same tables simultaneously, causing "already exists" errors and failed requests
+
+    - Uses pg_advisory_xact_lock on Postgres (no-op on other dialects).
+    - Runs the provided sync DDL callable via run_sync.
+    - Optionally tolerates "already exists" races (pg_type_typname_nsp_index, duplicate key/table).
+    """
+
+    async with engine.begin() as conn:  # type: ignore[misc]
+        if conn.dialect.name == "postgresql":
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": lock_key},
+            )
+
+        try:
+            await conn.run_sync(ddl_sync_fn)
+        except (IntegrityError, OperationalError, ProgrammingError) as exc:
+            if not tolerate_exists:
+                raise
+            msg = str(exc).lower()
+            race_markers = (
+                "pg_type_typname_nsp_index",
+                "already exists",
+                "duplicate key value",
+                "duplicate table",
+            )
+            if any(m in msg for m in race_markers):
+                logger.warning(
+                    "[SQL][DDL] DDL raced; assuming objects already exist (lock_id=%s)",
+                    lock_key,
+                )
+            else:
+                raise

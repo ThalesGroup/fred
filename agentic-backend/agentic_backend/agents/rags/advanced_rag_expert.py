@@ -207,6 +207,60 @@ class AdvancedRico(AgentFlow):
                 ui=UIHints(group="Reranking"),
             ),
             FieldSpec(
+                key="chat_options.attach_files",
+                type="boolean",
+                title="Allow file attachments",
+                description="Show file upload/attachment controls for this agent.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.libraries_selection",
+                type="boolean",
+                title="Document libraries picker",
+                description="Let users select document libraries/knowledge sources for this agent.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.search_policy_selection",
+                type="boolean",
+                title="Search policy selector",
+                description="Expose the search policy toggle (hybrid/semantic/strict).",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.search_rag_scoping",
+                type="boolean",
+                title="RAG scope selector",
+                description="Expose the RAG scope control (documents-only vs hybrid vs general knowledge).",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.deep_search_delegate",
+                type="boolean",
+                title="Deep search delegate toggle",
+                description="Allow delegation to a senior agent for deep search.",
+                required=False,
+                default=False,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
+                key="chat_options.include_corpus_in_search",
+                type="boolean",
+                title="Include corpus in search",
+                description="Allow corpus retrieval alongside attachments/session scope.",
+                required=False,
+                default=True,
+                ui=UIHints(group="Chat options"),
+            ),
+            FieldSpec(
                 key="export.enable_conversation_download",
                 type="boolean",
                 title="Enable Conversation Download",
@@ -362,7 +416,7 @@ class AdvancedRico(AgentFlow):
                 "agent.step_latency_ms",
                 dims={"step": "vector_search", "policy": search_policy},
             ):
-                hits: List[VectorSearchHit] = self.search_client.search(
+                hits: List[VectorSearchHit] = await self.search_client.search(
                     question=question or "",
                     top_k=top_k,
                     document_library_tags_ids=document_library_tags_ids,
@@ -459,7 +513,7 @@ class AdvancedRico(AgentFlow):
         top_r = self.get_tuned_int("rerankink.top_r", default=6)
 
         with self.kpi_timer("agent.step_latency_ms", dims={"step": "rerank"}):
-            reranked_documents = self.search_client.rerank(
+            reranked_documents = await self.search_client.rerank(
                 question=question, documents=documents, top_r=top_r
             )
 
@@ -613,7 +667,7 @@ class AdvancedRico(AgentFlow):
         )
 
         # Get optional chat context instructions
-        chat_context_instructions = self.chat_context_text()
+        chat_context_instructions = await self.chat_context_text()
         programmatic_context = state.get("context", None)
 
         # Build prompt template and variables

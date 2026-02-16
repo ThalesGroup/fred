@@ -64,7 +64,6 @@ class VectorSearchClient:
         tcfg = ctx.configuration.ai.timeout
         connect_t = float(tcfg.connect or 5)
         read_t = float(tcfg.read or 15)
-        self.timeout: float | tuple[float, float]
         self.timeout = (connect_t, read_t)
         self.session = _session_with_retries()
         self.session.auth = oa.auth

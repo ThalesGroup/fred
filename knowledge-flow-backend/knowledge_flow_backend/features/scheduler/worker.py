@@ -29,28 +29,32 @@ from temporalio.worker import Worker
 
 from knowledge_flow_backend.common.structures import TemporalSchedulerConfig
 from knowledge_flow_backend.features.scheduler.activities import (
-    create_pull_file_metadata,
     fast_delete_vectors,
     fast_store_vectors,
-    get_push_file_metadata,
-    input_process,
-    load_pull_file,
-    load_push_file,
     output_process,
     record_current_document,
     record_workflow_status,
+)
+from knowledge_flow_backend.features.scheduler.pull_files_activities import (
+    create_pull_file_metadata,
+    pull_input_process,
+)
+from knowledge_flow_backend.features.scheduler.push_files_activities import (
+    get_push_file_metadata,
+    push_input_process,
 )
 from knowledge_flow_backend.features.scheduler.workflow import (
     CreatePullFileMetadata,
     FastDeleteVectors,
     FastStoreVectors,
     GetPushFileMetadata,
-    InputProcess,
-    LoadPullFile,
-    LoadPushFile,
     OutputProcess,
-    Process,
-    ProcessFile,
+    ProcessPull,
+    ProcessPullFile,
+    ProcessPush,
+    ProcessPushFile,
+    PullInputProcess,
+    PushInputProcess,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,13 +80,14 @@ async def run_worker(config: TemporalSchedulerConfig):
         client=client,
         task_queue=config.task_queue,
         workflows=[
-            Process,
-            ProcessFile,
+            ProcessPull,
+            ProcessPullFile,
+            ProcessPush,
+            ProcessPushFile,
             CreatePullFileMetadata,
             GetPushFileMetadata,
-            LoadPullFile,
-            LoadPushFile,
-            InputProcess,
+            PullInputProcess,
+            PushInputProcess,
             OutputProcess,
             FastStoreVectors,
             FastDeleteVectors,
@@ -90,9 +95,8 @@ async def run_worker(config: TemporalSchedulerConfig):
         activities=[
             create_pull_file_metadata,
             get_push_file_metadata,
-            load_pull_file,
-            load_push_file,
-            input_process,
+            pull_input_process,
+            push_input_process,
             output_process,
             fast_store_vectors,
             fast_delete_vectors,

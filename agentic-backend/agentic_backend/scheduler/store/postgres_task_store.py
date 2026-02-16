@@ -18,11 +18,15 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from fred_core.sql import AsyncBaseSqlStore, json_for_engine
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    json_for_engine,
+    run_ddl_with_advisory_lock,
+)
 from pydantic import TypeAdapter
 from sqlalchemy import Column, Float, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import TIMESTAMP
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1
@@ -54,6 +58,7 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
     ):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         metadata = MetaData()
         json_type = json_for_engine(self.store.engine)
@@ -80,12 +85,12 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                try:
-                    await conn.run_sync(metadata.create_all)
-                except OperationalError as exc:
-                    if "already exists" not in str(exc).lower():
-                        raise
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         # Kick off table creation without blocking callers.
         try:

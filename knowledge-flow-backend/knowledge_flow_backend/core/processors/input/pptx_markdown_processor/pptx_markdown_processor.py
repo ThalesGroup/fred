@@ -14,6 +14,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pptx import Presentation
 
@@ -34,9 +35,9 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             logger.error(f"Invalid or corrupted PPTX file: {file_path} - {e}")
             return False
 
-    def extract_file_metadata(self, file_path: Path) -> dict:
+    def extract_file_metadata(self, file_path: Path) -> dict[str, Any]:
         """Extracts basic metadata from the PPTX file."""
-        metadata = {"document_name": file_path.name}
+        metadata: dict[str, Any] = {"document_name": file_path.name}
         try:
             presentation = Presentation(str(file_path))
             metadata["num_slides"] = len(presentation.slides)
@@ -57,8 +58,13 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             for slide in presentation.slides:
                 slide_md = []
                 for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text:
-                        slide_md.append(shape.text.strip())
+                    has_text_frame = bool(getattr(shape, "has_text_frame", False))
+                    text_frame = getattr(shape, "text_frame", None)
+                    if not has_text_frame or text_frame is None:
+                        continue
+                    text = str(getattr(text_frame, "text", "")).strip()
+                    if text:
+                        slide_md.append(text)
                 if slide_md:
                     slide_texts.append("### Slide\n" + "\n\n".join(slide_md))
 

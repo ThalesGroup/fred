@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 from typing import Optional
@@ -23,8 +24,11 @@ def search_image_by_name(
         logger.info(f"Searching for image with name: {image_name}")
 
         # Use VectorSearchClient.search() method
-        hits = vector_search_client.search(
-            question=image_name, top_k=5, search_policy="semantic"
+        loop = asyncio.get_event_loop()
+        hits = loop.run_until_complete(
+            vector_search_client.search(
+                question=image_name, top_k=5, search_policy="semantic"
+            )
         )
 
         if hits and len(hits) > 0:
@@ -89,8 +93,13 @@ def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
         logger.info(f"Downloading image with document_uid: {document_uid}")
 
         # Use the internal method to make authenticated GET request
-        response = kf_base_client._request_with_token_refresh(
-            "GET", f"/raw_content/{document_uid}"
+        loop = asyncio.get_event_loop()
+        response = loop.run_until_complete(
+            kf_base_client._request_with_token_refresh(
+                "GET",
+                f"/raw_content/{document_uid}",
+                phase_name="kf_raw_content_fetch",
+            )
         )
 
         if response and response.content:

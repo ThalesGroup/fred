@@ -18,7 +18,11 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
-from fred_core.sql import AsyncBaseSqlStore
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    run_ddl_with_advisory_lock,
+)
 from sqlalchemy import (
     Column,
     DateTime,
@@ -52,6 +56,7 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
     ) -> None:
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         metadata = MetaData()
         self.table = Table(
@@ -89,8 +94,12 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
 
         async def _create_async():
             try:
-                async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                    await conn.run_sync(_ensure_schema)
+                await run_ddl_with_advisory_lock(
+                    engine=self.store.engine,
+                    lock_key=self._ddl_lock_id,
+                    ddl_sync_fn=_ensure_schema,
+                    logger=logger,
+                )
                 logger.info(
                     "[SESSION][PG] Attachments table ready: %s", self.table_name
                 )

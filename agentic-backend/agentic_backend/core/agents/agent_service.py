@@ -128,6 +128,53 @@ class AgentService:
         self.agent_manager = agent_manager
         self.rebac = get_rebac_engine()
 
+    def _enrich_settings_with_class_tuning_defaults(
+        self, agent_settings: AgentSettings
+    ) -> AgentSettings:
+        """
+        Backward-compat enrichment:
+        - add missing tuning fields from class defaults (by key)
+        - recompute chat_options from the effective tuning
+        """
+        if not agent_settings.class_path:
+            return agent_settings
+
+        try:
+            agent_cls = _validate_class_path(agent_settings.class_path)
+        except InvalidClassPathError:
+            return agent_settings
+
+        class_tuning = getattr(agent_cls, "tuning", None)
+        if class_tuning is None:
+            return agent_settings
+
+        current_tuning = agent_settings.tuning or class_tuning
+        current_fields = list(current_tuning.fields or [])
+        seen_keys = {f.key for f in current_fields if f.key}
+        changed = agent_settings.tuning is None
+
+        for spec in class_tuning.fields or []:
+            if spec.key and spec.key not in seen_keys:
+                current_fields.append(spec.model_copy(deep=True))
+                seen_keys.add(spec.key)
+                changed = True
+
+        effective_tuning = current_tuning
+        if changed:
+            effective_tuning = current_tuning.model_copy(
+                update={"fields": current_fields}
+            )
+
+        derived_chat_options = AgentManager._chat_options_from_tuning(effective_tuning)
+        if agent_settings.chat_options != derived_chat_options or changed:
+            return agent_settings.model_copy(
+                update={
+                    "tuning": effective_tuning,
+                    "chat_options": derived_chat_options,
+                }
+            )
+        return agent_settings
+
     async def list_agents(
         self,
         user: KeycloakUser,
@@ -142,7 +189,7 @@ class AgentService:
         if authorized_ids is not None:
             agents = [a for a in agents if a.id in authorized_ids]
 
-        return agents
+        return [self._enrich_settings_with_class_tuning_defaults(a) for a in agents]
 
     async def get_agent_by_id(
         self, user: KeycloakUser, agent_id: str
@@ -151,7 +198,10 @@ class AgentService:
             user, AgentPermission.READ, agent_id
         )
 
-        return await self.agent_manager.get_agent_settings(agent_id)
+        settings = await self.agent_manager.get_agent_settings(agent_id)
+        if settings is None:
+            return None
+        return self._enrich_settings_with_class_tuning_defaults(settings)
 
     async def create_agent(
         self,

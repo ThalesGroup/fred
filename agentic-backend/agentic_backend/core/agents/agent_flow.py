@@ -18,7 +18,6 @@ import sys
 import tempfile
 import time
 from datetime import datetime
-from functools import partial
 from importlib.resources import files
 from pathlib import Path
 from typing import (
@@ -135,6 +134,7 @@ class AgentFlow:
         self._graph = None  # Will be built in async_init
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
+        self._prepared_context: Optional[Prepared] = None
         # has_public_key = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
         # has_secret_key = os.getenv("LANGFUSE_SECRET_KEY") is not None
 
@@ -587,12 +587,10 @@ class AgentFlow:
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            fn = partial(
-                self.storage_client.fetch_user_text,
+            return await self.storage_client.fetch_user_text(
                 asset_key,
                 access_token,
             )
-            return await get_app_context().run_in_executor(fn)
         except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             return f"[Asset Retrieval Error: {e.args[0]}]"
@@ -615,13 +613,11 @@ class AgentFlow:
         if not access_token:
             access_token = self.refresh_user_access_token()
 
-        fn = partial(
-            self.storage_client.fetch_agent_config_text,
+        return await self.storage_client.fetch_agent_config_text(
             asset_key,
             access_token,
             agent_id or self._default_agent_id(),
         )
-        return await get_app_context().run_in_executor(fn)
 
     async def _fetch_blob(
         self,
@@ -632,12 +628,10 @@ class AgentFlow:
             if not access_token:
                 access_token = self.refresh_user_access_token()
 
-            fn = partial(
-                self.storage_client.fetch_user_blob,
+            return await self.storage_client.fetch_user_blob(
                 asset_key,
                 access_token,
             )
-            return await get_app_context().run_in_executor(fn)
         except WorkspaceRetrievalError as e:
             logger.error(f"Failed to fetch asset for agent: {e}")
             raise
@@ -668,13 +662,11 @@ class AgentFlow:
             getattr(self.runtime_context, "access_token", None)
             or self.refresh_user_access_token()
         )
-        fn = partial(
-            self.storage_client.fetch_agent_config_blob,
+        blob = await self.storage_client.fetch_agent_config_blob(
             asset_key,
             access_token,
             agent_id or self._default_agent_id(),
         )
-        blob = await get_app_context().run_in_executor(fn)
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix or Path(blob.filename).suffix
         ) as f:
@@ -705,15 +697,13 @@ class AgentFlow:
             "UPLOADING_ASSET: Attempting to upload asset to user store: %s", key
         )
         try:
-            # Use get_app_context().run_in_executor to safely run the blocking client call
-            fn = partial(
-                self.storage_client.upload_user_blob,
+            # Upload via Knowledge Flow workspace client
+            result = await self.storage_client.upload_user_blob(
                 key,
                 file_content,
                 filename,
                 content_type,
             )
-            result = await get_app_context().run_in_executor(fn)
             logger.info(
                 "UPLOADING_ASSET: Upload successful. Key: %s, Size: %d, document_uid: %s",
                 result.key,
@@ -752,7 +742,7 @@ class AgentFlow:
         """Return the current effective AgentSettings for this instance."""
         return self.agent_settings
 
-    def chat_context_text(self) -> str:
+    async def chat_context_text(self) -> str:
         """
         Return the *chat context* text from the runtime context (if any).
 
@@ -764,7 +754,12 @@ class AgentFlow:
         - If your agent ignores chat context, simply don't call this method.
         """
         ctx = self.get_runtime_context() or RuntimeContext()
-        prepared: Prepared = resolve_prepared(ctx, get_knowledge_flow_base_url())
+        if self._prepared_context is None:
+            self._prepared_context = await resolve_prepared(
+                ctx,
+                get_knowledge_flow_base_url(),
+            )
+        prepared = self._prepared_context
         base = (prepared.prompt_chat_context_text or "").strip()
         # Optionally augment with per-turn attachments markdown injected by the chat layer
         if ctx.attachments_markdown is not None:
@@ -862,8 +857,19 @@ class AgentFlow:
         Notes:
         - Accepts AnyMessage/Sequence to play nicely with LangChain's typing.
         """
-        lang = get_language(self.get_runtime_context())
-        if lang and not self.chat_context_text():
+        ctx = self.get_runtime_context()
+        has_chat_context = False
+        if ctx is not None:
+            has_chat_context = bool(ctx.selected_chat_context_ids) or bool(
+                ctx.attachments_markdown
+            )
+        if not has_chat_context and self._prepared_context is not None:
+            has_chat_context = bool(
+                (self._prepared_context.prompt_chat_context_text or "").strip()
+            )
+
+        lang = get_language(ctx)
+        if lang and not has_chat_context:
             # Only inject language preference if no chat context is present to avoid duplication.
             system_text = (
                 f"{system_text}\n\n"
@@ -871,7 +877,7 @@ class AgentFlow:
             )
         return [SystemMessage(content=system_text), *messages]
 
-    def with_chat_context_text(
+    async def with_chat_context_text(
         self, messages: Sequence[AnyMessage]
     ) -> list[AnyMessage]:
         """
@@ -882,7 +888,7 @@ class AgentFlow:
 
         """
         messages = [msg for msg in messages if not isinstance(msg, ChatContextMessage)]
-        chat_context = self.chat_context_text()
+        chat_context = await self.chat_context_text()
         if not chat_context:
             return list(messages)
         include_spec = self.get_field_spec("prompts.include_chat_context")
@@ -915,6 +921,7 @@ class AgentFlow:
     def set_runtime_context(self, context: RuntimeContext) -> None:
         """Set the runtime context for this agent."""
         self.runtime_context = context
+        self._prepared_context = None
 
     def get_runtime_context(self) -> Optional[RuntimeContext]:
         """Get the current runtime context."""

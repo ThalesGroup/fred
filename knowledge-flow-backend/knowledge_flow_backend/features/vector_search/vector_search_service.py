@@ -264,7 +264,12 @@ class VectorSearchService:
         base_dims = self._kpi_search_dims(policy="semantic")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
-                ann_hits: List[AnnHit] = self.vector_store.ann_search(question, k=k, search_filter=sf)
+                ann_hits: List[AnnHit] = await asyncio.to_thread(
+                    self.vector_store.ann_search,
+                    question,
+                    k=k,
+                    search_filter=sf,
+                )
             except Exception as e:
                 kpi_dims["error_code"] = "ann_search_failed"
                 kpi_dims["exception_type"] = type(e).__name__
@@ -286,7 +291,7 @@ class VectorSearchService:
         hits_count = len(ann_hits)
         self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         if not ann_hits:
-            logger.warning(
+            logger.info(
                 "[VECTOR][SEARCH][ANN] no hits returned; tags=%s metadata_terms=%s question_len=%d",
                 library_tags_ids,
                 metadata_terms,
@@ -347,7 +352,12 @@ class VectorSearchService:
         base_dims = self._kpi_search_dims(policy="strict")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
-                hits: List[FullTextHit] = self.vector_store.full_text_search(query=question, top_k=k, search_filter=search_filter)
+                hits: List[FullTextHit] = await asyncio.to_thread(
+                    self.vector_store.full_text_search,
+                    query=question,
+                    top_k=k,
+                    search_filter=search_filter,
+                )
             except Exception as e:
                 kpi_dims["error_code"] = "fulltext_search_failed"
                 kpi_dims["exception_type"] = type(e).__name__
@@ -406,7 +416,12 @@ class VectorSearchService:
         base_dims = self._kpi_search_dims(policy="hybrid")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
-                hits: List[HybridHit] = self.vector_store.hybrid_search(query=question, top_k=k, search_filter=search_filter)
+                hits: List[HybridHit] = await asyncio.to_thread(
+                    self.vector_store.hybrid_search,
+                    query=question,
+                    top_k=k,
+                    search_filter=search_filter,
+                )
             except Exception as e:
                 kpi_dims["error_code"] = "hybrid_search_failed"
                 kpi_dims["exception_type"] = type(e).__name__

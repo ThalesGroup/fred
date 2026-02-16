@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-
-import requests
 
 from agentic_backend.common.kf_base_client import KfBaseClient
 from agentic_backend.core.agents.runtime_context import (
@@ -43,29 +42,29 @@ def _split_front_matter(text: str) -> str:
     return s
 
 
-def _fetch_body(
+async def _fetch_body(
     kf_base: str,
     rid: str,
     *,
     access_token: Optional[str] = None,
-    timeout: float = 8.0,
 ) -> Optional[str]:
     """Return body text for a resource id, or None if not found/invalid."""
+    if not access_token:
+        logger.warning(
+            "No access token available for knowledge-flow resource fetch (rid=%s).",
+            rid,
+        )
+        return None
+
     try:
-        if access_token:
-            client = KfBaseClient(
-                allowed_methods=frozenset({"GET"}),
-                access_token=access_token,
-            )
-            client.base_url = kf_base.rstrip("/")
-            client.timeout = (timeout, timeout)
-            resp = client._request_with_token_refresh("GET", f"/resources/{rid}")
-        else:
-            logger.warning(
-                "No access token available for knowledge-flow resource fetch (rid=%s).",
-                rid,
-            )
-            resp = requests.get(f"{kf_base}/resources/{rid}", timeout=timeout)
+        client = KfBaseClient(
+            allowed_methods=frozenset({"GET"}),
+            access_token=access_token,
+        )
+        client.base_url = kf_base.rstrip("/")
+        resp = await client._request_with_token_refresh(
+            "GET", f"/resources/{rid}", phase_name="kf_resource_fetch"
+        )
         if resp.status_code != 200:
             logger.warning(
                 f"Failed to fetch body for resource {rid}: {resp.status_code}"
@@ -77,10 +76,11 @@ def _fetch_body(
             return None
         return _split_front_matter(content)
     except Exception:
+        logger.exception("[AGENT][CTX] Failed to fetch prompt body for rid=%s", rid)
         return None
 
 
-def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
+async def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
     """
     Resolve and return the prepared data for the given runtime context.
     This includes:
@@ -93,10 +93,19 @@ def resolve_prepared(ctx: RuntimeContext, kf_base: str) -> Prepared:
     # 2) Prompts: loop each id, append body when resolvable; ignore failures
     bodies: List[str] = []
     access_token = get_access_token(ctx)
-    for pid in get_chat_context_libraries_ids(ctx) or []:
-        body = _fetch_body(kf_base, pid, access_token=access_token)
-        if body:
-            bodies.append(body)
+    profile_ids = get_chat_context_libraries_ids(ctx) or []
+    if profile_ids:
+        resolved_bodies = await asyncio.gather(
+            *[
+                _fetch_body(
+                    kf_base,
+                    pid,
+                    access_token=access_token,
+                )
+                for pid in profile_ids
+            ]
+        )
+        bodies.extend(body for body in resolved_bodies if body)
 
     prompt_profile_text = "\n\n".join(bodies) if bodies else ""
     return Prepared(doc_tag_ids=doc_tags, prompt_chat_context_text=prompt_profile_text)

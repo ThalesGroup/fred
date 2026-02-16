@@ -50,7 +50,7 @@ class KfLogsClient(KfBaseClient):
             refresh_user_access_token=refresh_user_access_token,
         )
 
-    def query(self, log_query: LogQuery) -> LogQueryResult:
+    async def query(self, log_query: LogQuery) -> LogQueryResult:
         payload = (
             log_query.model_dump()
             if hasattr(log_query, "model_dump")
@@ -63,9 +63,10 @@ class KfLogsClient(KfBaseClient):
             log_query.limit,
             log_query.order,
         )
-        r = self._request_with_token_refresh(
+        r = await self._request_with_token_refresh(
             method="POST",
             path="/logs/query",
+            phase_name="kf_logs_query",
             json=payload,
         )
         r.raise_for_status()
