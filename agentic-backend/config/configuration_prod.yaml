@@ -189,6 +189,11 @@ ai:
         search_rag_scoping: true
         deep_search_delegate: false
         attach_files: true
+    - id: "Aegis"
+      name: "Aegis"
+      type: "agent"
+      class_path: "agentic_backend.agents.aegis.aegis_rag_expert.Aegis"
+      enabled: true
     - id: "Tessa"
       name: "Tessa"
       type: "agent"
