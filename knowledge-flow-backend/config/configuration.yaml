@@ -21,9 +21,9 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9111
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 10
+  kpi_log_summary_interval_sec: 10.0
+  kpi_log_summary_top_n: 20
 
 processing:
   default_profile: fast
@@ -299,7 +299,9 @@ storage:
     table: resource
   kpi_store:
     type: "log"
-    level: "INFO"
+    level: "DEBUG"
+  log_store:
+    type: "in_memory"
   tag_store:
     type: "postgres"
     table: tags

@@ -232,10 +232,6 @@ storage:
     type: "postgres"
     table: resource
 
-  kpi_store:
-    type: "opensearch"
-    index: kpi-index
-
   tag_store:
     type: "postgres"
     table: tag
@@ -256,9 +252,12 @@ storage:
     # while ingesting large documents.
     bulk_size: 1000
 
+  kpi_store:
+    type: "log"
+    level: "DEBUG"
+
   log_store:
-    type: "opensearch"
-    index: log-index
+    type: "in_memory"
 
   tabular_stores:
     base_database:

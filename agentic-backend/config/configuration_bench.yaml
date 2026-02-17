@@ -258,5 +258,4 @@ storage:
     level: "DEBUG"
 
   log_store:
-    type: "stdout"
-    level: "DEBUG"
+    type: "in_memory"

@@ -18,7 +18,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: true
+  metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
 
@@ -223,7 +223,7 @@ storage:
 
   kpi_store:
     type: "log"
-    level: "info"
+    level: "DEBUG"
 
   log_store:
-    type: "stdout"
+    type: "in_memory"

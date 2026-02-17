@@ -18,13 +18,13 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: false
+  metrics_enabled: true
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
-  # KPI settings for local benchmarks and debugging. Disable in production.
-  kpi_process_metrics_interval_sec: 30
-  kpi_log_summary_interval_sec: 10.0
-  kpi_log_summary_top_n: 200
+  # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
 
 scheduler:
   enabled: true
@@ -325,9 +325,8 @@ storage:
     table: tasks
 
   kpi_store:
-    type: "opensearch"
-    index: kpi-index
+    type: "log"
+    level: "DEBUG"
 
   log_store:
-    type: "opensearch"
-    index: log-index
+    type: "in_memory"
