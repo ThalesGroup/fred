@@ -41,9 +41,18 @@ docker-build: ## Build the Docker image
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
 
+.PHONY: run-docker
+run-docker: ## Run Agentic API in Docker (uses host network by default)
+	@echo "🚀 Running Agentic API in Docker..."
+	docker run --rm -it \
+		--name $(API_CONTAINER_NAME) \
+		--network $(API_DOCKER_NETWORK) \
+		-v $(realpath config):/app/config:ro \
+		$(IMAGE_FULL)
+
 .PHONY: docker-run
-docker-run: ## Run the app in Docker
-	docker run -it \
-		-p $(PORT):$(PORT) \
-		-v $(realpath config/configuration.yaml):/app/configuration.yaml \
-		$(IMAGE_FULL) --config-path /app/configuration.yaml
+docker-run: run-docker ## Backward-compatible alias for run-docker
+
+# Docker API runtime defaults
+API_CONTAINER_NAME ?= agentic-api
+API_DOCKER_NETWORK ?= host

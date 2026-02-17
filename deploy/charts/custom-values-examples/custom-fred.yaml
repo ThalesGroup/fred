@@ -45,8 +45,10 @@ applications:
           index: session-index
 
         kpi_store:
-          type: "opensearch"
-          index: kpi-index
+          type: "log"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
 
         history_store:
           type: "opensearch"
@@ -82,8 +84,10 @@ applications:
           index: tag-index
 
         kpi_store:
-          type: "opensearch"
-          index: kpi-index
+          type: "log"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
 
         metadata_store:
           type: "opensearch"

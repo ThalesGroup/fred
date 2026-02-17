@@ -1,22 +1,19 @@
 import AssistantIcon from "@mui/icons-material/Assistant";
 import { Box, CssBaseline } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { DynamicSvgIcon } from "../components/DynamicSvgIcon";
 import { EmptyState } from "../components/EmptyState";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { useFrontendProperties } from "../hooks/useFrontendProperties";
 
 export function ComingSoon() {
   const { t } = useTranslation();
 
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery();
-  const { siteDisplayName } = frontendConfig.frontend_settings.properties || {};
-
-  // todo: use `useFrontendProperties` and `DynamicSvgIcon` after merge with team branch
-  //   const { agentIconName } = useFrontendProperties();
-  //   const icon = agentIconName ? (
-  //     <DynamicSvgIcon iconPath={`images/${agentIconName}.svg`} color="action" />
-  //   ) : (
-  //     <AssistantIcon />
-  //   );
+  const { siteDisplayName, agentIconName } = useFrontendProperties();
+  const icon = agentIconName ? (
+    <DynamicSvgIcon iconPath={`images/${agentIconName}.svg`} color="action" />
+  ) : (
+    <AssistantIcon />
+  );
 
   return (
     <>
@@ -31,7 +28,7 @@ export function ComingSoon() {
         }}
       >
         <EmptyState
-          icon={<AssistantIcon />}
+          icon={icon}
           title={t("comingSoon.title", { siteDisplayName })}
           description={t("comingSoon.description")}
           descriptionMaxWidth={"60ch"}

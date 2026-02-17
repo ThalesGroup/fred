@@ -774,7 +774,7 @@ const ChatBot = ({
     setLoadState((prev) => {
       if (prev.chatSessionId !== chatSessionId || prev.prefsReady) return prev;
       const elapsedMs = prev.startedAt ? Date.now() - prev.startedAt : 0;
-      const agentName = sessionPrefs?.agent_name;
+      const agentName = sessionPrefs?.agent_id ?? sessionPrefs?.agent_name;
       console.info("[CHATBOT][LOAD] prefs done", {
         seq: prev.seq,
         chatSessionId,
@@ -1119,7 +1119,7 @@ const ChatBot = ({
             text: freeText,
             checkpoint_id: (target as any)?.payload?.checkpoint_id,
           },
-          agent_name: currentAgent?.id,
+          agent_id: currentAgent?.id,
           access_token: accessToken || undefined,
           refresh_token: refreshToken || undefined,
         };

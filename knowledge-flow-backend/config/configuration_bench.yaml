@@ -307,8 +307,8 @@ storage:
     table: resource
 
   kpi_store:
-    type: "opensearch"
-    index: kpi-index
+    type: "log"
+    level: "DEBUG"
 
   tag_store:
     type: "postgres"
@@ -331,8 +331,7 @@ storage:
     bulk_size: 1000
 
   log_store:
-    type: "opensearch"
-    index: log-index
+    type: "in_memory"
 
 mcp:
   reports_enabled: true

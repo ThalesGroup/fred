@@ -224,21 +224,6 @@ timeout:
   pool: 5.0
 ```
 
-## 5.2 KPIs and Metrics
-
-- **Scraping endpoint:** Prometheus-format metrics are exposed by default on `http://<pod-ip>:9000/metrics` (override via `app.metrics_address` / `app.metrics_port` in YAML). Point Prometheus or `curl` there to scrape.
-- **Key KPI names (agentic backend):**
-
-
-- **Bench-mode logging (local tests):** For local load tests with `ws_bench`, enable verbose KPI summaries and process metrics via config, e.g.:
-  ```yaml
-  app:
-    kpi_log_summary_interval_sec: 5    # >0 to enable; 0 to disable (default prod)
-    kpi_log_summary_top_n: 20          # 0 to log all
-    kpi_process_metrics_interval_sec: 10
-  ```
-  Keep these at 0 in production to avoid extra log volume; Kubernetes scraping covers runtime metrics.
-
 
 ##### Rationale
 - **connect (10s)**: Handles cold DNS/TLS paths without blocking indefinitely.
@@ -373,6 +358,38 @@ as well as on deployed integration or production platforms.
 
   In production keep these at 0 to avoid extra log volume; Kubernetes scraping covers runtime metrics.
 
+### 5.2.1.1 Prometheus-Only KPI Profile (No OpenSearch KPI Writes)
+
+If Grafana is fed by Prometheus and you want to avoid extra OpenSearch traffic:
+
+- Set `storage.kpi_store` to log mode.
+- Keep `app.metrics_enabled: true` (Prometheus scraping).
+- Keep KPI summary/process log emitters disabled in production (`0`).
+
+Recommended baseline:
+
+```yaml
+app:
+  metrics_enabled: true
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
+
+storage:
+  kpi_store:
+    type: "log"
+    level: "DEBUG"
+```
+
+Important behavior:
+- Prometheus metrics are still exported and usable in Grafana.
+- `/kpi/query` does not return persisted historical KPI rows in this mode.
+
+Local laptop foreground profile (`configuration.yaml`):
+- Keep `app.metrics_enabled: false` to avoid local port collisions.
+- Keep KPI summaries enabled for quick feedback:
+  `kpi_log_summary_interval_sec: 10.0`, `kpi_log_summary_top_n: 20`.
+
 ### 5.2.2 Agentic KPIs
 
 | Metric name                     | Type     | Important dimensions                         | Meaning / usage                                                      |
@@ -416,6 +433,32 @@ as well as on deployed integration or production platforms.
 | `rag.rerank_top_r_total`           | counter | —                                         | Docs selected after rerank                                        |
 
 Bench-mode summary logging can also be enabled for knowledge-flow via the same `app` settings as above (use non-zero values in a bench YAML; keep 0 in production).
+
+
+## 5.3 Logs and Log Store
+
+### 5.3.1 Recommended Profile (Stdout Shipping + In-Memory Query Store)
+
+Use two distinct paths:
+
+- **Operational logging path:** write application logs to `stdout` and forward them with your platform collector (Fluent Bit, Vector, OpenTelemetry Collector, etc.) to Loki/Grafana.
+- **In-app query path:** keep `storage.log_store` as `in_memory` to serve Fred UI log panels and LogGenius (`/logs/query`) without extra external writes.
+
+Recommended baseline:
+
+```yaml
+storage:
+  log_store:
+    type: "in_memory"
+```
+
+Important behavior:
+
+- App logs are still emitted with normal levels (`DEBUG/INFO/WARNING/ERROR`) to console/stdout.
+- `log_store: in_memory` keeps only a recent per-process buffer (capacity 1000 events), meant for troubleshooting and UI queries.
+- If `log_store` is set to OpenSearch, each log event is additionally indexed remotely by the app, which increases write traffic.
+
+Current recommendation: keep `log_store: in_memory` in Fred backend configs and rely on stdout forwarding for production retention/search.
 
 
 ---

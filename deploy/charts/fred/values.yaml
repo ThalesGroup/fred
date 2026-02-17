@@ -290,7 +290,7 @@ applications:
             name: cross-encoder/ms-marco-MiniLM-L-12-v2
             settings:
               online: false
-              local_path: /app/models
+              local_path: /home/fred-user/.cache/huggingface
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
@@ -391,7 +391,9 @@ applications:
 
         kpi_store:
           type: "log"
-          level: "INFO"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
 
     dotenv:
       AZURE_OPENAI_API_KEY: ""
@@ -854,7 +856,9 @@ applications:
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
         kpi_store:
           type: "log"
-          level: "INFO"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
         tag_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
@@ -1218,7 +1222,9 @@ applications:
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
         kpi_store:
           type: "log"
-          level: "INFO"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
         tag_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"

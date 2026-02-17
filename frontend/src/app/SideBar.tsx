@@ -19,7 +19,7 @@ import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Avatar, Box, CSSObject, Divider, Paper, styled, Theme, Typography } from "@mui/material";
+import { Box, CSSObject, Divider, Paper, styled, Theme, Typography } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,6 +33,7 @@ import {
   SidebarProfileSection,
 } from "../components/sideBar";
 import { SideBarNewConversationButton } from "../components/sideBar/SideBarNewConversationButton";
+import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
@@ -251,7 +252,14 @@ export default function SideBar() {
       key: t.id,
       label: t.name,
       url: `team/${t.id}/${agentsNicknamePlural}`,
-      icon: <Avatar src={t.banner_image_url || ""} sx={{ height: "24px", width: "24px" }} />,
+      icon: (
+        <TeamAvatar
+          teamName={t.name}
+          imageUrl={t.banner_image_url}
+          sizes="small"
+          sx={{ width: 24, height: 24, fontSize: "0.75rem" }}
+        />
+      ),
     })) || [];
 
   const logoName = getProperty("logoName") || "fred";
