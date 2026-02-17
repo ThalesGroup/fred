@@ -7,13 +7,13 @@ from pathlib import Path
 
 from langchain.tools import tool
 
+from agentic_backend.agents.ppt_filler.powerpoint_template_util import (
+    fill_slide_from_structured_response,
+)
 from agentic_backend.agents.ppt_filler.pydantic_models import (
     CV,
     EnjeuxBesoins,
     PrestationFinanciere,
-)
-from agentic_backend.agents.knowledge_extractor.powerpoint_template_util import (
-    fill_slide_from_structured_response,
 )
 from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
 

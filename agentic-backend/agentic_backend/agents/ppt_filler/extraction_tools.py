@@ -101,7 +101,7 @@ Règles:
         logger.info(f"Generated {len(result.queries)} search queries: {result.queries}")
         return result.queries
 
-    async def _search_and_collect(self, queries: list[str]) -> str:
+    async def _search_and_collect(self, queries: list[str]) -> tuple[str, list[str]]:
         """
         Phase 2: Execute queries via MCP, deduplicate, rank, return formatted text.
 
@@ -109,12 +109,13 @@ Règles:
             queries: List of search query strings
 
         Returns:
-            Formatted text with all search results
+            Tuple of (formatted_text, ranked_titles) where ranked_titles lists
+            unique document titles sorted by cumulative relevance score.
         """
         search_tool = self._find_search_tool()
         if not search_tool:
             logger.error("Search tool not found")
-            return "❌ Outil de recherche documentaire introuvable."
+            return "❌ Outil de recherche documentaire introuvable.", []
 
         # Run all queries and collect results
         all_chunks: list[dict] = []
@@ -140,11 +141,21 @@ Règles:
                 )
 
         if not all_chunks:
-            return "❌ Aucun document trouvé."
+            return "❌ Aucun document trouvé.", []
 
         # Sort by score (descending) and keep top chunks
         all_chunks.sort(key=lambda c: c.get("score", 0), reverse=True)
         top_chunks = all_chunks[:MAX_UNIQUE_CHUNKS]
+
+        # Rank document titles by cumulative score
+        title_scores: dict[str, float] = {}
+        for chunk in top_chunks:
+            title = chunk.get("title", "")
+            if title:
+                title_scores[title] = title_scores.get(title, 0) + chunk.get("score", 0)
+        ranked_titles = sorted(
+            title_scores, key=lambda t: title_scores[t], reverse=True
+        )
 
         # Format chunks for the LLM
         formatted_chunks = []
@@ -154,7 +165,7 @@ Règles:
             formatted_chunks.append(f"### Extrait {i} (source: {title})\n{content}")
 
         logger.info(f"Collected {len(top_chunks)} unique chunks from search")
-        return "\n\n".join(formatted_chunks)
+        return "\n\n".join(formatted_chunks), ranked_titles
 
     def get_extract_enjeux_besoins_tool(self):
         """Tool to extract project context and missions."""
@@ -174,7 +185,7 @@ Règles:
             queries = await self._generate_queries(EnjeuxBesoins, context_hint)
 
             # Phase 2: Search and collect
-            chunks_text = await self._search_and_collect(queries)
+            chunks_text, ranked_titles = await self._search_and_collect(queries)
             if chunks_text.startswith("❌"):
                 return Command(
                     update={
@@ -193,8 +204,9 @@ Règles:
 RÈGLES IMPORTANTES:
 - N'invente RIEN - utilise uniquement les informations présentes dans les extraits
 - Si une information n'est pas trouvée, utilise une chaîne vide
-- Le contexte et les missions doivent être concis (max 300 caractères chacun)
-- refCahierCharges doit être le nom du fichier source principal"""
+- Le contexte doit décrire le projet de manière détaillée (2-3 phrases, utilise les 270 caractères disponibles)
+- Les missions doivent résumer les objectifs clés (2-3 phrases, max 270 caractères)
+- Laisse refCahierCharges vide, il sera rempli automatiquement"""
 
             result = await model.ainvoke(
                 [
@@ -205,6 +217,10 @@ RÈGLES IMPORTANTES:
             )
             if not isinstance(result, EnjeuxBesoins):
                 result = EnjeuxBesoins.model_validate(result)
+
+            # Set refCahierCharges from the most relevant document title
+            if ranked_titles:
+                result.refCahierCharges = ranked_titles[0]
 
             logger.info(f"Extracted EnjeuxBesoins: {result.model_dump()}")
 
@@ -245,7 +261,7 @@ RÈGLES IMPORTANTES:
             queries = await self._generate_queries(CV, context_hint)
 
             # Phase 2: Search and collect
-            chunks_text = await self._search_and_collect(queries)
+            chunks_text, _ = await self._search_and_collect(queries)
             if chunks_text.startswith("❌"):
                 return Command(
                     update={
@@ -275,7 +291,9 @@ RÈGLES IMPORTANTES:
   la maîtrise associée (maitriseManagement3) DOIT être une chaîne vide "", pas "0"
 - LANGUES: NE PAS inclure la langue maternelle du candidat (typiquement le français).
   Inclure uniquement les langues étrangères (anglais, espagnol, allemand, etc.)
-- Si une information n'est pas trouvée, utilise une chaîne vide"""
+- Si une information n'est pas trouvée, utilise une chaîne vide
+- STYLE: Rédige TOUJOURS à la troisième personne (pas de "je", "j'ai", "mon").
+  Exemple: "A géré une équipe de 5 personnes" et non "J'ai géré une équipe de 5 personnes"."""
 
             result = await model.ainvoke(
                 [
@@ -328,7 +346,7 @@ RÈGLES IMPORTANTES:
             queries = await self._generate_queries(PrestationFinanciere, context_hint)
 
             # Phase 2: Search and collect
-            chunks_text = await self._search_and_collect(queries)
+            chunks_text, _ = await self._search_and_collect(queries)
             if chunks_text.startswith("❌"):
                 return Command(
                     update={

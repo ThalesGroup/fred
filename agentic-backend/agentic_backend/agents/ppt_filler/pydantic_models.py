@@ -14,13 +14,13 @@ class EnjeuxBesoins(BaseModel):
 
     contexte: str = Field(
         "",
-        max_length=300,
-        description="Contexte du projet.",
+        max_length=270,
+        description="Contexte du projet. Une à deux phrases.",
     )
     missions: str = Field(
         "",
-        max_length=300,
-        description="Ensemble des missions et objectifs.",
+        max_length=270,
+        description="Ensemble des missions et objectifs. Une à deux phrases.",
     )
     refCahierCharges: str = Field(
         "",
@@ -39,7 +39,9 @@ class CV(BaseModel):
         max_length=3,
         description="Trigramme servant à anonymiser le nom de l'intervenant (présent dans le CV).",
     )
-    poste: str = Field("", description="L'intitulé du poste rempli par l'intervenant.")
+    poste: str = Field(
+        "", max_length=80, description="L'intitulé du poste rempli par l'intervenant."
+    )
 
     # Formations (max 3)
     dateFormation1: str = Field("", description="Date de la formation 1.")
@@ -58,31 +60,43 @@ class CV(BaseModel):
     )
 
     # Compétences Management (max 3)
-    competenceManagement1: str = Field("", description="Compétence management 1.")
+    competenceManagement1: str = Field(
+        "", max_length=30, description="Compétence management 1."
+    )
     maitriseManagement1: str = Field(
         "", description="Maîtrise management 1 (1-5). Chaîne vide si pas de compétence."
     )
-    competenceManagement2: str = Field("", description="Compétence management 2.")
+    competenceManagement2: str = Field(
+        "", max_length=30, description="Compétence management 2."
+    )
     maitriseManagement2: str = Field(
         "", description="Maîtrise management 2 (1-5). Chaîne vide si pas de compétence."
     )
-    competenceManagement3: str = Field("", description="Compétence management 3.")
+    competenceManagement3: str = Field(
+        "", max_length=30, description="Compétence management 3."
+    )
     maitriseManagement3: str = Field(
         "", description="Maîtrise management 3 (1-5). Chaîne vide si pas de compétence."
     )
 
     # Compétences Informatique (max 3)
-    competenceInformatique1: str = Field("", description="Compétence informatique 1.")
+    competenceInformatique1: str = Field(
+        "", max_length=30, description="Compétence informatique 1."
+    )
     maitriseInformatique1: str = Field(
         "",
         description="Maîtrise informatique 1 (1-5). Chaîne vide si pas de compétence.",
     )
-    competenceInformatique2: str = Field("", description="Compétence informatique 2.")
+    competenceInformatique2: str = Field(
+        "", max_length=30, description="Compétence informatique 2."
+    )
     maitriseInformatique2: str = Field(
         "",
         description="Maîtrise informatique 2 (1-5). Chaîne vide si pas de compétence.",
     )
-    competenceInformatique3: str = Field("", description="Compétence informatique 3.")
+    competenceInformatique3: str = Field(
+        "", max_length=30, description="Compétence informatique 3."
+    )
     maitriseInformatique3: str = Field(
         "",
         description="Maîtrise informatique 3 (1-5). Chaîne vide si pas de compétence.",
@@ -90,21 +104,21 @@ class CV(BaseModel):
 
     # Compétences Gestion de Projet (max 3)
     competenceGestionProjet1: str = Field(
-        "", description="Compétence gestion de projet 1."
+        "", max_length=30, description="Compétence gestion de projet 1."
     )
     maitriseGestionProjet1: str = Field(
         "",
         description="Maîtrise gestion projet 1 (1-5). Chaîne vide si pas de compétence.",
     )
     competenceGestionProjet2: str = Field(
-        "", description="Compétence gestion de projet 2."
+        "", max_length=30, description="Compétence gestion de projet 2."
     )
     maitriseGestionProjet2: str = Field(
         "",
         description="Maîtrise gestion projet 2 (1-5). Chaîne vide si pas de compétence.",
     )
     competenceGestionProjet3: str = Field(
-        "", description="Compétence gestion de projet 3."
+        "", max_length=30, description="Compétence gestion de projet 3."
     )
     maitriseGestionProjet3: str = Field(
         "",
@@ -143,28 +157,21 @@ class PrestationFinanciere(BaseModel):
     charge1: int = Field(
         0, description="Charge estimée de la prestation 1 en unités d'oeuvre."
     )
-    prixTotalPrestation1: int = Field(0, description="Coût total de la prestation 1.")
+    prixTotal1: int = Field(0, description="Coût total de la prestation 1.")
 
     prestation2: str = Field("", description="Nom de la prestation 2.")
     prix2: int = Field(0, description="Prix unitaire de la prestation 2.")
     charge2: int = Field(
         0, description="Charge estimée de la prestation 2 en unités d'oeuvre."
     )
-    prixTotalPrestation2: int = Field(0, description="Coût total de la prestation 2.")
+    prixTotal2: int = Field(0, description="Coût total de la prestation 2.")
 
     prestation3: str = Field("", description="Nom de la prestation 3.")
     prix3: int = Field(0, description="Prix unitaire de la prestation 3.")
     charge3: int = Field(
         0, description="Charge estimée de la prestation 3 en unités d'oeuvre."
     )
-    prixTotalPrestation3: int = Field(0, description="Coût total de la prestation 3.")
-
-    prestation4: str = Field("", description="Nom de la prestation 4.")
-    prix4: int = Field(0, description="Prix unitaire de la prestation 4.")
-    charge4: int = Field(
-        0, description="Charge estimée de la prestation 4 en unités d'oeuvre."
-    )
-    prixTotalPrestation4: int = Field(0, description="Coût total de la prestation 4.")
+    prixTotal3: int = Field(0, description="Coût total de la prestation 3.")
 
     prixTotal: int = Field(0, description="Coût total de toutes les prestations.")
 
