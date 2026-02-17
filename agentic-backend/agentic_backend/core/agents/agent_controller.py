@@ -36,6 +36,7 @@ from agentic_backend.core.agents.agent_manager import (
 from agentic_backend.core.agents.agent_service import (
     AgentService,
     InvalidClassPathError,
+    ImmutableTeamIdError,
     MissingTeamIdError,
     OwnerFilter,
 )
@@ -82,6 +83,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidClassPathError)
     async def invalid_class_path_handler(
         request: Request, exc: InvalidClassPathError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(ImmutableTeamIdError)
+    async def immutable_team_id_handler(
+        request: Request, exc: ImmutableTeamIdError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
@@ -201,6 +208,19 @@ async def create_agent(
         a2a_token=request.a2a_token,
         class_path=request.class_path,
     )
+
+
+@router.get(
+    "/agents/class-paths",
+    summary="List class paths declared in static agent configuration",
+    response_model=list[str],
+)
+async def list_declared_agent_class_paths(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> list[str]:
+    service = AgentService(agent_manager=agent_manager)
+    return await service.list_declared_class_paths(user)
 
 
 @router.put(

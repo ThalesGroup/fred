@@ -78,6 +78,7 @@ class VectorSearchController:
                         document_library_tags_ids=request.document_library_tags_ids,
                         document_uids=request.document_uids,
                         policy_name=request.search_policy,
+                        team_id=request.team_id,
                         session_id=request.session_id,
                         include_session_scope=request.include_session_scope,
                         include_corpus_scope=request.include_corpus_scope,

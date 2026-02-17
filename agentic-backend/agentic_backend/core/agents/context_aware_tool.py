@@ -159,6 +159,15 @@ class ContextAwareTool(BaseTool):
                 session_id,
             )
 
+        team_id = getattr(context, "team_id", None)
+        if team_id and "team_id" in tool_properties and not kwargs.get("team_id"):
+            kwargs["team_id"] = team_id
+            logger.info(
+                "ContextAwareTool(%s) injecting team_id: %s",
+                self.name,
+                team_id,
+            )
+
         include_session_scope, include_corpus_scope = get_vector_search_scopes(context)
         if (
             "include_session_scope" in tool_properties

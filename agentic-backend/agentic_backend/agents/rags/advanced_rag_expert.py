@@ -422,6 +422,7 @@ class AdvancedRico(AgentFlow):
                     document_library_tags_ids=document_library_tags_ids,
                     document_uids=document_uids,
                     search_policy=search_policy,
+                    team_id=runtime_context.team_id,
                     session_id=runtime_context.session_id,
                     include_session_scope=include_session_scope,
                     include_corpus_scope=include_corpus_scope,

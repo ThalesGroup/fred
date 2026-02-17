@@ -20,6 +20,7 @@ export interface ChatDocumentLibrariesSelectionCardProps {
   selectedLibrariesIds: string[];
   setSelectedLibrariesIds: (ids: string[]) => void;
   libraryType: TagType;
+  teamId?: string;
   onClose?: () => void;
 }
 
@@ -67,11 +68,16 @@ export function ChatDocumentLibrariesSelectionCard({
   selectedLibrariesIds,
   setSelectedLibrariesIds,
   libraryType,
+  teamId,
   onClose,
 }: ChatDocumentLibrariesSelectionCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: libraryType });
+  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    type: libraryType,
+    ownerFilter: teamId ? "team" : undefined,
+    teamId: teamId ?? undefined,
+  });
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
 

@@ -597,6 +597,7 @@ export type McpServerConfiguration = {
 export type Agent = {
   id: string;
   name: string;
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning | null;
@@ -612,6 +613,7 @@ export type Agent = {
 export type Leader = {
   id: string;
   name: string;
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning | null;
@@ -655,6 +657,7 @@ export type AgentTuning2 = {
 export type Agent2 = {
   id: string;
   name: string;
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
@@ -670,6 +673,7 @@ export type Agent2 = {
 export type Leader2 = {
   id: string;
   name: string;
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
@@ -794,6 +798,7 @@ export type VectorSearchHit = {
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
   language?: string | null;
+  team_id?: string | null;
   session_id?: string | null;
   user_id?: string | null;
   user_groups?: string[] | null;

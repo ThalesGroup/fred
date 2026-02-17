@@ -38,6 +38,7 @@ import { ChatDocumentLibrariesSelectionCard } from "./ChatDocumentLibrariesSelec
 export type ChatDocumentLibrariesWidgetProps = {
   selectedLibraryIds: string[];
   onChangeSelectedLibraryIds: (ids: string[]) => void;
+  teamId?: string;
   nameById: Record<string, string>;
   libraryById?: Record<string, TagWithItemsId | undefined>;
   includeInSearch: boolean;
@@ -54,6 +55,7 @@ export type ChatDocumentLibrariesWidgetProps = {
 const ChatDocumentLibrariesWidget = ({
   selectedLibraryIds,
   onChangeSelectedLibraryIds,
+  teamId,
   nameById,
   libraryById,
   includeInSearch,
@@ -258,6 +260,7 @@ const ChatDocumentLibrariesWidget = ({
               libraryType={"document"}
               selectedLibrariesIds={selectedLibraryIds}
               setSelectedLibrariesIds={onChangeSelectedLibraryIds}
+              teamId={teamId}
               onClose={() => setPickerAnchor(null)}
             />
           </FloatingPanel>

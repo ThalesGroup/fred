@@ -76,6 +76,10 @@ class SearchRequest(BaseModel):
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
     )
+    team_id: Optional[str] = Field(
+        default=None,
+        description="Optional team id to force corpus search to team-owned libraries only.",
+    )
     session_id: Optional[str] = Field(
         default=None,
         description="Optional chat session id to include session-scoped attachments (user/session filtered).",

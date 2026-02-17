@@ -91,6 +91,16 @@ class AgentFactory(BaseAgentFactory):
         self.loader = loader
         self._main_event_loop = asyncio.get_event_loop()
 
+    @staticmethod
+    def _apply_authoritative_team_scope(
+        runtime_context: RuntimeContext, team_id: Optional[str]
+    ) -> None:
+        """
+        Enforce team scope from server-side agent settings.
+        The client must not control team corpus boundaries.
+        """
+        runtime_context.team_id = team_id
+
     # ---------- Public entry point ----------
     async def create_and_init(
         self,
@@ -109,6 +119,8 @@ class AgentFactory(BaseAgentFactory):
         cached = self._agent_cache.get(cache_key)
         if cached is not None:
             self._agent_cache.acquire(cache_key)
+            cached_team_id = getattr(cached.get_agent_settings(), "team_id", None)
+            self._apply_authoritative_team_scope(runtime_context, cached_team_id)
             # Why: tokens/context may change between requests; always refresh on reuse.
             try:
                 cached.set_runtime_context(runtime_context)
@@ -123,6 +135,7 @@ class AgentFactory(BaseAgentFactory):
 
         # Build fresh
         settings, agent = await self._instantiate_from_settings(user, agent_id)
+        self._apply_authoritative_team_scope(runtime_context, settings.team_id)
 
         # Always apply merged settings and context before init
         agent.apply_settings(settings)

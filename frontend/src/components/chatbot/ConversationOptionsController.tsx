@@ -800,6 +800,7 @@ export function ConversationOptionsPanel({
     defaultSearchPolicy,
     defaultRagScope,
     defaultSearchRagScope,
+    currentAgent,
     contextOpen,
     hasContext,
     userInputContext,
@@ -909,6 +910,7 @@ export function ConversationOptionsPanel({
             <ChatDocumentLibrariesWidget
               selectedLibraryIds={displayDocumentLibraryIds}
               onChangeSelectedLibraryIds={setDocumentLibraryIds}
+              teamId={currentAgent?.team_id || undefined}
               nameById={libraryNameMap}
               libraryById={libraryById}
               includeInSearch={conversationPrefs.includeCorpusScope}

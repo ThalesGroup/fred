@@ -14,7 +14,7 @@ from langchain_core.documents import Document
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, FullTextHit, HybridHit, SearchFilter
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
-from knowledge_flow_backend.features.tag.structure import TagType
+from knowledge_flow_backend.features.tag.structure import OwnerFilter, TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
@@ -158,6 +158,18 @@ class VectorSearchService:
         Return all library tags ids for the user.
         """
         tags = await self.tag_service.list_all_tags_for_user(user=user, tag_type=TagType.DOCUMENT)
+        return [t.id for t in tags]
+
+    async def _team_document_library_tags_ids(self, user: KeycloakUser, team_id: str) -> List[str]:
+        """
+        Return all readable document-library tag ids owned by the provided team.
+        """
+        tags = await self.tag_service.list_all_tags_for_user(
+            user=user,
+            tag_type=TagType.DOCUMENT,
+            owner_filter=OwnerFilter.TEAM,
+            team_id=team_id,
+        )
         return [t.id for t in tags]
 
     async def _to_hit(self, doc: Document, score: float, rank: int, user: KeycloakUser) -> VectorSearchHit:
@@ -457,6 +469,7 @@ class VectorSearchService:
         document_library_tags_ids: Optional[List[str]] = None,
         document_uids: Optional[List[str]] = None,
         policy_name: Optional[SearchPolicyName] = None,
+        team_id: Optional[str] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
         include_corpus_scope: bool = True,
@@ -469,6 +482,7 @@ class VectorSearchService:
             document_library_tags_ids (Optional[List[str]]): List of tag IDs to filter the search by library.
             policy_name (Optional[SearchPolicyName]): The search policy to use (hybrid, strict, semantic). Defaults to hybrid.
             document_uids (Optional[List[str]]): Optional list of document UIDs to filter the search results by.
+            team_id (Optional[str]): Optional team id to force corpus retrieval to team-owned libraries.
             include_session_scope (bool): Whether to search session-scoped attachment vectors.
             include_corpus_scope (bool): Whether to search corpus/library vectors.
         Returns:
@@ -518,15 +532,41 @@ class VectorSearchService:
                 )
 
             if include_corpus_scope:
+                team_tag_ids: set[str] | None = None
+                if team_id:
+                    team_tag_ids = set(await self._team_document_library_tags_ids(user=user, team_id=team_id))
+
                 # Resolve library tags only if the caller provided some; otherwise stay empty so
                 # we can short-circuit when attachments already cover the request.
                 document_library_tags_ids = original_tag_ids
+                if team_tag_ids is not None:
+                    if document_library_tags_ids:
+                        requested = set(document_library_tags_ids)
+                        document_library_tags_ids = sorted(requested & team_tag_ids)
+                        dropped = sorted(requested - team_tag_ids)
+                        if dropped:
+                            logger.info(
+                                "[VECTOR][SEARCH][CORPUS] dropping %d tag(s) outside team=%s scope: %s",
+                                len(dropped),
+                                team_id,
+                                dropped,
+                            )
+                    else:
+                        document_library_tags_ids = sorted(team_tag_ids)
+
                 if not document_library_tags_ids:
-                    logger.info(
-                        "[VECTOR][SEARCH] user=%s has not restricted library tags → fetching all visible tags",
-                        user.uid,
-                    )
-                    document_library_tags_ids = await self._all_document_library_tags_ids(user)
+                    if team_tag_ids is not None:
+                        logger.info(
+                            "[VECTOR][SEARCH] user=%s team=%s has no visible team library tags",
+                            user.uid,
+                            team_id,
+                        )
+                    else:
+                        logger.info(
+                            "[VECTOR][SEARCH] user=%s has not restricted library tags → fetching all visible tags",
+                            user.uid,
+                        )
+                        document_library_tags_ids = await self._all_document_library_tags_ids(user)
 
                 # Exclude session-scoped vectors from corpus/library search to avoid leakage across sessions
                 corpus_metadata_extra = {"scope": ["!session"]}

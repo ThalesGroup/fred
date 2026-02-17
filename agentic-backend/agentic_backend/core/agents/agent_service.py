@@ -82,6 +82,12 @@ class InvalidClassPathError(Exception):
     pass
 
 
+class ImmutableTeamIdError(Exception):
+    """Raised when an update attempts to change an agent team ownership field."""
+
+    pass
+
+
 def _validate_class_path(class_path: str) -> type[AgentFlow]:
     """Validate that class_path is importable and inherits from AgentFlow.
 
@@ -191,6 +197,30 @@ class AgentService:
 
         return [self._enrich_settings_with_class_tuning_defaults(a) for a in agents]
 
+    async def list_declared_class_paths(self, user: KeycloakUser) -> List[str]:
+        """
+        Return all unique class paths declared in the static configuration.
+
+        Why:
+        - The UI can use this list as a controlled source for class_path autocomplete.
+        - Permissions stay aligned with class_path edition permissions.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+
+        class_paths = {
+            cp.strip()
+            for cp in (
+                (agent_cfg.class_path or "")
+                for agent_cfg in self.agent_manager.config.ai.agents
+            )
+            if cp and cp.strip()
+        }
+        return sorted(class_paths)
+
     async def get_agent_by_id(
         self, user: KeycloakUser, agent_id: str
     ) -> AgentSettings | None:
@@ -249,6 +279,7 @@ class AgentService:
             agent_settings = Agent(
                 id=agent_id,
                 name=name,
+                team_id=team_id,
                 class_path=_class_path(A2AProxyAgent),
                 enabled=True,
                 tuning=tuning,
@@ -266,6 +297,7 @@ class AgentService:
             agent_settings = Agent(
                 id=agent_id,
                 name=name,
+                team_id=team_id,
                 class_path=class_path or _class_path(BasicReActAgent),
                 enabled=True,
                 tuning=default_tuning,
@@ -298,10 +330,14 @@ class AgentService:
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
+        current = await self.agent_manager.get_agent_settings(agent_settings.id)
+        if current is not None and current.team_id != agent_settings.team_id:
+            raise ImmutableTeamIdError(
+                f"team_id is immutable for agent '{agent_settings.id}'"
+            )
 
         # Check class_path change
         if agent_settings.class_path is not None:
-            current = await self.agent_manager.get_agent_settings(agent_settings.id)
             if current and current.class_path != agent_settings.class_path:
                 await self.rebac.check_user_permission_or_raise(
                     user,

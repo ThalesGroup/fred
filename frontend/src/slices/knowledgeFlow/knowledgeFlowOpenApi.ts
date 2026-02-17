@@ -2045,6 +2045,8 @@ export type SearchRequest = {
   document_uids?: string[] | null;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
+  /** Optional team id to force corpus search to team-owned libraries only. */
+  team_id?: string | null;
   /** Optional chat session id to include session-scoped attachments (user/session filtered). */
   session_id?: string | null;
   /** If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session). */
