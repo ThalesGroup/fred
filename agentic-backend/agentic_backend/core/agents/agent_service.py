@@ -187,8 +187,6 @@ class AgentService:
         """Backfill missing team_id from ReBAC ownership for legacy agents."""
         if agent_settings.team_id:
             return agent_settings
-        if not self.rebac.enabled:
-            return agent_settings
 
         try:
             owner_teams = await self.rebac.lookup_subjects(
@@ -203,18 +201,14 @@ class AgentService:
             )
             return agent_settings
 
-        if isinstance(owner_teams, RebacDisabledResult) or not owner_teams:
+        if (
+            isinstance(owner_teams, RebacDisabledResult)
+            or not owner_teams
+            or len(owner_teams) == 0
+        ):
             return agent_settings
 
-        team_ids = sorted(
-            {
-                ref.id
-                for ref in owner_teams
-                if ref.type == Resource.TEAM and isinstance(ref.id, str) and ref.id
-            }
-        )
-        if not team_ids:
-            return agent_settings
+        team_ids = [ref.id for ref in owner_teams]
 
         if len(team_ids) > 1:
             logger.warning(
@@ -269,12 +263,9 @@ class AgentService:
         )
 
         class_paths = {
-            cp.strip()
-            for cp in (
-                (agent_cfg.class_path or "")
-                for agent_cfg in self.agent_manager.config.ai.agents
-            )
-            if cp and cp.strip()
+            agent_cfg.class_path.strip()
+            for agent_cfg in self.agent_manager.config.ai.agents
+            if agent_cfg.class_path and agent_cfg.class_path.strip()
         }
         return sorted(class_paths)
 
