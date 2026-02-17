@@ -466,7 +466,7 @@ class VectorSearchService:
         question: str,
         user: KeycloakUser,
         top_k: int = 10,
-        document_library_tags_ids: Optional[List[str]] = None,
+        document_library_tags_ids: List[str] = [],
         document_uids: Optional[List[str]] = None,
         policy_name: Optional[SearchPolicyName] = None,
         team_id: Optional[str] = None,
@@ -493,7 +493,6 @@ class VectorSearchService:
             Exception: For any other unexpected errors during the search process.
         """
         try:
-            original_tag_ids = document_library_tags_ids or []
             document_uids = [uid for uid in (document_uids or []) if uid]
             include_session_scope = bool(include_session_scope)
             include_corpus_scope = bool(include_corpus_scope)
@@ -536,9 +535,6 @@ class VectorSearchService:
                 if team_id:
                     team_tag_ids = set(await self._team_document_library_tags_ids(user=user, team_id=team_id))
 
-                # Resolve library tags only if the caller provided some; otherwise stay empty so
-                # we can short-circuit when attachments already cover the request.
-                document_library_tags_ids = original_tag_ids
                 if team_tag_ids is not None:
                     if document_library_tags_ids:
                         requested = set(document_library_tags_ids)
@@ -618,7 +614,7 @@ class VectorSearchService:
                             metadata_terms_extra=corpus_metadata_extra,
                         )
             else:
-                if original_tag_ids:
+                if document_library_tags_ids:
                     logger.info("[VECTOR][SEARCH][CORPUS] skipping corpus search (include_corpus_scope=false).")
 
             merged = _merge_attachment_and_corpus_hits(
