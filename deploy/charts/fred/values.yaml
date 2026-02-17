@@ -290,7 +290,7 @@ applications:
             name: cross-encoder/ms-marco-MiniLM-L-12-v2
             settings:
               online: false
-              local_path: /app/models
+              local_path: /home/fred-user/.cache/huggingface
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
