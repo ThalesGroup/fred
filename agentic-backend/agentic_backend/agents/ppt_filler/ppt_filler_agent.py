@@ -113,7 +113,6 @@ class PptFillerAgent(AgentFlow):
 **4. Gestion des maîtrises**
 - Les niveaux de maîtrise (langues, compétences) sont sur une échelle de 1 à 5
 - 1 = Débutant, 2 = Intermédiaire, 3 = Bon, 4 = Très bon, 5 = Expert
-- Ces niveaux sont convertis automatiquement en emoji (● et ○) lors de la génération
 
 ## COMMUNICATION AVEC L'UTILISATEUR
 

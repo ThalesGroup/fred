@@ -267,11 +267,15 @@ CONTEXTE PROJET (pour aligner les compétences et expériences):
 RÈGLES IMPORTANTES:
 - N'invente RIEN - utilise uniquement les informations présentes dans les extraits
 - Les compétences et expériences doivent être pertinentes par rapport au contexte projet
-- Sélectionne les compétences les plus importantes (max 5-6 par catégorie)
-- Pour les expériences, garde les plus récentes et pertinentes (max 4-5)
-- Pour la maitrise (langues et compétences), utilise une échelle de 1 à 5:
-  1 = Débutant, 2 = Intermédiaire, 3 = Bon, 4 = Très bon, 5 = Expert
-- Si une information n'est pas trouvée, retourne une liste vide pour ce champ"""
+- Sélectionne les compétences les plus importantes (max 3 par catégorie)
+- Pour les expériences, garde les plus récentes et pertinentes (max 3)
+- Pour la maitrise (langues et compétences), utilise une échelle de 1 à 5 (en tant que string):
+  "1" = Débutant, "2" = Intermédiaire, "3" = Bon, "4" = Très bon, "5" = Expert
+- Si un emplacement de compétence n'est pas rempli (ex: competenceManagement3 est vide),
+  la maîtrise associée (maitriseManagement3) DOIT être une chaîne vide "", pas "0"
+- LANGUES: NE PAS inclure la langue maternelle du candidat (typiquement le français).
+  Inclure uniquement les langues étrangères (anglais, espagnol, allemand, etc.)
+- Si une information n'est pas trouvée, utilise une chaîne vide"""
 
             result = await model.ainvoke(
                 [
@@ -346,7 +350,11 @@ RÈGLES IMPORTANTES:
 - La charge est exprimée en unités d'œuvre (jours/homme typiquement)
 - Le prixTotal d'une prestation = prix × charge
 - Le prixTotal global = somme de tous les prixTotal des prestations
-- Si aucune prestation n'est trouvée, retourne une liste vide"""
+- NE PAS inventer de catégories de prestations. Si aucune information financière
+  n'est trouvée dans les extraits, laisse TOUS les champs vides (chaînes vides pour
+  les noms, 0 pour les montants). Ne crée pas de titres de catégories avec un coût de 0.
+- Remplis uniquement les prestations pour lesquelles tu as des données concrètes
+  (nom ET prix/charge). Un nom sans données financières n'est pas une prestation valide."""
 
             result = await model.ainvoke(
                 [

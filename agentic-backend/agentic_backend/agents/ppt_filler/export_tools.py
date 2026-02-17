@@ -20,17 +20,24 @@ from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
 logger = logging.getLogger(__name__)
 
 
-def _convert_maitrise_to_emoji(level: int) -> str:
+def _convert_maitrise_to_emoji(level: str | int) -> str:
     """Convert maitrise level (1-5) to emoji pattern (●○○○○ to ●●●●●).
 
     Args:
-        level: Integer from 1 to 5
+        level: Integer or string from 1 to 5, or empty string for no skill
 
     Returns:
-        String with filled (●) and empty (○) circles
+        String with filled (●) and empty (○) circles, or empty string if no level
     """
+    if isinstance(level, str):
+        if not level.strip():
+            return ""
+        try:
+            level = int(level)
+        except ValueError:
+            return ""
     if not 1 <= level <= 5:
-        level = 0
+        return ""
     filled = "●" * level
     empty = "○" * (5 - level)
     return filled + empty
@@ -97,30 +104,14 @@ class ExportTools:
                 # 2. Convert maitrise levels to emojis for CV
                 cv_dict = cv.model_dump()
                 for i in range(1, 4):
-                    # Langues
-                    if cv_dict.get(f"maitriseLangue{i}"):
-                        cv_dict[f"maitriseLangue{i}"] = _convert_maitrise_to_emoji(
-                            cv_dict[f"maitriseLangue{i}"]
-                        )
-                    # Management
-                    if cv_dict.get(f"maitriseManagement{i}"):
-                        cv_dict[f"maitriseManagement{i}"] = _convert_maitrise_to_emoji(
-                            cv_dict[f"maitriseManagement{i}"]
-                        )
-                    # Informatique
-                    if cv_dict.get(f"maitriseInformatique{i}"):
-                        cv_dict[f"maitriseInformatique{i}"] = (
-                            _convert_maitrise_to_emoji(
-                                cv_dict[f"maitriseInformatique{i}"]
-                            )
-                        )
-                    # Gestion de projet
-                    if cv_dict.get(f"maitriseGestionProjet{i}"):
-                        cv_dict[f"maitriseGestionProjet{i}"] = (
-                            _convert_maitrise_to_emoji(
-                                cv_dict[f"maitriseGestionProjet{i}"]
-                            )
-                        )
+                    for category in [
+                        "Langue",
+                        "Management",
+                        "Informatique",
+                        "GestionProjet",
+                    ]:
+                        key = f"maitrise{category}{i}"
+                        cv_dict[key] = _convert_maitrise_to_emoji(cv_dict.get(key, ""))
 
                 # 3. Build template data structure
                 template_data = {

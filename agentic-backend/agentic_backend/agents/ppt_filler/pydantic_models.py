@@ -6,7 +6,6 @@ Used with `with_structured_output(Model, method=\"json_schema\")`.
 
 from pydantic import BaseModel, Field
 
-
 # --- enjeuxBesoinsSchema ---
 
 
@@ -29,12 +28,17 @@ class EnjeuxBesoins(BaseModel):
     )
 
 
-# --- cvSchema (flattened) ---
+# --- cvSchema ---
 
 
 class CV(BaseModel):
-    """Informations sur le CV de l'intervenant (structure plate)."""
+    """Informations sur le CV de l'intervenant."""
 
+    trigramme: str = Field(
+        "",
+        max_length=3,
+        description="Trigramme servant à anonymiser le nom de l'intervenant (présent dans le CV).",
+    )
     poste: str = Field("", description="L'intitulé du poste rempli par l'intervenant.")
 
     # Formations (max 3)
@@ -45,37 +49,67 @@ class CV(BaseModel):
     dateFormation3: str = Field("", description="Date de la formation 3.")
     formation3: str = Field("", description="Nom de l'établissement ou formation 3.")
 
-    # Langues (max 3)
-    langue1: str = Field("", description="Langue parlée 1.")
-    maitriseLangue1: int = Field(0, description="Maîtrise de la langue 1 (1-5).")
-    langue2: str = Field("", description="Langue parlée 2.")
-    maitriseLangue2: int = Field(0, description="Maîtrise de la langue 2 (1-5).")
-    langue3: str = Field("", description="Langue parlée 3.")
-    maitriseLangue3: int = Field(0, description="Maîtrise de la langue 3 (1-5).")
+    # Langues (max 1) - Exclude native language (e.g. French)
+    langue1: str = Field(
+        "", description="Langue parlée 1 (exclure la langue maternelle)."
+    )
+    maitriseLangue1: str = Field(
+        "", description="Maîtrise de la langue 1 (1-5). Chaîne vide si pas de langue."
+    )
 
     # Compétences Management (max 3)
     competenceManagement1: str = Field("", description="Compétence management 1.")
-    maitriseManagement1: int = Field(0, description="Maîtrise management 1 (1-5).")
+    maitriseManagement1: str = Field(
+        "", description="Maîtrise management 1 (1-5). Chaîne vide si pas de compétence."
+    )
     competenceManagement2: str = Field("", description="Compétence management 2.")
-    maitriseManagement2: int = Field(0, description="Maîtrise management 2 (1-5).")
+    maitriseManagement2: str = Field(
+        "", description="Maîtrise management 2 (1-5). Chaîne vide si pas de compétence."
+    )
     competenceManagement3: str = Field("", description="Compétence management 3.")
-    maitriseManagement3: int = Field(0, description="Maîtrise management 3 (1-5).")
+    maitriseManagement3: str = Field(
+        "", description="Maîtrise management 3 (1-5). Chaîne vide si pas de compétence."
+    )
 
     # Compétences Informatique (max 3)
     competenceInformatique1: str = Field("", description="Compétence informatique 1.")
-    maitriseInformatique1: int = Field(0, description="Maîtrise informatique 1 (1-5).")
+    maitriseInformatique1: str = Field(
+        "",
+        description="Maîtrise informatique 1 (1-5). Chaîne vide si pas de compétence.",
+    )
     competenceInformatique2: str = Field("", description="Compétence informatique 2.")
-    maitriseInformatique2: int = Field(0, description="Maîtrise informatique 2 (1-5).")
+    maitriseInformatique2: str = Field(
+        "",
+        description="Maîtrise informatique 2 (1-5). Chaîne vide si pas de compétence.",
+    )
     competenceInformatique3: str = Field("", description="Compétence informatique 3.")
-    maitriseInformatique3: int = Field(0, description="Maîtrise informatique 3 (1-5).")
+    maitriseInformatique3: str = Field(
+        "",
+        description="Maîtrise informatique 3 (1-5). Chaîne vide si pas de compétence.",
+    )
 
     # Compétences Gestion de Projet (max 3)
-    competenceGestionProjet1: str = Field("", description="Compétence gestion de projet 1.")
-    maitriseGestionProjet1: int = Field(0, description="Maîtrise gestion projet 1 (1-5).")
-    competenceGestionProjet2: str = Field("", description="Compétence gestion de projet 2.")
-    maitriseGestionProjet2: int = Field(0, description="Maîtrise gestion projet 2 (1-5).")
-    competenceGestionProjet3: str = Field("", description="Compétence gestion de projet 3.")
-    maitriseGestionProjet3: int = Field(0, description="Maîtrise gestion projet 3 (1-5).")
+    competenceGestionProjet1: str = Field(
+        "", description="Compétence gestion de projet 1."
+    )
+    maitriseGestionProjet1: str = Field(
+        "",
+        description="Maîtrise gestion projet 1 (1-5). Chaîne vide si pas de compétence.",
+    )
+    competenceGestionProjet2: str = Field(
+        "", description="Compétence gestion de projet 2."
+    )
+    maitriseGestionProjet2: str = Field(
+        "",
+        description="Maîtrise gestion projet 2 (1-5). Chaîne vide si pas de compétence.",
+    )
+    competenceGestionProjet3: str = Field(
+        "", description="Compétence gestion de projet 3."
+    )
+    maitriseGestionProjet3: str = Field(
+        "",
+        description="Maîtrise gestion projet 3 (1-5). Chaîne vide si pas de compétence.",
+    )
 
     # Expériences (max 3)
     entreprise1: str = Field("", description="Nom de l'entreprise 1.")
@@ -92,36 +126,45 @@ class CV(BaseModel):
     realisations3: str = Field("", description="Description des tâches réalisées 3.")
 
 
-# --- prestationFinanciereSchema (flattened) ---
+# --- prestationFinanciereSchema ---
 
 
 class PrestationFinanciere(BaseModel):
-    """Informations sur les prestations financières facturées au client (structure plate)."""
+    """Informations sur les prestations financières facturées au client.
 
-    prestation1: str = Field("", description="Nom de la prestation 1.")
+    Ne remplir QUE les prestations pour lesquelles des données concrètes existent.
+    Ne pas inventer de catégories avec un coût de 0.
+    """
+
+    prestation1: str = Field(
+        "", description="Nom de la prestation 1. Vide si pas de données."
+    )
     prix1: int = Field(0, description="Prix unitaire de la prestation 1.")
-    charge1: int = Field(0, description="Charge estimée de la prestation 1 en unités d'oeuvre.")
+    charge1: int = Field(
+        0, description="Charge estimée de la prestation 1 en unités d'oeuvre."
+    )
     prixTotalPrestation1: int = Field(0, description="Coût total de la prestation 1.")
 
     prestation2: str = Field("", description="Nom de la prestation 2.")
     prix2: int = Field(0, description="Prix unitaire de la prestation 2.")
-    charge2: int = Field(0, description="Charge estimée de la prestation 2 en unités d'oeuvre.")
+    charge2: int = Field(
+        0, description="Charge estimée de la prestation 2 en unités d'oeuvre."
+    )
     prixTotalPrestation2: int = Field(0, description="Coût total de la prestation 2.")
 
     prestation3: str = Field("", description="Nom de la prestation 3.")
     prix3: int = Field(0, description="Prix unitaire de la prestation 3.")
-    charge3: int = Field(0, description="Charge estimée de la prestation 3 en unités d'oeuvre.")
+    charge3: int = Field(
+        0, description="Charge estimée de la prestation 3 en unités d'oeuvre."
+    )
     prixTotalPrestation3: int = Field(0, description="Coût total de la prestation 3.")
 
     prestation4: str = Field("", description="Nom de la prestation 4.")
     prix4: int = Field(0, description="Prix unitaire de la prestation 4.")
-    charge4: int = Field(0, description="Charge estimée de la prestation 4 en unités d'oeuvre.")
+    charge4: int = Field(
+        0, description="Charge estimée de la prestation 4 en unités d'oeuvre."
+    )
     prixTotalPrestation4: int = Field(0, description="Coût total de la prestation 4.")
-
-    prestation5: str = Field("", description="Nom de la prestation 5.")
-    prix5: int = Field(0, description="Prix unitaire de la prestation 5.")
-    charge5: int = Field(0, description="Charge estimée de la prestation 5 en unités d'oeuvre.")
-    prixTotalPrestation5: int = Field(0, description="Coût total de la prestation 5.")
 
     prixTotal: int = Field(0, description="Coût total de toutes les prestations.")
 
