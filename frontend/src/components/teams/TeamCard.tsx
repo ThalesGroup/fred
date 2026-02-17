@@ -6,6 +6,7 @@ import { KeyCloakService } from "../../security/KeycloakService";
 import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { getInitials } from "../../utils/getInitials";
 import InvisibleLink from "../InvisibleLink";
+import { TeamBanner } from "./TeamVisuals";
 
 const HoverBox = styled(Box)<{ isClickable: boolean }>(({ theme, isClickable }) => {
   if (!isClickable) {
@@ -59,11 +60,7 @@ export function TeamCard({ team }: TeamCardProps) {
         }}
       >
         {/* Banner */}
-        <img
-          src={team.banner_image_url || ""}
-          alt={`${team.name} avatar`}
-          style={{ objectFit: "cover", backgroundRepeat: "no-repeat", height: "6rem" }}
-        />
+        <TeamBanner teamName={team.name} imageUrl={team.banner_image_url} alt={`${team.name} avatar`} height="6rem" />
 
         <Box
           sx={{

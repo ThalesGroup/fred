@@ -37,6 +37,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
+import { TeamBanner } from "../teams/TeamVisuals";
 
 const teamSettingsSchema = z.object({
   description: z.string().max(180).optional(),
@@ -187,33 +188,14 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
 
             {/* Banner Preview */}
             <Box sx={{ position: "relative" }}>
-              {team?.banner_image_url ? (
-                <img
-                  src={team.banner_image_url}
-                  alt={t("teamSettingsPage.teamBanner.alt")}
-                  style={{ height: "6rem", width: "450px", objectFit: "cover", borderRadius: theme.spacing(1) }}
-                  onError={(e) => {
-                    // Handle missing/expired presigned URL gracefully
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    height: "6rem",
-                    width: "450px",
-                    border: `2px dashed ${theme.palette.divider}`,
-                    borderRadius: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Typography variant="body2" color="textSecondary">
-                    {t("teamSettingsPage.teamBanner.noImage")}
-                  </Typography>
-                </Box>
-              )}
+              <TeamBanner
+                teamName={team?.name}
+                imageUrl={team?.banner_image_url}
+                alt={t("teamSettingsPage.teamBanner.alt")}
+                height="6rem"
+                width="450px"
+                borderRadius={theme.spacing(1)}
+              />
             </Box>
           </Box>
 
