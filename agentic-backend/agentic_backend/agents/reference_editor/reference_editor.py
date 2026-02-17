@@ -345,9 +345,10 @@ class ReferenceEditor(AgentFlow):
                     VectorSearchClient,
                 )
 
-                vector_search_client = VectorSearchClient(
-                    team_id=getattr(self.get_runtime_context(), "team_id", None)
-                )
+                runtime_context = self.get_runtime_context()
+                if runtime_context is not None:
+                    team_id = runtime_context.team_id
+                vector_search_client = VectorSearchClient(team_id=team_id)
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
@@ -444,9 +445,10 @@ class ReferenceEditor(AgentFlow):
                     VectorSearchClient,
                 )
 
-                vector_search_client = VectorSearchClient(
-                    team_id=getattr(self.get_runtime_context(), "team_id", None)
-                )
+                runtime_context = self.get_runtime_context()
+                if runtime_context is not None:
+                    team_id = runtime_context.team_id
+                vector_search_client = VectorSearchClient(team_id=team_id)
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
