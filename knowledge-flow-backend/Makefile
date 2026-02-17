@@ -75,6 +75,13 @@ docker-build: ## Build the Docker image
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)
 
+.PHONY: docker-build-online
+docker-build-online: ## Build the online Docker image
+	docker build \
+		-f ./dockerfiles/Dockerfile-online \
+		-t $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)-online \
+		$(DOCKER_CONTEXT)
+
 .PHONY: docker-push
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
