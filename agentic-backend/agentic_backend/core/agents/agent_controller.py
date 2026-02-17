@@ -35,8 +35,8 @@ from agentic_backend.core.agents.agent_manager import (
 )
 from agentic_backend.core.agents.agent_service import (
     AgentService,
-    InvalidClassPathError,
     ImmutableTeamIdError,
+    InvalidClassPathError,
     MissingTeamIdError,
     OwnerFilter,
 )

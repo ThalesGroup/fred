@@ -5,7 +5,7 @@ import { getInitials } from "../../utils/getInitials";
 const fallbackColors = (theme: Theme) => {
   return {
     bg: alpha(theme.palette.primary.main, 0.16),
-    fg: theme.palette.getContrastText(alpha(theme.palette.primary.main, 0.16)),
+    fg: theme.palette.mode === "dark" ? theme.palette.common.white : theme.palette.common.black,
   };
 };
 

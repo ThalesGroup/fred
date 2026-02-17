@@ -28,7 +28,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
-from fred_core.kpi import KPIActor, KPIWriter, emit_process_kpis
+from fred_core.kpi import KPIActor, KPIWriter, emit_process_kpis, emit_sql_pool_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -152,6 +152,7 @@ def create_app() -> FastAPI:
         except Exception:
             logger.debug("[LOOP_LAG] probe init failed", exc_info=True)
         process_kpi_task = None
+        db_pool_kpi_task = None
         kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
         if kpi_interval_env:
             try:
@@ -165,6 +166,14 @@ def create_app() -> FastAPI:
             if interval_s > 0:
                 process_kpi_task = asyncio.create_task(
                     emit_process_kpis(interval_s, application_context.get_kpi_writer())
+                )
+                db_pool_kpi_task = asyncio.create_task(
+                    emit_sql_pool_kpis(
+                        interval_s,
+                        application_context.get_kpi_writer(),
+                        application_context.get_pg_async_engine(),
+                        pool_name="agentic-postgres",
+                    )
                 )
         try:
             await agent_manager.bootstrap()
@@ -188,6 +197,10 @@ def create_app() -> FastAPI:
                 process_kpi_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await process_kpi_task
+            if db_pool_kpi_task:
+                db_pool_kpi_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await db_pool_kpi_task
             await application_context.shutdown()
             logger.info("[MAIN] Lifespan exit: orderly shutdown.")
             logger.info("[] Shutdown complete.")

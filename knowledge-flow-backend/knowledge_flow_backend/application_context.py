@@ -877,9 +877,9 @@ class ApplicationContext:
         # No choice, team store only support SQLAlchemy compatible db (Postgres, SQLite...)
         if self._team_metadata_store_instance is not None:
             return self._team_metadata_store_instance
-        pg = get_configuration().storage.postgres
-        engine = create_async_engine_from_config(pg)
-        self._team_metadata_store_instance = PostgresTeamMetadataStore(engine=engine)
+        self._team_metadata_store_instance = PostgresTeamMetadataStore(
+            engine=self.get_pg_async_engine(),
+        )
         return self._team_metadata_store_instance
 
     def get_resource_store(self) -> BaseResourceStore:
