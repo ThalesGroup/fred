@@ -391,7 +391,9 @@ applications:
 
         kpi_store:
           type: "log"
-          level: "INFO"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
 
     dotenv:
       AZURE_OPENAI_API_KEY: ""
@@ -854,7 +856,9 @@ applications:
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
         kpi_store:
           type: "log"
-          level: "INFO"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
         tag_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
@@ -1218,7 +1222,9 @@ applications:
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
         kpi_store:
           type: "log"
-          level: "INFO"
+          level: "DEBUG"
+        log_store:
+          type: "in_memory"
         tag_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
