@@ -36,8 +36,8 @@ import { z } from "zod";
 import {
   CreateAgentRequest,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
 } from "../../slices/agentic/agenticOpenApi";
-import { useListDeclaredAgentClassPathsQuery } from "../../slices/agentic/agenticClassPathApi";
 
 import { KeyCloakService } from "../../security/KeycloakService";
 import { useToast } from "../ToastProvider";
