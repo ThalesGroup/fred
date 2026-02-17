@@ -147,14 +147,16 @@ Règles:
         all_chunks.sort(key=lambda c: c.get("score", 0), reverse=True)
         top_chunks = all_chunks[:MAX_UNIQUE_CHUNKS]
 
-        # Rank document titles by cumulative score
-        title_scores: dict[str, float] = {}
+        # Rank document filenames by cumulative score
+        filename_scores: dict[str, float] = {}
         for chunk in top_chunks:
-            title = chunk.get("title", "")
-            if title:
-                title_scores[title] = title_scores.get(title, 0) + chunk.get("score", 0)
-        ranked_titles = sorted(
-            title_scores, key=lambda t: title_scores[t], reverse=True
+            fname = chunk.get("file_name", "")
+            if fname:
+                filename_scores[fname] = filename_scores.get(fname, 0) + chunk.get(
+                    "score", 0
+                )
+        ranked_filenames = sorted(
+            filename_scores, key=lambda f: filename_scores[f], reverse=True
         )
 
         # Format chunks for the LLM
@@ -165,7 +167,7 @@ Règles:
             formatted_chunks.append(f"### Extrait {i} (source: {title})\n{content}")
 
         logger.info(f"Collected {len(top_chunks)} unique chunks from search")
-        return "\n\n".join(formatted_chunks), ranked_titles
+        return "\n\n".join(formatted_chunks), ranked_filenames
 
     def get_extract_enjeux_besoins_tool(self):
         """Tool to extract project context and missions."""
@@ -185,7 +187,7 @@ Règles:
             queries = await self._generate_queries(EnjeuxBesoins, context_hint)
 
             # Phase 2: Search and collect
-            chunks_text, ranked_titles = await self._search_and_collect(queries)
+            chunks_text, ranked_filenames = await self._search_and_collect(queries)
             if chunks_text.startswith("❌"):
                 return Command(
                     update={
@@ -219,8 +221,8 @@ RÈGLES IMPORTANTES:
                 result = EnjeuxBesoins.model_validate(result)
 
             # Set refCahierCharges from the most relevant document title
-            if ranked_titles:
-                result.refCahierCharges = ranked_titles[0]
+            if ranked_filenames:
+                result.refCahierCharges = ranked_filenames[0]
 
             logger.info(f"Extracted EnjeuxBesoins: {result.model_dump()}")
 
@@ -290,7 +292,7 @@ RÈGLES IMPORTANTES:
 - Si un emplacement de compétence n'est pas rempli (ex: competenceManagement3 est vide),
   la maîtrise associée (maitriseManagement3) DOIT être une chaîne vide "", pas "0"
 - LANGUES: NE PAS inclure la langue maternelle du candidat (typiquement le français).
-  Inclure uniquement les langues étrangères (anglais, espagnol, allemand, etc.)
+  Inclure uniquement les langues étrangères (Anglais, Espagnol, Allemand, etc.).
 - Si une information n'est pas trouvée, utilise une chaîne vide
 - STYLE: Rédige TOUJOURS à la troisième personne (pas de "je", "j'ai", "mon").
   Exemple: "A géré une équipe de 5 personnes" et non "J'ai géré une équipe de 5 personnes"."""

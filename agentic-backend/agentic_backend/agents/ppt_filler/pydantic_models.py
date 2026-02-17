@@ -40,7 +40,7 @@ class CV(BaseModel):
         description="Trigramme servant à anonymiser le nom de l'intervenant (présent dans le CV).",
     )
     poste: str = Field(
-        "", max_length=80, description="L'intitulé du poste rempli par l'intervenant."
+        "", max_length=60, description="L'intitulé du poste rempli par l'intervenant."
     )
 
     # Formations (max 3)
