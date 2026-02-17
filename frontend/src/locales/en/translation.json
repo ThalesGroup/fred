@@ -1193,16 +1193,10 @@
     }
   },
   "newChat": {
-    "yourAgents": "Your agents",
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
     "loadingAgentError": "Unable to load your agents.",
-    "teamPromptTitle": "Choose a team first",
-    "teamPromptSubtitle": "Agents are scoped by team. Select your team context before starting a conversation.",
-    "selectTeamToContinue": "Select a team to continue.",
-    "browseTeams": "Browse or join teams",
-    "teamAgentsTitle": "Agents in {{teamName}}",
-    "personalAgents": "Personal agents",
-    "noAgentsForTeam": "No agents are available yet for {{teamName}}."
+    "teamAgents": "Team agents",
+    "personalAgents": "Personal agents"
   },
   "comingSoon": {
     "title": "{{siteDisplayName}} is coming soon.",

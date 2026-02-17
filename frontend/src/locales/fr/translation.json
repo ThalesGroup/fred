@@ -1195,15 +1195,9 @@
   },
   "newChat": {
     "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
-    "yourAgents": "Vos agents",
     "loadingAgentError": "Impossible de charger la liste des agents.",
-    "teamPromptTitle": "Choisissez d'abord une équipe",
-    "teamPromptSubtitle": "Les agents sont limités par équipe. Sélectionnez votre contexte d'équipe avant de démarrer une conversation.",
-    "selectTeamToContinue": "Sélectionnez une équipe pour continuer.",
-    "browseTeams": "Parcourir ou rejoindre des équipes",
-    "teamAgentsTitle": "Agents de {{teamName}}",
-    "personalAgents": "Agents personnels",
-    "noAgentsForTeam": "Aucun agent n'est encore disponible pour {{teamName}}."
+    "teamAgents": "Agents d'équipe",
+    "personalAgents": "Agents personnels"
   },
   "comingSoon": {
     "title": "{{siteDisplayName}} arrive très bientôt.",
