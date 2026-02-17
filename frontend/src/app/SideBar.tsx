@@ -283,8 +283,8 @@ export default function SideBar() {
     return activeAgent?.team_id ?? null;
   }, [activeAgentId, allAgents]);
   const activeTeam = useMemo(
-    () => (activeTeamId ? teams?.find((team) => team.id === activeTeamId) || null : null),
-    [activeTeamId, teams],
+    () => (activeSessionId && activeTeamId ? teams?.find((team) => team.id === activeTeamId) || null : null),
+    [activeSessionId, activeTeamId, teams],
   );
   const teamsMenuItem: SideBarNavigationElement[] =
     yourTeams?.map((team) => {
