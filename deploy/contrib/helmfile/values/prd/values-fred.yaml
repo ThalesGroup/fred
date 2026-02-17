@@ -168,7 +168,7 @@ applications:
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
-      tag: &prism-tag "0.0.20-prism-rc"
+      tag: &prism-tag "0.0.25-prism"
     imagePullSecrets: &carma-pull-secret
       - name: "carma-pull-secret"
 
@@ -226,9 +226,8 @@ applications:
           showAgentRegisterA2A: false
           showAgentRestoreFromConfiguration: false
           showAgentCode: false
-          # todo: uncomment when using `0.0.23-prism`
-          # allowAgentSwitchInOneConversation: false
-          # showAgentDisableButton: false
+          allowAgentSwitchInOneConversation: false
+          showAgentDisableButton: false
 
       ai:
         # Increase max number of session per users
