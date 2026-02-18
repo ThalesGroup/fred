@@ -194,6 +194,17 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.aegis.aegis_rag_expert.Aegis"
       enabled: true
+    - id: "Archie"
+      name: "Archie"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.archie.Archie"
+      enabled: true
+      chat_model: {}
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
+        search_rag_scoping: true
+        attach_files: true
     - id: "Tessa"
       name: "Tessa"
       type: "agent"
