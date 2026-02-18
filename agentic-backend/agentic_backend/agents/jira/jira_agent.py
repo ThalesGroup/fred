@@ -308,9 +308,7 @@ class JiraAgent(AgentFlow):
                 self.single_item_tools.get_update_user_story_tool(),
                 self.single_item_tools.get_update_test_tool(),
                 # Read/inspect
-                self.single_item_tools.get_read_requirements_tool(),
-                self.single_item_tools.get_read_user_stories_tool(),
-                self.single_item_tools.get_read_tests_tool(),
+                self.single_item_tools.get_read_items_tool(),
                 # Export
                 self.export_tools.get_export_tool(),
                 self.export_tools.get_export_jira_csv_tool(),
