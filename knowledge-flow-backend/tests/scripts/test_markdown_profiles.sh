@@ -122,26 +122,56 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --input-dir)
+        if [[ $# -lt 2 ]]; then
+          echo "${C_RED}[ERROR]${C_RESET} Missing value for --input-dir" >&2
+          usage
+          exit 2
+        fi
         INPUT_DIR="$2"
         shift 2
         ;;
       --base-url)
+        if [[ $# -lt 2 ]]; then
+          echo "${C_RED}[ERROR]${C_RESET} Missing value for --base-url" >&2
+          usage
+          exit 2
+        fi
         BASE_URL="$2"
         shift 2
         ;;
       --output-dir)
+        if [[ $# -lt 2 ]]; then
+          echo "${C_RED}[ERROR]${C_RESET} Missing value for --output-dir" >&2
+          usage
+          exit 2
+        fi
         OUTPUT_DIR="$2"
         shift 2
         ;;
       --profiles)
+        if [[ $# -lt 2 ]]; then
+          echo "${C_RED}[ERROR]${C_RESET} Missing value for --profiles" >&2
+          usage
+          exit 2
+        fi
         PROFILES="$2"
         shift 2
         ;;
       --auth-bearer)
+        if [[ $# -lt 2 ]]; then
+          echo "${C_RED}[ERROR]${C_RESET} Missing value for --auth-bearer" >&2
+          usage
+          exit 2
+        fi
         AUTH_BEARER="$2"
         shift 2
         ;;
       --timeout)
+        if [[ $# -lt 2 ]]; then
+          echo "${C_RED}[ERROR]${C_RESET} Missing value for --timeout" >&2
+          usage
+          exit 2
+        fi
         TIMEOUT_SECONDS="$2"
         shift 2
         ;;
