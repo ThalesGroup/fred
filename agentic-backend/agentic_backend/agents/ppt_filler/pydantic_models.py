@@ -7,19 +7,21 @@ max_length constraints define PPT card limits but are stripped for extraction
 
 from typing import Type
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 
-def schema_without_max_length(model_class: Type[BaseModel]) -> dict:
-    """Return the model's JSON schema with all maxLength constraints removed.
+def schema_without_max_length(model_class: Type[BaseModel]) -> Type[BaseModel]:
+    """Return a new Pydantic model with all max_length constraints removed.
 
     Used with `with_structured_output(schema, method="json_schema")` so the LLM
     extracts full content without truncating to fit PPT card limits.
     """
-    schema = model_class.model_json_schema()
-    for prop in schema.get("properties", {}).values():
-        prop.pop("maxLength", None)
-    return schema
+    fields = {}
+    for name, field_info in model_class.model_fields.items():
+        kwargs = {"default": field_info.default, "description": field_info.description}
+        fields[name] = (field_info.annotation, Field(**kwargs))
+    return create_model(model_class.__name__, **fields)
+
 
 # --- enjeuxBesoinsSchema ---
 
@@ -144,15 +146,21 @@ class CV(BaseModel):
     entreprise1: str = Field("", description="Nom de l'entreprise 1.")
     poste1: str = Field("", description="Nom du poste 1.")
     duree1: str = Field("", description="Durée de l'expérience 1.")
-    realisations1: str = Field("", description="Description des tâches réalisées 1.")
+    realisations1: str = Field(
+        "", max_length=600, description="Description des tâches réalisées 1."
+    )
     entreprise2: str = Field("", description="Nom de l'entreprise 2.")
     poste2: str = Field("", description="Nom du poste 2.")
     duree2: str = Field("", description="Durée de l'expérience 2.")
-    realisations2: str = Field("", description="Description des tâches réalisées 2.")
+    realisations2: str = Field(
+        "", max_length=600, description="Description des tâches réalisées 2."
+    )
     entreprise3: str = Field("", description="Nom de l'entreprise 3.")
     poste3: str = Field("", description="Nom du poste 3.")
     duree3: str = Field("", description="Durée de l'expérience 3.")
-    realisations3: str = Field("", description="Description des tâches réalisées 3.")
+    realisations3: str = Field(
+        "", max_length=600, description="Description des tâches réalisées 3."
+    )
 
 
 # --- prestationFinanciereSchema ---

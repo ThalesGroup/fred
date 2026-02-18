@@ -22,8 +22,29 @@ from agentic_backend.application_context import get_default_chat_model
 logger = logging.getLogger(__name__)
 
 SEARCH_TOOL_NAME = "search_documents_using_vectorization"
-TOP_K_PER_QUERY = 10
+TOP_K_PER_QUERY = 8
 MAX_UNIQUE_CHUNKS = 30
+
+# Hardcoded queries per extraction type (use _generate_queries() in the future for generalization)
+ENJEUX_BESOINS_QUERIES = [
+    "Quels sont les objectifs et les missions principales du projet ?",
+    "Quel est le contexte du projet ?",
+]
+CV_QUERIES = [
+    "Intitulé du poste",
+    "Trigramme de l'intervenant",
+    "Formations avec dates et établissements",
+    "Langues parlées et niveau de maîtrise",
+    "Compétences en management et niveau de maîtrise",
+    "Compétences en informatique et niveau de maîtrise",
+    "Compétences en gestion de projet et niveau de maîtrise",
+    "Expériences professionnelles avec entreprises, postes, durées et réalisations",
+]
+PRESTATION_FINANCIERE_QUERIES = [
+    "Nom et coût unitaire des prestations",
+    "Charge estimée en unités d'œuvre pour chaque prestation",
+    "Coût total de chaque prestation et coût total global",
+]
 
 
 class ExtractionTools:
@@ -50,18 +71,6 @@ class ExtractionTools:
                 return t
         return None
 
-    def _get_schema_description(self, model_class: Type[BaseModel]) -> str:
-        """
-        Build a human-readable field list from a Pydantic model.
-        For flattened models, just lists all fields with their descriptions.
-        """
-        lines = []
-        for field_name, field_info in model_class.model_fields.items():
-            description = field_info.description or ""
-            lines.append(f"- {field_name}: {description}")
-
-        return "\n".join(lines)
-
     async def _generate_queries(
         self, model_class: Type[BaseModel], context_hint: str = ""
     ) -> list[str]:
@@ -75,7 +84,12 @@ class ExtractionTools:
         Returns:
             List of search query strings
         """
-        schema_desc = self._get_schema_description(model_class)
+        # Human readable names and descriptions for fields
+        lines = []
+        for name, info in model_class.model_fields.items():
+            lines.append(f"- {name}: {info.description or ''}")
+        schema_desc = "\n".join(lines)
+
         prompt = f"""Voici les champs à extraire depuis des documents projet et un CV:
 
 {schema_desc}
@@ -184,11 +198,10 @@ Règles:
             Returns:
                 JSON contenant les enjeux et besoins du projet.
             """
-            # Phase 1: Generate queries
-            queries = await self._generate_queries(EnjeuxBesoins, context_hint)
-
-            # Phase 2: Search and collect
-            chunks_text, ranked_filenames = await self._search_and_collect(queries)
+            # Phase 1: Search and collect
+            chunks_text, ranked_filenames = await self._search_and_collect(
+                ENJEUX_BESOINS_QUERIES
+            )
             if chunks_text.startswith("❌"):
                 return Command(
                     update={
@@ -260,11 +273,8 @@ RÈGLES IMPORTANTES:
             Returns:
                 JSON contenant les informations du CV.
             """
-            # Phase 1: Generate queries
-            queries = await self._generate_queries(CV, context_hint)
-
-            # Phase 2: Search and collect
-            chunks_text, _ = await self._search_and_collect(queries)
+            # Phase 1: Search and collect
+            chunks_text, _ = await self._search_and_collect(CV_QUERIES)
             if chunks_text.startswith("❌"):
                 return Command(
                     update={
@@ -345,11 +355,10 @@ RÈGLES IMPORTANTES:
             Returns:
                 JSON contenant les prestations financières.
             """
-            # Phase 1: Generate queries
-            queries = await self._generate_queries(PrestationFinanciere, context_hint)
-
-            # Phase 2: Search and collect
-            chunks_text, _ = await self._search_and_collect(queries)
+            # Phase 1: Search and collect
+            chunks_text, _ = await self._search_and_collect(
+                PRESTATION_FINANCIERE_QUERIES
+            )
             if chunks_text.startswith("❌"):
                 return Command(
                     update={
