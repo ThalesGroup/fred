@@ -11,25 +11,6 @@ global:
     accessModes: "ReadWriteMany"
     storageClass: "ontap-nfs"
 
-  # Enable whitelist
-  whitelist:
-    enabled: true
-    user_list_inline: |
-      maxime.daragon@thalesgroup.com
-      felix.page@thalesgroup.com
-      florian.muller@thalesgroup.com
-      sebastien.ehling@thalesgroup.com
-      julien.buisson-chavot@thalesgroup.com
-      simon.cariou@thalesgroup.com
-      dimitri.tombroff@thalesgroup.com
-      benjamin.deroys@thalesgroup.com
-      thomas.poirieux@thalesgroup.com
-      gregoire.mahon@thalesgroup.com
-      samuel.cohen@thalesgroup.com
-      felicity.dorleans@thalesgroup.com
-      luc.ballot@thalesgroup.com
-      gauthier.baron@thalesgroup.com
-
 applications:
   agentic-backend:
     replicaCount: 2
@@ -280,10 +261,14 @@ applications:
         # log_level: "debug"
 
       processing:
-        # disable image processing for now (todo: enable it)
-        process_images: false
-        # disable gpu for now (todo: enable it)
-        use_gpu: false
+        profiles:
+          # disable gpu for now (todo: enable it ?)
+          fast:
+            use_gpu: &use_gpu_for_processing false
+          medium:
+            use_gpu: *use_gpu_for_processing
+          rich:
+            use_gpu: *use_gpu_for_processing
 
       # Set Keycloak url
       security: *security-configuration
