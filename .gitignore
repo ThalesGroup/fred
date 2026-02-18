@@ -90,6 +90,8 @@ docs/_build/
 # PyBuilder
 .pybuilder/
 target/
+.fred-test/
+knowledge-flow-backend/.fred-test/
 
 # Jupyter Notebook
 .ipynb_checkpoints

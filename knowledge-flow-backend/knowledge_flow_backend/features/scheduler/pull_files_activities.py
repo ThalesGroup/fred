@@ -53,9 +53,9 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
     assert file.source_tag, "Pull files must have a source tag"
     logger = activity.logger
     logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Starting file={file}")
-    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = IngestionService()
+    ingestion_service = get_ingestion_service()
 
     from knowledge_flow_backend.application_context import ApplicationContext
 
@@ -73,7 +73,7 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Fetched file path={full_path}")
 
         # Step 3: Extract and save metadata
-        ingestion_service = IngestionService()
+        ingestion_service = get_ingestion_service()
         metadata = await ingestion_service.extract_metadata(
             file.processed_by,
             full_path,
@@ -104,9 +104,9 @@ async def pull_input_process(
     logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] Starting uid=%s", metadata.document_uid)
     logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] profile=%r type=%s", profile, type(profile).__name__)
 
-    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = IngestionService()
+    ingestion_service = get_ingestion_service()
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)

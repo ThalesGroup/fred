@@ -31,9 +31,9 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
     logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
 
     from knowledge_flow_backend.application_context import ApplicationContext
-    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+    from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
-    ingestion_service = IngestionService()
+    ingestion_service = get_ingestion_service()
 
     output_stage: ProcessingStage | None = None
     try:
