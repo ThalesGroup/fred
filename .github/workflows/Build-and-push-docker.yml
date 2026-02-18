@@ -24,21 +24,25 @@ jobs:
             dockerfile: ./agentic-backend/dockerfiles/Dockerfile-prod
             image: agentic-backend
             tag_rule: "type=match,pattern=code/(v.*),group=1"
+            target: ""
           - name: knowledge-flow-backend
             context: ./
             dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
             tag_rule: "type=match,pattern=code/(v.*),group=1"
-          - name: knowledge-flow-backend-online
+            target: "online"
+          - name: knowledge-flow-backend-offline
             context: ./
-            dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-online
+            dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
-            tag_rule: "type=match,pattern=code/(v.*),group=1,suffix=-online"
+            tag_rule: "type=match,pattern=code/(v.*),group=1,suffix=-offline"
+            target: "prod"
           - name: frontend
             context: ./
             dockerfile: ./frontend/dockerfiles/Dockerfile-prod
             image: frontend
             tag_rule: "type=match,pattern=code/(v.*),group=1"
+            target: ""
 
     # what each job will play
 
@@ -67,10 +71,22 @@ jobs:
 
       # push on ghcr.io/thalesgroup/fred-agent/myimage:vX.Y.Z
       - name: Build and push Docker image
+        if: matrix.target == ''
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
+          labels: ${{ steps.meta.outputs.labels }} # many various informations
+
+      - name: Build and push Docker image (targeted)
+        if: matrix.target != ''
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: true
           tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
           labels: ${{ steps.meta.outputs.labels }} # many various informations
@@ -99,7 +115,7 @@ jobs:
             ```
             oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
-            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}-online
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}-offline
             oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
             ```
           draft: false

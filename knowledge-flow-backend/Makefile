@@ -72,14 +72,19 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 docker-build: ## Build the Docker image
 	docker build \
 		-f $(DOCKERFILE_PATH) \
+		--target online \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)
 
 .PHONY: docker-build-online
-docker-build-online: ## Build the online Docker image
+docker-build-online: docker-build ## Backward-compatible alias for docker-build (online image)
+
+.PHONY: docker-build-offline
+docker-build-offline: ## Build the offline Docker image
 	docker build \
-		-f ./dockerfiles/Dockerfile-online \
-		-t $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)-online \
+		-f $(DOCKERFILE_PATH) \
+		--target prod \
+		-t $(REGISTRY_URL)/$(REGISTRY_NAMESPACE)/$(IMAGE_NAME):$(IMAGE_TAG)-offline \
 		$(DOCKER_CONTEXT)
 
 .PHONY: docker-push

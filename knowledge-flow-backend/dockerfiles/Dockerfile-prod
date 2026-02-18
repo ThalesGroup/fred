@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# BUILD STAGE
+# BUILD STAGE (shared)
 # -----------------------------------------------------------------------------
 FROM mirror.gcr.io/python:3.12.8-slim AS builder
 ARG USER_NAME=fred-user
@@ -20,7 +20,6 @@ RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh && \
 # Create virtualenv manually (outside project for portability)
 ENV UV_PROJECT_ENVIRONMENT=/app/venv
 ENV PATH="/app/venv/bin:$PATH"
-ENV TIKTOKEN_CACHE_DIR=/app/encodings
 
 # Set working directory
 WORKDIR /app
@@ -37,24 +36,18 @@ COPY fred-core /fred-core
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
 
-# Prepare local encodings directory
-RUN mkdir -p $TIKTOKEN_CACHE_DIR
-
-# Download encodings for offline usage
-RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
-
-# Copy projets
+# Copy project
 COPY knowledge-flow-backend/. /app/
 
 # -----------------------------------------------------------------------------
-# FINAL STAGE: PROD IMAGE
+# RUNTIME BASE STAGE (shared by online/offline)
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim
+FROM mirror.gcr.io/python:3.12.8-slim AS runtime-base
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# System deps (minimal)
+# System deps (minimal runtime)
 RUN apt-get update && \
     apt-get install -y \
     curl \
@@ -79,9 +72,47 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 
 # Copy virtualenv from build stage
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
-COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 
 ENV PATH="/app/venv/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy app source
+COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
+COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
+
+# Set environment
+ENV PYTHONPATH=/app
+
+# -----------------------------------------------------------------------------
+# ONLINE IMAGE
+# -----------------------------------------------------------------------------
+FROM runtime-base AS online
+ARG USER_NAME=fred-user
+
+# Run as non-root
+USER ${USER_NAME}
+
+# Expose Fast API port
+EXPOSE 8111
+
+# Entrypoint without make
+ENTRYPOINT ["uvicorn", "knowledge_flow_backend.main:create_app", "--factory"]
+CMD ["--port", "8111", "--host", "0.0.0.0", "--log-level", "info", "--loop", "asyncio"]
+
+# -----------------------------------------------------------------------------
+# OFFLINE IMAGE (prod)
+# -----------------------------------------------------------------------------
+FROM online AS prod
+ARG USER_NAME=fred-user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Switch to root to prepare writable cache directories
+USER root
+
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
 
@@ -94,11 +125,17 @@ ENV HF_HUB_CACHE=${RERANKER_MODEL_CACHE}
 ENV HUGGINGFACE_HUB_CACHE=${RERANKER_MODEL_CACHE}
 ENV SENTENCE_TRANSFORMERS_HOME=${RERANKER_MODEL_CACHE}
 ENV TRANSFORMERS_CACHE=${RERANKER_MODEL_CACHE}
-RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && \
-    chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH}
+
+# Prepare local cache directories for offline runtime
+RUN mkdir -p ${TIKTOKEN_CACHE_DIR} ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && \
+    chown -R ${USER_ID}:${GROUP_ID} ${TIKTOKEN_CACHE_DIR} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH}
+
+USER ${USER_NAME}
+
+# Download encodings for offline usage
+RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
 # Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
-USER ${USER_NAME}
 RUN python -c "\
 from sentence_transformers import CrossEncoder; \
 import os; \
@@ -122,21 +159,3 @@ download_models( \
     with_smoldocling_mlx=False, \
     with_granite_vision=False \
 )"
-
-# Set working directory
-WORKDIR /app
-
-# Copy app source
-COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
-COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
-
-# Set environment
-ENV PYTHONPATH=/app
-
-# Expose Fast API port
-EXPOSE 8111
-
-# Entrypoint without make
-ENTRYPOINT ["uvicorn", "knowledge_flow_backend.main:create_app", "--factory"]
-CMD ["--port", "8111", "--host", "0.0.0.0", "--log-level", "info", "--loop", "asyncio"]
