@@ -55,14 +55,12 @@ docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
 
 .PHONY: run-docker
-run-docker: ## Run the API in Docker
-	@echo "🚀 Running the API in Docker..."
+run-docker: ## Run Agentic API in Docker (uses host network by default)
+	@echo "🚀 Running Agentic API in Docker..."
 	docker run --rm -it \
 		--name $(API_CONTAINER_NAME) \
 		--network $(API_DOCKER_NETWORK) \
 		-v $(realpath config):/app/config:ro \
-		-e ENV_FILE=/app/config/.env \
-		$(if $(CONFIG_FILE),-e CONFIG_FILE=$(CONFIG_FILE),) \
 		$(IMAGE_FULL)
 
 .PHONY: docker-run

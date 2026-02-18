@@ -30,7 +30,7 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 logger = logging.getLogger(__name__)
 
 TUNING = AgentTuning(
-    role="generalist",
+    role="Broad and general knowledge assistant",
     description="Fallback generalist expert used to handle broad queries when no specialist applies.",
     tags=["fallback"],
     fields=[
@@ -39,7 +39,7 @@ TUNING = AgentTuning(
             type="prompt",
             title="System Prompt",
             description=(
-                "Sets Georges’ base persona and boundaries. "
+                "Sets Georges' base persona and boundaries. "
                 "Adjust to shift tone/voice or emphasize constraints."
             ),
             required=True,

@@ -64,6 +64,23 @@ def _normalize_ts(ts: datetime | str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _parse_metrics_bound(ts: str, field: str) -> datetime:
+    """Parse and validate a metrics time bound as timezone-aware UTC datetime."""
+    try:
+        parsed = datetime.fromisoformat(ts.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid '{field}' timestamp: '{ts}'. Expected ISO 8601 datetime with timezone."
+        ) from exc
+
+    if parsed.tzinfo is None:
+        raise ValueError(
+            f"Invalid '{field}' timestamp: timezone information is required."
+        )
+
+    return parsed.astimezone(timezone.utc)
+
+
 def _safe_md(v: Any) -> ChatMetadata:
     if isinstance(v, ChatMetadata):
         return v
@@ -220,6 +237,11 @@ class PostgresHistoryStore(BaseHistoryStore):
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
     ) -> MetricsResponse:
+        start_dt = _parse_metrics_bound(start, "start")
+        end_dt = _parse_metrics_bound(end, "end")
+        if end_dt < start_dt:
+            raise ValueError("Invalid metrics window: 'end' must be >= 'start'.")
+
         async with self.store.begin() as conn:
             result = await conn.execute(
                 select(
@@ -234,8 +256,8 @@ class PostgresHistoryStore(BaseHistoryStore):
                     self.table.c.metadata_json,
                 )
                 .where(
-                    self.table.c.timestamp >= start,
-                    self.table.c.timestamp <= end,
+                    self.table.c.timestamp >= start_dt,
+                    self.table.c.timestamp <= end_dt,
                     self.table.c.user_id == user_id,
                 )
                 .order_by(self.table.c.timestamp.asc())
