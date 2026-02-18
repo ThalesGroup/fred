@@ -146,7 +146,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         media_folder = images_dir / "media"
 
         ################################## MyCV images parsing #################################################
-        if "cv" in str(file_path):
+        if "cv" in file_path.name.lower():
             if media_folder.exists():
                 for img_file in media_folder.iterdir():
                     if img_file.suffix.lower() not in _RASTER_IMAGE_SUFFIXES:
