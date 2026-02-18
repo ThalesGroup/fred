@@ -1,10 +1,25 @@
 """Pydantic models for PPT Filler agent structured outputs.
 
 Flattened structure to match PowerPoint template placeholders.
-Used with `with_structured_output(Model, method=\"json_schema\")`.
+max_length constraints define PPT card limits but are stripped for extraction
+(so the LLM doesn't self-truncate). Validation happens at fill_template time.
 """
 
+from typing import Type
+
 from pydantic import BaseModel, Field
+
+
+def schema_without_max_length(model_class: Type[BaseModel]) -> dict:
+    """Return the model's JSON schema with all maxLength constraints removed.
+
+    Used with `with_structured_output(schema, method="json_schema")` so the LLM
+    extracts full content without truncating to fit PPT card limits.
+    """
+    schema = model_class.model_json_schema()
+    for prop in schema.get("properties", {}).values():
+        prop.pop("maxLength", None)
+    return schema
 
 # --- enjeuxBesoinsSchema ---
 

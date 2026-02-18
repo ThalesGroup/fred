@@ -15,6 +15,7 @@ from agentic_backend.agents.ppt_filler.pydantic_models import (
     EnjeuxBesoins,
     PrestationFinanciere,
     SearchQueries,
+    schema_without_max_length,
 )
 from agentic_backend.application_context import get_default_chat_model
 
@@ -197,17 +198,17 @@ Règles:
                     }
                 )
 
-            # Phase 3: Extract with structured output
+            # Phase 3: Extract with structured output (no maxLength constraints)
             model = get_default_chat_model().with_structured_output(
-                EnjeuxBesoins, method="json_schema"
+                schema_without_max_length(EnjeuxBesoins), method="json_schema"
             )
             extraction_prompt = """Extrais le contexte et les missions du projet depuis les extraits suivants.
 
 RÈGLES IMPORTANTES:
 - N'invente RIEN - utilise uniquement les informations présentes dans les extraits
 - Si une information n'est pas trouvée, utilise une chaîne vide
-- Le contexte doit décrire le projet de manière détaillée (2-3 phrases, utilise les 270 caractères disponibles)
-- Les missions doivent résumer les objectifs clés (2-3 phrases, max 270 caractères)
+- Le contexte doit décrire le projet de manière détaillée (2-3 phrases)
+- Les missions doivent résumer les objectifs clés (2-3 phrases)
 - Laisse refCahierCharges vide, il sera rempli automatiquement"""
 
             result = await model.ainvoke(
@@ -218,7 +219,7 @@ RÈGLES IMPORTANTES:
                 config=self._build_llm_config(),
             )
             if not isinstance(result, EnjeuxBesoins):
-                result = EnjeuxBesoins.model_validate(result)
+                result = EnjeuxBesoins.model_construct(**dict(result))
 
             # Set refCahierCharges from the most relevant document title
             if ranked_filenames:
@@ -273,9 +274,9 @@ RÈGLES IMPORTANTES:
                     }
                 )
 
-            # Phase 3: Extract with structured output
+            # Phase 3: Extract with structured output (no maxLength constraints)
             model = get_default_chat_model().with_structured_output(
-                CV, method="json_schema"
+                schema_without_max_length(CV), method="json_schema"
             )
             extraction_prompt = """Extrais les informations du CV de l'intervenant depuis les extraits suivants.
 
@@ -309,7 +310,7 @@ RÈGLES IMPORTANTES:
                 config=self._build_llm_config(),
             )
             if not isinstance(result, CV):
-                result = CV.model_validate(result)
+                result = CV.model_construct(**dict(result))
 
             logger.info(f"Extracted CV: poste={result.poste}")
 
@@ -358,9 +359,9 @@ RÈGLES IMPORTANTES:
                     }
                 )
 
-            # Phase 3: Extract with structured output
+            # Phase 3: Extract with structured output (no maxLength constraints)
             model = get_default_chat_model().with_structured_output(
-                PrestationFinanciere, method="json_schema"
+                schema_without_max_length(PrestationFinanciere), method="json_schema"
             )
             extraction_prompt = """Extrais les prestations financières depuis les extraits suivants.
 
@@ -384,7 +385,7 @@ RÈGLES IMPORTANTES:
                 config=self._build_llm_config(),
             )
             if not isinstance(result, PrestationFinanciere):
-                result = PrestationFinanciere.model_validate(result)
+                result = PrestationFinanciere.model_construct(**dict(result))
 
             logger.info(f"Extracted PrestationFinanciere: total={result.prixTotal}€")
 

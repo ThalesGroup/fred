@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from langchain.tools import tool
+from pydantic import ValidationError
 
 from agentic_backend.agents.ppt_filler.powerpoint_template_util import (
     fill_slide_from_structured_response,
@@ -91,12 +92,33 @@ class ExportTools:
                 Lien de téléchargement du fichier PowerPoint généré
             """
             try:
-                # 1. Extract and validate the three sections
+                # 1. Extract and validate the three sections (max_length enforced here)
                 enjeux_data = data.get("enjeuxBesoins", {})
                 cv_data = data.get("cv", {})
                 prestation_data = data.get("prestationFinanciere", {})
 
-                # Validate with Pydantic models
+                validation_errors = []
+                for section_name, model_cls, section_data in [
+                    ("enjeuxBesoins", EnjeuxBesoins, enjeux_data),
+                    ("cv", CV, cv_data),
+                    ("prestationFinanciere", PrestationFinanciere, prestation_data),
+                ]:
+                    try:
+                        model_cls.model_validate(section_data)
+                    except ValidationError as e:
+                        for err in e.errors():
+                            field = ".".join(str(loc) for loc in err["loc"])
+                            validation_errors.append(
+                                f"{section_name}.{field}: {err['msg']}"
+                            )
+
+                if validation_errors:
+                    error_list = "\n".join(f"- {e}" for e in validation_errors)
+                    return (
+                        f"❌ Validation échouée. Raccourcis les champs trop longs "
+                        f"puis rappelle fill_template:\n{error_list}"
+                    )
+
                 enjeux = EnjeuxBesoins.model_validate(enjeux_data)
                 cv = CV.model_validate(cv_data)
                 prestation = PrestationFinanciere.model_validate(prestation_data)
