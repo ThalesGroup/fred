@@ -94,7 +94,7 @@ export function NewChatAgentSelection() {
           {/* Personal agents */}
           {!agentLoading && !agentError && personalAgents.length > 0 && (
             <>
-              <Typography variant="subtitle1" color="textSecondary">
+              <Typography variant="subtitle1" color="textSecondary" sx={{ textAlign: "center" }}>
                 {t("newChat.personalAgents")}
               </Typography>
               <AgentGrid>
@@ -108,7 +108,7 @@ export function NewChatAgentSelection() {
           {/* Team agents */}
           {!agentLoading && !agentError && teamScopedAgents.length > 0 && (
             <>
-              <Typography variant="subtitle1" color="textSecondary">
+              <Typography variant="subtitle1" color="textSecondary" sx={{ textAlign: "center" }}>
                 {t("newChat.teamAgents")}
               </Typography>
               <AgentGrid>

@@ -49,26 +49,11 @@ export function AgentTile({ agent }: AgentTileProps) {
           }}
         >
           {/* Icon */}
-          <AgentIcon sx={{ color: agentColor, width: 28 }} />
+          {/* Hide agent icon for now as user do not choose it */}
+          {/* <AgentIcon sx={{ color: agentColor, width: 28 }} /> */}
 
           {/* Name + role + team */}
           <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: 0.5 }}>
-            <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <Typography
-                variant="body1"
-                color="textPrimary"
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              >
-                {agent.name}
-              </Typography>
-              <Typography
-                variant="body2"
-                color="textSecondary"
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              >
-                {agent.tuning?.role}
-              </Typography>
-            </Box>
             {teamName && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
                 <GroupsIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
@@ -81,6 +66,22 @@ export function AgentTile({ agent }: AgentTileProps) {
                 </Typography>
               </Box>
             )}
+            <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 0.25 }}>
+              <Typography
+                variant="subtitle1"
+                color="primary"
+                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
+              >
+                {agent.name}
+              </Typography>
+              <Typography
+                variant="body1"
+                color="textSecondary"
+                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {agent.tuning?.role}
+              </Typography>
+            </Box>
           </Box>
         </HoverBox>
       </Paper>
