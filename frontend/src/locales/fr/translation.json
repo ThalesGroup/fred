@@ -170,8 +170,7 @@
     "monitoring_graph": "Graphe",
     "newChat": "Nouvelle conversation",
     "teams": "Équipes",
-    "yourTeamsSectionTitle": "Vos équipes",
-    "activeTeamLabel": "Équipe active"
+    "yourTeamsSectionTitle": "Vos équipes"
   },
   "apps": {
     "scheduler": {
