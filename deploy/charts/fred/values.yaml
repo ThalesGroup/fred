@@ -671,7 +671,7 @@ applications:
         max_ingestion_workers: 3
 
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:
             use_gpu: true
@@ -712,7 +712,7 @@ applications:
               generate_picture_images: false
               generate_page_images: false
               generate_table_images: false
-              do_table_structure: false
+              do_table_structure: true
               do_ocr: false
             input_processors:
               - suffix: ".pdf"
@@ -739,7 +739,7 @@ applications:
               backend: dlparse_v4
               images_scale: 2.0
               generate_picture_images: true
-              generate_page_images: true
+              generate_page_images: false
               generate_table_images: false
               do_table_structure: true
               do_ocr: true
@@ -1042,7 +1042,7 @@ applications:
         kpi_log_summary_top_n: 0
 
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:
             use_gpu: true
@@ -1083,7 +1083,7 @@ applications:
               generate_picture_images: false
               generate_page_images: false
               generate_table_images: false
-              do_table_structure: false
+              do_table_structure: true
               do_ocr: false
             input_processors:
               - suffix: ".pdf"
@@ -1104,13 +1104,13 @@ applications:
                 class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
           rich:
             use_gpu: true
-            generate_summary: true
+            generate_summary: false
             process_images: true
             pdf:
               backend: dlparse_v4
               images_scale: 2.0
               generate_picture_images: true
-              generate_page_images: true
+              generate_page_images: false
               generate_table_images: false
               do_table_structure: true
               do_ocr: true

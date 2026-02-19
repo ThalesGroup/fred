@@ -79,15 +79,13 @@ processing:
       process_images: false
       pdf:
         backend: dlparse_v4
-        images_scale: 2.0
         generate_picture_images: false
-        generate_page_images: true
-        generate_table_images: false
-        do_table_structure: false
+        generate_page_images: false
+        do_table_structure: true
         do_ocr: false
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"
@@ -124,10 +122,10 @@ processing:
       process_images: true
       pdf:
         backend: dlparse_v4
-        images_scale: 2.0
+        images_scale: 2.0 # recommandé (si absent, tu dépends du défaut)
         generate_picture_images: true
-        generate_page_images: true
-        generate_table_images: false
+        generate_page_images: true # IMPORTANT: requis pour OCR/table
+        generate_table_images: false # optionnel, mais tu peux le fixer
         do_table_structure: true
         do_ocr: true
       input_processors:

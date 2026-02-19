@@ -27,7 +27,7 @@ app:
   max_ingestion_workers: 3
 
 processing:
-  default_profile: medium
+  default_profile: fast
   profiles:
     fast:
       use_gpu: true
@@ -66,9 +66,9 @@ processing:
         backend: dlparse_v4
         images_scale: 2.0
         generate_picture_images: false
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
-        do_table_structure: false
+        do_table_structure: true
         do_ocr: false
       input_processors:
         - suffix: ".pdf"
@@ -95,7 +95,7 @@ processing:
         backend: dlparse_v4
         images_scale: 2.0
         generate_picture_images: true
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
         do_table_structure: true
         do_ocr: true
