@@ -56,6 +56,8 @@ type PersistedCtx = {
   includeSessionScope?: boolean;
   ragKnowledgeScope?: SearchRagScope;
   skipRagSearch?: boolean;
+  agent_id?: string;
+  // Legacy fallback key kept for backward compatibility with previously persisted sessions.
   agent_name?: string;
 };
 
@@ -68,6 +70,16 @@ const asStringArray = (v: unknown, fallback: string[] = []): string[] => {
 };
 
 const asBoolean = (v: unknown, fallback: boolean): boolean => (typeof v === "boolean" ? v : fallback);
+
+const resolvePreferredAgentId = (prefs: PersistedCtx): string | undefined => {
+  if (typeof prefs.agent_id === "string" && prefs.agent_id.trim().length > 0) {
+    return prefs.agent_id.trim();
+  }
+  if (typeof prefs.agent_name === "string" && prefs.agent_name.trim().length > 0) {
+    return prefs.agent_name.trim();
+  }
+  return undefined;
+};
 
 type ControllerArgs = {
   chatSessionId?: string;
@@ -135,7 +147,7 @@ export type ConversationOptionsActions = {
   setDocumentLibraryIds: (ids: string[]) => void;
   setDocumentUids: (ids: string[]) => void;
   selectAgent: (agent: AnyAgent) => Promise<void>;
-  seedSessionPrefs: (chatSessionId: string, agentName?: string) => Promise<unknown>;
+  seedSessionPrefs: (chatSessionId: string, agentId?: string) => Promise<unknown>;
   setChatContextWidgetOpen: (open: boolean) => void;
   setAttachmentsWidgetOpen: (open: boolean) => void;
   setSearchOptionsWidgetOpen: (open: boolean) => void;
@@ -244,12 +256,13 @@ export function useConversationOptionsController({
     prefsTargetSessionId ? "loading" : "idle",
   );
   const prevPrefsTargetSessionIdRef = useRef<string | undefined>(undefined);
+  const hydratedSessionIdRef = useRef<string | undefined>(undefined);
   const lastSentJson = useRef<string>("");
   const seededSessionRef = useRef<{ sessionId: string; prefs: PersistedCtx } | null>(null);
   const isSessionPrefsReady = prefsLoadState === "hydrated";
 
   const buildPersistedPrefs = useCallback(
-    (prefs: ConversationPrefs, agentName?: string) => ({
+    (prefs: ConversationPrefs, agentId?: string) => ({
       chatContextIds: prefs.chatContextIds,
       documentLibraryIds: prefs.documentLibraryIds,
       documentUids: supportsDocumentsSelection ? prefs.documentUids : undefined,
@@ -261,7 +274,7 @@ export function useConversationOptionsController({
       includeCorpusScope: supportsLibrariesSelection ? prefs.includeCorpusScope : undefined,
       includeDocumentScope: supportsDocumentsSelection ? prefs.includeDocumentScope : undefined,
       includeSessionScope: supportsAttachments ? prefs.includeSessionScope : undefined,
-      agent_name: agentName ?? currentAgent?.id ?? defaultAgent?.id,
+      agent_id: agentId ?? currentAgent?.id ?? defaultAgent?.id,
     }),
     [
       supportsRagScopeSelection,
@@ -275,15 +288,20 @@ export function useConversationOptionsController({
   );
 
   const savePrefs = useCallback(
-    (nextPrefs: ConversationPrefs, agentName?: string, opts: { force?: boolean } = {}) => {
-      if (!prefsTargetSessionId || prefsLoadState !== "hydrated") {
+    (nextPrefs: ConversationPrefs, agentId?: string, opts: { force?: boolean } = {}) => {
+      if (
+        !prefsTargetSessionId ||
+        prefsLoadState !== "hydrated" ||
+        hydratedSessionIdRef.current !== prefsTargetSessionId
+      ) {
         console.info("[PREFS] skip persist (prefs not hydrated)", {
           sessionId: prefsTargetSessionId ?? null,
           prefsLoadState,
+          hydratedSessionId: hydratedSessionIdRef.current ?? null,
         });
         return;
       }
-      const prefs = buildPersistedPrefs(nextPrefs, agentName);
+      const prefs = buildPersistedPrefs(nextPrefs, agentId);
       const serialized = serializePrefs(prefs);
       if (!opts.force && serialized === lastSentJson.current) return;
       lastSentJson.current = serialized;
@@ -302,17 +320,10 @@ export function useConversationOptionsController({
     },
     [prefsTargetSessionId, prefsLoadState, buildPersistedPrefs, persistSessionPrefs],
   );
-  useEffect(() => {
-    // Persist only when session prefs are hydrated (your existing rule)
-    if (!prefsTargetSessionId || prefsLoadState !== "hydrated") return;
-
-    // Persist current prefs (agent_name derived from currentAgent)
-    savePrefs(conversationPrefs, currentAgent?.id);
-  }, [conversationPrefs, currentAgent?.id, prefsTargetSessionId, prefsLoadState, savePrefs]);
 
   const seedSessionPrefs = useCallback(
-    async (chatSessionIdToSeed: string, agentName?: string) => {
-      const prefs = buildPersistedPrefs(conversationPrefs, agentName);
+    async (chatSessionIdToSeed: string, agentId?: string) => {
+      const prefs = buildPersistedPrefs(conversationPrefs, agentId);
       console.log("[PREFS] seeding new session", { chatSessionId: chatSessionIdToSeed, prefs });
       const result = await persistSessionPrefs({
         sessionId: chatSessionIdToSeed,
@@ -428,10 +439,15 @@ export function useConversationOptionsController({
   const selectAgent = useCallback(
     async (agent: AnyAgent) => {
       setCurrentAgent(agent);
-      if (!prefsTargetSessionId || prefsLoadState !== "hydrated") {
+      if (
+        !prefsTargetSessionId ||
+        prefsLoadState !== "hydrated" ||
+        hydratedSessionIdRef.current !== prefsTargetSessionId
+      ) {
         console.info("[PREFS][AGENT] skip (prefs not hydrated)", {
           sessionId: prefsTargetSessionId ?? null,
           prefsLoadState,
+          hydratedSessionId: hydratedSessionIdRef.current ?? null,
           agent: agent.id,
         });
         return;
@@ -466,6 +482,7 @@ export function useConversationOptionsController({
         console.info("[PREFS][STATE] idle (no session)");
       }
       setPrefsLoadState("idle");
+      hydratedSessionIdRef.current = undefined;
       lastSentJson.current = "";
       resetToDefaults();
       setContextOpen(false);
@@ -492,20 +509,19 @@ export function useConversationOptionsController({
     }
 
     if (!prevId || currentId !== prevId) {
+      hydratedSessionIdRef.current = undefined;
       const seeded = seededSessionRef.current;
       if (seeded && seeded.sessionId === currentId) {
-        const desiredAgentName =
-          typeof seeded.prefs.agent_name === "string" && seeded.prefs.agent_name.length
-            ? seeded.prefs.agent_name
-            : undefined;
-        if (desiredAgentName) {
-          const foundAgent = agents.find((a) => a.id === desiredAgentName);
+        const desiredAgentId = resolvePreferredAgentId(seeded.prefs);
+        if (desiredAgentId) {
+          const foundAgent = agents.find((a) => a.id === desiredAgentId);
           if (foundAgent && foundAgent.id !== currentAgent?.id) setCurrentAgent(foundAgent);
         }
         lastSentJson.current = serializePrefs(seeded.prefs);
         seededSessionRef.current = null;
         setPrefsLoadState("hydrated");
-        console.info("[PREFS][STATE] hydrated (seeded)", { sessionId: currentId, agent: desiredAgentName ?? null });
+        hydratedSessionIdRef.current = currentId;
+        console.info("[PREFS][STATE] hydrated (seeded)", { sessionId: currentId, agent: desiredAgentId ?? null });
         return;
       }
       console.info("[PREFS][STATE] loading (session switch)", { prevId: prevId ?? null, currentId });
@@ -566,9 +582,9 @@ export function useConversationOptionsController({
       setLibrariesWidgetOpen(false);
       setDocumentsWidgetOpen(false);
 
-      const desiredAgentName = typeof p.agent_name === "string" && p.agent_name.length ? p.agent_name : undefined;
-      if (desiredAgentName) {
-        const foundAgent = agents.find((a) => a.id === desiredAgentName);
+      const desiredAgentId = resolvePreferredAgentId(p);
+      if (desiredAgentId) {
+        const foundAgent = agents.find((a) => a.id === desiredAgentId);
         if (foundAgent && foundAgent.id !== currentAgent?.id) setCurrentAgent(foundAgent);
       }
 
@@ -584,12 +600,13 @@ export function useConversationOptionsController({
         includeCorpusScope: nextIncludeCorpusScope,
         includeDocumentScope: nextIncludeDocumentScope,
         includeSessionScope: nextIncludeSessionScope,
-        agent_name: desiredAgentName,
+        agent_id: desiredAgentId,
       });
       setPrefsLoadState("hydrated");
+      hydratedSessionIdRef.current = currentId;
       console.info("[PREFS][STATE] hydrated", {
         sessionId: currentId,
-        agent: desiredAgentName ?? null,
+        agent: desiredAgentId ?? null,
         chatContextCount: nextChatContextIds.length,
         libraryCount: nextLibs.length,
         searchPolicy: nextSearchPolicy,
@@ -609,6 +626,20 @@ export function useConversationOptionsController({
     agents,
     currentAgent?.id,
   ]);
+
+  useEffect(() => {
+    // Persist only when session prefs are hydrated for the currently displayed session.
+    if (!prefsTargetSessionId || prefsLoadState !== "hydrated") return;
+    if (hydratedSessionIdRef.current !== prefsTargetSessionId) {
+      console.info("[PREFS] skip persist (session transition in progress)", {
+        sessionId: prefsTargetSessionId,
+        hydratedSessionId: hydratedSessionIdRef.current ?? null,
+      });
+      return;
+    }
+
+    savePrefs(conversationPrefs, currentAgent?.id);
+  }, [conversationPrefs, currentAgent?.id, prefsTargetSessionId, prefsLoadState, savePrefs]);
 
   const isHydratingSession = prefsLoadState === "loading" && !isPrefsError;
   const displayChatContextIds = isHydratingSession ? [] : conversationPrefs.chatContextIds;

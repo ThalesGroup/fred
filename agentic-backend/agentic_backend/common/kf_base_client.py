@@ -1,47 +1,30 @@
 # Copyright Thales 2025
-# Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-import requests
+import httpx
 from fred_core.kpi import KPIActor
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from fred_core.kpi.kpi_phase_metric import phase_timer
 
 from agentic_backend.application_context import get_app_context
+from agentic_backend.common.kf_http_client import get_shared_kf_async_client
 
 logger = logging.getLogger(__name__)
-
-
-def _session_with_retries(allowed_methods: frozenset) -> requests.Session:
-    s = requests.Session()
-    retry = Retry(
-        total=2,
-        backoff_factor=0.3,
-        status_forcelist=(429, 500, 502, 503, 504),
-        allowed_methods=allowed_methods,
-        raise_on_status=False,
-    )
-    s.mount("http://", HTTPAdapter(max_retries=retry))
-    s.mount("https://", HTTPAdapter(max_retries=retry))
-    return s
-
-
-def _session_without_retries() -> requests.Session:
-    s = requests.Session()
-    retry = Retry(
-        total=0,
-        backoff_factor=0,
-        status_forcelist=(),
-        allowed_methods=frozenset(),
-        raise_on_status=False,
-    )
-    s.mount("http://", HTTPAdapter(max_retries=retry))
-    s.mount("https://", HTTPAdapter(max_retries=retry))
-    return s
 
 
 if TYPE_CHECKING:
@@ -68,12 +51,15 @@ class KfBaseClient:
         self._kpi = ctx.get_kpi_writer()
 
         tcfg = ctx.configuration.ai.timeout
-        connect_t = float(tcfg.connect or 5)
-        read_t = float(tcfg.read or 30)
-        self.timeout: float | tuple[float, float] = (connect_t, read_t)
-
-        self.session = _session_with_retries(allowed_methods)
-        self.session_no_retry = _session_without_retries()
+        timeout_cfg = {
+            "connect": float(tcfg.connect or 5),
+            "read": float(tcfg.read or 30),
+            "write": float(tcfg.read or 30),
+            "pool": float(tcfg.connect or 5),
+        }
+        tuning, client = get_shared_kf_async_client(timeout_cfg=timeout_cfg)
+        self._tuning = tuning
+        self.client = client
 
         self._agent = agent
         self._static_access_token = access_token
@@ -157,9 +143,9 @@ class KfBaseClient:
     # Request execution
     # ---------------------------
 
-    def _execute_authenticated_request(
+    async def _execute_authenticated_request(
         self, method: str, path: str, **kwargs: Any
-    ) -> requests.Response:
+    ) -> httpx.Response:
         """
         Executes an HTTP request with Bearer authentication.
         If an explicit 'access_token' kwarg is provided, it overrides the default one.
@@ -172,38 +158,37 @@ class KfBaseClient:
         headers: Dict[str, str] = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
 
-        use_no_retry = "files" in kwargs and kwargs.get("files") is not None
-        session = self.session_no_retry if use_no_retry else self.session
-        return session.request(
-            method, url, timeout=self.timeout, headers=headers, **kwargs
+        # httpx handles files/stream directly.
+        return await self.client.request(
+            method,
+            url,
+            headers=headers,
+            **kwargs,
         )
 
-    def _request_with_token_refresh(
-        self, method: str, path: str, **kwargs: Any
-    ) -> requests.Response:
+    async def _request_with_token_refresh(
+        self, method: str, path: str, *, phase_name: str, **kwargs: Any
+    ) -> httpx.Response:
         """
         Executes a request, handling user-token expiration (401) via refresh and retry.
         """
-        dims = self._kpi_dims(method=method, path=path)
-        with self._kpi.timer(
-            "kf.request_latency_ms",
-            dims=dims,
-            actor=self._kpi_actor(),
-        ) as kpi_dims:
-            r = self._execute_authenticated_request(method=method, path=path, **kwargs)
-            kpi_dims["http_status"] = str(r.status_code)
+        async with phase_timer(self._kpi, phase_name):
+            r = await self._execute_authenticated_request(
+                method=method, path=path, **kwargs
+            )
             if r.status_code != 401:
                 r.raise_for_status()
                 return r
 
             logger.warning(
-                "401 Unauthorized on %s %s. Attempting token refresh...", method, path
+                "401 Unauthorized on %s %s. Attempting token refresh...",
+                method,
+                path,
             )
             if self._try_refresh_token():
-                r = self._execute_authenticated_request(
+                r = await self._execute_authenticated_request(
                     method=method, path=path, **kwargs
                 )
-                kpi_dims["http_status"] = str(r.status_code)
 
             r.raise_for_status()
             return r

@@ -18,10 +18,14 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from fred_core.sql import AsyncBaseSqlStore, json_for_engine
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    json_for_engine,
+    run_ddl_with_advisory_lock,
+)
 from pydantic import TypeAdapter
 from sqlalchemy import Column, MetaData, String, Table, select
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.common.structures import AgentSettings
@@ -45,6 +49,8 @@ class PostgresAgentStore(BaseAgentStore):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
         self._seed_marker_id = "__static_seeded__"
+        # Deterministic 64-bit key to guard DDL with a Postgres advisory lock.
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         json_type = json_for_engine(self.store.engine)
 
@@ -59,14 +65,12 @@ class PostgresAgentStore(BaseAgentStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                try:
-                    await conn.run_sync(metadata.create_all)
-                except OperationalError as exc:
-                    # SQLite may raise if create_all races; ignore "already exists"
-                    msg = str(exc).lower()
-                    if "already exists" not in msg:
-                        raise
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         try:
             loop = asyncio.get_running_loop()

@@ -25,6 +25,8 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
 
 logger = logging.getLogger(__name__)
 
+_RASTER_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
+
 
 def default_or_unknown(value: str, default="None") -> str:
     return value.strip() if value and value.strip() else default
@@ -101,10 +103,11 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             if which("inkscape") is None:
                 logger.error("[DOCX] Inkscape not found; cannot convert %s to SVG. Leaving EMF in place.", img_path)
                 continue
+
             try:
                 subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)], check=True)
             except subprocess.CalledProcessError as e:
-                logger.error("[DOCX] Inkscape failed converting %s: %s", img_path, e)
+                logger.error("[DOCX] Inkscape failed converting %s to SVG: %s", img_path, e)
                 continue
 
             # Remove the original EMF file

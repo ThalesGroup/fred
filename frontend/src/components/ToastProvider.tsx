@@ -13,14 +13,15 @@
 // limitations under the License.
 
 import React, { createContext, useContext, useState } from "react";
-import { Snackbar, Alert, AlertColor, Box, Typography, Link } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { Snackbar, Alert, AlertColor, Box, Typography, Link, IconButton, Tooltip } from "@mui/material";
 
 // Define the structure for the toast message with summary and detail
 interface ToastMessage {
   severity: AlertColor;
   summary: string;
   detail: string;
-  duration?: number;
+  duration?: number | null;
   id: number;
 }
 
@@ -68,7 +69,7 @@ const ToastContext = createContext<any>(null);
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]); // Store multiple toasts with unique IDs
   // Function to show a toast message with severity, summary, and detail
-  const showToast = (severity: AlertColor, summary: string, detail: string, duration: number = 8000) => {
+  const showToast = (severity: AlertColor, summary: string, detail: string, duration: number | null = 8000) => {
     const newToast: ToastMessage = {
       severity,
       summary,
@@ -87,7 +88,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const showError = (message: Omit<ToastMessage, "severity">) => {
-    showToast("error", message.summary, message.detail, message.duration);
+    // Keep errors visible until the user explicitly closes them.
+    showToast("error", message.summary, message.detail, message.duration ?? null);
   };
 
   const showInfo = (message: Omit<ToastMessage, "severity">) => {
@@ -98,6 +100,20 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     console.warn(message);
     showToast("warning", message.summary, message.detail, message.duration);
   };
+
+  const copyToastDetails = async (toast: ToastMessage) => {
+    const content = [toast.summary, toast.detail].filter(Boolean).join("\n");
+    if (!content.trim()) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch (error) {
+      console.error("Failed to copy toast content:", error);
+    }
+  };
+
   return (
     <ToastContext.Provider value={{ showSuccess, showError, showInfo, showWarn }}>
       {children}
@@ -105,7 +121,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         <Snackbar
           key={toast.id + index}
           open={true}
-          autoHideDuration={toast.duration || 8000}
+          autoHideDuration={toast.duration === undefined ? 8000 : toast.duration}
           onClose={() => handleClose(toast.id)}
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           style={{ bottom: `${16 + index * 80}px` }} // Adjust the position dynamically based on the index
@@ -126,10 +142,24 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               gap: 1,
             }}
           >
-            <Box>
-              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                {toast.summary}
-              </Typography>
+            <Box sx={{ width: "100%" }}>
+              <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ flex: 1 }}>
+                  {toast.summary}
+                </Typography>
+                {toast.severity === "error" && (
+                  <Tooltip title="Copier l'erreur">
+                    <IconButton
+                      aria-label="Copier l'erreur"
+                      size="small"
+                      onClick={() => void copyToastDetails(toast)}
+                      sx={{ mt: -0.5 }}
+                    >
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
               {renderDetailLines(toast.detail)}
             </Box>
           </Alert>

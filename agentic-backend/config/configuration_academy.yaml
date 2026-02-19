@@ -204,4 +204,6 @@ storage:
     duckdb_path: "~/.fred/agentic/history.duckdb"
   kpi_store:
     type: "log"
-    level: "INFO"
+    level: "DEBUG"
+  log_store:
+    type: "in_memory"

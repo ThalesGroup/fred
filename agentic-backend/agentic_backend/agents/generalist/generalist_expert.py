@@ -30,7 +30,7 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 logger = logging.getLogger(__name__)
 
 TUNING = AgentTuning(
-    role="generalist",
+    role="Broad and general knowledge assistant",
     description="Fallback generalist expert used to handle broad queries when no specialist applies.",
     tags=["fallback"],
     fields=[
@@ -39,7 +39,7 @@ TUNING = AgentTuning(
             type="prompt",
             title="System Prompt",
             description=(
-                "Sets Georges’ base persona and boundaries. "
+                "Sets Georges' base persona and boundaries. "
                 "Adjust to shift tone/voice or emphasize constraints."
             ),
             required=True,
@@ -99,7 +99,7 @@ class Georges(SimpleAgentFlow):
             )
 
         # 4) Optionally add the chat context text (if available)
-        chat_context = self.chat_context_text()
+        chat_context = await self.chat_context_text()
         include_chat_context = self.get_field_spec(
             "prompts.include_chat_context"
         ) is None or bool(self.get_tuned_any("prompts.include_chat_context"))
@@ -112,7 +112,7 @@ class Georges(SimpleAgentFlow):
                 sys,
                 chat_context,
             )
-        llm_messages = self.with_chat_context_text(llm_messages)
+        llm_messages = await self.with_chat_context_text(llm_messages)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 "Georges: Messages after adding context text. Final count: %s",

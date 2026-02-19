@@ -18,10 +18,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fred_core.sql import AsyncBaseSqlStore
+from fred_core.sql import (
+    AsyncBaseSqlStore,
+    advisory_lock_key,
+    run_ddl_with_advisory_lock,
+)
 from sqlalchemy import Column, MetaData, String, Table, select
 from sqlalchemy.dialects.postgresql import TIMESTAMP
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.features.scheduler.store.base_task_store import BaseWorkflowTaskStore
@@ -47,6 +50,7 @@ class PostgresWorkflowTaskStore(BaseWorkflowTaskStore):
     ) -> None:
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
+        self._ddl_lock_id = advisory_lock_key(self.table_name)
 
         metadata = MetaData()
         self.table = Table(
@@ -63,12 +67,12 @@ class PostgresWorkflowTaskStore(BaseWorkflowTaskStore):
         )
 
         async def _create():
-            async with self.store.engine.begin() as conn:  # type: ignore[attr-defined]
-                try:
-                    await conn.run_sync(metadata.create_all)
-                except OperationalError as exc:
-                    if "already exists" not in str(exc).lower():
-                        raise
+            await run_ddl_with_advisory_lock(
+                engine=self.store.engine,
+                lock_key=self._ddl_lock_id,
+                ddl_sync_fn=metadata.create_all,
+                logger=logger,
+            )
 
         try:
             loop = asyncio.get_running_loop()

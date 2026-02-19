@@ -33,6 +33,7 @@ from knowledge_flow_backend.common.document_structures import (
     SourceType,
     Tagging,
 )
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.stores.catalog.base_catalog_store import PullFileEntry
 
 
@@ -41,6 +42,7 @@ class FileToProcessWithoutUser(BaseModel):
     source_tag: str
     tags: List[str] = []
     display_name: Optional[str] = None
+    profile: IngestionProcessingProfile = IngestionProcessingProfile.MEDIUM
 
     # Push-specific
     document_uid: Optional[str] = None  # Present for push files

@@ -33,7 +33,7 @@ const (
 type askPayload struct {
 	SessionID        string `json:"session_id,omitempty"`
 	Message          string `json:"message"`
-	AgentName        string `json:"agent_name"`
+	AgentID          string `json:"agent_id"`
 	ClientExchangeID string `json:"client_exchange_id,omitempty"`
 }
 
@@ -50,7 +50,7 @@ type config struct {
 	URL                string
 	Token              string
 	TokenInQuery       bool
-	Agent              string
+	AgentID            string
 	Message            string
 	SessionID          string
 	SessionURL         string
@@ -66,6 +66,7 @@ type config struct {
 	InsecureTLS        bool
 	AllowEmptyTok      bool
 	DebugEvents        bool
+	RampDuration       time.Duration
 }
 
 type result struct {
@@ -125,19 +126,28 @@ func main() {
 			sessionIDs = ids
 		}
 
+		// Optional ramp-up: spread client starts evenly over RampDuration
+		delayPerClient := time.Duration(0)
+		if cfg.RampDuration > 0 && cfg.Clients > 1 {
+			delayPerClient = cfg.RampDuration / time.Duration(cfg.Clients-1)
+		}
 		for i := 0; i < cfg.Clients; i++ {
 			wg.Add(1)
 			sessionID := ""
 			if len(sessionIDs) > 0 {
 				sessionID = sessionIDs[i]
 			}
-			go func(id string) {
+			startDelay := delayPerClient * time.Duration(i)
+			go func(id string, d time.Duration) {
 				defer wg.Done()
+				if d > 0 {
+					time.Sleep(d)
+				}
 				resList := runClientPersistent(cfg, id)
 				for _, r := range resList {
 					results <- r
 				}
-			}(sessionID)
+			}(sessionID, startDelay)
 		}
 		wg.Wait()
 		close(results)
@@ -195,18 +205,19 @@ func parseFlags() config {
 	urlFlag := flag.String("url", "ws://localhost:8000/agentic/v1/chatbot/query/ws", "WebSocket URL")
 	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
 	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
-	agentFlag := flag.String("agent", "Georges", "Agent name")
+	agentFlag := flag.String("agent", "Georges", "Agent ID (matches configuration.yaml)")
 	messageFlag := flag.String("message", "Hello", "Prompt message")
 	sessionFlag := flag.String("session", "", "Session ID (optional)")
 	sessionURLFlag := flag.String("session-url", "", "HTTP session endpoint URL (optional)")
 	sessionTitleFlag := flag.String("session-title", "Benchmark", "Session title to skip auto-title")
 	createSessionFlag := flag.Bool("create-session", true, "Create a session before asking (when no session is provided)")
-	prepareSessionsFlag := flag.Bool("prepare-sessions", true, "Pre-create one session per client before measuring")
+	prepareSessionsFlag := flag.Bool("prepare-sessions", false, "Pre-create one session per client before measuring")
 	prepareConcurrencyFlag := flag.Int("prepare-concurrency", 20, "Concurrent session creates/deletes during preparation/cleanup")
 	deleteSessionFlag := flag.Bool("delete-session", true, "Delete sessions created by the benchmark when done")
-	clientsFlag := flag.Int("clients", 10, "Concurrent clients")
+	rampDurationFlag := flag.Duration("ramp-duration", 10*time.Second, "Optional stagger for client start (e.g. 10s spreads clients evenly over 10 seconds)")
+	clientsFlag := flag.Int("clients", 150, "Concurrent clients")
 	requestsFlag := flag.Int("requests", 0, "Total requests (defaults to clients)")
-	requestsPerClientFlag := flag.Int("requests-per-client", 1, "Requests per client (sequential mode)")
+	requestsPerClientFlag := flag.Int("requests-per-client", 10, "Requests per client (sequential mode)")
 	timeoutFlag := flag.Duration("timeout", 90*time.Second, "Timeout per request")
 	insecureFlag := flag.Bool("insecure", false, "Skip TLS verification for wss://")
 	allowEmptyTok := flag.Bool("allow-empty-token", false, "Allow missing token (not recommended)")
@@ -231,7 +242,7 @@ func parseFlags() config {
 		URL:                strings.TrimSpace(*urlFlag),
 		Token:              token,
 		TokenInQuery:       *tokenInQuery,
-		Agent:              strings.TrimSpace(*agentFlag),
+		AgentID:            strings.TrimSpace(*agentFlag),
 		Message:            *messageFlag,
 		SessionID:          strings.TrimSpace(*sessionFlag),
 		SessionURL:         strings.TrimSpace(*sessionURLFlag),
@@ -247,6 +258,7 @@ func parseFlags() config {
 		InsecureTLS:        *insecureFlag,
 		AllowEmptyTok:      *allowEmptyTok,
 		DebugEvents:        *debugEvents,
+		RampDuration:       *rampDurationFlag,
 	}
 }
 
@@ -322,7 +334,7 @@ func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sess
 	payload := askPayload{
 		SessionID:        sessionID,
 		Message:          cfg.Message,
-		AgentName:        cfg.Agent,
+		AgentID:          cfg.AgentID,
 		ClientExchangeID: newExchangeID(),
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -380,7 +392,7 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 
 	fmt.Printf("\n%s\n", style("WS BENCH CONFIG", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	fmt.Printf("%s %s\n", style("Agent:", colorDim), cfg.Agent)
+	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
 	fmt.Printf("%s %s\n", style("Mode:", colorDim), mode)
 	fmt.Printf("%s %d\n", style("Clients:", colorDim), effectiveClients)
 	fmt.Printf("%s %d\n", style("Total requests:", colorDim), totalRequests)
@@ -459,7 +471,7 @@ func runOnceWithSession(cfg config, sessionID string) result {
 	payload := askPayload{
 		SessionID:        sessionID,
 		Message:          cfg.Message,
-		AgentName:        cfg.Agent,
+		AgentID:          cfg.AgentID,
 		ClientExchangeID: newExchangeID(),
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -537,8 +549,8 @@ func createSession(ctx context.Context, cfg config) (string, error) {
 	}
 
 	payload := map[string]string{
-		"agent_name": cfg.Agent,
-		"title":      cfg.SessionTitle,
+		"agent_id": cfg.AgentID,
+		"title":    cfg.SessionTitle,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -784,7 +796,7 @@ func printSummary(cfg config, total int, durations []time.Duration, errorCount i
 	fmt.Printf("\n%s\n", style("WS BENCH SUMMARY", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Outcome:", colorDim), style(outcome, colorBold, outcomeColor))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
-	fmt.Printf("%s %s\n", style("Agent:", colorDim), cfg.Agent)
+	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
 	fmt.Printf("%s %d\n", style("Total requests:", colorDim), total)
 	fmt.Printf("%s %d\n", style("Concurrent clients:", colorDim), cfg.Clients)
 	if cfg.RequestsPerClient > 0 {

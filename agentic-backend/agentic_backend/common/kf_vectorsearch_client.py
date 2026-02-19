@@ -42,7 +42,7 @@ class VectorSearchClient(KfBaseClient):
             allowed_methods=frozenset({"POST"}),
         )
 
-    def search(
+    async def search(
         self,
         *,
         question: str,
@@ -97,9 +97,10 @@ class VectorSearchClient(KfBaseClient):
         # This will handle token refresh if needed. The required refresh token
         # is obtained via the refresh_callback provided at initialization. And the actual
         # token used is part of the runtime configuration passed to the agent.
-        r = self._request_with_token_refresh(
+        r = await self._request_with_token_refresh(
             method="POST",
             path="/vector/search",
+            phase_name="kf_vector_search",
             json=payload,
         )
         r.raise_for_status()
@@ -110,7 +111,7 @@ class VectorSearchClient(KfBaseClient):
             return []
         return _HITS.validate_python(raw)
 
-    def rerank(
+    async def rerank(
         self,
         *,
         question: str,
@@ -135,9 +136,10 @@ class VectorSearchClient(KfBaseClient):
             ],
         }
 
-        r = self._request_with_token_refresh(
+        r = await self._request_with_token_refresh(
             method="POST",
             path="/vector/rerank",
+            phase_name="kf_vector_rerank",
             json=payload,
         )
         r.raise_for_status()

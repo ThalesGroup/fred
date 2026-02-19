@@ -15,7 +15,6 @@
 import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
-import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { Box, Button, CardContent, Drawer, Fade, IconButton, Typography, useTheme } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
@@ -111,11 +110,6 @@ export const AgentGridManager = ({
     setCreateModalOpen(true);
   };
 
-  const handleOpenRegisterA2AAgent = () => {
-    setCreateModalType("a2a_proxy");
-    setCreateModalOpen(true);
-  };
-
   const handleCloseCreateAgent = () => setCreateModalOpen(false);
 
   // Code inspector handler
@@ -197,7 +191,7 @@ export const AgentGridManager = ({
     }
   };
 
-  const { showAgentRegisterA2A, showAgentRestoreFromConfiguration } = useFrontendProperties();
+  const { showAgentRestoreFromConfiguration } = useFrontendProperties();
 
   return (
     <>
@@ -219,16 +213,6 @@ export const AgentGridManager = ({
                     disabled={!canEdit || isRestoring}
                   >
                     {t("agentHub.restoreButton")}
-                  </Button>
-                )}
-                {showAgentRegisterA2A && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<CloudQueueIcon />}
-                    onClick={canCreate ? handleOpenRegisterA2AAgent : undefined}
-                    disabled={!canCreate}
-                  >
-                    {t("agentHub.registerA2A")}
                   </Button>
                 )}
                 <Button

@@ -23,7 +23,7 @@ class ProcessingPipeline:
     Library-aware ingestion pipeline.
 
     For now this is instantiated once as the default pipeline and mirrors
-    the existing behaviour driven by configuration.input_processors and
+    the existing behaviour driven by processing.default_profile.input_processors and
     configuration.output_processors.
 
     Later, additional pipelines (e.g. 'CIR') can be created and associated
@@ -41,7 +41,7 @@ class ProcessingPipeline:
         Build the default pipeline from the existing configuration.
 
         This preserves current behaviour:
-        - One input processor per extension (from configuration.input_processors).
+        - One input processor per extension (from default profile input processors).
         - One output processor per extension (or defaulted via EXTENSION_CATEGORY).
         - Optional library-level processors (if configured).
         """
@@ -143,6 +143,9 @@ class ProcessingPipeline:
         if suffix in self.input_processors:
             return self.input_processors[suffix]
         raise ValueError(f"No input processor configured for extension '{suffix}' in pipeline '{self.name}'")
+
+    def get_input_processor(self, suffix: str) -> BaseInputProcessor:
+        return self._get_input_processor(suffix)
 
     def _get_output_pipeline(self, suffix: str) -> List[BaseOutputProcessor]:
         suffix = suffix.lower()

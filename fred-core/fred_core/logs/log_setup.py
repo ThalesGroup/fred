@@ -163,6 +163,10 @@ def log_setup(
     include_uvicorn: bool = True,
     use_rich: bool = True,
 ) -> None:
+    # Route Python warnings.warn(...) through logging so they share
+    # Fred formatting/handlers instead of raw stderr lines.
+    logging.captureWarnings(True)
+
     root = logging.getLogger()
     root.setLevel(log_level.upper())
     for h in list(root.handlers):
@@ -223,7 +227,13 @@ def log_setup(
         lg.handlers.clear()  # their own handlers (if any) → gone
         lg.setLevel(logging.WARNING)
         lg.propagate = False  # <-- key: do NOT bubble up to root
-
+    extra_noisy = (
+        "pdfminer",
+        "pdfminer.pdfinterp",
+    )
+    for noisy in extra_noisy:
+        lg = logging.getLogger(noisy)
+        lg.setLevel(logging.ERROR)  # even more severe
     # 4) Make uvicorn loggers flow into our handlers (no duplicates)
     if include_uvicorn:
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
@@ -232,7 +242,7 @@ def log_setup(
             # Access logs are particularly chatty; keep only warnings+
             if name == "uvicorn.access":
                 lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))
-                lg.setLevel(logging.WARNING)
+                lg.setLevel(log_level.upper())
             else:
                 lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers

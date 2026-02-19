@@ -21,9 +21,9 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
-  kpi_process_metrics_interval_sec: 30
+  kpi_process_metrics_interval_sec: 10
   kpi_log_summary_interval_sec: 10.0
-  kpi_log_summary_top_n: 200
+  kpi_log_summary_top_n: 20
 
 scheduler:
   # Keep the scheduler disable to properly regenerate  the openapi UI code. If enabled the
@@ -143,6 +143,11 @@ ai:
       enabled: true
       metadata:
         deep_search_hidden_in_ui: true
+    - id: "Aegis"
+      name: "Aegis"
+      type: "agent"
+      class_path: "agentic_backend.agents.aegis.aegis_rag_expert.Aegis"
+      enabled: true
     - id: "Tessa"
       name: "Tessa"
       type: "agent"
@@ -275,8 +280,7 @@ storage:
 
   kpi_store:
     type: "log"
-    level: "INFO"
+    level: "DEBUG"
 
   log_store:
-    type: "stdout"
-    level: "INFO"
+    type: "in_memory"

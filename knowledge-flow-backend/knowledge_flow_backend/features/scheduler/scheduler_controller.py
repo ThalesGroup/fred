@@ -15,7 +15,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user, raise_internal_error
 from fred_core.scheduler import TemporalClientProvider
 
@@ -55,7 +55,10 @@ class SchedulerController:
             tags=["Processing"],
             response_model=ProcessDocumentsResponse,
             summary="Submit processing for push/pull files in-process (fire-and-forget)",
-            description="Accepts a list of files (document_uid or external_path) and launches the ingestion pipeline in a local background worker thread.",
+            description=(
+                "Accepts a list of files (document_uid or external_path) and launches the ingestion pipeline "
+                "in a local background worker thread. Push and pull files must be submitted in separate requests."
+            ),
         )
         async def process_documents(
             req: ProcessDocumentsRequest,
@@ -81,6 +84,8 @@ class SchedulerController:
                     workflow_id=handle.workflow_id,
                     run_id=handle.run_id,
                 )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
             except Exception as e:
                 raise_internal_error(logger, "Failed to submit process-documents workflow", e)
 

@@ -14,16 +14,6 @@
 
 import { useEffect, useState } from "react";
 import { loadPermissions } from "../common/config";
-import { KeyCloakService } from "./KeycloakService";
-
-// Get the current user’s role based on Keycloak roles
-function getCurrentRole(): string {
-  const roles = KeyCloakService.GetUserRoles() || [];
-  if (roles.includes("admin")) return "admin";
-  if (roles.includes("editor")) return "editor";
-  if (roles.includes("service_agent")) return "service_agent";
-  return "viewer";
-}
 
 // Hook to check permissions
 export const usePermissions = () => {
@@ -60,5 +50,5 @@ export const usePermissions = () => {
     }
   };
 
-  return { permissions: permissions ?? [], loading, can, refreshPermissions, role: getCurrentRole() };
+  return { permissions: permissions ?? [], loading, can, refreshPermissions };
 };

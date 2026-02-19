@@ -1,3 +1,17 @@
+// Copyright Thales 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import {
@@ -23,6 +37,7 @@ import {
 } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { Team } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider";
+import { TeamBanner } from "../teams/TeamVisuals";
 
 const teamSettingsSchema = z.object({
   description: z.string().max(180).optional(),
@@ -38,7 +53,7 @@ export interface TeamSettingsPageProps {
 export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const { showError, showInfo } = useToast();
+  const { showError, showSuccess } = useToast();
 
   const [updateTeam] = useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation();
   const [uploadBanner, { isLoading: isUploadingBanner }] =
@@ -103,12 +118,18 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
 
     // Client-side validation
     if (!ALLOWED_TYPES.includes(file.type)) {
-      showError(t("teamSettingsPage.teamBanner.invalidType"));
+      showError({
+        summary: t("teamSettingsPage.teamBanner.invalidType"),
+        detail: "",
+      });
       return;
     }
 
     if (file.size > MAX_BANNER_SIZE) {
-      showError(t("teamSettingsPage.teamBanner.tooLarge"));
+      showError({
+        summary: t("teamSettingsPage.teamBanner.tooLarge"),
+        detail: "",
+      });
       return;
     }
 
@@ -118,11 +139,17 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
         bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: { file },
       }).unwrap();
 
-      showInfo(t("teamSettingsPage.teamBanner.uploadSuccess"));
+      showSuccess({
+        summary: t("teamSettingsPage.teamBanner.uploadSuccess"),
+        detail: "",
+      });
       // RTK Query will automatically invalidate and refetch team data
     } catch (error) {
       console.error("Banner upload error:", error);
-      showError(t("teamSettingsPage.teamBanner.uploadError"));
+      showError({
+        summary: t("teamSettingsPage.teamBanner.uploadError"),
+        detail: "",
+      });
     } finally {
       // Reset file input
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -161,33 +188,14 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
 
             {/* Banner Preview */}
             <Box sx={{ position: "relative" }}>
-              {team?.banner_image_url ? (
-                <img
-                  src={team.banner_image_url}
-                  alt={t("teamSettingsPage.teamBanner.alt")}
-                  style={{ height: "6rem", width: "450px", objectFit: "cover", borderRadius: theme.spacing(1) }}
-                  onError={(e) => {
-                    // Handle missing/expired presigned URL gracefully
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    height: "6rem",
-                    width: "450px",
-                    border: `2px dashed ${theme.palette.divider}`,
-                    borderRadius: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Typography variant="body2" color="textSecondary">
-                    {t("teamSettingsPage.teamBanner.noImage")}
-                  </Typography>
-                </Box>
-              )}
+              <TeamBanner
+                teamName={team?.name}
+                imageUrl={team?.banner_image_url}
+                alt={t("teamSettingsPage.teamBanner.alt")}
+                height="6rem"
+                width="450px"
+                borderRadius={theme.spacing(1)}
+              />
             </Box>
           </Box>
 
@@ -203,7 +211,9 @@ export function TeamSettingsPage({ team }: TeamSettingsPageProps) {
                 minRows={3}
                 label={t("teamSettingsPage.description.label")}
                 placeholder={t("teamSettingsPage.description.placeholder")}
-                inputProps={{ maxLength: 180 }}
+                slotProps={{
+                  htmlInput: { maxLength: 180 },
+                }}
                 helperText={`${field.value?.length || 0}/180`}
                 error={!!fieldState.error}
               />
