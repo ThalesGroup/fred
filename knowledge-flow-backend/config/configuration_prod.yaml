@@ -200,7 +200,7 @@ crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
     online: false
-    local_path: /app/.cache/huggingface
+    local_path: ~/.cache/huggingface
     max_retries: 0
     timeout:
       connect: 10.0
