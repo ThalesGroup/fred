@@ -185,6 +185,7 @@ applications:
           enabled: true
           client_id: "agentic"
           realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+          secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
           enabled: true
           client_id: "app"
