@@ -14,6 +14,7 @@
 
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Type
@@ -132,6 +133,11 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             pipeline_options.generate_table_images = pdf_options.generate_table_images
             pipeline_options.do_table_structure = pdf_options.do_table_structure
             pipeline_options.do_ocr = pdf_options.do_ocr
+            artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+            if artifacts_dir:
+                artifacts_path = Path(artifacts_dir).expanduser()
+                pipeline_options.artifacts_path = artifacts_path
+                logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
             # pipeline_options.do_picture_classification = True
             # pipeline_options.do_picture_description = True
             backend_cls = self._resolve_pdf_backend(pdf_options.backend)

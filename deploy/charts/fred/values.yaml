@@ -209,6 +209,11 @@ applications:
           # If true activate the backend and frontend modules in charge of K8
           # and frugality monitoring
           enableK8Features: false
+          # If true activate support for an electronic warfare demonstration
+          enableElecWarfare: false
+        properties:
+          logoName: "fred"
+
       scheduler:
         # Scheduler backend driving agent workflows.
         # - "memory": in-process queue for local/dev.
@@ -223,10 +228,6 @@ applications:
           connect_timeout_seconds: 5
         # Optional progress query name and memo/search attributes can be added here if your
         # cluster uses custom Temporal conventions.
-          # If true activate support for an electronic warfare demonstration
-          enableElecWarfare: false
-        properties:
-          logoName: "fred"
       ai:
         # In production  activate the configuration persistence mechanism
         # that allow users to create/update agents at runtime and change
@@ -290,7 +291,7 @@ applications:
             name: cross-encoder/ms-marco-MiniLM-L-12-v2
             settings:
               online: false
-              local_path: /app/models
+              local_path: /home/fred-user/.cache/huggingface
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
