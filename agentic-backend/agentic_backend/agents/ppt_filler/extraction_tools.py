@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Type
 
+import requests
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -17,33 +18,43 @@ from agentic_backend.agents.ppt_filler.pydantic_models import (
     SearchQueries,
     schema_without_max_length,
 )
-from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.agents.ppt_filler.skill_mastery import (
+    extract_mastery_from_image,
+    inject_mastery_alt_text,
+    is_raster_image,
+    parse_image_refs,
+)
+from agentic_backend.application_context import get_app_context, get_default_chat_model
 
 logger = logging.getLogger(__name__)
 
 SEARCH_TOOL_NAME = "search_documents_using_vectorization"
-TOP_K_PER_QUERY = 8
-MAX_UNIQUE_CHUNKS = 30
+TOP_K_DEFAULT = 8
+MAX_UNIQUE_CHUNKS = 40
 
-# Hardcoded queries per extraction type (use _generate_queries() in the future for generalization)
-ENJEUX_BESOINS_QUERIES = [
-    "Quels sont les objectifs et les missions principales du projet ?",
-    "Quel est le contexte du projet ?",
+# Hardcoded queries per extraction type: (query, top_k) pairs.
+# Use a higher top_k for broad queries that may span many document sections.
+ENJEUX_BESOINS_QUERIES: list[tuple[str, int]] = [
+    ("Quels sont les objectifs et les missions principales du projet ?", TOP_K_DEFAULT),
+    ("Quel est le contexte du projet ?", TOP_K_DEFAULT),
 ]
-CV_QUERIES = [
-    "Intitulé du poste",
-    "Trigramme de l'intervenant",
-    "Formations avec dates et établissements",
-    "Langues parlées et niveau de maîtrise",
-    "Compétences en management et niveau de maîtrise",
-    "Compétences en informatique et niveau de maîtrise",
-    "Compétences en gestion de projet et niveau de maîtrise",
-    "Expériences professionnelles avec entreprises, postes, durées et réalisations",
+CV_QUERIES: list[tuple[str, int]] = [
+    ("Intitulé du poste", 5),
+    ("Trigramme de l'intervenant", 5),
+    ("Formations avec dates et établissements", TOP_K_DEFAULT),
+    ("Langues parlées et niveau de maîtrise", TOP_K_DEFAULT),
+    ("Compétences en management et niveau de maîtrise", TOP_K_DEFAULT),
+    ("Compétences en informatique et niveau de maîtrise", 20),
+    ("Compétences en gestion de projet et niveau de maîtrise", TOP_K_DEFAULT),
+    (
+        "Expériences professionnelles avec entreprises, postes, durées et réalisations",
+        15,
+    ),
 ]
-PRESTATION_FINANCIERE_QUERIES = [
-    "Nom et coût unitaire des prestations",
-    "Charge estimée en unités d'œuvre pour chaque prestation",
-    "Coût total de chaque prestation et coût total global",
+PRESTATION_FINANCIERE_QUERIES: list[tuple[str, int]] = [
+    ("Nom et coût unitaire des prestations", TOP_K_DEFAULT),
+    ("Charge estimée en unités d'œuvre pour chaque prestation", TOP_K_DEFAULT),
+    ("Coût total de chaque prestation et coût total global", TOP_K_DEFAULT),
 ]
 
 
@@ -62,6 +73,47 @@ class ExtractionTools:
         """Build a RunnableConfig with Langfuse callback if enabled."""
         handler = self._get_langfuse_handler()
         return {"callbacks": [handler]} if handler else {}
+
+    def _enrich_with_skill_mastery(self, chunks_text: str) -> str:
+        """Fetch skill-bar images referenced in chunks and inject mastery alt text.
+
+        Parses <img> tags from the markdown, fetches each raster image from
+        knowledge-flow, checks if it's a 214x33 skill bar, counts blue dots,
+        and replaces the alt text inline.
+        """
+        image_refs = parse_image_refs(chunks_text)
+        if not image_refs:
+            return chunks_text
+
+        base_url = get_app_context().get_knowledge_flow_base_url().rstrip("/")
+        token = getattr(self.agent.runtime_context, "access_token", None)
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+        mastery_map: dict[str, int] = {}
+        for doc_uid, filename in image_refs:
+            if not is_raster_image(filename) or filename in mastery_map:
+                continue
+            try:
+                url = f"{base_url}/markdown/{doc_uid}/media/{filename}"
+                resp = requests.get(url, headers=headers, timeout=10)
+                if resp.status_code != 200:
+                    continue
+                level = extract_mastery_from_image(resp.content)
+                if level is not None:
+                    mastery_map[filename] = level
+            except Exception:
+                logger.warning(
+                    "[skill_mastery] Failed to fetch %s/%s",
+                    doc_uid,
+                    filename,
+                    exc_info=True,
+                )
+
+        if mastery_map:
+            logger.info("[skill_mastery] Detected: %s", mastery_map)
+            chunks_text = inject_mastery_alt_text(chunks_text, mastery_map)
+
+        return chunks_text
 
     def _find_search_tool(self):
         """Find the MCP vector search tool by name."""
@@ -116,12 +168,15 @@ Règles:
         logger.info(f"Generated {len(result.queries)} search queries: {result.queries}")
         return result.queries
 
-    async def _search_and_collect(self, queries: list[str]) -> tuple[str, list[str]]:
+    async def _search_and_collect(
+        self, queries: list[tuple[str, int]]
+    ) -> tuple[str, list[str]]:
         """
         Phase 2: Execute queries via MCP, deduplicate, rank, return formatted text.
 
         Args:
-            queries: List of search query strings
+            queries: List of (query, top_k) pairs. top_k controls how many chunks
+                are retrieved per query; use higher values for broad queries.
 
         Returns:
             Tuple of (formatted_text, ranked_titles) where ranked_titles lists
@@ -136,11 +191,9 @@ Règles:
         all_chunks: list[dict] = []
         seen = set()
 
-        for query in queries:
+        for query, top_k in queries:
             try:
-                result = await search_tool.ainvoke(
-                    {"question": query, "top_k": TOP_K_PER_QUERY}
-                )
+                result = await search_tool.ainvoke({"question": query, "top_k": top_k})
                 if not result:
                     continue
 
@@ -238,7 +291,7 @@ RÈGLES IMPORTANTES:
             if ranked_filenames:
                 result.refCahierCharges = ranked_filenames[0]
 
-            logger.info(f"Extracted EnjeuxBesoins: {result.model_dump()}")
+
 
             # Return formatted JSON
             json_output = json.dumps(result.model_dump(), ensure_ascii=False, indent=2)
@@ -284,6 +337,9 @@ RÈGLES IMPORTANTES:
                     }
                 )
 
+            # Phase 2: Enrich with skill mastery from blue-dot images
+            chunks_text = self._enrich_with_skill_mastery(chunks_text)
+
             # Phase 3: Extract with structured output (no maxLength constraints)
             model = get_default_chat_model().with_structured_output(
                 schema_without_max_length(CV), method="json_schema"
@@ -296,7 +352,8 @@ CONTEXTE PROJET (pour aligner les compétences et expériences):
 RÈGLES IMPORTANTES:
 - N'invente RIEN - utilise uniquement les informations présentes dans les extraits
 - Les compétences et expériences doivent être pertinentes par rapport au contexte projet
-- Sélectionne les compétences les plus importantes (max 3 par catégorie)
+- Sélectionne les compétences les plus pertinentes par rapport au projet (max 3 par catégorie)
+- COMPÉTENCES INFORMATIQUES: trie par pertinence projet mais ne laisse pas de slots vides inutilement
 - Pour les expériences, garde les plus récentes et pertinentes (max 3)
 - Pour la maitrise (langues et compétences), utilise une échelle de 1 à 5 (en tant que string):
   "1" = Débutant, "2" = Intermédiaire, "3" = Bon, "4" = Très bon, "5" = Expert
