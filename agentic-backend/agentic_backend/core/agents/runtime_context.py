@@ -25,7 +25,6 @@ class RuntimeContext(BaseModel):
     """
 
     language: Optional[str] = None
-    team_id: Optional[str] = None
     session_id: Optional[str] = None
     user_id: Optional[str] = None
     user_groups: list[str] | None = None

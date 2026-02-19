@@ -811,7 +811,6 @@ export type VectorSearchHit = {
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "cancelled" | "other";
 export type RuntimeContext = {
   language?: string | null;
-  team_id?: string | null;
   session_id?: string | null;
   user_id?: string | null;
   user_groups?: string[] | null;

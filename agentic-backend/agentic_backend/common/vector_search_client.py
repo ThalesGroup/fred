@@ -18,7 +18,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import requests
-from fred_core import VectorSearchHit
+from fred_core import OwnerFilter, VectorSearchHit
 from pydantic import TypeAdapter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -54,7 +54,11 @@ class VectorSearchClient:
     - On 401, forces a token refresh once and retries the request.
     """
 
-    def __init__(self, team_id: Optional[str] = None):
+    def __init__(
+        self,
+        team_id: Optional[str] = None,
+        owner_filter: Optional[OwnerFilter] = None,
+    ):
         ctx = get_app_context()
         oa = ctx.get_outbound_auth()
 
@@ -69,6 +73,7 @@ class VectorSearchClient:
         self.session.auth = oa.auth
         self._on_auth_refresh: Optional[Callable[[], None]] = oa.refresh
         self._team_id = team_id
+        self._owner_filter = owner_filter
 
     def _post_once(self, path: str, payload: Dict[str, Any]) -> requests.Response:
         url = f"{self.base_url}{path}"
@@ -98,6 +103,7 @@ class VectorSearchClient:
         top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
+        owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
@@ -111,6 +117,7 @@ class VectorSearchClient:
             "top_k": int,
             "library_tags_ids": [str]?,
             "search_policy": str?,
+            "owner_filter": str?,
             "team_id": str?,
             "session_id": str?,
             "include_session_scope": bool,
@@ -122,6 +129,9 @@ class VectorSearchClient:
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
         if search_policy:
             payload["search_policy"] = search_policy
+        effectcive_owner_filter = owner_filter or self._owner_filter
+        if effectcive_owner_filter:
+            payload["owner_filter"] = effectcive_owner_filter.value
         effective_team_id = team_id or self._team_id
         if effective_team_id:
             payload["team_id"] = effective_team_id

@@ -20,7 +20,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from fred_core import KeycloakUser, get_current_user
+from fred_core import KeycloakUser, OwnerFilter, get_current_user
 from pydantic import BaseModel
 
 from agentic_backend.common.error import MCPClientConnectionException
@@ -38,7 +38,6 @@ from agentic_backend.core.agents.agent_service import (
     ImmutableTeamIdError,
     InvalidClassPathError,
     MissingTeamIdError,
-    OwnerFilter,
 )
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager

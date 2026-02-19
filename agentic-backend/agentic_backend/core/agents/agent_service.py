@@ -30,6 +30,7 @@ from fred_core import (
     AgentPermission,
     KeycloakUser,
     OrganizationPermission,
+    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -57,17 +58,6 @@ from agentic_backend.core.agents.basic_react_agent import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class OwnerFilter(str, Enum):
-    """Filter agents by ownership type.
-
-    - PERSONAL: only agents where the user is directly the owner
-    - TEAM: only agents owned by the specified team (team_id required)
-    """
-
-    PERSONAL = "personal"
-    TEAM = "team"
 
 
 class MissingTeamIdError(Exception):

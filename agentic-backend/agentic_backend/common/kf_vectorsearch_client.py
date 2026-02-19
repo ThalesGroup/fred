@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
-from fred_core import VectorSearchHit
+from fred_core import OwnerFilter, VectorSearchHit
 from pydantic import TypeAdapter
 
 from agentic_backend.common.kf_base_client import KfBaseClient
@@ -50,6 +50,7 @@ class VectorSearchClient(KfBaseClient):
         document_library_tags_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
+        owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
@@ -67,6 +68,7 @@ class VectorSearchClient(KfBaseClient):
             "library_tags_ids": [str]?,
             "document_uids": [str]?,
             "search_policy": str?,
+            "owner_filter": str?,
             "team_id": str?,
             "session_id": str?,
             "include_session_scope": bool,
@@ -80,6 +82,8 @@ class VectorSearchClient(KfBaseClient):
             payload["document_uids"] = list(document_uids)
         if search_policy:
             payload["search_policy"] = search_policy
+        if owner_filter:
+            payload["owner_filter"] = owner_filter.value
         if team_id:
             payload["team_id"] = team_id
         if session_id:

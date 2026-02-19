@@ -4,6 +4,7 @@ import logging
 import tempfile
 from pathlib import Path
 
+from fred_core import OwnerFilter
 from jsonschema import Draft7Validator
 from langchain.agents import create_agent
 from langchain.tools import tool
@@ -345,10 +346,12 @@ class ReferenceEditor(AgentFlow):
                     VectorSearchClient,
                 )
 
-                runtime_context = self.get_runtime_context()
-                if runtime_context is not None:
-                    team_id = runtime_context.team_id
-                vector_search_client = VectorSearchClient(team_id=team_id)
+                vector_search_client = VectorSearchClient(
+                    team_id=self.get_agent_settings().team_id,
+                    owner_filter=OwnerFilter.TEAM
+                    if self.get_settings().team_id
+                    else OwnerFilter.PERSONAL,
+                )
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
@@ -445,10 +448,12 @@ class ReferenceEditor(AgentFlow):
                     VectorSearchClient,
                 )
 
-                runtime_context = self.get_runtime_context()
-                if runtime_context is not None:
-                    team_id = runtime_context.team_id
-                vector_search_client = VectorSearchClient(team_id=team_id)
+                vector_search_client = VectorSearchClient(
+                    team_id=self.get_agent_settings().team_id,
+                    owner_filter=OwnerFilter.TEAM
+                    if self.get_settings().team_id
+                    else OwnerFilter.PERSONAL,
+                )
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
