@@ -6,7 +6,7 @@ FROM mirror.gcr.io/python:3.12
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
-ARG UV_VERSION=0.7.12
+ARG UV_VERSION=0.7.21
 
 # Install required system dependencies
 RUN apt-get update && \
@@ -14,7 +14,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh && \
     mv /root/.local/bin/uv /usr/local/bin/uv && \
     chmod +x /usr/local/bin/uv
 
@@ -28,6 +28,19 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 ENV UV_PROJECT_ENVIRONMENT=/app/venv
 ENV PATH="/app/venv/bin:$PATH"
 ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV APP_CACHE_DIR=/app/.cache
+ENV XDG_CACHE_HOME=${APP_CACHE_DIR}
+ENV HF_HOME=${APP_CACHE_DIR}/huggingface
+ENV HUGGINGFACE_HUB_CACHE=${APP_CACHE_DIR}/huggingface/hub
+ENV HF_HUB_CACHE=${APP_CACHE_DIR}/huggingface/hub
+ENV TRANSFORMERS_CACHE=${APP_CACHE_DIR}/huggingface/transformers
+ENV SENTENCE_TRANSFORMERS_HOME=${APP_CACHE_DIR}/huggingface
+ENV TORCH_HOME=${APP_CACHE_DIR}/torch
+ENV EASYOCR_MODULE_PATH=${APP_CACHE_DIR}/easyocr
+RUN mkdir -p ${APP_CACHE_DIR}/huggingface/hub ${APP_CACHE_DIR}/huggingface/transformers ${APP_CACHE_DIR}/torch ${APP_CACHE_DIR}/easyocr && \
+    chmod -R 0777 ${APP_CACHE_DIR}
 
 # Set working directory
 WORKDIR /app

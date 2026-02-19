@@ -53,6 +53,7 @@ FROM mirror.gcr.io/python:3.12.8-slim
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
+ARG HF_OFFLINE_STRICT=1
 
 # System deps (minimal)
 RUN apt-get update && \
@@ -83,45 +84,72 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 
 ENV PATH="/app/venv/bin:$PATH"
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
-ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Cache policy:
+# - Keep all mutable ML caches under /app/.cache (explicit, easy to inspect).
+# - Make cache tree writable for arbitrary runtime UID/GID.
+ENV APP_CACHE_DIR=/app/.cache
+ENV XDG_CACHE_HOME=${APP_CACHE_DIR}
+ENV HF_HOME=${APP_CACHE_DIR}/huggingface
+ENV HUGGINGFACE_HUB_CACHE=${APP_CACHE_DIR}/huggingface/hub
+ENV HF_HUB_CACHE=${APP_CACHE_DIR}/huggingface/hub
+ENV TRANSFORMERS_CACHE=${APP_CACHE_DIR}/huggingface/transformers
+ENV SENTENCE_TRANSFORMERS_HOME=${APP_CACHE_DIR}/huggingface
+ENV TORCH_HOME=${APP_CACHE_DIR}/torch
+ENV EASYOCR_MODULE_PATH=${APP_CACHE_DIR}/easyocr
+ENV DOCLING_ARTIFACTS_PATH=${APP_CACHE_DIR}/docling/models
+RUN mkdir -p ${APP_CACHE_DIR}/huggingface/hub ${APP_CACHE_DIR}/huggingface/transformers ${APP_CACHE_DIR}/torch ${APP_CACHE_DIR}/easyocr ${DOCLING_ARTIFACTS_PATH} && \
+    chmod -R 0777 ${APP_CACHE_DIR}
 
 # Hugging Face / reranker cache layout
-ENV CACHE_HOME=/home/${USER_NAME}/.cache
 ENV RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-12-v2
-ENV RERANKER_MODEL_CACHE=${CACHE_HOME}/huggingface
-ENV HF_HOME=${CACHE_HOME}
-ENV HF_HUB_CACHE=${RERANKER_MODEL_CACHE}
-ENV HUGGINGFACE_HUB_CACHE=${RERANKER_MODEL_CACHE}
-ENV SENTENCE_TRANSFORMERS_HOME=${RERANKER_MODEL_CACHE}
-ENV TRANSFORMERS_CACHE=${RERANKER_MODEL_CACHE}
-RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && \
-    chown -R ${USER_ID}:${GROUP_ID} ${CACHE_HOME} ${DOCLING_ARTIFACTS_PATH}
-
-# Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
 USER ${USER_NAME}
-RUN python -c "\
-from sentence_transformers import CrossEncoder; \
-import os; \
-CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
+RUN python - <<'PY'
+import os
+from sentence_transformers import CrossEncoder
 
-# Preload Docling artifacts (layout/table + EasyOCR) for offline-friendly runtime
-RUN python -c "\
-from pathlib import Path; \
-import os; \
-from docling.utils.model_downloader import download_models; \
-download_models( \
-    output_dir=Path(os.environ['DOCLING_ARTIFACTS_PATH']), \
-    progress=False, \
-    with_layout=True, \
-    with_tableformer=True, \
-    with_easyocr=True, \
-    with_code_formula=False, \
-    with_picture_classifier=False, \
-    with_smolvlm=False, \
-    with_smoldocling=False, \
-    with_smoldocling_mlx=False, \
-    with_granite_vision=False \
-)"
+CrossEncoder(
+    model_name_or_path=os.environ["RERANKER_MODEL"],
+    cache_folder=os.environ["HF_HOME"],
+)
+PY
+
+# Preload Docling artifacts needed by PDF medium/rich profiles:
+# - layout (dlparse_v4)
+# - tableformer (rich with do_table_structure=true)
+# - easyocr (rich with do_ocr=true)
+RUN python - <<'PY'
+import os
+from pathlib import Path
+from docling.utils.model_downloader import download_models
+
+output_dir = Path(os.environ["DOCLING_ARTIFACTS_PATH"]).expanduser()
+output_dir.mkdir(parents=True, exist_ok=True)
+download_models(
+    output_dir=output_dir,
+    force=False,
+    progress=False,
+    with_layout=True,
+    with_tableformer=True,
+    with_code_formula=False,
+    with_picture_classifier=False,
+    with_smolvlm=False,
+    with_smoldocling=False,
+    with_smoldocling_mlx=False,
+    with_granite_vision=False,
+    with_easyocr=True,
+)
+print(f"Docling artifacts ready in: {output_dir}")
+PY
+USER root
+RUN chmod -R 0777 ${APP_CACHE_DIR}
+
+# Runtime offline policy for Hugging Face based dependencies.
+ENV HF_HUB_OFFLINE=${HF_OFFLINE_STRICT}
+ENV TRANSFORMERS_OFFLINE=${HF_OFFLINE_STRICT}
+ENV HF_HUB_DISABLE_TELEMETRY=1
 
 # Set working directory
 WORKDIR /app
@@ -133,6 +161,9 @@ COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Set environment
 ENV PYTHONPATH=/app
+
+# Switch to non-root user
+USER ${USER_NAME}
 
 # Expose Fast API port
 EXPOSE 8111

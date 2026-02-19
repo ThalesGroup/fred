@@ -22,11 +22,13 @@ from shutil import which
 
 import numpy as np
 from docx import Document
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 
 logger = logging.getLogger(__name__)
+
+_RASTER_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
 
 
 def default_or_unknown(value: str, default="None") -> str:
@@ -48,8 +50,8 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
 
     @staticmethod
     def cv_skills_extractor(image_path: Path) -> int:
-        img = Image.open(image_path).convert("RGB")
-        arr = np.array(img)
+        with Image.open(image_path) as img:
+            arr = np.array(img.convert("RGB"))
 
         blue = np.array([0, 174, 199])
         dist = np.linalg.norm(arr - blue, axis=2)
@@ -122,10 +124,11 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             if which("inkscape") is None:
                 logger.error("[DOCX] Inkscape not found; cannot convert %s to SVG. Leaving EMF in place.", img_path)
                 continue
+
             try:
                 subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)], check=True)
             except subprocess.CalledProcessError as e:
-                logger.error("[DOCX] Inkscape failed converting %s: %s", img_path, e)
+                logger.error("[DOCX] Inkscape failed converting %s to SVG: %s", img_path, e)
                 continue
 
             # Remove the original EMF file
@@ -143,12 +146,25 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         media_folder = images_dir / "media"
 
         ################################## MyCV images parsing #################################################
-        if "cv" in str(file_path):
+        if "cv" in file_path.name.lower():
             if media_folder.exists():
                 for img_file in media_folder.iterdir():
-                    img = Image.open(img_file)
-                    if img.size == (214, 33):
-                        bullet_count = self.cv_skills_extractor(img_file)
+                    if img_file.suffix.lower() not in _RASTER_IMAGE_SUFFIXES:
+                        continue
+
+                    try:
+                        with Image.open(img_file) as img:
+                            is_skill_bar = img.size == (214, 33)
+                    except (UnidentifiedImageError, OSError) as exc:
+                        logger.warning("[DOCX] Skipping unreadable image %s: %s", img_file, exc)
+                        continue
+
+                    if is_skill_bar:
+                        try:
+                            bullet_count = self.cv_skills_extractor(img_file)
+                        except Exception as exc:  # pragma: no cover - defensive fallback
+                            logger.warning("[DOCX] Skipping cv skill extraction for %s: %s", img_file, exc)
+                            continue
 
                         alt_text = f"{bullet_count}/5 de maitrise"
 

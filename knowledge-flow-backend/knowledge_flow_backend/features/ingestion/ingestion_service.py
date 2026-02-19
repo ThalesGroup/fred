@@ -15,7 +15,8 @@
 import logging
 import pathlib
 import re
-from typing import Iterable, Tuple
+import threading
+from typing import Iterable, Optional, Tuple
 
 from fred_core import Action, KeycloakUser, Resource, authorize
 
@@ -256,3 +257,37 @@ class IngestionService:
         if scheduler_task_service is None:
             raise ValueError("Scheduler backend is disabled")
         return await scheduler_task_service.get_progress(user=user, workflow_id=workflow_id)
+
+
+_INGESTION_SERVICE_LOCK = threading.Lock()
+_INGESTION_SERVICE_SINGLETON: Optional[IngestionService] = None
+
+
+def get_ingestion_service(*, force_new: bool = False) -> IngestionService:
+    """
+    Return a process-local cached IngestionService.
+
+    Temporal activities and API handlers run in separate processes, so each process
+    keeps its own singleton. If ApplicationContext is reinitialized (tests), the
+    cached service is automatically refreshed against the new context.
+    """
+    global _INGESTION_SERVICE_SINGLETON
+
+    context = ApplicationContext.get_instance()
+    with _INGESTION_SERVICE_LOCK:
+        stale_context = _INGESTION_SERVICE_SINGLETON is not None and _INGESTION_SERVICE_SINGLETON.context is not context
+        if force_new or _INGESTION_SERVICE_SINGLETON is None or stale_context:
+            _INGESTION_SERVICE_SINGLETON = IngestionService()
+            logger.debug(
+                "[INGESTION][SERVICE] Created process-local singleton force_new=%s stale_context=%s",
+                force_new,
+                stale_context,
+            )
+        return _INGESTION_SERVICE_SINGLETON
+
+
+def reset_ingestion_service() -> None:
+    """Clear the cached process-local IngestionService (useful in tests)."""
+    global _INGESTION_SERVICE_SINGLETON
+    with _INGESTION_SERVICE_LOCK:
+        _INGESTION_SERVICE_SINGLETON = None
