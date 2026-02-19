@@ -18,7 +18,10 @@ export interface AgentTileProps {
 }
 
 export function AgentTile({ agent }: AgentTileProps) {
-  const { Icon: AgentIcon, colorHint } = getAgentVisuals(agent);
+  const {
+    // Icon: AgentIcon,
+    colorHint,
+  } = getAgentVisuals(agent);
   const theme = useTheme();
   const agentColor = THEME_COLOR_MAP(theme)[colorHint];
 

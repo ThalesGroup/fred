@@ -49,7 +49,10 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
   if (!agent) return null;
 
   const theme = useTheme();
-  const { Icon: ChipIcon, colorHint } = getAgentVisuals(agent);
+  const {
+    // Icon: ChipIcon,
+    colorHint,
+  } = getAgentVisuals(agent);
   const chipColor = THEME_COLOR_MAP(theme)[colorHint];
 
   // Visual constants
