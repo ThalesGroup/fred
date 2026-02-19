@@ -291,8 +291,6 @@ RÈGLES IMPORTANTES:
             if ranked_filenames:
                 result.refCahierCharges = ranked_filenames[0]
 
-
-
             # Return formatted JSON
             json_output = json.dumps(result.model_dump(), ensure_ascii=False, indent=2)
             return Command(
