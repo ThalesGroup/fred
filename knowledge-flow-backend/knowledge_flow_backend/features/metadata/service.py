@@ -99,9 +99,7 @@ class MetadataService:
         """Return only the document UIDs the user is allowed to read (individual permission checks)."""
         if not document_uids:
             return set()
-        results = await asyncio.gather(
-            *(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in document_uids)
-        )
+        results = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in document_uids))
         return {uid for uid, allowed in zip(document_uids, results) if allowed}
 
     @authorize(Action.READ, Resource.DOCUMENTS)
