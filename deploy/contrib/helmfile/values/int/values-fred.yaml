@@ -275,7 +275,7 @@ applications:
 
       # Enable scheduler
       scheduler:
-        enabled: false # todo: enable once temporal is installed on integration
+        enabled: true
         backend: "temporal"
         temporal:
           host: temporal-frontend:7233
@@ -386,7 +386,7 @@ applications:
 
   knowledge-flow-worker:
     <<: *knowledgeFlowBackend
-    enabled: false # todo: enable once temporal is installed on integration
+    enabled: true
     deployment:
       enabled: true  
     replicaCount: 2
