@@ -453,10 +453,14 @@ applications:
         log_level: "warning"
 
       processing:
-        # disable image processing for now (todo: enable it)
-        process_images: false
-        # disable gpu for now (todo: enable it)
-        use_gpu: false
+        profiles:
+          # disable gpu for now (todo: enable it ?)
+          fast:
+            use_gpu: &use_gpu_for_processing false
+          medium:
+            use_gpu: *use_gpu_for_processing
+          rich:
+            use_gpu: *use_gpu_for_processing
 
       # Set Keycloak url
       security: *security-configuration
