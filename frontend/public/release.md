@@ -1,3 +1,9 @@
+**v1.2.6** — 2026-02-20
+
+- **Improvements**
+
+  - improve fallback pdf processing if image/ocr parsing fail (#1188)
+
 **v1.2.5** — 2026-02-14
 
 - **Summary**
