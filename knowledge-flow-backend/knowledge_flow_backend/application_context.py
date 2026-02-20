@@ -639,19 +639,23 @@ class ApplicationContext:
         if not settings.get("online", True):
             if not model_config.name:
                 raise ValueError("The name of the cross-encoder model is required for offline mode.")
-            if not settings.get("local_path"):
+            configured_local_path = settings.get("local_path")
+            if not configured_local_path:
                 raise ValueError("A path to the local cross-encoder model is required for offline mode.")
 
-            local_path: str = settings.get("local_path", "")
+            expanded = os.path.expandvars(str(configured_local_path))
+            resolved_local_path = str(Path(expanded).expanduser().resolve(strict=False))
 
-            logging.info(f"[CROSSENCODER][OFFLINE] Cache folder exists: {settings.get('local_path')}")
-            logging.info(f"[CROSSENCODER][OFFLINE] Cache folder content: {os.listdir(local_path) if os.path.exists(local_path) else 'NOT FOUND'}")
-
-            return CrossEncoder(
-                model_name_or_path=model_config.name,
-                cache_folder=settings.get("local_path"),
-                local_files_only=True,
-            )
+            logging.info("[CROSSENCODER][OFFLINE] Offline mode enabled.")
+            logging.info("[CROSSENCODER][OFFLINE] Using configured local_path: %s", resolved_local_path)
+            try:
+                return CrossEncoder(
+                    model_name_or_path=model_config.name,
+                    cache_folder=resolved_local_path,
+                    local_files_only=True,
+                )
+            except Exception as e:
+                raise ValueError(f"[CROSSENCODER][OFFLINE] Could not load model '{model_config.name}' from local_path '{resolved_local_path}': {e}") from e
 
         if not model_config.name:
             raise ValueError("The name of the cross-encoder model is required.")
