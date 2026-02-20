@@ -112,6 +112,7 @@ class KfWorkspaceClient(KfBaseClient):
             path,
             phase_name="kf_workspace_fetch_stream",
             access_token=access_token,
+            stream=True
         )
         r.raise_for_status()
         return r
