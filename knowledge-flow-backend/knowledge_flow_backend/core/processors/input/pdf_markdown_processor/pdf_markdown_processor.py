@@ -44,6 +44,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PDF documents to Markdown with optional image descriptions, table markers, and a lightweight fallback."
 
     _IMAGE_PLACEHOLDER = "%%ANNOTATION%%"
+    _MARKDOWN_PREVIEW_CHARS = 4000
 
     # Heuristics to decide whether Docling output is too text-poor (likely image-only)
     _MIN_TEXT_CHARS_FOR_RICH = 400
@@ -322,15 +323,22 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 image_placeholder=self._IMAGE_PLACEHOLDER,
             )
 
+            with open(output_markdown_path, "r", encoding="utf-8") as f:
+                md_content = f.read()
+
             if logger.isEnabledFor(logging.DEBUG):
-                with open(output_markdown_path, "r", encoding="utf-8") as f:
-                    md_content = f.read()
+                preview_chars = self._MARKDOWN_PREVIEW_CHARS
+                markdown_preview = md_content[:preview_chars]
+                if len(md_content) > preview_chars:
+                    markdown_preview += "\n...[truncated]"
 
                 # Lightweight fallback if Docling output is likely image-only / too text-poor
                 logger.debug(
-                    "[PROCESSOR][PDF][MARKDOWN_PRE_FALLBACK] file=%s markdown=\n%s",
+                    "[PROCESSOR][PDF][MARKDOWN_PRE_FALLBACK] file=%s preview_chars=%d total_chars=%d markdown_preview=\n%s",
                     file_path.name,
-                    md_content,
+                    preview_chars,
+                    len(md_content),
+                    markdown_preview,
                 )
 
             used_lite_fallback = False
