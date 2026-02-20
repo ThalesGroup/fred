@@ -92,6 +92,7 @@ applications:
           name: "mistral"
           settings:
             base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+            request_timeout: 300
         default_language_model: *tgs-mistral-medium
 
         # Remove local agents (only dynamic ones)
