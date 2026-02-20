@@ -112,7 +112,7 @@ class KfWorkspaceClient(KfBaseClient):
             path,
             phase_name="kf_workspace_fetch_stream",
             access_token=access_token,
-            stream=True
+            stream=True,
         )
         r.raise_for_status()
         return r
@@ -155,7 +155,10 @@ class KfWorkspaceClient(KfBaseClient):
         )
 
     async def fetch_agent_config_text(
-        self, key: str, access_token: str, agent_id: str
+        self,
+        key: str,
+        access_token: str,
+        agent_id: str,
     ) -> str:
         """Lire un fichier de configuration d'agent (ex: template, prompt) en texte clair."""
         return await self._fetch_text_at_path(
@@ -163,7 +166,11 @@ class KfWorkspaceClient(KfBaseClient):
         )
 
     async def fetch_agent_user_text(
-        self, key: str, access_token: str, agent_id: str, target_user_id: str
+        self,
+        key: str,
+        access_token: str,
+        agent_id: str,
+        target_user_id: str,
     ) -> str:
         """Lire une note mémo privée d'un agent pour un utilisateur donné (agent-only)."""
         return await self._fetch_text_at_path(
@@ -228,7 +235,10 @@ class KfWorkspaceClient(KfBaseClient):
         )
 
     async def fetch_agent_config_blob(
-        self, key: str, access_token: str, agent_id: str
+        self,
+        key: str,
+        access_token: str,
+        agent_id: str,
     ) -> UserStorageBlob:
         """Récupérer un fichier de configuration d'agent (binaire + métadonnées)."""
         return await self._fetch_blob_at_path(
@@ -236,7 +246,11 @@ class KfWorkspaceClient(KfBaseClient):
         )
 
     async def fetch_agent_user_blob(
-        self, key: str, access_token: str, agent_id: str, target_user_id: str
+        self,
+        key: str,
+        access_token: str,
+        agent_id: str,
+        target_user_id: str,
     ) -> UserStorageBlob:
         """Récupérer une note privée agent↔utilisateur (binaire + métadonnées)."""
         return await self._fetch_blob_at_path(

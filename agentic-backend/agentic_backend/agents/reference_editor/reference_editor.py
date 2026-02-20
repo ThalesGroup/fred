@@ -256,10 +256,23 @@ class ReferenceEditor(AgentFlow):
         template_tool = self.get_template_tool()
         word_template_tool = self.get_word_template_tool()
         validator_tool = self.get_validator_tool()
+        base_system_prompt = self.render(self.get_tuned_text("prompts.system") or "")
+        download_guardrail = """
+# RÈGLE DE RESTITUTION DES TÉLÉCHARGEMENTS (OBLIGATOIRE)
+- Si template_tool ou word_template_tool retourne un LinkPart, ne le réécris jamais en texte.
+- N'affiche jamais d'URL brute, de markdown `[Download ...]`, ni de ligne `Download ...`.
+- Laisse uniquement le LinkPart pour le téléchargement.
+- Tu peux dire en texte : "Le bouton de téléchargement est ci-dessous."
+"""
+        system_prompt = (
+            f"{base_system_prompt.rstrip()}\n\n{download_guardrail.strip()}"
+            if base_system_prompt
+            else download_guardrail.strip()
+        )
 
         return create_agent(
             model=get_default_chat_model(),
-            system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
+            system_prompt=system_prompt,
             tools=[
                 template_tool,
                 word_template_tool,
@@ -328,7 +341,7 @@ class ReferenceEditor(AgentFlow):
             Outil permettant de templétiser le fichier envoyé par l'utilisateur.
             La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
             l'outil possède déjà cette information.
-            L'outil retournera un lien de téléchargement une fois le fichier templatisé.
+            L'outil retourne un LinkPart pour l'interface. Ne jamais réécrire ce lien en texte/Markdown.
             """
             # 1. Fetch template from secure asset storage
             template_key = (
@@ -404,7 +417,7 @@ class ReferenceEditor(AgentFlow):
                     title=f"Download {upload_result.file_name}",
                     kind=LinkKind.download,
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                )
+                ).model_dump(mode="json")
             else:
                 return last_error
 
@@ -425,7 +438,7 @@ class ReferenceEditor(AgentFlow):
             Outil permettant de templétiser un fichier Word envoyé par l'utilisateur.
             La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
             l'outil possède déjà cette information.
-            L'outil retournera un lien de téléchargement une fois le fichier templatisé.
+            L'outil retourne un LinkPart pour l'interface. Ne jamais réécrire ce lien en texte/Markdown.
             """
             # 1. Fetch template from secure asset storage
             template_key = (
@@ -498,6 +511,6 @@ class ReferenceEditor(AgentFlow):
                 title=f"Download {upload_result.file_name}",
                 kind=LinkKind.download,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+            ).model_dump(mode="json")
 
         return word_template_tool

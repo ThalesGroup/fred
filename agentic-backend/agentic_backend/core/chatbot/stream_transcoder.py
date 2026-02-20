@@ -136,6 +136,44 @@ def _extract_vector_search_hits(raw: Any) -> Optional[List[VectorSearchHit]]:
     return hits
 
 
+def _extract_fred_parts_from_tool_content(raw: Any) -> List[MessagePart]:
+    """
+    Best-effort extraction of structured frontend parts returned by tools.
+    Accepts:
+      - {"type": "link" | "geo", ...}
+      - {"fred_parts": [{...}, ...]}
+      - [{...}, ...]
+      - JSON string of one of the above
+    """
+    if raw is None:
+        return []
+
+    payload: Any = raw
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            return []
+
+    candidates: List[dict] = []
+    if isinstance(payload, dict):
+        part_type = payload.get("type")
+        if part_type in {"link", "geo"}:
+            candidates = [payload]
+        else:
+            raw_parts = payload.get("fred_parts")
+            if isinstance(raw_parts, list):
+                candidates = [p for p in raw_parts if isinstance(p, dict)]
+            elif isinstance(raw_parts, dict):
+                candidates = [raw_parts]
+    elif isinstance(payload, list):
+        candidates = [p for p in payload if isinstance(p, dict)]
+
+    if not candidates:
+        return []
+    return hydrate_fred_parts({"fred_parts": candidates})
+
+
 def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
     if raw is None:
         return []
@@ -447,6 +485,7 @@ class StreamTranscoder:
         seq = start_seq
         final_sent = False
         pending_sources_payload: Optional[List[VectorSearchHit]] = None
+        pending_fred_parts: List[MessagePart] = []
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
 
         # Determine graph input: Command for resume, or State dict for start
@@ -600,6 +639,12 @@ class StreamTranscoder:
                                     call_id,
                                 )
 
+                        tool_fred_parts = _extract_fred_parts_from_tool_content(
+                            raw_content
+                        )
+                        if tool_fred_parts:
+                            pending_fred_parts.extend(tool_fred_parts)
+
                         content_str = raw_content or ""
                         if not isinstance(content_str, str):
                             content_str = json.dumps(content_str)
@@ -617,7 +662,8 @@ class StreamTranscoder:
                                     ok=ok_flag,
                                     latency_ms=raw_md.get("latency_ms"),
                                     content=content_str,
-                                )
+                                ),
+                                *tool_fred_parts,
                             ],
                             metadata=ChatMetadata(
                                 agent_id=agent_id,
@@ -673,6 +719,12 @@ class StreamTranscoder:
                     additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
                     if additional_kwargs:
                         parts.extend(hydrate_fred_parts(additional_kwargs))
+
+                    # Carry structured parts emitted by tool outputs to the next assistant message.
+                    if role == Role.assistant and not final_sent and pending_fred_parts:
+                        if not any(getattr(p, "type", None) == "link" for p in parts):
+                            parts.extend(pending_fred_parts)
+                        pending_fred_parts = []
 
                     # Optional thought trace (developer-facing, not part of final answer)
                     if "thought" in raw_md:
