@@ -46,6 +46,18 @@ docker-build: ## Build the Docker image
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
 
+.PHONY: run-docker
+run-docker: ## Run frontend in Docker (maps host port 5173 to container port 8080 by default)
+	@echo "🚀 Running frontend in Docker..."
+	docker run --rm -it \
+		--name $(FRONTEND_CONTAINER_NAME) \
+		--network $(FRONTEND_DOCKER_NETWORK) \
+		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
+		$(IMAGE_FULL)
+
+.PHONY: docker-run
+docker-run: run-docker ## Backward-compatible alias for run-docker
+
 ##@ Run
 
 .PHONY: run
@@ -86,7 +98,7 @@ clean: ## Clean requirements and build files
 
 .PHONY: clean-docker
 clean-docker: ## Clean up Docker-related artifacts
-	docker rm -f frontend || true
+	docker rm -f $(FRONTEND_CONTAINER_NAME) || true
 	docker image prune -f
 
 .PHONY: full-clean
@@ -103,3 +115,9 @@ helm-push: ## Push the Helm chart to the project registry
 
 
 include ../scripts/makefiles/help.mk
+
+# Docker runtime defaults
+FRONTEND_CONTAINER_NAME ?= frontend
+FRONTEND_DOCKER_NETWORK ?= bridge
+FRONTEND_HOST_PORT ?= 5173
+FRONTEND_CONTAINER_PORT ?= 8080

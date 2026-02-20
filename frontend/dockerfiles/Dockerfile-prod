@@ -52,6 +52,10 @@ RUN printf '%s\n' \
 "}" \
 > /etc/nginx/conf.d/fred.conf
 
+# Ensure ES module workers (pdf.worker.min*.mjs) are served with a JS MIME type.
+RUN grep -q ' mjs;' /etc/nginx/mime.types || \
+    sed -i '/application\/javascript/a\    application/javascript                           mjs;' /etc/nginx/mime.types
+
 RUN chown nginx:nginx /etc/nginx/conf.d/fred.conf
 
 # Disable default configuration for nginx
