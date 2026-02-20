@@ -90,7 +90,8 @@ class KfWorkspaceClient(KfBaseClient):
 
     @staticmethod
     def _path_agent_config_download(agent_id: str, key: str) -> str:
-        return f"/storage/agent-config/{agent_id}/{key}"
+        logical_key = (key or "").strip().replace("\\", "/").split("/")[-1]
+        return f"/storage/agent-config/{agent_id}/{logical_key}"
 
     @staticmethod
     def _path_agent_config_upload(agent_id: str) -> str:
@@ -111,7 +112,6 @@ class KfWorkspaceClient(KfBaseClient):
             path,
             phase_name="kf_workspace_fetch_stream",
             access_token=access_token,
-            stream=True,
         )
         r.raise_for_status()
         return r

@@ -11,8 +11,8 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
 from agentic_backend.agents.reference_editor.powerpoint_template_util import (
-    fill_slide_from_structured_response,
-    fill_word_from_structured_response,
+    fill_slide_from_structured_response_async,
+    fill_word_from_structured_response_async,
     referenceSchema,
 )
 from agentic_backend.application_context import get_default_chat_model
@@ -271,7 +271,7 @@ class ReferenceEditor(AgentFlow):
 
     def get_validator_tool(self):
         @tool
-        async def validator_tool(data: dict):
+        async def validator_tool(data: dict | None = None):
             """
             Outil permettant de valider le format des données avant de les passer à l'outil de templetisation.
             L'outil retourne [] si le schéma est valide et la liste des erreurs sinon.
@@ -279,6 +279,12 @@ class ReferenceEditor(AgentFlow):
             IMPORTANT : Si cet outil retourne [] (liste vide), tu DOIS IMMÉDIATEMENT appeler template_tool(data={{...}})
             avec exactement les mêmes données dans le MÊME tour de conversation. Ne t'arrête pas ici.
             """
+            if data is None:
+                return (
+                    "Missing required argument: data. "
+                    "Call validator_tool(data={...}) with the structured payload."
+                )
+
             if len(data.keys()) != 3:
                 return (
                     "Bad root key format. The JSON should have the following format:\n"
@@ -349,7 +355,7 @@ class ReferenceEditor(AgentFlow):
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
-                fill_slide_from_structured_response(
+                await fill_slide_from_structured_response_async(
                     template_path,
                     actual_data,
                     output_path,
@@ -446,7 +452,7 @@ class ReferenceEditor(AgentFlow):
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
-                fill_word_from_structured_response(
+                await fill_word_from_structured_response_async(
                     template_path,
                     actual_data,
                     output_path,

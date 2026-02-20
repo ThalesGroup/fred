@@ -1,4 +1,3 @@
-import asyncio
 import io
 import logging
 from typing import Optional
@@ -6,7 +5,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def search_image_by_name(
+async def search_image_by_name(
     image_name: str, vector_search_client, kf_base_client
 ) -> Optional[str]:
     """
@@ -23,12 +22,14 @@ def search_image_by_name(
     try:
         logger.info(f"Searching for image with name: {image_name}")
 
-        # Use VectorSearchClient.search() method
-        loop = asyncio.get_event_loop()
-        hits = loop.run_until_complete(
-            vector_search_client.search(
-                question=image_name, top_k=5, search_policy="semantic"
-            )
+        # VectorSearchClient.search() is synchronous, run it in a worker thread.
+        import asyncio
+
+        hits = await asyncio.to_thread(
+            vector_search_client.search,
+            question=image_name,
+            top_k=5,
+            search_policy="semantic",
         )
 
         if hits and len(hits) > 0:
@@ -78,7 +79,7 @@ def search_image_by_name(
         return None
 
 
-def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
+async def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
     """
     Download the original image file from the knowledge flow backend.
 
@@ -92,14 +93,10 @@ def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
     try:
         logger.info(f"Downloading image with document_uid: {document_uid}")
 
-        # Use the internal method to make authenticated GET request
-        loop = asyncio.get_event_loop()
-        response = loop.run_until_complete(
-            kf_base_client._request_with_token_refresh(
-                "GET",
-                f"/raw_content/{document_uid}",
-                phase_name="kf_raw_content_fetch",
-            )
+        response = await kf_base_client._request_with_token_refresh(
+            "GET",
+            f"/raw_content/{document_uid}",
+            phase_name="kf_raw_content_fetch",
         )
 
         if response and response.content:
@@ -117,7 +114,7 @@ def download_image(document_uid: str, kf_base_client) -> Optional[io.BytesIO]:
         return None
 
 
-def get_image_for_technology(
+async def get_image_for_technology(
     technology_name: str, vector_search_client, kf_base_client
 ) -> Optional[io.BytesIO]:
     """
@@ -137,7 +134,7 @@ def get_image_for_technology(
     logger.info(f"Getting image for technology: {clean_name}")
 
     # Search for the image
-    document_uid = search_image_by_name(
+    document_uid = await search_image_by_name(
         clean_name, vector_search_client, kf_base_client
     )
 
@@ -146,7 +143,7 @@ def get_image_for_technology(
         return None
 
     # Download the image
-    image_data = download_image(document_uid, kf_base_client)
+    image_data = await download_image(document_uid, kf_base_client)
 
     if not image_data:
         logger.warning(f"Could not download image for technology: {clean_name}")
