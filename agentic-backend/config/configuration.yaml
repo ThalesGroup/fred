@@ -168,13 +168,6 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
       enabled: false
-    - id: "Temporal Test Agent"
-      name: "Temporal Test Agent"
-      type: "agent"
-      class_path: "agentic_backend.agents.temporal_test_agent.temporal_test_agent.TemporalTestAgent"
-      enabled: false
-      chat_options:
-        attach_files: false
     - id: "Kellia"
       name: "Kellia"
       type: "agent"
