@@ -213,7 +213,7 @@ ai:
     - id: "Kellia"
       name: "Kellia"
       type: "agent"
-      class_path: "agentic_backend.agents.knowledge_extractor.slide_maker.SlideMaker"
+      class_path: "agentic_backend.agents.ppt_filler.ppt_filler_agent.PptFillerAgent"
       enabled: true
     - id: "Raph"
       name: "Raph"

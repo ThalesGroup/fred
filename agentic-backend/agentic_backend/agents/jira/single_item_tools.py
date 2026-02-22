@@ -196,9 +196,13 @@ Génère:
             title: str,
             req_type: str | None = None,
             priority: str | None = None,
+            description: str | None = None,
         ):
             """
             Ajoute UNE exigence à partir d'un titre.
+
+            Si une description est fournie, elle est utilisée directement sans appel LLM.
+            Sinon, la description est générée automatiquement à partir du titre.
 
             Utilise cet outil pour les demandes simples comme "ajoute une exigence pour l'authentification".
             Pour générer PLUSIEURS exigences, utilise generate_requirements().
@@ -207,20 +211,26 @@ Génère:
                 title: Titre de l'exigence (ex: "Authentification multi-facteur")
                 req_type: Type d'exigence - "fonctionnelle" ou "non-fonctionnelle" (défaut: "fonctionnelle")
                 priority: Priorité - "Haute", "Moyenne", ou "Basse" (défaut: "Moyenne")
+                description: Description détaillée de l'exigence (optionnel - si fourni, pas d'appel LLM)
             """
             # Generate ID
             rtype = req_type or "fonctionnelle"
             next_id = get_next_requirement_id(runtime.state, rtype)
             prio = priority or "Moyenne"
 
-            # Get an example requirement from state if available
-            existing_requirements = runtime.state.get("requirements") or []
-            example_requirement = (
-                existing_requirements[0] if existing_requirements else None
-            )
-
-            # Expand title into full requirement using internal LLM
-            expanded = await self._expand_requirement(title, rtype, example_requirement)
+            if description is not None:
+                # User provided description directly, skip LLM
+                expanded = {"description": description}
+            else:
+                # Get an example requirement from state if available
+                existing_requirements = runtime.state.get("requirements") or []
+                example_requirement = (
+                    existing_requirements[0] if existing_requirements else None
+                )
+                # Expand title into full requirement using internal LLM
+                expanded = await self._expand_requirement(
+                    title, rtype, example_requirement
+                )
 
             # Build complete Requirement
             new_req = {
@@ -257,13 +267,25 @@ Génère:
             epic_name: str | None = None,
             requirement_ids: list[str] | None = None,
             context: str | None = None,
+            description: str | None = None,
+            priority: str | None = None,
+            issue_type: str | None = None,
+            story_points: int | None = None,
+            labels: list[str] | None = None,
+            dependencies: list[str] | None = None,
+            acceptance_criteria: list[dict] | None = None,
+            clarification_questions: list[str] | None = None,
         ):
             """
             Ajoute UNE User Story à partir d'un titre.
 
+            Si une description est fournie, elle est utilisée directement sans appel LLM.
+            Sinon, la description et les autres champs manquants sont générés automatiquement.
+
             Utilise cet outil pour:
             - Les demandes simples comme "ajoute une US pour le login"
             - Ajouter des User Stories après avoir ajouté de nouvelles exigences (add_requirement)
+            - Ajouter une US complète avec tous les champs fournis par l'utilisateur
             - Tu peux appeler cet outil plusieurs fois séquentiellement pour ajouter plusieurs stories
 
             ⚠️ generate_user_stories() ne fonctionne que pour la génération initiale.
@@ -274,23 +296,55 @@ Génère:
                 epic_name: Nom de l'Epic parent (défaut: "Backlog")
                 requirement_ids: Liste des IDs d'exigences liées (optionnel)
                 context: Contexte supplémentaire pour guider la génération
+                description: Description au format "En tant que [persona], je veux [action], afin de [bénéfice]" (optionnel - si fourni, pas d'appel LLM)
+                priority: Priorité - "Haute", "Moyenne", ou "Basse" (optionnel)
+                issue_type: Type d'issue Jira - "Story", "Task", ou "Bug" (défaut: "Story")
+                story_points: Story points - Fibonacci: 1, 2, 3, 5, 8, 13, 21 (optionnel)
+                labels: Étiquettes pour catégorisation (optionnel)
+                dependencies: IDs de User Stories pré-requises (optionnel)
+                acceptance_criteria: Critères d'acceptation avec scénario et étapes Gherkin (optionnel)
+                clarification_questions: Questions de clarification (optionnel)
             """
             # Generate ID
             next_id = get_next_user_story_id(runtime.state)
             epic = epic_name or "Backlog"
 
-            # Expand title into full story using internal LLM
-            expanded = await self._expand_user_story(
-                title, epic, requirement_ids, context
-            )
+            if description is not None:
+                # User provided description directly, skip LLM
+                expanded: dict = {
+                    "description": description,
+                    "priority": priority or "Moyenne",
+                }
+                if story_points is not None:
+                    expanded["story_points"] = story_points
+                if acceptance_criteria is not None:
+                    expanded["acceptance_criteria"] = acceptance_criteria
+                if clarification_questions is not None:
+                    expanded["clarification_questions"] = clarification_questions
+            else:
+                # Expand title into full story using internal LLM
+                expanded = await self._expand_user_story(
+                    title, epic, requirement_ids, context
+                )
+                # Override LLM-generated fields with user-provided values
+                if priority is not None:
+                    expanded["priority"] = priority
+                if story_points is not None:
+                    expanded["story_points"] = story_points
+                if acceptance_criteria is not None:
+                    expanded["acceptance_criteria"] = acceptance_criteria
+                if clarification_questions is not None:
+                    expanded["clarification_questions"] = clarification_questions
 
             # Build complete UserStory
             new_story = {
                 "id": next_id,
                 "summary": title,
                 "epic_name": epic,
-                "issue_type": "Story",
+                "issue_type": issue_type or "Story",
                 "requirement_ids": requirement_ids or [],
+                "labels": labels,
+                "dependencies": dependencies,
                 **expanded,
             }
 
@@ -320,9 +374,19 @@ Génère:
             title: str,
             user_story_id: str,
             test_type: str | None = None,
+            description: str | None = None,
+            preconditions: str | None = None,
+            steps: list[str] | None = None,
+            test_data: list[str] | None = None,
+            priority: str | None = None,
+            expected_result: str | None = None,
         ):
             """
             Ajoute UN test à partir d'un titre.
+
+            Si les étapes (steps) et le résultat attendu (expected_result) sont fournis,
+            ils sont utilisés directement sans appel LLM.
+            Sinon, les champs manquants sont générés automatiquement.
 
             Utilise cet outil pour les demandes simples comme "ajoute un test pour US-01".
             Pour générer PLUSIEURS tests, utilise generate_tests().
@@ -331,6 +395,12 @@ Génère:
                 title: Titre du test (ex: "Vérifier connexion avec identifiants invalides")
                 user_story_id: ID de la User Story liée (ex: "US-01")
                 test_type: Type de test - "Nominal", "Limite", ou "Erreur" (défaut: "Nominal")
+                description: Description du test (optionnel)
+                preconditions: Préconditions nécessaires (optionnel)
+                steps: Étapes détaillées en format Gherkin (optionnel - si fourni avec expected_result, pas d'appel LLM)
+                test_data: Données de test (optionnel)
+                priority: Priorité - "Haute", "Moyenne", ou "Basse" (optionnel)
+                expected_result: Résultat attendu du test (optionnel - si fourni avec steps, pas d'appel LLM)
             """
             # Validate user_story_id exists
             user_stories = runtime.state.get("user_stories") or []
@@ -357,10 +427,37 @@ Génère:
             next_id = get_next_test_id(runtime.state)
             ttype = test_type or "Nominal"
 
-            # Expand title into full test using internal LLM
-            expanded = await self._expand_test(
-                title, user_story_id, ttype, story_context
-            )
+            if steps is not None and expected_result is not None:
+                # User provided core fields directly, skip LLM
+                expanded: dict = {
+                    "steps": steps,
+                    "expected_result": expected_result,
+                    "priority": priority or "Moyenne",
+                }
+                if description is not None:
+                    expanded["description"] = description
+                if preconditions is not None:
+                    expanded["preconditions"] = preconditions
+                if test_data is not None:
+                    expanded["test_data"] = test_data
+            else:
+                # Expand title into full test using internal LLM
+                expanded = await self._expand_test(
+                    title, user_story_id, ttype, story_context
+                )
+                # Override LLM-generated fields with user-provided values
+                if description is not None:
+                    expanded["description"] = description
+                if preconditions is not None:
+                    expanded["preconditions"] = preconditions
+                if steps is not None:
+                    expanded["steps"] = steps
+                if test_data is not None:
+                    expanded["test_data"] = test_data
+                if priority is not None:
+                    expanded["priority"] = priority
+                if expected_result is not None:
+                    expanded["expected_result"] = expected_result
 
             # Build complete Test
             new_test = {
@@ -464,7 +561,7 @@ Génère:
             title: str | None = None,
             description: str | None = None,
             priority: str | None = None,
-            regenerate_description: bool = False,
+            regenerate: bool = False,
         ):
             """
             Met à jour une exigence existante.
@@ -504,7 +601,7 @@ Génère:
 
             if description is not None:
                 update_fields["description"] = description
-            elif regenerate_description and title is not None:
+            elif regenerate and title is not None:
                 # Regenerate description using LLM
                 req_type = "fonctionnelle" if "FON" in item_id else "non-fonctionnelle"
                 expanded = await self._expand_requirement(title, req_type, existing)
@@ -962,28 +1059,50 @@ Génère:
 
         return update_test
 
-    def get_read_requirements_tool(self):
-        """Tool to read/inspect requirements."""
+    def get_read_items_tool(self):
+        """Tool to read/inspect items by type."""
 
         @tool
-        async def get_requirements(
+        async def read_items(
             runtime: ToolRuntime,
+            item_type: str,
             ids: str | list[str],
         ):
             """
-            Récupère une ou plusieurs exigences pour consultation.
+            Récupère un ou plusieurs éléments pour consultation.
 
             Args:
-                ids: Liste d'IDs (ex: ["EX-FON-01", "EX-FON-02"]) ou "all" pour toutes les exigences
+                item_type: Type d'élément - "requirements", "user_stories", ou "tests"
+                ids: Liste d'IDs (ex: ["US-01", "US-02"]) ou "all" pour tous les éléments
             """
-            requirements = runtime.state.get("requirements") or []
-
-            if not requirements:
+            valid_types = ["requirements", "user_stories", "tests"]
+            if item_type not in valid_types:
                 return Command(
                     update={
                         "messages": [
                             ToolMessage(
-                                "ℹ️ Aucune exigence n'existe encore.",
+                                f"❌ Type invalide: {item_type}. Types valides: {', '.join(valid_types)}",
+                                tool_call_id=runtime.tool_call_id,
+                            )
+                        ]
+                    }
+                )
+
+            type_labels = {
+                "requirements": "exigence(s)",
+                "user_stories": "User Stor(y/ies)",
+                "tests": "test(s)",
+            }
+            label = type_labels[item_type]
+
+            items = runtime.state.get(item_type) or []
+
+            if not items:
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                f"ℹ️ Aucun(e) {label} n'existe encore.",
                                 tool_call_id=runtime.tool_call_id,
                             )
                         ]
@@ -995,7 +1114,7 @@ Génère:
                     update={
                         "messages": [
                             ToolMessage(
-                                f"📋 {len(requirements)} exigence(s):\n\n{json.dumps(requirements, indent=2, ensure_ascii=False)}",
+                                f"📋 {len(items)} {label}:\n\n{json.dumps(items, indent=2, ensure_ascii=False)}",
                                 tool_call_id=runtime.tool_call_id,
                             )
                         ]
@@ -1008,7 +1127,7 @@ Génère:
             found = []
             missing = []
             for item_id in ids:
-                item = next((r for r in requirements if r.get("id") == item_id), None)
+                item = next((i for i in items if i.get("id") == item_id), None)
                 if item:
                     found.append(item)
                 else:
@@ -1017,10 +1136,10 @@ Génère:
             message_parts = []
             if found:
                 message_parts.append(
-                    f"✓ {len(found)} exigence(s) trouvée(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
+                    f"✓ {len(found)} {label} trouvé(e)(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
                 )
             if missing:
-                message_parts.append(f"⚠️ Non trouvée(s): {', '.join(missing)}")
+                message_parts.append(f"⚠️ Non trouvé(e)(s): {', '.join(missing)}")
 
             return Command(
                 update={
@@ -1033,150 +1152,4 @@ Génère:
                 }
             )
 
-        return get_requirements
-
-    def get_read_user_stories_tool(self):
-        """Tool to read/inspect user stories."""
-
-        @tool
-        async def get_user_stories(
-            runtime: ToolRuntime,
-            ids: str | list[str],
-        ):
-            """
-            Récupère une ou plusieurs User Stories pour consultation.
-
-            Args:
-                ids: Liste d'IDs (ex: ["US-01", "US-02"]) ou "all" pour toutes les User Stories
-            """
-            user_stories = runtime.state.get("user_stories") or []
-
-            if not user_stories:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "ℹ️ Aucune User Story n'existe encore.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
-
-            if ids == "all":
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"📋 {len(user_stories)} User Stor(y/ies):\n\n{json.dumps(user_stories, indent=2, ensure_ascii=False)}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
-
-            if not isinstance(ids, list):
-                ids = [ids]
-
-            found = []
-            missing = []
-            for item_id in ids:
-                item = next((s for s in user_stories if s.get("id") == item_id), None)
-                if item:
-                    found.append(item)
-                else:
-                    missing.append(item_id)
-
-            message_parts = []
-            if found:
-                message_parts.append(
-                    f"✓ {len(found)} User Stor(y/ies) trouvée(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
-                )
-            if missing:
-                message_parts.append(f"⚠️ Non trouvée(s): {', '.join(missing)}")
-
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            "\n\n".join(message_parts),
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
-            )
-
-        return get_user_stories
-
-    def get_read_tests_tool(self):
-        """Tool to read/inspect tests."""
-
-        @tool
-        async def get_tests(
-            runtime: ToolRuntime,
-            ids: str | list[str],
-        ):
-            """
-            Récupère un ou plusieurs tests pour consultation.
-
-            Args:
-                ids: Liste d'IDs (ex: ["SC-01", "SC-02"]) ou "all" pour tous les tests
-            """
-            tests = runtime.state.get("tests") or []
-
-            if not tests:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "ℹ️ Aucun test n'existe encore.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
-
-            if ids == "all":
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"📋 {len(tests)} test(s):\n\n{json.dumps(tests, indent=2, ensure_ascii=False)}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
-
-            if not isinstance(ids, list):
-                ids = [ids]
-
-            found = []
-            missing = []
-            for item_id in ids:
-                item = next((t for t in tests if t.get("id") == item_id), None)
-                if item:
-                    found.append(item)
-                else:
-                    missing.append(item_id)
-
-            message_parts = []
-            if found:
-                message_parts.append(
-                    f"✓ {len(found)} test(s) trouvé(s):\n\n{json.dumps(found, indent=2, ensure_ascii=False)}"
-                )
-            if missing:
-                message_parts.append(f"⚠️ Non trouvé(s): {', '.join(missing)}")
-
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            "\n\n".join(message_parts),
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
-            )
-
-        return get_tests
+        return read_items

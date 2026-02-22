@@ -14,7 +14,7 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
-# Always append citation guidance, even if the agent has a custom system prompt.
+# Append citation guidance only when document-search tools are available.
 _CITATION_POLICY = (
     "\n\n"
     "Citations for document search tools:\n"
@@ -22,6 +22,17 @@ _CITATION_POLICY = (
     "cite sources with bracketed numbers like [1], [2]. Use the hit rank when available; "
     "otherwise use list order.\n"
     "- If multiple sources support a statement, include multiple citations (e.g., [1][3])."
+)
+
+_NO_TOOLS_POLICY = (
+    "\n\n"
+    "Tool availability:\n"
+    "- No external tool is available in this session.\n"
+    "- Do NOT claim you searched the web, queried a database, or called any tool.\n"
+    "- Do NOT write fake tool markers such as [web search], [tool], or similar.\n"
+    "- Answer normally without repeating capability disclaimers.\n"
+    "- Mention the limitation only when the user's request explicitly requires unavailable external lookup.\n"
+    "- When needed, keep that limitation note short and only once in the answer."
 )
 
 # ---------------------------
@@ -43,14 +54,18 @@ BASIC_REACT_TUNING = AgentTuning(
             required=True,
             default=(
                 "You are a general assistant with tools. Use the available instructions and tools to solve the user's request.\n"
-                "If you have tools:\n"
-                "- ALWAYS use the tools at your disposal before providing any answer.\n"
+                "If tools are available:\n"
+                "- Use only the tools that are explicitly available in this session.\n"
                 "- Prefer concrete evidence from tool outputs.\n"
                 "- Be explicit about which tools you used and why.\n"
-                "- When you reference tool results, keep short inline markers (e.g., [tool_name]).\n"
+                "- Never claim any tool result that was not actually returned by a tool call.\n"
                 "- When a tool returns document search results (vector hits with title/content/rank), cite sources with\n"
                 "  bracketed numbers like [1], [2]. Use the hit rank when available; otherwise use list order.\n"
                 "- If multiple sources support a statement, include multiple citations (e.g., [1][3]).\n"
+                "If no tool is available:\n"
+                "- Answer directly without proactive capability disclaimers.\n"
+                "- Only mention missing external lookup capability when it is strictly necessary for the request.\n"
+                "- Never mention fake tools such as [web search].\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -133,9 +148,27 @@ class BasicReActAgent(AgentFlow):
         self, checkpointer: Checkpointer | None = None
     ) -> CompiledStateGraph:
         base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
+        tools = [*self.mcp.get_tools()]
+        tool_names = [tool.name for tool in tools]
+
+        if tool_names:
+            listed_tools = "\n".join(f"- {name}" for name in tool_names)
+            tool_policy = (
+                "\n\n"
+                "Available tools (exact names):\n"
+                f"{listed_tools}\n"
+                "Rules:\n"
+                "- You may only call tools listed above.\n"
+                "- Never invent tool names.\n"
+                "- Never present tool output unless a tool actually returned it."
+            )
+            system_prompt = f"{base_prompt}{tool_policy}{_CITATION_POLICY}"
+        else:
+            system_prompt = f"{base_prompt}{_NO_TOOLS_POLICY}"
+
         return create_agent(
             model=get_default_chat_model(),
-            system_prompt=f"{base_prompt}{_CITATION_POLICY}",
-            tools=[*self.mcp.get_tools()],
+            system_prompt=system_prompt,
+            tools=tools,
             checkpointer=checkpointer,
         )

@@ -12,3 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""PPT Filler Agent for extracting data from documents and filling PowerPoint templates."""
+
+from agentic_backend.agents.ppt_filler.ppt_filler_agent import PptFillerAgent
+
+__all__ = ["PptFillerAgent"]

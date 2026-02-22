@@ -93,7 +93,6 @@ run-docker-test: reset-test-state ## Run Knowledge Flow API in Docker with confi
 		-e HF_HOME=/app/.fred-test/.cache/huggingface \
 		-e HUGGINGFACE_HUB_CACHE=/app/.fred-test/.cache/huggingface/hub \
 		-e HF_HUB_CACHE=/app/.fred-test/.cache/huggingface/hub \
-		-e TRANSFORMERS_CACHE=/app/.fred-test/.cache/huggingface/transformers \
 		-e SENTENCE_TRANSFORMERS_HOME=/app/.fred-test/.cache/huggingface \
 		$(IMAGE_FULL)
 
