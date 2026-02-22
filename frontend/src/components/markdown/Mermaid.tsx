@@ -150,8 +150,8 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         let attemptIdx = 0;
         for (const candidate of renderCandidates) {
           try {
-            console.info(`[Mermaid] rendering diagram (${candidate.name}):\n`, candidate.code);
             const attemptId = `${generatedDiagramId}-${candidate.name}-${attemptIdx++}`;
+            console.info(`[Mermaid] rendering diagram (${candidate.name}) with attemptId=${attemptId}`);
             result = await mermaid.render(attemptId, candidate.code);
             strategy = candidate.name;
             cleanupMermaidArtifacts(generatedDiagramId);
