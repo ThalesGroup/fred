@@ -66,7 +66,6 @@ const cleanupMermaidArtifacts = (diagramId: string) => {
       `#i${escapedId}`,
       `[id="i${diagramId}"]`,
       `[id^="i${diagramId}-"]`,
-      ".mermaidTooltip",
     ];
 
     const candidates = new Set<Element>();
