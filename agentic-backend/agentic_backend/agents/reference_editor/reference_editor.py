@@ -88,6 +88,7 @@ def _normalize_reference_payload_for_validation(
 
     return payload, None
 
+
 # --- Configuration & Tuning ---
 # ------------------------------
 TUNING = AgentTuning(
