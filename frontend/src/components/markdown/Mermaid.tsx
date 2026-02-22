@@ -53,7 +53,19 @@ const cleanupMermaidArtifacts = (diagramId: string) => {
     const selectors = [
       `#${escapedId}`,
       `[id="${diagramId}"]`,
-      // Mermaid may create temporary containers/error nodes in the DOM on render/parse attempts
+      // Mermaid render(id, ...) creates temporary body-level nodes with ids:
+      // - id
+      // - d{id}  (enclosing div)
+      // - i{id}  (iframe in sandbox mode)
+      // We render multiple candidates with ids prefixed by generatedDiagramId, so we clean
+      // both exact ids and Mermaid-owned prefixes for this diagram only.
+      `[id^="${diagramId}-"]`,
+      `#d${escapedId}`,
+      `[id="d${diagramId}"]`,
+      `[id^="d${diagramId}-"]`,
+      `#i${escapedId}`,
+      `[id="i${diagramId}"]`,
+      `[id^="i${diagramId}-"]`,
       ".mermaidTooltip",
     ];
 
@@ -62,31 +74,12 @@ const cleanupMermaidArtifacts = (diagramId: string) => {
       document.querySelectorAll(selector).forEach((el) => candidates.add(el));
     }
 
-    // Remove obvious Mermaid parse-error artifacts that can leak into page flow
-    document.querySelectorAll("div, pre, span").forEach((el) => {
-      const txt = (el.textContent || "").trim();
-      if (!txt) return;
-      if (/^error in text$/i.test(txt) || /^syntax error in text$/i.test(txt)) {
-        candidates.add(el);
-      }
-      if (/^mermaid version\s+\d+/i.test(txt)) {
-        const parent = el.parentElement;
-        if (parent) candidates.add(parent);
-        candidates.add(el);
-      }
-    });
-
     candidates.forEach((el) => {
       if (!el || el === document.body || el === document.documentElement) return;
-      const isInsideApp = !!el.closest("#root");
-      const likelyMermaidArtifact =
-        !isInsideApp ||
-        el.className?.toString().toLowerCase().includes("mermaid") ||
-        /error in text|syntax error in text|mermaid version/i.test(el.textContent || "");
-
-      if (likelyMermaidArtifact) {
-        el.remove();
-      }
+      const id = el.id || "";
+      // Never remove this component's own React container when matching id prefixes.
+      if (id === `${diagramId}-box-container`) return;
+      el.remove();
     });
   } catch (e) {
     console.warn("[Mermaid] cleanup artifacts failed", e);
