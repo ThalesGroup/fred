@@ -23,7 +23,11 @@ regen-lockfile: check-node ## Regenerate package-lock.json inside Docker
 
 .PHONY: node_modules
 node_modules: check-node package.json
-	npm install
+	@if [ -f package-lock.json ]; then \
+		npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
+	else \
+		npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
+	fi
 
 .PHONY: build
 build: check-node node_modules ## Build the ui using npm run build
