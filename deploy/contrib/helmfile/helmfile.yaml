@@ -13,6 +13,7 @@ helmDefaults:
 releases:
   - name: fred
     namespace: "{{ .Values.namespace }}"
+    # tofix: use tagged chart image
     chart: ../../charts/fred
     values:
       - values/{{ .Environment.Name }}/values-fred.yaml
