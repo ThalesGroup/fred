@@ -5,7 +5,7 @@ variables:
   CODE_DOCKER_TAG:
     description: "Version tag for code docker images (used for manual builds)."
   BUILD_CODE_DOCKER_IMAGE:
-    value: "true"
+    value: "false"
     options: ["true", "false"]
     description: "Defines if code docker images (frontend, agentic-backend, knowledge-flow-backend) must be built"
   BENCHMARK_DOCKER_TAG:
@@ -15,6 +15,12 @@ variables:
     value: "false"
     options: ["true", "false"]
     description: "Defines if benchmark tools docker image must be built"
+  CHART_TAG:
+    description: "Version tag for Helm chart (used for manual builds)."
+  BUILD_CHART:
+    value: "false"
+    options: ["true", "false"]
+    description: "Defines if Helm chart must be packaged and pushed"
 
 # -----------------------------------------------------------------------------
 # Stages definition, order and workflow conditions
@@ -22,10 +28,12 @@ variables:
 
 stages:
   - build-image
+  - package-chart
 
 workflow:
   rules:
     - if: $CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_TAG =~ /^chart\/v\d+\.\d+\.\d+$/
     - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
     - if: $CI_PIPELINE_SOURCE == "web"
 
@@ -98,3 +106,40 @@ docker-benchmark:
     DOCKER_FILE: Dockerfile
   rules:
     - if: $BUILD_BENCHMARK_DOCKER_IMAGE == "true"
+
+# -----------------------------------------------------------------------------
+# Package and push Helm charts
+# -----------------------------------------------------------------------------
+
+.helm-chart:
+  image: alpine/helm:3.17.3
+  stage: package-chart
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^chart\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+      variables:
+        CHART_VERSION: 0.0.0-dev-prism
+    - if: $BUILD_CHART == "true"
+  before_script:
+    - |
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        CHART_VERSION=$(echo "${CI_COMMIT_TAG}" | sed 's|^chart/v||')
+        export CHART_VERSION
+      fi
+    - helm registry login "${CI_REGISTRY}" --username "${CI_REGISTRY_USER}" --password "${CI_REGISTRY_PASSWORD}"
+  script:
+    - |
+      echo "Packaging ${CHART_NAME} with version ${CHART_VERSION}"
+      helm package "${CHART_PATH}" --version "${CHART_VERSION}" --destination ./packages
+      PACKAGE_FILE=$(ls ./packages/${CHART_NAME}-${CHART_VERSION}.tgz)
+      echo "Pushing ${PACKAGE_FILE} to ${CI_REGISTRY_CHART}"
+      helm push "${PACKAGE_FILE}" "oci://${CI_REGISTRY_CHART}"
+
+helm-chart:
+  extends: .helm-chart
+  variables:
+    CHART_VERSION: ${CHART_TAG}
+  parallel:
+    matrix:
+      - CHART_NAME: fred
+        CHART_PATH: ${CI_PROJECT_DIR}/deploy/charts/fred
