@@ -1,6 +1,8 @@
 variables:
+  DEV_BRANCH:
+    value: "prism"
+    description: "Development branch name. Commits on this branch auto-build code images with dev-prism tag."
   CODE_DOCKER_TAG:
-    value: "0.0.4-prism"
     description: "Version tag for code docker images (used for manual builds)."
   BUILD_CODE_DOCKER_IMAGE:
     value: "true"
@@ -24,6 +26,7 @@ stages:
 workflow:
   rules:
     - if: $CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
     - if: $CI_PIPELINE_SOURCE == "web"
 
 # -----------------------------------------------------------------------------
@@ -59,7 +62,10 @@ workflow:
 .docker-code:
   extends: .docker-default
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/'
+    - if: $CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+      variables:
+        IMAGE_TAG: dev-prism
     - if: $BUILD_CODE_DOCKER_IMAGE == "true"
   before_script:
     - *docker-auth
