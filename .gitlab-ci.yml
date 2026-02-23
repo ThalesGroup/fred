@@ -69,29 +69,19 @@ workflow:
         export IMAGE_TAG
       fi
 
-docker-frontend:
+docker-code:
   extends: .docker-code
   variables:
-    IMAGE_NAME: frontend
     IMAGE_TAG: ${CODE_DOCKER_TAG}
     CONTEXT: ${CI_PROJECT_DIR}
-    DOCKER_FILE: frontend/dockerfiles/Dockerfile-prod
-
-docker-backend-api:
-  extends: .docker-code
-  variables:
-    IMAGE_NAME: agentic-backend
-    IMAGE_TAG: ${CODE_DOCKER_TAG}
-    CONTEXT: ${CI_PROJECT_DIR}
-    DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
-
-docker-backend-knowledge:
-  extends: .docker-code
-  variables:
-    IMAGE_NAME: knowledge-flow-backend
-    IMAGE_TAG: ${CODE_DOCKER_TAG}
-    CONTEXT: ${CI_PROJECT_DIR}
-    DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
+  parallel:
+    matrix:
+      - IMAGE_NAME: frontend
+        DOCKER_FILE: frontend/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: agentic-backend
+        DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: knowledge-flow-backend
+        DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
 
 docker-benchmark:
   extends: .docker-default
