@@ -100,6 +100,8 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    let createdObjectUrl: string | null = null;
     // Candidate 1: raw code (least destructive)
     const rawCandidate = baseCode;
     // Candidate 2: normalize line break markers commonly produced by LLMs
@@ -143,20 +145,24 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
     const tryRender = async () => {
       let lastErr: unknown = null;
       try {
+        if (cancelled) return;
         cleanupMermaidArtifacts(generatedDiagramId);
         let result: Awaited<ReturnType<typeof mermaid.render>> | null = null;
         let strategy: string | null = null;
         let attemptIdx = 0;
         for (const candidate of renderCandidates) {
+          if (cancelled) return;
           try {
             const attemptId = `${generatedDiagramId}-${candidate.name}-${attemptIdx++}`;
             console.info(`[Mermaid] rendering diagram (${candidate.name}) with attemptId=${attemptId}`);
             result = await mermaid.render(attemptId, candidate.code);
+            if (cancelled) return;
             strategy = candidate.name;
             cleanupMermaidArtifacts(generatedDiagramId);
             break;
           } catch (candidateErr) {
             lastErr = candidateErr;
+            if (cancelled) return;
             console.warn(`[Mermaid] render failed (${candidate.name})`, candidateErr);
             cleanupMermaidArtifacts(generatedDiagramId);
           }
@@ -165,6 +171,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         if (!result) {
           throw lastErr ?? new Error("No Mermaid render candidate succeeded");
         }
+        if (cancelled) return;
 
         console.info("[Mermaid] render success strategy=", strategy);
 
@@ -193,6 +200,11 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
 
         const blob = new Blob([responsiveSvg], { type: "image/svg+xml" });
         const objectUrl = URL.createObjectURL(blob);
+        createdObjectUrl = objectUrl;
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
         setSvgSrc((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return objectUrl;
@@ -201,9 +213,10 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         setErrorDetails(null);
         setLoading(false);
       } catch (err) {
+        if (cancelled) return;
         console.warn("[Mermaid] render failed", err);
         cleanupMermaidArtifacts(generatedDiagramId);
-        setError("Mermaid diagram could not be rendered (syntax error)");
+        setError("Mermaid diagram could not be rendered");
         setErrorDetails(toErrorMessage(err));
         setSvgSrc((prev) => {
           if (prev) URL.revokeObjectURL(prev);
@@ -217,11 +230,15 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
     setLoading(!svgSrc);
     tryRender();
     return () => {
+      cancelled = true;
       cleanupMermaidArtifacts(generatedDiagramId);
-      setSvgSrc((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
+      if (createdObjectUrl) {
+        try {
+          URL.revokeObjectURL(createdObjectUrl);
+        } catch (e) {
+          console.warn("[Mermaid] revoke object URL failed", e);
+        }
+      }
     };
   }, [baseCode, generatedDiagramId, theme.palette]);
 
