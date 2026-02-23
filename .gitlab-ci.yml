@@ -85,6 +85,7 @@ workflow:
 
 docker-code:
   extends: .docker-code
+  needs: []
   variables:
     IMAGE_TAG: ${CODE_DOCKER_TAG}
     CONTEXT: ${CI_PROJECT_DIR}
@@ -99,6 +100,7 @@ docker-code:
 
 docker-benchmark:
   extends: .docker-default
+  needs: []
   variables:
     IMAGE_NAME: benchmark-tools
     IMAGE_TAG: ${BENCHMARK_DOCKER_TAG}
@@ -137,6 +139,7 @@ docker-benchmark:
 
 helm-chart:
   extends: .helm-chart
+  needs: []
   variables:
     CHART_VERSION: ${CHART_TAG}
   parallel:
