@@ -1,25 +1,11 @@
 variables:
-  FRONTEND_DOCKER_TAG:
+  CODE_DOCKER_TAG:
     value: "0.0.4-prism"
-    description: "Version of Fred frontend docker image."
-  BUILD_FRONTEND_DOCKER_IMAGE:
+    description: "Version tag for code docker images (used for manual builds)."
+  BUILD_CODE_DOCKER_IMAGE:
     value: "true"
     options: ["true", "false"]
-    description: "Defines if Fred frontend docker image must be built"
-  BACKEND_API_DOCKER_TAG:
-    value: "0.0.4-prism"
-    description: "Version of Fred backend docker image."
-  BUILD_BACKEND_API_DOCKER_IMAGE:
-    value: "true"
-    options: ["true", "false"]
-    description: "Defines if Fred backend docker image must be built"
-  BACKEND_KNOWLEDGE_DOCKER_TAG:
-    value: "0.0.4-prism"
-    description: "Version of Fred backend docker image."
-  BUILD_BACKEND_KNOWLEDGE_DOCKER_IMAGE:
-    value: "true"
-    options: ["true", "false"]
-    description: "Defines if Fred backend docker image must be built"
+    description: "Defines if code docker images (frontend, agentic-backend, knowledge-flow-backend) must be built"
   BENCHMARK_DOCKER_TAG:
     value: "0.0.4-prism"
     description: "Version of benchmark tools docker image."
@@ -27,10 +13,6 @@ variables:
     value: "false"
     options: ["true", "false"]
     description: "Defines if benchmark tools docker image must be built"
-  # KASTCTL:
-  #   value: "-"
-  #   options: ["-", "install", "uninstall"]
-  #   description: "Install or uninstall appli and middleware components."
 
 # -----------------------------------------------------------------------------
 # Stages definition, order and workflow conditions
@@ -38,81 +20,78 @@ variables:
 
 stages:
   - build-image
-  # - kastctl-init
-  # - kastctl-install
-  # - kastctl-un/install
 
 workflow:
   rules:
-    - if: '$CI_COMMIT_TAG'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: $CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/
+    - if: $CI_PIPELINE_SOURCE == "web"
 
 # -----------------------------------------------------------------------------
 # Build docker images
 # -----------------------------------------------------------------------------
 
+.docker-auth: &docker-auth
+  - CI_REGISTRY_AUTH="$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')"
+  - |
+    cat << EOF > /kaniko/.docker/config.json
+    {
+      "auths": {
+        "${CI_REGISTRY}": {
+          "auth": "${CI_REGISTRY_AUTH}"
+        }
+      }
+    }
+    EOF
+
 .docker-default:
   image: gcr.io/kaniko-project/executor:v1.23.2-debug
   stage: build-image
-  before_script:
-    - CI_REGISTRY_AUTH="$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')"
-    - |
-      cat << EOF > /kaniko/.docker/config.json
-      {
-        "auths": {
-          "${CI_REGISTRY}": {
-            "auth": "${CI_REGISTRY_AUTH}"
-          }
-        }
-      }
-      EOF
+  before_script: *docker-auth
   script:
     - |
       echo CONTEXT = ${CONTEXT}
       echo DOCKER_FILE = ${DOCKER_FILE}
       echo CI_REGISTRY_IMAGE = ${CI_REGISTRY_IMAGE}
       echo IMAGE_NAME = ${IMAGE_NAME}
-      echo "/kaniko/executor --context ${CONTEXT} --dockerfile ${CONTEXT}/${DOCKER_FILE} --destination ${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${IMAGE_TAG}"
+      echo IMAGE_TAG = ${IMAGE_TAG}
       /kaniko/executor --context ${CONTEXT} --dockerfile ${CONTEXT}/${DOCKER_FILE} --destination ${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${IMAGE_TAG}
 
-docker-frontend:
+.docker-code:
   extends: .docker-default
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/'
+    - if: $BUILD_CODE_DOCKER_IMAGE == "true"
+  before_script:
+    - *docker-auth
+    - |
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        IMAGE_TAG=$(echo "${CI_COMMIT_TAG}" | sed 's|^code/v||')
+        export IMAGE_TAG
+      fi
+
+docker-frontend:
+  extends: .docker-code
   variables:
     IMAGE_NAME: frontend
-    IMAGE_TAG: ${FRONTEND_DOCKER_TAG}
+    IMAGE_TAG: ${CODE_DOCKER_TAG}
     CONTEXT: ${CI_PROJECT_DIR}
     DOCKER_FILE: frontend/dockerfiles/Dockerfile-prod
-  rules:
-    - if: '$CI_COMMIT_TAG'
-      variables:
-        IMAGE_TAG: ${CI_COMMIT_TAG}
-    - if: $BUILD_FRONTEND_DOCKER_IMAGE == "true"
 
 docker-backend-api:
-  extends: .docker-default
+  extends: .docker-code
   variables:
     IMAGE_NAME: agentic-backend
-    IMAGE_TAG: ${BACKEND_API_DOCKER_TAG}
+    IMAGE_TAG: ${CODE_DOCKER_TAG}
     CONTEXT: ${CI_PROJECT_DIR}
     DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
-  rules:
-    - if: '$CI_COMMIT_TAG'
-      variables:
-        IMAGE_TAG: ${CI_COMMIT_TAG}
-    - if: $BUILD_BACKEND_API_DOCKER_IMAGE == "true"
 
 docker-backend-knowledge:
-  extends: .docker-default
+  extends: .docker-code
   variables:
     IMAGE_NAME: knowledge-flow-backend
-    IMAGE_TAG: ${BACKEND_KNOWLEDGE_DOCKER_TAG}
+    IMAGE_TAG: ${CODE_DOCKER_TAG}
     CONTEXT: ${CI_PROJECT_DIR}
     DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
-  rules:
-    - if: '$CI_COMMIT_TAG'
-      variables:
-        IMAGE_TAG: ${CI_COMMIT_TAG}
-    - if: $BUILD_BACKEND_KNOWLEDGE_DOCKER_IMAGE == "true"
 
 docker-benchmark:
   extends: .docker-default
