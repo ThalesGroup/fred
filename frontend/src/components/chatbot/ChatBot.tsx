@@ -827,7 +827,6 @@ const ChatBot = ({
 
   const buildRuntimeContext = useCallback(() => {
     const runtimeContext: RuntimeContext = { ...(baseRuntimeContext ?? {}) };
-
     if (conversationPrefs.chatContextIds.length) {
       runtimeContext.selected_chat_context_ids = conversationPrefs.chatContextIds;
     }

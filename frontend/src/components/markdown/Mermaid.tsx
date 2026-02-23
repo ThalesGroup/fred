@@ -23,27 +23,107 @@ interface MermaidProps {
   code: string;
 }
 
+interface MermaidRenderCandidate {
+  name: string;
+  code: string;
+}
+
+const uniqueCandidates = (candidates: MermaidRenderCandidate[]): MermaidRenderCandidate[] => {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    if (!candidate.code.trim()) return false;
+    if (seen.has(candidate.code)) return false;
+    seen.add(candidate.code);
+    return true;
+  });
+};
+
+const toErrorMessage = (err: unknown): string => {
+  if (err instanceof Error && err.message) return err.message;
+  try {
+    return String(err);
+  } catch {
+    return "Unknown Mermaid render error";
+  }
+};
+
+const cleanupMermaidArtifacts = (diagramId: string) => {
+  try {
+    const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(diagramId) : diagramId;
+    const selectors = [
+      `#${escapedId}`,
+      `[id="${diagramId}"]`,
+      // Mermaid render(id, ...) creates temporary body-level nodes with ids:
+      // - id
+      // - d{id}  (enclosing div)
+      // - i{id}  (iframe in sandbox mode)
+      // We render multiple candidates with ids prefixed by generatedDiagramId, so we clean
+      // both exact ids and Mermaid-owned prefixes for this diagram only.
+      `[id^="${diagramId}-"]`,
+      `#d${escapedId}`,
+      `[id="d${diagramId}"]`,
+      `[id^="d${diagramId}-"]`,
+      `#i${escapedId}`,
+      `[id="i${diagramId}"]`,
+      `[id^="i${diagramId}-"]`,
+    ];
+
+    const candidates = new Set<Element>();
+    for (const selector of selectors) {
+      document.querySelectorAll(selector).forEach((el) => candidates.add(el));
+    }
+
+    candidates.forEach((el) => {
+      if (!el || el === document.body || el === document.documentElement) return;
+      const id = el.id || "";
+      // Never remove this component's own React container when matching id prefixes.
+      if (id === `${diagramId}-box-container`) return;
+      el.remove();
+    });
+  } catch (e) {
+    console.warn("[Mermaid] cleanup artifacts failed", e);
+  }
+};
+
 const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   // Unique ID for rendering the diagram
   const diagramIdRef = useRef<string>(`mermaid-${Math.random().toString(36).slice(2)}`);
   const generatedDiagramId = diagramIdRef.current;
   const theme = useTheme();
+  const baseCode = code.replace(/^mermaid\s*\n/i, "").trim();
 
   // Store the SVG data URI in state (via Blob URL, not innerHTML)
   const [svgSrc, setSvgSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
 
   useEffect(() => {
-    // Normalize common wrappers (e.g., leading "mermaid\n" from some generators)
-    const base = code.replace(/^mermaid\s*\n/i, "").trim();
-    // Convert <br> or <br/> tags to newline for Mermaid compatibility
-    const normalized = base.replace(/<br\s*\/?>/gi, "\n");
-    // Mermaid flowchart labels cannot contain raw newlines inside brackets; convert to <br>
+    // Candidate 1: raw code (least destructive)
+    const rawCandidate = baseCode;
+    // Candidate 2: normalize line break markers commonly produced by LLMs
+    const htmlBreakCandidate = baseCode
+      .replace(/<br\s*\/?>/gi, "<br/>")
+      .replace(/\\n/g, "<br/>");
+    // Candidate 3: legacy transform kept as fallback for backward compatibility
+    const normalized = baseCode.replace(/<br\s*\/?>/gi, "\n");
     const canonical = normalized.replace(/\n\(/g, "<br>(");
-    // Wrap bare labels in quotes to allow HTML/parentheses safely
     const quoted = canonical.replace(/\[([^[\]"]+)]/g, '["$1"]');
+    const preferHtmlBreaks = /\\n|<br\s*\/?>/i.test(baseCode);
+    const orderedCandidates = preferHtmlBreaks
+      ? [
+          { name: "htmlBreaks", code: htmlBreakCandidate },
+          { name: "raw", code: rawCandidate },
+          { name: "legacyQuoted", code: quoted },
+        ]
+      : [
+          { name: "raw", code: rawCandidate },
+          { name: "htmlBreaks", code: htmlBreakCandidate },
+          { name: "legacyQuoted", code: quoted },
+        ];
+    const renderCandidates = uniqueCandidates(orderedCandidates);
+
     // Initialize Mermaid with theme-aware colors for readability
     mermaid.initialize({
       startOnLoad: false,
@@ -61,9 +141,32 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
     } as any);
 
     const tryRender = async () => {
+      let lastErr: unknown = null;
       try {
-        console.info("[Mermaid] rendering diagram:\n", quoted);
-        const result = await mermaid.render(generatedDiagramId, quoted);
+        cleanupMermaidArtifacts(generatedDiagramId);
+        let result: Awaited<ReturnType<typeof mermaid.render>> | null = null;
+        let strategy: string | null = null;
+        let attemptIdx = 0;
+        for (const candidate of renderCandidates) {
+          try {
+            const attemptId = `${generatedDiagramId}-${candidate.name}-${attemptIdx++}`;
+            console.info(`[Mermaid] rendering diagram (${candidate.name}) with attemptId=${attemptId}`);
+            result = await mermaid.render(attemptId, candidate.code);
+            strategy = candidate.name;
+            cleanupMermaidArtifacts(generatedDiagramId);
+            break;
+          } catch (candidateErr) {
+            lastErr = candidateErr;
+            console.warn(`[Mermaid] render failed (${candidate.name})`, candidateErr);
+            cleanupMermaidArtifacts(generatedDiagramId);
+          }
+        }
+
+        if (!result) {
+          throw lastErr ?? new Error("No Mermaid render candidate succeeded");
+        }
+
+        console.info("[Mermaid] render success strategy=", strategy);
 
         // Make the SVG responsive: strip fixed width/height, keep viewBox if present
         let responsiveSvg = result.svg;
@@ -95,10 +198,13 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
           return objectUrl;
         });
         setError(null);
+        setErrorDetails(null);
         setLoading(false);
       } catch (err) {
         console.warn("[Mermaid] render failed", err);
+        cleanupMermaidArtifacts(generatedDiagramId);
         setError("Mermaid diagram could not be rendered (syntax error)");
+        setErrorDetails(toErrorMessage(err));
         setSvgSrc((prev) => {
           if (prev) URL.revokeObjectURL(prev);
           return null;
@@ -111,12 +217,13 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
     setLoading(!svgSrc);
     tryRender();
     return () => {
+      cleanupMermaidArtifacts(generatedDiagramId);
       setSvgSrc((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return null;
       });
     };
-  }, [code, generatedDiagramId, theme.palette]);
+  }, [baseCode, generatedDiagramId, theme.palette]);
 
   const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
@@ -168,7 +275,36 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
             style={{ display: "block", maxWidth: "100%", height: "auto", margin: 0 }}
           />
         ) : error ? (
-          <p style={{ color: "#d32f2f", fontStyle: "italic" }}>{error}</p>
+          <Box style={{ width: "100%" }}>
+            <p style={{ color: "#d32f2f", fontStyle: "italic", marginTop: 0 }}>{error}</p>
+            {errorDetails && (
+              <p style={{ color: "#b71c1c", opacity: 0.9, marginTop: 4, marginBottom: 8 }}>
+                {errorDetails}
+              </p>
+            )}
+            <p style={{ opacity: 0.8, marginTop: 0, marginBottom: 6 }}>
+              Fallback: showing Mermaid source code
+            </p>
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                p: 1.5,
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.default",
+                color: "text.primary",
+                overflowX: "auto",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontFamily: "monospace",
+                fontSize: "0.85rem",
+              }}
+            >
+              {baseCode}
+            </Box>
+          </Box>
         ) : (
           <p style={{ opacity: 0.7 }}>{loading ? "Loading diagram..." : "Diagram unavailable"}</p>
         )}

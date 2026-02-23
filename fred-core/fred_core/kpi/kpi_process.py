@@ -16,7 +16,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from fred_core.kpi.kpi_writer_structures import KPIActor
 
@@ -171,4 +171,101 @@ async def emit_process_kpis(interval_s: float, kpi_writer) -> None:
             )
         except Exception:
             logger.exception("Process KPI tick failed; continuing")
+        await asyncio.sleep(interval_s)
+
+
+def _pool_value(pool: Any, attr_name: str) -> Optional[float]:
+    """
+    Best-effort extraction of SQLAlchemy pool metrics.
+
+    QueuePool exposes callable accessors (e.g. size(), checkedout()).
+    """
+    try:
+        attr = getattr(pool, attr_name, None)
+        if callable(attr):
+            value = attr()
+        else:
+            value = attr
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            return float(value)
+        return None
+    except Exception:
+        return None
+
+
+async def emit_sql_pool_kpis(
+    interval_s: float,
+    kpi_writer,
+    engine: Any,
+    *,
+    pool_name: str = "postgres",
+) -> None:
+    """
+    Emit SQLAlchemy pool KPIs on a fixed cadence.
+
+    This is complementary to process.open_fds:
+    - open_fds counts all descriptors (files, sockets, pipes...).
+    - db_pool.* isolates DB connection-pool pressure.
+    """
+    actor = KPIActor(type="system")
+    while True:
+        try:
+            sync_engine = getattr(engine, "sync_engine", engine)
+            pool = getattr(sync_engine, "pool", None)
+
+            if pool is None:
+                logger.debug(
+                    "SQL pool KPI tick skipped: no pool found (pool_name=%s)",
+                    pool_name,
+                )
+                await asyncio.sleep(interval_s)
+                continue
+
+            size = _pool_value(pool, "size")
+            checked_in = _pool_value(pool, "checkedin")
+            checked_out = _pool_value(pool, "checkedout")
+            overflow = _pool_value(pool, "overflow")
+            util_pct: Optional[float] = None
+            if size is not None and size > 0 and checked_out is not None:
+                util_pct = (checked_out / size) * 100.0
+
+            dims = {"pool": pool_name}
+            if size is not None:
+                kpi_writer.gauge("process.db_pool.size", size, dims=dims, actor=actor)
+            if checked_in is not None:
+                kpi_writer.gauge(
+                    "process.db_pool.checked_in", checked_in, dims=dims, actor=actor
+                )
+            if checked_out is not None:
+                kpi_writer.gauge(
+                    "process.db_pool.checked_out", checked_out, dims=dims, actor=actor
+                )
+            if overflow is not None:
+                kpi_writer.gauge(
+                    "process.db_pool.overflow", overflow, dims=dims, actor=actor
+                )
+            if util_pct is not None:
+                kpi_writer.gauge(
+                    "process.db_pool.utilization_percent",
+                    util_pct,
+                    unit="percent",
+                    dims=dims,
+                    actor=actor,
+                )
+
+            logger.warning(
+                "[KPI][SUMMARY] db_pool=%s size=%s checked_in=%s checked_out=%s overflow=%s util_pct=%s",
+                pool_name,
+                f"{size:.0f}" if size is not None else "n/a",
+                f"{checked_in:.0f}" if checked_in is not None else "n/a",
+                f"{checked_out:.0f}" if checked_out is not None else "n/a",
+                f"{overflow:.0f}" if overflow is not None else "n/a",
+                f"{util_pct:.2f}" if util_pct is not None else "n/a",
+            )
+        except Exception:
+            logger.exception("SQL pool KPI tick failed; continuing")
         await asyncio.sleep(interval_s)

@@ -55,7 +55,7 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
     BaseVectorStore,
 )
-from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
@@ -163,7 +163,6 @@ class IngestionController:
                     suffix = suffix[1:]
                 registry[suffix] = cls
         if not registry:
-            # registry["*"] = FastUnstructuredTextProcessingProcessor
             registry[".pdf"] = FastLitePdfProcessor
             registry[".docx"] = FastLiteDocxProcessor
             registry[".pptx"] = FastLitePptxProcessor
@@ -533,7 +532,7 @@ class IngestionController:
 
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.service = IngestionService()
+        self.service = get_ingestion_service()
         self._fast_text_registry = self._build_fast_text_registry()
         self._fast_text_instances: Dict[str, BaseFastTextProcessor] = {}
         self.embedder = ApplicationContext.get_instance().get_embedder()

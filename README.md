@@ -29,6 +29,7 @@ Contents:
   - [Model configuration](#model-configuration)
   - [Start Fred components](#start-fred-components)
   - [Head for the Fred UI!](#head-for-the-fred-ui)
+- [k3d Local Deployment](#k3d-local-deployment)
 - [Production mode](#production-mode)
 - [Agent coding academy](#agent-coding-academy)
 - [Advanced configuration](#advanced-configuration)
@@ -474,6 +475,76 @@ cd frontend && make run
 ### Head for the Fred UI!
 
 Open <http://localhost:5173> in your browser.
+
+## k3d Local Deployment
+
+Fred can be deployed locally into a [k3d](https://k3d.io) Kubernetes cluster using Helm. This mode mirrors a production-like setup while keeping everything on your machine.
+
+### Prerequisites
+
+| Tool | Purpose | Install |
+|------|---------|---------|
+| **Docker** | Container runtime | [docs](https://docs.docker.com/get-docker/) |
+| **k3d** | Local Kubernetes clusters | `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash` |
+| **Helm** | Kubernetes package manager | [docs](https://helm.sh/docs/intro/install/) |
+| **kubectl** | Kubernetes CLI | [docs](https://kubernetes.io/docs/tasks/tools/) |
+
+You also need the infrastructure stack deployed via the [fred-deployment-factory](https://github.com/ThalesGroup/fred-deployment-factory) repository. Follow its README to run `make k3d-up`.
+
+### Host Configuration
+
+> [!IMPORTANT]
+> You **must** add `keycloak` to your `/etc/hosts` file so your browser can reach the Keycloak server running inside k3d:
+>
+> ```
+> 127.0.0.1 localhost keycloak
+> ```
+>
+> Without this entry, authentication will not work because the browser cannot resolve the `keycloak` hostname.
+
+### Deploying
+
+```bash
+# 1. Set your OpenAI API key in the values file
+#    Edit deploy/local/k3d/values-local.yaml and fill OPENAI_API_KEY
+
+# 2. Build, import images into k3d, and deploy via Helm (all-in-one)
+make k3d-deploy
+```
+
+### Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make k3d-build` | Build Docker images for all services (agentic-backend, knowledge-flow-backend, frontend) |
+| `make k3d-import` | Import built images into the k3d cluster |
+| `make k3d-deploy` | All-in-one: build + import + deploy |
+| `make k3d-deploy-only` | Deploy/upgrade the Helm chart only (images must already be imported) |
+| `make k3d-undeploy` | Uninstall the Helm release |
+| `make k3d-status` | Show pod and service status in the `fred` namespace |
+| `make k3d-logs-agentic` | Tail logs for the agentic-backend |
+| `make k3d-logs-kf` | Tail logs for the knowledge-flow-backend |
+| `make k3d-logs-frontend` | Tail logs for the frontend |
+
+### Accessing the Application
+
+Once deployed, open <http://localhost:8088> in your browser. The Traefik Ingress routes all traffic through a single port:
+
+| Path | Service |
+|------|---------|
+| `/` | Frontend |
+| `/agentic/*` | Agentic backend |
+| `/knowledge-flow/*` | Knowledge Flow backend |
+| `/realms/*` | Keycloak (authentication) |
+
+Other infrastructure services remain accessible on their usual ports:
+
+| Service | URL |
+|---------|-----|
+| Keycloak | <http://keycloak:8080> |
+| Temporal UI | <http://localhost:8233> |
+| MinIO Console | <http://localhost:9001> |
+| OpenSearch Dashboards | <http://localhost:5601> |
 
 ## Production mode
 

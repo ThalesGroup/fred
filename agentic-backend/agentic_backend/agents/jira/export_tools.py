@@ -380,7 +380,10 @@ class ExportTools:
         """Tool that exports generated tests to CSV format for Zephyr Scale import."""
 
         @tool
-        async def export_zephyr_csv(runtime: ToolRuntime):
+        async def export_zephyr_csv(
+            runtime: ToolRuntime,
+            folder: str = "",
+        ):
             """
             Exporte les tests générés dans un fichier CSV compatible avec l'import Zephyr Scale.
 
@@ -388,6 +391,12 @@ class ExportTools:
 
             Le fichier CSV généré contient les colonnes Zephyr Scale:
             - Name, Objective, Precondition, Test Script (Plain Text), Folder, Priority, Labels, Coverage
+
+            Args:
+                folder: Dossier racine dans Zephyr Scale pour organiser les tests.
+                    Si spécifié, les tests seront placés dans des sous-dossiers par type
+                    (ex: "Mon Projet/Sprint 1" → "Mon Projet/Sprint 1/Nominal").
+                    Si vide, le type de test est utilisé comme dossier.
 
             Returns:
                 Lien de téléchargement du fichier CSV
@@ -441,9 +450,18 @@ class ExportTools:
                 script_parts = list(steps)
                 expected_result = test.get("expected_result", "")
                 if expected_result:
-                    script_parts.append("")  # blank line separator
+                    script_parts.append("")
                     script_parts.append(f"Résultat attendu:\n{expected_result}")
                 test_script = "\n".join(script_parts)
+
+                # Build folder path: base folder + test_type subfolder
+                test_type = test.get("test_type", "") or ""
+                if folder:
+                    test_folder = (
+                        f"{folder.rstrip('/')}/{test_type}" if test_type else folder
+                    )
+                else:
+                    test_folder = test_type
 
                 writer.writerow(
                     {
@@ -451,7 +469,7 @@ class ExportTools:
                         "Objective": test.get("description", "") or "",
                         "Precondition": precondition,
                         "Test Script (Plain Text)": test_script,
-                        "Folder": test.get("test_type", "") or "",
+                        "Folder": test_folder,
                         "Priority": test.get("priority", "") or "",
                         "Labels": test.get("test_type", "") or "",
                         "Coverage": test.get("user_story_id", "") or "",

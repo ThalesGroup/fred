@@ -49,9 +49,15 @@ RUN printf '%s\n' \
 "        root   /usr/share/nginx/html;" \
 "        index  index.html index.htm;" \
 "    }" \
+"" \
+"    # Ensure ES module workers (.mjs) are served with a JS MIME type." \
+"    location ~ \.mjs\$ {" \
+"        types {" \
+"            application/javascript                           mjs;" \
+"        }" \
+"    }" \
 "}" \
 > /etc/nginx/conf.d/fred.conf
-
 RUN chown nginx:nginx /etc/nginx/conf.d/fred.conf
 
 # Disable default configuration for nginx

@@ -2045,6 +2045,10 @@ export type SearchRequest = {
   document_uids?: string[] | null;
   /** Optional search policy preset. If omitted, defaults to 'hybrid'. */
   search_policy?: SearchPolicyName | null;
+  /** Filter by ownership: 'personal' for user-owned resources, 'team' for team-owned resources. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  team_id?: string | null;
   /** Optional chat session id to include session-scoped attachments (user/session filtered). */
   session_id?: string | null;
   /** If true and session_id is provided, also search session-scoped attachment vectors (filtered by user/session). */

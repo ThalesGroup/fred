@@ -46,6 +46,7 @@ FROM mirror.gcr.io/python:3.12.8-slim AS runtime-base
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
+ARG HF_OFFLINE_STRICT=1
 
 # System deps (minimal runtime)
 RUN apt-get update && \
@@ -119,7 +120,7 @@ ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
 # Hugging Face / reranker cache layout
 ENV CACHE_HOME=/home/${USER_NAME}/.cache
 ENV RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-12-v2
-ENV RERANKER_MODEL_CACHE=${CACHE_HOME}/huggingface
+ENV RERANKER_MODEL_CACHE=${CACHE_HOME}/huggingface/hub
 ENV HF_HOME=${CACHE_HOME}
 ENV HF_HUB_CACHE=${RERANKER_MODEL_CACHE}
 ENV HUGGINGFACE_HUB_CACHE=${RERANKER_MODEL_CACHE}
@@ -137,16 +138,16 @@ RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows
 
 # Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
 RUN python -c "\
-from sentence_transformers import CrossEncoder; \
-import os; \
-CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
+    from sentence_transformers import CrossEncoder; \
+    import os; \
+    CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
 
 # Preload Docling artifacts (layout/table + EasyOCR) for offline-friendly runtime
 RUN python -c "\
-from pathlib import Path; \
-import os; \
-from docling.utils.model_downloader import download_models; \
-download_models( \
+    from pathlib import Path; \
+    import os; \
+    from docling.utils.model_downloader import download_models; \
+    download_models( \
     output_dir=Path(os.environ['DOCLING_ARTIFACTS_PATH']), \
     progress=False, \
     with_layout=True, \
@@ -158,4 +159,4 @@ download_models( \
     with_smoldocling=False, \
     with_smoldocling_mlx=False, \
     with_granite_vision=False \
-)"
+    )"

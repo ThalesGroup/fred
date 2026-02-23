@@ -35,7 +35,7 @@ from fred_core import (
     log_setup,
     register_exception_handlers,
 )
-from fred_core.kpi import emit_process_kpis
+from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -158,6 +158,7 @@ def create_app() -> FastAPI:
         # Reconcile Keycloak groups with ReBAC every 15 minutes
         background_task = asyncio.create_task(periodic_reconciliation())
         process_kpi_task = None
+        db_pool_kpi_task = None
         kpi_interval_env = configuration.app.kpi_process_metrics_interval_sec
         if kpi_interval_env:
             try:
@@ -170,6 +171,14 @@ def create_app() -> FastAPI:
                 interval_s = 0
             if interval_s > 0:
                 process_kpi_task = asyncio.create_task(emit_process_kpis(interval_s, application_context.get_kpi_writer()))
+                db_pool_kpi_task = asyncio.create_task(
+                    emit_sql_pool_kpis(
+                        interval_s,
+                        application_context.get_kpi_writer(),
+                        application_context.get_pg_async_engine(),
+                        pool_name="knowledge-flow-postgres",
+                    )
+                )
 
         try:
             yield
@@ -178,6 +187,10 @@ def create_app() -> FastAPI:
                 process_kpi_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await process_kpi_task
+            if db_pool_kpi_task:
+                db_pool_kpi_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await db_pool_kpi_task
             background_task.cancel()
             with suppress(asyncio.CancelledError):
                 await background_task

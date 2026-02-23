@@ -86,14 +86,7 @@ This is deliberate to avoid silently routing unsupported formats to heavier/less
 ## 4) Unstructured Status
 
 Current status:
-- `FastUnstructuredTextProcessingProcessor` still exists in codebase.
-- It is not used by default attachment fallback.
-- It is not referenced in current active config templates.
-- It remains available for explicit opt-in (or benchmark usage), but not part of the default trusted path.
-
-Practical implication:
-- The runtime behavior is now deterministic per suffix for fast attachments.
-- If unstructured is not wanted at all, remove it from dependency and image layers as a separate cleanup task.
+- `FastUnstructuredTextProcessingProcessor` has been removed because it is unreliable and brings in criticzal security breaches.
 
 ---
 

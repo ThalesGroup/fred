@@ -147,22 +147,20 @@ class JiraAgent(AgentFlow):
 - `generate_tests(quantity?)` - Génère plusieurs tests depuis les User Stories
 
 **Pour consulter (READ):**
-- `get_requirements(ids)` - Récupère des exigences (ids = liste d'IDs ou "all")
-- `get_user_stories(ids)` - Récupère des User Stories (ids = liste d'IDs ou "all")
-- `get_tests(ids)` - Récupère des tests (ids = liste d'IDs ou "all")
+- `read_items(item_type, ids)` - Récupère des éléments. item_type = "requirements", "user_stories" ou "tests". ids = liste d'IDs (ex: ["US-01", "US-02"]) ou "all"
 
 **Pour ajouter UN élément:**
-- `add_user_story(title, epic_name?, requirement_ids?, context?)` - Ajoute UNE User Story
-- `add_test(title, user_story_id, test_type?)` - Ajoute UN test
-- `add_requirement(title, req_type?, priority?)` - Ajoute UNE exigence
+- `add_requirement(title, req_type?, priority?, description?)` - Ajoute UNE exigence.
+- `add_user_story(title, epic_name?, requirement_ids?, context?, description?, priority?, issue_type?, story_points?, labels?, dependencies?, acceptance_criteria?, clarification_questions?)` - Ajoute UNE User Story.
+- `add_test(title, user_story_id, test_type?, description?, preconditions?, steps?, test_data?, priority?, expected_result?)` - Ajoute UN test.
 
 **Pour modifier UN élément:**
-- `update_requirement(item_id, title?, description?, priority?, regenerate_description?)` - Modifie une exigence
+- `update_requirement(item_id, title?, description?, priority?, regenerate?)` - Modifie une exigence. regenerate=True régénère la description depuis le nouveau titre.
 - `update_user_story(item_id, summary?, description?, epic_name?, priority?, story_points?, labels?, requirement_ids?, dependencies?, acceptance_criteria?, regenerate?)` - Modifie une User Story
 - `update_test(item_id, name?, user_story_id?, description?, preconditions?, steps?, test_data?, priority?, test_type?, expected_result?, regenerate?)` - Modifie un test
 
 **Pour supprimer:**
-- `remove_item(item_type, item_id)` - Supprime UN élément par son ID
+- `remove_item(item_type, item_id)` - Supprime UN élément par son ID. item_type = "requirements", "user_stories" ou "tests"
 
 **Pour importer depuis un fichier Markdown:**
 - `import_markdown(markdown_content, mode?)` - Importe les exigences, User Stories et tests depuis un fichier Markdown exporté. mode="merge" (défaut) fusionne avec l'existant, mode="overwrite" remplace tout.
@@ -308,9 +306,7 @@ class JiraAgent(AgentFlow):
                 self.single_item_tools.get_update_user_story_tool(),
                 self.single_item_tools.get_update_test_tool(),
                 # Read/inspect
-                self.single_item_tools.get_read_requirements_tool(),
-                self.single_item_tools.get_read_user_stories_tool(),
-                self.single_item_tools.get_read_tests_tool(),
+                self.single_item_tools.get_read_items_tool(),
                 # Export
                 self.export_tools.get_export_tool(),
                 self.export_tools.get_export_jira_csv_tool(),

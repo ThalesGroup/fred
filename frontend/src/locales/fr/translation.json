@@ -425,7 +425,8 @@
       "a2aBaseUrlRequired": "L'URL de base A2A est requise pour un agent A2A.",
       "a2aToken": "Jeton A2A (optionnel)",
       "classPath": "Chemin de classe personnalisé",
-      "classPathHelp": "Chemin complet de la classe Python (ex : mon_module.MonAgent). Laisser vide pour le défaut.",
+      "classPathHelp": "Sélectionnez un chemin de classe déclaré dans la configuration backend. Laisser vide pour le défaut.",
+      "classPathNoOptions": "Aucun chemin de classe déclaré dans la configuration backend.",
       "optional": "Optionnel",
       "icon": "Icône",
       "tags": "Tags",
@@ -1193,8 +1194,9 @@
   },
   "newChat": {
     "selectAgentTitle": "Bienvenue {{userName}}, à qui souhaitez-vous parler ?",
-    "yourAgents": "Vos agents",
-    "loadingAgentError": "Impossible de charger la liste des agents."
+    "loadingAgentError": "Impossible de charger la liste des agents.",
+    "teamAgents": "Agents d'équipe",
+    "personalAgents": "Agents personnels"
   },
   "comingSoon": {
     "title": "{{siteDisplayName}} arrive très bientôt.",

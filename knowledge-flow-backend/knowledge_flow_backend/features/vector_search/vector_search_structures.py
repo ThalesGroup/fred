@@ -15,7 +15,7 @@
 from enum import Enum
 from typing import List, Optional
 
-from fred_core import VectorSearchHit
+from fred_core import OwnerFilter, VectorSearchHit
 from pydantic import BaseModel, Field
 
 
@@ -75,6 +75,14 @@ class SearchRequest(BaseModel):
     search_policy: Optional[SearchPolicyName] = Field(
         default=None,
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
+    )
+    owner_filter: Optional[OwnerFilter] = Field(
+        default=None,
+        description="Filter by ownership: 'personal' for user-owned resources, 'team' for team-owned resources.",
+    )
+    team_id: Optional[str] = Field(
+        default=None,
+        description="Team ID, required when owner_filter is 'team'.",
     )
     session_id: Optional[str] = Field(
         default=None,

@@ -1,8 +1,8 @@
+import CloseIcon from "@mui/icons-material/Close";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import CloseIcon from "@mui/icons-material/Close";
 import { Box, Checkbox, IconButton, TextField, Typography, useTheme } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
@@ -20,6 +20,7 @@ export interface ChatDocumentLibrariesSelectionCardProps {
   selectedLibrariesIds: string[];
   setSelectedLibrariesIds: (ids: string[]) => void;
   libraryType: TagType;
+  teamId?: string;
   onClose?: () => void;
 }
 
@@ -67,11 +68,16 @@ export function ChatDocumentLibrariesSelectionCard({
   selectedLibrariesIds,
   setSelectedLibrariesIds,
   libraryType,
+  teamId,
   onClose,
 }: ChatDocumentLibrariesSelectionCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: libraryType });
+  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    type: libraryType,
+    ownerFilter: teamId ? "team" : "personal",
+    teamId: teamId,
+  });
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
 

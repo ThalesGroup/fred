@@ -13,20 +13,19 @@
 # limitations under the License.
 
 import logging
-import re
 import subprocess
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from shutil import which
 
-import numpy as np
 from docx import Document
-from PIL import Image
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 
 logger = logging.getLogger(__name__)
+
+_RASTER_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
 
 
 def default_or_unknown(value: str, default="None") -> str:
@@ -45,24 +44,6 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         except Exception as e:
             logger.error(f"Erreur inattendue lors de la vérification de {file_path}: {e}")
         return False
-
-    @staticmethod
-    def cv_skills_extractor(image_path: Path) -> int:
-        img = Image.open(image_path).convert("RGB")
-        arr = np.array(img)
-
-        blue = np.array([0, 174, 199])
-        dist = np.linalg.norm(arr - blue, axis=2)
-        blue_mask = dist < 60
-
-        cols_with_blue = np.where(blue_mask.sum(axis=0) > 5)[0]
-
-        filled = 0
-        if len(cols_with_blue) > 0:
-            gaps = np.diff(cols_with_blue)
-            filled = 1 + np.sum(gaps > 3)
-
-        return int(filled)
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         try:
@@ -122,10 +103,11 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             if which("inkscape") is None:
                 logger.error("[DOCX] Inkscape not found; cannot convert %s to SVG. Leaving EMF in place.", img_path)
                 continue
+
             try:
                 subprocess.run(["inkscape", str(img_path), "--export-filename=" + str(svg_path)], check=True)
             except subprocess.CalledProcessError as e:
-                logger.error("[DOCX] Inkscape failed converting %s: %s", img_path, e)
+                logger.error("[DOCX] Inkscape failed converting %s to SVG: %s", img_path, e)
                 continue
 
             # Remove the original EMF file
@@ -139,33 +121,6 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
 
         # Change media path to use api endpoint
         md_content = md_content.replace(str(output_dir), f"knowledge-flow/v1/markdown/{document_uid}")
-
-        media_folder = images_dir / "media"
-
-        ################################## MyCV images parsing #################################################
-        if "cv" in str(file_path):
-            if media_folder.exists():
-                for img_file in media_folder.iterdir():
-                    img = Image.open(img_file)
-                    if img.size == (214, 33):
-                        bullet_count = self.cv_skills_extractor(img_file)
-
-                        alt_text = f"{bullet_count}/5 de maitrise"
-
-                        pattern = rf'(<img[^>]*src="[^"]*knowledge-flow/v1/markdown/{document_uid}/media/{img_file.name}"[^>]*)>'
-
-                        def repl(match):
-                            tag = match.group(1)
-
-                            if "alt=" in tag:
-                                tag = re.sub(r'alt="[^"]*"', f'alt="{alt_text}"', tag)
-                            else:
-                                tag = f'{tag} alt="{alt_text}"'
-                            return tag + ">"
-
-                        md_content = re.sub(pattern, repl, md_content)
-
-        ################################## MY CV images parsing #################################################
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_content)

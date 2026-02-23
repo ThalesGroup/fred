@@ -23,7 +23,11 @@ regen-lockfile: check-node ## Regenerate package-lock.json inside Docker
 
 .PHONY: node_modules
 node_modules: check-node package.json
-	npm install
+	@if [ -f package-lock.json ]; then \
+		npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
+	else \
+		npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
+	fi
 
 .PHONY: build
 build: check-node node_modules ## Build the ui using npm run build
@@ -45,6 +49,18 @@ docker-build: ## Build the Docker image
 .PHONY: docker-push
 docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
+
+.PHONY: run-docker
+run-docker: ## Run frontend in Docker (maps host port 5173 to container port 8080 by default)
+	@echo "🚀 Running frontend in Docker..."
+	docker run --rm -it \
+		--name $(FRONTEND_CONTAINER_NAME) \
+		--network $(FRONTEND_DOCKER_NETWORK) \
+		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
+		$(IMAGE_FULL)
+
+.PHONY: docker-run
+docker-run: run-docker ## Backward-compatible alias for run-docker
 
 ##@ Run
 
@@ -86,7 +102,7 @@ clean: ## Clean requirements and build files
 
 .PHONY: clean-docker
 clean-docker: ## Clean up Docker-related artifacts
-	docker rm -f frontend || true
+	docker rm -f $(FRONTEND_CONTAINER_NAME) || true
 	docker image prune -f
 
 .PHONY: full-clean
@@ -103,3 +119,9 @@ helm-push: ## Push the Helm chart to the project registry
 
 
 include ../scripts/makefiles/help.mk
+
+# Docker runtime defaults
+FRONTEND_CONTAINER_NAME ?= frontend
+FRONTEND_DOCKER_NETWORK ?= bridge
+FRONTEND_HOST_PORT ?= 5173
+FRONTEND_CONTAINER_PORT ?= 8080

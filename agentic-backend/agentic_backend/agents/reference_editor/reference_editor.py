@@ -1,9 +1,24 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import logging
 import tempfile
 from pathlib import Path
 
+from fred_core import OwnerFilter
 from jsonschema import Draft7Validator
 from langchain.agents import create_agent
 from langchain.tools import tool
@@ -11,8 +26,8 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
 from agentic_backend.agents.reference_editor.powerpoint_template_util import (
-    fill_slide_from_structured_response,
-    fill_word_from_structured_response,
+    fill_slide_from_structured_response_async,
+    fill_word_from_structured_response_async,
     referenceSchema,
 )
 from agentic_backend.application_context import get_default_chat_model
@@ -24,13 +39,55 @@ from agentic_backend.core.agents.agent_spec import (
     MCPServerRef,
     UIHints,
 )
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.runtime_context import (
+    RuntimeContext,
+    get_document_library_tags_ids,
+    get_document_uids,
+    get_vector_search_scopes,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
     LinkPart,
 )
 
 logger = logging.getLogger(__name__)
+EXPECTED_REFERENCE_SECTIONS = {"informationsProjet", "contexte", "syntheseProjet"}
+
+
+def _normalize_reference_payload_for_validation(
+    data: dict | None,
+) -> tuple[dict | None, str | None]:
+    """
+    Accept both payload styles:
+    - {"data": {...}}  (preferred, matches tool schema)
+    - {...}            (legacy convenience)
+    """
+    if data is None:
+        return (
+            None,
+            "Missing required argument: data. Call validator_tool(data={...}) with the structured payload.",
+        )
+    if not isinstance(data, dict):
+        return None, "Invalid payload type. Expected a JSON object."
+
+    payload = data.get("data", data)
+    if not isinstance(payload, dict):
+        return (
+            None,
+            "Invalid payload format. Expected `data` to be a JSON object.",
+        )
+
+    keys = set(payload.keys())
+    if keys != EXPECTED_REFERENCE_SECTIONS:
+        return (
+            None,
+            "Bad root key format. Expected sections are: "
+            '{"informationsProjet": {...}, "contexte": {...}, "syntheseProjet": {...}} '
+            "(inside `data` if wrapped).",
+        )
+
+    return payload, None
+
 
 # --- Configuration & Tuning ---
 # ------------------------------
@@ -250,16 +307,52 @@ class ReferenceEditor(AgentFlow):
     async def aclose(self):
         await self.mcp.aclose()
 
+    def _build_vector_search_scope_options(self) -> dict:
+        """
+        Build strict retrieval constraints for direct vector-search calls done inside
+        template/image utilities.
+        """
+        settings = self.get_agent_settings()
+        runtime_context = self.get_runtime_context()
+        include_session_scope, include_corpus_scope = get_vector_search_scopes(
+            runtime_context
+        )
+
+        return {
+            "document_library_tags_ids": get_document_library_tags_ids(runtime_context),
+            "document_uids": get_document_uids(runtime_context),
+            "owner_filter": (
+                OwnerFilter.TEAM if settings.team_id else OwnerFilter.PERSONAL
+            ),
+            "team_id": settings.team_id,
+            "session_id": runtime_context.session_id if runtime_context else None,
+            "include_session_scope": include_session_scope,
+            "include_corpus_scope": include_corpus_scope,
+        }
+
     def get_compiled_graph(
         self, checkpointer: Checkpointer | None = None
     ) -> CompiledStateGraph:
         template_tool = self.get_template_tool()
         word_template_tool = self.get_word_template_tool()
         validator_tool = self.get_validator_tool()
+        base_system_prompt = self.render(self.get_tuned_text("prompts.system") or "")
+        download_guardrail = """
+# RÈGLE DE RESTITUTION DES TÉLÉCHARGEMENTS (OBLIGATOIRE)
+- Si template_tool ou word_template_tool retourne un LinkPart, ne le réécris jamais en texte.
+- N'affiche jamais d'URL brute, de markdown `[Download ...]`, ni de ligne `Download ...`.
+- Laisse uniquement le LinkPart pour le téléchargement.
+- Tu peux dire en texte : "Le bouton de téléchargement est ci-dessous."
+"""
+        system_prompt = (
+            f"{base_system_prompt.rstrip()}\n\n{download_guardrail.strip()}"
+            if base_system_prompt
+            else download_guardrail.strip()
+        )
 
         return create_agent(
             model=get_default_chat_model(),
-            system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
+            system_prompt=system_prompt,
             tools=[
                 template_tool,
                 word_template_tool,
@@ -271,7 +364,7 @@ class ReferenceEditor(AgentFlow):
 
     def get_validator_tool(self):
         @tool
-        async def validator_tool(data: dict):
+        async def validator_tool(data: dict | None = None):
             """
             Outil permettant de valider le format des données avant de les passer à l'outil de templetisation.
             L'outil retourne [] si le schéma est valide et la liste des erreurs sinon.
@@ -279,31 +372,25 @@ class ReferenceEditor(AgentFlow):
             IMPORTANT : Si cet outil retourne [] (liste vide), tu DOIS IMMÉDIATEMENT appeler template_tool(data={{...}})
             avec exactement les mêmes données dans le MÊME tour de conversation. Ne t'arrête pas ici.
             """
-            if len(data.keys()) != 3:
-                return (
-                    "Bad root key format. The JSON should have the following format:\n"
-                    "{{\n"
-                    '    "enjeuxBesoins": {{...}},\n'
-                    '    "cv": {{...}},\n'
-                    '    "prestationFinanciere": {{...}}\n'
-                    "}}"
-                )
+            payload, error_message = _normalize_reference_payload_for_validation(data)
+            if error_message:
+                return error_message
 
             def shorten_error_message(error):
                 """Convert verbose validation errors to concise messages"""
                 field_path = ".".join(str(p) for p in error.path) or "root"
                 if error.validator == "type":
                     return f"{field_path} type invalid. Expected {error.schema.get('type')}."
+                if error.validator == "required":
+                    return f"{field_path} missing required field."
                 return f"{field_path} invalid. Reason: {error.validator}."
 
             validator = Draft7Validator(referenceSchema)
 
-            errors = [shorten_error_message(e) for e in validator.iter_errors(data)]
+            errors = [shorten_error_message(e) for e in validator.iter_errors(payload)]
             if not errors:
-                return "✓ Validation réussie ! Appelle maintenant template_tool(data={{...}}) avec ces mêmes données."
+                return "✓ Validation réussie ! Appelle maintenant template_tool(data={...}) avec ces mêmes données."
             return errors
-
-        return validator_tool
 
         return validator_tool
 
@@ -322,7 +409,7 @@ class ReferenceEditor(AgentFlow):
             Outil permettant de templétiser le fichier envoyé par l'utilisateur.
             La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
             l'outil possède déjà cette information.
-            L'outil retournera un lien de téléchargement une fois le fichier templatisé.
+            L'outil retourne un LinkPart pour l'interface. Ne jamais réécrire ce lien en texte/Markdown.
             """
             # 1. Fetch template from secure asset storage
             template_key = (
@@ -341,20 +428,22 @@ class ReferenceEditor(AgentFlow):
                 actual_data = data.get("data", data)
                 # Create clients for image search
                 from agentic_backend.common.kf_base_client import KfBaseClient
-                from agentic_backend.common.vector_search_client import (
+                from agentic_backend.common.kf_vectorsearch_client import (
                     VectorSearchClient,
                 )
 
-                vector_search_client = VectorSearchClient()
+                vector_search_client = VectorSearchClient(agent=self)
+                search_options = self._build_vector_search_scope_options()
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
-                fill_slide_from_structured_response(
+                await fill_slide_from_structured_response_async(
                     template_path,
                     actual_data,
                     output_path,
                     vector_search_client,
                     kf_base_client,
+                    search_options=search_options,
                 )
 
             # 3. Upload the generated asset to user storage
@@ -398,7 +487,7 @@ class ReferenceEditor(AgentFlow):
                     title=f"Download {upload_result.file_name}",
                     kind=LinkKind.download,
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                )
+                ).model_dump(mode="json")
             else:
                 return last_error
 
@@ -419,7 +508,7 @@ class ReferenceEditor(AgentFlow):
             Outil permettant de templétiser un fichier Word envoyé par l'utilisateur.
             La nature du fichier importe peu tant que le format des données est respecté. Tu n'as pas besoin de préciser quel fichier,
             l'outil possède déjà cette information.
-            L'outil retournera un lien de téléchargement une fois le fichier templatisé.
+            L'outil retourne un LinkPart pour l'interface. Ne jamais réécrire ce lien en texte/Markdown.
             """
             # 1. Fetch template from secure asset storage
             template_key = (
@@ -438,20 +527,22 @@ class ReferenceEditor(AgentFlow):
                 actual_data = data.get("data", data)
                 # Create clients for image search
                 from agentic_backend.common.kf_base_client import KfBaseClient
-                from agentic_backend.common.vector_search_client import (
+                from agentic_backend.common.kf_vectorsearch_client import (
                     VectorSearchClient,
                 )
 
-                vector_search_client = VectorSearchClient()
+                vector_search_client = VectorSearchClient(agent=self)
+                search_options = self._build_vector_search_scope_options()
                 kf_base_client = KfBaseClient(
                     allowed_methods=frozenset({"GET", "POST"}), agent=self
                 )
-                fill_word_from_structured_response(
+                await fill_word_from_structured_response_async(
                     template_path,
                     actual_data,
                     output_path,
                     vector_search_client,
                     kf_base_client,
+                    search_options=search_options,
                 )
 
             # 3. Upload the generated asset to user storage
@@ -492,6 +583,6 @@ class ReferenceEditor(AgentFlow):
                 title=f"Download {upload_result.file_name}",
                 kind=LinkKind.download,
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+            ).model_dump(mode="json")
 
         return word_template_tool

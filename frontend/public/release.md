@@ -1,3 +1,35 @@
+**v1.2.6** — 2026-02-22
+
+- **Summary**
+
+  This release focuses on stability, offline compatibility, and team features. It introduces the Aegis agent, improves offline deployment support (Dockerfiles, knowledge flow), and refines team-based vector search and agent selection. It also includes significant updates to dependencies (removing unstructured) and fixes for PDF loading and SVG processing.
+
+- **Features**
+
+  - Add Aegis agent (#1166,#1182)
+  - Add k3d configuration (#1174)
+  - Add team filter in vector search and rework agent selection with team (#1158)
+  - Improve pipeline initialisation and deliver new test tool (#1152)
+  - Viewers can CRUD attachments (#1176)
+
+- **Improvements**
+
+  - Remove unstructured dependency and update dependencies for security (#1202)
+  - Make knowledge flow and Dockerfiles work in truly offline environments (#1163,#1184)
+  - Move cv skill detection and refactor agent architecture (#1185)
+  - Rename default agentic secret m2m env var (#1186)
+  - Config storage for Raph & Kellia and move to async utils (#1197)
+
+- **Bug Fixes**
+
+  - Fix failure of pdf loading (#1192)
+  - Fix svg images breaking ingestion process (#1172)
+  - Fix metric kpi loading regression (#1154)
+  - Fix conversation switches and remove agent_name (#1156)
+  - Fix frontend settings in helm values (#1171)
+  - Fix crossencoder_model in helm values
+  - Fix cannot read properties of undefined in coming soon page (#1159)
+
 **v1.2.5** — 2026-02-14
 
 - **Summary**
@@ -12,6 +44,7 @@
   duckdb has been removed.
 
 - **Features**
+  d
 
   - add missing kpi (#1129)
   - add frontend properties to hide enable/disable agent button (#1139)

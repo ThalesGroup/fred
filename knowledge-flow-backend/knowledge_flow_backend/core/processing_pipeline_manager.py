@@ -56,9 +56,11 @@ class ProcessingPipelineManager:
 
     @staticmethod
     def _clone_pipeline(template: ProcessingPipeline, name: str) -> ProcessingPipeline:
-        input_processors = {ext: proc.__class__() for ext, proc in template.input_processors.items()}
-        output_processors = {ext: [proc.__class__() for proc in processors] for ext, processors in template.output_processors.items()}
-        library_output_processors = [proc.__class__() for proc in template.library_output_processors]
+        # Keep this clone lightweight: profile pipelines only need different input
+        # mappings. Output processors and library processors are shared instances.
+        input_processors = dict(template.input_processors)
+        output_processors = {ext: list(processors) for ext, processors in template.output_processors.items()}
+        library_output_processors = list(template.library_output_processors)
         return ProcessingPipeline(
             name=name,
             input_processors=input_processors,

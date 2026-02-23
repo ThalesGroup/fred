@@ -1,3 +1,18 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import asyncio
 import logging
 import re
 from io import BytesIO
@@ -15,12 +30,13 @@ from agentic_backend.agents.reference_editor.image_search_util import (
 logger = logging.getLogger(__name__)
 
 
-def fill_slide_from_structured_response(
+async def fill_slide_from_structured_response_async(
     ppt_path,
     structured_responses,
     output_path,
     vector_search_client=None,
     kf_base_client=None,
+    search_options: dict | None = None,
 ):
     prs = Presentation(ppt_path)
     pattern = re.compile(r"\{([^}]+)\}")
@@ -47,8 +63,11 @@ def fill_slide_from_structured_response(
     ):
         technologies_text = flattened_data["listeTechnologies"]
         logger.info(f"Detected listeTechnologies field with value: {technologies_text}")
-        tech_images = parse_technologies_and_fetch_images(
-            technologies_text, vector_search_client, kf_base_client
+        tech_images = await parse_technologies_and_fetch_images(
+            technologies_text,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
         )
 
     # Pre-fetch image for nomSociete if present
@@ -56,8 +75,11 @@ def fill_slide_from_structured_response(
     if "nomSociete" in flattened_data and vector_search_client and kf_base_client:
         nom_societe = flattened_data["nomSociete"]
         logger.info(f"Detected nomSociete field with value: {nom_societe}")
-        societe_image = get_image_for_technology(
-            nom_societe, vector_search_client, kf_base_client
+        societe_image = await get_image_for_technology(
+            nom_societe,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
         )
         if societe_image:
             logger.info(f"Successfully fetched image for nomSociete: {nom_societe}")
@@ -177,12 +199,33 @@ def fill_slide_from_structured_response(
     return output_path
 
 
-def fill_word_from_structured_response(
+def fill_slide_from_structured_response(
+    ppt_path,
+    structured_responses,
+    output_path,
+    vector_search_client=None,
+    kf_base_client=None,
+    search_options: dict | None = None,
+):
+    return asyncio.run(
+        fill_slide_from_structured_response_async(
+            ppt_path,
+            structured_responses,
+            output_path,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
+        )
+    )
+
+
+async def fill_word_from_structured_response_async(
     docx_path,
     structured_responses,
     output_path,
     vector_search_client=None,
     kf_base_client=None,
+    search_options: dict | None = None,
 ):
     doc = Document(docx_path)
     pattern = re.compile(r"\{([^}]+)\}")
@@ -241,8 +284,11 @@ def fill_word_from_structured_response(
     ):
         technologies_text = flattened_data["listeTechnologies"]
         logger.info(f"Detected listeTechnologies field with value: {technologies_text}")
-        tech_images = parse_technologies_and_fetch_images(
-            technologies_text, vector_search_client, kf_base_client
+        tech_images = await parse_technologies_and_fetch_images(
+            technologies_text,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
         )
 
     # Pre-fetch image for nomSociete if present
@@ -250,8 +296,11 @@ def fill_word_from_structured_response(
     if "nomSociete" in flattened_data and vector_search_client and kf_base_client:
         nom_societe = flattened_data["nomSociete"]
         logger.info(f"Detected nomSociete field with value: {nom_societe}")
-        societe_image = get_image_for_technology(
-            nom_societe, vector_search_client, kf_base_client
+        societe_image = await get_image_for_technology(
+            nom_societe,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
         )
         if societe_image:
             logger.info(f"Successfully fetched image for nomSociete: {nom_societe}")
@@ -514,8 +563,32 @@ def fill_word_from_structured_response(
     return output_path
 
 
-def parse_technologies_and_fetch_images(
-    technologies_text: str, vector_search_client, kf_base_client
+def fill_word_from_structured_response(
+    docx_path,
+    structured_responses,
+    output_path,
+    vector_search_client=None,
+    kf_base_client=None,
+    search_options: dict | None = None,
+):
+    return asyncio.run(
+        fill_word_from_structured_response_async(
+            docx_path,
+            structured_responses,
+            output_path,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
+        )
+    )
+
+
+async def parse_technologies_and_fetch_images(
+    technologies_text: str,
+    vector_search_client,
+    kf_base_client,
+    *,
+    search_options: dict | None = None,
 ) -> list[tuple[str, BytesIO | None]]:
     """
     Parse a comma-separated list of technologies and fetch their corresponding images.
@@ -540,8 +613,11 @@ def parse_technologies_and_fetch_images(
     results = []
     for tech_name in technologies:
         logger.info(f"Fetching image for technology: {tech_name}")
-        image_data = get_image_for_technology(
-            tech_name, vector_search_client, kf_base_client
+        image_data = await get_image_for_technology(
+            tech_name,
+            vector_search_client,
+            kf_base_client,
+            search_options=search_options,
         )
 
         if image_data:
@@ -896,10 +972,20 @@ def _add_societe_image_near_textbox(
 
 referenceSchema = {
     "type": "object",
+    "required": ["informationsProjet", "contexte", "syntheseProjet"],
+    "additionalProperties": False,
     "properties": {
         "informationsProjet": {
             "type": "object",
             "description": "Informations sur le projet",
+            "required": [
+                "nomSociete",
+                "nomProjet",
+                "dateProjet",
+                "nombrePersonnes",
+                "enjeuFinancier",
+            ],
+            "additionalProperties": False,
             "properties": {
                 "nomSociete": {
                     "type": "string",
@@ -929,6 +1015,12 @@ referenceSchema = {
         "contexte": {
             "type": "object",
             "description": "Informations sur le contexte et le client",
+            "required": [
+                "presentationClient",
+                "presentationContexte",
+                "listeTechnologies",
+            ],
+            "additionalProperties": False,
             "properties": {
                 "presentationClient": {
                     "type": "string",
@@ -949,6 +1041,13 @@ referenceSchema = {
         "syntheseProjet": {
             "type": "object",
             "description": "Synthèse struturée du projet",
+            "required": [
+                "enjeux",
+                "activiteSolutions",
+                "beneficeClients",
+                "pointsForts",
+            ],
+            "additionalProperties": False,
             "properties": {
                 "enjeux": {
                     "type": "string",

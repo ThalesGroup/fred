@@ -424,7 +424,8 @@
       "a2aBaseUrlRequired": "A2A base URL is required for an A2A agent.",
       "a2aToken": "A2A Token (optional)",
       "classPath": "Custom Agent Class Path",
-      "classPathHelp": "Fully qualified Python class path (e.g. my_module.MyAgent). Leave empty for default.",
+      "classPathHelp": "Select a class path declared in backend configuration. Leave empty for default.",
+      "classPathNoOptions": "No class path declared in backend configuration.",
       "optional": "Optional",
       "icon": "Icon",
       "tags": "Tags",
@@ -1191,9 +1192,10 @@
     }
   },
   "newChat": {
-    "yourAgents": "Your agents",
     "selectAgentTitle": "Welcome {{userName}}, who would you like to speak to?",
-    "loadingAgentError": "Unable to load your agents."
+    "loadingAgentError": "Unable to load your agents.",
+    "teamAgents": "Team agents",
+    "personalAgents": "Personal agents"
   },
   "comingSoon": {
     "title": "{{siteDisplayName}} is coming soon.",

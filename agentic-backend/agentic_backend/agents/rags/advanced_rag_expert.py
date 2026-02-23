@@ -16,7 +16,7 @@
 import logging
 from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
-from fred_core import VectorSearchHit
+from fred_core import OwnerFilter, VectorSearchHit
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
@@ -422,6 +422,10 @@ class AdvancedRico(AgentFlow):
                     document_library_tags_ids=document_library_tags_ids,
                     document_uids=document_uids,
                     search_policy=search_policy,
+                    team_id=self.get_settings().team_id,
+                    owner_filter=OwnerFilter.TEAM
+                    if self.get_settings().team_id
+                    else OwnerFilter.PERSONAL,
                     session_id=runtime_context.session_id,
                     include_session_scope=include_session_scope,
                     include_corpus_scope=include_corpus_scope,

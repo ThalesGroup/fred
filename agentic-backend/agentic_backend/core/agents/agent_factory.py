@@ -123,7 +123,6 @@ class AgentFactory(BaseAgentFactory):
 
         # Build fresh
         settings, agent = await self._instantiate_from_settings(user, agent_id)
-
         # Always apply merged settings and context before init
         agent.apply_settings(settings)
         if runtime_context:
