@@ -90,8 +90,7 @@ class KfWorkspaceClient(KfBaseClient):
 
     @staticmethod
     def _path_agent_config_download(agent_id: str, key: str) -> str:
-        logical_key = (key or "").strip().replace("\\", "/").split("/")[-1]
-        return f"/storage/agent-config/{agent_id}/{logical_key}"
+        return f"/storage/agent-config/{agent_id}/{key}"
 
     @staticmethod
     def _path_agent_config_upload(agent_id: str) -> str:
