@@ -89,6 +89,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   // Unique ID for rendering the diagram
   const diagramIdRef = useRef<string>(`mermaid-${Math.random().toString(36).slice(2)}`);
   const generatedDiagramId = diagramIdRef.current;
+  const activeSvgUrlRef = useRef<string | null>(null);
   const theme = useTheme();
   const baseCode = code.replace(/^mermaid\s*\n/i, "").trim();
 
@@ -207,6 +208,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         }
         setSvgSrc((prev) => {
           if (prev) URL.revokeObjectURL(prev);
+          activeSvgUrlRef.current = objectUrl;
           return objectUrl;
         });
         setError(null);
@@ -220,6 +222,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         setErrorDetails(toErrorMessage(err));
         setSvgSrc((prev) => {
           if (prev) URL.revokeObjectURL(prev);
+          activeSvgUrlRef.current = null;
           return null;
         });
         setLoading(false);
@@ -232,7 +235,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
     return () => {
       cancelled = true;
       cleanupMermaidArtifacts(generatedDiagramId);
-      if (createdObjectUrl) {
+      if (createdObjectUrl && createdObjectUrl !== activeSvgUrlRef.current) {
         try {
           URL.revokeObjectURL(createdObjectUrl);
         } catch (e) {
@@ -241,6 +244,20 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
       }
     };
   }, [baseCode, generatedDiagramId, theme.palette]);
+
+  useEffect(() => {
+    return () => {
+      const activeUrl = activeSvgUrlRef.current;
+      if (!activeUrl) return;
+      try {
+        URL.revokeObjectURL(activeUrl);
+      } catch (e) {
+        console.warn("[Mermaid] revoke active object URL on unmount failed", e);
+      } finally {
+        activeSvgUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
