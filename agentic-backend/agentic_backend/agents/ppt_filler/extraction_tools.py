@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Type
 
-import requests
+import httpx
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -24,7 +24,8 @@ from agentic_backend.agents.ppt_filler.skill_mastery import (
     is_raster_image,
     parse_image_refs,
 )
-from agentic_backend.application_context import get_app_context, get_default_chat_model
+from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.common.kf_markdown_media_client import KfMarkdownMediaClient
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class ExtractionTools:
         handler = self._get_langfuse_handler()
         return {"callbacks": [handler]} if handler else {}
 
-    def _enrich_with_skill_mastery(self, chunks_text: str) -> str:
+    async def _enrich_with_skill_mastery(self, chunks_text: str) -> str:
         """Fetch skill-bar images referenced in chunks and inject mastery alt text.
 
         Parses <img> tags from the markdown, fetches each raster image from
@@ -85,22 +86,19 @@ class ExtractionTools:
         if not image_refs:
             return chunks_text
 
-        base_url = get_app_context().get_knowledge_flow_base_url().rstrip("/")
-        token = getattr(self.agent.runtime_context, "access_token", None)
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        client = KfMarkdownMediaClient(agent=self.agent)
 
         mastery_map: dict[str, int] = {}
         for doc_uid, filename in image_refs:
             if not is_raster_image(filename) or filename in mastery_map:
                 continue
             try:
-                url = f"{base_url}/markdown/{doc_uid}/media/{filename}"
-                resp = requests.get(url, headers=headers, timeout=10)
-                if resp.status_code != 200:
-                    continue
-                level = extract_mastery_from_image(resp.content)
+                image_bytes = await client.fetch_media(doc_uid, filename)
+                level = extract_mastery_from_image(image_bytes)
                 if level is not None:
                     mastery_map[filename] = level
+            except httpx.HTTPStatusError:
+                continue
             except Exception:
                 logger.warning(
                     "[skill_mastery] Failed to fetch %s/%s",
@@ -336,7 +334,7 @@ RÈGLES IMPORTANTES:
                 )
 
             # Phase 2: Enrich with skill mastery from blue-dot images
-            chunks_text = self._enrich_with_skill_mastery(chunks_text)
+            chunks_text = await self._enrich_with_skill_mastery(chunks_text)
 
             # Phase 3: Extract with structured output (no maxLength constraints)
             model = get_default_chat_model().with_structured_output(
