@@ -584,8 +584,10 @@ export type McpServerConfiguration = {
   name: string;
   /** react-i18next key for the description of the MCP server. */
   description?: string | null;
-  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
+  /** MCP server transport. Can be sse, stdio, websocket, streamable_http or inprocess */
   transport?: string | null;
+  /** Local provider key when transport=inprocess (e.g. 'web_github_readonly'). */
+  provider?: string | null;
   /** URL and endpoint of the MCP server */
   url?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */

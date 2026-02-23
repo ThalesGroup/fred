@@ -14,6 +14,7 @@ from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.interrupts.hitl_i18n import select_hitl_payload
 from agentic_backend.scheduler.agent_contracts import (
     AgentContextRefsV1,
     AgentResultStatus,
@@ -136,27 +137,55 @@ class HitlAgent(AgentFlow):
         )
         interrupt(
             {
-                "stage": "gather",
-                "title": "Validate gathered material",
-                "question": "Are these collected sources acceptable to continue?",
-                "choices": [
-                    {
-                        "id": "proceed",
-                        "label": "Yes, use them",
-                        "description": "Data looks good; move to analysis.",
-                        "default": True,
+                **select_hitl_payload(
+                    self,
+                    en={
+                        "stage": "gather",
+                        "title": "Validate gathered material",
+                        "question": "Are these collected sources acceptable to continue?",
+                        "choices": [
+                            {
+                                "id": "proceed",
+                                "label": "Yes, use them",
+                                "description": "Data looks good; move to analysis.",
+                                "default": True,
+                            },
+                            {
+                                "id": "retry",
+                                "label": "No, re-collect",
+                                "description": "Discard current gather step and try again.",
+                            },
+                            {
+                                "id": "adjust",
+                                "label": "Refine scope then continue",
+                                "description": "I'll add a short note with tweaks.",
+                            },
+                        ],
                     },
-                    {
-                        "id": "retry",
-                        "label": "No, re-collect",
-                        "description": "Discard current gather step and try again.",
+                    fr={
+                        "stage": "gather",
+                        "title": "Valider les éléments collectés",
+                        "question": "Les sources collectées sont-elles acceptables pour continuer ?",
+                        "choices": [
+                            {
+                                "id": "proceed",
+                                "label": "Oui, les utiliser",
+                                "description": "Les données sont correctes; passer à l'analyse.",
+                                "default": True,
+                            },
+                            {
+                                "id": "retry",
+                                "label": "Non, relancer la collecte",
+                                "description": "Supprimer la collecte actuelle et recommencer.",
+                            },
+                            {
+                                "id": "adjust",
+                                "label": "Affiner le périmètre",
+                                "description": "J'ajouterai une note courte avec les ajustements.",
+                            },
+                        ],
                     },
-                    {
-                        "id": "adjust",
-                        "label": "Refine scope then continue",
-                        "description": "I’ll add a short note with tweaks.",
-                    },
-                ],
+                ),
                 "free_text": True,
                 "metadata": {"sample": str(state.get("research_data"))[:400]},
             }
@@ -251,27 +280,55 @@ class HitlAgent(AgentFlow):
         )
         interrupt(
             {
-                "stage": "analyze",
-                "title": "Validate insights",
-                "question": "Do these preliminary findings look correct?",
-                "choices": [
-                    {
-                        "id": "approve_analysis",
-                        "label": "Looks correct",
-                        "description": "Proceed to drafting with these insights.",
-                        "default": True,
+                **select_hitl_payload(
+                    self,
+                    en={
+                        "stage": "analyze",
+                        "title": "Validate insights",
+                        "question": "Do these preliminary findings look correct?",
+                        "choices": [
+                            {
+                                "id": "approve_analysis",
+                                "label": "Looks correct",
+                                "description": "Proceed to drafting with these insights.",
+                                "default": True,
+                            },
+                            {
+                                "id": "revise_analysis",
+                                "label": "Needs revision",
+                                "description": "Re-run analysis with adjustments I'll describe.",
+                            },
+                            {
+                                "id": "deepen_analysis",
+                                "label": "Go deeper",
+                                "description": "Increase depth/coverage before drafting.",
+                            },
+                        ],
                     },
-                    {
-                        "id": "revise_analysis",
-                        "label": "Needs revision",
-                        "description": "Re-run analysis with adjustments I’ll describe.",
+                    fr={
+                        "stage": "analyze",
+                        "title": "Valider les enseignements",
+                        "question": "Ces premiers résultats te semblent-ils corrects ?",
+                        "choices": [
+                            {
+                                "id": "approve_analysis",
+                                "label": "Ça semble correct",
+                                "description": "Passer à la rédaction avec ces éléments.",
+                                "default": True,
+                            },
+                            {
+                                "id": "revise_analysis",
+                                "label": "À revoir",
+                                "description": "Relancer l'analyse avec les ajustements que je vais décrire.",
+                            },
+                            {
+                                "id": "deepen_analysis",
+                                "label": "Approfondir",
+                                "description": "Augmenter la profondeur/couverture avant la rédaction.",
+                            },
+                        ],
                     },
-                    {
-                        "id": "deepen_analysis",
-                        "label": "Go deeper",
-                        "description": "Increase depth/coverage before drafting.",
-                    },
-                ],
+                ),
                 "free_text": True,
                 "metadata": {
                     "messages": [m.content for m in state.get("messages", [])][-3:]
@@ -289,32 +346,65 @@ class HitlAgent(AgentFlow):
         )
         interrupt(
             {
-                "stage": "draft",
-                "title": "Ready to draft",
-                "question": "Choose how to finalize the report:",
-                "choices": [
-                    {
-                        "id": "draft_full",
-                        "label": "Draft full report",
-                        "description": "Generate the complete summary now.",
-                        "default": True,
+                **select_hitl_payload(
+                    self,
+                    en={
+                        "stage": "draft",
+                        "title": "Ready to draft",
+                        "question": "Choose how to finalize the report:",
+                        "choices": [
+                            {
+                                "id": "draft_full",
+                                "label": "Draft full report",
+                                "description": "Generate the complete summary now.",
+                                "default": True,
+                            },
+                            {
+                                "id": "draft_brief",
+                                "label": "Draft brief version",
+                                "description": "Produce a concise one-pager.",
+                            },
+                            {
+                                "id": "add_notes",
+                                "label": "Add guidance first",
+                                "description": "I'll type specific instructions, then draft.",
+                            },
+                            {
+                                "id": "cancel",
+                                "label": "Stop here",
+                                "description": "End the flow without drafting.",
+                            },
+                        ],
                     },
-                    {
-                        "id": "draft_brief",
-                        "label": "Draft brief version",
-                        "description": "Produce a concise one-pager.",
+                    fr={
+                        "stage": "draft",
+                        "title": "Prêt pour la rédaction",
+                        "question": "Choisis comment finaliser le rapport :",
+                        "choices": [
+                            {
+                                "id": "draft_full",
+                                "label": "Rédiger le rapport complet",
+                                "description": "Générer la synthèse complète maintenant.",
+                                "default": True,
+                            },
+                            {
+                                "id": "draft_brief",
+                                "label": "Rédiger une version courte",
+                                "description": "Produire une synthèse concise.",
+                            },
+                            {
+                                "id": "add_notes",
+                                "label": "Ajouter des consignes",
+                                "description": "Je vais saisir des instructions, puis rédiger.",
+                            },
+                            {
+                                "id": "cancel",
+                                "label": "Arrêter ici",
+                                "description": "Terminer le flux sans rédaction.",
+                            },
+                        ],
                     },
-                    {
-                        "id": "add_notes",
-                        "label": "Add guidance first",
-                        "description": "I’ll type specific instructions, then draft.",
-                    },
-                    {
-                        "id": "cancel",
-                        "label": "Stop here",
-                        "description": "End the flow without drafting.",
-                    },
-                ],
+                ),
                 "free_text": True,
                 "metadata": {
                     "messages": [m.content for m in state.get("messages", [])][-3:]
