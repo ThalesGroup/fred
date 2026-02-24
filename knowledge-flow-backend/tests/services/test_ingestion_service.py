@@ -67,9 +67,7 @@ def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
 
 def test_process_input(sample_docx, output_dir, test_user):
     service = IngestionService()
-    metadata = asyncio.run(
-        service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred")
-    )
+    metadata = asyncio.run(service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred"))
 
     # ⚙️ Process the file into output directory
     service.process_input(test_user, sample_docx, output_dir, metadata)
@@ -82,9 +80,7 @@ def test_process_input(sample_docx, output_dir, test_user):
 
 def test_process_input_then_output(sample_docx, output_dir, test_user):
     service = IngestionService()
-    metadata = asyncio.run(
-        service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred")
-    )
+    metadata = asyncio.run(service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred"))
 
     # First process input
     service.process_input(test_user, sample_docx, output_dir, metadata)
@@ -96,9 +92,7 @@ def test_process_input_then_output(sample_docx, output_dir, test_user):
 
 def test_get_preview_file_fallback(sample_docx, output_dir, test_user):
     service = IngestionService()
-    metadata = asyncio.run(
-        service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred")
-    )
+    metadata = asyncio.run(service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred"))
 
     # Write a dummy preview
     preview = output_dir / "table.csv"

@@ -98,11 +98,7 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
         return out
 
     async def list_by_source_tag(self, source_tag: str) -> list[DocumentMetadata]:
-        return [
-            doc.model_copy(deep=True)
-            for doc in self._items.values()
-            if doc.source_tag == source_tag
-        ]
+        return [doc.model_copy(deep=True) for doc in self._items.values() if doc.source_tag == source_tag]
 
     async def save_metadata(self, metadata: DocumentMetadata) -> None:
         self._items[metadata.document_uid] = metadata.model_copy(deep=True)
