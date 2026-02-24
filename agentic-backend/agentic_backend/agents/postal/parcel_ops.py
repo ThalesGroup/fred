@@ -441,7 +441,6 @@ class ParcelOpsAgent(AgentFlow):
             logger.warning(
                 "[LaPosteDemoAgent] Text does not look like pure JSON, attempting to extract JSON object from text"
             )
-            pass
 
         start = raw.find("{")
         end = raw.rfind("}")
