@@ -584,7 +584,7 @@ export type McpServerConfiguration = {
   name: string;
   /** react-i18next key for the description of the MCP server. */
   description?: string | null;
-  /** MCP server transport. Can be sse, stdio, websocket, streamable_http or inprocess */
+  /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
   transport?: string | null;
   /** Local provider key when transport=inprocess (e.g. 'web_github_readonly'). */
   provider?: string | null;
