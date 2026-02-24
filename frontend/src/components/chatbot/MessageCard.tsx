@@ -264,6 +264,18 @@ export default function MessageCard({
                           {String(extras.label)}
                         </Typography>
                       )}
+                      {showMetaChips && extras?.hitl?.kind === "decision" && (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          label={
+                            extras?.hitl?.stage
+                              ? `Decision · ${String(extras.hitl.stage)}`
+                              : "HITL decision"
+                          }
+                        />
+                      )}
                       {isCall && pending && (
                         <Typography fontSize=".8rem" sx={{ opacity: 0.7 }}>
                           ⏳ {t("chat.message.waiting")}

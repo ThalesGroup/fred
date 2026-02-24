@@ -1108,6 +1108,11 @@ const ChatBot = ({
         }
         const refreshToken = KeyCloakService.GetRefreshToken();
         const accessToken = KeyCloakService.GetToken();
+        const hitlPayload = (target as any)?.payload ?? {};
+        const selectedChoice =
+          typeof answerOrChoice === "string" && Array.isArray(hitlPayload?.choices)
+            ? hitlPayload.choices.find((c: any) => c?.id === answerOrChoice)
+            : undefined;
         const payload = {
           type: "human_resume",
           session_id: chatSessionId,
@@ -1115,8 +1120,11 @@ const ChatBot = ({
           payload: {
             answer: answerOrChoice,
             choice_id: typeof answerOrChoice === "string" ? answerOrChoice : undefined,
+            _hitl_choice_label: selectedChoice?.label,
+            _hitl_title: hitlPayload?.title,
+            _hitl_stage: hitlPayload?.stage,
             text: freeText,
-            checkpoint_id: (target as any)?.payload?.checkpoint_id,
+            checkpoint_id: hitlPayload?.checkpoint_id,
           },
           agent_id: currentAgent?.id,
           access_token: accessToken || undefined,

@@ -20,6 +20,7 @@ from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 from fred_core import VectorSearchHit
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agentic_backend.common.structures import AgentSettings
@@ -46,6 +47,12 @@ class Channel(str, Enum):
     tool_result = "tool_result"
     error = "error"  # agent-level error (transport errors use ErrorEvent)
     system_note = "system_note"  # injected context, tips, etc.
+
+
+class DecisionMessage(HumanMessage):
+    """A message representing a user's decision in a HITL flow."""
+
+    type: Literal["decision"] = "decision"
 
 
 class FinishReason(str, Enum):

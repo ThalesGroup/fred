@@ -1,8 +1,23 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import Annotated, List, Type, TypedDict
+from typing import Annotated, Any, List, Optional, Type, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.graph import END, StateGraph
@@ -14,6 +29,11 @@ from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.interrupts.hitl_i18n import select_hitl_payload
+from agentic_backend.scheduler.agent_contracts import (
+    AgentContextRefsV1,
+    AgentResultStatus,
+)
+from agentic_backend.scheduler.temporal.delegate_client import TemporalAgentInvoker
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +55,8 @@ class ResearchAgentState(TypedDict):
     research_data: str
     project_id: str  # Hydrated from AgentInputV1.context.project_id
     research_depth: int  # Hydrated from AgentInputV1.parameters['research_depth']
+    delegate_workflow_id: Optional[str]
+    delegate_summary: Optional[str]
 
 
 class HitlAgent(AgentFlow):
@@ -78,6 +100,8 @@ class HitlAgent(AgentFlow):
         builder.add_node("gather", self.gather_information)
         builder.add_node("validate_gather", self.validate_after_gather)
         builder.add_node("analyze", self.analyze_data)
+        builder.add_node("validate_analyze", self.validate_after_analyze)
+        builder.add_node("delegate", self.delegate_to_georges)
         builder.add_node("validate_draft", self.validate_before_draft)
         builder.add_node("draft", self.draft_report)
 
@@ -85,7 +109,8 @@ class HitlAgent(AgentFlow):
         builder.set_entry_point("gather")
         builder.add_edge("gather", "validate_gather")
         builder.add_edge("validate_gather", "analyze")
-        builder.add_edge("analyze", "validate_draft")
+        builder.add_edge("analyze", "delegate")
+        builder.add_edge("delegate", "validate_draft")
         builder.add_edge("validate_draft", "draft")
         builder.add_edge("draft", END)
 
@@ -179,8 +204,8 @@ class HitlAgent(AgentFlow):
                 "metadata": {"sample": str(state.get("research_data"))[:400]},
             }
         )
-        # Decision transcript persistence is now handled centrally by the backend
-        # resume flow (SessionOrchestrator), so the agent can stay focused on logic.
+        # Decision transcript persistence is handled centrally by the backend
+        # resume flow (SessionOrchestrator) to keep agent nodes focused on logic.
         return {}
 
     async def analyze_data(self, state: ResearchAgentState):
@@ -190,6 +215,146 @@ class HitlAgent(AgentFlow):
         return {
             "messages": [AIMessage(content="Analyzed data. Key trend: AI is growing.")]
         }
+
+    async def delegate_to_georges(self, state: ResearchAgentState):
+        """
+        Delegate to the generalist agent (Georges) via Temporal and wait for completion.
+
+        This keeps the current LangGraph node paused while the child workflow runs.
+        Heartbeats are sent so the parent Temporal activity does not time out.
+        """
+
+        original_request = self._content_to_text(
+            state.get("messages", [])[0].content if state.get("messages") else ""
+        )
+        project_id = state.get("project_id")
+
+        # Build a lightweight context for the delegated agent
+        context = AgentContextRefsV1(project_id=project_id)
+
+        # The runtime_context is set in async_init; may be absent when run outside Temporal
+        user_id = getattr(getattr(self, "runtime_context", None), "user_id", None)
+
+        invoker = TemporalAgentInvoker()
+        logger.info(
+            "[Researcher] Delegating to Georges via Temporal (project=%s user=%s)",
+            project_id,
+            user_id,
+        )
+
+        result, workflow_id = await invoker.execute_agent(
+            target_agent="Georges",
+            request_text=original_request or "Assist with research findings",
+            user_id=user_id,
+            context=context,
+            parameters={"project_id": project_id},
+            heartbeat_label="waiting_for_georges",
+        )
+
+        # delegate_client may return Pydantic model or a plain dict depending on caller context
+        if isinstance(result, dict):
+            summary = result.get("final_summary") or "Delegate returned no summary"
+            status = result.get("status", AgentResultStatus.FAILED)
+        else:
+            summary = result.final_summary or "Delegate returned no summary"
+            status = result.status
+
+        if status == AgentResultStatus.COMPLETED:
+            msg = f"Delegate agent Georges completed. Summary: {summary}"
+        elif status == AgentResultStatus.BLOCKED:
+            msg = (
+                "Delegate agent Georges is waiting for input (BLOCKED). "
+                f"Workflow id={workflow_id}."
+            )
+        else:
+            msg = (
+                f"Delegate agent Georges failed: {summary} (workflow id={workflow_id})"
+            )
+
+        return {
+            "messages": [AIMessage(content=msg)],
+            "delegate_workflow_id": workflow_id,
+            "delegate_summary": summary,
+        }
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        """Normalize LangChain content (str | list | dict) to string for downstream calls."""
+        if isinstance(content, str):
+            return content
+        try:
+            return json.dumps(content, ensure_ascii=False)
+        except Exception:  # pragma: no cover - defensive fallback
+            return str(content)
+
+    async def validate_after_analyze(self, state: ResearchAgentState):
+        """
+        HITL pause after analysis: ask user to validate insights.
+        """
+        logger.info(
+            "[Researcher] validate_after_analyze invoked state_keys=%s",
+            list(state.keys()),
+        )
+        interrupt(
+            {
+                **select_hitl_payload(
+                    self,
+                    en={
+                        "stage": "analyze",
+                        "title": "Validate insights",
+                        "question": "Do these preliminary findings look correct?",
+                        "choices": [
+                            {
+                                "id": "approve_analysis",
+                                "label": "Looks correct",
+                                "description": "Proceed to drafting with these insights.",
+                                "default": True,
+                            },
+                            {
+                                "id": "revise_analysis",
+                                "label": "Needs revision",
+                                "description": "Re-run analysis with adjustments I'll describe.",
+                            },
+                            {
+                                "id": "deepen_analysis",
+                                "label": "Go deeper",
+                                "description": "Increase depth/coverage before drafting.",
+                            },
+                        ],
+                    },
+                    fr={
+                        "stage": "analyze",
+                        "title": "Valider les enseignements",
+                        "question": "Ces premiers résultats te semblent-ils corrects ?",
+                        "choices": [
+                            {
+                                "id": "approve_analysis",
+                                "label": "Ça semble correct",
+                                "description": "Passer à la rédaction avec ces éléments.",
+                                "default": True,
+                            },
+                            {
+                                "id": "revise_analysis",
+                                "label": "À revoir",
+                                "description": "Relancer l'analyse avec les ajustements que je vais décrire.",
+                            },
+                            {
+                                "id": "deepen_analysis",
+                                "label": "Approfondir",
+                                "description": "Augmenter la profondeur/couverture avant la rédaction.",
+                            },
+                        ],
+                    },
+                ),
+                "free_text": True,
+                "metadata": {
+                    "messages": [m.content for m in state.get("messages", [])][-3:]
+                },
+            }
+        )
+        # Decision transcript persistence is handled centrally by the backend
+        # resume flow (SessionOrchestrator) to keep agent nodes focused on logic.
+        return {}
 
     async def validate_before_draft(self, state: ResearchAgentState):
         """
@@ -266,8 +431,8 @@ class HitlAgent(AgentFlow):
                 },
             }
         )
-        # Decision transcript persistence is now handled centrally by the backend
-        # resume flow (SessionOrchestrator), so the agent can stay focused on logic.
+        # Decision transcript persistence is handled centrally by the backend
+        # resume flow (SessionOrchestrator) to keep agent nodes focused on logic.
         return {}
 
     async def draft_report(self, state: ResearchAgentState):
@@ -278,10 +443,18 @@ class HitlAgent(AgentFlow):
         # state['messages'][0] is the HumanMessage hydrated from input_data.request_text
         original_request = state["messages"][0].content
 
+        delegate_info = ""
+        if state.get("delegate_summary"):
+            delegate_info = (
+                f"\nDelegated agent (Georges) summary: {state['delegate_summary']}"
+            )
+        if state.get("delegate_workflow_id"):
+            delegate_info += f"\nDelegated workflow id: {state['delegate_workflow_id']}"
+
         final_text = (
             f"RESEARCH REPORT for Project: {state.get('project_id')}\n"
             f"Based on request: {original_request}\n"
-            f"Findings: Validated successfully."
+            f"Findings: Validated successfully.{delegate_info}"
         )
 
         return {"messages": [AIMessage(content=final_text)]}

@@ -1,6 +1,9 @@
 # Fred
 
-[Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
+Before you even know what fred is about, there are two key references to know: 
+- [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
+- [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
+
 
 Fred is both:
 

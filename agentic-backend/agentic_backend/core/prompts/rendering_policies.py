@@ -23,7 +23,11 @@ _MERMAID_POLICY_EN = (
     '- Prefer simple rectangular nodes (e.g., `A["..."]`) for compatibility, especially with multiline labels.\n'
     "- Use simple ASCII in Mermaid source when possible (`-`, `'`, `...`) and avoid typographic punctuation that may break parsers.\n"
     "- Keep node IDs simple (`A`, `node_api`, `kf_backend`) without spaces or special characters.\n"
+    "- Never connect edges to a `subgraph` identifier; connect edges only to node IDs.\n"
+    "- If you need to show a relationship to a group, connect one or more representative nodes inside that subgraph instead.\n"
     "- For edge labels, also use `<br/>` instead of `\\n`.\n"
+    "- Prefer standard edge-label syntax like `A -->|label| B`; avoid malformed quoting in edge labels.\n"
+    "- Unless explicitly requested, do not emit custom `classDef` color palettes; rely on Mermaid theme defaults for dark/light compatibility.\n"
     "- Return valid Mermaid syntax in a fenced ```mermaid``` block.\n"
     "- If the user asks mainly for a diagram, return one Mermaid block first, then optional short explanation after the block.\n"
     "- Prefer simpler flowchart syntax (rectangular nodes) when unsure.\n"
@@ -37,7 +41,11 @@ _MERMAID_POLICY_FR = (
     '- Privilégie des nœuds rectangulaires simples (ex: `A["..."]`) pour la compatibilité, surtout avec des labels multilignes.\n'
     "- Utilise si possible des caractères ASCII simples dans le source Mermaid (`-`, `'`, `...`) et évite la ponctuation typographique qui peut casser le parseur.\n"
     "- Garde des identifiants de nœuds simples (`A`, `node_api`, `kf_backend`) sans espaces ni caractères spéciaux.\n"
+    "- Ne relie jamais une arête à un identifiant de `subgraph`; relie les arêtes uniquement à des IDs de nœuds.\n"
+    "- Si tu dois représenter une relation avec un groupe, relie plutôt un ou plusieurs nœuds représentatifs à l'intérieur de ce subgraph.\n"
     "- Pour les labels de liens, utilise aussi `<br/>` au lieu de `\\n`.\n"
+    "- Privilégie la syntaxe standard des labels d'arêtes `A -->|label| B` et évite les guillemets mal formés dans les labels de liens.\n"
+    "- Sauf demande explicite, n'émet pas de palette de couleurs personnalisée via `classDef`; laisse Mermaid utiliser son thème par défaut (compatible clair/sombre).\n"
     "- Retourne une syntaxe Mermaid valide dans un bloc ```mermaid```.\n"
     "- Si la demande porte surtout sur un diagramme, retourne d'abord un bloc Mermaid unique, puis une courte explication optionnelle après le bloc.\n"
     "- En cas de doute, préfère une syntaxe `flowchart` simple (nœuds rectangulaires).\n"

@@ -26,6 +26,11 @@ Tools implemented:
 
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+import sys
+import types
 from typing import Dict, Any, Literal, List, Optional
 import time
 import uuid
@@ -33,12 +38,159 @@ import uuid
 try:
     # Use FastMCP (ergonomic server with @tool decorator) and build a Starlette app
     from mcp.server import FastMCP
+    from mcp.server.fastmcp import Context
 except Exception as e:  # pragma: no cover - helpful error at import time
     raise ImportError(
         "The 'mcp' package is required for postal_service_mcp_server.server_mcp.\n"
         "Install it via: pip install \"mcp[fastapi]\"\n"
         f"Import error: {e}"
     )
+
+logger = logging.getLogger(__name__)
+
+
+def _load_fred_oidc_helpers():
+    """
+    Best-effort import of fred_core.security.oidc without importing the heavy
+    `fred_core.__init__` aggregator.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    fred_core_pkg = repo_root / "fred-core" / "fred_core"
+    if not fred_core_pkg.exists():
+        return None, None, None
+
+    if "fred_core" not in sys.modules:
+        pkg = types.ModuleType("fred_core")
+        pkg.__path__ = [str(fred_core_pkg)]  # type: ignore[attr-defined]
+        sys.modules["fred_core"] = pkg
+
+    try:
+        from fred_core.security.oidc import decode_jwt, initialize_user_security
+        from fred_core.security.structure import UserSecurity
+
+        return decode_jwt, initialize_user_security, UserSecurity
+    except Exception as exc:  # pragma: no cover - demo fallback
+        logger.warning(
+            "Could not import fred_core OIDC helpers; falling back to mock caller: %s",
+            exc,
+        )
+        return None, None, None
+
+
+_FRED_DECODE_JWT, _FRED_INIT_USER_SECURITY, _FRED_USER_SECURITY_CLS = (
+    _load_fred_oidc_helpers()
+)
+_FRED_OIDC_INIT_DONE = False
+
+
+def _init_demo_oidc_from_env_once() -> None:
+    global _FRED_OIDC_INIT_DONE
+    if _FRED_OIDC_INIT_DONE:
+        return
+    _FRED_OIDC_INIT_DONE = True
+
+    if not (_FRED_INIT_USER_SECURITY and _FRED_USER_SECURITY_CLS):
+        return
+
+    enabled = os.getenv("DEMO_MCP_OIDC_ENABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    realm_url = os.getenv("DEMO_MCP_KEYCLOAK_REALM_URL", "").strip()
+    client_id = os.getenv("DEMO_MCP_KEYCLOAK_CLIENT_ID", "").strip()
+
+    if not enabled:
+        logger.info(
+            "Demo OIDC disabled for postal MCP (set DEMO_MCP_OIDC_ENABLED=true to validate Bearer tokens)."
+        )
+        return
+
+    if not realm_url or not client_id:
+        logger.warning(
+            "Demo OIDC enabled but realm/client env vars are missing. Falling back to mock caller."
+        )
+        return
+
+    try:
+        cfg = _FRED_USER_SECURITY_CLS(
+            enabled=True,
+            realm_url=realm_url,
+            client_id=client_id,
+        )
+        _FRED_INIT_USER_SECURITY(cfg)
+        logger.info(
+            "Demo OIDC initialized for postal MCP (realm=%s client_id=%s)",
+            realm_url,
+            client_id,
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Demo OIDC initialization failed: %s", exc)
+
+
+def _extract_bearer_token_from_ctx(ctx: Optional[Context]) -> Optional[str]:
+    if not ctx:
+        return None
+    try:
+        req = ctx.request_context.request
+        if req is None:
+            return None
+        headers = getattr(req, "headers", None)
+        auth = headers.get("authorization") if headers else None
+        if not auth and headers:
+            auth = headers.get("Authorization")
+        if not isinstance(auth, str) or not auth.lower().startswith("bearer "):
+            return None
+        token = auth[7:].strip()
+        return token or None
+    except Exception:
+        return None
+
+
+def _user_to_demo_profile(user: Any, *, source: str) -> Dict[str, Any]:
+    uid = str(getattr(user, "uid", "") or "admin")
+    username = str(getattr(user, "username", "") or "admin")
+    email = getattr(user, "email", None)
+    email_str = email if isinstance(email, str) and email else None
+
+    if username and username != "admin":
+        display_name = username.replace(".", " ").replace("_", " ").title()
+    elif email_str and "@" in email_str and not email_str.startswith("admin@"):
+        display_name = email_str.split("@", 1)[0].replace(".", " ").replace("_", " ").title()
+    else:
+        # Stable demo alias when auth is disabled locally.
+        display_name = "Alice Martin"
+
+    return {
+        "uid": uid,
+        "username": username,
+        "email": email_str,
+        "display_name": display_name,
+        "demo_customer_ref": f"CUST-DEMO-{uid.upper().replace('-', '')[:12]}",
+        "source": source,
+    }
+
+
+def _resolve_demo_caller(ctx: Optional[Context]) -> Dict[str, Any]:
+    _init_demo_oidc_from_env_once()
+    token = _extract_bearer_token_from_ctx(ctx)
+
+    if token and _FRED_DECODE_JWT:
+        try:
+            user = _FRED_DECODE_JWT(token)
+            return _user_to_demo_profile(user, source="bearer_token")
+        except Exception as exc:
+            logger.warning("Bearer token decode failed in postal MCP: %s", exc)
+
+    mock_user = types.SimpleNamespace(
+        uid="admin",
+        username="admin",
+        email="admin@mail.com",
+        roles=["admin"],
+        groups=["admins"],
+    )
+    return _user_to_demo_profile(mock_user, source="mock")
 
 
 # In-memory stores (tutorial-grade persistence)
@@ -119,6 +271,12 @@ _PICKUP_POINTS: Dict[str, Dict[str, Any]] = {
 
 # Create a FastMCP server (provides @tool and compatible transports)
 server = FastMCP(name="postal-mcp")
+
+
+@server.tool()
+async def who_am_i_demo(ctx: Context) -> Dict[str, Any]:
+    """Return the caller identity as seen by the postal demo MCP server."""
+    return {"ok": True, "caller": _resolve_demo_caller(ctx)}
 
 
 def _now_ts() -> int:
@@ -468,6 +626,37 @@ async def seed_demo_parcel_exception(
         ],
         "nearby_pickup_points": nearby,
     }
+
+
+@server.tool()
+async def seed_demo_parcel_exception_for_current_user(
+    ctx: Context,
+    city: str = "Paris",
+    postal_code: str = "75015",
+    street: str = "85 Rue de Vaugirard",
+    service: Literal["standard", "express"] = "express",
+) -> Dict[str, Any]:
+    """
+    Create a delayed parcel scenario personalized to the caller identity.
+
+    If no Bearer token is available (or OIDC is not configured), the server falls
+    back to a stable demo identity ("Alice Martin").
+    """
+    caller = _resolve_demo_caller(ctx)
+    seeded = await seed_demo_parcel_exception(
+        receiver_name=str(caller.get("display_name") or "Alice Martin"),
+        city=city,
+        postal_code=postal_code,
+        street=street,
+        service=service,
+    )
+    if isinstance(seeded, dict):
+        seeded["caller"] = caller
+        seeded["summary"] = (
+            f"Parcel delayed at hub for caller '{caller.get('display_name', 'Alice Martin')}' "
+            f"(identity source={caller.get('source', 'unknown')})"
+        )
+    return seeded
 
 
 @server.tool()
