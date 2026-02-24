@@ -1,6 +1,6 @@
 variables:
   DEV_BRANCH:
-    value: "prism"
+    value: "develop-prism"
     description: "Development branch name. Commits on this branch auto-build code images with dev-prism tag."
   CODE_DOCKER_TAG:
     description: "Version tag for code docker images (used for manual builds)."
