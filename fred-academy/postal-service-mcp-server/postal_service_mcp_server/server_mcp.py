@@ -31,6 +31,7 @@ import os
 from pathlib import Path
 import sys
 import types
+from functools import lru_cache
 from typing import Dict, Any, Literal, List, Optional
 import time
 import uuid
@@ -80,15 +81,10 @@ def _load_fred_oidc_helpers():
 _FRED_DECODE_JWT, _FRED_INIT_USER_SECURITY, _FRED_USER_SECURITY_CLS = (
     _load_fred_oidc_helpers()
 )
-_FRED_OIDC_INIT_DONE = False
 
 
+@lru_cache(maxsize=1)
 def _init_demo_oidc_from_env_once() -> None:
-    global _FRED_OIDC_INIT_DONE
-    if _FRED_OIDC_INIT_DONE:
-        return
-    _FRED_OIDC_INIT_DONE = True
-
     if not (_FRED_INIT_USER_SECURITY and _FRED_USER_SECURITY_CLS):
         return
 
