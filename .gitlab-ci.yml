@@ -128,14 +128,15 @@ docker-benchmark:
         CHART_VERSION=$(echo "${CI_COMMIT_TAG}" | sed 's|^chart/v||')
         export CHART_VERSION
       fi
-    - helm registry login "${CI_REGISTRY}" --username "${CI_REGISTRY_USER}" --password "${CI_REGISTRY_PASSWORD}"
   script:
     - |
       echo "Packaging ${CHART_NAME} with version ${CHART_VERSION}"
       helm package "${CHART_PATH}" --version "${CHART_VERSION}" --destination ./packages
       PACKAGE_FILE=$(ls ./packages/${CHART_NAME}-${CHART_VERSION}.tgz)
       echo "Pushing ${PACKAGE_FILE} to ${CI_REGISTRY_CHART}"
-      helm push "${PACKAGE_FILE}" "oci://${CI_REGISTRY_CHART}"
+      curl --fail --user "${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD}" \
+        -T "${PACKAGE_FILE}" \
+        "${CI_REGISTRY_CHART}/${CHART_NAME}-${CHART_VERSION}.tgz"
 
 helm-chart:
   extends: .helm-chart
