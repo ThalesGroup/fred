@@ -27,10 +27,10 @@ import pytest
 from fred_core import KeycloakUser
 from langchain_core.documents import Document
 
-from knowledge_flow_backend.features.vector_search import vector_search_service
-from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
-from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit
+from knowledge_flow_backend.features.vector_search import vector_search_service
+from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
+from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 pytestmark = pytest.mark.asyncio
 

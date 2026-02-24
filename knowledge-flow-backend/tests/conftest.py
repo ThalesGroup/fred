@@ -45,10 +45,10 @@ from knowledge_flow_backend.common.structures import (
     StorageConfig,
     TemporalSchedulerConfig,
 )
+from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
 )
-from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
 from knowledge_flow_backend.main import create_app
 
 from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor
