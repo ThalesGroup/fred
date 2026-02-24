@@ -149,9 +149,16 @@ def _make_donut_chart(filled: int, size: int = DONUT_SIZE) -> Image.Image:
 
 
 class TestCountDonutSegments:
-    @pytest.mark.parametrize("filled,expected_mastery", [
-        (2, 1), (4, 2), (6, 3), (8, 4), (10, 5),
-    ])
+    @pytest.mark.parametrize(
+        "filled,expected_mastery",
+        [
+            (2, 1),
+            (4, 2),
+            (6, 3),
+            (8, 4),
+            (10, 5),
+        ],
+    )
     def test_filled_segments(self, filled, expected_mastery):
         img = _make_donut_chart(filled)
         assert count_donut_segments(img) == expected_mastery
