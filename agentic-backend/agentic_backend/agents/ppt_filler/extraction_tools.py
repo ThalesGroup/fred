@@ -76,11 +76,12 @@ class ExtractionTools:
         return {"callbacks": [handler]} if handler else {}
 
     async def _enrich_with_skill_mastery(self, chunks_text: str) -> str:
-        """Fetch skill-bar images referenced in chunks and inject mastery alt text.
+        """Fetch skill images referenced in chunks and inject mastery alt text.
 
         Parses <img> tags from the markdown, fetches each raster image from
-        knowledge-flow, checks if it's a 214x33 skill bar, counts blue dots,
-        and replaces the alt text inline.
+        knowledge-flow, checks if it's a skill bar (blue dots) or donut chart
+        (ring segments), determines the mastery level, and replaces the alt
+        text inline.
         """
         image_refs = parse_image_refs(chunks_text)
         if not image_refs:
