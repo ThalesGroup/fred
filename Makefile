@@ -1,4 +1,5 @@
 CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend
+TEST_DIRS := agentic-backend knowledge-flow-backend
 
 ##@ Code quality
 
@@ -24,6 +25,16 @@ clean: ## Clean all submodules
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Cleaning $$dir ************"; \
 		$(MAKE) -C $$dir clean; \
+	done
+
+##@ Tests
+
+.PHONY: test
+test: ## Run non-integration test suites in backend submodules
+	@set -e; \
+	for dir in $(TEST_DIRS); do \
+		echo "************ Running tests in $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir test; \
 	done
 	
 .PHONY: dev

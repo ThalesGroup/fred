@@ -1806,7 +1806,8 @@ class SessionOrchestrator:
 
             # Unknown/other roles → ignore (by design)
 
-        # Tail: if transcript ends with pending calls and no results, keep the grouped AI(tool_calls=...)
+        # Tail: flush any remaining exchange state. Calls without a tool_result in the
+        # same exchange are intentionally skipped by flush_exchange_calls_if_any().
         flush_exchange_calls_if_any(current_exchange)
         try:
             logger.info(

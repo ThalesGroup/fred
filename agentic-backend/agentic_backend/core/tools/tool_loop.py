@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.constants import START
 from langgraph.graph import END, MessagesState, StateGraph
@@ -63,7 +63,7 @@ def build_tool_loop(
 
     async def reasoner(state: MessagesState):
         sys_text = system_builder(state)
-        msgs = [AIMessage(content=sys_text, role="system")] + state["messages"]
+        msgs = [SystemMessage(content=sys_text)] + state["messages"]
         response = await model.ainvoke(msgs)
 
         # Attach latest tool outputs if post_response not provided

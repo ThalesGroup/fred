@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import ipaddress
 import json
 import os
 import re
+import socket
 import time
 from html.parser import HTMLParser
 from typing import Any, Optional
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 
@@ -110,8 +113,9 @@ class WebGithubReadonlyService:
             "Accept": "*/*",
         }
         github_token = os.getenv("GITHUB_TOKEN")
-        if github_token:
-            headers["Authorization"] = f"Bearer {github_token}"
+        self._github_auth_header: Optional[str] = (
+            f"Bearer {github_token}" if github_token else None
+        )
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout_sec),
             headers=headers,
@@ -127,19 +131,66 @@ class WebGithubReadonlyService:
         *,
         headers: Optional[dict[str, str]] = None,
         max_bytes: int = _MAX_HTTP_BYTES,
+        enforce_public_target: bool = False,
+        max_redirects: int = 5,
     ) -> dict[str, Any]:
-        try:
-            resp = await self._client.get(url, headers=headers)
-        except httpx.HTTPError as e:
-            return {
-                "ok": False,
-                "status": 0,
-                "url": url,
-                "error": f"{type(e).__name__}: {e}",
-                "body": b"",
-                "headers": {},
-                "over_limit": False,
-            }
+        current_url = url
+        redirects_followed = 0
+
+        while True:
+            if enforce_public_target:
+                err = await self._validate_public_http_target(current_url)
+                if err:
+                    return {
+                        "ok": False,
+                        "status": 0,
+                        "url": current_url,
+                        "error": err,
+                        "body": b"",
+                        "headers": {},
+                        "over_limit": False,
+                    }
+
+            try:
+                if enforce_public_target:
+                    resp = await self._client.get(
+                        current_url,
+                        headers=headers,
+                        follow_redirects=False,
+                    )
+                else:
+                    resp = await self._client.get(current_url, headers=headers)
+            except httpx.HTTPError as e:
+                return {
+                    "ok": False,
+                    "status": 0,
+                    "url": current_url,
+                    "error": f"{type(e).__name__}: {e}",
+                    "body": b"",
+                    "headers": {},
+                    "over_limit": False,
+                }
+
+            if (
+                enforce_public_target
+                and resp.is_redirect
+                and resp.headers.get("location")
+            ):
+                if redirects_followed >= max(0, int(max_redirects)):
+                    return {
+                        "ok": False,
+                        "status": resp.status_code,
+                        "url": str(resp.url),
+                        "error": f"Too many redirects (>{max_redirects})",
+                        "body": b"",
+                        "headers": {k.lower(): v for k, v in resp.headers.items()},
+                        "over_limit": False,
+                    }
+                current_url = urljoin(str(resp.url), resp.headers["location"])
+                redirects_followed += 1
+                continue
+
+            break
 
         body = resp.content[: max_bytes + 1]
         over_limit = len(body) > max_bytes
@@ -156,6 +207,93 @@ class WebGithubReadonlyService:
             "headers": {k.lower(): v for k, v in resp.headers.items()},
             "over_limit": over_limit,
         }
+
+    @staticmethod
+    def _blocked_ip_reason(
+        ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    ) -> Optional[str]:
+        if ip.is_loopback:
+            return "loopback address"
+        if ip.is_link_local:
+            return "link-local address"
+        if ip.is_private:
+            return "private address"
+        if ip.is_multicast:
+            return "multicast address"
+        if ip.is_reserved:
+            return "reserved address"
+        if ip.is_unspecified:
+            return "unspecified address"
+        if hasattr(ip, "is_site_local") and getattr(ip, "is_site_local"):
+            return "site-local address"
+        if not ip.is_global:
+            return "non-global address"
+        return None
+
+    async def _validate_public_http_target(self, url: str) -> Optional[str]:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return "URL hostname is required"
+
+        normalized_host = hostname.strip().rstrip(".").lower()
+        if not normalized_host:
+            return "URL hostname is required"
+        if normalized_host == "localhost" or normalized_host.endswith(".localhost"):
+            return f"Access to local host '{hostname}' is not allowed"
+
+        port = parsed.port
+        if port is None:
+            port = 443 if parsed.scheme == "https" else 80
+
+        resolved_ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+
+        try:
+            literal_ip = ipaddress.ip_address(normalized_host)
+        except ValueError:
+            literal_ip = None
+
+        if literal_ip is not None:
+            resolved_ips.append(literal_ip)
+        else:
+            try:
+                infos = await asyncio.get_running_loop().getaddrinfo(
+                    hostname,
+                    port,
+                    type=socket.SOCK_STREAM,
+                )
+            except socket.gaierror as e:
+                return f"DNS resolution failed for host '{hostname}': {e}"
+            except Exception as e:
+                return f"Failed to resolve host '{hostname}': {type(e).__name__}: {e}"
+
+            for family, _, _, _, sockaddr in infos:
+                if family not in {socket.AF_INET, socket.AF_INET6}:
+                    continue
+                if not isinstance(sockaddr, tuple) or not sockaddr:
+                    continue
+                ip_txt = str(sockaddr[0])
+                try:
+                    resolved_ips.append(ipaddress.ip_address(ip_txt))
+                except ValueError:
+                    continue
+
+        if not resolved_ips:
+            return f"Could not resolve any IP address for host '{hostname}'"
+
+        seen: set[str] = set()
+        for ip in resolved_ips:
+            ip_txt = str(ip)
+            if ip_txt in seen:
+                continue
+            seen.add(ip_txt)
+            reason = self._blocked_ip_reason(ip)
+            if reason:
+                return (
+                    f"Access to host '{hostname}' is not allowed: "
+                    f"resolved to {ip_txt} ({reason})"
+                )
+        return None
 
     @staticmethod
     def _json_from_http(resp: dict[str, Any]) -> dict[str, Any]:
@@ -220,7 +358,14 @@ class WebGithubReadonlyService:
             url = f"{url}?{urlencode(q, doseq=True)}"
         resp = await self._http_get(
             url,
-            headers={"Accept": "application/vnd.github+json"},
+            headers={
+                "Accept": "application/vnd.github+json",
+                **(
+                    {"Authorization": self._github_auth_header}
+                    if self._github_auth_header
+                    else {}
+                ),
+            },
         )
         return self._json_from_http(resp)
 
@@ -232,7 +377,7 @@ class WebGithubReadonlyService:
                 "error": "Only http:// and https:// URLs are supported",
             }
 
-        resp = await self._http_get(url)
+        resp = await self._http_get(url, enforce_public_target=True)
         if not resp["ok"]:
             out = {
                 "ok": False,
