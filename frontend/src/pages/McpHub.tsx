@@ -35,7 +35,11 @@ const ActionButton = ({
   const theme = useTheme();
   return (
     <Button
-      startIcon={<Box component="span" sx={{ color: "inherit", display: "flex" }}>{icon}</Box>}
+      startIcon={
+        <Box component="span" sx={{ color: "inherit", display: "flex" }}>
+          {icon}
+        </Box>
+      }
       size="small"
       {...props}
       sx={{
@@ -174,8 +178,7 @@ export const McpHub = () => {
         },
       }).unwrap();
       showSuccess({
-        summary:
-          server.enabled === false ? t("mcpHub.toasts.enabled") : t("mcpHub.toasts.disabled"),
+        summary: server.enabled === false ? t("mcpHub.toasts.enabled") : t("mcpHub.toasts.disabled"),
       });
       refetch();
     } catch (error: any) {
@@ -305,11 +308,7 @@ export const McpHub = () => {
               ) : (
                 <Grid2 container spacing={2}>
                   {sortedServers.map((server) => (
-                    <Grid2
-                      key={server.id}
-                      size={{ xs: 12, sm: 12, md: 6, lg: 6 }}
-                      display="flex"
-                    >
+                    <Grid2 key={server.id} size={{ xs: 12, sm: 12, md: 6, lg: 6 }} display="flex">
                       <Fade in timeout={500}>
                         <Box sx={{ width: "100%" }}>
                           <McpServerCard

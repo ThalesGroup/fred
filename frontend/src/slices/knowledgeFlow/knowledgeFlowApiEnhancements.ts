@@ -24,7 +24,7 @@ export const enhancedKnowledgeFlowApi = knowledgeFlowApi.enhanceEndpoints({
     uploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: {
       query: (queryArg) => {
         const formData = new FormData();
-        formData.append('file', queryArg.bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost.file);
+        formData.append("file", queryArg.bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost.file);
 
         return {
           url: `/knowledge-flow/v1/teams/${queryArg.teamId}/banner`,

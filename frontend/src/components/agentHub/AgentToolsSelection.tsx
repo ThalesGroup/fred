@@ -15,8 +15,9 @@ export interface AgentToolsSelectionProps {
 
 export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery(undefined, {
+  const { data: mcpServersData, isFetching: isFetchingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery(
+    undefined,
+    {
       refetchOnMountOrArgChange: true,
       refetchOnFocus: true,
       refetchOnReconnect: true,
@@ -95,11 +96,7 @@ export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: Age
     >
       <Stack spacing={0.5}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Switch
-            size="small"
-            checked={selected}
-            onChange={(event) => onSelectedChange(event.target.checked)}
-          />
+          <Switch size="small" checked={selected} onChange={(event) => onSelectedChange(event.target.checked)} />
           <Stack spacing={0.25} flex={1}>
             <Typography fontWeight={600} variant="body2">
               {t(conf.name)}

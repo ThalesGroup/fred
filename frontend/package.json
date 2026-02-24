@@ -1,10 +1,16 @@
 {
   "private": true,
   "name": "fred-ui",
+  "type": "module",
   "overrides": {
     "pdfjs-dist": "4.3.136",
     "canvas": "npm:@napi-rs/canvas@^0.1.59",
     "@mapbox/node-pre-gyp": "^2"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",
@@ -16,33 +22,19 @@
     "@mui/icons-material": "^6.0.2",
     "@mui/material": "^6.0.2",
     "@mui/x-tree-view": "^8.10.0",
-    "@react-three/drei": "^9.122.0",
-    "@react-three/fiber": "^8.18.0",
     "@reduxjs/toolkit": "^2.1.0",
-    "@types/lodash": "^4.14.202",
-    "bootstrap": "^5.3.3",
-    "dompurify": "^3.2.6",
     "echarts": "^5.5.1",
     "echarts-for-react": "^3.0.2",
-    "eslint": "^10.0.1",
     "http-proxy-middleware": "^3.0.2",
     "i18next": "^25.2.1",
     "i18next-browser-languagedetector": "^8.2.0",
     "katex": "^0.16.23",
     "keycloak-js": "^25.0.1",
     "leaflet": "^1.9.4",
-    "lodash": "^4.17.23",
-    "mammoth": "^1.9.0",
-    "marked": "^16.0.0",
-    "mermaid": "^11.12.3",
+    "mermaid": "^11.12.0",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "4.3.136",
-    "primeflex": "^3.3.1",
     "react": "^18.2.0",
-    "react-big-calendar": "^1.13.1",
-    "react-cookie": "^7.2.2",
-    "react-datepicker": "^7.3.0",
-    "react-doc-viewer": "^0.1.14",
     "react-dom": "^18.2.0",
     "react-dropzone": "^11.0.0",
     "react-force-graph-3d": "^1.27.0",
@@ -63,15 +55,25 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "sass": "^1.70.0",
-    "styled-components": "^6.1.13",
-    "three": "^0.181.2",
     "uuid": "^11.0.3",
     "zod": "^4.0.10"
   },
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+  "devDependencies": {
+    "@date-io/dayjs": "^3.0.0",
+    "@mui/x-date-pickers": "^7.29.4",
+    "@svgr/rollup": "^8.1.0",
+    "@types/leaflet": "^1.9.17",
+    "@types/react": "^18.2.61",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "dayjs": "^1.11.13",
+    "eslint": "^9.10.0",
+    "prettier": "3.5.3",
+    "prettier-plugin-css-order": "^2.2.0",
+    "rollup-plugin-visualizer": "^7.0.0",
+    "typescript": "^5.6.2",
+    "vite": "^6.3.6",
+    "vite-tsconfig-paths": "6.1.1"
   },
   "eslintConfig": {
     "extends": [
@@ -91,18 +93,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "devDependencies": {
-    "@date-io/dayjs": "^3.0.0",
-    "@mui/x-date-pickers": "^7.29.4",
-    "@svgr/rollup": "^8.1.0",
-    "@types/leaflet": "^1.9.17",
-    "@types/react": "^18.2.61",
-    "@types/react-dom": "^18.2.19",
-    "@vitejs/plugin-react": "^4.2.1",
-    "dayjs": "^1.11.13",
-    "prettier": "3.5.3",
-    "typescript": "^5.6.2",
-    "vite": "^6.3.6"
   }
 }

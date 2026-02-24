@@ -1,15 +1,5 @@
 import SearchIcon from "@mui/icons-material/Search";
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Divider,
-  InputAdornment,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, Button, Chip, Divider, InputAdornment, Stack, TextField, Typography } from "@mui/material";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {

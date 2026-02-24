@@ -5,15 +5,7 @@ import HttpIcon from "@mui/icons-material/Http";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import TerminalRounded from "@mui/icons-material/TerminalRounded";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
-import {
-  Card,
-  CardContent,
-  Chip,
-  IconButton,
-  Stack,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Card, CardContent, Chip, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { McpServerConfiguration } from "../../slices/agentic/agenticOpenApi";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
@@ -27,14 +19,7 @@ export interface McpServerCardProps {
   onToggleEnabled?: (server: McpServerConfiguration) => void;
 }
 
-export function McpServerCard({
-  server,
-  onEdit,
-  onDelete,
-  canEdit,
-  canDelete,
-  onToggleEnabled,
-}: McpServerCardProps) {
+export function McpServerCard({ server, onEdit, onDelete, canEdit, canDelete, onToggleEnabled }: McpServerCardProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const transport = (server.transport || "streamable_http").toLowerCase();
@@ -73,11 +58,7 @@ export function McpServerCard({
                 variant="outlined"
               />
             ) : (
-              <Chip
-                size="small"
-                label={t("mcpHub.auth.none", "No auth")}
-                variant="outlined"
-              />
+              <Chip size="small" label={t("mcpHub.auth.none", "No auth")} variant="outlined" />
             )}
           </Stack>
 

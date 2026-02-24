@@ -84,7 +84,13 @@ interface NavigationTabsProps {
   isLoading?: boolean;
 }
 
-export function NavigationTabs({ tabs, defaultPath, tabsContainerSx, contentContainerSx, isLoading }: NavigationTabsProps) {
+export function NavigationTabs({
+  tabs,
+  defaultPath,
+  tabsContainerSx,
+  contentContainerSx,
+  isLoading,
+}: NavigationTabsProps) {
   const location = useLocation();
 
   // Find the current tab index based on the pathname

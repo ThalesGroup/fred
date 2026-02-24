@@ -19,32 +19,42 @@ import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
-import DataHub from "../pages/DataHub";
-import GraphHub from "../pages/GraphHub.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
-import { Kpis } from "../pages/Kpis";
-import Logs from "../pages/Logs";
 import { McpHub } from "../pages/McpHub";
 import { NewChatAgentSelection } from "../pages/NewChatAgentSelection.tsx";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import ProcessorBench from "../pages/ProcessorBench";
-import ProcessorRunDetail from "../pages/ProcessorRunDetail";
 import { Profile } from "../pages/Profile";
-import RebacBackfill from "../pages/RebacBackfill";
-import Runtime from "../pages/Runtime";
 import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
 import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
+import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
+import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
+import React, { lazy, Suspense } from "react";
+import LoadingWithProgress from "../components/LoadingWithProgress";
 
 const basename = getConfig().frontend_basename;
 
 const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
+// Lazy loaded monitoring pages
+const Kpis = lazy(() => import("../pages/Kpis").then((module) => ({ default: module.Kpis })));
+const Runtime = lazy(() => import("../pages/Runtime"));
+const DataHub = lazy(() => import("../pages/DataHub"));
+const GraphHub = lazy(() => import("../pages/GraphHub"));
+const Logs = lazy(() => import("../pages/Logs"));
+const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
+const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
+const ProcessorRunDetail = lazy(() => import("../pages/ProcessorRunDetail"));
+
+const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
+  <Suspense fallback={<LoadingWithProgress />}>{children}</Suspense>
+);
+
 export const routes: RouteObject[] = [
   {
     path: "/",
-    element: <RootLayout />,
+    element: <MainLayout />,
     children: [
       {
         index: true,
@@ -55,12 +65,24 @@ export const routes: RouteObject[] = [
         element: <NewChatAgentSelection />,
       },
       {
+        path: "/design-system",
+        element: <DesignSystemPage />,
+      },
+      {
         path: "/new-chat/:agent-id",
         element: <Chat />,
       },
       {
         path: "chat/:sessionId",
         element: <Chat />,
+      },
+      {
+        path: "agents",
+        element: <AgentHub />,
+      },
+      {
+        path: "knowledge",
+        element: <KnowledgeHub />,
       },
       {
         path: "teams",
@@ -74,7 +96,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/kpis",
         element: (
           <ProtectedRoute resource="kpi" action="create">
-            <Kpis />
+            <SuspenseWrapper>
+              <Kpis />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -82,7 +106,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/runtime",
         element: (
           <ProtectedRoute resource="kpi" action="create">
-            <Runtime />
+            <SuspenseWrapper>
+              <Runtime />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -90,7 +116,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/data",
         element: (
           <ProtectedRoute resource="kpi" action="create">
-            <DataHub />
+            <SuspenseWrapper>
+              <DataHub />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -98,7 +126,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/graph",
         element: (
           <ProtectedRoute resource="kpi" action="create">
-            <GraphHub />
+            <SuspenseWrapper>
+              <GraphHub />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -110,7 +140,9 @@ export const routes: RouteObject[] = [
             action="create"
             anyResource // means that any of the permissions is enough so the user can have opensearch:create || logs:create and it would let the user pass.
           >
-            <Logs />
+            <SuspenseWrapper>
+              <Logs />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -118,7 +150,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/rebac-backfill",
         element: (
           <ProtectedRoute resource="tag" action="update">
-            <RebacBackfill />
+            <SuspenseWrapper>
+              <RebacBackfill />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -126,7 +160,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/processors",
         element: (
           <ProtectedRoute resource="kpi" action="create">
-            <ProcessorBench />
+            <SuspenseWrapper>
+              <ProcessorBench />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -134,7 +170,9 @@ export const routes: RouteObject[] = [
         path: "monitoring/processors/runs/:runId",
         element: (
           <ProtectedRoute resource="kpi" action="create">
-            <ProcessorRunDetail />
+            <SuspenseWrapper>
+              <ProcessorRunDetail />
+            </SuspenseWrapper>
           </ProtectedRoute>
         ),
       },
@@ -143,16 +181,8 @@ export const routes: RouteObject[] = [
         element: <Profile />,
       },
       {
-        path: "knowledge",
-        element: <KnowledgeHub />,
-      },
-      {
         path: "test-renderer",
         element: <RendererPlayground />,
-      },
-      {
-        path: "agents",
-        element: <AgentHub />,
       },
       {
         path: "tools",

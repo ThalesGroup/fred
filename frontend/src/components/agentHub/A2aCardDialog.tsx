@@ -12,17 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Box,
-  Chip,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Grid,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box, Chip, Dialog, DialogContent, DialogTitle, Divider, Grid, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 type A2aSkill = {
@@ -71,7 +61,12 @@ export const A2aCardDialog = ({ open, onClose, card }: Props) => {
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {card.description}
             </Typography>
-            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }} divider={<Divider orientation="vertical" flexItem />}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ mt: 1, flexWrap: "wrap" }}
+              divider={<Divider orientation="vertical" flexItem />}
+            >
               {card.url && (
                 <Typography variant="caption" color="text.secondary">
                   URL: {card.url}
@@ -96,14 +91,8 @@ export const A2aCardDialog = ({ open, onClose, card }: Props) => {
             </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap">
               <Chip label={t("agentHub.a2aStreaming")} color={cap.streaming ? "success" : "default"} />
-              <Chip
-                label={t("agentHub.a2aPush")}
-                color={cap.pushNotifications ? "success" : "default"}
-              />
-              <Chip
-                label={t("agentHub.a2aHistory")}
-                color={cap.stateTransitionHistory ? "success" : "default"}
-              />
+              <Chip label={t("agentHub.a2aPush")} color={cap.pushNotifications ? "success" : "default"} />
+              <Chip label={t("agentHub.a2aHistory")} color={cap.stateTransitionHistory ? "success" : "default"} />
             </Stack>
           </Box>
 
@@ -115,7 +104,10 @@ export const A2aCardDialog = ({ open, onClose, card }: Props) => {
               <Grid container spacing={1.5}>
                 {skills.map((s, idx) => (
                   <Grid item xs={12} sm={6} key={`${s.id || s.name || "skill"}-${idx}`}>
-                    <Stack spacing={0.5} sx={{ p: 1, border: (th) => `1px solid ${th.palette.divider}`, borderRadius: 1 }}>
+                    <Stack
+                      spacing={0.5}
+                      sx={{ p: 1, border: (th) => `1px solid ${th.palette.divider}`, borderRadius: 1 }}
+                    >
                       <Typography variant="body2" fontWeight={600}>
                         {s.name || s.id}
                       </Typography>

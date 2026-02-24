@@ -163,13 +163,7 @@ export const HitlDialog: React.FC<HitlDialogProps> = ({ open, event, onSubmit, o
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: isMobile ? "wrap" : "nowrap" }}>
-        <Button
-          startIcon={<CancelIcon />}
-          color="inherit"
-          variant="text"
-          onClick={onCancel}
-          fullWidth={isMobile}
-        >
+        <Button startIcon={<CancelIcon />} color="inherit" variant="text" onClick={onCancel} fullWidth={isMobile}>
           Cancel
         </Button>
         <Button

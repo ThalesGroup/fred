@@ -1273,5 +1273,25 @@
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Annuler",
     "defaultConfirmButtonLabel": "Confirmer"
+  },
+  "rework": {
+    "sidebar": {
+      "title": "FRED.AI",
+      "team": {
+        "avatarAlt": "Équipe {{teamName}}",
+        "bannerAlt": "Bannière de l'équipe",
+        "userTeam": "Espace personel",
+        "allTeams": "Toutes les équipes"
+      },
+      "menu": {
+        "agents": "Agents",
+        "resources": "Ressources",
+        "apps": "Apps"
+      },
+      "newChat": "Nouvelle conversation",
+      "chatList": {
+        "title": "Conversations"
+      }
+    }
   }
 }

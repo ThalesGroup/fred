@@ -25,7 +25,7 @@ export type DocumentFlowRowSlice = {
   key: string;
   label: string | undefined;
   value: number;
-}
+};
 
 export type VectorItem = number[] | Record<string, any> | string | number | null;
 
@@ -48,7 +48,7 @@ export const distributionColors = (theme: Theme) => [
 ];
 
 export interface DocumentDataPieProps {
-  slices: DocumentFlowRowSlice[]
+  slices: DocumentFlowRowSlice[];
 }
 
 export interface DocumentDataRowsProps {
