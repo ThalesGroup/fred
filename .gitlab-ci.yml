@@ -180,6 +180,7 @@ sync-develop-prism:
           --form "target_branch=${DEV_BRANCH}" \
           --form "title=Auto-sync: Merge ${SOURCE_BRANCH} into ${DEV_BRANCH}" \
           --form "description=MR automatique pour synchroniser ${DEV_BRANCH} avec ${SOURCE_BRANCH} suite à un push GitHub." \
+          --form "reviewer_ids=${REVIEWER_IDS}" \
           --form "remove_source_branch=false")
         MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
         echo "✅ MR !${MR_IID} créée."
