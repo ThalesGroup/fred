@@ -148,6 +148,10 @@ class BaseAgent(BaseModel):
 
     id: str
     name: str
+    team_id: Optional[str] = Field(
+        default=None,
+        description="Owning team id when this is a team-owned agent.",
+    )
     enabled: bool = True
     class_path: Optional[str] = None  # None → dynamic/UI agent
     tuning: Optional[AgentTuning] = None

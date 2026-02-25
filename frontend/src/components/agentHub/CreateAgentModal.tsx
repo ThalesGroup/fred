@@ -14,6 +14,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Autocomplete,
   Button,
   Dialog,
   DialogActions,
@@ -35,6 +36,7 @@ import { z } from "zod";
 import {
   CreateAgentRequest,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
 } from "../../slices/agentic/agenticOpenApi";
 
 import { KeyCloakService } from "../../security/KeycloakService";
@@ -108,6 +110,12 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
   });
   const watchType = useWatch({ control, name: "type", defaultValue: initialType });
   const isA2aType = watchType === "a2a_proxy";
+  const { data: declaredClassPaths = [], isFetching: isClassPathLoading } = useListDeclaredAgentClassPathsQuery(
+    undefined,
+    {
+      skip: !isAdmin || isA2aType,
+    },
+  );
 
   const submit = async (data: FormData) => {
     if (data.type === "a2a_proxy" && !data.a2a_base_url) {
@@ -202,13 +210,24 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                   name="class_path"
                   control={control}
                   render={({ field: f }) => (
-                    <TextField
-                      {...f}
-                      fullWidth
-                      size="small"
-                      label={t("agentHub.fields.classPath")}
-                      placeholder="my_module.agents.MyCustomAgent"
-                      helperText={t("agentHub.fields.classPathHelp")}
+                    <Autocomplete
+                      options={declaredClassPaths}
+                      loading={isClassPathLoading}
+                      value={f.value || null}
+                      onChange={(_, value) => {
+                        f.onChange((value || "").toString());
+                      }}
+                      noOptionsText={t("agentHub.fields.classPathNoOptions")}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          fullWidth
+                          size="small"
+                          label={t("agentHub.fields.classPath")}
+                          placeholder="my_module.agents.MyCustomAgent"
+                          helperText={t("agentHub.fields.classPathHelp")}
+                        />
+                      )}
                     />
                   )}
                 />

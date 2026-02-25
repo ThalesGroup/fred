@@ -341,8 +341,17 @@ def decode_jwt(token: str) -> KeycloakUser:
     )
 
     # Build user
+    sub = payload.get("sub")
+    if not isinstance(sub, str):
+        logger.warning("[SECURITY] JWT token missing or invalid 'sub' claim: %r", sub)
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token claims",
+            headers={"WWW-Authenticate": "Bearer error='invalid_token'"},
+        )
+
     user = KeycloakUser(
-        uid=payload.get("sub"),
+        uid=sub,
         username=payload.get("preferred_username", ""),
         roles=client_roles,
         email=payload.get("email"),

@@ -163,7 +163,6 @@ class IngestionController:
                     suffix = suffix[1:]
                 registry[suffix] = cls
         if not registry:
-            # registry["*"] = FastUnstructuredTextProcessingProcessor
             registry[".pdf"] = FastLitePdfProcessor
             registry[".docx"] = FastLiteDocxProcessor
             registry[".pptx"] = FastLitePptxProcessor

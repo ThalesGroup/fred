@@ -158,12 +158,21 @@ class KfBaseClient:
         headers: Dict[str, str] = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
 
-        # httpx handles files/stream directly.
-        return await self.client.request(
+        # httpx>=0.28 path: build a Request then send it with explicit stream mode.
+        stream = bool(kwargs.pop("stream", False))
+        follow_redirects = kwargs.pop("follow_redirects", httpx.USE_CLIENT_DEFAULT)
+        auth = kwargs.pop("auth", httpx.USE_CLIENT_DEFAULT)
+        request = self.client.build_request(
             method,
             url,
             headers=headers,
             **kwargs,
+        )
+        return await self.client.send(
+            request,
+            stream=stream,
+            auth=auth,
+            follow_redirects=follow_redirects,
         )
 
     async def _request_with_token_refresh(
@@ -179,6 +188,8 @@ class KfBaseClient:
             if r.status_code != 401:
                 r.raise_for_status()
                 return r
+
+            await r.aclose()
 
             logger.warning(
                 "401 Unauthorized on %s %s. Attempting token refresh...",

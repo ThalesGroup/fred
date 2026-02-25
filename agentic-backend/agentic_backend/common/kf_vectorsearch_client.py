@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
-from fred_core import VectorSearchHit
+from fred_core import OwnerFilter, VectorSearchHit
 from pydantic import TypeAdapter
 
 from agentic_backend.common.kf_base_client import KfBaseClient
@@ -50,6 +50,8 @@ class VectorSearchClient(KfBaseClient):
         document_library_tags_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
         search_policy: Optional[str] = None,
+        owner_filter: Optional[OwnerFilter] = None,
+        team_id: Optional[str] = None,
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
         include_corpus_scope: bool = True,
@@ -66,6 +68,8 @@ class VectorSearchClient(KfBaseClient):
             "library_tags_ids": [str]?,
             "document_uids": [str]?,
             "search_policy": str?,
+            "owner_filter": str?,
+            "team_id": str?,
             "session_id": str?,
             "include_session_scope": bool,
             "include_corpus_scope": bool
@@ -78,12 +82,17 @@ class VectorSearchClient(KfBaseClient):
             payload["document_uids"] = list(document_uids)
         if search_policy:
             payload["search_policy"] = search_policy
+        if owner_filter:
+            payload["owner_filter"] = owner_filter.value
+        if team_id:
+            payload["team_id"] = team_id
         if session_id:
             payload["session_id"] = session_id
             payload["include_session_scope"] = include_session_scope
         payload["include_corpus_scope"] = include_corpus_scope
         logger.info(
-            "[VECTOR][CLIENT] session_id=%s include_session_scope=%s include_corpus_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s document_uids=%s",
+            "[VECTOR][CLIENT] team_id=%s session_id=%s include_session_scope=%s include_corpus_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s document_uids=%s",
+            team_id,
             session_id,
             include_session_scope,
             include_corpus_scope,

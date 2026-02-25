@@ -247,7 +247,7 @@ class IngestionService:
                 return candidate
         raise FileNotFoundError(f"No preview file found for document: {metadata.document_uid} did you generate an output file named 'output.md' or 'table.csv'?")
 
-    @authorize(Action.PROCESS, Resource.DOCUMENTS)
+    @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def get_processing_progress(
         self,
         user: KeycloakUser,

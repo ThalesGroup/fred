@@ -299,16 +299,11 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
         """Convenience helper to lookup resources for a user."""
-        group_relations, org_relations = await asyncio.gather(
-            self.groups_list_to_relations(user),
-            self.user_role_to_organization_relation(user),
-        )
-
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
             resource_type=_resource_for_permission(permission),
-            contextual_relations=group_relations | org_relations,
+            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
 
@@ -323,6 +318,24 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> bool:
         """Evaluate whether a subject can perform an action on a resource."""
+
+    async def has_user_permission(
+        self,
+        user: KeycloakUser,
+        permission: RebacPermission,
+        resource_id: str,
+        *,
+        consistency_token: str | None = None,
+    ) -> bool:
+        """Convenience helper to check if a user has a permission on a resource."""
+        resource_type = _resource_for_permission(permission)
+        return await self.has_permission(
+            RebacReference(Resource.USER, user.uid),
+            permission,
+            RebacReference(resource_type, resource_id),
+            contextual_relations=await self._user_contextual_relations(user),
+            consistency_token=consistency_token,
+        )
 
     async def check_permission_or_raise(
         self,
@@ -354,19 +367,22 @@ class RebacEngine(ABC):
         consistency_token: str | None = None,
     ) -> None:
         """Convenience helper to check permission for a user, raising if unauthorized."""
-        group_relations, org_relations = await asyncio.gather(
-            self.groups_list_to_relations(user),
-            self.user_role_to_organization_relation(user),
-        )
-
         resource_type = _resource_for_permission(permission)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
             permission,
             RebacReference(resource_type, resource_id),
-            contextual_relations=group_relations | org_relations,
+            contextual_relations=await self._user_contextual_relations(user),
             consistency_token=consistency_token,
         )
+
+    async def _user_contextual_relations(self, user: KeycloakUser) -> set[Relation]:
+        """Resolve group memberships and organization role into contextual relations for a user."""
+        group_relations, org_relations = await asyncio.gather(
+            self.groups_list_to_relations(user),
+            self.user_role_to_organization_relation(user),
+        )
+        return group_relations | org_relations
 
     async def groups_list_to_relations(self, user: KeycloakUser) -> set[Relation]:
         """Helper to convert user groups to relations."""

@@ -1,0 +1,64 @@
+name: Build and Push Docker Image for develop
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push-develop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # matrix will trigger the creation of a different parallel job for each case
+      matrix:
+        include:
+          - name: agentic-backend
+            context: ./
+            dockerfile: ./agentic-backend/dockerfiles/Dockerfile-prod
+            image: agentic-backend
+          - name: knowledge-flow-backend
+            context: ./
+            dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
+            image: knowledge-flow-backend
+          - name: frontend
+            context: ./
+            dockerfile: ./frontend/dockerfiles/Dockerfile-prod
+            image: frontend
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/thalesgroup/fred-agent/${{ matrix.image }}
+          tags: |
+            type=raw,value=dev
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

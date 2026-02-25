@@ -18,7 +18,6 @@ from typing import Dict, List
 from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import (
     DocxMarkdownProcessor,
 )
-from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_unstructured_text_processor import FastUnstructuredTextProcessingProcessor
 from knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor import (
     MarkdownMarkdownProcessor,
 )
@@ -68,14 +67,6 @@ def default_registry() -> Dict[str, ProcessorSpec]:
             factory=lambda: MarkdownMarkdownProcessor(),
             display_name="Markdown → MD (Standard)",
             file_types=[".md"],
-        ),
-        ##################### Fast processors #####################
-        ProcessorSpec(
-            id="fast_unstructured_text",
-            kind="fast",
-            factory=lambda: FastUnstructuredTextProcessingProcessor(),
-            display_name="Fast → Text (Unstructured)",
-            file_types=[".pdf", ".docx", ".pptx", ".txt", ".md"],
         ),
     ]
 

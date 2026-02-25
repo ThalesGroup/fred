@@ -19,10 +19,11 @@ import MonitorHeartIcon from "@mui/icons-material/MonitorHeart";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ScienceIcon from "@mui/icons-material/Science";
 import ShieldIcon from "@mui/icons-material/Shield";
-import { Box, CSSObject, Divider, Paper, styled, Theme, Typography } from "@mui/material";
+import { alpha, Box, CSSObject, Divider, Paper, styled, Theme, Typography } from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { useMatch } from "react-router-dom";
 import { getProperty } from "../common/config";
 import { DynamicSvgIcon } from "../components/DynamicSvgIcon";
 import InvisibleLink from "../components/InvisibleLink";
@@ -37,6 +38,11 @@ import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { KeyCloakService } from "../security/KeycloakService";
 import { usePermissions } from "../security/usePermissions";
+import {
+  useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery,
+  useGetSessionsAgenticV1ChatbotSessionsGetQuery,
+  useListAgentsAgenticV1AgentsGetQuery,
+} from "../slices/agentic/agenticOpenApi";
 import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
@@ -85,9 +91,21 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== "open" 
     },
   ],
 }));
+
+const resolvePreferredAgentId = (prefs?: { [key: string]: any } | null): string | null => {
+  if (!prefs || typeof prefs !== "object") return null;
+  const agentId = prefs.agent_id;
+  if (typeof agentId === "string" && agentId.trim()) return agentId.trim();
+  const legacyAgentName = prefs.agent_name;
+  if (typeof legacyAgentName === "string" && legacyAgentName.trim()) return legacyAgentName.trim();
+  return null;
+};
+
 export default function SideBar() {
   const { t } = useTranslation();
   const { agentsNicknamePlural, agentIconName } = useFrontendProperties();
+  const activeChatMatch = useMatch("/chat/:sessionId");
+  const activeSessionId = activeChatMatch?.params.sessionId;
 
   // Remove collapsing for now
   // const [open, setOpen] = useLocalStorageState("SideBar.open", true);
@@ -246,21 +264,54 @@ export default function SideBar() {
   // todo: handle loading
   // todo: handle error
   const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
+  const { data: sessions = [] } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
+  const { data: activeSessionPrefs } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
+    { sessionId: activeSessionId || "" },
+    { skip: !activeSessionId },
+  );
+  const { data: allAgents = [] } = useListAgentsAgenticV1AgentsGetQuery({});
   const yourTeams = teams && teams.filter((t) => t.is_member);
+  const activeSession = useMemo(
+    () => (activeSessionId ? sessions.find((session) => session.id === activeSessionId) : undefined),
+    [activeSessionId, sessions],
+  );
+  const preferredAgentId = useMemo(() => resolvePreferredAgentId(activeSessionPrefs), [activeSessionPrefs]);
+  const activeAgentId = preferredAgentId || activeSession?.agent_id || activeSession?.agents?.[0]?.id || null;
+  const activeTeamId = useMemo(() => {
+    if (!activeAgentId) return null;
+    const activeAgent = allAgents.find((agent) => agent.id === activeAgentId);
+    return activeAgent?.team_id ?? null;
+  }, [activeAgentId, allAgents]);
+  const activeTeam = useMemo(
+    () => (activeSessionId && activeTeamId ? teams?.find((team) => team.id === activeTeamId) || null : null),
+    [activeSessionId, activeTeamId, teams],
+  );
   const teamsMenuItem: SideBarNavigationElement[] =
-    yourTeams?.map((t) => ({
-      key: t.id,
-      label: t.name,
-      url: `team/${t.id}/${agentsNicknamePlural}`,
-      icon: (
-        <TeamAvatar
-          teamName={t.name}
-          imageUrl={t.banner_image_url}
-          sizes="small"
-          sx={{ width: 24, height: 24, fontSize: "0.75rem" }}
-        />
-      ),
-    })) || [];
+    yourTeams?.map((team) => {
+      const isActiveTeam = activeTeam?.id === team.id;
+      return {
+        key: team.id,
+        label: team.name,
+        url: `team/${team.id}/${agentsNicknamePlural}`,
+        icon: (
+          <TeamAvatar
+            teamName={team.name}
+            imageUrl={team.banner_image_url}
+            sizes="small"
+            sx={[
+              { width: 24, height: 24, fontSize: "0.75rem" },
+              isActiveTeam
+                ? (theme) => ({
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: 1,
+                    boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.24)}`,
+                  })
+                : undefined,
+            ]}
+          />
+        ),
+      };
+    }) || [];
 
   const logoName = getProperty("logoName") || "fred";
   const logoNameDark = getProperty("logoNameDark") || "fred-dark";

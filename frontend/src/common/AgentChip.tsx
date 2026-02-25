@@ -12,19 +12,19 @@ const LETTER_SPACING = 0.2; // avoids cramped uppercase
 // Maps the functional color hints to specific, high-contrast chart colors.
 export const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
   // Leaders: Use high-contrast purple
-  leader: theme.palette.secondary.main,
+  leader: theme.palette.primary.main,
 
   // Data/Knowledge: Mapped to chart.blue (Information/Context)
-  data: theme.palette.secondary.main,
+  data: theme.palette.primary.main,
 
   // Execution/Tool: Mapped to chart.green (Action/Success)
-  execution: theme.palette.secondary.main,
+  execution: theme.palette.primary.main,
 
   // Drafting/Content: Mapped to chart.orange (Creation/Drafting, high visibility)
-  document: theme.palette.secondary.main,
+  document: theme.palette.primary.main,
 
-  // Fallback/General: Mapped to chart.secondary
-  general: theme.palette.secondary.main,
+  // Fallback/General: Mapped to chart.primary
+  general: theme.palette.primary.main,
 });
 
 // --- Component Props and Definition ---
@@ -49,14 +49,17 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
   if (!agent) return null;
 
   const theme = useTheme();
-  const { Icon: ChipIcon, colorHint } = getAgentVisuals(agent);
+  const {
+    // Icon: ChipIcon,
+    colorHint,
+  } = getAgentVisuals(agent);
   const chipColor = THEME_COLOR_MAP(theme)[colorHint];
 
   // Visual constants
-  const ICON_SIZE = 14;
+  // const ICON_SIZE = 14;
   const NAME_MAX_W = 200; // allow a bit more breathing room
   const GAP_X = 0.75;
-  const ICON_PAD = ICON_SIZE + 6;
+  // const ICON_PAD = ICON_SIZE + 6;
 
   return (
     <Box
@@ -69,12 +72,13 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
           textAlign: "center",
           minWidth: 0,
           py: 0.15,
-          pl: `${ICON_PAD}px`,
+          // pl: `${ICON_PAD}px`,
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <ChipIcon
+      {/* Hide icon until user can choose it */}
+      {/* <ChipIcon
         sx={{
           fontSize: ICON_SIZE,
           color: chipColor,
@@ -85,7 +89,7 @@ export const AgentChipWithIcon = ({ agent, sx }: AgentChipProps) => {
           top: "50%",
           transform: "translateY(-50%)",
         }}
-      />
+      /> */}
 
       <Box
         sx={{

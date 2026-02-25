@@ -42,6 +42,10 @@ run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
 
+.PHONY: run-worker-prod
+run-worker-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
+run-worker-prod: run-worker ## run the Temporal agent worker with production config
+
 .PHONY: run-worker-docker
 run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost via host network)
 	@echo "🚀 Running the worker in Docker..."
@@ -93,7 +97,6 @@ run-docker-test: reset-test-state ## Run Knowledge Flow API in Docker with confi
 		-e HF_HOME=/app/.fred-test/.cache/huggingface \
 		-e HUGGINGFACE_HUB_CACHE=/app/.fred-test/.cache/huggingface/hub \
 		-e HF_HUB_CACHE=/app/.fred-test/.cache/huggingface/hub \
-		-e TRANSFORMERS_CACHE=/app/.fred-test/.cache/huggingface/transformers \
 		-e SENTENCE_TRANSFORMERS_HOME=/app/.fred-test/.cache/huggingface \
 		$(IMAGE_FULL)
 

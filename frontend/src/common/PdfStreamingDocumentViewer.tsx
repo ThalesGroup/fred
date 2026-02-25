@@ -18,6 +18,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
+import { getConfig } from "./config";
 import { useAuthToken } from "../security/AuthContext";
 
 type Props = {
@@ -49,10 +50,23 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
     return () => ro.disconnect();
   }, []);
 
-  const pdfUrl = useMemo(
-    () => (doc?.document_uid ? `/knowledge-flow/v1/raw_content/stream/${doc.document_uid}` : null),
-    [doc?.document_uid],
-  );
+  const pdfUrl = useMemo(() => {
+    if (!doc?.document_uid) return null;
+    const streamPath = `/knowledge-flow/v1/raw_content/stream/${doc.document_uid}`;
+    try {
+      const base =
+        (import.meta.env.VITE_BACKEND_URL_KNOWLEDGE as string | undefined) || getConfig().backend_url_knowledge;
+      const trimmedBase = (base || "").replace(/\/+$/, "");
+      if (!trimmedBase) return streamPath;
+      if (trimmedBase.endsWith("/knowledge-flow/v1")) {
+        return `${trimmedBase}/raw_content/stream/${doc.document_uid}`;
+      }
+      return `${trimmedBase}${streamPath}`;
+    } catch {
+      // Config may be unavailable during very early app bootstrap.
+      return streamPath;
+    }
+  }, [doc?.document_uid]);
 
   const fileProp = useMemo(() => {
     if (!pdfUrl) return null;
