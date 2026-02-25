@@ -155,12 +155,13 @@ helm-chart:
 # -----------------------------------------------------------------------------
 
 sync-develop-prism:
-  image: registry.gitlab.com/gitlab-ci-utils/curl-jq:1.2.1
+  image: artifactory.thalesdigital.io/docker-internal/fred/alpine:3.21
   stage: sync
   needs: []
   rules:
     - if: $CI_COMMIT_BRANCH == "sehling/create-auto-merge-ci" || $CI_COMMIT_BRANCH == "main"
   script:
+    - apk add --no-cache curl jq
     - SOURCE_BRANCH="${CI_COMMIT_BRANCH}"
     - echo "Mirror updated on branch ${SOURCE_BRANCH}, creating MR to ${DEV_BRANCH}"
     # Check if a MR already exists
@@ -200,7 +201,7 @@ sync-develop-prism:
     # No conflicts: auto-merge the MR
     - |
       echo "No conflicts detected, auto-merging MR !${MR_IID}..."
-
+      
       MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
       if [ "$MERGE_STATE" = "merged" ]; then
         echo "✅ MR !${MR_IID} merged successfully (${SOURCE_BRANCH} → ${DEV_BRANCH})."
