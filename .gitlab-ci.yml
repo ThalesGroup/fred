@@ -184,26 +184,24 @@ sync-develop-prism:
         MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
         echo "✅ MR !${MR_IID} créée."
       fi
-    # # Check for merge conflicts
-    # - |
-    #   MR_DETAIL=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-    #     "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}")
-    #   HAS_CONFLICTS=$(echo "$MR_DETAIL" | jq -r '.has_conflicts')
-    #   if [ "$HAS_CONFLICTS" = "true" ]; then
-    #     echo "❌ CONFLIT détecté sur la MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})."
-    #     echo "Veuillez résoudre les conflits manuellement."
-    #     exit 1
-    #   fi
-    # # No conflicts: auto-merge the MR
-    # - |
-    #   echo "Aucun conflit détecté, merge automatique de la MR !${MR_IID}..."
-    #   MERGE_RESPONSE=$(curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-    #     "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/merge")
-    #   MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
-    #   if [ "$MERGE_STATE" = "merged" ]; then
-    #     echo "✅ MR !${MR_IID} mergée avec succès (${SOURCE_BRANCH} → ${DEV_BRANCH})."
-    #   else
-    #     echo "❌ Échec du merge automatique de la MR !${MR_IID}."
-    #     echo "$MERGE_RESPONSE" | jq .
-    #     exit 1
-    #   fi
+    # Check for merge conflicts
+    - |
+      MR_DETAIL=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}")
+      HAS_CONFLICTS=$(echo "$MR_DETAIL" | jq -r '.has_conflicts')
+      if [ "$HAS_CONFLICTS" = "true" ]; then
+        echo "❌ CONFLIT détecté sur la MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+        echo "Veuillez résoudre les conflits manuellement."
+        exit 1
+      fi
+    # No conflicts: auto-merge the MR
+    - |
+      echo "Aucun conflit détecté, merge automatique de la MR !${MR_IID}..."
+      MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
+      if [ "$MERGE_STATE" = "merged" ]; then
+        echo "✅ MR !${MR_IID} mergée avec succès (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+      else
+        echo "❌ Échec du merge automatique de la MR !${MR_IID}."
+        echo "$MERGE_RESPONSE" | jq .
+        exit 1
+      fi
