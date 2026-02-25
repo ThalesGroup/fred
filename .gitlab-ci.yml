@@ -185,7 +185,7 @@ sync-develop-prism:
         MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
         echo "✅ MR !${MR_IID} créée."
       fi
-    # Check for merge conflicts
+    # Check for merge conflicts 
     - |
       MR_DETAIL=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}")
