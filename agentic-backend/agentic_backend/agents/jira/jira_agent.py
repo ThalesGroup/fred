@@ -193,7 +193,8 @@ class JiraAgent(AgentFlow):
 
 1. **Jamais afficher le contenu** : uniquement confirmer (ex: "User Story US-01 ajoutée")
 2. **Export par défaut en Markdown** : à la fin, appeler UNIQUEMENT export_deliverables(). N'appeler export_jira_csv() QUE si l'utilisateur demande explicitement un CSV ou un fichier pour Jira. N'appeler export_zephyr_csv() QUE si l'utilisateur demande explicitement un export Zephyr
-3. **Erreurs de validation** : Si un outil échoue, corrige le format et réessaie.""",
+3. **Liens de téléchargement** : Si un outil d'export retourne un LinkPart, ne le réécris JAMAIS en texte ou en Markdown. N'affiche jamais d'URL brute ni de lien `[Download ...]` ou `[Télécharger ...]`. Le bouton de téléchargement s'affiche automatiquement. Résume simplement ce qui a été généré.
+4. **Erreurs de validation** : Si un outil échoue, corrige le format et réessaie.""",
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
             FieldSpec(
