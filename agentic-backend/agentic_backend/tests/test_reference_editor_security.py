@@ -10,7 +10,7 @@ from agentic_backend.agents.reference_editor.image_search_util import (
 from agentic_backend.agents.reference_editor.powerpoint_template_util import (
     referenceSchema,
 )
-from agentic_backend.agents.reference_editor.reference_editor import (
+from agentic_backend.agents.reference_editor.validation_tools import (
     _normalize_reference_payload_for_validation,
 )
 
