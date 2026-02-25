@@ -155,13 +155,12 @@ helm-chart:
 # -----------------------------------------------------------------------------
 
 sync-develop-prism:
-  image: alpine:latest
+  image: registry.gitlab.com/gitlab-ci-utils/curl-jq:1.2.1
   stage: sync
   needs: []
   rules:
     - if: $CI_COMMIT_BRANCH == "sehling/create-auto-merge-ci" || $CI_COMMIT_BRANCH == "main"
   script:
-    - apk add --no-cache curl jq
     - SOURCE_BRANCH="${CI_COMMIT_BRANCH}"
     - echo "Mirror updated on branch ${SOURCE_BRANCH}, creating MR to ${DEV_BRANCH}"
     # Check if a MR already exists
@@ -179,30 +178,34 @@ sync-develop-prism:
           --form "source_branch=${SOURCE_BRANCH}" \
           --form "target_branch=${DEV_BRANCH}" \
           --form "title=Auto-sync: Merge ${SOURCE_BRANCH} into ${DEV_BRANCH}" \
-          --form "description=MR automatique pour synchroniser ${DEV_BRANCH} avec ${SOURCE_BRANCH} suite à un push GitHub." \
-          --form "reviewer_ids=${REVIEWER_IDS}" \
+          --form "description=Automatic MR to sync ${DEV_BRANCH} with ${SOURCE_BRANCH} following a GitHub push." \
           --form "remove_source_branch=false")
         MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
-        echo "✅ MR !${MR_IID} créée."
+        echo "✅ MR !${MR_IID} created."
       fi
-    # Check for merge conflicts 
+    # Check for merge conflicts
     - |
       MR_DETAIL=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
         "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}")
       HAS_CONFLICTS=$(echo "$MR_DETAIL" | jq -r '.has_conflicts')
       if [ "$HAS_CONFLICTS" = "true" ]; then
-        echo "❌ CONFLIT détecté sur la MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})."
-        echo "Veuillez résoudre les conflits manuellement."
+        echo "❌ CONFLICT detected on MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+        echo "Adding reviewers for notification..."
+        curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}" \
+          --form "reviewer_ids=${REVIEWER_IDS}"
+        echo "Please resolve the conflicts manually."
         exit 1
       fi
     # No conflicts: auto-merge the MR
     - |
-      echo "Aucun conflit détecté, merge automatique de la MR !${MR_IID}..."
+      echo "No conflicts detected, auto-merging MR !${MR_IID}..."
+
       MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
       if [ "$MERGE_STATE" = "merged" ]; then
-        echo "✅ MR !${MR_IID} mergée avec succès (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+        echo "✅ MR !${MR_IID} merged successfully (${SOURCE_BRANCH} → ${DEV_BRANCH})."
       else
-        echo "❌ Échec du merge automatique de la MR !${MR_IID}."
+        echo "❌ Auto-merge failed for MR !${MR_IID}."
         echo "$MERGE_RESPONSE" | jq .
         exit 1
       fi
