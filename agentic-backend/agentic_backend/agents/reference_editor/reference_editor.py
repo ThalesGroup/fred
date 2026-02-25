@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from __future__ import annotations
 
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 
 from fred_core import OwnerFilter
@@ -31,6 +31,10 @@ from agentic_backend.agents.reference_editor.powerpoint_template_util import (
     referenceSchema,
 )
 from agentic_backend.application_context import get_default_chat_model
+from agentic_backend.common.kf_base_client import KfBaseClient
+from agentic_backend.common.kf_vectorsearch_client import (
+    VectorSearchClient,
+)
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import (
@@ -426,11 +430,6 @@ class ReferenceEditor(AgentFlow):
                 output_path = Path(out.name)
                 # Extract the actual data from the wrapper
                 actual_data = data.get("data", data)
-                # Create clients for image search
-                from agentic_backend.common.kf_base_client import KfBaseClient
-                from agentic_backend.common.kf_vectorsearch_client import (
-                    VectorSearchClient,
-                )
 
                 vector_search_client = VectorSearchClient(agent=self)
                 search_options = self._build_vector_search_scope_options()
@@ -448,7 +447,6 @@ class ReferenceEditor(AgentFlow):
 
             # 3. Upload the generated asset to user storage
             import asyncio
-            import uuid
 
             # user_id_to_store_asset = self.get_end_user_id()
             # Use UUID to generate a unique filename that won't trigger versioning conflicts
