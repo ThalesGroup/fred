@@ -155,7 +155,7 @@ helm-chart:
 # -----------------------------------------------------------------------------
 
 sync-develop-prism:
-  image: artifactory.thalesdigital.io/docker-internal/fred/alpine:3.21
+  image: mirror.gcr.io/library/alpine:3.21
   stage: sync
   needs: []
   rules:
