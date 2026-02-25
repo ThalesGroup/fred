@@ -171,7 +171,7 @@ class ExportTools:
                 # Return LinkPart directly for proper UI rendering
                 return LinkPart(
                     href=upload_result.download_url,
-                    title=f"📥 Télécharger {upload_result.file_name}",
+                    title=upload_result.file_name,
                     kind=LinkKind.download,
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 ).model_dump(mode="json")

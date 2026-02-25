@@ -83,7 +83,8 @@ fill_template(enjeuxBesoins=<JSON étape 1>, cv=<JSON étape 2>, prestationFinan
 ## COMMUNICATION
 
 - Sois concis entre les appels d'outils. Ne décris pas ce que tu vas faire avant chaque appel.
-- Ne montre pas les JSON bruts à l'utilisateur.""",
+- Ne montre pas les JSON bruts à l'utilisateur.
+- Si fill_template retourne un LinkPart, ne le réécris JAMAIS en texte ou en Markdown. N'affiche jamais d'URL brute ni de lien `[Download ...]`. Ne mentionne pas le bouton de téléchargement. Résume simplement ce qui a été extrait et les champs manquants.""",
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
             FieldSpec(
