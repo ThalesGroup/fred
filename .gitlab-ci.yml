@@ -151,7 +151,7 @@ helm-chart:
         CHART_PATH: ${CI_PROJECT_DIR}/deploy/charts/fred
 
 # -----------------------------------------------------------------------------
-# Sync develop-prism with the most recent GitHub branch (develop or main)
+# Sync develop-prism with the most recent GitHub branch (develop or main) 
 # -----------------------------------------------------------------------------
 
 sync-develop-prism:
