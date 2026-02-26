@@ -12,7 +12,7 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-and-push-develop:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
