@@ -26,14 +26,16 @@ variables:
 # -----------------------------------------------------------------------------
 
 stages:
+  - sync
   - build-image
   - package-chart
 
 workflow:
   rules:
-    - if: $CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/
-    - if: $CI_COMMIT_TAG =~ /^chart\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_TAG =~ /^code\/v/
+    - if: $CI_COMMIT_TAG =~ /^chart\/v/
     - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "web"
 
 # -----------------------------------------------------------------------------
@@ -69,7 +71,7 @@ workflow:
 .docker-code:
   extends: .docker-default
   rules:
-    - if: $CI_COMMIT_TAG =~ /^code\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_TAG =~ /^code\/v/
     - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
       variables:
         IMAGE_TAG: dev-prism
@@ -116,7 +118,7 @@ docker-benchmark:
   image: alpine/helm:3.17.3
   stage: package-chart
   rules:
-    - if: $CI_COMMIT_TAG =~ /^chart\/v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_TAG =~ /^chart\/v/
     - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
       variables:
         CHART_VERSION: 0.0.0-dev-prism
@@ -146,3 +148,65 @@ helm-chart:
     matrix:
       - CHART_NAME: fred
         CHART_PATH: ${CI_PROJECT_DIR}/deploy/charts/fred
+
+# -----------------------------------------------------------------------------
+# Sync develop-prism with the most recent GitHub branch (develop or main)
+# -----------------------------------------------------------------------------
+
+sync-develop-prism:
+  image: mirror.gcr.io/library/alpine:3.21
+  stage: sync
+  needs: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"
+  script:
+    - apk add --no-cache curl jq
+    - SOURCE_BRANCH="${CI_COMMIT_BRANCH}"
+    - echo "Mirror updated on branch ${SOURCE_BRANCH}, creating MR to ${DEV_BRANCH}"
+    # Check if a MR already exists
+    - |
+      EXISTING_MR=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${SOURCE_BRANCH}&target_branch=${DEV_BRANCH}&state=opened" \
+        | jq '.[0]')
+      if [ "$EXISTING_MR" != "null" ]; then
+        echo "A MR already exists from ${SOURCE_BRANCH} to ${DEV_BRANCH}. Skipping creation."
+        MR_IID=$(echo "$EXISTING_MR" | jq -r '.iid')
+      else
+        # Create the MR
+        MR_RESPONSE=$(curl -s --request POST --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests" \
+          --form "source_branch=${SOURCE_BRANCH}" \
+          --form "target_branch=${DEV_BRANCH}" \
+          --form "title=Auto-sync: Merge ${SOURCE_BRANCH} into ${DEV_BRANCH}" \
+          --form "description=Automatic MR to sync ${DEV_BRANCH} with ${SOURCE_BRANCH} following a GitHub push." \
+          --form "remove_source_branch=false")
+        MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
+        echo "✅ MR !${MR_IID} created."
+      fi
+    # Check for merge conflicts
+    - |
+      MR_DETAIL=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}")
+      HAS_CONFLICTS=$(echo "$MR_DETAIL" | jq -r '.has_conflicts')
+      if [ "$HAS_CONFLICTS" = "true" ]; then
+        echo "❌ CONFLICT detected on MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+        echo "Adding reviewers for notification..."
+        curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}" \
+          --form "reviewer_ids=${REVIEWER_IDS}"
+        echo "Please resolve the conflicts manually."
+        exit 1
+      fi
+    # No conflicts: auto-merge the MR
+    - |
+      echo "No conflicts detected, auto-merging MR !${MR_IID}..."
+      MERGE_RESPONSE=$(curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/merge")
+      MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
+      if [ "$MERGE_STATE" = "merged" ]; then
+        echo "✅ MR !${MR_IID} merged successfully (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+      else
+        echo "❌ Auto-merge failed for MR !${MR_IID}."
+        echo "$MERGE_RESPONSE" | jq .
+        exit 1
+      fi

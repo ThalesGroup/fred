@@ -1,7 +1,9 @@
+import GroupsIcon from "@mui/icons-material/Groups";
 import { Box, styled, Typography, useTheme } from "@mui/material";
 import Paper from "@mui/material/Paper/Paper";
 import { AnyAgent, getAgentVisuals } from "../../common/agent";
 import { THEME_COLOR_MAP } from "../../common/AgentChip";
+import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import InvisibleLink from "../InvisibleLink";
 
 const HoverBox = styled(Box)<{ agentColor: string }>(({ theme, agentColor }) => ({
@@ -16,9 +18,15 @@ export interface AgentTileProps {
 }
 
 export function AgentTile({ agent }: AgentTileProps) {
-  const { Icon: AgentIcon, colorHint } = getAgentVisuals(agent);
+  const {
+    // Icon: AgentIcon,
+    colorHint,
+  } = getAgentVisuals(agent);
   const theme = useTheme();
   const agentColor = THEME_COLOR_MAP(theme)[colorHint];
+
+  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery(); // (If multiples tiles are displayed, Redux RTK query should cache the teams, so this should not cause multiple requests)
+  const teamName = agent.team_id ? teams?.find((t) => t.id === agent.team_id)?.name : undefined;
 
   return (
     <InvisibleLink to={`/new-chat/${encodeURIComponent(agent.id)}`}>
@@ -39,29 +47,44 @@ export function AgentTile({ agent }: AgentTileProps) {
             pl: 2,
             gap: 1.5,
             py: 2,
-            width: "240px",
+            width: "100%",
             height: "100%",
           }}
         >
           {/* Icon */}
-          <AgentIcon sx={{ color: agentColor, width: 28 }} />
+          {/* Hide agent icon for now as user do not choose it */}
+          {/* <AgentIcon sx={{ color: agentColor, width: 28 }} /> */}
 
-          {/* Name + role */}
-          <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-            <Typography
-              variant="body1"
-              color="textPrimary"
-              sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-            >
-              {agent.name}
-            </Typography>
-            <Typography
-              variant="body2"
-              color="textSecondary"
-              sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-            >
-              {agent.tuning?.role}
-            </Typography>
+          {/* Name + role + team */}
+          <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: 0.5 }}>
+            {teamName && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                <GroupsIcon sx={{ fontSize: "1rem", color: "text.secondary" }} />
+                <Typography
+                  variant="caption"
+                  color="textSecondary"
+                  sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {teamName}
+                </Typography>
+              </Box>
+            )}
+            <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 0.25 }}>
+              <Typography
+                variant="subtitle1"
+                color="primary"
+                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
+              >
+                {agent.name}
+              </Typography>
+              <Typography
+                variant="body1"
+                color="textSecondary"
+                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {agent.tuning?.role}
+              </Typography>
+            </Box>
           </Box>
         </HoverBox>
       </Paper>

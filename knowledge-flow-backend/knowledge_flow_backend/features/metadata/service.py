@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -93,6 +94,13 @@ class MetadataService:
         self.vector_store = None
         self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
+
+    async def filter_readable_document_uids(self, user: KeycloakUser, document_uids: list[str]) -> set[str]:
+        """Return only the document UIDs the user is allowed to read (individual permission checks)."""
+        if not document_uids:
+            return set()
+        results = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, uid) for uid in document_uids))
+        return {uid for uid, allowed in zip(document_uids, results) if allowed}
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_documents_metadata(self, user: KeycloakUser, filters_dict: dict) -> list[DocumentMetadata]:

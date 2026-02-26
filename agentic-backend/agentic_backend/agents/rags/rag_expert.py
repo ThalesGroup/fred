@@ -16,7 +16,7 @@
 import logging
 from typing import List, Tuple
 
-from fred_core import VectorSearchHit
+from fred_core import OwnerFilter, VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
@@ -137,13 +137,15 @@ RAG_TUNING = AgentTuning(
             type="prompt",
             title="No Results Message",
             description=(
-                "Message sent to the model when the search returns no documents at all. Include a {question} placeholder if needed."
+                "Message sent to the model when the search returns no documents at all. "
+                "Include placeholders for {question} and {response_language}."
             ),
             required=True,
             default=(
-                "No relevant documents or uploaded files were found in the selected libraries "
-                "to answer this question. Please refine the query (e.g., add date/location constraints, a specific document type, or alternate keywords), "
-                "or upload supporting documents so I can work with concrete sources.\n\n"
+                "No relevant information was found in the selected corpus (libraries and session attachments) for this question.\n"
+                "Start your answer with one explicit sentence in {response_language} stating that there is no supporting information in the corpus.\n"
+                "Then, if corpus-only mode is active, explain that you cannot answer without corpus evidence.\n"
+                "Otherwise, you may provide a concise general-knowledge answer, clearly labeled as not grounded in corpus documents.\n\n"
                 "Question:\n{question}"
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -300,11 +302,46 @@ class Rico(AgentFlow):
             raise RuntimeError(f"Rico: no tuned prompt found for '{key}'.")
         return self.render(prompt, **tokens)
 
+    @staticmethod
+    def _normalize_response_language(
+        language: str | None, default: str = "English"
+    ) -> str:
+        """
+        Normalize locale-like values (e.g. fr, fr-FR, en-US) to model-friendly labels.
+        """
+        if not language:
+            return default
+        normalized = language.strip()
+        if not normalized:
+            return default
+        key = normalized.lower().replace("_", "-")
+        if key.startswith("fr"):
+            return "français"
+        if key.startswith("en"):
+            return "English"
+        return normalized
+
+    @staticmethod
+    def _empty_corpus_notice(response_language: str) -> str:
+        lang = response_language.lower()
+        if lang.startswith("fr"):
+            return (
+                "Aucune information pertinente n'a été trouvée dans le corpus "
+                "sélectionné (bibliothèques et pièces jointes de session)."
+            )
+        return (
+            "No relevant information was found in the selected corpus "
+            "(libraries and session attachments)."
+        )
+
     def _system_prompt(self) -> str:
         """
         Resolve the RAG system prompt from tuning; optionally append chat context text if enabled.
         """
-        response_language = get_language(self.get_runtime_context()) or "English"
+        response_language = self._normalize_response_language(
+            get_language(self.get_runtime_context()),
+            default="English",
+        )
         sys_text = self._render_tuned_prompt(
             "prompts.system", response_language=response_language
         )  # token-safe rendering (e.g. {today})
@@ -360,7 +397,10 @@ class Rico(AgentFlow):
         try:
             runtime_context = self.get_runtime_context()
             rag_scope = get_rag_knowledge_scope(runtime_context)
-            response_language = get_language(runtime_context) or "English"
+            response_language = self._normalize_response_language(
+                get_language(runtime_context),
+                default="English",
+            )
             chat_context = await self.chat_context_text()
             include_chat_context = self.get_field_spec(
                 "prompts.include_chat_context"
@@ -456,6 +496,10 @@ class Rico(AgentFlow):
                     document_library_tags_ids=doc_tag_ids,
                     document_uids=document_uids,
                     search_policy=search_policy,
+                    team_id=self.get_settings().team_id,
+                    owner_filter=OwnerFilter.TEAM
+                    if self.get_settings().team_id
+                    else OwnerFilter.PERSONAL,
                     session_id=runtime_context.session_id,
                     include_session_scope=include_session_scope,
                     include_corpus_scope=include_corpus_scope,
@@ -475,17 +519,43 @@ class Rico(AgentFlow):
                     )
                 logger.debug("[AGENT] top hits: %s", "; ".join(hit_summaries))
             if not hits:
+                sys_msg = SystemMessage(content=self._system_prompt())
+                history_max = self.get_tuned_int(
+                    "rag.history_max_messages", default=6, min_value=0
+                )
+                history = self.get_recent_history(
+                    state["messages"],
+                    max_messages=history_max,
+                    include_system=False,
+                    include_tool=False,
+                    drop_last=True,
+                )
                 if is_corpus_only_mode(runtime_context):
-                    warn = (
-                        "No relevant documents or attached files were found in the selected libraries, "
-                        "and I am restricted to the corpus only. Please provide documents or refine your query."
-                    )
+                    if response_language.lower().startswith("fr"):
+                        warn = (
+                            f"{self._empty_corpus_notice(response_language)}\n\n"
+                            "Tu dois indiquer clairement que tu ne peux pas répondre "
+                            "de façon fiable sans preuves dans le corpus, puis proposer "
+                            "de reformuler la question ou d'ajouter des documents."
+                        )
+                    else:
+                        warn = (
+                            f"{self._empty_corpus_notice(response_language)}\n\n"
+                            "You must clearly state that you cannot provide a reliable "
+                            "answer without corpus evidence, then ask the user to "
+                            "refine the request or upload relevant documents."
+                        )
                 else:
-                    warn = (
-                        "I couldn't find any relevant documents or uploaded attachments for that question. "
-                        "Try asking about something covered by the selected libraries or upload relevant files."
+                    no_results_text = self._render_tuned_prompt(
+                        "prompts.no_results",
+                        question=question,
+                        response_language=response_language,
                     )
-                messages = [HumanMessage(content=warn)]
+                    warn = (
+                        f"{self._empty_corpus_notice(response_language)}\n\n"
+                        f"{no_results_text}"
+                    )
+                messages = [sys_msg, *history, HumanMessage(content=warn)]
                 messages = await self.with_chat_context_text(messages)
 
                 async with self.phase("answer_no_results"):
@@ -636,7 +706,10 @@ class Rico(AgentFlow):
 
             fallback_text = guardrail_fallback_message(
                 info,
-                language=get_language(runtime_context) or "English",
+                language=self._normalize_response_language(
+                    get_language(runtime_context),
+                    default="English",
+                ),
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
             fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])

@@ -26,7 +26,6 @@ import { useTranslation } from "react-i18next";
 
 // OpenAPI types
 import { AnyAgent } from "../../common/agent";
-import { AgentChipWithIcon } from "../../common/AgentChip";
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { Leader } from "../../slices/agentic/agenticOpenApi";
@@ -134,14 +133,20 @@ export const AgentCard = ({
                 </Typography>
               </Box>
             ) : (
-              <AgentChipWithIcon agent={agent} />
+              <Typography
+                variant="subtitle1"
+                color="primary"
+                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
+              >
+                {agent.name}
+              </Typography>
             )}
           </Box>
         </Box>
 
         {/* ROW 2: Agent Role (Moved here) */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body2" color="textPrimary" sx={{ lineHeight: 1.25, fontWeight: 500 }}>
+          <Typography variant="body1" color="textPrimary" sx={{ lineHeight: 1.25 }}>
             {agent.tuning.role}
           </Typography>
         </Box>

@@ -15,7 +15,6 @@
 import asyncio
 import importlib
 import logging
-from enum import Enum
 from typing import List, Optional, Tuple, Union
 from uuid import uuid4
 
@@ -30,6 +29,7 @@ from fred_core import (
     AgentPermission,
     KeycloakUser,
     OrganizationPermission,
+    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -59,17 +59,6 @@ from agentic_backend.core.agents.basic_react_agent import (
 logger = logging.getLogger(__name__)
 
 
-class OwnerFilter(str, Enum):
-    """Filter agents by ownership type.
-
-    - PERSONAL: only agents where the user is directly the owner
-    - TEAM: only agents owned by the specified team (team_id required)
-    """
-
-    PERSONAL = "personal"
-    TEAM = "team"
-
-
 class MissingTeamIdError(Exception):
     """Raised when owner_filter is 'team' but no team_id is provided."""
 
@@ -78,6 +67,12 @@ class MissingTeamIdError(Exception):
 
 class InvalidClassPathError(Exception):
     """Raised when a class_path is not a valid, importable module.Class."""
+
+    pass
+
+
+class ImmutableTeamIdError(Exception):
+    """Raised when an update attempts to change an agent team ownership field."""
 
     pass
 
@@ -175,6 +170,53 @@ class AgentService:
             )
         return agent_settings
 
+    async def _enrich_settings_with_authoritative_team_id(
+        self, agent_settings: AgentSettings
+    ) -> AgentSettings:
+        """Backfill missing team_id from ReBAC ownership for legacy agents."""
+        if agent_settings.team_id:
+            return agent_settings
+
+        try:
+            owner_teams = await self.rebac.lookup_subjects(
+                resource=RebacReference(type=Resource.AGENT, id=agent_settings.id),
+                relation=RelationType.OWNER,
+                subject_type=Resource.TEAM,
+            )
+        except Exception:
+            logger.exception(
+                "[AGENTS] Failed to resolve authoritative team owner for agent '%s'",
+                agent_settings.id,
+            )
+            return agent_settings
+
+        if (
+            isinstance(owner_teams, RebacDisabledResult)
+            or not owner_teams
+            or len(owner_teams) == 0
+        ):
+            return agent_settings
+
+        team_ids = [ref.id for ref in owner_teams]
+
+        if len(team_ids) > 1:
+            logger.warning(
+                "[AGENTS] agent='%s' has multiple team owners in ReBAC (%s); using '%s'",
+                agent_settings.id,
+                team_ids,
+                team_ids[0],
+            )
+
+        return agent_settings.model_copy(update={"team_id": team_ids[0]})
+
+    async def _enrich_agent_settings(
+        self, agent_settings: AgentSettings
+    ) -> AgentSettings:
+        with_team_id = await self._enrich_settings_with_authoritative_team_id(
+            agent_settings
+        )
+        return self._enrich_settings_with_class_tuning_defaults(with_team_id)
+
     async def list_agents(
         self,
         user: KeycloakUser,
@@ -188,8 +230,33 @@ class AgentService:
         )
         if authorized_ids is not None:
             agents = [a for a in agents if a.id in authorized_ids]
+        return list(
+            await asyncio.gather(
+                *(self._enrich_agent_settings(agent) for agent in agents),
+                return_exceptions=False,
+            )
+        )
 
-        return [self._enrich_settings_with_class_tuning_defaults(a) for a in agents]
+    async def list_declared_class_paths(self, user: KeycloakUser) -> List[str]:
+        """
+        Return all unique class paths declared in the static configuration.
+
+        Why:
+        - The UI can use this list as a controlled source for class_path autocomplete.
+        - Permissions stay aligned with class_path edition permissions.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+
+        class_paths = {
+            agent_cfg.class_path.strip()
+            for agent_cfg in self.agent_manager.config.ai.agents
+            if agent_cfg.class_path and agent_cfg.class_path.strip()
+        }
+        return sorted(class_paths)
 
     async def get_agent_by_id(
         self, user: KeycloakUser, agent_id: str
@@ -201,7 +268,7 @@ class AgentService:
         settings = await self.agent_manager.get_agent_settings(agent_id)
         if settings is None:
             return None
-        return self._enrich_settings_with_class_tuning_defaults(settings)
+        return await self._enrich_agent_settings(settings)
 
     async def create_agent(
         self,
@@ -249,6 +316,7 @@ class AgentService:
             agent_settings = Agent(
                 id=agent_id,
                 name=name,
+                team_id=team_id,
                 class_path=_class_path(A2AProxyAgent),
                 enabled=True,
                 tuning=tuning,
@@ -266,6 +334,7 @@ class AgentService:
             agent_settings = Agent(
                 id=agent_id,
                 name=name,
+                team_id=team_id,
                 class_path=class_path or _class_path(BasicReActAgent),
                 enabled=True,
                 tuning=default_tuning,
@@ -298,10 +367,16 @@ class AgentService:
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
+        current = await self.agent_manager.get_agent_settings(agent_settings.id)
+        if current is not None:
+            current = await self._enrich_settings_with_authoritative_team_id(current)
+        if current is not None and current.team_id != agent_settings.team_id:
+            raise ImmutableTeamIdError(
+                f"team_id is immutable for agent '{agent_settings.id}'"
+            )
 
         # Check class_path change
         if agent_settings.class_path is not None:
-            current = await self.agent_manager.get_agent_settings(agent_settings.id)
             if current and current.class_path != agent_settings.class_path:
                 await self.rebac.check_user_permission_or_raise(
                     user,

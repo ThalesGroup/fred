@@ -19,6 +19,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
     }),
+    listDeclaredAgentClassPathsAgenticV1AgentsClassPathsGet: build.query<
+      ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse,
+      ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/class-paths` }),
+    }),
     updateAgentAgenticV1AgentsUpdatePut: build.mutation<
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
@@ -321,6 +327,9 @@ export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Suc
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   createAgentRequest: CreateAgentRequest;
 };
+export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
+  /** status 200 Successful Response */ string[];
+export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg = void;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
   agentSettings:
@@ -597,6 +606,8 @@ export type McpServerConfiguration = {
 export type Agent = {
   id: string;
   name: string;
+  /** Owning team id when this is a team-owned agent. */
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning | null;
@@ -612,6 +623,8 @@ export type Agent = {
 export type Leader = {
   id: string;
   name: string;
+  /** Owning team id when this is a team-owned agent. */
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning | null;
@@ -655,6 +668,8 @@ export type AgentTuning2 = {
 export type Agent2 = {
   id: string;
   name: string;
+  /** Owning team id when this is a team-owned agent. */
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
@@ -670,6 +685,8 @@ export type Agent2 = {
 export type Leader2 = {
   id: string;
   name: string;
+  /** Owning team id when this is a team-owned agent. */
+  team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
   tuning?: AgentTuning2 | null;
@@ -1212,6 +1229,8 @@ export const {
   useListAgentsAgenticV1AgentsGetQuery,
   useLazyListAgentsAgenticV1AgentsGetQuery,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
+  useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,

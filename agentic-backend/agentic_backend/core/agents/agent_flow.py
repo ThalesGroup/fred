@@ -76,6 +76,7 @@ from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 from agentic_backend.core.agents.agent_state import Prepared, resolve_prepared
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext, get_language
+from agentic_backend.core.prompts import append_mermaid_rendering_policy
 from agentic_backend.scheduler.agent_contracts import AgentInputArgsV1
 
 logger = logging.getLogger(__name__)
@@ -869,6 +870,7 @@ class AgentFlow:
             )
 
         lang = get_language(ctx)
+        system_text = append_mermaid_rendering_policy(system_text, language=lang)
         if lang and not has_chat_context:
             # Only inject language preference if no chat context is present to avoid duplication.
             system_text = (

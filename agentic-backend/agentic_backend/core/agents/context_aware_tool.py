@@ -2,14 +2,16 @@
 # Licensed under the Apache License, Version 2.0
 
 import logging
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
+from fred_core import OwnerFilter
 from fred_core.kpi import KPIActor
 from langchain_core.tools import BaseTool
 from pydantic import Field
 
 from agentic_backend.application_context import get_app_context
+from agentic_backend.common.structures import AgentSettings
 from agentic_backend.common.token_expiry import (
     is_expired_httpx_status_error,
     unwrap_httpx_status_error,
@@ -20,6 +22,8 @@ from agentic_backend.core.agents.runtime_context import (
     get_document_library_tags_ids,
     get_vector_search_scopes,
 )
+
+AgentSettingsProvider = Callable[[], AgentSettings]
 
 logger = logging.getLogger(__name__)
 
@@ -94,13 +98,22 @@ class ContextAwareTool(BaseTool):
     context_provider: RuntimeContextProvider = Field(
         ..., description="Function that provides runtime context"
     )
+    agent_settings_provider: AgentSettingsProvider = Field(
+        ..., description="Function that provides agent settings"
+    )
 
-    def __init__(self, base_tool: BaseTool, context_provider: RuntimeContextProvider):
+    def __init__(
+        self,
+        base_tool: BaseTool,
+        context_provider: RuntimeContextProvider,
+        agent_settings_provider: AgentSettingsProvider,
+    ):
         # Preserve tool identity (name/description) so LLM can pick it properly.
         super().__init__(
             **base_tool.__dict__,
             base_tool=base_tool,
             context_provider=context_provider,
+            agent_settings_provider=agent_settings_provider,
         )
 
     def _inject_context_if_needed(self, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -110,6 +123,7 @@ class ContextAwareTool(BaseTool):
         tool supports it and caller didn't pass it.
         """
         context = self.context_provider()
+        settings = self.agent_settings_provider()
         if not context:
             return kwargs
 
@@ -146,7 +160,7 @@ class ContextAwareTool(BaseTool):
                 library_ids,
             )
 
-        session_id = getattr(context, "session_id", None)
+        session_id = context.session_id
         if (
             session_id
             and "session_id" in tool_properties
@@ -157,6 +171,27 @@ class ContextAwareTool(BaseTool):
                 "ContextAwareTool(%s) injecting session_id: %s",
                 self.name,
                 session_id,
+            )
+
+        # Force team_id depending on agent settings
+        if "team_id" in tool_properties and settings.team_id:
+            kwargs["team_id"] = settings.team_id
+            logger.info(
+                "ContextAwareTool(%s) injecting team_id: %s",
+                self.name,
+                settings.team_id,
+            )
+
+        # Force owner_filter depending on agent settings
+        if "owner_filter" in tool_properties:
+            owner_filter = (
+                OwnerFilter.TEAM if settings.team_id else OwnerFilter.PERSONAL
+            )
+            kwargs["owner_filter"] = owner_filter.value
+            logger.info(
+                "ContextAwareTool(%s) injecting owner_filter: %s",
+                self.name,
+                owner_filter.value,
             )
 
         include_session_scope, include_corpus_scope = get_vector_search_scopes(context)

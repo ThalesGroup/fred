@@ -123,10 +123,11 @@ class McpToolkit(BaseToolkit):
         """
         base_tools = self._discover_base_tools()
         context_provider = self._agent.get_runtime_context
+        settings_provider = self._agent.get_agent_settings
         wrapped: List[BaseTool] = []
         for tool in base_tools:
             if isinstance(tool, ContextAwareTool):
                 wrapped.append(tool)
                 continue
-            wrapped.append(ContextAwareTool(tool, context_provider))
+            wrapped.append(ContextAwareTool(tool, context_provider, settings_provider))
         return wrapped

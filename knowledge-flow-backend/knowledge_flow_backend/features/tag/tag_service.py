@@ -22,6 +22,7 @@ from uuid import uuid4
 from fred_core import (
     Action,
     KeycloakUser,
+    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -39,7 +40,6 @@ from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.resources.service import ResourceService
 from knowledge_flow_backend.features.tag.structure import (
     MissingTeamIdError,
-    OwnerFilter,
     Tag,
     TagCreate,
     TagMemberUser,
@@ -93,9 +93,9 @@ class TagService:
         # 1) fetch
         tags: list[Tag] = await self._tag_store.list_all_tags()
 
-        # Filter by permission / ownership
-        authorized_tag_ids = await self._resolve_authorized_tag_ids(user, owner_filter, team_id)
-        if authorized_tag_ids is not None:
+        # Filter by permissions (if rebac is enabled)
+        authorized_tag_ids = await self.resolve_authorized_tag_ids_in_rebac(user, owner_filter, team_id)
+        if not isinstance(authorized_tag_ids, RebacDisabledResult):
             tags = [t for t in tags if t.id in authorized_tag_ids]
 
         # 2) filter by type
@@ -136,6 +136,14 @@ class TagService:
             [t.id for t in tags_with_perm],
         )
         return tags_with_perm
+
+    async def list_authorized_tags_ids(self, user: KeycloakUser, owner_filter: Optional[OwnerFilter], team_id: Optional[str]) -> set[str]:
+        """Convenience method to get the set of authorized tag IDs for a user. If ReBAC is disabled, return all tag IDs."""
+        # todo: add a filter on tag type ?
+        tag_ids = await self.resolve_authorized_tag_ids_in_rebac(user, owner_filter, team_id)
+        if isinstance(tag_ids, RebacDisabledResult):
+            return {t.id for t in await self._tag_store.list_all_tags()}
+        return tag_ids
 
     @authorize(Action.READ, Resource.TAGS)
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
@@ -461,12 +469,12 @@ class TagService:
 
         return perm_map
 
-    async def _resolve_authorized_tag_ids(
+    async def resolve_authorized_tag_ids_in_rebac(
         self,
         user: KeycloakUser,
         owner_filter: Optional[OwnerFilter],
         team_id: Optional[str],
-    ) -> set[str] | None:
+    ) -> set[str] | RebacDisabledResult:
         """Return the set of tag IDs the user is allowed to see, or None if ReBAC is disabled.
 
         Always enforces TagPermission.READ as the security baseline.
@@ -478,7 +486,7 @@ class TagService:
         if owner_filter is None:
             readable_refs = await readable_coro
             if isinstance(readable_refs, RebacDisabledResult):
-                return None
+                return RebacDisabledResult()
             return {ref.id for ref in readable_refs}
 
         # Determine the subject reference based on the filter
@@ -497,7 +505,7 @@ class TagService:
             self.rebac.lookup_resources(subject_ref, TagPermission.VIEWER, Resource.TAGS),
         )
         if isinstance(readable_refs, RebacDisabledResult) or isinstance(owned, RebacDisabledResult) or isinstance(edited, RebacDisabledResult) or isinstance(viewed, RebacDisabledResult):
-            return None
+            return RebacDisabledResult()
 
         readable_ids = {ref.id for ref in readable_refs}
         filtered_ids = {ref.id for r in (owned, edited, viewed) for ref in r}

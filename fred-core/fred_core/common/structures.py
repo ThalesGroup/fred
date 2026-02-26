@@ -13,10 +13,22 @@
 # limitations under the License.
 
 import os
+from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
+
+
+class OwnerFilter(str, Enum):
+    """Filter resources by ownership type.
+
+    - PERSONAL: resources where the user is directly owner/editor/viewer (not via team)
+    - TEAM: resources owned by a specific team (requires team_id parameter)
+    """
+
+    PERSONAL = "personal"
+    TEAM = "team"
 
 
 class BaseModelWithId(BaseModel):
