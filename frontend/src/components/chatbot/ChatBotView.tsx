@@ -155,8 +155,35 @@ const ChatBotView = ({
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const shouldAutoFollowRef = useRef(true);
+
+  useEffect(() => {
+    // New session/view should start in follow mode.
+    shouldAutoFollowRef.current = true;
+  }, [chatSessionId, showWelcome]);
+
+  useEffect(() => {
+    if (showWelcome) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const FOLLOW_THRESHOLD_PX = 80;
+    const updateAutoFollow = () => {
+      const distanceToBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      shouldAutoFollowRef.current = distanceToBottom <= FOLLOW_THRESHOLD_PX;
+    };
+
+    updateAutoFollow();
+    scroller.addEventListener("scroll", updateAutoFollow, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", updateAutoFollow);
+    };
+  }, [chatSessionId, showWelcome]);
+
   useLayoutEffect(() => {
     if (showWelcome) return;
+    if (!shouldAutoFollowRef.current) return;
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
@@ -167,7 +194,7 @@ const ChatBotView = ({
       cancelAnimationFrame(raf1);
       if (raf2) cancelAnimationFrame(raf2);
     };
-  }, [messages.length, chatSessionId, showWelcome]);
+  }, [messages, chatSessionId, showWelcome]);
 
   const { outputTokenCounts, inputTokenCounts } = useMemo(() => {
     if (!messages || messages.length === 0) return { outputTokenCounts: 0, inputTokenCounts: 0 };

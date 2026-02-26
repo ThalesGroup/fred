@@ -1,16 +1,26 @@
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import React from "react";
 
+const exchangeKey = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;
+
+const isStreamingPartialFinal = (m: ChatMessage) =>
+  m.role === "assistant" &&
+  m.channel === "final" &&
+  Boolean((m.metadata as any)?.extras?.streaming_partial);
+
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
+  const base = isStreamingPartialFinal(m)
+    ? all.filter((x) => !(isStreamingPartialFinal(x) && exchangeKey(x) === exchangeKey(m)))
+    : all;
   const k = keyOf(m);
-  const idx = all.findIndex((x) => keyOf(x) === k);
+  const idx = base.findIndex((x) => keyOf(x) === k);
   if (idx >= 0) {
-    const updated = [...all];
+    const updated = [...base];
     updated[idx] = m; // overwrite (most recent wins)
     return sortMessages(updated);
   }
-  return sortMessages([...all, m]);
+  return sortMessages([...base, m]);
 };
 
 export const sortMessages = (arr: ChatMessage[]) =>
@@ -23,8 +33,15 @@ export const sortMessages = (arr: ChatMessage[]) =>
   });
 
 export const mergeAuthoritative = (existing: ChatMessage[], finals: ChatMessage[]) => {
+  const finalizedExchanges = new Set(
+    finals.filter((m) => m.role === "assistant" && m.channel === "final").map(exchangeKey),
+  );
+  const cleanedExisting = existing.filter(
+    (m) => !(isStreamingPartialFinal(m) && finalizedExchanges.has(exchangeKey(m))),
+  );
+
   // Build maps by key
-  const map = new Map(existing.map((m) => [keyOf(m), m]));
+  const map = new Map(cleanedExisting.map((m) => [keyOf(m), m]));
   for (const f of finals) map.set(keyOf(f), f); // overwrite existing or insert new
   return sortMessages([...map.values()]);
 };
