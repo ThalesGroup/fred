@@ -52,7 +52,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/thalesgroup/fred-agent/${{ matrix.image }}
           tags: |
-            type=raw,value=dev
+            type=raw,value=develop
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
