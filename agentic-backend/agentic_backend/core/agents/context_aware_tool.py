@@ -218,6 +218,18 @@ class ContextAwareTool(BaseTool):
 
         return kwargs
 
+    def _drop_none_kwargs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        MCP/LangChain tool schemas frequently model optional string query params as
+        non-required `string` fields. If the caller passes them explicitly as `None`,
+        adapter-side validation fails before the HTTP request is sent.
+
+        To keep tool invocation robust, omit top-level kwargs whose value is None.
+        """
+        if not kwargs:
+            return kwargs
+        return {k: v for k, v in kwargs.items() if v is not None}
+
     def _kpi_base_dims(self, *, context) -> dict[str, Optional[str]]:
         dims: dict[str, Optional[str]] = {"tool_name": self.name, "source": "mcp"}
         session_id = getattr(context, "session_id", None) if context else None
@@ -245,6 +257,7 @@ class ContextAwareTool(BaseTool):
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
+        kwargs = self._drop_none_kwargs(kwargs)
         kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
@@ -296,6 +309,7 @@ class ContextAwareTool(BaseTool):
         """Async execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
+        kwargs = self._drop_none_kwargs(kwargs)
         kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
