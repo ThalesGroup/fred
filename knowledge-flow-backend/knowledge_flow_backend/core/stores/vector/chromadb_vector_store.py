@@ -69,13 +69,10 @@ def _build_where(search_filter: Optional[SearchFilter]) -> Optional[Dict]:
         return value
 
     # ---- Tag IDs ----
-    if search_filter.tag_ids is not None:
-        if search_filter.tag_ids:
-            tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
-            clauses.append({"tag_ids": {"$in": tag_values}})
-        else:
-            # Empty list = user has no authorized tags → match nothing
-            clauses.append({"tag_ids": {"$eq": "__impossible_match__"}})
+    if search_filter.tag_ids:
+        # Each tag is stored as a JSON array string
+        tag_values = [json.dumps([t]) for t in search_filter.tag_ids]
+        clauses.append({"tag_ids": {"$in": tag_values}})
 
     # ---- Metadata terms ----
     for field, values in (search_filter.metadata_terms or {}).items():

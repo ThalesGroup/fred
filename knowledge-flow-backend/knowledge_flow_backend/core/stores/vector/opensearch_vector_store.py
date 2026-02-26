@@ -894,7 +894,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         if not f:
             return None
         filters: List[Dict] = []
-        if f.tag_ids is not None:
+        if f.tag_ids:
             filters.append({"terms": {"metadata.tag_ids": list(f.tag_ids)}})
         if f.metadata_terms:
             for field, values in f.metadata_terms.items():
