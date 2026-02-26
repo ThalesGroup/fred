@@ -112,7 +112,7 @@ docker-benchmark:
     - if: $BUILD_BENCHMARK_DOCKER_IMAGE == "true"
 
 # -----------------------------------------------------------------------------
-# Package and push Helm charts
+# Package and push Helm charts 
 # -----------------------------------------------------------------------------
 
 .helm-chart:
