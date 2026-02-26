@@ -156,20 +156,26 @@ function Area({
       const shouldHideUserMessage = userMessage && hiddenUserExchangeIds?.has(userMessage.exchange_id);
       if (userMessage && !shouldHideUserMessage) {
         elements.push(
-          <MessageCard
+          <Box
             key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
-            message={userMessage}
-            agent={currentAgent}
-            side="right"
-            enableCopy
-            enableThumbs
-            pending={isActiveExchange}
-            suppressText={false}
-            libraryNameById={libraryNameById}
-            chatContextNameById={chatContextNameById}
-            onCitationHover={(uid) => setHighlightUid(uid)}
-            onCitationClick={(uid) => setHighlightUid(uid)}
-          />,
+            data-chat-anchor="user-final"
+            data-chat-session-id={userMessage.session_id}
+            data-chat-exchange-id={userMessage.exchange_id}
+          >
+            <MessageCard
+              message={userMessage}
+              agent={currentAgent}
+              side="right"
+              enableCopy
+              enableThumbs
+              pending={isActiveExchange}
+              suppressText={false}
+              libraryNameById={libraryNameById}
+              chatContextNameById={chatContextNameById}
+              onCitationHover={(uid) => setHighlightUid(uid)}
+              onCitationClick={(uid) => setHighlightUid(uid)}
+            />
+          </Box>,
         );
       }
 

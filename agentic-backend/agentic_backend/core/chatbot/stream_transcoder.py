@@ -632,6 +632,7 @@ class StreamTranscoder:
                             "langgraph_node": streamed_meta.get("langgraph_node"),
                         },
                     )
+                    assert partial_final_rank is not None
                     partial_msg = ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,

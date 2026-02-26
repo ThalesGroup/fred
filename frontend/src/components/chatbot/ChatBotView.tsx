@@ -156,11 +156,29 @@ const ChatBotView = ({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const shouldAutoFollowRef = useRef(true);
+  const pendingReadingAnchorRef = useRef(false);
+  const prevWaitResponseRef = useRef(waitResponse);
 
   useEffect(() => {
     // New session/view should start in follow mode.
     shouldAutoFollowRef.current = true;
+    pendingReadingAnchorRef.current = false;
+    prevWaitResponseRef.current = waitResponse;
   }, [chatSessionId, showWelcome]);
+
+  useEffect(() => {
+    const wasWaiting = prevWaitResponseRef.current;
+    const isStartingResponse = !wasWaiting && waitResponse;
+    prevWaitResponseRef.current = waitResponse;
+
+    if (showWelcome) return;
+    if (!isStartingResponse) return;
+
+    // Reading mode default: anchor on the newly sent user message and do not
+    // auto-follow streaming chunks unless the user scrolls back near the bottom.
+    shouldAutoFollowRef.current = false;
+    pendingReadingAnchorRef.current = true;
+  }, [waitResponse, showWelcome]);
 
   useEffect(() => {
     if (showWelcome) return;
@@ -183,10 +201,32 @@ const ChatBotView = ({
 
   useLayoutEffect(() => {
     if (showWelcome) return;
-    if (!shouldAutoFollowRef.current) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
+        if (pendingReadingAnchorRef.current) {
+          pendingReadingAnchorRef.current = false;
+          const anchors = scroller.querySelectorAll<HTMLElement>('[data-chat-anchor="user-final"]');
+          const latestUserAnchor = anchors.length ? anchors[anchors.length - 1] : null;
+
+          if (latestUserAnchor) {
+            const scrollerRect = scroller.getBoundingClientRect();
+            const anchorRect = latestUserAnchor.getBoundingClientRect();
+            const targetTopInViewport = scrollerRect.top + scroller.clientHeight * 0.18;
+            const delta = anchorRect.top - targetTopInViewport;
+            const nextTop = Math.max(
+              0,
+              Math.min(scroller.scrollHeight - scroller.clientHeight, scroller.scrollTop + delta),
+            );
+            scroller.scrollTo({ top: nextTop });
+            return;
+          }
+        }
+
+        if (!shouldAutoFollowRef.current) return;
         bottomRef.current?.scrollIntoView({ block: "end" });
       });
     });

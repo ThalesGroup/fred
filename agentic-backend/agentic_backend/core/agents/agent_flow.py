@@ -51,7 +51,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command
+from langgraph.types import Command, StreamMode
 
 from agentic_backend.application_context import (
     get_app_context,
@@ -287,7 +287,7 @@ class AgentFlow:
         state: Any,
         *,
         config: Optional[RunnableConfig] = None,
-        stream_mode: str | Sequence[str] = "updates",
+        stream_mode: StreamMode | Sequence[StreamMode] = "updates",
         **kwargs: Any,
     ) -> AsyncIterator[Any]:
         """
