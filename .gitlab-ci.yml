@@ -112,7 +112,7 @@ docker-benchmark:
     - if: $BUILD_BENCHMARK_DOCKER_IMAGE == "true"
 
 # -----------------------------------------------------------------------------
-# Package and push Helm charts 
+# Package and push Helm charts
 # -----------------------------------------------------------------------------
 
 .helm-chart:
@@ -195,7 +195,7 @@ sync-develop-prism:
         MERGE_STATUS=$(echo "$MR_DETAIL" | jq -r '.detailed_merge_status // .merge_status')
         HAS_CONFLICTS=$(echo "$MR_DETAIL" | jq -r '.has_conflicts')
         echo "Attempt $((RETRIES+1))/${MAX_RETRIES}: merge_status=${MERGE_STATUS}, has_conflicts=${HAS_CONFLICTS}"
-        if [ "$MERGE_STATUS" != "checking" ] && [ "$MERGE_STATUS" != "unchecked" ]; then
+        if [ "$MERGE_STATUS" != "checking" ] && [ "$MERGE_STATUS" != "unchecked" ] && [ "$MERGE_STATUS" != "preparing" ]; then
           break
         fi
         RETRIES=$((RETRIES+1))
