@@ -19,6 +19,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
     }),
+    getAgentGraphAgenticV1AgentsAgentIdGraphGet: build.query<
+      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse,
+      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}/graph` }),
+    }),
     listDeclaredAgentClassPathsAgenticV1AgentsClassPathsGet: build.query<
       ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse,
       ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg
@@ -326,6 +332,10 @@ export type ListAgentsAgenticV1AgentsGetApiArg = {
 export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   createAgentRequest: CreateAgentRequest;
+};
+export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse = /** status 200 Successful Response */ string;
+export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg = {
+  agentId: string;
 };
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
   /** status 200 Successful Response */ string[];
@@ -1231,6 +1241,8 @@ export const {
   useListAgentsAgenticV1AgentsGetQuery,
   useLazyListAgentsAgenticV1AgentsGetQuery,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
+  useLazyGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
