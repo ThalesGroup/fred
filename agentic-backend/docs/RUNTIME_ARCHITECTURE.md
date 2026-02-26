@@ -52,7 +52,7 @@ Key benefit: the controller stays transport‑only; orchestration and runtime lo
 
 4) Agent creation/reuse
 - `AgentFactory.create_and_init(...)` returns a warm, per-(session, agent) instance
-- If cached: refresh runtime context; else: instantiate from catalog, apply settings, set context, run `async_init` (Leader builds crew)
+- If cached: refresh runtime context; else: instantiate from catalog, apply settings, then run `initialize_runtime(...)` (Leader builds crew)
 - References:
   - `agent_factory.py:64`–`110` create/reuse
   - `agent_factory.py:129`–`176` simple vs leader init/crew
@@ -91,20 +91,24 @@ Key benefit: the controller stays transport‑only; orchestration and runtime lo
 
 - Cache key: `(session_id, agent_id)` using a thread‑safe LRU with a bounded size from configuration
 - On reuse, always refresh the runtime context (tokens can change across requests)
-- Fresh builds apply authoritative settings from AgentManager, then call `async_init`
-- LeaderFlow builds a crew by instantiating and initializing each expert agent once; the crew is passed to the leader’s `async_init`
+- Fresh builds apply authoritative settings from AgentManager, then call `initialize_runtime(...)`
+- `initialize_runtime(...)` uses the typed lifecycle: `bind_runtime_context(...)` → `build_runtime_structure()` → `activate_runtime()`
+- Legacy agents overriding `async_init(...)` still work via a compatibility path, but new agents should implement the split lifecycle hooks
+- LeaderFlow currently remains a special path/WIP and may still rely on legacy initialization sequencing
 - Session deletion triggers `AgentFactory.teardown_session_agents(session_id)` which sequentially awaits each agent’s `aclose()`
 - References:
   - `agent_factory.py:51`–`61`, `:76`–`90`, `:92`–`110`, `:129`–`176`, `:179`–`200`
 
 ## 5) MCP Integration (Tools)
 
-- Agents that need tools declare MCP server(s) in their tunings; during `async_init`, they:
-  - Instantiate `MCPRuntime(agent=self)`
-  - `await mcp.init()` to create a `MultiServerMCPClient` using the agent’s `RuntimeContext` tokens
-  - Bind tools to the model, e.g., `self.model = self.model.bind_tools(self.mcp.get_tools())`
+- Agents that need tools declare MCP server(s) in their tunings
+- Recommended split:
+  - `build_runtime_structure()` builds the graph topology (no MCP connection)
+  - `activate_runtime()` instantiates `MCPRuntime(agent=self)`, calls `await mcp.init()`, and binds tools to the model
+- `MCPRuntime.init()` creates a `MultiServerMCPClient` using the agent’s `RuntimeContext` tokens
+- Tool binding remains explicit, e.g., `self.model = self.model.bind_tools(self.mcp.get_tools())`
 - Lifecycle guarantees: the MCP client opens and closes in the same asyncio task; `aclose()` is awaited on agent teardown
-- Example: `SentinelExpert` shows end‑to‑end binding of MCP tools in `async_init`
+- Example: `SentinelExpert` shows end‑to‑end binding of MCP tools in `activate_runtime()` while keeping graph build non-activating
 - References:
   - `sentinel_expert.py:86`–`103` init + bind tools
   - `mcp_runtime.py:88`–`123` init; `:124`–`180` lifecycle task; `:181`–`195` tool access; `:196`–`200` aclose signature
@@ -148,11 +152,11 @@ Key benefit: the controller stays transport‑only; orchestration and runtime lo
 
 - To add a new agent:
   - Register it in the catalog (YAML/DB) with `class_path` and tuning fields
-  - Implement `async_init` to set the model, initialize MCP (when needed), bind tools, and build the graph
+  - Implement `build_runtime_structure()` to build the LangGraph structure (no I/O)
+  - Implement `activate_runtime()` to set the model, initialize MCP (when needed), and bind tools
   - Return a compiled graph via `get_compiled_graph()` and stream with `astream_updates`
 - To enable MCP tools, add MCP servers in the agent’s tuning; ensure `RuntimeContext` carries tokens
 
 ---
 
 This architecture keeps concerns cleanly separated: transport (WS), orchestration (sessions/history/KPIs), agent runtime (graphs/tools), and persistence/metrics. It is token‑aware, safe to cache across exchanges, and friendly to MCP‑enabled agents.
-

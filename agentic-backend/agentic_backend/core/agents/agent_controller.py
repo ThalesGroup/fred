@@ -29,12 +29,12 @@ from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
     AgentSettings,
 )
+from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
     AgentUpdatesDisabled,
 )
-from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_service import (
     AgentService,
     ImmutableTeamIdError,
