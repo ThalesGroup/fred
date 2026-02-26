@@ -14,6 +14,7 @@
 
 import logging
 import math
+import os
 import sys
 import tempfile
 import time
@@ -46,8 +47,8 @@ from langchain_core.messages import (
 )
 from langchain_core.runnables import Runnable, RunnableConfig
 
-# from langfuse import Langfuse
-# from langfuse.callback import CallbackHandler
+from langfuse import Langfuse
+from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langgraph.graph.state import CompiledStateGraph
@@ -136,15 +137,15 @@ class AgentFlow:
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self._prepared_context: Optional[Prepared] = None
-        # has_public_key = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
-        # has_secret_key = os.getenv("LANGFUSE_SECRET_KEY") is not None
+        has_public_key = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
+        has_secret_key = os.getenv("LANGFUSE_SECRET_KEY") is not None
 
-        # if has_public_key and has_secret_key:
-        #     # Only initialize if keys are present
-        #     self.langfuse_client = Langfuse()
-        # else:
-        #     # Set to None if disabled
-        #     self.langfuse_client = None
+        if has_public_key and has_secret_key:
+            # Only initialize if keys are present
+            self.langfuse_client = Langfuse()
+        else:
+            # Set to None if disabled
+            self.langfuse_client = None
 
     def get_compiled_graph(
         self, checkpointer: Optional[object] = None
@@ -321,28 +322,28 @@ class AgentFlow:
 
         # 2. Instantiate the Langfuse Handler
         # CallbackHandler expects an optional public_key (str | None); do not pass the Langfuse client instance here.
-        # langfuse_handler = None
-        # if self.langfuse_client is not None:
-        #     langfuse_handler = CallbackHandler()
+        langfuse_handler = None
+        if self.langfuse_client is not None:
+            langfuse_handler = CallbackHandler()
 
-        #     # 3. Safely get the callbacks list (Resolves Pylance warnings)
-        #     existing_callbacks = self.run_config.get("callbacks")
-        #     if existing_callbacks is None:
-        #         # No callbacks provided yet — create a list with our handler
-        #         callbacks_list = [langfuse_handler]
-        #     elif isinstance(existing_callbacks, list):
-        #         # If it's already a list, create a shallow copy and append to avoid mutating external state
-        #         callbacks_list = list(existing_callbacks) + [langfuse_handler]
-        #     else:
-        #         # If it's a single callback object (e.g., a BaseCallbackManager or handler), wrap it into a list
-        #         callbacks_list = [existing_callbacks, langfuse_handler]
+            # 3. Safely get the callbacks list (Resolves Pylance warnings)
+            existing_callbacks = self.run_config.get("callbacks")
+            if existing_callbacks is None:
+                # No callbacks provided yet — create a list with our handler
+                callbacks_list = [langfuse_handler]
+            elif isinstance(existing_callbacks, list):
+                # If it's already a list, create a shallow copy and append to avoid mutating external state
+                callbacks_list = list(existing_callbacks) + [langfuse_handler]
+            else:
+                # If it's a single callback object (e.g., a BaseCallbackManager or handler), wrap it into a list
+                callbacks_list = [existing_callbacks, langfuse_handler]
 
-        #     # 4. Update the config with a list of callbacks (langgraph expects an iterable/list)
-        #     self.run_config["callbacks"] = callbacks_list  # type: ignore[assignment]
-        #     logger.info(
-        #         "[AGENTS] Langfuse CallbackHandler added to run_config callbacks for agent '%s'.",
-        #         self.get_name(),
-        #     )
+            # 4. Update the config with a list of callbacks (langgraph expects an iterable/list)
+            self.run_config["callbacks"] = callbacks_list  # type: ignore[assignment]
+            logger.info(
+                "[AGENTS] Langfuse CallbackHandler added to run_config callbacks for agent '%s'.",
+                self.get_role(),
+            )
 
         # 5. Execute the graph using the MODIFIED config (self.run_config)
         async for event in compiled.astream(
@@ -354,8 +355,8 @@ class AgentFlow:
             yield event
 
         # 6. Flush the client after the run is complete
-        # if self.langfuse_client is not None:
-        #     self.langfuse_client.flush()
+        if self.langfuse_client is not None:
+            self.langfuse_client.flush()
 
     def log_message_summary(self, messages: Sequence[AnyMessage]) -> None:
         """
