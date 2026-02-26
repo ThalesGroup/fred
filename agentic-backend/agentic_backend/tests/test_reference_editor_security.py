@@ -42,14 +42,26 @@ def test_normalize_reference_payload_rejects_old_schema_shape():
 
 def test_reference_schema_accepts_valid_partial_payload():
     """Pydantic models use defaults, so partial payloads are valid."""
-    valid = InformationsProjet(nomSociete="Acme", nomProjet="Project X")
+    valid = InformationsProjet(
+        nomSociete="Acme",
+        nomProjet="Project X",
+        dateProjet="",
+        nombrePersonnes="",
+        enjeuFinancier="",
+    )
     assert valid.nomSociete == "Acme"
     assert valid.dateProjet == ""
 
 
 def test_reference_schema_rejects_field_exceeding_max_length():
     with pytest.raises(ValidationError) as exc_info:
-        InformationsProjet(nomSociete="A" * 51)
+        InformationsProjet(
+            nomSociete="A" * 51,
+            nomProjet="",
+            dateProjet="",
+            nombrePersonnes="",
+            enjeuFinancier="",
+        )
     assert any(
         "max_length" in str(err) or "most" in str(err["msg"])
         for err in exc_info.value.errors()
