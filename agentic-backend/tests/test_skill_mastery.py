@@ -1,13 +1,11 @@
-"""Tests for skill mastery detection (blue dots and donut charts)."""
+"""Tests for the blue-dot skill mastery counter."""
 
 import io
-import math
 
 import pytest
 from PIL import Image
 
 from agentic_backend.agents.ppt_filler.skill_mastery import (
-    count_donut_segments,
     count_filled_dots,
     extract_mastery_from_image,
     inject_mastery_alt_text,
@@ -18,7 +16,6 @@ from agentic_backend.agents.ppt_filler.skill_mastery import (
 # Target blue used in CV skill bars.
 BLUE = (0, 174, 199)
 GREY = (200, 200, 200)
-WHITE = (255, 255, 255)
 
 
 def _make_skill_bar(filled: int) -> Image.Image:
@@ -108,82 +105,3 @@ class TestInjectMasteryAltText:
         html = '<img src="knowledge-flow/v1/markdown/uid/media/other.png">'
         result = inject_mastery_alt_text(html, {"img1.png": 3})
         assert result == html
-
-
-# ---------- Donut chart tests ----------
-
-DONUT_SIZE = 233
-
-
-def _make_donut_chart(filled: int, size: int = DONUT_SIZE) -> Image.Image:
-    """Create a synthetic donut chart with `filled` blue segments out of 10.
-
-    Segments are centered at 0°, 36°, 72°, ... (matching real CV images).
-    Each segment spans 33° with a 3° gap between segments.
-    """
-    img = Image.new("RGB", (size, size), color=WHITE)
-    cx, cy = size // 2, size // 2
-    outer_r = int(size * 0.45)
-    inner_r = int(size * 0.30)
-    segment_degrees = 33  # 36 - 3 degree gap
-    half_seg = segment_degrees / 2  # 16.5° on each side of center
-
-    for x in range(size):
-        for y in range(size):
-            dx, dy = x - cx, y - cy
-            dist = math.sqrt(dx * dx + dy * dy)
-            if inner_r <= dist <= outer_r:
-                angle = math.degrees(math.atan2(dy, dx)) % 360
-                # Find which segment center (0°, 36°, 72°, ...) is closest
-                seg_idx = round(angle / 36) % 10
-                seg_center = seg_idx * 36
-                # Angular distance to segment center
-                diff = abs(((angle - seg_center + 180) % 360) - 180)
-                if diff <= half_seg:
-                    if seg_idx < filled:
-                        img.putpixel((x, y), BLUE)
-                    else:
-                        img.putpixel((x, y), GREY)
-
-    return img
-
-
-class TestCountDonutSegments:
-    @pytest.mark.parametrize(
-        "filled,expected_mastery",
-        [
-            (2, 1),
-            (4, 2),
-            (6, 3),
-            (8, 4),
-            (10, 5),
-        ],
-    )
-    def test_filled_segments(self, filled, expected_mastery):
-        img = _make_donut_chart(filled)
-        assert count_donut_segments(img) == expected_mastery
-
-    def test_zero_filled_returns_none(self):
-        img = _make_donut_chart(0)
-        assert count_donut_segments(img) is None
-
-    def test_non_donut_returns_none(self):
-        img = Image.new("RGB", (DONUT_SIZE, DONUT_SIZE), color=WHITE)
-        assert count_donut_segments(img) is None
-
-
-class TestExtractMasteryDonutIntegration:
-    def test_donut_chart_via_extract(self):
-        img = _make_donut_chart(6)
-        data = _image_to_bytes(img)
-        assert extract_mastery_from_image(data) == 3
-
-    def test_dot_bar_still_works(self):
-        img = _make_skill_bar(3)
-        data = _image_to_bytes(img)
-        assert extract_mastery_from_image(data) == 3
-
-    def test_random_233_image_returns_none(self):
-        img = Image.new("RGB", (DONUT_SIZE, DONUT_SIZE), color=(128, 0, 0))
-        data = _image_to_bytes(img)
-        assert extract_mastery_from_image(data) is None
