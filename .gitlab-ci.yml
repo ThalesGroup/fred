@@ -151,7 +151,7 @@ helm-chart:
         CHART_PATH: ${CI_PROJECT_DIR}/deploy/charts/fred
 
 # -----------------------------------------------------------------------------
-# Sync develop-prism with the most recent GitHub branch (develop or main) 
+# Sync develop-prism with the most recent GitHub branch (develop or main)
 # -----------------------------------------------------------------------------
 
 sync-develop-prism:
@@ -159,7 +159,7 @@ sync-develop-prism:
   stage: sync
   needs: []
   rules:
-    - if: $CI_COMMIT_BRANCH == "sehling/create-auto-merge-ci" || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop
+    - if: $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "sehling/create-auto-merge-ci"  # TODO: remove test branch after testing
   script:
     - apk add --no-cache curl jq
     - SOURCE_BRANCH="${CI_COMMIT_BRANCH}"
