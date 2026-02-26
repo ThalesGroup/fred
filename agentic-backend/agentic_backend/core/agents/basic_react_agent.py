@@ -20,7 +20,7 @@ try:
 except Exception:  # pragma: no cover - runtime/version compatibility fallback
     create_agent = None
 
-from langgraph.graph import MessagesState
+from langgraph.graph import END, MessagesState
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer, interrupt
 
@@ -29,7 +29,12 @@ from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.structural_graph_builder import (
+    StructuralConditional,
+    StructuralEdge,
+    StructuralGraphSpec,
+    build_structural_state_graph,
+)
 from agentic_backend.core.interrupts.tool_approval import (
     is_truthy as _is_truthy_hitl,
 )
@@ -157,6 +162,7 @@ class BasicReActAgent(AgentFlow):
     """Simple ReAct agent used for dynamic UI-created agents."""
 
     tuning = BASIC_REACT_TUNING
+    mcp: MCPRuntime | None = None
     default_chat_options = AgentChatOptions(
         search_policy_selection=False,
         libraries_selection=False,
@@ -165,9 +171,56 @@ class BasicReActAgent(AgentFlow):
         attach_files=False,
     )
 
-    async def async_init(self, runtime_context: RuntimeContext):
-        await super().async_init(runtime_context=runtime_context)
+    def build_runtime_structure(self) -> None:
+        if self._tool_approval_enabled():
+            spec = StructuralGraphSpec(
+                state_schema=MessagesState,
+                nodes=("reasoner", "approval", "tools"),
+                start_node="reasoner",
+                edges=(StructuralEdge(source="tools", target="reasoner"),),
+                conditionals=(
+                    StructuralConditional(
+                        source="reasoner",
+                        routes={
+                            "final": END,
+                            "approval": "approval",
+                        },
+                        default_choice="final",
+                    ),
+                    StructuralConditional(
+                        source="approval",
+                        routes={
+                            "cancel": END,
+                            "approve": "tools",
+                        },
+                        default_choice="cancel",
+                    ),
+                ),
+            )
+        else:
+            spec = StructuralGraphSpec(
+                state_schema=MessagesState,
+                nodes=("reasoner", "tools"),
+                start_node="reasoner",
+                edges=(StructuralEdge(source="tools", target="reasoner"),),
+                conditionals=(
+                    StructuralConditional(
+                        source="reasoner",
+                        routes={
+                            "final": END,
+                            "tools": "tools",
+                        },
+                        default_choice="final",
+                    ),
+                ),
+            )
 
+        self._graph = build_structural_state_graph(
+            spec=spec,
+            owner_name=type(self).__name__,
+        )
+
+    async def activate_runtime(self) -> None:
         # Initialize MCP runtime
         self.mcp = MCPRuntime(
             agent=self,
@@ -175,11 +228,37 @@ class BasicReActAgent(AgentFlow):
         await self.mcp.init()
 
     async def aclose(self):
-        await self.mcp.aclose()
+        if self.mcp is not None:
+            await self.mcp.aclose()
 
     def get_state_schema(self) -> Type:
         """Minimal state schema for LangGraph/Temporal hydration compatibility."""
         return MessagesState
+
+    def get_graph_mermaid_preview(self) -> str:
+        """
+        Return a compact conceptual graph for UI inspection without requiring MCP init.
+        The compiled LangGraph for create_agent() is verbose and may require runtime tools.
+        """
+        if self._tool_approval_enabled():
+            return (
+                "flowchart TD;\n"
+                "User([User message]) --> Reasoner[LLM reasoner];\n"
+                "Reasoner --> Decision{Tool needed?};\n"
+                "Decision -->|No| Final[Final response];\n"
+                "Decision -->|Yes| Approval{HITL approval required?};\n"
+                "Approval -->|Cancel| Final;\n"
+                "Approval -->|Approve| Tools[(MCP tools)];\n"
+                "Tools --> Reasoner;\n"
+            )
+        return (
+            "flowchart TD;\n"
+            "User([User message]) --> Reasoner[LLM reasoner];\n"
+            "Reasoner --> Decision{Tool needed?};\n"
+            "Decision -->|No| Final[Final response];\n"
+            "Decision -->|Yes| Tools[(MCP tools)];\n"
+            "Tools --> Reasoner;\n"
+        )
 
     def _build_system_prompt(self, tools: list[Any]) -> str:
         base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
@@ -293,6 +372,10 @@ class BasicReActAgent(AgentFlow):
     def get_compiled_graph(
         self, checkpointer: Checkpointer | None = None
     ) -> CompiledStateGraph:
+        if self.mcp is None:
+            raise RuntimeError(
+                f"{type(self).__name__}: runtime not activated (MCPRuntime unavailable)."
+            )
         tools = self._dedupe_tools_by_name(self.mcp.get_tools())
         system_prompt = self._build_system_prompt(tools)
 

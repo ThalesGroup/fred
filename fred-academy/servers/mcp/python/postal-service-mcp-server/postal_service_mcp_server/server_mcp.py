@@ -14,6 +14,7 @@ Tools implemented:
   - validate_address(country, city, postal_code, street)
   - quote_shipping(weight_kg, distance_km, speed)
   - create_label(receiver_name, address_id, service)
+  - list_my_active_parcels()
   - track_package(tracking_id)
   - seed_demo_parcel_exception(...)
   - get_pickup_points_nearby(city, postal_code, limit)
@@ -48,6 +49,8 @@ except Exception as e:  # pragma: no cover - helpful error at import time
     )
 
 logger = logging.getLogger(__name__)
+
+_TERMINAL_PACKAGE_STATUSES = {"DELIVERED", "CANCELLED", "LOST"}
 
 
 def _load_fred_oidc_helpers():
@@ -187,6 +190,41 @@ def _resolve_demo_caller(ctx: Optional[Context]) -> Dict[str, Any]:
         groups=["admins"],
     )
     return _user_to_demo_profile(mock_user, source="mock")
+
+
+def _norm_text(value: Any) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _attach_owner_metadata_to_package(pkg: Dict[str, Any], caller: Dict[str, Any]) -> None:
+    """Persist a compact caller identity on the package for later lookups."""
+    pkg["owner"] = {
+        "uid": caller.get("uid"),
+        "username": caller.get("username"),
+        "email": caller.get("email"),
+        "display_name": caller.get("display_name"),
+        "demo_customer_ref": caller.get("demo_customer_ref"),
+        "source": caller.get("source"),
+    }
+
+
+def _caller_matches_package(caller: Dict[str, Any], pkg: Dict[str, Any]) -> bool:
+    owner = pkg.get("owner") or {}
+    if isinstance(owner, dict):
+        caller_uid = _norm_text(caller.get("uid"))
+        caller_ref = _norm_text(caller.get("demo_customer_ref"))
+        caller_email = _norm_text(caller.get("email"))
+        if caller_uid and _norm_text(owner.get("uid")) == caller_uid:
+            return True
+        if caller_ref and _norm_text(owner.get("demo_customer_ref")) == caller_ref:
+            return True
+        if caller_email and _norm_text(owner.get("email")) == caller_email:
+            return True
+
+    # Fallback for older seeded packages without owner metadata.
+    caller_name = _norm_text(caller.get("display_name"))
+    receiver_name = _norm_text(pkg.get("receiver"))
+    return bool(caller_name and receiver_name and caller_name == receiver_name)
 
 
 # In-memory stores (tutorial-grade persistence)
@@ -352,8 +390,7 @@ def _recompute_delay_minutes(pkg: Dict[str, Any]) -> None:
 
 def _package_actions_available(pkg: Dict[str, Any]) -> List[str]:
     status = pkg.get("status")
-    terminal_statuses = {"DELIVERED", "CANCELLED", "LOST"}
-    if status in terminal_statuses:
+    if status in _TERMINAL_PACKAGE_STATUSES:
         return []
 
     delivery = pkg.get("delivery", {})
@@ -539,6 +576,82 @@ async def track_package(tracking_id: str) -> Dict[str, Any]:
 
 
 @server.tool()
+async def list_my_active_parcels(
+    ctx: Context,
+    include_terminal: bool = False,
+    limit: int = 10,
+) -> Dict[str, Any]:
+    """
+    List parcels linked to the current caller identity in the demo environment.
+
+    Use this when the user asks questions such as:
+    - "Ai-je un colis en cours ?"
+    - "Y a-t-il un colis pour moi en attente ou en livraison ?"
+    - "Montre mes colis actifs"
+
+    This is the missing "find my parcels" capability used by generic tool agents.
+    """
+    caller = _resolve_demo_caller(ctx)
+    try:
+        limit_i = int(limit)
+    except (TypeError, ValueError):
+        limit_i = 10
+    limit_i = max(1, min(limit_i, 20))
+
+    parcels: List[Dict[str, Any]] = []
+    for tracking_id, pkg in _PACKAGES.items():
+        _ensure_package_defaults(tracking_id, pkg)
+        if not _caller_matches_package(caller, pkg):
+            continue
+        status = str(pkg.get("status") or "UNKNOWN")
+        if not include_terminal and status in _TERMINAL_PACKAGE_STATUSES:
+            continue
+        _recompute_delay_minutes(pkg)
+        delivery = pkg.get("delivery") or {}
+        eta = pkg.get("eta") or {}
+        current_location = pkg.get("current_location") or {}
+        parcels.append(
+            {
+                "tracking_id": tracking_id,
+                "status": status,
+                "service": pkg.get("service"),
+                "receiver": pkg.get("receiver"),
+                "created_at_ts": pkg.get("created_at_ts"),
+                "updated_event_count": len(pkg.get("history", [])),
+                "actions_available": _package_actions_available(pkg),
+                "delay_minutes": eta.get("delay_minutes"),
+                "delivery_mode": delivery.get("mode"),
+                "pickup_point_id": delivery.get("pickup_point_id"),
+                "pickup_point_name": delivery.get("pickup_point_name"),
+                "scheduled_date": delivery.get("scheduled_date"),
+                "time_window": delivery.get("time_window"),
+                "current_location": {
+                    "kind": current_location.get("kind"),
+                    "label": current_location.get("label"),
+                },
+            }
+        )
+
+    parcels.sort(
+        key=lambda p: (
+            p.get("status") in _TERMINAL_PACKAGE_STATUSES,
+            -(int(p.get("created_at_ts") or 0)),
+        )
+    )
+    visible = parcels[:limit_i]
+
+    return {
+        "ok": True,
+        "caller": caller,
+        "has_active_parcels": bool(visible),
+        "count": len(visible),
+        "total_matched": len(parcels),
+        "parcels": visible,
+        "suggested_next_tools": ["track_package"] if visible else [],
+    }
+
+
+@server.tool()
 async def seed_demo_parcel_exception(
     receiver_name: str = "Claire Martin",
     city: str = "Paris",
@@ -648,6 +761,9 @@ async def seed_demo_parcel_exception_for_current_user(
     )
     if isinstance(seeded, dict):
         seeded["caller"] = caller
+        tracking_id = str(seeded.get("tracking_id") or "")
+        if tracking_id and tracking_id in _PACKAGES:
+            _attach_owner_metadata_to_package(_PACKAGES[tracking_id], caller)
         seeded["summary"] = (
             f"Parcel delayed at hub for caller '{caller.get('display_name', 'Alice Martin')}' "
             f"(identity source={caller.get('source', 'unknown')})"

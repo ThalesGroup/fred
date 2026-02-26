@@ -25,7 +25,6 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +45,8 @@ class SimpleAgentFlow(AgentFlow):
     Developers only need to implement the asynchronous 'arun' method.
     """
 
-    async def async_init(self, runtime_context: RuntimeContext):
-        """Initializes the internal graph structure."""
+    def build_runtime_structure(self) -> None:
+        """Build and compile the internal graph structure without I/O."""
         self._graph = self._build_graph()
         self.get_compiled_graph()
 

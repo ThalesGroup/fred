@@ -243,7 +243,7 @@ ai:
     - id: "ParcelOpsAgent"
       name: "ParcelOpsAgent"
       type: "agent"
-      class_path: "agentic_backend.agents.postal.parcel_ops.ParcelOpsAgent"
+      class_path: "agentic_backend.agents.postal.tracking.TrackingAgent"
       enabled: true
 
 mcp:

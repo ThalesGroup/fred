@@ -412,11 +412,6 @@ export default function MessageCard({
                       </Box>
                     )}
                   </Box>
-                  {geoPart && (
-                    <Box px={0} pt={0.5} pb={1}>
-                      <GeoMapRenderer part={geoPart} />
-                    </Box>
-                  )}
                   {/* 🌟 DOWNLOAD / VIEW LINKS 🌟 */}
                   {(downloadLinkPart || viewLinkPart) && (
                     <Box px={0} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
@@ -460,6 +455,14 @@ export default function MessageCard({
                   {/* 🌟 END LINKS 🌟 */}
                 </Box>
               </Grid2>
+
+              {geoPart && (
+                <Grid2 size={12} sx={{ width: "100%" }}>
+                  <Box px={0} pt={0.5} pb={1} sx={{ width: "100%" }}>
+                    <GeoMapRenderer part={geoPart} />
+                  </Box>
+                </Grid2>
+              )}
 
               {/* Footer controls (assistant side) */}
               {side === "left" ? (
