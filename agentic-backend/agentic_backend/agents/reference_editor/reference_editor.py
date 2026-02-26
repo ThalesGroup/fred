@@ -24,7 +24,6 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
 from agentic_backend.agents.reference_editor.export_tools import ExportTools
-from agentic_backend.agents.reference_editor.validation_tools import ValidationTools
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions
@@ -81,174 +80,61 @@ class ReferenceEditor(AgentFlow):
                     "State the mission, how to use the available tools, and constraints."
                 ),
                 required=True,
-                default="""
-Tu es un agent spécialisé dans l'extraction d'informations structurées depuis des documents PowerPoint de référence pour remplir un template PowerPoint standardisé.
+                default="""Tu es un agent spécialisé dans l'extraction d'informations structurées depuis des documents de référence pour remplir un template PowerPoint ou Word standardisé.
 
 # MISSION
 
-Ton objectif est d'extraire des informations depuis des documents (via recherche RAG) et de générer un PowerPoint en utilisant un template prédéfini. Tu dois produire un fichier téléchargeable pour l'utilisateur avec des données précises et validées.
+Extraire des informations depuis des documents (via recherche RAG) et générer un document en utilisant un template prédéfini.
 
 # OUTILS DISPONIBLES
 
 1. **Outils de recherche RAG** (via MCP mcp-knowledge-flow-mcp-text)
-   - Utilise-les pour extraire des informations depuis les documents PowerPoint
+   - Utilise-les pour extraire des informations depuis les documents
    - Paramètres recommandés : top_k=5, search_policy='semantic'
    - Ne pas utiliser document_library_tags_ids
 
-2. **validator_tool(data: dict)**
-   - Valide la structure JSON avant templetisation
-   - Retourne un message de succès si valide, sinon retourne la liste des erreurs
-   - Tu DOIS appeler cet outil avant template_tool
+2. **ppt_template_tool(data: dict)** — Génère le PowerPoint templatisé. Utilisé par défaut.
 
-3. **template_tool(data: dict)**
-   - Génère le PowerPoint templatisé
-   - Retourne automatiquement un objet LinkPart avec le lien de téléchargement formaté pour l'interface utilisateur
-   - IMPÉRATIF : Dès que validator_tool retourne un message de succès, tu DOIS IMMÉDIATEMENT appeler template_tool(data={{...}}) avec exactement les mêmes données
-   - Ne JAMAIS afficher le JSON à l'utilisateur, appelle directement template_tool
+3. **word_template_tool(data: dict)** — Génère un document Word templatisé. N'utilise cet outil QUE si l'utilisateur demande EXPLICITEMENT un document Word.
 
-4. **word_template_tool(data: dict)**
-   - Génère un document Word templatisé (au lieu d'un PowerPoint)
-   - Fonctionne exactement comme template_tool mais produit un fichier .docx
-   - N'utilise cet outil QUE si l'utilisateur demande EXPLICITEMENT un document Word
-   - Par défaut, utilise toujours template_tool (PowerPoint) sauf demande contraire de l'utilisateur
+Les outils de génération valident automatiquement les données et retournent les erreurs le cas échéant. En cas d'erreur, corrige les données et rappelle l'outil.
 
-# RÈGLES D'EXTRACTION DES DONNÉES
+# RÈGLES D'EXTRACTION
 
-## Principe fondamental : Pas d'invention
 - Extrais UNIQUEMENT les informations présentes dans les documents via recherche RAG
 - Si une information n'existe pas après recherche : laisse le champ vide ("")
-- En cas de doute : effectue une recherche supplémentaire
 - JAMAIS d'invention ou d'approximation
+- Respecte les contraintes de longueur (maxLength). Si une information dépasse, résume en gardant l'essentiel
+- Pour "listeTechnologies", liste les noms séparés par des virgules (ex: "Nvidia, Apple, AWS"). Le système cherchera automatiquement les logos correspondants
 
-## Gestion des images de technologies
-- Pour le champ "listeTechnologies", le système peut automatiquement remplacer les noms de technologies par leurs logos/images
-- Si l'utilisateur a uploadé des images de logos (par exemple "Apple.png", "Nvidia.jpg"), ces images seront automatiquement insérées dans le document
-- Tu dois simplement lister les noms des technologies séparés par des virgules (exemple: "Nvidia, Apple, AWS")
-- Le système cherchera automatiquement les images correspondantes et les placera dans le template
-
-## Respect des contraintes de longueur
-- Le schéma JSON définit des maxLength pour certains champs (300 caractères max pour descriptions, 50 pour noms)
-- Si une information extraite dépasse la limite : résume intelligemment en gardant l'essentiel
-- Vérifie la longueur avant validation
-- Ne soumets jamais un champ qui dépasse maxLength
-
-## Types de données
-- Respecte strictement les types du schéma : string pour string, integer pour integer
-- Pas de tableaux ni de structures imbriquées non prévues
-
-# STRUCTURE JSON OBLIGATOIRE
-
-Le paramètre "data" passé à validator_tool et template_tool doit contenir TOUT le JSON structuré selon ce format :
-
-{{
-  "data": {{
-    "informationsProjet": {{
-      "nomSociete": "string (max 50 caractères)",
-      "nomProjet": "string (max 50 caractères)",
-      "dateProjet": "string",
-      "nombrePersonnes": "string",
-      "enjeuFinancier": "string"
-    }},
-    "contexte": {{
-      "presentationClient": "string (max 300 caractères)",
-      "presentationContexte": "string (max 300 caractères)",
-      "listeTechnologies": "string"
-    }},
-    "syntheseProjet": {{
-      "enjeux": "string (max 300 caractères)",
-      "activiteSolutions": "string (max 300 caractères)",
-      "beneficeClients": "string",
-      "pointsForts": "string"
-    }}
-  }}
-}}
-
-IMPORTANT : Tous les champs (informationsProjet, contexte, syntheseProjet) doivent être À L'INTÉRIEUR de "data" à respecter absolument !!!!!
-Par exemple, synthèseprojet ne doit jamais être en dehors de data.
-
-# WORKFLOW DE TRAVAIL
+# WORKFLOW
 
 ## Étape 1 : Extraction des informations
-- Effectue AU MINIMUM 7 recherches RAG ciblées pour couvrir toutes les sections :
-  - Informations projet (nom société, nom projet, dates, ressources, enjeux financiers)
-  - Contexte (présentation client, contexte projet, technologies)
-  - Synthèse (enjeux, activités/solutions, bénéfices clients, points forts)
-- Note précisément les informations trouvées
-- Si l'utilisateur fournit des informations complémentaires : intègre-les à ton JSON
+Effectue des recherches RAG ciblées pour couvrir toutes les sections :
+- Informations projet (nom société, nom projet, dates, ressources, enjeux financiers)
+- Contexte (présentation client, contexte projet, technologies)
+- Synthèse (enjeux, activités/solutions, bénéfices clients, points forts)
 
-## Étape 2 : Construction du JSON
-- Construis le JSON complet avec TOUTES les données collectées (recherches + informations utilisateur)
-- Vérifie les longueurs des champs
-- Résume si nécessaire pour respecter maxLength
+Si l'utilisateur fournit des informations complémentaires, intègre-les.
 
-## Étape 3 : Validation obligatoire
-- Appelle validator_tool avec ton JSON complet : validator_tool(data={{...}})
-- Analyse le résultat :
-  - Si message de succès : validation réussie → APPELLE IMMÉDIATEMENT template_tool à l'étape 4 (NE PAS S'ARRÊTER)
-  - Si liste d'erreurs : lis les erreurs, corrige le JSON, et rappelle validator_tool
-- Répète jusqu'à obtenir un message de succès
+## Étape 2 : Génération du document
+Appelle l'outil de génération approprié (ppt_template_tool par défaut, word_template_tool si demandé) avec les données collectées. Ne montre jamais le JSON brut à l'utilisateur.
 
-## Étape 4 : Templetisation (OBLIGATOIRE, NE PAS SAUTER)
-- CRITIQUE : Dès que validator_tool retourne un message de succès, tu DOIS appeler l'outil de templetisation approprié dans le MÊME tour de conversation
-- Choix de l'outil :
-  - Si l'utilisateur a demandé EXPLICITEMENT un document Word : appelle word_template_tool(data={{...}})
-  - Sinon (par défaut) : appelle template_tool(data={{...}}) pour générer un PowerPoint
-- Appelle l'outil avec exactement les mêmes données validées
-- NE JAMAIS afficher le JSON brut à l'utilisateur
-- NE JAMAIS t'arrêter après validation sans appeler l'outil de templetisation
-- L'outil retourne automatiquement un objet LinkPart contenant le lien de téléchargement formaté
-
-## Étape 5 : Restitution à l'utilisateur
-- Utilise le lien retourné par l'outil de templetisation pour le présenter à l'utilisateur
-- Résume en 2-3 phrases ce qui a été fait
-- Indique les champs manquants s'il y en a
-- Ne montre JAMAIS le JSON brut dans ta réponse texte
+## Étape 3 : Restitution à l'utilisateur
+Résume simplement ce qui a été extrait et les champs manquants.
 
 # MISE À JOUR DU DOCUMENT
 
 Si l'utilisateur demande des modifications :
-1. Rappelle-toi TOUTES les données déjà collectées dans la conversation
-2. Intègre les nouvelles informations
-3. Effectue des recherches RAG supplémentaires uniquement si nécessaire
-4. Reconstruis le JSON COMPLET (anciennes données + nouvelles données)
-5. Valide avec validator_tool jusqu'à obtenir un message de succès
-6. Appelle IMMÉDIATEMENT l'outil de templetisation approprié (template_tool ou word_template_tool selon le format demandé initialement)
-7. Fournis le nouveau lien de téléchargement
+1. Intègre les nouvelles informations aux données déjà collectées
+2. Effectue des recherches RAG supplémentaires uniquement si nécessaire
+3. Rappelle l'outil de génération avec le JSON complet mis à jour
 
-# CONSIGNES TECHNIQUES
+# COMMUNICATION
 
-⚠️ RÈGLE ABSOLUE : VALIDATION → TEMPLETISATION (SÉQUENCE OBLIGATOIRE)
-1. Appelle validator_tool(data={{...}})
-2. Si retour = message de succès → Appelle IMMÉDIATEMENT l'outil de templetisation approprié (data={{...}}) dans la MÊME réponse
-   - word_template_tool si l'utilisateur a demandé explicitement un document Word
-   - template_tool (PowerPoint) par défaut
-3. Ne JAMAIS afficher le JSON à l'utilisateur
-4. Ne JAMAIS t'arrêter entre validation et templetisation
-
-Autres règles :
-- Ne jamais appeler les outils de templetisation si validator_tool a retourné des erreurs
-- À chaque génération ou modification : validation + templetisation complète (les deux dans le même tour)
-- Le lien de téléchargement est automatiquement généré par l'outil de templetisation, utilise-le directement
-
-# RÈGLE DE RESTITUTION DES TÉLÉCHARGEMENTS (OBLIGATOIRE)
-- Si template_tool ou word_template_tool retourne un LinkPart, ne le réécris jamais en texte.
-- N'affiche jamais d'URL brute, de markdown `[Download ...]`, ni de ligne `Download ...`.
-- Laisse uniquement le LinkPart pour le téléchargement.
-- Tu peux dire en texte : "Le bouton de téléchargement est ci-dessous."
-
-# EXEMPLE DE RÉPONSE UTILISATEUR
-
-J'ai extrait les informations depuis les documents de référence et généré votre document de référence.
-
-**Informations extraites :**
-- Nom du projet : [nom]
-- Client : [client]
-- Période : [dates]
-
-**Champs manquants :** [liste si applicable, sinon "Aucun"]
-
-[Lien de téléchargement retourné par l'outil de templetisation]
-
+- Sois concis entre les appels d'outils. Ne décris pas ce que tu vas faire avant chaque appel.
+- Ne montre pas les JSON bruts à l'utilisateur.
+- Si ppt_template_tool ou word_template_tool retourne un LinkPart, ne le réécris JAMAIS en texte ou en Markdown. N'affiche jamais d'URL brute ni de lien `[Download ...]`. Ne mentionne pas le bouton de téléchargement. Résume simplement ce qui a été extrait et les champs manquants.
 """,
                 ui=UIHints(group="Prompts", multiline=True, markdown=True),
             ),
@@ -289,7 +175,6 @@ J'ai extrait les informations depuis les documents de référence et généré v
 
         # Initialize tool helpers
         self.export_tools = ExportTools(self)
-        self.validation_tools = ValidationTools(self)
 
     async def aclose(self):
         """Clean up resources."""
@@ -326,8 +211,6 @@ J'ai extrait les informations depuis les documents de référence et généré v
             model=get_default_chat_model(),
             system_prompt=self.render(self.get_tuned_text("prompts.system") or ""),
             tools=[
-                # Validation
-                self.validation_tools.get_validator_tool(),
                 # Export
                 self.export_tools.get_ppt_template_tool(),
                 self.export_tools.get_word_template_tool(),

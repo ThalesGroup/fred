@@ -16,11 +16,13 @@
 
 import logging
 
-from jsonschema import Draft7Validator
 from langchain.tools import tool
+from pydantic import ValidationError
 
-from agentic_backend.agents.reference_editor.powerpoint_template_util import (
-    referenceSchema,
+from agentic_backend.agents.reference_editor.pydantic_models import (
+    Contexte,
+    InformationsProjet,
+    SyntheseProjet,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,21 +87,23 @@ class ValidationTools:
             if error_message:
                 return error_message
 
-            def shorten_error_message(error):
-                """Convert verbose validation errors to concise messages."""
-                field_path = ".".join(str(p) for p in error.path) or "root"
-                if error.validator == "type":
-                    return f"{field_path} type invalid. Expected {error.schema.get('type')}."
-                if error.validator == "required":
-                    return f"{field_path} missing required field."
-                return f"{field_path} invalid. Reason: {error.validator}."
+            validation_errors = []
+            for section_name, model_cls in [
+                ("informationsProjet", InformationsProjet),
+                ("contexte", Contexte),
+                ("syntheseProjet", SyntheseProjet),
+            ]:
+                try:
+                    model_cls.model_validate(payload.get(section_name, {}))
+                except ValidationError as e:
+                    for err in e.errors():
+                        field = ".".join(str(loc) for loc in err["loc"])
+                        validation_errors.append(
+                            f"{section_name}.{field}: {err['msg']}"
+                        )
 
-            validator = Draft7Validator(referenceSchema)
-            errors = [
-                shorten_error_message(e) for e in validator.iter_errors(payload)
-            ]
-            if not errors:
+            if not validation_errors:
                 return "✓ Validation réussie ! Appelle maintenant template_tool(data={...}) avec ces mêmes données."
-            return errors
+            return validation_errors
 
         return validator_tool

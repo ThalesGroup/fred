@@ -20,11 +20,16 @@ import uuid
 from pathlib import Path
 
 from langchain.tools import tool
+from pydantic import ValidationError
 
 from agentic_backend.agents.reference_editor.powerpoint_template_util import (
     fill_slide_from_structured_response_async,
     fill_word_from_structured_response_async,
-    referenceSchema,
+)
+from agentic_backend.agents.reference_editor.pydantic_models import (
+    Contexte,
+    InformationsProjet,
+    SyntheseProjet,
 )
 from agentic_backend.common.kf_base_client import KfBaseClient
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
@@ -33,19 +38,56 @@ from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
 logger = logging.getLogger(__name__)
 
 
+def _validate_sections(data: dict) -> list[str]:
+    """Validate each section with its Pydantic model. Returns a list of errors (empty if valid)."""
+    actual_data = data.get("data", data)
+    errors = []
+    for section_name, model_cls in [
+        ("informationsProjet", InformationsProjet),
+        ("contexte", Contexte),
+        ("syntheseProjet", SyntheseProjet),
+    ]:
+        try:
+            model_cls.model_validate(actual_data.get(section_name, {}))
+        except ValidationError as e:
+            for err in e.errors():
+                field = ".".join(str(loc) for loc in err["loc"])
+                errors.append(f"{section_name}.{field}: {err['msg']}")
+    return errors
+
+
 class ExportTools:
     """Helper class to organize reference editor export tools."""
 
     def __init__(self, agent):
         self.agent = agent
 
+    def _build_tool_schema(self):
+        """Build the tool schema from Pydantic models, following ppt_filler pattern."""
+        return {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "informationsProjet": {"$ref": "#/$defs/InformationsProjet"},
+                        "contexte": {"$ref": "#/$defs/Contexte"},
+                        "syntheseProjet": {"$ref": "#/$defs/SyntheseProjet"},
+                    },
+                    "required": ["informationsProjet", "contexte", "syntheseProjet"],
+                },
+            },
+            "required": ["data"],
+            "$defs": {
+                "InformationsProjet": InformationsProjet.model_json_schema(),
+                "Contexte": Contexte.model_json_schema(),
+                "SyntheseProjet": SyntheseProjet.model_json_schema(),
+            },
+        }
+
     def get_ppt_template_tool(self):
         """Create the PowerPoint template tool."""
-        tool_schema = {
-            "type": "object",
-            "properties": {"data": referenceSchema},
-            "required": ["data"],
-        }
+        tool_schema = self._build_tool_schema()
 
         @tool(args_schema=tool_schema)
         async def ppt_template_tool(data: dict):
@@ -55,6 +97,15 @@ class ExportTools:
             l'outil possède déjà cette information.
             L'outil retourne un LinkPart pour l'interface. Ne jamais réécrire ce lien en texte/Markdown.
             """
+            # 0. Validate data before proceeding
+            validation_errors = _validate_sections(data)
+            if validation_errors:
+                error_list = "\n".join(f"- {e}" for e in validation_errors)
+                return (
+                    f"❌ Validation échouée. Corrige les champs puis réessaie:\n{error_list}"
+                )
+
+            output_path = None
             try:
                 # 1. Fetch template from secure asset storage
                 template_key = (
@@ -110,17 +161,14 @@ class ExportTools:
                 logger.error(f"[ppt_template_tool] {error_msg}", exc_info=True)
                 return error_msg
             finally:
-                output_path.unlink(missing_ok=True)
+                if output_path:
+                    output_path.unlink(missing_ok=True)
 
         return ppt_template_tool
 
     def get_word_template_tool(self):
         """Create the Word template tool."""
-        tool_schema = {
-            "type": "object",
-            "properties": {"data": referenceSchema},
-            "required": ["data"],
-        }
+        tool_schema = self._build_tool_schema()
 
         @tool(args_schema=tool_schema)
         async def word_template_tool(data: dict):
@@ -130,6 +178,15 @@ class ExportTools:
             l'outil possède déjà cette information.
             L'outil retourne un LinkPart pour l'interface. Ne jamais réécrire ce lien en texte/Markdown.
             """
+            # 0. Validate data before proceeding
+            validation_errors = _validate_sections(data)
+            if validation_errors:
+                error_list = "\n".join(f"- {e}" for e in validation_errors)
+                return (
+                    f"❌ Validation échouée. Corrige les champs puis réessaie:\n{error_list}"
+                )
+
+            output_path = None
             try:
                 # 1. Fetch template from secure asset storage
                 template_key = (
@@ -182,9 +239,10 @@ class ExportTools:
                 ).model_dump(mode="json")
             except Exception as e:
                 error_msg = f"❌ Erreur lors de la génération du document Word: {e}"
-                logger.error(f"[word_ppt_template_tool] {error_msg}", exc_info=True)
+                logger.error(f"[word_template_tool] {error_msg}", exc_info=True)
                 return error_msg
             finally:
-                output_path.unlink(missing_ok=True)
+                if output_path:
+                    output_path.unlink(missing_ok=True)
 
         return word_template_tool
