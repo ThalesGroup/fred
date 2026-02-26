@@ -8,11 +8,22 @@ const isStreamingPartialFinal = (m: ChatMessage) =>
   m.channel === "final" &&
   Boolean((m.metadata as any)?.extras?.streaming_partial);
 
+const pruneStreamingPartialsForExchange = (all: ChatMessage[], sessionId: string, exchangeId: string) =>
+  all.filter(
+    (x) => !(isStreamingPartialFinal(x) && x.session_id === sessionId && x.exchange_id === exchangeId),
+  );
+
+export const pruneStreamingPartialsForSession = (all: ChatMessage[], sessionId: string) =>
+  all.filter((x) => !(isStreamingPartialFinal(x) && x.session_id === sessionId));
+
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
-  const base = isStreamingPartialFinal(m)
-    ? all.filter((x) => !(isStreamingPartialFinal(x) && exchangeKey(x) === exchangeKey(m)))
-    : all;
+  const shouldPruneExchangePartials =
+    isStreamingPartialFinal(m) ||
+    (m.role === "assistant" && m.channel === "final") ||
+    (m.role === "assistant" && m.channel === "tool_call") ||
+    (m.role === "tool" && m.channel === "tool_result");
+  const base = shouldPruneExchangePartials ? pruneStreamingPartialsForExchange(all, m.session_id, m.exchange_id) : all;
   const k = keyOf(m);
   const idx = base.findIndex((x) => keyOf(x) === k);
   if (idx >= 0) {

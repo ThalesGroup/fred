@@ -47,7 +47,7 @@ import {
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../ToastProvider.tsx";
-import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
+import { keyOf, mergeAuthoritative, pruneStreamingPartialsForSession, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
@@ -679,6 +679,11 @@ const ChatBot = ({
             }
 
             case "error": {
+              const errorSessionId = (response as { session_id?: string }).session_id;
+              if (errorSessionId) {
+                messagesRef.current = pruneStreamingPartialsForSession(messagesRef.current, errorSessionId);
+                setMessages(messagesRef.current);
+              }
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
               endWaiting({ immediate: true });
@@ -687,6 +692,17 @@ const ChatBot = ({
 
             case "awaiting_human": {
               const awaiting = response as AwaitingHumanEvent;
+              messagesRef.current = messagesRef.current.filter(
+                (m) =>
+                  !(
+                    m.role === "assistant" &&
+                    m.channel === "final" &&
+                    m.session_id === awaiting.session_id &&
+                    m.exchange_id === awaiting.exchange_id &&
+                    Boolean((m.metadata as any)?.extras?.streaming_partial)
+                  ),
+              );
+              setMessages(messagesRef.current);
               setPendingHitl(awaiting);
               endWaiting({ immediate: true });
               break;

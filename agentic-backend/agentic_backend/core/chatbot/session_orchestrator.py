@@ -1662,13 +1662,16 @@ class SessionOrchestrator:
                 continue
 
             if m.role == Role.assistant:
-                if m.channel != Channel.tool_call:
+                # Only replay user-facing assistant answers into model context.
+                # Trace channels (thought/plan/observation/...) are persisted for UI
+                # debugging but must not be fed back into subsequent prompts.
+                if m.channel == Channel.final:
                     text = _concat_text_parts(m.parts or [])
                     am = AIMessage(text)
                     lc_history.append(am)
                     _rlog(
                         "emit_ai_text",
-                        msg="Emitted AI text",
+                        msg="Emitted AI final text",
                         exchange_id=current_exchange,
                         preview=_preview(text),
                     )
