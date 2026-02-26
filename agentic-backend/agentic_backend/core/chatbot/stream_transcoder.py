@@ -24,7 +24,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser, VectorSearchHit
 from fred_core.kpi import BaseKPIWriter
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AIMessageChunk, AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
@@ -196,6 +196,84 @@ def _additional_kwargs_emptyish(raw: Any) -> bool:
     if not isinstance(raw, dict):
         return True
     return all(v in (None, "", [], {}, False) for v in raw.values())
+
+
+def _split_stream_event(event: Any) -> tuple[str, Any] | None:
+    """
+    Normalize LangGraph astream outputs across single-mode and multi-mode variants.
+
+    Shapes handled:
+      - {"node": {...}}                               (single mode="updates")
+      - ("updates", {"node": {...}})                 (multi-mode, no subgraphs)
+      - (("ns", ...), "messages", (...))             (multi-mode + subgraphs)
+    """
+    if isinstance(event, dict):
+        return ("updates", event)
+
+    if isinstance(event, tuple):
+        if len(event) == 2 and isinstance(event[0], str):
+            return (event[0], event[1])
+        if len(event) == 3 and isinstance(event[1], str):
+            return (event[1], event[2])
+
+    return None
+
+
+def _split_messages_payload(payload: Any) -> tuple[Any, dict[str, Any]] | None:
+    """
+    Normalize `stream_mode="messages"` payloads: expected shape is (message, metadata).
+    """
+    if not isinstance(payload, tuple) or len(payload) != 2:
+        return None
+    msg, metadata = payload
+    return (msg, metadata if isinstance(metadata, dict) else {})
+
+
+def _chunk_has_tool_signal(chunk: AIMessageChunk) -> bool:
+    """
+    Best-effort guard to avoid streaming tool-call JSON as final user-visible text.
+    """
+    if getattr(chunk, "tool_call_chunks", None):
+        return True
+    if getattr(chunk, "tool_calls", None):
+        return True
+
+    additional_kwargs = getattr(chunk, "additional_kwargs", {}) or {}
+    if isinstance(additional_kwargs, dict) and additional_kwargs.get("tool_calls"):
+        return True
+
+    content = getattr(chunk, "content", None)
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                part_type = str(part.get("type") or "").lower()
+                if "tool" in part_type:
+                    return True
+    return False
+
+
+def _chunk_text_delta(chunk: AIMessageChunk) -> str:
+    """
+    Extract visible text from a streamed AIMessageChunk.
+    """
+    text = getattr(chunk, "text", "")
+    if isinstance(text, str):
+        return text
+    if text is None:
+        return ""
+    return str(text)
+
+
+def _append_stream_text(current: str, piece: str) -> str:
+    """
+    Prefer append semantics (normal token deltas), but tolerate providers that may
+    occasionally send cumulative chunks.
+    """
+    if not piece:
+        return current
+    if current and piece.startswith(current):
+        return piece
+    return current + piece
 
 
 class InterruptRaised(Exception):
@@ -486,6 +564,9 @@ class StreamTranscoder:
         final_sent = False
         pending_sources_payload: Optional[List[VectorSearchHit]] = None
         pending_fred_parts: List[MessagePart] = []
+        partial_final_rank: Optional[int] = None
+        partial_final_text = ""
+        partial_final_timestamp: Optional[datetime] = None
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
 
         # Determine graph input: Command for resume, or State dict for start
@@ -499,13 +580,77 @@ class StreamTranscoder:
             graph_input = {"messages": msgs_any}
 
         try:
-            async for event in agent.astream_updates(
+            async for raw_event in agent.astream_updates(
                 state=graph_input,
                 config=config,
+                stream_mode=["updates", "messages"],
             ):
                 events_seen += 1
                 if t_first_event is None:
                     t_first_event = time.monotonic()
+
+                split = _split_stream_event(raw_event)
+                if split is None:
+                    continue
+                mode, event = split
+
+                if mode == "messages":
+                    msg_payload = _split_messages_payload(event)
+                    if msg_payload is None:
+                        continue
+                    streamed_msg, streamed_meta = msg_payload
+                    if final_sent:
+                        continue
+                    if not isinstance(streamed_msg, AIMessageChunk):
+                        continue
+                    if _chunk_has_tool_signal(streamed_msg):
+                        # Tool-call generations are handled via the authoritative
+                        # `updates` path. Avoid showing tool JSON in the main reply.
+                        continue
+
+                    delta_text = _chunk_text_delta(streamed_msg)
+                    if not delta_text:
+                        continue
+
+                    # Prefer one provisional final message (same key updated in place).
+                    expected_rank = base_rank + seq
+                    if partial_final_rank != expected_rank:
+                        partial_final_rank = expected_rank
+                        partial_final_text = ""
+                        partial_final_timestamp = _utcnow_dt()
+
+                    partial_final_text = _append_stream_text(
+                        partial_final_text, delta_text
+                    )
+                    if not partial_final_text.strip():
+                        continue
+
+                    partial_meta = ChatMetadata(
+                        agent_id=agent_id,
+                        extras={
+                            "streaming_partial": True,
+                            "langgraph_node": streamed_meta.get("langgraph_node"),
+                        },
+                    )
+                    partial_msg = ChatMessage(
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        rank=partial_final_rank,
+                        timestamp=partial_final_timestamp or _utcnow_dt(),
+                        role=Role.assistant,
+                        channel=Channel.final,
+                        parts=[TextPart(text=partial_final_text)],
+                        metadata=partial_meta,
+                    )
+                    emit_start = time.monotonic()
+                    await self._emit(callback, partial_msg)
+                    emit_time_total += time.monotonic() - emit_start
+                    emit_count += 1
+                    continue
+
+                if mode != "updates":
+                    continue
+
                 # Handle LangGraph interrupt events explicitly
                 key = next(iter(event))
                 if logger.isEnabledFor(logging.DEBUG):
@@ -554,6 +699,11 @@ class StreamTranscoder:
                     # ---------- TOOL CALLS ----------
                     tool_calls = extract_tool_calls(msg)
                     if tool_calls:
+                        # Any provisional streamed text belonged to a tool-call turn.
+                        # Drop local state; the frontend will also prune partials on final.
+                        partial_final_rank = None
+                        partial_final_text = ""
+                        partial_final_timestamp = None
                         if logger.isEnabledFor(logging.DEBUG):
                             logger.debug(
                                 "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
@@ -727,30 +877,43 @@ class StreamTranscoder:
                         pending_fred_parts = []
 
                     # Optional thought trace (developer-facing, not part of final answer)
+                    thought_text: Optional[str] = None
                     if "thought" in raw_md:
                         thought_txt = raw_md["thought"]
                         if isinstance(thought_txt, (dict, list)):
                             thought_txt = json.dumps(thought_txt, ensure_ascii=False)
                         if str(thought_txt).strip():
-                            tmsg = ChatMessage(
-                                session_id=session_id,
-                                exchange_id=exchange_id,
-                                rank=base_rank + seq,
-                                timestamp=_utcnow_dt(),
-                                role=Role.assistant,
-                                channel=Channel.thought,
-                                parts=[TextPart(text=str(thought_txt))],
-                                metadata=ChatMetadata(
-                                    agent_id=agent_id,
-                                    extras=raw_md.get("extras") or {},
-                                ),
-                            )
-                            out.append(tmsg)
-                            seq += 1
-                            emit_start = time.monotonic()
-                            await self._emit(callback, tmsg)
-                            emit_time_total += time.monotonic() - emit_start
-                            emit_count += 1
+                            thought_text = str(thought_txt)
+
+                    partial_final_matches_rank = (
+                        role == Role.assistant
+                        and partial_final_rank is not None
+                        and partial_final_rank == (base_rank + seq)
+                    )
+
+                    # Default behavior keeps thoughts before the final message.
+                    # If we already streamed a provisional final at this rank, emit
+                    # the authoritative final first so the UI overwrites in place.
+                    if thought_text and not partial_final_matches_rank:
+                        tmsg = ChatMessage(
+                            session_id=session_id,
+                            exchange_id=exchange_id,
+                            rank=base_rank + seq,
+                            timestamp=_utcnow_dt(),
+                            role=Role.assistant,
+                            channel=Channel.thought,
+                            parts=[TextPart(text=thought_text)],
+                            metadata=ChatMetadata(
+                                agent_id=agent_id,
+                                extras=raw_md.get("extras") or {},
+                            ),
+                        )
+                        out.append(tmsg)
+                        seq += 1
+                        emit_start = time.monotonic()
+                        await self._emit(callback, tmsg)
+                        emit_time_total += time.monotonic() - emit_start
+                        emit_count += 1
 
                     # Channel selection
                     if role == Role.assistant:
@@ -842,6 +1005,30 @@ class StreamTranscoder:
                         await self._emit(callback, msg_v2)
                         emit_time_total += time.monotonic() - emit_start
                         emit_count += 1
+                        partial_final_rank = None
+                        partial_final_text = ""
+                        partial_final_timestamp = None
+
+                        if thought_text and partial_final_matches_rank:
+                            tmsg = ChatMessage(
+                                session_id=session_id,
+                                exchange_id=exchange_id,
+                                rank=base_rank + seq,
+                                timestamp=_utcnow_dt(),
+                                role=Role.assistant,
+                                channel=Channel.thought,
+                                parts=[TextPart(text=thought_text)],
+                                metadata=ChatMetadata(
+                                    agent_id=agent_id,
+                                    extras=raw_md.get("extras") or {},
+                                ),
+                            )
+                            out.append(tmsg)
+                            seq += 1
+                            emit_start = time.monotonic()
+                            await self._emit(callback, tmsg)
+                            emit_time_total += time.monotonic() - emit_start
+                            emit_count += 1
         except InterruptRaised as ir:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
