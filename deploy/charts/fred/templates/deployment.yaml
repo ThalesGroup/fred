@@ -62,7 +62,7 @@ spec:
 
       containers:
         - name: {{ .app.applicationName }}
-          image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
+          image: "{{ .app.image.repository }}:{{ .app.image.tag }}"
           imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
 
           {{- with .app.securityContext }}
