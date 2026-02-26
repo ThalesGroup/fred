@@ -8,7 +8,7 @@ A recurring and **structural problem** appears in all such agents:
 
 > **Given a user request, how does the agent decide which tool to suggest or call?**
 
-In practice, this problem is often solved: 
+In practice, this problem is often solved:
 - ad-hoc,
 - differently in every agent,
 - using brittle heuristics (string parsing, regex, keywords),
