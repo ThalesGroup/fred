@@ -330,7 +330,7 @@ mcp:
   text_enabled: true
   templates_enabled: true
   resources_enabled: true
-  opensearch_ops_enabled: false
+  opensearch_ops_enabled: true
   neo4j_enabled: false
   filesystem_enabled: true
 
