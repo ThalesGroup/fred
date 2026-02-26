@@ -84,7 +84,7 @@ class ValidationTools:
             avec exactement les mêmes données dans le MÊME tour de conversation. Ne t'arrête pas ici.
             """
             payload, error_message = _normalize_reference_payload_for_validation(data)
-            if error_message:
+            if error_message or payload is None:
                 return error_message
 
             validation_errors = []
