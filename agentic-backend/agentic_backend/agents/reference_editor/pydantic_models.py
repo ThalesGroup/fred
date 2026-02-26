@@ -89,5 +89,3 @@ class SyntheseProjet(BaseModel):
         "",
         description="Court résumé des points forts du projet. Longueur maximale: 300 caractères (une à deux phrases).",
     )
-
-

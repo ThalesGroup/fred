@@ -101,9 +101,7 @@ class ExportTools:
             validation_errors = _validate_sections(data)
             if validation_errors:
                 error_list = "\n".join(f"- {e}" for e in validation_errors)
-                return (
-                    f"❌ Validation échouée. Corrige les champs puis réessaie:\n{error_list}"
-                )
+                return f"❌ Validation échouée. Corrige les champs puis réessaie:\n{error_list}"
 
             output_path = None
             try:
@@ -182,9 +180,7 @@ class ExportTools:
             validation_errors = _validate_sections(data)
             if validation_errors:
                 error_list = "\n".join(f"- {e}" for e in validation_errors)
-                return (
-                    f"❌ Validation échouée. Corrige les champs puis réessaie:\n{error_list}"
-                )
+                return f"❌ Validation échouée. Corrige les champs puis réessaie:\n{error_list}"
 
             output_path = None
             try:

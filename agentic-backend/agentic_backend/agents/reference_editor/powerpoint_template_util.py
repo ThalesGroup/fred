@@ -968,5 +968,3 @@ def _add_societe_image_near_textbox(
         logger.info(f"Added company image for: {nom_societe} near textbox (69x56 pt)")
     except Exception as e:
         logger.error(f"Failed to add company image for {nom_societe} near textbox: {e}")
-
-
