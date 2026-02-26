@@ -16,7 +16,7 @@
 
 import logging
 import tempfile
-import uuid
+from datetime import datetime
 from pathlib import Path
 
 from langchain.tools import tool
@@ -136,8 +136,8 @@ class ExportTools:
                 )
 
                 # 3. Upload the generated file to user storage
-                unique_id = str(uuid.uuid4())
-                final_key = f"Generated_Slide_{unique_id}.pptx"
+                timestamp = datetime.now().strftime("%m%d%H%M")
+                final_key = f"Reference_{timestamp}.pptx"
 
                 with open(output_path, "rb") as f_out:
                     upload_result = await self.agent.upload_user_blob(
@@ -215,8 +215,8 @@ class ExportTools:
                 )
 
                 # 3. Upload the generated file to user storage
-                unique_id = str(uuid.uuid4())
-                final_key = f"Generated_Document_{unique_id}.docx"
+                timestamp = datetime.now().strftime("%m%d%H%M")
+                final_key = f"Reference_{timestamp}.docx"
 
                 with open(output_path, "rb") as f_out:
                     upload_result = await self.agent.upload_user_blob(
