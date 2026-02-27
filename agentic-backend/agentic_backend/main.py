@@ -97,7 +97,9 @@ def _env_bool(name: str, default: bool) -> bool:
         return True
     if value in {"0", "false", "no", "off"}:
         return False
-    logger.warning("[MAIN] Invalid boolean for %s=%r, defaulting to %s", name, raw, default)
+    logger.warning(
+        "[MAIN] Invalid boolean for %s=%r, defaulting to %s", name, raw, default
+    )
     return default
 
 
