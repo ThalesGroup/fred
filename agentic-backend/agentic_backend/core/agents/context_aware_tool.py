@@ -206,12 +206,16 @@ class ContextAwareTool(BaseTool):
 
         try:
             # Pydantic v2 first, v1 fallback, else assume dict-like
-            schema_method = getattr(self.base_tool.args_schema, "model_json_schema", None)
+            schema_method = getattr(
+                self.base_tool.args_schema, "model_json_schema", None
+            )
             if schema_method:
                 tool_schema = schema_method()
             else:
                 schema_method = getattr(self.base_tool.args_schema, "schema", None)
-                tool_schema = schema_method() if schema_method else self.base_tool.args_schema
+                tool_schema = (
+                    schema_method() if schema_method else self.base_tool.args_schema
+                )
 
             if isinstance(tool_schema, dict):
                 props = tool_schema.get("properties", {})
@@ -226,9 +230,7 @@ class ContextAwareTool(BaseTool):
 
         return tool_properties
 
-    def _sanitize_tool_kwargs(
-        self, kwargs: Optional[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _sanitize_tool_kwargs(self, kwargs: Optional[dict[str, Any]]) -> dict[str, Any]:
         """Ensure mapping input and drop explicit null values."""
         return {k: v for k, v in (kwargs or {}).items() if v is not None}
 
