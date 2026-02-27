@@ -11,56 +11,11 @@ This note consolidates the current Fred design for:
 
 It is intended as a precise reference for the dev team and as a discussion base for the next design step.
 
----
-
-## Executive Summary
-
-Fred currently supports two complementary agent styles:
-
-1. **Generic tool-using agents** (e.g. `BasicReActAgent`)
-   - LLM-driven tool selection (ReAct/tool-calling style)
-   - shared tool-level HITL approval policy
-   - good for dynamic agents and rapid iteration
-
-2. **Business workflow agents** (e.g. `LaPosteDemoAgent`)
-   - explicit LangGraph state machine
-   - domain-specific HITL (choice cards, approval steps)
-   - better for deterministic, governed, demo/production-grade workflows
-
-The platform is moving toward a stronger shared architecture:
-
-- **Planner -> Policy -> Executor**
-- **Capability-first model** (what the agent can do)
-- **Transport as an implementation detail** (`mcp`, `inprocess`, later others)
-
-Today, Fred already has important building blocks for this:
-
-- shared HITL policy helpers (`tool_approval.py`, `hitl_i18n.py`)
-- reusable gated tool loop (`build_tool_loop(...)`)
-- unified runtime tool resolution across remote MCP and local in-process providers (`MCPRuntime`)
-
----
-
-## Context and Problem Statement
-
-In Fred, many agents are equipped with tools:
-
-- remote MCP connectors,
-- local in-process capabilities,
-- internal services,
-- long-running tasks / jobs (e.g. Temporal),
-- document/corpus operations,
-- business APIs.
-
-The recurring structural problem is:
-
-> Given a user request and a set of available capabilities, how do we decide:
-> 1) what to do,
-> 2) whether it is allowed,
-> 3) whether a human must approve,
-> 4) and how to execute it safely and audibly?
-
-If each agent solves this independently (prompt heuristics, regex, custom branching), we get:
+In practice, this problem is often solved: 
+- ad-hoc,
+- differently in every agent,
+- using brittle heuristics (string parsing, regex, keywords),
+- or by embedding implicit logic inside prompts.
 
 - duplicated logic,
 - inconsistent UX,
