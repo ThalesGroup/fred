@@ -2,15 +2,16 @@
 
 import csv
 import io
+import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
 from langchain.tools import ToolRuntime, tool
-from langchain_core.messages import ToolMessage
-from langgraph.types import Command
 
 from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
+
+logger = logging.getLogger(__name__)
 
 
 class ExportTools:
@@ -163,21 +164,20 @@ class ExportTools:
 
         # Upload to user storage
         try:
-            user_id = self.agent.get_end_user_id()
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            final_key = f"{user_id}_livrables_{timestamp}.md"
+            timestamp = datetime.now().strftime("%m%d%H%M")
+            final_key = f"Livrables_{timestamp}.md"
 
             with open(output_path, "rb") as f_out:
                 upload_result = await self.agent.upload_user_blob(
                     key=final_key,
                     file_content=f_out,
-                    filename=f"Livrables_{timestamp}.md",
+                    filename=final_key,
                     content_type="text/markdown",
                 )
 
             return LinkPart(
                 href=upload_result.download_url,
-                title=f"📥 Télécharger {upload_result.file_name}",
+                title=upload_result.file_name,
                 kind=LinkKind.download,
                 mime="text/markdown",
             )
@@ -198,50 +198,28 @@ class ExportTools:
             Returns:
                 Lien de téléchargement du fichier Markdown
             """
-            # Check if we have any generated content
-            has_content = any(
-                [
-                    runtime.state.get("requirements"),
-                    runtime.state.get("user_stories"),
-                    runtime.state.get("tests"),
-                ]
-            )
-
-            if not has_content:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucun livrable n'a été généré. Veuillez d'abord générer des exigences, user stories ou tests.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+            try:
+                # Check if we have any generated content
+                has_content = any(
+                    [
+                        runtime.state.get("requirements"),
+                        runtime.state.get("user_stories"),
+                        runtime.state.get("tests"),
+                    ]
                 )
 
-            link_part = await self._generate_markdown_file(runtime.state)
-            if link_part:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                content=f"✓ Fichier exporté avec succès: [{link_part.title}]({link_part.href})",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+                if not has_content:
+                    return "❌ Aucun livrable n'a été généré. Veuillez d'abord générer des exigences, user stories ou tests."
 
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            "❌ Erreur lors de la génération du fichier.",
-                            tool_call_id=runtime.tool_call_id,
-                        ),
-                    ],
-                }
-            )
+                link_part = await self._generate_markdown_file(runtime.state)
+                if link_part:
+                    return link_part.model_dump(mode="json")
+
+                return "❌ Erreur lors de la génération du fichier."
+            except Exception as e:
+                error_msg = f"❌ Erreur lors de l'export des livrables: {e}"
+                logger.error(f"[export_deliverables] {error_msg}", exc_info=True)
+                return error_msg
 
         return export_deliverables
 
@@ -265,114 +243,99 @@ class ExportTools:
             """
             user_stories = runtime.state.get("user_stories")
             if not user_stories:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucune User Story n'a été générée. Veuillez d'abord appeler generate_user_stories.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+                return "❌ Aucune User Story n'a été générée. Veuillez d'abord appeler generate_user_stories."
 
-            # Build CSV with Jira-compatible field names
-            # See: https://support.atlassian.com/jira-cloud-administration/docs/import-data-from-a-csv-file/
-            output = io.StringIO()
-            fieldnames = [
-                "Summary",
-                "Description",
-                "Issue Type",
-                "Priority",
-                "Epic Name",
-                "Story Points",
-                "Labels",
-            ]
-            writer = csv.DictWriter(
-                output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
-            )
-            writer.writeheader()
-
-            for story in user_stories:
-                # Append acceptance criteria to description since it's not a standard Jira field
-                description = story.get("description", "")
-                acceptance_criteria = story.get("acceptance_criteria", [])
-                if acceptance_criteria:
-                    criteria_lines = []
-                    for c in acceptance_criteria:
-                        if isinstance(c, dict):
-                            criteria_lines.append(f"*{c.get('scenario', 'Scénario')}*")
-                            for step in c.get("steps", []):
-                                criteria_lines.append(f"  - {step}")
-                        else:
-                            criteria_lines.append(f"- {c}")
-                    criteria_text = "\n".join(criteria_lines)
-                    description = (
-                        f"{description}\n\n*Critères d'acceptation:*\n{criteria_text}"
-                    )
-
-                # Convert labels list to comma-separated string
-                labels = story.get("labels", [])
-                if isinstance(labels, list):
-                    labels = ",".join(labels)
-
-                writer.writerow(
-                    {
-                        "Summary": story.get("summary", story.get("id", "")),
-                        "Description": description,
-                        "Issue Type": story.get("issue_type", "Story"),
-                        "Priority": story.get("priority", "Moyenne"),
-                        "Epic Name": story.get("epic_name", ""),
-                        "Story Points": story.get("story_points", ""),
-                        "Labels": labels,
-                    }
-                )
-
-            csv_content = output.getvalue()
-
-            # Create temp file
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".csv",
-                prefix="jira_import_",
-                mode="w",
-                encoding="utf-8",
-            ) as f:
-                f.write(csv_content)
-                output_path = Path(f.name)
-
-            # Upload to user storage
             try:
-                user_id = self.agent.get_end_user_id()
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                final_key = f"{user_id}_jira_import_{timestamp}.csv"
+                # Build CSV with Jira-compatible field names
+                # See: https://support.atlassian.com/jira-cloud-administration/docs/import-data-from-a-csv-file/
+                output = io.StringIO()
+                fieldnames = [
+                    "Summary",
+                    "Description",
+                    "Issue Type",
+                    "Priority",
+                    "Epic Name",
+                    "Story Points",
+                    "Labels",
+                ]
+                writer = csv.DictWriter(
+                    output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
+                )
+                writer.writeheader()
 
-                with open(output_path, "rb") as f_out:
-                    upload_result = await self.agent.upload_user_blob(
-                        key=final_key,
-                        file_content=f_out,
-                        filename=f"jira_import_{timestamp}.csv",
-                        content_type="text/csv",
+                for story in user_stories:
+                    # Append acceptance criteria to description since it's not a standard Jira field
+                    description = story.get("description", "")
+                    acceptance_criteria = story.get("acceptance_criteria", [])
+                    if acceptance_criteria:
+                        criteria_lines = []
+                        for c in acceptance_criteria:
+                            if isinstance(c, dict):
+                                criteria_lines.append(
+                                    f"*{c.get('scenario', 'Scénario')}*"
+                                )
+                                for step in c.get("steps", []):
+                                    criteria_lines.append(f"  - {step}")
+                            else:
+                                criteria_lines.append(f"- {c}")
+                        criteria_text = "\n".join(criteria_lines)
+                        description = f"{description}\n\n*Critères d'acceptation:*\n{criteria_text}"
+
+                    # Convert labels list to comma-separated string
+                    labels = story.get("labels", [])
+                    if isinstance(labels, list):
+                        labels = ",".join(labels)
+
+                    writer.writerow(
+                        {
+                            "Summary": story.get("summary", story.get("id", "")),
+                            "Description": description,
+                            "Issue Type": story.get("issue_type", "Story"),
+                            "Priority": story.get("priority", "Moyenne"),
+                            "Epic Name": story.get("epic_name", ""),
+                            "Story Points": story.get("story_points", ""),
+                            "Labels": labels,
+                        }
                     )
-            finally:
-                output_path.unlink(missing_ok=True)
 
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            content=f"✓ Fichier CSV Jira exporté avec succès: [{upload_result.file_name}]({upload_result.download_url})\n\n"
-                            f"**Pour importer dans Jira:**\n"
-                            f"1. Allez dans votre projet Jira\n"
-                            f"2. Menu **Project settings** > **External system import**\n"
-                            f"3. Sélectionnez **CSV** et uploadez le fichier\n"
-                            f"4. Mappez le champ **Epic Name** vers le champ Epic Link de Jira\n"
-                            f"5. Les Epics doivent exister dans le projet ou être créés avant l'import",
-                            tool_call_id=runtime.tool_call_id,
-                        ),
-                    ],
-                }
-            )
+                csv_content = output.getvalue()
+
+                # Create temp file
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=".csv",
+                    prefix="jira_import_",
+                    mode="w",
+                    encoding="utf-8",
+                ) as f:
+                    f.write(csv_content)
+                    output_path = Path(f.name)
+
+                # Upload to user storage
+                try:
+                    timestamp = datetime.now().strftime("%m%d%H%M")
+                    final_key = f"Import_Jira_{timestamp}.csv"
+
+                    with open(output_path, "rb") as f_out:
+                        upload_result = await self.agent.upload_user_blob(
+                            key=final_key,
+                            file_content=f_out,
+                            filename=final_key,
+                            content_type="text/csv",
+                        )
+                finally:
+                    output_path.unlink(missing_ok=True)
+
+                return LinkPart(
+                    href=upload_result.download_url,
+                    title=upload_result.file_name,
+                    kind=LinkKind.download,
+                    mime="text/csv",
+                ).model_dump(mode="json")
+            except Exception as e:
+                error_msg = f"❌ Erreur lors de l'export CSV Jira: {e}"
+                logger.error(f"[export_jira_csv] {error_msg}", exc_info=True)
+                return error_msg
 
         return export_jira_csv
 
@@ -403,134 +366,108 @@ class ExportTools:
             """
             tests = runtime.state.get("tests")
             if not tests:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucun test n'a été généré. Veuillez d'abord appeler generate_tests.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return "❌ Aucun test n'a été généré. Veuillez d'abord appeler generate_tests."
+
+            try:
+                # Build CSV with Zephyr Scale-compatible field names
+                # See: https://support.smartbear.com/zephyr/docs/en/test-cases/import-test-cases.html
+                output = io.StringIO()
+                fieldnames = [
+                    "Name",
+                    "Objective",
+                    "Precondition",
+                    "Test Script (Plain Text)",
+                    "Folder",
+                    "Priority",
+                    "Labels",
+                    "Coverage",
+                ]
+                writer = csv.DictWriter(
+                    output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
                 )
+                writer.writeheader()
 
-            # Build CSV with Zephyr Scale-compatible field names
-            # See: https://support.smartbear.com/zephyr/docs/en/test-cases/import-test-cases.html
-            output = io.StringIO()
-            fieldnames = [
-                "Name",
-                "Objective",
-                "Precondition",
-                "Test Script (Plain Text)",
-                "Folder",
-                "Priority",
-                "Labels",
-                "Coverage",
-            ]
-            writer = csv.DictWriter(
-                output, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
-            )
-            writer.writeheader()
+                for test in tests:
+                    # Build precondition text (include test_data if present)
+                    precondition = test.get("preconditions", "") or ""
+                    test_data = test.get("test_data") or []
+                    if test_data:
+                        test_data_text = "\n".join(test_data)
+                        if precondition:
+                            precondition = (
+                                f"{precondition}\n\nDonnées de test:\n{test_data_text}"
+                            )
+                        else:
+                            precondition = f"Données de test:\n{test_data_text}"
 
-            for test in tests:
-                # Build precondition text (include test_data if present)
-                precondition = test.get("preconditions", "") or ""
-                test_data = test.get("test_data") or []
-                if test_data:
-                    test_data_text = "\n".join(test_data)
-                    if precondition:
-                        precondition = (
-                            f"{precondition}\n\nDonnées de test:\n{test_data_text}"
+                    # Build test script (plain text with Gherkin steps + expected result)
+                    steps = test.get("steps", [])
+                    script_parts = list(steps)
+                    expected_result = test.get("expected_result", "")
+                    if expected_result:
+                        script_parts.append("")
+                        script_parts.append(f"Résultat attendu:\n{expected_result}")
+                    test_script = "\n".join(script_parts)
+
+                    # Build folder path: base folder + test_type subfolder
+                    test_type = test.get("test_type", "") or ""
+                    if folder:
+                        test_folder = (
+                            f"{folder.rstrip('/')}/{test_type}" if test_type else folder
                         )
                     else:
-                        precondition = f"Données de test:\n{test_data_text}"
+                        test_folder = test_type
 
-                # Build test script (plain text with Gherkin steps + expected result)
-                steps = test.get("steps", [])
-                script_parts = list(steps)
-                expected_result = test.get("expected_result", "")
-                if expected_result:
-                    script_parts.append("")
-                    script_parts.append(f"Résultat attendu:\n{expected_result}")
-                test_script = "\n".join(script_parts)
-
-                # Build folder path: base folder + test_type subfolder
-                test_type = test.get("test_type", "") or ""
-                if folder:
-                    test_folder = (
-                        f"{folder.rstrip('/')}/{test_type}" if test_type else folder
+                    writer.writerow(
+                        {
+                            "Name": test.get("name", test.get("id", "")),
+                            "Objective": test.get("description", "") or "",
+                            "Precondition": precondition,
+                            "Test Script (Plain Text)": test_script,
+                            "Folder": test_folder,
+                            "Priority": test.get("priority", "") or "",
+                            "Labels": test.get("test_type", "") or "",
+                            "Coverage": test.get("user_story_id", "") or "",
+                        }
                     )
-                else:
-                    test_folder = test_type
 
-                writer.writerow(
-                    {
-                        "Name": test.get("name", test.get("id", "")),
-                        "Objective": test.get("description", "") or "",
-                        "Precondition": precondition,
-                        "Test Script (Plain Text)": test_script,
-                        "Folder": test_folder,
-                        "Priority": test.get("priority", "") or "",
-                        "Labels": test.get("test_type", "") or "",
-                        "Coverage": test.get("user_story_id", "") or "",
-                    }
-                )
+                csv_content = output.getvalue()
 
-            csv_content = output.getvalue()
+                # Create temp file
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=".csv",
+                    prefix="zephyr_import_",
+                    mode="w",
+                    encoding="utf-8",
+                ) as f:
+                    f.write(csv_content)
+                    output_path = Path(f.name)
 
-            # Create temp file
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".csv",
-                prefix="zephyr_import_",
-                mode="w",
-                encoding="utf-8",
-            ) as f:
-                f.write(csv_content)
-                output_path = Path(f.name)
+                # Upload to user storage
+                try:
+                    timestamp = datetime.now().strftime("%m%d%H%M")
+                    final_key = f"Import_Zephyr_{timestamp}.csv"
 
-            # Upload to user storage
-            try:
-                user_id = self.agent.get_end_user_id()
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                final_key = f"{user_id}_zephyr_import_{timestamp}.csv"
+                    with open(output_path, "rb") as f_out:
+                        upload_result = await self.agent.upload_user_blob(
+                            key=final_key,
+                            file_content=f_out,
+                            filename=final_key,
+                            content_type="text/csv",
+                        )
+                finally:
+                    output_path.unlink(missing_ok=True)
 
-                with open(output_path, "rb") as f_out:
-                    upload_result = await self.agent.upload_user_blob(
-                        key=final_key,
-                        file_content=f_out,
-                        filename=f"zephyr_import_{timestamp}.csv",
-                        content_type="text/csv",
-                    )
-            finally:
-                output_path.unlink(missing_ok=True)
-
-            # Build coverage summary for instructions
-            coverage_ids = sorted(
-                {t.get("user_story_id", "") for t in tests if t.get("user_story_id")}
-            )
-            coverage_note = ""
-            if coverage_ids:
-                coverage_note = f"\n6. Les issues de Coverage ({', '.join(coverage_ids)}) doivent exister dans le projet Jira"
-
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            content=(
-                                f"✓ Fichier CSV Zephyr exporté avec succès: [{upload_result.file_name}]({upload_result.download_url})\n\n"
-                                f"**Pour importer dans Zephyr Scale:**\n"
-                                f"1. Allez dans votre projet Jira\n"
-                                f"2. Ouvrez Zephyr Scale > Test Cases\n"
-                                f"3. Cliquez sur **Import** (icône en haut à droite)\n"
-                                f"4. Sélectionnez **CSV** et uploadez le fichier\n"
-                                f"5. Vérifiez le mapping des colonnes (Priority, Labels)"
-                                f"{coverage_note}"
-                            ),
-                            tool_call_id=runtime.tool_call_id,
-                        ),
-                    ],
-                }
-            )
+                return LinkPart(
+                    href=upload_result.download_url,
+                    title=upload_result.file_name,
+                    kind=LinkKind.download,
+                    mime="text/csv",
+                ).model_dump(mode="json")
+            except Exception as e:
+                error_msg = f"❌ Erreur lors de l'export CSV Zephyr: {e}"
+                logger.error(f"[export_zephyr_csv] {error_msg}", exc_info=True)
+                return error_msg
 
         return export_zephyr_csv
