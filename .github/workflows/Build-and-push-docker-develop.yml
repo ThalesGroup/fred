@@ -10,6 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  PRODUCTION_FASTAPI_DOCS_ENABLED: "true"
 
 jobs:
   build-and-push-develop:
@@ -59,6 +60,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          build-args: |
+            PRODUCTION_FASTAPI_DOCS_ENABLED=${{ env.PRODUCTION_FASTAPI_DOCS_ENABLED }}
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
