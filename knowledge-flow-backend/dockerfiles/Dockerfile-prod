@@ -54,6 +54,7 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG HF_OFFLINE_STRICT=1
+ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
 
 # System deps (minimal)
 RUN apt-get update && \
@@ -85,6 +86,7 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 ENV PATH="/app/venv/bin:$PATH"
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
+ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 
 # Hugging Face / reranker cache layout
 ENV CACHE_HOME=/home/${USER_NAME}/.cache
