@@ -59,8 +59,20 @@ frontend_settings:
     # If true activate support for an electronic warfare demonstration
     enableElecWarfare: false
   properties:
-    logoName: "fred"
-    siteDisplayName: "Fred"
+    logoName: "logo_PRISM_light"
+    logoNameDark: "logo_PRISM_dark"
+    logoHeight: "24px"
+    logoWidth: "129px"
+    faviconName: "favicon_PRISM_light"
+    faviconNameDark: "favicon_PRISM_dark"
+    siteDisplayName: "PRISM.AI"
+    agentsNicknameSingular: "Lumi"
+    agentsNicknamePlural: "Lumis"
+    contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
+    agentIconName: "icon_lumi"
+    showAgentRegisterA2A: false
+    showAgentRestoreFromConfiguration: false
+    showAgentCode: false
 
 ai:
   # In production  activate the configuration persistence mechanism

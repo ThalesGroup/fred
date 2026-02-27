@@ -1,0 +1,58 @@
+
+set shell := ["powershell.exe", "-c"]
+
+# You should download the age key (key.txt) from Cryptobox before
+export SOPS_AGE_KEY_FILE := "./key.txt"
+
+# On Mobility/Alcea VM you can only place scripts and .exe in `~/myApp`. You helm plugins should also be in `~/myApp/helm-plugins`
+export HELM_PLUGINS := env_var('USERPROFILE') + "\\MyApp\\helm-plugins"
+
+# Show available commands
+help:
+	@just --list
+
+# List release in helm file for a give environment
+[group('helmfile install')]
+list environment: ## List the release
+	helmfile list --environment "{{environment}}"
+
+[group('helmfile install')]
+install-one environment release:
+	helmfile --environment "{{environment}}" --selector name="{{release}}" sync
+
+[group('helmfile install')]
+install environment:
+	helmfile --environment "{{environment}}" sync
+
+[group('helmfile debug')]
+template-one environment release:
+	helmfile --environment "{{environment}}" --selector name="{{release}}" template
+
+# Decrypt all .sec.yaml files to .nosec.yaml
+[group('encryption')]
+decrypt-all:
+    @echo "Decrypting all .sec.yaml files..."
+    @Get-ChildItem -Recurse -Filter "*.sec.yaml" | ForEach-Object { \
+        $secFile = $_.FullName; \
+        $nosecFile = $secFile -replace '\.sec\.yaml$', '.nosec.yaml'; \
+        Write-Host "Decrypting $secFile -> $nosecFile"; \
+        sops -d $secFile | Out-File -Encoding utf8 $nosecFile \
+    }
+
+# Re-encrypt all .nosec.yaml files back to .sec.yaml
+[group('encryption')]
+encrypt-all:
+    @echo "Re-encrypting all .nosec.yaml files..."
+    @Get-ChildItem -Recurse -Filter "*.nosec.yaml" | ForEach-Object { \
+        $nosecFile = $_.FullName; \
+        $secFile = $nosecFile -replace '\.nosec\.yaml$', '.sec.yaml'; \
+        Write-Host "Encrypting $nosecFile -> $secFile"; \
+        sops -e $nosecFile | Out-File -Encoding utf8 $secFile \
+    }
+
+# Clean up all .nosec.yaml files
+[group('encryption')]
+clean-secrets:
+    @echo "Cleaning up decrypted files..."
+    @Get-ChildItem -Recurse -Filter "*.nosec.yaml" | Remove-Item -Force
+    @echo "All .nosec.yaml files removed"
