@@ -469,10 +469,11 @@ class AgentFlow:
         state: Any,
         *,
         config: Optional[RunnableConfig] = None,
+        stream_mode: Any = "updates",
         **kwargs: Any,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[Any]:
         """
-        Stream LangGraph 'updates' while ensuring the agent sees the run config.
+        Stream LangGraph events while ensuring the agent sees the run config.
         """
         # 1. Start with the incoming config, ensuring it's not None
         self.run_config = config if config is not None else {}
@@ -530,7 +531,7 @@ class AgentFlow:
         async for event in compiled.astream(
             state,
             config=self.run_config,
-            stream_mode="updates",
+            stream_mode=stream_mode,
             **kwargs,
         ):
             yield event

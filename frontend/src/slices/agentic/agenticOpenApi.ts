@@ -783,6 +783,7 @@ export type ChatTokenUsage = {
   output_tokens?: number;
   total_tokens?: number;
 };
+export type TokenUsageSource = "updates" | "messages" | "messages_backfill" | "unavailable";
 export type VectorSearchHit = {
   content: string;
   page?: number | null;
@@ -842,6 +843,7 @@ export type RuntimeContext = {
 export type ChatMetadata = {
   model?: string | null;
   token_usage?: ChatTokenUsage | null;
+  token_usage_source?: TokenUsageSource | null;
   sources?: VectorSearchHit[];
   agent_id?: string | null;
   latency_ms?: number | null;

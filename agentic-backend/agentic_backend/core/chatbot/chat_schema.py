@@ -195,12 +195,20 @@ class ChatTokenUsage(BaseModel):
     total_tokens: int = 0
 
 
+class TokenUsageSource(str, Enum):
+    updates = "updates"
+    messages = "messages"
+    messages_backfill = "messages_backfill"
+    unavailable = "unavailable"
+
+
 # ---------- Message metadata (small, strong) ----------
 class ChatMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: Optional[str] = None
     token_usage: Optional[ChatTokenUsage] = None
+    token_usage_source: Optional[TokenUsageSource] = None
     # Keep your VectorSearchHit untouched
     sources: List[VectorSearchHit] = Field(default_factory=list)
 

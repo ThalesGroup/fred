@@ -117,12 +117,16 @@ class SimpleAgentFlow(AgentFlow):
 
         # Fallback coercion: Convert any other BaseMessage into a guaranteed AIMessage.
         # This is safe because all BaseMessages have 'content' and 'additional_kwargs'.
-        return AIMessage(
-            content=temp_message.content,
-            additional_kwargs=temp_message.additional_kwargs,
+        kwargs: Dict[str, Any] = {
+            "content": temp_message.content,
+            "additional_kwargs": temp_message.additional_kwargs,
             # Note: response_metadata is often critical and should be preserved
-            response_metadata=getattr(temp_message, "response_metadata", {}),
-        )
+            "response_metadata": getattr(temp_message, "response_metadata", {}),
+        }
+        usage_metadata = getattr(temp_message, "usage_metadata", None)
+        if usage_metadata is not None:
+            kwargs["usage_metadata"] = usage_metadata
+        return AIMessage(**kwargs)
 
     # --- State schema for Temporal hydration ---
     def get_state_schema(self):

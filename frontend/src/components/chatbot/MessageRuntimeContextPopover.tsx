@@ -43,10 +43,13 @@ export default function MessageRuntimeContextPopover({
   const open = Boolean(anchorEl);
 
   const fmt = (n?: number) => (n == null ? undefined : Number(n).toLocaleString());
+  const normalizeToken = (n?: number): number | undefined =>
+    typeof n === "number" && Number.isFinite(n) ? Math.max(0, n) : undefined;
+  const formatToken = (n?: number): string => fmt(n) ?? "—";
 
-  const inTok = Math.max(0, Number(tokens?.in ?? 0));
-  const outTok = Math.max(0, Number(tokens?.out ?? 0));
-  const totalTok = inTok + outTok;
+  const inTok = normalizeToken(tokens?.in);
+  const outTok = normalizeToken(tokens?.out);
+  const totalTok = inTok == null && outTok == null ? undefined : (inTok ?? 0) + (outTok ?? 0);
 
   const SectionRow = ({ label, value }: { label: string; value?: string | number }) =>
     value === undefined || value === null || value === "" ? null : (
@@ -94,10 +97,10 @@ export default function MessageRuntimeContextPopover({
 
           {/* Tokens */}
           <Stack spacing={0}>
-            <SectionRow label={t("popover.tokensTotal")} value={fmt(totalTok)} />
+            <SectionRow label={t("popover.tokensTotal")} value={formatToken(totalTok)} />
             <Stack spacing={0.25} sx={{ pl: 1.5 }}>
-              <SectionRow label={t("popover.tokensIn")} value={fmt(inTok)} />
-              <SectionRow label={t("popover.tokensOut")} value={fmt(outTok)} />
+              <SectionRow label={t("popover.tokensIn")} value={formatToken(inTok)} />
+              <SectionRow label={t("popover.tokensOut")} value={formatToken(outTok)} />
             </Stack>
           </Stack>
 
