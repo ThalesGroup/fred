@@ -94,6 +94,19 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    logger.warning("%s Invalid boolean for %s=%r, defaulting to %s", LOG_PREFIX, name, raw, default)
+    return default
+
+
 def load_environment(dotenv_path: str = "./config/.env"):
     if load_dotenv(dotenv_path):
         logger.info("%s Loaded environment variables from: %s", LOG_PREFIX, dotenv_path)
@@ -137,6 +150,8 @@ def create_app() -> FastAPI:
     )
     logger.info("%s create_app() called with base_url=%s", LOG_PREFIX, base_url)
     application_context._log_config_summary()
+    docs_enabled = _env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    logger.info("%s FastAPI docs/openapi endpoints enabled=%s", LOG_PREFIX, docs_enabled)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -197,9 +212,9 @@ def create_app() -> FastAPI:
             await application_context.shutdown()
 
     app = FastAPI(
-        docs_url=f"{configuration.app.base_url}/docs",
-        redoc_url=f"{configuration.app.base_url}/redoc",
-        openapi_url=f"{configuration.app.base_url}/openapi.json",
+        docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
+        redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
+        openapi_url=f"{configuration.app.base_url}/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
 
