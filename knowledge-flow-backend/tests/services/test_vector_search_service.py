@@ -99,7 +99,8 @@ class DummyTag:
 
 class DummyTagService:
     async def list_authorized_tags_ids(self, _user, _owner_filter=None, _team_id=None):
-        return set()
+        # Non-empty authorized scope so corpus search path is exercised in unit tests.
+        return {"tag-1"}
 
     async def get_tag_for_user(self, _tag_id, _user):
         return DummyTag()
@@ -138,7 +139,6 @@ def test_user():
 # ----------------------------
 
 
-@pytest.mark.skip(reason="Temporarily disabled: behavior depends on external authorization wiring (OpenFGA integration path).")
 async def test_similarity_search_success(monkeypatch, test_user):
     """Test: performs similarity search with a valid question and k=2.
     Asserts returned objects are Document-score tuples."""
@@ -163,7 +163,6 @@ async def test_similarity_search_success(monkeypatch, test_user):
 # ----------------------------
 
 
-@pytest.mark.skip(reason="Temporarily disabled: behavior depends on external authorization wiring (OpenFGA integration path).")
 async def test_similarity_search_empty_question(monkeypatch, test_user):
     """Test: raises ValueError if question is an empty string."""
     monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
