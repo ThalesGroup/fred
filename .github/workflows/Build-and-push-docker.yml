@@ -6,6 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  PRODUCTION_FASTAPI_DOCS_ENABLED: "false"
 
 jobs:
   build-and-push:
@@ -64,6 +65,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          build-args: |
+            PRODUCTION_FASTAPI_DOCS_ENABLED=${{ env.PRODUCTION_FASTAPI_DOCS_ENABLED }}
           push: true
           tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
           labels: ${{ steps.meta.outputs.labels }} # many various informations
