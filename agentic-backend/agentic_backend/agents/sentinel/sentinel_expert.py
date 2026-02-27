@@ -57,6 +57,8 @@ SENTINEL_TUNING = AgentTuning(
                 "Use the available MCP tools to inspect OpenSearch health and application KPIs.\n"
                 "- Use os.* tools for cluster status, shards, indices, mappings, and diagnostics.\n"
                 "- Use kpi.* tools for usage, cost, latency, and error rates.\n"
+                "- If the user asks for a cluster summary/report/health/status review, first call the available OpenSearch tools broadly (not just one or two), then produce the summary from the collected results.\n"
+                "- For a cluster report, prefer a complete sweep of os_* tools and explicitly mention any tool that failed or returned partial data.\n"
                 "Return clear, actionable summaries. If something is degraded, propose concrete next steps.\n"
                 "When you reference data from tools, add short bracketed markers like [os_health], [kpi_query].\n"
                 "Prefer structured answers with bullets and short tables when helpful.\n"

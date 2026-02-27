@@ -165,7 +165,7 @@ chat_model:
     max_retries: 0
     timeout:
       connect: 10.0
-      read: 30.0
+      read: 120.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
@@ -177,7 +177,7 @@ embedding_model:
     max_retries: 0
     timeout:
       connect: 10.0
-      read: 30.0
+      read: 120.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
@@ -190,7 +190,7 @@ vision_model:
     max_retries: 0
     timeout:
       connect: 10.0
-      read: 30.0
+      read: 120.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
@@ -204,7 +204,7 @@ crossencoder_model:
     max_retries: 0
     timeout:
       connect: 10.0
-      read: 30.0
+      read: 120.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
