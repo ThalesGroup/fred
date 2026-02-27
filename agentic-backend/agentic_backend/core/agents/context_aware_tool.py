@@ -127,29 +127,7 @@ class ContextAwareTool(BaseTool):
         if not context:
             return kwargs
 
-        tool_properties = {}
-        if self.base_tool.args_schema:
-            try:
-                # Pydantic v2 first, v1 fallback, else assume dict-like
-                schema_method = getattr(
-                    self.base_tool.args_schema, "model_json_schema", None
-                )
-                if schema_method:
-                    tool_schema = schema_method()
-                else:
-                    schema_method = getattr(self.base_tool.args_schema, "schema", None)
-                    tool_schema = (
-                        schema_method() if schema_method else self.base_tool.args_schema
-                    )
-                if isinstance(tool_schema, dict):
-                    tool_properties = tool_schema.get("properties", {})
-            except Exception as e:
-                logger.warning(
-                    "ContextAwareTool(%s): could not extract tool schema: %s",
-                    self.name,
-                    e,
-                )
-                tool_properties = {}
+        tool_properties = self._get_tool_properties()
 
         library_ids = get_document_library_tags_ids(context)
         if library_ids and "document_library_tags_ids" in tool_properties:
@@ -218,17 +196,41 @@ class ContextAwareTool(BaseTool):
 
         return kwargs
 
-    def _drop_none_kwargs(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+    def _get_tool_properties(self) -> dict[str, Any]:
         """
-        MCP/LangChain tool schemas frequently model optional string query params as
-        non-required `string` fields. If the caller passes them explicitly as `None`,
-        adapter-side validation fails before the HTTP request is sent.
+        Best-effort extraction of tool input schema properties.
+        """
+        tool_properties: dict[str, Any] = {}
+        if not self.base_tool.args_schema:
+            return tool_properties
 
-        To keep tool invocation robust, omit top-level kwargs whose value is None.
-        """
-        if not kwargs:
-            return kwargs
-        return {k: v for k, v in kwargs.items() if v is not None}
+        try:
+            # Pydantic v2 first, v1 fallback, else assume dict-like
+            schema_method = getattr(self.base_tool.args_schema, "model_json_schema", None)
+            if schema_method:
+                tool_schema = schema_method()
+            else:
+                schema_method = getattr(self.base_tool.args_schema, "schema", None)
+                tool_schema = schema_method() if schema_method else self.base_tool.args_schema
+
+            if isinstance(tool_schema, dict):
+                props = tool_schema.get("properties", {})
+                if isinstance(props, dict):
+                    tool_properties = props
+        except Exception as e:
+            logger.warning(
+                "ContextAwareTool(%s): could not extract tool schema: %s",
+                self.name,
+                e,
+            )
+
+        return tool_properties
+
+    def _sanitize_tool_kwargs(
+        self, kwargs: Optional[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Ensure mapping input and drop explicit null values."""
+        return {k: v for k, v in (kwargs or {}).items() if v is not None}
 
     def _kpi_base_dims(self, *, context) -> dict[str, Optional[str]]:
         dims: dict[str, Optional[str]] = {"tool_name": self.name, "source": "mcp"}
@@ -257,7 +259,7 @@ class ContextAwareTool(BaseTool):
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        kwargs = self._drop_none_kwargs(kwargs)
+        kwargs = self._sanitize_tool_kwargs(kwargs)
         kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
@@ -309,7 +311,7 @@ class ContextAwareTool(BaseTool):
         """Async execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
-        kwargs = self._drop_none_kwargs(kwargs)
+        kwargs = self._sanitize_tool_kwargs(kwargs)
         kpi, timer, base_dims, groups = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
