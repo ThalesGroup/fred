@@ -46,7 +46,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables import Runnable, RunnableConfig
-
 from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.memory import MemorySaver
