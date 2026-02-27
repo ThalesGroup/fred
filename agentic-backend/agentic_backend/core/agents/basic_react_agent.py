@@ -1,16 +1,53 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import json
 import logging
+from typing import Any, Type
 
-from langchain.agents import create_agent
+try:
+    from langchain.agents import create_agent
+except Exception:  # pragma: no cover - runtime/version compatibility fallback
+    create_agent = None
+
+from langgraph.graph import END, MessagesState
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, interrupt
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.structural_graph_builder import (
+    StructuralConditional,
+    StructuralEdge,
+    StructuralGraphSpec,
+    build_structural_state_graph,
+)
+from agentic_backend.core.interrupts.tool_approval import (
+    is_truthy as _is_truthy_hitl,
+)
+from agentic_backend.core.interrupts.tool_approval import (
+    parse_approval_required_tools,
+    requires_tool_approval,
+    tool_approval_policy_text,
+    tool_approval_tuning_fields,
+    tool_approval_ui_payload,
+)
+from agentic_backend.core.prompts import append_mermaid_rendering_policy
 from agentic_backend.core.runtime_source import expose_runtime_source
+from agentic_backend.core.tools.tool_loop import build_tool_loop
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +125,7 @@ BASIC_REACT_TUNING = AgentTuning(
             default=False,
             ui=UIHints(group="Chat options"),
         ),
+        *tool_approval_tuning_fields(),
         # FieldSpec(
         #     key="chat_options.search_policy_selection",
         #     type="boolean",
@@ -124,6 +162,7 @@ class BasicReActAgent(AgentFlow):
     """Simple ReAct agent used for dynamic UI-created agents."""
 
     tuning = BASIC_REACT_TUNING
+    mcp: MCPRuntime | None = None
     default_chat_options = AgentChatOptions(
         search_policy_selection=False,
         libraries_selection=False,
@@ -132,9 +171,56 @@ class BasicReActAgent(AgentFlow):
         attach_files=False,
     )
 
-    async def async_init(self, runtime_context: RuntimeContext):
-        await super().async_init(runtime_context=runtime_context)
+    def build_runtime_structure(self) -> None:
+        if self._tool_approval_enabled():
+            spec = StructuralGraphSpec(
+                state_schema=MessagesState,
+                nodes=("reasoner", "approval", "tools"),
+                start_node="reasoner",
+                edges=(StructuralEdge(source="tools", target="reasoner"),),
+                conditionals=(
+                    StructuralConditional(
+                        source="reasoner",
+                        routes={
+                            "final": END,
+                            "approval": "approval",
+                        },
+                        default_choice="final",
+                    ),
+                    StructuralConditional(
+                        source="approval",
+                        routes={
+                            "cancel": END,
+                            "approve": "tools",
+                        },
+                        default_choice="cancel",
+                    ),
+                ),
+            )
+        else:
+            spec = StructuralGraphSpec(
+                state_schema=MessagesState,
+                nodes=("reasoner", "tools"),
+                start_node="reasoner",
+                edges=(StructuralEdge(source="tools", target="reasoner"),),
+                conditionals=(
+                    StructuralConditional(
+                        source="reasoner",
+                        routes={
+                            "final": END,
+                            "tools": "tools",
+                        },
+                        default_choice="final",
+                    ),
+                ),
+            )
 
+        self._graph = build_structural_state_graph(
+            spec=spec,
+            owner_name=type(self).__name__,
+        )
+
+    async def activate_runtime(self) -> None:
         # Initialize MCP runtime
         self.mcp = MCPRuntime(
             agent=self,
@@ -142,13 +228,44 @@ class BasicReActAgent(AgentFlow):
         await self.mcp.init()
 
     async def aclose(self):
-        await self.mcp.aclose()
+        if self.mcp is not None:
+            await self.mcp.aclose()
 
-    def get_compiled_graph(
-        self, checkpointer: Checkpointer | None = None
-    ) -> CompiledStateGraph:
+    def get_state_schema(self) -> Type:
+        """Minimal state schema for LangGraph/Temporal hydration compatibility."""
+        return MessagesState
+
+    def get_graph_mermaid_preview(self) -> str:
+        """
+        Return a compact conceptual graph for UI inspection without requiring MCP init.
+        The compiled LangGraph for create_agent() is verbose and may require runtime tools.
+        """
+        if self._tool_approval_enabled():
+            return (
+                "flowchart TD;\n"
+                "User([User message]) --> Reasoner[LLM reasoner];\n"
+                "Reasoner --> Decision{Tool needed?};\n"
+                "Decision -->|No| Final[Final response];\n"
+                "Decision -->|Yes| Approval{HITL approval required?};\n"
+                "Approval -->|Cancel| Final;\n"
+                "Approval -->|Approve| Tools[(MCP tools)];\n"
+                "Tools --> Reasoner;\n"
+            )
+        return (
+            "flowchart TD;\n"
+            "User([User message]) --> Reasoner[LLM reasoner];\n"
+            "Reasoner --> Decision{Tool needed?};\n"
+            "Decision -->|No| Final[Final response];\n"
+            "Decision -->|Yes| Tools[(MCP tools)];\n"
+            "Tools --> Reasoner;\n"
+        )
+
+    def _build_system_prompt(self, tools: list[Any]) -> str:
         base_prompt = self.render(self.get_tuned_text("prompts.system") or "")
-        tools = [*self.mcp.get_tools()]
+        base_prompt = append_mermaid_rendering_policy(
+            base_prompt,
+            language=getattr(getattr(self, "runtime_context", None), "language", None),
+        )
         tool_names = [tool.name for tool in tools]
 
         if tool_names:
@@ -163,8 +280,124 @@ class BasicReActAgent(AgentFlow):
                 "- Never present tool output unless a tool actually returned it."
             )
             system_prompt = f"{base_prompt}{tool_policy}{_CITATION_POLICY}"
-        else:
-            system_prompt = f"{base_prompt}{_NO_TOOLS_POLICY}"
+            if self._tool_approval_enabled():
+                system_prompt = f"{system_prompt}{self._hitl_policy_text()}"
+            return system_prompt
+        return f"{base_prompt}{_NO_TOOLS_POLICY}"
+
+    @staticmethod
+    def _dedupe_tools_by_name(tools: list[Any]) -> list[Any]:
+        deduped: list[Any] = []
+        seen: set[str] = set()
+        for tool in tools:
+            name = getattr(tool, "name", None) or getattr(tool, "__name__", None)
+            if not isinstance(name, str):
+                deduped.append(tool)
+                continue
+            if name in seen:
+                logger.warning(
+                    "[BasicReActAgent] Duplicate tool name ignored: %s", name
+                )
+                continue
+            seen.add(name)
+            deduped.append(tool)
+        return deduped
+
+    def _hitl_policy_text(self) -> str:
+        return tool_approval_policy_text(self)
+
+    def _hitl_ui_text(self, tool_name: str) -> dict[str, Any]:
+        return tool_approval_ui_payload(self, tool_name)
+
+    def _tool_approval_enabled(self) -> bool:
+        raw = self.get_tuned_any("safety.enable_tool_approval")
+        return _is_truthy_hitl(raw)
+
+    def _configured_approval_required_tools(self) -> set[str]:
+        raw = self.get_tuned_any("safety.approval_required_tools")
+        return parse_approval_required_tools(raw)
+
+    def _requires_tool_approval(self, tool_name: str) -> bool:
+        return requires_tool_approval(
+            tool_name,
+            approval_enabled=self._tool_approval_enabled(),
+            exact_required_tools=self._configured_approval_required_tools(),
+        )
+
+    @staticmethod
+    def _truncate_for_hitl(value: Any, max_chars: int = 1200) -> str:
+        try:
+            text = json.dumps(value, ensure_ascii=False)
+        except Exception:
+            text = str(value)
+        return text if len(text) <= max_chars else text[: max_chars - 3] + "..."
+
+    def _build_hitl_react_graph(self, *, system_prompt: str, tools: list[Any]):
+        bound_model = get_default_chat_model().bind_tools(tools)
+
+        def system_builder(_: MessagesState) -> str:
+            return system_prompt
+
+        def requires_hitl(tool_name: str) -> bool:
+            return self._requires_tool_approval(tool_name)
+
+        async def hitl_callback(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+            payload = self._hitl_ui_text(tool_name)
+            decision = interrupt(
+                {
+                    **payload,
+                    "free_text": True,
+                    "metadata": {
+                        "tool_name": tool_name,
+                        "tool_args_preview": self._truncate_for_hitl(args),
+                    },
+                }
+            )
+
+            choice = None
+            if isinstance(decision, dict):
+                choice = decision.get("choice_id") or decision.get("answer")
+            if isinstance(choice, str) and choice.strip().lower() == "cancel":
+                return {"cancel": True}
+            return {}
+
+        return build_tool_loop(
+            model=bound_model,
+            tools=tools,
+            system_builder=system_builder,
+            requires_hitl=requires_hitl,
+            hitl_callback=hitl_callback,
+        )
+
+    def get_compiled_graph(
+        self, checkpointer: Checkpointer | None = None
+    ) -> CompiledStateGraph:
+        if self.mcp is None:
+            raise RuntimeError(
+                f"{type(self).__name__}: runtime not activated (MCPRuntime unavailable)."
+            )
+        tools = self._dedupe_tools_by_name(self.mcp.get_tools())
+        system_prompt = self._build_system_prompt(tools)
+
+        if self._tool_approval_enabled():
+            logger.info(
+                "[BasicReActAgent] HITL tool approval enabled for agent=%s",
+                self.get_id(),
+            )
+            graph = self._build_hitl_react_graph(
+                system_prompt=system_prompt, tools=tools
+            )
+            return graph.compile(checkpointer=checkpointer)
+
+        if create_agent is None:
+            logger.warning(
+                "[BasicReActAgent] langchain.agents.create_agent unavailable; "
+                "falling back to internal tool loop without HITL gating"
+            )
+            graph = self._build_hitl_react_graph(
+                system_prompt=system_prompt, tools=tools
+            )
+            return graph.compile(checkpointer=checkpointer)
 
         return create_agent(
             model=get_default_chat_model(),

@@ -151,7 +151,8 @@ class AgentFlow:
     ) -> CompiledStateGraph:
         """
         Compile and return the agent's graph (idempotent).
-        Subclasses must set `self._graph` in async_init().
+        Subclasses should set `self._graph` in `build_runtime_structure()`
+        (or legacy `async_init()` implementations).
         """
         # If we have a cached graph, return it.
         # The checkpointer is bound at compile time, so we assume it's the correct one.
@@ -163,9 +164,10 @@ class AgentFlow:
             return self.compiled_graph
 
         if self._graph is None:
-            # Strong, early signal to devs wiring the agent: you must build the graph in async_init()
+            # Strong, early signal to devs wiring the agent: you must build the graph
+            # during the lifecycle before requesting compilation.
             raise RuntimeError(
-                f"{type(self).__name__}: _graph is None. Did you forget to set it in async_init()?"
+                f"{type(self).__name__}: _graph is None. Did you forget to set it in build_runtime_structure() or async_init()?"
             )
 
         cp = checkpointer or self.streaming_memory
@@ -176,6 +178,136 @@ class AgentFlow:
         )
         self.compiled_graph = self._graph.compile(checkpointer=cp)
         return self.compiled_graph
+
+    def get_graph_mermaid(self) -> Optional[str]:
+        """
+        Returns the Mermaid diagram definition for the agent's structural graph.
+
+        This intentionally renders from `self._graph` (built in
+        `build_runtime_structure()`) instead of calling `get_compiled_graph()`.
+        Some agents override runtime compilation and require activated tools/MCP,
+        but graph visualization should remain non-activating.
+        """
+        try:
+            if self._graph is None:
+                return None
+            graph = self._graph.compile(checkpointer=None)
+            if hasattr(graph, "get_graph"):
+                # Temporary UX experiment: strip LangGraph-generated styles to compare a cleaner baseline across agents.
+                return graph.get_graph(xray=False).draw_mermaid(with_styles=False)
+            return None
+        except Exception as e:
+            logger.warning(
+                f"Failed to generate mermaid graph for agent {self.get_id()}: {e}"
+            )
+            return None
+
+    def get_graph_mermaid_preview(self) -> Optional[str]:
+        """
+        Optional lightweight Mermaid preview that does not require runtime initialization.
+        Subclasses may override to avoid expensive setup (e.g., MCP connections).
+        """
+        return None
+
+    @staticmethod
+    def build_mermaid_preview(
+        *,
+        nodes: Sequence[dict[str, str]],
+        edges: Sequence[dict[str, str]],
+        direction: str = "TD",
+    ) -> str:
+        """
+        Build a small, controlled Mermaid flowchart from declarative nodes/edges.
+
+        Node dict keys:
+        - id: Mermaid node id
+        - label: Display label
+        - shape: rect | round | diamond (optional, default rect)
+
+        Edge dict keys:
+        - source: source node id
+        - target: target node id
+        - label: optional edge label
+        """
+
+        def _escape(text: str) -> str:
+            return str(text).replace("\\", "\\\\").replace('"', '\\"')
+
+        reserved_ids = {
+            "end",  # Mermaid keyword (e.g. subgraph ... end)
+            "subgraph",
+            "class",
+            "classdef",
+            "style",
+            "click",
+            "linkstyle",
+            "default",
+            "graph",
+            "flowchart",
+        }
+
+        def _sanitize_id(raw: str) -> str:
+            txt = str(raw)
+            cleaned = "".join(ch if (ch.isalnum() or ch == "_") else "_" for ch in txt)
+            if not cleaned:
+                cleaned = "node"
+            if cleaned[0].isdigit():
+                cleaned = f"n_{cleaned}"
+            if cleaned.lower() in reserved_ids:
+                cleaned = f"node_{cleaned}"
+            return cleaned
+
+        id_map: dict[str, str] = {}
+        used_ids: set[str] = set()
+        for idx, node in enumerate(nodes):
+            original = str(node["id"])
+            base = _sanitize_id(original)
+            candidate = base
+            suffix = 2
+            while candidate in used_ids:
+                candidate = f"{base}_{suffix}"
+                suffix += 1
+            id_map[original] = candidate
+            used_ids.add(candidate)
+
+        def _id(raw: str) -> str:
+            raw_s = str(raw)
+            if raw_s in id_map:
+                return id_map[raw_s]
+            # Edge references should normally point to declared nodes; fallback keeps output valid.
+            candidate = _sanitize_id(raw_s)
+            if candidate in used_ids:
+                i = 2
+                while f"{candidate}_{i}" in used_ids:
+                    i += 1
+                candidate = f"{candidate}_{i}"
+            return candidate
+
+        def _node_line(node: dict[str, str]) -> str:
+            node_id = _id(node["id"])
+            label = _escape(node.get("label", node_id))
+            shape = (node.get("shape") or "rect").lower()
+            if shape == "round":
+                return f'{node_id}(["{label}"])'
+            if shape == "diamond":
+                return f'{node_id}{{"{label}"}}'
+            return f'{node_id}["{label}"]'
+
+        lines: list[str] = [f"flowchart {direction};"]
+        for node in nodes:
+            lines.append(f"  {_node_line(node)};")
+
+        for edge in edges:
+            src = _id(edge["source"])
+            dst = _id(edge["target"])
+            raw_label = edge.get("label")
+            if raw_label:
+                label = _escape(raw_label)
+                lines.append(f"  {src} -->|{label}| {dst};")
+            else:
+                lines.append(f"  {src} --> {dst};")
+
+        return "\n".join(lines) + "\n"
 
     def apply_settings(self, new_settings: AgentSettings) -> None:
         """
@@ -195,12 +327,62 @@ class AgentFlow:
         """
         self.middlewares = list(middlewares or [])
 
+    def bind_runtime_context(self, runtime_context: RuntimeContext) -> None:
+        """
+        Bind the runtime context and initialize context-scoped helpers.
+
+        This is the first lifecycle step after object creation and should not perform
+        external I/O. It allows typically the agent to be created for inspection and tuning without triggering expensive setup (e.g., MCP connections, model loading).
+        The target usage is to be able to get a structural graph preview and tuning spec from the UI without full initialization.
+        """
+        self.set_runtime_context(runtime_context)
+        self.storage_client = KfWorkspaceClient(agent=self)
+
+    def build_runtime_structure(self) -> None:
+        """
+        Build in-memory runtime structures (e.g., LangGraph StateGraph) without I/O.
+
+        Subclasses should override this to construct deterministic graph structure.
+        """
+        return None
+
+    async def activate_runtime(self) -> None:
+        """
+        Activate runtime dependencies (MCP, models, remote resources).
+
+        This step may perform async I/O.
+        """
+        return None
+
+    async def initialize_runtime(self, runtime_context: RuntimeContext) -> None:
+        """
+        Typed lifecycle entrypoint for normal execution.
+
+        Delegates to `async_init()` so legacy subclasses overriding `async_init()`
+        remain compatible while newer agents can implement split lifecycle hooks.
+        """
+        await self.async_init(runtime_context=runtime_context)
+
     async def async_init(self, runtime_context: RuntimeContext):
         """
-        Asynchronous initialization routine that must be implemented by subclasses.
+        Legacy initialization entrypoint kept for compatibility.
+
+        Behavior:
+        - New subclasses (no `async_init` override): runs the full lifecycle
+          bind -> build -> activate.
+        - Legacy subclasses (override `async_init` and call `super().async_init(...)`):
+          `super()` keeps the previous bind-only behavior to avoid double init.
         """
-        self.runtime_context: RuntimeContext = runtime_context
-        self.storage_client = KfWorkspaceClient(agent=self)
+        # Compatibility mode for legacy subclasses overriding async_init():
+        # their `super().async_init(...)` call should remain bind-only.
+        if type(self).async_init is not AgentFlow.async_init:
+            self.bind_runtime_context(runtime_context)
+            return
+
+        # New default lifecycle (typed and split by responsibility).
+        self.bind_runtime_context(runtime_context)
+        self.build_runtime_structure()
+        await self.activate_runtime()
 
     async def aclose(self) -> None:
         """
@@ -287,10 +469,11 @@ class AgentFlow:
         state: Any,
         *,
         config: Optional[RunnableConfig] = None,
+        stream_mode: Any = "updates",
         **kwargs: Any,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[Any]:
         """
-        Stream LangGraph 'updates' while ensuring the agent sees the run config.
+        Stream LangGraph events while ensuring the agent sees the run config.
         """
         # 1. Start with the incoming config, ensuring it's not None
         self.run_config = config if config is not None else {}
@@ -348,7 +531,7 @@ class AgentFlow:
         async for event in compiled.astream(
             state,
             config=self.run_config,
-            stream_mode="updates",
+            stream_mode=stream_mode,
             **kwargs,
         ):
             yield event

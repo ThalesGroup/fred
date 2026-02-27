@@ -96,7 +96,20 @@ jobs:
             directory: fred-core
             unit-target: test
             integration-target: test-integration
+            needs-pandoc: false
             should-run: ${{ needs.detect-changes.outputs.fred-core == 'true' }}
+          - name: agentic-backend
+            directory: agentic-backend
+            unit-target: test
+            integration-target: ""
+            needs-pandoc: false
+            should-run: ${{ needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
+          - name: knowledge-flow-backend
+            directory: knowledge-flow-backend
+            unit-target: test
+            integration-target: ""
+            needs-pandoc: true
+            should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
     name: Backend Tests - ${{ matrix.name }}
 
     steps:
@@ -105,6 +118,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install system dependencies
+        if: ${{ matrix.should-run && matrix.needs-pandoc }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pandoc
 
       - name: Setup Python environment
         if: ${{ matrix.should-run }}
@@ -120,7 +139,7 @@ jobs:
           UV: uv
 
       - name: Run integration tests
-        if: ${{ matrix.should-run }}
+        if: ${{ matrix.should-run && matrix.integration-target != '' }}
         run: make ${{ matrix.integration-target }}
         working-directory: ${{ matrix.directory }}
         env:

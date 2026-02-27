@@ -9,6 +9,14 @@ PORT := 9797
 HOST := 127.0.0.1
 APP_MODULE := postal_service_mcp_server.server_mcp:app
 
+# Demo OIDC defaults (override on the command line if needed, e.g. `make run DEMO_MCP_OIDC_ENABLED=false`)
+DEMO_MCP_OIDC_ENABLED ?= true
+DEMO_MCP_KEYCLOAK_REALM_URL ?= http://localhost:8080/realms/app
+DEMO_MCP_KEYCLOAK_CLIENT_ID ?= app
+export DEMO_MCP_OIDC_ENABLED
+export DEMO_MCP_KEYCLOAK_REALM_URL
+export DEMO_MCP_KEYCLOAK_CLIENT_ID
+
 .PHONY: help venv install server clean
 
 help:
@@ -35,6 +43,7 @@ install: venv
 run: install
 	@echo "🚀 Starting standard MCP server on http://$(HOST):$(PORT)"
 	@echo "Using module: $(APP_MODULE)"
+	@echo "Demo OIDC: enabled=$(DEMO_MCP_OIDC_ENABLED) realm=$(DEMO_MCP_KEYCLOAK_REALM_URL) client_id=$(DEMO_MCP_KEYCLOAK_CLIENT_ID)"
 	$(UVICORN) $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
 
 # 4. Clean up: removes the virtual environment folder

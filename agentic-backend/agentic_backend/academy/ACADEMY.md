@@ -7,20 +7,23 @@
 
 ## 0 The mental model
 
-Fred agents are **two-phase objects**:
+Fred agents are **construction + split-runtime lifecycle** objects:
 
-| Phase           | Method         | What goes here                                                                            | Why it exists                                                                          |
-| --------------- | -------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 1️⃣ Construction | `__init__`     | Cheap, local setup only. No I/O, no awaits.                                               | Keeps object creation instant and safe.                                                |
-| 2️⃣ Runtime init | `async_init()` | Heavy setup: build the LangGraph, connect MCP servers, load/warm models, read files, etc. | Fred orchestrates these async in a safe order and wires streaming memory/checkpointer. |
+| Phase                 | Method                      | What goes here                                                                 | Why it exists                                                                 |
+| --------------------- | --------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| 1️⃣ Construction       | `__init__`                  | Cheap, local setup only. No I/O, no awaits.                                    | Keeps object creation instant and safe.                                       |
+| 2️⃣ Bind context       | `bind_runtime_context(...)` | Attach caller/session identity and helpers. No I/O.                            | Lets Fred pass user identity before runtime activation.                       |
+| 3️⃣ Build structure    | `build_runtime_structure()` | Build LangGraph topology / prompts / deterministic in-memory structures. No I/O. | Enables safe graph inspection and predictable setup.                          |
+| 4️⃣ Activate runtime   | `activate_runtime()`        | Heavy setup: connect MCP servers, load/warm models, read files, remote clients. | Fred orchestrates async setup after context is known.                         |
 
 **Rule of thumb**
 
 - **`__init__`** ➜ _instant_ setup (variables, caches, constants). **Never** do network or disk I/O here.
-- **`async_init()`** ➜ _real_ setup (anything `await`-able or that could block: MCP, models, files).
+- **`build_runtime_structure()`** ➜ deterministic graph/prompt setup. **No** network or disk I/O here.
+- **`activate_runtime()`** ➜ _real_ setup (anything `await`-able or that could block: MCP, models, files).
 
 Why this matters: a blocking `__init__` would freeze the orchestrator and create fragile start ordering.  
-Fred calls **all** agents’ `async_init()` in a controlled, concurrent way, and compiles graphs **after** setup.
+Fred now calls `initialize_runtime(...)` (which orchestrates bind → build → activate), and can render a **structural graph** without activating MCP/tooling.
 
 ---
 
@@ -29,8 +32,9 @@ Fred calls **all** agents’ `async_init()` in a controlled, concurrent way, and
 Every agent class must:
 
 1. **Declare tunables** with `AgentTuning` (what the UI can change live).
-2. **Build a LangGraph** in `async_init()` (do _not_ compile here).
-3. **Return a state _update_** from each node (usually `{"messages": [AIMessage(...)]}`).
+2. **Build a LangGraph** in `build_runtime_structure()` (do _not_ compile here).
+3. **Activate runtime dependencies** (models/MCP/clients) in `activate_runtime()`.
+4. **Return a state _update_** from each node (usually `{"messages": [AIMessage(...)]}`).
 
 Fred then compiles your graph later (wiring streaming memory) and manages execution & streaming.
 
@@ -71,7 +75,7 @@ Docs: `README.md`
 
 **What you’ll learn**
 
-- AgentTuning + `async_init()` + one node that returns a **delta** (the new AI message only).
+- AgentTuning + split lifecycle (`build_runtime_structure()` / `activate_runtime()`) + one node that returns a **delta** (the new AI message only).
 - Using `MessagesState` and a `StateGraph` with a single node.
 
 Key idea: _Return only the new `AIMessage`_.  

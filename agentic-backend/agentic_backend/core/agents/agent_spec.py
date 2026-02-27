@@ -86,7 +86,16 @@ class MCPServerConfiguration(BaseModel):
     )
     transport: Optional[str] = Field(
         "sse",
-        description="MCP server transport. Can be sse, stdio, websocket or streamable_http",
+        description=(
+            "MCP server transport. Can be sse, stdio, websocket, streamable_http, "
+            "or inprocess (local toolkit provider exposed in the MCP catalog)."
+        ),
+    )
+    provider: Optional[str] = Field(
+        None,
+        description=(
+            "Local provider key when transport=inprocess (e.g. 'web_github_readonly')."
+        ),
     )
     url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
     sse_read_timeout: Optional[int] = Field(

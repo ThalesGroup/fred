@@ -30,6 +30,7 @@ from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.common.structures import (
     AppConfig,
     Configuration,
@@ -45,9 +46,68 @@ from knowledge_flow_backend.common.structures import (
     TemporalSchedulerConfig,
 )
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
+from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
+    BaseMetadataStore,
+)
 from knowledge_flow_backend.main import create_app
 
 from .test_utils.test_processors import TestDocxProcessor, TestMarkdownProcessor, TestOutputProcessor
+
+
+class _InMemoryTestMetadataStore(BaseMetadataStore):
+    def __init__(self) -> None:
+        self._items: dict[str, DocumentMetadata] = {}
+
+    async def get_all_metadata(self, filters: dict) -> list[DocumentMetadata]:
+        docs = list(self._items.values())
+        if not filters:
+            return [d.model_copy(deep=True) for d in docs]
+
+        def _matches(doc: DocumentMetadata) -> bool:
+            for key, expected in filters.items():
+                if key == "source_tag":
+                    if doc.source_tag != expected:
+                        return False
+                    continue
+                if key == "tags":
+                    tag_names = list(getattr(doc.tags, "tag_names", []) or [])
+                    if isinstance(expected, list):
+                        if not all(v in tag_names for v in expected):
+                            return False
+                    elif expected not in tag_names:
+                        return False
+                    continue
+                actual = getattr(doc, key, None)
+                if actual != expected:
+                    return False
+            return True
+
+        return [d.model_copy(deep=True) for d in docs if _matches(d)]
+
+    async def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
+        item = self._items.get(document_uid)
+        return item.model_copy(deep=True) if item else None
+
+    async def get_metadata_in_tag(self, tag_id: str) -> list[DocumentMetadata]:
+        out: list[DocumentMetadata] = []
+        for doc in self._items.values():
+            tag_ids = list(getattr(doc.tags, "tag_ids", []) or [])
+            tag_names = list(getattr(doc.tags, "tag_names", []) or [])
+            if tag_id in tag_ids or tag_id in tag_names:
+                out.append(doc.model_copy(deep=True))
+        return out
+
+    async def list_by_source_tag(self, source_tag: str) -> list[DocumentMetadata]:
+        return [doc.model_copy(deep=True) for doc in self._items.values() if doc.source_tag == source_tag]
+
+    async def save_metadata(self, metadata: DocumentMetadata) -> None:
+        self._items[metadata.document_uid] = metadata.model_copy(deep=True)
+
+    async def delete_metadata(self, document_uid: str) -> None:
+        self._items.pop(document_uid, None)
+
+    async def clear(self) -> None:
+        self._items.clear()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -190,12 +250,12 @@ def app_context(monkeypatch, fake_embedder):
         ),
         output_processors=[
             ProcessorConfig(
-                prefix=".pdf",
+                suffix=".pdf",
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
                 description="Test output processor for pdf files",
             ),
             ProcessorConfig(
-                prefix=".docx",
+                suffix=".docx",
                 class_path=f"{TestOutputProcessor.__module__}.{TestOutputProcessor.__qualname__}",
                 description="Test output processor for docx files",
             ),
@@ -205,7 +265,9 @@ def app_context(monkeypatch, fake_embedder):
 
     os.makedirs("/tmp/knowledge-flow-test-fs", exist_ok=True)
 
-    return ApplicationContext(config)
+    ctx = ApplicationContext(config)
+    ctx._metadata_store_instance = _InMemoryTestMetadataStore()
+    return ctx
 
 
 @pytest.fixture(scope="function")

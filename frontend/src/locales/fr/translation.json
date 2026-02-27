@@ -438,10 +438,15 @@
         "name": "Nom",
         "url": "URL",
         "transport": "Transport",
-        "transport_http": "streamable_http",
+        "transport_http": "HTTP",
         "transport_local": "stdio",
         "command": "Commande",
-        "timeout": "Timeout"
+        "timeout": "Timeout",
+        "transport_inprocess": "inprocess",
+        "provider": "Fournisseur",
+        "source": "Source",
+        "source_mcp": "MCP",
+        "source_local": "Local"
       }
     },
     "actions": {
@@ -480,14 +485,14 @@
   },
   "mcpHub": {
     "title": "Outils",
-    "subtitle": "Déclarez et modifiez les serveurs MCP accessibles aux agents.",
-    "addButton": "Ajouter un serveur MCP",
-    "restoreButton": "Restaurer depuis la configuration",
-    "addTitle": "Nouveau serveur MCP",
-    "editTitle": "Modifier un serveur MCP",
-    "emptyTitle": "Aucun serveur MCP pour l'instant",
-    "emptyHint": "Créez une entrée pour permettre aux agents de s'y connecter.",
-    "countLabel": "serveurs",
+    "subtitle": "Déclarez et modifiez les connecteurs d'outils (MCP distants ou capacités locales) accessibles aux agents.",
+    "addButton": "Ajouter un connecteur d'outils",
+    "restoreButton": "Restaurer le catalogue depuis la configuration",
+    "addTitle": "Nouveau connecteur d'outils",
+    "editTitle": "Modifier un connecteur d'outils",
+    "emptyTitle": "Aucun connecteur d'outils pour l'instant",
+    "emptyHint": "Créez une entrée pour permettre aux agents d'utiliser cette capacité.",
+    "countLabel": "connecteurs",
     "search": "Rechercher",
     "filter": "Filtrer",
     "confirmDeleteTitle": "Supprimer le serveur MCP ?",
@@ -503,11 +508,13 @@
       "env": "Variables d'environnement",
       "enabled": "Activé",
       "timeout": "Timeout SSE (s)",
-      "auth_mode": "Mode d'authentification"
+      "auth_mode": "Mode d'authentification",
+      "provider": "Fournisseur local"
     },
     "helpers": {
       "args": "Arguments séparés par un espace ou une virgule",
-      "env": "Une ligne KEY=VALUE par variable"
+      "env": "Une ligne KEY=VALUE par variable",
+      "provider": "Exemple : web_github_readonly"
     },
     "status": {
       "enabled": "Activé",
@@ -515,9 +522,10 @@
     },
     "transport": {
       "stdio": "stdio",
-      "streamable_http": "streamable_http",
+      "streamable_http": "HTTP",
       "sse": "Server-sent events",
-      "websocket": "WebSocket"
+      "websocket": "WebSocket",
+      "inprocess": "inprocess"
     },
     "auth": {
       "user_token": "Jeton utilisateur",
@@ -536,7 +544,24 @@
       "error": "Échec de l'opération"
     },
     "confirmRestoreTitle": "Écraser les serveurs MCP avec la configuration ?",
-    "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible."
+    "confirmRestoreMessage": "Cette action remplacera toutes les modifications de serveurs MCP saisies dans l'UI par celles du YAML. Vous perdrez ces changements. Cette opération est irréversible.",
+    "source": {
+      "mcp": "MCP",
+      "local": "Local"
+    },
+    "searchPlaceholder": "Rechercher par id, nom, description, URL, commande ou fournisseur",
+    "clearFilters": "Réinitialiser",
+    "resultsLabel": "résultats",
+    "noResultsTitle": "Aucun connecteur ne correspond à la recherche",
+    "noResultsHint": "Essayez de supprimer certains filtres ou d'élargir la recherche.",
+    "filters": {
+      "source": "Source",
+      "transport": "Transport",
+      "status": "Statut",
+      "all": "Tous",
+      "enabled": "Activés",
+      "disabled": "Désactivés"
+    }
   },
   "chatbot": {
     "ragScope": {
@@ -1157,6 +1182,10 @@
       "local_stdio": {
         "name": "MCP local (stdio)",
         "description": "Exécute un serveur MCP local via stdio (outils basés sur un processus)"
+      },
+      "web_github_readonly": {
+        "name": "Web + GitHub (lecture seule)",
+        "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)"
       }
     }
   },
