@@ -42,6 +42,10 @@ run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
 
+.PHONY: run-worker-prod
+run-worker-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
+run-worker-prod: run-worker ## run the Temporal agent worker with production config
+
 .PHONY: run-worker-docker
 run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost via host network)
 	@echo "🚀 Running the worker in Docker..."
