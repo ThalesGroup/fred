@@ -41,6 +41,7 @@ import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
+import { tokenUsageSourceLabel } from "./tokenUsage.ts";
 import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
 import { workspaceUserFileDownloader } from "./workspaceUserFileDownloader.tsx";
 
@@ -489,11 +490,17 @@ export default function MessageCard({
 
                   {renderMessage.metadata?.token_usage && (
                     <SimpleTooltip
-                      title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? 0} · Out: ${renderMessage.metadata.token_usage?.output_tokens ?? 0}`}
+                      title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? "—"} · Out: ${
+                        renderMessage.metadata.token_usage?.output_tokens ?? "—"
+                      }${
+                        tokenUsageSourceLabel(renderMessage.metadata?.token_usage_source)
+                          ? ` · Source: ${tokenUsageSourceLabel(renderMessage.metadata?.token_usage_source)}`
+                          : ""
+                      }`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
-                        {renderMessage.metadata.token_usage?.output_tokens ?? 0} tokens
+                        {renderMessage.metadata.token_usage?.output_tokens ?? "—"} tokens
                       </Typography>
                     </SimpleTooltip>
                   )}
