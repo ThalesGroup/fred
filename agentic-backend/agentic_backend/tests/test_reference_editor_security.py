@@ -2,15 +2,15 @@ import types
 
 import pytest
 from fred_core import OwnerFilter
-from jsonschema import Draft7Validator
+from pydantic import ValidationError
 
 from agentic_backend.agents.reference_editor.image_search_util import (
     search_image_by_name,
 )
-from agentic_backend.agents.reference_editor.powerpoint_template_util import (
-    referenceSchema,
+from agentic_backend.agents.reference_editor.pydantic_models import (
+    InformationsProjet,
 )
-from agentic_backend.agents.reference_editor.reference_editor import (
+from agentic_backend.agents.reference_editor.validation_tools import (
     _normalize_reference_payload_for_validation,
 )
 
@@ -40,28 +40,32 @@ def test_normalize_reference_payload_rejects_old_schema_shape():
     assert "Bad root key format" in err
 
 
-def test_reference_schema_is_strict_on_required_fields():
-    invalid_payload = {
-        "informationsProjet": {
-            "nomSociete": "Acme",
-            "nomProjet": "Project X",
-            # Missing required fields: dateProjet, nombrePersonnes, enjeuFinancier
-        },
-        "contexte": {
-            "presentationClient": "",
-            "presentationContexte": "",
-            "listeTechnologies": "",
-        },
-        "syntheseProjet": {
-            "enjeux": "",
-            "activiteSolutions": "",
-            "beneficeClients": "",
-            "pointsForts": "",
-        },
-    }
-    errors = list(Draft7Validator(referenceSchema).iter_errors(invalid_payload))
-    assert errors
-    assert any(e.validator == "required" for e in errors)
+def test_reference_schema_accepts_valid_partial_payload():
+    """Pydantic models use defaults, so partial payloads are valid."""
+    valid = InformationsProjet(
+        nomSociete="Acme",
+        nomProjet="Project X",
+        dateProjet="",
+        nombrePersonnes="",
+        enjeuFinancier="",
+    )
+    assert valid.nomSociete == "Acme"
+    assert valid.dateProjet == ""
+
+
+def test_reference_schema_rejects_field_exceeding_max_length():
+    with pytest.raises(ValidationError) as exc_info:
+        InformationsProjet(
+            nomSociete="A" * 51,
+            nomProjet="",
+            dateProjet="",
+            nombrePersonnes="",
+            enjeuFinancier="",
+        )
+    assert any(
+        "max_length" in str(err) or "most" in str(err["msg"])
+        for err in exc_info.value.errors()
+    )
 
 
 @pytest.mark.asyncio
