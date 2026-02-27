@@ -39,8 +39,8 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatMetadata,
     MessagePart,
     Role,
-    TokenUsageSource,
     TextPart,
+    TokenUsageSource,
     ToolCallPart,
     ToolResultPart,
     validate_hitl_payload,
@@ -54,6 +54,8 @@ from agentic_backend.core.chatbot.message_part import (
 )
 from agentic_backend.core.chatbot.tool_result_contract import (
     coerce_latency_ms as _coerce_latency_ms,
+)
+from agentic_backend.core.chatbot.tool_result_contract import (
     normalize_tool_result_contract,
 )
 from agentic_backend.core.interrupts.base_interrupt_handler import InterruptHandler

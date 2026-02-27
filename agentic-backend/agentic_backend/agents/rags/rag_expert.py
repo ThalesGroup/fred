@@ -16,6 +16,7 @@
 import logging
 import time
 from typing import (
+    Annotated,
     Any,
     Dict,
     List,
@@ -24,7 +25,6 @@ from typing import (
     Tuple,
     TypedDict,
     cast,
-    Annotated,
 )
 
 from fred_core import OwnerFilter, VectorSearchHit
