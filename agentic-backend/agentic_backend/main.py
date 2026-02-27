@@ -22,6 +22,7 @@ Entrypoint for the Agentic Backend App.
 import asyncio
 import contextlib
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -87,6 +88,21 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    logger.warning(
+        "[MAIN] Invalid boolean for %s=%r, defaulting to %s", name, raw, default
+    )
+    return default
+
+
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -107,6 +123,8 @@ def create_app() -> FastAPI:
     )
     logger.info(f"[MAIN] create_app() called with .env={env_file} config={config_file}")
     application_context._log_config_summary()
+    docs_enabled = _env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    logger.info("[MAIN] FastAPI docs/openapi endpoints enabled=%s", docs_enabled)
 
     # The correct and final code to use
     @asynccontextmanager
@@ -206,9 +224,9 @@ def create_app() -> FastAPI:
             logger.info("[] Shutdown complete.")
 
     app = FastAPI(
-        docs_url=f"{base_url}/docs",
-        redoc_url=f"{base_url}/redoc",
-        openapi_url=f"{base_url}/openapi.json",
+        docs_url=f"{base_url}/docs" if docs_enabled else None,
+        redoc_url=f"{base_url}/redoc" if docs_enabled else None,
+        openapi_url=f"{base_url}/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
 

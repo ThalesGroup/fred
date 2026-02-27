@@ -51,6 +51,7 @@ FROM mirror.gcr.io/python:3.12.8-slim
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
+ARG PRODUCTION_FASTAPI_DOCS_ENABLED=false
 
 # System deps (minimal)
 RUN apt-get update && \
@@ -79,6 +80,7 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 # Copy virtualenv from build stage
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
+ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 
 # Set working directory
 WORKDIR /app
