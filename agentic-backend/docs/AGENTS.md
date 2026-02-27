@@ -8,7 +8,7 @@ Fred agents are **LangGraph-based conversational experts** that follow a few cor
 
 - **Agents own their own model**: each agent manages its own `LLM` instance, configured based on its settings.
 - **Graph-driven**: agents are implemented as LangGraph `StateGraph`s, describing their reasoning and tool-use logic.
-- **Async-compatible**: all agents must implement `async_init()` to support loading tools, model, and graph logic.
+- **Lifecycle-split**: agents should separate context binding, graph structure build, and runtime activation.
 - **Minimal boilerplate**: agent class declarations remain clean — `AgentFlow` takes care of lifecycle management, memory, and LangGraph compilation.
 
 ---
@@ -26,6 +26,18 @@ The `AgentFlow` base class defines:
 | `graph`                | The LangGraph flow used to process user input                       |
 | `get_compiled_graph()` | Compiles and caches the flow for execution                          |
 
+### Recommended lifecycle (new agents)
+
+`AgentFlow` now exposes a split lifecycle:
+
+- `bind_runtime_context(runtime_context)` — attach user/session context (no I/O)
+- `build_runtime_structure()` — build deterministic in-memory structures (graph topology)
+- `activate_runtime()` — async I/O for MCP, models, clients, etc.
+- `initialize_runtime(runtime_context)` — framework entrypoint that orchestrates the steps above
+
+For new agents, prefer overriding `build_runtime_structure()` and `activate_runtime()` instead of `async_init()`.
+Legacy `async_init()` overrides are still supported for compatibility, but are no longer the recommended pattern.
+
 ---
 
 ## 🧰 Toolkits and Tool Binding
@@ -34,18 +46,22 @@ Agents that use external tools (e.g., via MCP or LangChain integrations) should 
 
 ### ✅ Requirements for tool-using agents:
 
-1.  **Load the tools in `async_init()`** — typically from an external service like MCP.
-2.  **Bind the tools to the model** using:
+1.  **Build the graph structure in `build_runtime_structure()`** — no MCP/network calls in this step.
+2.  **Load tools in `activate_runtime()`** — typically from an external service like MCP.
+3.  **Bind the tools to the model** using:
 
         self.model = self.model.bind_tools(self.toolkit.get_tools())
 
     This ensures the model can generate tool calls correctly during reasoning.
 
-3.  **Add a `ToolNode`** to the LangGraph using:
+4.  **Add a `ToolNode`** (or a stable tools-wrapper node) to the LangGraph using:
 
     builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
 
-4.  **Route via `tools_condition`** in your graph to allow conditional tool invocation:
+    If your tool list is only known after MCP activation, build a stable `"tools"` node in
+    `build_runtime_structure()` and prepare its runtime executor during `activate_runtime()`.
+
+5.  **Route via `tools_condition`** in your graph to allow conditional tool invocation:
 
     builder.add_conditional_edges("reasoner", tools_condition)
 
@@ -56,18 +72,20 @@ If you **forget to bind the tools** to the model (`bind_tools(...)`), the agent 
 - Receive the correct prompt and think it can use tools,
 - But **never actually call them** — leading to incomplete or incorrect answers.
 
-Always remember: **tool binding is not automatic**. It must be done explicitly in your agent’s `async_init()`.
+Always remember: **tool binding is not automatic**. It must be done explicitly during runtime activation (typically `activate_runtime()`).
 
 ### Example (excerpt from `Tessa`):
 
 ```python
-async def async_init(self):
-        self.model = get_default_chat_model()
-        self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
-        self.toolkit = TabularToolkit(self.mcp_client)
-        self.model = self.model.bind_tools(self.toolkit.get_tools())
-        self.base_prompt = self._generate_prompt()
-        self._graph = self._build_graph()
+def build_runtime_structure(self) -> None:
+    self.base_prompt = self._generate_prompt()
+    self._graph = self._build_graph()
+
+async def activate_runtime(self) -> None:
+    self.model = get_default_chat_model()
+    self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
+    self.toolkit = TabularToolkit(self.mcp_client)
+    self.model = self.model.bind_tools(self.toolkit.get_tools())
 ```
 
 ---
@@ -96,10 +114,12 @@ class Georges(AgentFlow):
     def __init__(self, agent_settings: AgentSettings):
         super().__init__(agent_settings = agent_settings)
 
-    async def async_init(self):
-        self.model = get_default_chat_model()
+    def build_runtime_structure(self) -> None:
         self.base_prompt = self._generate_prompt()
         self._graph = self._build_graph()
+
+    async def activate_runtime(self) -> None:
+        self.model = get_default_chat_model()
 
     def _generate_prompt(self) -> str:
         today = datetime.now().strftime("%Y-%m-%d")
@@ -131,12 +151,13 @@ class Georges(AgentFlow):
 
 ## 🧪 Testing & Reuse
 
-- Once instantiated and `await agent.async_init()` is called, the agent is **fully ready** and can be invoked.
+- Runtime execution path: `await agent.initialize_runtime(runtime_context)` makes the agent **fully ready**.
+- Graph inspection path (UI graph view): `bind_runtime_context(...)` + `build_runtime_structure()` is enough for a non-activating structural graph.
 - Agents **can be reused across conversations** if desired, since their model and graph are pre-initialized.
 
 ---
 
 ## 🪜 Next Steps
 
-- See `Tessa` for an example agent that loads tools asynchronously and uses LangGraph `ToolNode`.
+- See `Tessa` for an example agent that activates tools in `activate_runtime()` and uses LangGraph `ToolNode`.
 - In the future, shared utilities for common node types, graph patterns, and memory behaviors will further reduce duplication.

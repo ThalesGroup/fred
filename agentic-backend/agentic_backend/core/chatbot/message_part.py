@@ -174,16 +174,81 @@ def extract_tool_calls(msg: Any) -> List[dict]:
 
 def clean_token_usage(raw: dict | None) -> Optional[ChatTokenUsage]:
     """
-    Normalize usage metadata into ChatTokenUsage.
-    Returns None if parsing fails or input is empty.
+    Normalize heterogeneous provider usage payloads into ChatTokenUsage.
+    Returns None when no usage keys are present.
     """
-    if not raw:
+    if not isinstance(raw, dict) or not raw:
         return None
+
+    usage: dict = raw
+
+    # Some providers nest usage under "usage".
+    nested_usage = usage.get("usage")
+    if isinstance(nested_usage, dict):
+        usage = nested_usage
+
+    def _to_int(value: Any) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return 0
+
+    # Canonical keys first, then provider aliases.
+    input_raw = usage.get("input_tokens")
+    if input_raw is None:
+        input_raw = usage.get("prompt_tokens")
+    if input_raw is None:
+        input_raw = usage.get("prompt_tokens_total")
+    if input_raw is None:
+        input_raw = usage.get("input_token_count")
+    if input_raw is None:
+        input_raw = usage.get("prompt_eval_count")
+
+    output_raw = usage.get("output_tokens")
+    if output_raw is None:
+        output_raw = usage.get("completion_tokens")
+    if output_raw is None:
+        output_raw = usage.get("completion_tokens_total")
+    if output_raw is None:
+        output_raw = usage.get("output_token_count")
+    if output_raw is None:
+        output_raw = usage.get("eval_count")
+
+    total_raw = usage.get("total_tokens")
+    if total_raw is None:
+        total_raw = usage.get("token_count")
+
+    has_any = any(
+        usage.get(k) is not None
+        for k in (
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "prompt_tokens",
+            "completion_tokens",
+            "prompt_tokens_total",
+            "completion_tokens_total",
+            "input_token_count",
+            "output_token_count",
+            "prompt_eval_count",
+            "eval_count",
+            "token_count",
+        )
+    )
+    if not has_any:
+        return None
+
+    input_tokens = _to_int(input_raw)
+    output_tokens = _to_int(output_raw)
+    total_tokens = _to_int(total_raw)
+    if total_tokens <= 0:
+        total_tokens = input_tokens + output_tokens
+
     try:
         return ChatTokenUsage(
-            input_tokens=int(raw.get("input_tokens", 0) or 0),
-            output_tokens=int(raw.get("output_tokens", 0) or 0),
-            total_tokens=int(raw.get("total_tokens", 0) or 0),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
         )
     except Exception:
         return None

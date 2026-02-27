@@ -23,7 +23,7 @@ const DEFAULT_SERVER: Draft = {
   sse_read_timeout: 3000,
 };
 
-const transportOptions = ["streamable_http", "stdio"];
+const transportOptions = ["streamable_http", "stdio", "inprocess"];
 const authOptions: ClientAuthMode[] = ["user_token", "no_token"];
 
 function argsToText(args?: string[] | null): string {
@@ -80,19 +80,37 @@ export function McpServerForm({ open, initial, onCancel, onSubmit }: McpServerFo
   }, [initial, open]);
 
   const isStdio = useMemo(() => (draft.transport || "").toLowerCase() === "stdio", [draft.transport]);
+  const isInprocess = useMemo(
+    () => (draft.transport || "").toLowerCase() === "inprocess",
+    [draft.transport],
+  );
 
   const handleSubmit = () => {
+    const transport = (draft.transport || "streamable_http").toLowerCase();
     const cleaned: Draft = {
       ...draft,
       id: draft.id.trim(),
       name: draft.name.trim(),
       description: draft.description?.trim() || undefined,
+      provider: draft.provider?.trim() || undefined,
       url: draft.url?.trim() || undefined,
       command: draft.command?.trim() || undefined,
       args: parseArgs(argsText),
       env: parseEnv(envText),
       sse_read_timeout: draft.sse_read_timeout || undefined,
     };
+    if (transport === "inprocess") {
+      cleaned.url = undefined;
+      cleaned.command = undefined;
+      cleaned.args = undefined;
+    } else if (transport === "stdio") {
+      cleaned.url = undefined;
+      cleaned.provider = undefined;
+    } else {
+      cleaned.command = undefined;
+      cleaned.args = undefined;
+      cleaned.provider = undefined;
+    }
     if (!cleaned.id || !cleaned.name) {
       return;
     }
@@ -175,7 +193,15 @@ export function McpServerForm({ open, initial, onCancel, onSubmit }: McpServerFo
             />
           </Stack>
 
-          {isStdio ? (
+          {isInprocess ? (
+            <TextField
+              label={t("mcpHub.fields.provider", "Provider")}
+              fullWidth
+              value={draft.provider || ""}
+              onChange={(e) => setDraft({ ...draft, provider: e.target.value })}
+              helperText={t("mcpHub.helpers.provider", "Example: web_github_readonly")}
+            />
+          ) : isStdio ? (
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
                 label={t("mcpHub.fields.command")}

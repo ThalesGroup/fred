@@ -914,6 +914,186 @@ const injectedRtkApi = api.injectEndpoints({
     runPca: build.mutation<RunPcaApiResponse, RunPcaApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/stat/pca`, method: "POST", body: queryArg.pcaRequest }),
     }),
+    osHealth: build.query<OsHealthApiResponse, OsHealthApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/health` }),
+    }),
+    osPendingTasks: build.query<OsPendingTasksApiResponse, OsPendingTasksApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/pending_tasks` }),
+    }),
+    osClusterSettings: build.query<OsClusterSettingsApiResponse, OsClusterSettingsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/cluster/settings`,
+        params: {
+          include_defaults: queryArg.includeDefaults,
+          flat_settings: queryArg.flatSettings,
+        },
+      }),
+    }),
+    osClusterState: build.query<OsClusterStateApiResponse, OsClusterStateApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/cluster/state`,
+        params: {
+          metric: queryArg.metric,
+          index: queryArg.index,
+          local: queryArg.local,
+          filter_path: queryArg.filterPath,
+        },
+      }),
+    }),
+    osClusterStats: build.query<OsClusterStatsApiResponse, OsClusterStatsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/cluster/stats`,
+        params: {
+          node_id: queryArg.nodeId,
+          timeout: queryArg.timeout,
+        },
+      }),
+    }),
+    osAllocationExplain: build.query<OsAllocationExplainApiResponse, OsAllocationExplainApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/allocation/explain`,
+        params: {
+          index: queryArg.index,
+          shard: queryArg.shard,
+          primary: queryArg.primary,
+          include_disk_info: queryArg.includeDiskInfo,
+        },
+      }),
+    }),
+    osNodesStats: build.query<OsNodesStatsApiResponse, OsNodesStatsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/nodes/stats`,
+        params: {
+          metric: queryArg.metric,
+        },
+      }),
+    }),
+    osNodesInfo: build.query<OsNodesInfoApiResponse, OsNodesInfoApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/nodes/info`,
+        params: {
+          node_id: queryArg.nodeId,
+          metric: queryArg.metric,
+          flat_settings: queryArg.flatSettings,
+          timeout: queryArg.timeout,
+        },
+      }),
+    }),
+    osNodesHotThreads: build.query<OsNodesHotThreadsApiResponse, OsNodesHotThreadsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/nodes/hot_threads`,
+        params: {
+          node_id: queryArg.nodeId,
+          threads: queryArg.threads,
+          snapshots: queryArg.snapshots,
+          interval: queryArg.interval,
+          ignore_idle_threads: queryArg.ignoreIdleThreads,
+          type: queryArg["type"],
+        },
+      }),
+    }),
+    osIndices: build.query<OsIndicesApiResponse, OsIndicesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/indices`,
+        params: {
+          pattern: queryArg.pattern,
+          bytes: queryArg.bytes,
+        },
+      }),
+    }),
+    osIndexStats: build.query<OsIndexStatsApiResponse, OsIndexStatsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/stats` }),
+    }),
+    osIndexMapping: build.query<OsIndexMappingApiResponse, OsIndexMappingApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/mapping` }),
+    }),
+    osIndexSettings: build.query<OsIndexSettingsApiResponse, OsIndexSettingsApiArg>({
+      query: (queryArg) => ({ url: `/knowledge-flow/v1/os/index/${queryArg.index}/settings` }),
+    }),
+    osIndexRecovery: build.query<OsIndexRecoveryApiResponse, OsIndexRecoveryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/index/${queryArg.index}/recovery`,
+        params: {
+          detailed: queryArg.detailed,
+          active_only: queryArg.activeOnly,
+        },
+      }),
+    }),
+    osTasks: build.query<OsTasksApiResponse, OsTasksApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/tasks`,
+        params: {
+          detailed: queryArg.detailed,
+          actions: queryArg.actions,
+          nodes: queryArg.nodes,
+          parent_task_id: queryArg.parentTaskId,
+          wait_for_completion: queryArg.waitForCompletion,
+          timeout: queryArg.timeout,
+          group_by: queryArg.groupBy,
+        },
+      }),
+    }),
+    osTaskGet: build.query<OsTaskGetApiResponse, OsTaskGetApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/tasks/${queryArg.taskId}`,
+        params: {
+          wait_for_completion: queryArg.waitForCompletion,
+          timeout: queryArg.timeout,
+        },
+      }),
+    }),
+    osShards: build.query<OsShardsApiResponse, OsShardsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/shards`,
+        params: {
+          pattern: queryArg.pattern,
+        },
+      }),
+    }),
+    osCatNodes: build.query<OsCatNodesApiResponse, OsCatNodesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/cat/nodes`,
+        params: {
+          bytes: queryArg.bytes,
+          columns: queryArg.columns,
+          sort: queryArg.sort,
+        },
+      }),
+    }),
+    osCatAllocation: build.query<OsCatAllocationApiResponse, OsCatAllocationApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/cat/allocation`,
+        params: {
+          node: queryArg.node,
+          bytes: queryArg.bytes,
+          columns: queryArg.columns,
+          sort: queryArg.sort,
+        },
+      }),
+    }),
+    osCatThreadPool: build.query<OsCatThreadPoolApiResponse, OsCatThreadPoolApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/cat/thread_pool`,
+        params: {
+          node_id: queryArg.nodeId,
+          columns: queryArg.columns,
+          sort: queryArg.sort,
+          thread_pool_patterns: queryArg.threadPoolPatterns,
+        },
+      }),
+    }),
+    osRecovery: build.query<OsRecoveryApiResponse, OsRecoveryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/os/recovery`,
+        params: {
+          detailed: queryArg.detailed,
+          active_only: queryArg.activeOnly,
+        },
+      }),
+    }),
+    osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
+    }),
     writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
       WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
       WriteReportKnowledgeFlowV1McpReportsWritePostApiArg
@@ -1554,6 +1734,171 @@ export type RunPcaApiResponse = /** status 200 Successful Response */ any;
 export type RunPcaApiArg = {
   pcaRequest: PcaRequest;
 };
+export type OsHealthApiResponse = /** status 200 Successful Response */ any;
+export type OsHealthApiArg = void;
+export type OsPendingTasksApiResponse = /** status 200 Successful Response */ any;
+export type OsPendingTasksApiArg = void;
+export type OsClusterSettingsApiResponse = /** status 200 Successful Response */ any;
+export type OsClusterSettingsApiArg = {
+  /** Include default settings */
+  includeDefaults?: boolean;
+  /** Flatten nested settings */
+  flatSettings?: boolean;
+};
+export type OsClusterStateApiResponse = /** status 200 Successful Response */ any;
+export type OsClusterStateApiArg = {
+  /** State metric(s), e.g. routing_table,metadata,nodes,blocks */
+  metric?: string;
+  /** Optional index expression for filtered state */
+  index?: string | null;
+  /** Read local node state instead of cluster-manager state */
+  local?: boolean;
+  /** Filter response fields to reduce payload size */
+  filterPath?: string | null;
+};
+export type OsClusterStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsClusterStatsApiArg = {
+  /** Optional node id/name expression */
+  nodeId?: string | null;
+  /** Timeout, e.g. 5s */
+  timeout?: string | null;
+};
+export type OsAllocationExplainApiResponse = /** status 200 Successful Response */ any;
+export type OsAllocationExplainApiArg = {
+  /** Index name (optional) */
+  index?: string | null;
+  /** Shard number (optional) */
+  shard?: number | null;
+  /** Whether primary shard (optional) */
+  primary?: boolean | null;
+  /** Include disk info in explanation */
+  includeDiskInfo?: boolean;
+};
+export type OsNodesStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsNodesStatsApiArg = {
+  metric?: string;
+};
+export type OsNodesInfoApiResponse = /** status 200 Successful Response */ any;
+export type OsNodesInfoApiArg = {
+  /** Optional node id/name expression */
+  nodeId?: string | null;
+  /** Info metric(s), e.g. settings,os,jvm,process,plugins */
+  metric?: string;
+  /** Flatten nested node settings */
+  flatSettings?: boolean;
+  /** Timeout, e.g. 5s */
+  timeout?: string | null;
+};
+export type OsNodesHotThreadsApiResponse = /** status 200 Successful Response */ any;
+export type OsNodesHotThreadsApiArg = {
+  /** Optional node id/name expression */
+  nodeId?: string | null;
+  /** Number of hot threads to report */
+  threads?: number;
+  /** Number of stack trace snapshots */
+  snapshots?: number;
+  /** Sampling interval */
+  interval?: string;
+  /** Skip idle threads */
+  ignoreIdleThreads?: boolean;
+  /** cpu|wait|block */
+  type?: string;
+};
+export type OsIndicesApiResponse = /** status 200 Successful Response */ any;
+export type OsIndicesApiArg = {
+  pattern?: string;
+  bytes?: string;
+};
+export type OsIndexStatsApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexStatsApiArg = {
+  index: string;
+};
+export type OsIndexMappingApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexMappingApiArg = {
+  index: string;
+};
+export type OsIndexSettingsApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexSettingsApiArg = {
+  index: string;
+};
+export type OsIndexRecoveryApiResponse = /** status 200 Successful Response */ any;
+export type OsIndexRecoveryApiArg = {
+  index: string;
+  /** Include file-level details */
+  detailed?: boolean;
+  /** Only active recoveries */
+  activeOnly?: boolean;
+};
+export type OsTasksApiResponse = /** status 200 Successful Response */ any;
+export type OsTasksApiArg = {
+  /** Return detailed task information */
+  detailed?: boolean;
+  /** Action filters, e.g. *search,*reindex */
+  actions?: string | null;
+  /** Node id/name filters */
+  nodes?: string | null;
+  /** Filter by parent task id */
+  parentTaskId?: string | null;
+  /** Wait until tasks finish */
+  waitForCompletion?: boolean;
+  /** Wait timeout, e.g. 5s */
+  timeout?: string | null;
+  /** Group by: nodes|parents|none */
+  groupBy?: string;
+};
+export type OsTaskGetApiResponse = /** status 200 Successful Response */ any;
+export type OsTaskGetApiArg = {
+  /** Task id in the form nodeId:taskNumber */
+  taskId: string;
+  /** Wait until the task completes */
+  waitForCompletion?: boolean;
+  /** Wait timeout, e.g. 10s */
+  timeout?: string | null;
+};
+export type OsShardsApiResponse = /** status 200 Successful Response */ any;
+export type OsShardsApiArg = {
+  pattern?: string;
+};
+export type OsCatNodesApiResponse = /** status 200 Successful Response */ any;
+export type OsCatNodesApiArg = {
+  /** Byte unit (b|kb|mb|gb|...) */
+  bytes?: string;
+  /** Column list (cat 'h' parameter) */
+  columns?: string | null;
+  /** Sort columns (cat 's' parameter) */
+  sort?: string | null;
+};
+export type OsCatAllocationApiResponse = /** status 200 Successful Response */ any;
+export type OsCatAllocationApiArg = {
+  /** Optional node name/id filter */
+  node?: string | null;
+  /** Byte unit (b|kb|mb|gb|...) */
+  bytes?: string;
+  /** Column list (cat 'h' parameter) */
+  columns?: string | null;
+  /** Sort columns (cat 's' parameter) */
+  sort?: string | null;
+};
+export type OsCatThreadPoolApiResponse = /** status 200 Successful Response */ any;
+export type OsCatThreadPoolApiArg = {
+  /** Optional node id/name expression */
+  nodeId?: string | null;
+  /** Column list (cat 'h' parameter) */
+  columns?: string | null;
+  /** Sort columns (cat 's' parameter) */
+  sort?: string | null;
+  /** Thread pool name patterns, comma-separated */
+  threadPoolPatterns?: string | null;
+};
+export type OsRecoveryApiResponse = /** status 200 Successful Response */ any;
+export type OsRecoveryApiArg = {
+  /** Include file-level details */
+  detailed?: boolean;
+  /** Only active recoveries */
+  activeOnly?: boolean;
+};
+export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
+export type OsDiagnosticsApiArg = void;
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
   /** status 200 Successful Response */ WriteReportResponse;
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
@@ -2676,6 +3021,50 @@ export const {
   useLazyTestDistributionQuery,
   useDetectOutliersMlMutation,
   useRunPcaMutation,
+  useOsHealthQuery,
+  useLazyOsHealthQuery,
+  useOsPendingTasksQuery,
+  useLazyOsPendingTasksQuery,
+  useOsClusterSettingsQuery,
+  useLazyOsClusterSettingsQuery,
+  useOsClusterStateQuery,
+  useLazyOsClusterStateQuery,
+  useOsClusterStatsQuery,
+  useLazyOsClusterStatsQuery,
+  useOsAllocationExplainQuery,
+  useLazyOsAllocationExplainQuery,
+  useOsNodesStatsQuery,
+  useLazyOsNodesStatsQuery,
+  useOsNodesInfoQuery,
+  useLazyOsNodesInfoQuery,
+  useOsNodesHotThreadsQuery,
+  useLazyOsNodesHotThreadsQuery,
+  useOsIndicesQuery,
+  useLazyOsIndicesQuery,
+  useOsIndexStatsQuery,
+  useLazyOsIndexStatsQuery,
+  useOsIndexMappingQuery,
+  useLazyOsIndexMappingQuery,
+  useOsIndexSettingsQuery,
+  useLazyOsIndexSettingsQuery,
+  useOsIndexRecoveryQuery,
+  useLazyOsIndexRecoveryQuery,
+  useOsTasksQuery,
+  useLazyOsTasksQuery,
+  useOsTaskGetQuery,
+  useLazyOsTaskGetQuery,
+  useOsShardsQuery,
+  useLazyOsShardsQuery,
+  useOsCatNodesQuery,
+  useLazyOsCatNodesQuery,
+  useOsCatAllocationQuery,
+  useLazyOsCatAllocationQuery,
+  useOsCatThreadPoolQuery,
+  useLazyOsCatThreadPoolQuery,
+  useOsRecoveryQuery,
+  useLazyOsRecoveryQuery,
+  useOsDiagnosticsQuery,
+  useLazyOsDiagnosticsQuery,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,

@@ -19,6 +19,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
     }),
+    getAgentGraphAgenticV1AgentsAgentIdGraphGet: build.query<
+      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse,
+      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}/graph` }),
+    }),
     listDeclaredAgentClassPathsAgenticV1AgentsClassPathsGet: build.query<
       ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse,
       ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg
@@ -327,6 +333,10 @@ export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Suc
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   createAgentRequest: CreateAgentRequest;
 };
+export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse = /** status 200 Successful Response */ string;
+export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg = {
+  agentId: string;
+};
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
   /** status 200 Successful Response */ string[];
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg = void;
@@ -584,8 +594,10 @@ export type McpServerConfiguration = {
   name: string;
   /** react-i18next key for the description of the MCP server. */
   description?: string | null;
-  /** MCP server transport. Can be sse, stdio, websocket or streamable_http */
+  /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
   transport?: string | null;
+  /** Local provider key when transport=inprocess (e.g. 'web_github_readonly'). */
+  provider?: string | null;
   /** URL and endpoint of the MCP server */
   url?: string | null;
   /** How long (in seconds) the client will wait for a new event before disconnecting */
@@ -771,6 +783,7 @@ export type ChatTokenUsage = {
   output_tokens?: number;
   total_tokens?: number;
 };
+export type TokenUsageSource = "updates" | "messages" | "messages_backfill" | "unavailable";
 export type VectorSearchHit = {
   content: string;
   page?: number | null;
@@ -830,6 +843,7 @@ export type RuntimeContext = {
 export type ChatMetadata = {
   model?: string | null;
   token_usage?: ChatTokenUsage | null;
+  token_usage_source?: TokenUsageSource | null;
   sources?: VectorSearchHit[];
   agent_id?: string | null;
   latency_ms?: number | null;
@@ -1229,6 +1243,8 @@ export const {
   useListAgentsAgenticV1AgentsGetQuery,
   useLazyListAgentsAgenticV1AgentsGetQuery,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
+  useLazyGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,

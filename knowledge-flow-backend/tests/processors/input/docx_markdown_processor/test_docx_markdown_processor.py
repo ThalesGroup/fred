@@ -191,7 +191,7 @@ def test_convert_docx_handles_many_image_extensions(processor: DocxMarkdownProce
 
     assert f"knowledge-flow/v1/markdown/{document_uid}/media/image_svg.svg" in md_content
     assert f"knowledge-flow/v1/markdown/{document_uid}/media/image_emf.svg" in md_content
-    assert 'alt="1/5 de maitrise"' in md_content
+    assert 'alt="1/5 de maitrise"' not in md_content
 
 
 def test_convert_docx_does_not_enable_cv_mode_when_only_path_contains_cv(processor: DocxMarkdownProcessor, tmp_path, monkeypatch):

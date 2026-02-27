@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Iterable
 from typing import Any, Callable, List, Optional, cast
 
 from langchain_core.tools import BaseTool
@@ -31,6 +32,9 @@ from agentic_backend.common.mcp_utils import get_connected_mcp_client_for_agent
 from agentic_backend.common.tool_node_utils import create_mcp_tool_node
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.tools.inprocess_toolkit_registry import (
+    create_inprocess_toolkit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +66,8 @@ class MCPRuntime:
         self.tunings: AgentTuning = agent.get_agent_tunings()
         self.agent_instance = agent
         self.available_servers: List[MCPServerConfiguration] = []
+        self.remote_servers: List[MCPServerConfiguration] = []
+        self.inprocess_servers: List[MCPServerConfiguration] = []
         for s in self.tunings.mcp_servers:
             server_configuration = get_mcp_configuration().get_server(s.id)
             if not server_configuration:
@@ -72,9 +78,15 @@ class MCPRuntime:
                 )
                 continue
             self.available_servers.append(server_configuration)
+            transport = (server_configuration.transport or "streamable_http").lower()
+            if transport == "inprocess":
+                self.inprocess_servers.append(server_configuration)
+            else:
+                self.remote_servers.append(server_configuration)
 
         self.mcp_client: Optional[MultiServerMCPClient] = None
         self.toolkit: Optional[McpToolkit] = None
+        self._inprocess_toolkits: list[Any] = []
 
         # Lifecycle orchestration so enter/exit happen in the SAME task
         self._lifecycle_task: Optional[asyncio.Task] = None
@@ -83,9 +95,11 @@ class MCPRuntime:
         self._lifecycle_error: Optional[BaseException] = None
 
         logger.info(
-            "[MCP]agent=%s mcp_servers=%s (enabled only)",
+            "[MCP]agent=%s mcp_servers=%s remote=%s inprocess=%s (enabled only)",
             self.agent_instance.get_id(),
             [s.id for s in self.available_servers],
+            [s.id for s in self.remote_servers],
+            [s.id for s in self.inprocess_servers],
         )
 
     # ---------- lifecycle (Token-aware initialization) ----------
@@ -97,12 +111,25 @@ class MCPRuntime:
 
         NOTE: This should only be called once during the agent's async_init.
         """
-        if not self.available_servers or len(self.available_servers) == 0:
+        if not self.available_servers:
             logger.info(
                 "agent=%s init: No MCP server configuration found in tunings. Skipping MCP client connection.",
                 self.agent_instance.get_id(),
             )
             # We allow the agent to run, but without MCP tools.
+            return
+
+        try:
+            self._init_inprocess_toolkits()
+        except Exception:
+            await self._aclose_inprocess_toolkits()
+            raise
+
+        if not self.remote_servers:
+            logger.info(
+                "[MCP] agent=%s init: Local inprocess toolkits only; no remote MCP connection required.",
+                self.agent_instance.get_id(),
+            )
             return
 
         # If already running, just return
@@ -124,6 +151,7 @@ class MCPRuntime:
         # 3) Wait until connected or error
         await self._ready_event.wait()
         if self._lifecycle_error:
+            await self._aclose_inprocess_toolkits()
             raise self._lifecycle_error
 
     async def _run_lifecycle(self, runtime_context: RuntimeContext) -> None:
@@ -146,7 +174,7 @@ class MCPRuntime:
 
             new_client = await get_connected_mcp_client_for_agent(
                 agent_id=self.agent_instance.get_id(),
-                mcp_servers=self.available_servers,
+                mcp_servers=self.remote_servers,
                 runtime_context=runtime_context,
                 tool_interceptors=interceptors,
             )
@@ -201,15 +229,17 @@ class MCPRuntime:
         Returns the list of tools from the toolkit.
         NOTE: The filtering logic now runs inside the toolkit, not here.
         """
-        if not self.toolkit:
+        remote_tools: list[BaseTool] = []
+        if self.toolkit:
+            # We assume McpToolkit.get_tools() handles policy/role filtering
+            remote_tools = self.toolkit.get_tools()
+        elif self.remote_servers:
             logger.warning(
                 "[MCP] agent=%s get_tools: Toolkit is None. Returning empty list.",
                 self.agent_instance.get_id(),
             )
-            return []
-
-        # We assume McpToolkit.get_tools() handles policy/role filtering
-        return self.toolkit.get_tools()
+        local_tools = self._get_inprocess_tools()
+        return self._dedupe_tools_by_name([*local_tools, *remote_tools])
 
     def get_tool_nodes(self) -> ToolNode:
         """
@@ -246,7 +276,77 @@ class MCPRuntime:
             await _close_mcp_client_quietly(self.mcp_client)
             self.mcp_client = None
             self.toolkit = None
+        await self._aclose_inprocess_toolkits()
         logger.info(
             "[MCP] agent=%s aclose: MCP shutdown complete.",
             self.agent_instance.get_id(),
         )
+
+    def _init_inprocess_toolkits(self) -> None:
+        if self._inprocess_toolkits:
+            return
+        for server in self.inprocess_servers:
+            toolkit = create_inprocess_toolkit(server.provider)
+            self._inprocess_toolkits.append(toolkit)
+            logger.info(
+                "[MCP] agent=%s enabled inprocess provider=%s via server=%s",
+                self.agent_instance.get_id(),
+                server.provider,
+                server.id,
+            )
+
+    def _get_inprocess_tools(self) -> list[BaseTool]:
+        tools: list[BaseTool] = []
+        for toolkit in self._inprocess_toolkits:
+            provider = getattr(toolkit, "tools", None)
+            if not callable(provider):
+                logger.warning(
+                    "[MCP] agent=%s local toolkit %s has no tools() method",
+                    self.agent_instance.get_id(),
+                    toolkit.__class__.__name__,
+                )
+                continue
+            try:
+                toolkit_tools = cast(Iterable[BaseTool] | None, provider())
+                if toolkit_tools:
+                    tools.extend(list(toolkit_tools))
+            except Exception:
+                logger.warning(
+                    "[MCP] agent=%s failed loading inprocess tools from %s",
+                    self.agent_instance.get_id(),
+                    toolkit.__class__.__name__,
+                    exc_info=True,
+                )
+        return tools
+
+    async def _aclose_inprocess_toolkits(self) -> None:
+        for toolkit in self._inprocess_toolkits:
+            aclose = getattr(toolkit, "aclose", None)
+            if callable(aclose):
+                try:
+                    aclose_coro = cast(Awaitable[Any], aclose())
+                    await aclose_coro
+                except Exception:
+                    logger.warning(
+                        "[MCP] agent=%s failed closing inprocess toolkit %s",
+                        self.agent_instance.get_id(),
+                        toolkit.__class__.__name__,
+                        exc_info=True,
+                    )
+        self._inprocess_toolkits = []
+
+    @staticmethod
+    def _dedupe_tools_by_name(tools: list[BaseTool]) -> list[BaseTool]:
+        deduped: list[BaseTool] = []
+        seen: set[str] = set()
+        for tool in tools:
+            name = getattr(tool, "name", None)
+            if not isinstance(name, str):
+                deduped.append(tool)
+                continue
+            if name in seen:
+                logger.warning("[MCP] Duplicate tool name ignored: %s", name)
+                continue
+            seen.add(name)
+            deduped.append(tool)
+        return deduped

@@ -66,6 +66,13 @@ type MediaInfo = {
 // Try to pull document/media ids out of the markdown image src so we can fetch with auth.
 const extractMediaInfo = (src?: string, fallbackDocumentUid?: string): MediaInfo | null => {
   if (!src) return null;
+  // External absolute URLs (e.g. presigned MinIO URLs) are used as-is — skip pattern matching.
+  try {
+    const parsed = new URL(src);
+    if (parsed.origin !== window.location.origin) return null;
+  } catch {
+    // Not an absolute URL — continue with relative path matching below.
+  }
   // Prefer the URL pathname if src is absolute; otherwise keep the raw string to test patterns.
   let path = src;
   try {

@@ -106,6 +106,23 @@ def _normalize_openai_compat(settings: Dict[str, Any]) -> None:
         settings["openai_api_base"] = settings.pop("base_url")
 
 
+def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
+    """
+    Enforce usage reporting for streamed chat responses across OpenAI-compatible wrappers.
+
+    Rationale:
+    - In Fred we inject shared HTTP clients, which bypasses wrapper auto-defaults.
+    - The websocket telemetry contract expects token usage whenever upstream supports it.
+
+    Opt-out:
+    - Set `stream_usage: false` explicitly in model settings when a gateway/provider
+      does not support usage-in-stream responses.
+    """
+    if "stream_usage" in settings:
+        return
+    settings["stream_usage"] = True
+
+
 # ---------------------------------------------------------------------------
 # Chat model factory
 # ---------------------------------------------------------------------------
@@ -132,6 +149,12 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         ModelProvider.AZURE_APIM.value,
     ):
         _normalize_openai_compat(settings)
+    if provider in (
+        ModelProvider.OPENAI.value,
+        ModelProvider.AZURE_OPENAI.value,
+        ModelProvider.AZURE_APIM.value,
+    ):
+        _apply_openai_stream_usage_default(settings)
 
     # Extract an optional request-level timeout (applied at OpenAI client level)
     request_level_timeout = settings.get("request_timeout", None)
@@ -163,9 +186,10 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             )
         _info_provider(cfg, settings)
         logger.info(
-            "[MODEL][OPENAI] Constructing ChatOpenAI model=%s with explicit timeout=%s (overriding SDK default)",
+            "[MODEL][OPENAI] Constructing ChatOpenAI model=%s with explicit timeout=%s stream_usage=%s (overriding SDK default)",
             cfg.name,
             base_kwargs.get("timeout"),
+            settings.get("stream_usage"),
         )
         return ChatOpenAI(
             model=cfg.name,
@@ -187,6 +211,10 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             "[MODEL][AZURE_OPENAI] Constructing AzureChatOpenAI deployment=%s with explicit timeout=%s",
             cfg.name,
             base_kwargs.get("timeout"),
+        )
+        logger.info(
+            "[MODEL][AZURE_OPENAI] stream_usage=%s",
+            settings.get("stream_usage"),
         )
         return AzureChatOpenAI(
             azure_deployment=cfg.name,
@@ -234,6 +262,10 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             "[MODEL][AZURE_APIM] Constructing AzureChatOpenAI (APIM) deployment=%s with explicit timeout=%s",
             cfg.name,
             base_kwargs.get("timeout"),
+        )
+        logger.info(
+            "[MODEL][AZURE_APIM] stream_usage=%s",
+            passthrough.get("stream_usage"),
         )
 
         return AzureChatOpenAI(

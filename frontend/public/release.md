@@ -1,4 +1,10 @@
-**v1.2.7** — 2026-02-25
+**Unrelease** — 2026-XX-XX
+
+- **Features**
+
+  - HITL improvements demonstrated around a MCP use case (#1207)
+
+**v1.2.7** — 2026-02-26
 
 - **Summary**
 

@@ -13,6 +13,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import CodeIcon from "@mui/icons-material/Code";
@@ -38,6 +39,7 @@ type AgentCardProps = {
   onManageAssets?: (agent: AnyAgent) => void;
   onInspectCode?: (agent: AnyAgent) => void;
   onViewA2ACard?: (agent: AnyAgent) => void;
+  onInspectGraph?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -57,6 +59,7 @@ export const AgentCard = ({
   onManageAssets,
   onInspectCode,
   onViewA2ACard,
+  onInspectGraph,
 }: AgentCardProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -227,6 +230,18 @@ export const AgentCard = ({
                 aria-label="inspect agent source code"
               >
                 <CodeIcon fontSize="small" />
+              </IconButton>
+            </SimpleTooltip>
+          )}
+          {onInspectGraph && (
+            <SimpleTooltip title={t("agentCard.inspectGraph", "Inspect Graph")}>
+              <IconButton
+                size="small"
+                onClick={() => onInspectGraph(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="inspect agent graph"
+              >
+                <AccountTreeIcon fontSize="small" />
               </IconButton>
             </SimpleTooltip>
           )}

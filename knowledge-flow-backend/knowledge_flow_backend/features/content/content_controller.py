@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import logging
+import re
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -66,6 +68,42 @@ def parse_range_header(range_str: Optional[str]) -> Optional[tuple[int | None, i
     start = int(start_s) if start_s else None
     end = int(end_s) if end_s else None
     return start, end
+
+
+_MEDIA_RE = re.compile(r"knowledge-flow/v1/markdown/([^/]+)/media/([^/?#\s\"']+)")
+
+
+def _replace_with_presigned(content: str, content_store) -> str:
+    """Replace /knowledge-flow/v1/markdown/{uid}/media/{file} URLs with 1-minute MinIO presigned URLs.
+    Falls back to the original URL if generation fails or the store is not MinIO.
+    """
+    from knowledge_flow_backend.core.stores.content.minio_content_store import MinioStorageBackend
+
+    logger.info("[PRESIGNED] content_store type: %s", type(content_store).__name__)
+    if not isinstance(content_store, MinioStorageBackend):
+        logger.info("[PRESIGNED] not MinIO → skipping presigned URL generation")
+        return content
+
+    matches = _MEDIA_RE.findall(content)
+    logger.info("[PRESIGNED] found %d media reference(s) to replace: %s", len(matches), matches)
+
+    def make_presigned(m: re.Match) -> str:
+        uid = m.group(1)
+        filename = m.group(2)
+        object_key = f"{uid}/output/media/{filename}"
+        try:
+            url = content_store.client.presigned_get_object(
+                bucket_name=content_store.document_bucket,
+                object_name=object_key,
+                expires=timedelta(minutes=1),
+            )
+            logger.info("[PRESIGNED] generated URL for %s: %s", object_key, url)
+            return url
+        except Exception as e:
+            logger.warning("---------------------------------------[CONTENT] presigned URL failed for %s: %s", object_key, e)
+            return m.group(0)
+
+    return _MEDIA_RE.sub(make_presigned, content)
 
 
 class ContentController:
@@ -146,6 +184,8 @@ class ContentController:
             try:
                 logger.info(f"Retrieving full document: {document_uid}")
                 content = await self.service.get_markdown_preview(user, document_uid)
+                content = _replace_with_presigned(content, self.service.content_store)
+                logger.info("-----------------------------------------------------------------------------Markdown with presigned URLs:\n%s", content[:30])
                 return {"content": content}
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))

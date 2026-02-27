@@ -155,7 +155,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>{isA2aType ? t("agentHub.registerA2A") : t("agentHub.createAgent")}</DialogTitle>
       <DialogContent dividers>
         {/* Note: The <form> element is required for handleSubmit, but we'll manually trigger it below */}
