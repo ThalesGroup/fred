@@ -17,9 +17,10 @@ import logging
 from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.constants import START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import tools_condition
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
@@ -30,7 +31,6 @@ from agentic_backend.core.agents.agent_spec import (
     MCPServerRef,
     UIHints,
 )
-from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
@@ -78,17 +78,23 @@ class SentinelExpert(AgentFlow):
 
     Pattern alignment with AgentFlow:
     - Class-level `tuning` (spec only; values come from YAML/DB/UI).
-    - async_init(): set model, init MCP (tools), bind tools, build graph.
+    - build_runtime_structure(): build LangGraph topology (no I/O).
+    - activate_runtime(): set model, init MCP (tools), bind tools.
     - Each node chooses if/when to use the tuned prompt (no global magic).
     """
 
     tuning = SENTINEL_TUNING
+    model: Any = None
+    mcp: MCPRuntime | None = None
+    _tool_node: ToolNode | None = None
 
     # ---------------------------
     # Bootstrap
     # ---------------------------
-    async def async_init(self, runtime_context: RuntimeContext):
-        await super().async_init(runtime_context)
+    def build_runtime_structure(self) -> None:
+        self._graph = self._build_graph()
+
+    async def activate_runtime(self) -> None:
 
         # 1) LLM. Here we use the default chat model from backend application context.
         # In a real setup, you might want to allow tuning this per-agent.
@@ -98,32 +104,37 @@ class SentinelExpert(AgentFlow):
         self.mcp = MCPRuntime(agent=self)
         await self.mcp.init()  # start MCP + toolkit
         self.model = self.model.bind_tools(self.mcp.get_tools())
-
-        # 3) Graph
-        self._graph = self._build_graph()
+        self._tool_node = self.mcp.get_tool_nodes()
 
     async def aclose(self):
-        await self.mcp.aclose()
+        if self.mcp is not None:
+            await self.mcp.aclose()
 
     # ---------------------------
     # Graph
     # ---------------------------
     def _build_graph(self) -> StateGraph:
-        if self.mcp.toolkit is None:
-            raise RuntimeError(
-                "Sentinel: toolkit must be initialized before building the graph."
-            )
-
         builder = StateGraph(MessagesState)
 
         # LLM node
         builder.add_node("reasoner", self.reasoner)
 
-        builder.add_node("tools", self.mcp.get_tool_nodes())
+        builder.add_node("tools", self._run_tools_node)
         builder.add_edge(START, "reasoner")
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
         return builder
+
+    async def _run_tools_node(
+        self,
+        state: MessagesState,
+        config: RunnableConfig | None = None,
+    ) -> dict[str, Any]:
+        if self._tool_node is None:
+            raise RuntimeError(
+                "Sentinel: tools node is not initialized. Call initialize_runtime() first."
+            )
+        return await self._tool_node.ainvoke(state, config=config)
 
     # ---------------------------
     # LLM node
@@ -136,7 +147,7 @@ class SentinelExpert(AgentFlow):
         """
         if self.model is None:
             raise RuntimeError(
-                "Sentinel: model is not initialized. Call async_init() first."
+                "Sentinel: model is not initialized. Call initialize_runtime() first."
             )
 
         # 1) Build the system prompt from tuning (and tokens like {today})

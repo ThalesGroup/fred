@@ -131,5 +131,5 @@ class SchedulerController:
             req: ProcessDocumentsProgressRequest,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
+            authorize_or_raise(user, Action.CREATE, Resource.DOCUMENTS)
             return await self.task_service.get_progress(user=user, workflow_id=req.workflow_id)

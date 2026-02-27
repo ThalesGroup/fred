@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
+from types import SimpleNamespace
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -29,7 +29,7 @@ from fred_core import (
 )
 from pydantic import AnyHttpUrl, AnyUrl
 
-from agentic_backend.application_context import ApplicationContext, get_agent_store
+from agentic_backend.application_context import ApplicationContext
 
 # ⬇️ NEW: Agent/union + RecursionConfig now live in tuning_spec
 # ⬇️ REST of your config types stay where they were
@@ -46,8 +46,7 @@ from agentic_backend.common.structures import (
     StorageConfig,
     TimeoutSettings,
 )
-from agentic_backend.core.agents.agent_loader import AgentLoader
-from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents import agent_controller
 from agentic_backend.core.chatbot import chatbot_controller
 
 
@@ -159,32 +158,22 @@ def client(app_context, monkeypatch) -> TestClient:
     # Mount our API under the expected base URL
     router = APIRouter(prefix="/agentic/v1")
 
-    # Include the chatbot routes (under test)
+    # Include the routes under test
     router.include_router(chatbot_controller.router)
+    router.include_router(agent_controller.router)
     app.include_router(router)
 
-    # Use a fake chat model for tests to avoid real provider keys/network
-    from langchain_core.language_models.fake_chat_models import FakeChatModel
+    class _FakeAgentService:
+        def __init__(self, agent_manager):
+            self.agent_manager = agent_manager
 
-    import agentic_backend.application_context as app_ctx
+        async def list_agents(self, user, owner_filter=None, team_id=None):
+            return list(app_context.configuration.ai.agents)
 
-    monkeypatch.setattr(app_ctx, "get_model", lambda cfg: FakeChatModel())
+    monkeypatch.setattr(agent_controller, "AgentService", _FakeAgentService)
 
-    # Initialize a real AgentManager using the shared ApplicationContext
-    loader = AgentLoader(app_context.configuration, get_agent_store())
-    manager = AgentManager(app_context.configuration, loader, get_agent_store())
-    # Load static agents so /chatbot/agenticflows returns data
-    # Use asyncio.run to avoid deprecated get_event_loop behavior
-    try:
-        asyncio.run(manager.bootstrap())
-    except RuntimeError:
-        # Fallback for environments that already run an event loop
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(manager.bootstrap())
-        finally:
-            loop.close()
-    app.state.agent_manager = manager
+    # Minimal app state for dependencies that read app.state.agent_manager
+    app.state.agent_manager = SimpleNamespace(config=app_context.configuration)
 
     # Keep auth predictable
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(

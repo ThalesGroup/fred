@@ -14,11 +14,28 @@
 
 
 import logging
-from typing import List, Tuple
+import time
+from typing import (
+    Annotated,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypedDict,
+    cast,
+)
 
 from fred_core import OwnerFilter, VectorSearchHit
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langgraph.graph import END, START, StateGraph, add_messages
 
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
@@ -48,6 +65,22 @@ from agentic_backend.core.agents.runtime_context import (
 from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
+
+
+class RicoGraphState(TypedDict, total=False):
+    messages: Annotated[list[AnyMessage], add_messages]
+    question: str
+    documents: List[VectorSearchHit]
+    sources: List[VectorSearchHit]
+    retrieval_total_hits: int
+    retrieval_latency_ms: int
+    retrieval_search_policy: str
+    retrieval_top_k: int
+    retrieval_doc_tag_ids: List[str]
+    retrieval_document_uids: List[str]
+    retrieval_augmented_question: str
+    retrieval_keywords: List[str]
+
 
 # -----------------------------
 # Spec-only tuning (class-level)
@@ -286,15 +319,238 @@ class Rico(AgentFlow):
         self._graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        builder = StateGraph(MessagesState)
+        builder = StateGraph(RicoGraphState)
+        builder.add_node("corpus_research", self._corpus_research_step)
         builder.add_node("reasoner", self._run_reasoning_step)
-        builder.add_edge(START, "reasoner")
+        builder.add_edge(START, "corpus_research")
+        builder.add_edge("corpus_research", "reasoner")
         builder.add_edge("reasoner", END)
         return builder
 
     # -----------------------------
     # Small helpers (local policy)
     # -----------------------------
+    def _mk_progress_thought(self, *, text: str, node: str, label: str) -> AIMessage:
+        return AIMessage(
+            content="",
+            response_metadata={
+                "thought": text,
+                "extras": {"task": "progress", "node": node, "label": label},
+            },
+        )
+
+    def _mk_tool_call(
+        self, *, call_id: str, name: str, args: Dict[str, Any]
+    ) -> AIMessage:
+        return AIMessage(
+            content="",
+            tool_calls=[{"id": call_id, "name": name, "args": args}],
+            response_metadata={"extras": {"task": "retrieval", "node": name}},
+        )
+
+    def _mk_tool_result(
+        self,
+        *,
+        call_id: str,
+        content: str,
+        ok: Optional[bool] = None,
+        latency_ms: Optional[int] = None,
+        extras: Optional[Dict[str, Any]] = None,
+        sources: Optional[List[VectorSearchHit]] = None,
+    ) -> ToolMessage:
+        md: Dict[str, Any] = {}
+        if extras:
+            md["extras"] = extras
+        if latency_ms is not None:
+            md["latency_ms"] = latency_ms
+        if ok is not None:
+            md["ok"] = ok
+        if sources:
+            md["sources"] = [
+                s.model_dump() if hasattr(s, "model_dump") else s for s in sources
+            ]
+        return ToolMessage(content=content, tool_call_id=call_id, response_metadata=md)
+
+    def _attach_latency_to_ai_message(
+        self, message: AIMessage, *, latency_ms: int
+    ) -> AIMessage:
+        md = getattr(message, "response_metadata", {}) or {}
+        md["latency_ms"] = latency_ms
+        setattr(message, "response_metadata", md)
+        return message
+
+    def _progress_text(self, *, fr: str, en: str) -> str:
+        language = self._normalize_response_language(
+            get_language(self.get_runtime_context()),
+            default="English",
+        ).lower()
+        return fr if language.startswith("fr") else en
+
+    async def _corpus_research_step(self, state: RicoGraphState):
+        messages = cast(Sequence[AnyMessage], state.get("messages") or [])
+        question = cast(
+            Optional[str], state.get("question")
+        ) or self._latest_user_question(messages)
+        runtime_context = self.get_runtime_context()
+        if get_rag_knowledge_scope(runtime_context) == "general_only":
+            return {
+                "question": question,
+                "documents": [],
+                "sources": [],
+                "retrieval_total_hits": 0,
+                "messages": [
+                    self._mk_progress_thought(
+                        text=self._progress_text(
+                            fr="Mode connaissance générale: recherche corpus ignorée.",
+                            en="General-knowledge mode: corpus search skipped.",
+                        ),
+                        node="corpus_research",
+                        label="corpus_research",
+                    )
+                ],
+            }
+
+        call_id = "tc_corpus_research_1"
+        start = time.perf_counter()
+        search_policy = "hybrid"
+        top_k = self.get_tuned_int("rag.top_k", default=10)
+        doc_tag_ids: List[str] = []
+        document_uids: List[str] = []
+        augmented_question = question
+        keywords: List[str] = []
+        hits: List[VectorSearchHit] = []
+
+        call_msg = self._mk_tool_call(
+            call_id=call_id,
+            name="corpus_research",
+            args={
+                "query": question,
+                "top_k": top_k,
+            },
+        )
+        try:
+            if not runtime_context or not runtime_context.session_id:
+                raise RuntimeError(
+                    "Runtime context missing session_id; required for scoped retrieval."
+                )
+
+            doc_tag_ids = get_document_library_tags_ids(runtime_context) or []
+            document_uids = get_document_uids(runtime_context) or []
+            search_policy = get_search_policy(runtime_context)
+            top_k = self.get_tuned_int("rag.top_k", default=10)
+
+            if bool(self.get_tuned_any("rag.keyword_expansion")):
+                augmented_question, keywords = await self._expand_with_keywords(
+                    question
+                )
+
+            include_session_scope, include_corpus_scope = get_vector_search_scopes(
+                runtime_context
+            )
+            async with self.phase("vector_search"):
+                hits = await self.search_client.search(
+                    question=augmented_question,
+                    top_k=top_k,
+                    document_library_tags_ids=doc_tag_ids,
+                    document_uids=document_uids,
+                    search_policy=search_policy,
+                    team_id=self.get_settings().team_id,
+                    owner_filter=OwnerFilter.TEAM
+                    if self.get_settings().team_id
+                    else OwnerFilter.PERSONAL,
+                    session_id=runtime_context.session_id,
+                    include_session_scope=include_session_scope,
+                    include_corpus_scope=include_corpus_scope,
+                )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            result_msg = self._mk_tool_result(
+                call_id=call_id,
+                content=f"Retrieved {len(hits)} candidates.",
+                ok=True,
+                latency_ms=latency_ms,
+                extras={"task": "retrieval", "node": "corpus_research"},
+                sources=hits,
+            )
+            return {
+                "question": question,
+                "documents": hits,
+                "sources": hits,
+                "retrieval_total_hits": len(hits),
+                "retrieval_latency_ms": latency_ms,
+                "retrieval_search_policy": search_policy,
+                "retrieval_top_k": top_k,
+                "retrieval_doc_tag_ids": doc_tag_ids,
+                "retrieval_document_uids": document_uids,
+                "retrieval_augmented_question": augmented_question,
+                "retrieval_keywords": keywords,
+                "messages": [call_msg, result_msg],
+            }
+        except Exception as e:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            logger.exception(
+                "Rico: corpus_research failed question=%r search_policy=%s top_k=%s",
+                question,
+                search_policy,
+                top_k,
+            )
+            result_msg = self._mk_tool_result(
+                call_id=call_id,
+                content=f"Corpus retrieval failed: {e}",
+                ok=False,
+                latency_ms=latency_ms,
+                extras={"task": "retrieval", "node": "corpus_research"},
+            )
+            return {
+                "question": question,
+                "documents": [],
+                "sources": [],
+                "retrieval_total_hits": 0,
+                "retrieval_latency_ms": latency_ms,
+                "retrieval_search_policy": search_policy,
+                "retrieval_top_k": top_k,
+                "retrieval_doc_tag_ids": doc_tag_ids,
+                "retrieval_document_uids": document_uids,
+                "retrieval_augmented_question": augmented_question,
+                "retrieval_keywords": keywords,
+                "messages": [call_msg, result_msg],
+            }
+
+    @staticmethod
+    def _last_human_index(messages: Sequence[AnyMessage]) -> int | None:
+        for i in range(len(messages) - 1, -1, -1):
+            if isinstance(messages[i], HumanMessage):
+                return i
+        return None
+
+    def _latest_user_question(self, messages: Sequence[AnyMessage]) -> str:
+        idx = self._last_human_index(messages)
+        if idx is None:
+            raise TypeError("No user message found in state.")
+        last = messages[idx]
+        if not isinstance(last.content, str):
+            raise TypeError(
+                f"Expected string content for the latest user message, got: {type(last.content).__name__}"
+            )
+        return last.content
+
+    def _history_before_current_question(
+        self,
+        messages: Sequence[AnyMessage],
+        *,
+        max_messages: int,
+    ) -> list[AnyMessage]:
+        idx = self._last_human_index(messages)
+        if idx is None:
+            return []
+        prior = list(messages[:idx])
+        return self.get_recent_history(
+            prior,
+            max_messages=max_messages,
+            include_system=False,
+            include_tool=False,
+            drop_last=False,
+        )
+
     def _render_tuned_prompt(self, key: str, **tokens) -> str:
         prompt = self.get_tuned_text(key)
         if not prompt:
@@ -380,22 +636,30 @@ class Rico(AgentFlow):
     # -----------------------------
     # Node: reasoner
     # -----------------------------
-    async def _run_reasoning_step(self, state: MessagesState):
+    async def _run_reasoning_step(self, state: RicoGraphState):
         if self.model is None:
             raise RuntimeError(
                 "Model is not initialized. Did you forget to call async_init()?"
             )
 
-        # Last user question (MessagesState ensures 'messages' is AnyMessage[])
-        last = state["messages"][-1]
-        if not isinstance(last.content, str):
-            raise TypeError(
-                f"Expected string content for the last message, got: {type(last.content).__name__}"
-            )
-        question = last.content
+        state_messages = cast(Sequence[AnyMessage], state.get("messages") or [])
+        question = cast(
+            Optional[str], state.get("question")
+        ) or self._latest_user_question(state_messages)
+        runtime_context = self.get_runtime_context()
+        doc_tag_ids = cast(List[str], state.get("retrieval_doc_tag_ids") or [])
+        document_uids = cast(List[str], state.get("retrieval_document_uids") or [])
+        search_policy = cast(Optional[str], state.get("retrieval_search_policy"))
+        top_k = cast(Optional[int], state.get("retrieval_top_k"))
+        hits = list(cast(List[VectorSearchHit], state.get("documents") or []))
+        retrieval_total_hits = int(state.get("retrieval_total_hits", 0) or 0)
+        retrieval_latency_ms = int(state.get("retrieval_latency_ms", 0) or 0)
+        retrieval_keywords = cast(List[str], state.get("retrieval_keywords") or [])
+        retrieval_augmented_question = (
+            cast(Optional[str], state.get("retrieval_augmented_question")) or question
+        )
 
         try:
-            runtime_context = self.get_runtime_context()
             rag_scope = get_rag_knowledge_scope(runtime_context)
             response_language = self._normalize_response_language(
                 get_language(runtime_context),
@@ -419,12 +683,9 @@ class Rico(AgentFlow):
                 history_max = self.get_tuned_int(
                     "rag.history_max_messages", default=6, min_value=0
                 )
-                history = self.get_recent_history(
-                    state["messages"],
+                history = self._history_before_current_question(
+                    state_messages,
                     max_messages=history_max,
-                    include_system=False,
-                    include_tool=False,
-                    drop_last=True,
                 )
                 human_msg = HumanMessage(
                     content=self._render_tuned_prompt(
@@ -434,77 +695,41 @@ class Rico(AgentFlow):
                 messages = [sys_msg, *history, human_msg]
                 messages = await self.with_chat_context_text(messages)
                 async with self.phase("answer_general_only"):
-                    answer = await self.model.ainvoke(messages)
+                    llm_start = time.perf_counter()
+                    answer = cast(AIMessage, await self.model.ainvoke(messages))
+                answer = self._attach_latency_to_ai_message(
+                    answer,
+                    latency_ms=int((time.perf_counter() - llm_start) * 1000),
+                )
                 return {"messages": [answer]}
 
-            # 0) Optional keyword expansion to widen recall
-            augmented_question = question
-            keywords: List[str] = []
-            if bool(self.get_tuned_any("rag.keyword_expansion")):
-                augmented_question, keywords = await self._expand_with_keywords(
-                    question
-                )
-                logger.debug(
-                    "[AGENT] keyword expansion enabled; raw_question=%r keywords=%s augmented=%r",
-                    question,
-                    keywords,
-                    augmented_question,
-                )
-            else:
-                logger.debug(
-                    "[AGENT] keyword expansion disabled; using raw_question=%r",
-                    question,
-                )
-
-            # 1) Build retrieval scope from runtime context
-            doc_tag_ids = get_document_library_tags_ids(runtime_context)
-            document_uids = get_document_uids(runtime_context)
-            search_policy = get_search_policy(runtime_context)
-            top_k = self.get_tuned_int("rag.top_k", default=10)
             logger.debug(
-                "[AGENT] reasoning start question=%r doc_tag_ids=%s document_uids=%s search_policy=%s top_k=%s rag_scope=%s",
+                "[AGENT] reasoning start question=%r doc_tag_ids=%s document_uids=%s search_policy=%s top_k=%s rag_scope=%s retrieval_hits=%d retrieval_latency_ms=%d",
                 question,
                 doc_tag_ids,
                 document_uids,
                 search_policy,
                 top_k,
                 rag_scope,
+                retrieval_total_hits,
+                retrieval_latency_ms,
             )
             logger.info(
-                "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s document_uids=%s",
+                "[AGENT][SESSION PATH] question=%r runtime_context.session_id=%s rag_scope=%s search_policy=%s doc_tag_ids=%s document_uids=%s retrieval_hits=%d",
                 question,
                 runtime_context.session_id if runtime_context else None,
                 rag_scope,
                 search_policy,
                 doc_tag_ids,
                 document_uids,
+                retrieval_total_hits,
             )
-
-            if not runtime_context or not runtime_context.session_id:
-                raise RuntimeError(
-                    "Runtime context missing session_id; required for scoped retrieval."
-                )
-            include_session_scope, include_corpus_scope = get_vector_search_scopes(
-                runtime_context
+            logger.debug(
+                "[AGENT] retrieval inputs augmented_question=%r keywords=%s",
+                retrieval_augmented_question,
+                retrieval_keywords,
             )
-
-            # 2) Vector search
-            async with self.phase("vector_search"):
-                hits: List[VectorSearchHit] = await self.search_client.search(
-                    question=augmented_question,
-                    top_k=top_k,
-                    document_library_tags_ids=doc_tag_ids,
-                    document_uids=document_uids,
-                    search_policy=search_policy,
-                    team_id=self.get_settings().team_id,
-                    owner_filter=OwnerFilter.TEAM
-                    if self.get_settings().team_id
-                    else OwnerFilter.PERSONAL,
-                    session_id=runtime_context.session_id,
-                    include_session_scope=include_session_scope,
-                    include_corpus_scope=include_corpus_scope,
-                )
-            logger.debug("[AGENT] vector search returned %d hit(s)", len(hits))
+            logger.debug("[AGENT] corpus_research returned %d hit(s)", len(hits))
             if hits:
                 hit_summaries = []
                 for h in hits[:10]:
@@ -523,12 +748,9 @@ class Rico(AgentFlow):
                 history_max = self.get_tuned_int(
                     "rag.history_max_messages", default=6, min_value=0
                 )
-                history = self.get_recent_history(
-                    state["messages"],
+                history = self._history_before_current_question(
+                    state_messages,
                     max_messages=history_max,
-                    include_system=False,
-                    include_tool=False,
-                    drop_last=True,
                 )
                 if is_corpus_only_mode(runtime_context):
                     if response_language.lower().startswith("fr"):
@@ -559,7 +781,13 @@ class Rico(AgentFlow):
                 messages = await self.with_chat_context_text(messages)
 
                 async with self.phase("answer_no_results"):
-                    return {"messages": [await self.model.ainvoke(messages)]}
+                    llm_start = time.perf_counter()
+                    answer = cast(AIMessage, await self.model.ainvoke(messages))
+                answer = self._attach_latency_to_ai_message(
+                    answer,
+                    latency_ms=int((time.perf_counter() - llm_start) * 1000),
+                )
+                return {"messages": [answer]}
 
             # 3) Deterministic ordering + fill ranks
             hits = sort_hits(hits)
@@ -580,7 +808,7 @@ class Rico(AgentFlow):
                     len(hits),
                     before,
                 )
-            elif search_policy != "semantic":
+            elif search_policy and search_policy != "semantic":
                 logger.debug(
                     "Rico: skipping min_score filter because search_policy=%s",
                     search_policy,
@@ -591,12 +819,9 @@ class Rico(AgentFlow):
                 history_max = self.get_tuned_int(
                     "rag.history_max_messages", default=6, min_value=0
                 )
-                history = self.get_recent_history(
-                    state["messages"],
+                history = self._history_before_current_question(
+                    state_messages,
                     max_messages=history_max,
-                    include_system=False,
-                    include_tool=False,
-                    drop_last=True,
                 )
                 if is_corpus_only_mode(runtime_context):
                     no_sources_text = (
@@ -612,7 +837,12 @@ class Rico(AgentFlow):
                 messages = [sys_msg, *history, human_msg]
                 messages = await self.with_chat_context_text(messages)
                 async with self.phase("answer_no_sources"):
-                    answer = await self.model.ainvoke(messages)
+                    llm_start = time.perf_counter()
+                    answer = cast(AIMessage, await self.model.ainvoke(messages))
+                answer = self._attach_latency_to_ai_message(
+                    answer,
+                    latency_ms=int((time.perf_counter() - llm_start) * 1000),
+                )
                 return {"messages": [answer]}
 
             # 4) Build messages explicitly (no magic)
@@ -628,12 +858,9 @@ class Rico(AgentFlow):
             history_max = self.get_tuned_int(
                 "rag.history_max_messages", default=6, min_value=0
             )
-            history = self.get_recent_history(
-                state["messages"],
+            history = self._history_before_current_question(
+                state_messages,
                 max_messages=history_max,
-                include_system=False,
-                include_tool=False,
-                drop_last=True,
             )
             guardrails = ""
             if is_corpus_only_mode(runtime_context):
@@ -668,7 +895,12 @@ class Rico(AgentFlow):
                 len(human_msg.content),
             )
             async with self.phase("answer_with_sources"):
-                answer = await self.model.ainvoke(messages)
+                llm_start = time.perf_counter()
+                answer = cast(AIMessage, await self.model.ainvoke(messages))
+            answer = self._attach_latency_to_ai_message(
+                answer,
+                latency_ms=int((time.perf_counter() - llm_start) * 1000),
+            )
 
             # 6) Attach rich sources metadata for the UI
             attach_sources_to_llm_response(answer, hits)
@@ -677,18 +909,14 @@ class Rico(AgentFlow):
 
         except Exception as e:
             info = normalize_llm_exception(e)
-            hits_count = (
-                len(locals().get("hits", []))
-                if isinstance(locals().get("hits", None), list)
-                else 0
-            )
+            hits_count = len(hits)
             log_ctx = error_log_context(
                 info,
                 extra={
                     "question": question,
-                    "doc_tag_ids": locals().get("doc_tag_ids"),
-                    "search_policy": locals().get("search_policy"),
-                    "top_k": locals().get("top_k"),
+                    "doc_tag_ids": doc_tag_ids,
+                    "search_policy": search_policy,
+                    "top_k": top_k,
                     "hits_count": hits_count,
                     "exception": str(e),
                 },
@@ -712,5 +940,13 @@ class Rico(AgentFlow):
                 ),
                 default_message="An unexpected error occurred while searching documents. Please try again.",
             )
-            fallback = await self.model.ainvoke([HumanMessage(content=fallback_text)])
+            llm_start = time.perf_counter()
+            fallback = cast(
+                AIMessage,
+                await self.model.ainvoke([HumanMessage(content=fallback_text)]),
+            )
+            fallback = self._attach_latency_to_ai_message(
+                fallback,
+                latency_ms=int((time.perf_counter() - llm_start) * 1000),
+            )
             return {"messages": [fallback]}
