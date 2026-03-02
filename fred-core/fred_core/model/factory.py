@@ -321,9 +321,7 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     # --- Provider: Vertex AI Model Garden (generic) ---
     if provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
         if not cfg.name:
-            raise ValueError(
-                "Vertex AI Model Garden requires 'name' (model id)."
-            )
+            raise ValueError("Vertex AI Model Garden requires 'name' (model id).")
         _require_settings(
             settings,
             ["project", "location", "model_family"],
@@ -540,24 +538,24 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             raise ValueError(
                 "Vertex AI embeddings require 'name' (e.g., text-embedding-005)."
             )
-        _require_settings(
-            settings, ["project", "location"], "Vertex AI embeddings"
-        )
+        _require_settings(settings, ["project", "location"], "Vertex AI embeddings")
         project = str(settings.pop("project"))
         location = str(settings.pop("location"))
-        # VertexAIEmbeddings does not accept request_timeout in constructor.
+        # GoogleGenerativeAIEmbeddings does not use request_timeout directly.
         settings.pop("request_timeout", None)
+        # Force Vertex backend path (not Google AI Studio API key mode).
+        settings.setdefault("vertexai", True)
         try:
-            from langchain_google_vertexai import VertexAIEmbeddings
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
         except ImportError as e:
             raise ImportError(
-                "Provider 'vertex-ai' embeddings requires package 'langchain-google-vertexai'."
+                "Provider 'vertex-ai' embeddings requires package 'langchain-google-genai'."
             ) from e
 
         log_settings = dict(settings)
         log_settings.update({"project": project, "location": location})
         _info_provider(cfg, log_settings)
-        return VertexAIEmbeddings(
+        return GoogleGenerativeAIEmbeddings(
             model=name,
             project=project,
             location=location,
