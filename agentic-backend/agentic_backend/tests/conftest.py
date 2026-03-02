@@ -170,6 +170,12 @@ def client(app_context, monkeypatch) -> TestClient:
         async def list_agents(self, user, owner_filter=None, team_id=None):
             return list(app_context.configuration.ai.agents)
 
+        async def get_agent_by_id(self, user, agent_id):
+            for agent in app_context.configuration.ai.agents:
+                if agent.id == agent_id:
+                    return agent
+            return None
+
     monkeypatch.setattr(agent_controller, "AgentService", _FakeAgentService)
 
     # Minimal app state for dependencies that read app.state.agent_manager

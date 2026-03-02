@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
     LogStorageConfig,
@@ -187,29 +187,14 @@ class BaseAgent(BaseModel):
 class Agent(BaseAgent):
     """
     Why this subclass:
-    - Regular agents don’t own crew. They can be *selected* into a leader’s crew.
+    - Single straightforward agent settings contract.
     """
 
     type: Literal["agent"] = "agent"
 
 
-# ---------------- Leader: declares its crew (and only here) ----------------
-class Leader(BaseAgent):
-    """
-    Why this subclass:
-    - Crew membership is defined *once*, at the leader level, to avoid drift.
-    - You can include by IDs and/or by tags; optional excludes too.
-    """
-
-    type: Literal["leader"] = "leader"
-    crew: List[str] = Field(
-        default_factory=list,
-        description="IDs of agents in this leader's crew (if any).",
-    )
-
-
-# ---------------- Discriminated union for IO (YAML ⇄ DB ⇄ API) ----------------
-AgentSettings = Annotated[Union[Agent, Leader], Field(discriminator="type")]
+# ---------------- Agent settings for IO (YAML ⇄ DB ⇄ API) ----------------
+AgentSettings = Agent
 
 
 class AIConfig(BaseModel):

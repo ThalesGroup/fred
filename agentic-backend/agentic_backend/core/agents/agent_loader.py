@@ -16,15 +16,34 @@ from __future__ import annotations
 
 import importlib
 import logging
+from dataclasses import dataclass
 from typing import List, Type
 
 from agentic_backend.common.structures import (
+    AgentSettings,
     Configuration,
 )
+from agentic_backend.core.agents.agent_class_resolver import (
+    AgentImplementationKind,
+    resolve_agent_class,
+)
 from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
+from agentic_backend.core.agents.v2.catalog import (
+    apply_profile_defaults_to_settings,
+    build_definition_from_settings,
+    definition_to_agent_settings,
+    definition_to_agent_tuning,
+)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedAgentCatalogueEntry:
+    settings: AgentSettings
+    tuning: AgentTuning
 
 
 class AgentLoader:
@@ -45,14 +64,16 @@ class AgentLoader:
     # Public API
     # ---------------------------------------------------------------------
 
-    def load_static(self) -> List[AgentFlow]:
+    def load_static(self) -> List[LoadedAgentCatalogueEntry]:
         """
-        Build agents declared in configuration (enabled only), run `async_init()`,
-        and return `(instances, failed_map)`. `failed_map` contains AgentSettings
-        for static agents that failed to import/instantiate/init (so a retry loop
-        can attempt later).
+        Resolve static agent declarations into catalogue entries.
+
+        For legacy `AgentFlow`, the class instance remains the source of truth for
+        default settings and tuning.
+        For v2 definitions, we derive the current `AgentSettings` compatibility
+        view directly from the pure definition.
         """
-        instances: List[AgentFlow] = []
+        entries: List[LoadedAgentCatalogueEntry] = []
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
@@ -63,22 +84,57 @@ class AgentLoader:
                 )
                 continue
             try:
-                cls = self._import_agent_class(agent_cfg.class_path)
-                if not issubclass(cls, AgentFlow):
-                    logger.error(
-                        "Class '%s' is not AgentFlow for '%s'",
-                        agent_cfg.class_path,
-                        agent_cfg.id,
+                resolved = resolve_agent_class(agent_cfg.class_path)
+                if resolved.implementation_kind == AgentImplementationKind.FLOW:
+                    cls = self._import_agent_class(agent_cfg.class_path)
+                    inst: AgentFlow = cls(agent_settings=agent_cfg)
+                    entries.append(
+                        LoadedAgentCatalogueEntry(
+                            settings=inst.get_agent_settings(),
+                            tuning=inst.get_agent_tunings(),
+                        )
                     )
                     continue
-                inst: AgentFlow = cls(agent_settings=agent_cfg)
-                instances.append(inst)
+
+                definition = build_definition_from_settings(
+                    definition_class=resolved.cls,
+                    settings=agent_cfg,
+                )
+                effective_settings = apply_profile_defaults_to_settings(
+                    definition=definition,
+                    settings=agent_cfg,
+                )
+                derived = definition_to_agent_settings(
+                    definition,
+                    class_path=agent_cfg.class_path,
+                    enabled=agent_cfg.enabled,
+                ).model_copy(
+                    update={
+                        "id": agent_cfg.id,
+                        "name": agent_cfg.name,
+                        "team_id": agent_cfg.team_id,
+                        "enabled": agent_cfg.enabled,
+                        "metadata": agent_cfg.metadata,
+                        "chat_options": effective_settings.chat_options,
+                    }
+                )
+                effective_tuning = (
+                    effective_settings.tuning or definition_to_agent_tuning(definition)
+                )
+                entries.append(
+                    LoadedAgentCatalogueEntry(
+                        settings=derived.model_copy(
+                            update={"tuning": effective_tuning}
+                        ),
+                        tuning=effective_tuning,
+                    )
+                )
             except Exception as e:
                 logger.exception(
                     "❌ Failed to construct static agent '%s': %s", agent_cfg.id, e
                 )
 
-        return instances
+        return entries
 
     async def load_persisted(self) -> List[AgentFlow]:
         """
@@ -154,6 +210,8 @@ class AgentLoader:
         """
         module_name, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_name)
-        if class_name == "Leader":
-            raise ImportError(f"Class '{class_name}' not found in '{module_name}'")
+        if class_name in {"Leader", "LeaderFlow"}:
+            raise ImportError(
+                f"Class '{class_name}' is deprecated and no longer supported."
+            )
         return getattr(module, class_name)

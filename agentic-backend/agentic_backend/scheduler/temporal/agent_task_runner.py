@@ -27,6 +27,7 @@ from agentic_backend.application_context import (
 )
 from agentic_backend.common.config_loader import load_configuration
 from agentic_backend.common.structures import Configuration
+from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_factory import AgentFactory
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
@@ -138,6 +139,10 @@ class AgentTaskRunner:
         agent.run_config = cast(RunnableConfig, config)
 
         try:
+            if not isinstance(agent, AgentFlow):
+                raise NotImplementedError(
+                    "Temporal task execution is not wired for v2 runtimes yet."
+                )
             compiled = agent.get_compiled_graph()
 
             # --- 4. EXECUTION LOGIC (Start vs Resume) ---

@@ -14,21 +14,57 @@
 
 import asyncio
 import logging
-from typing import Dict, Optional, Tuple, cast
+from abc import abstractmethod
+from typing import Optional, Tuple, cast
 
 from fred_core import KeycloakUser
-from pyparsing import abstractmethod
 
-from agentic_backend.common.structures import AgentSettings, Configuration, Leader
+from agentic_backend.application_context import get_kpi_writer, get_pg_async_engine
+from agentic_backend.common.structures import AgentSettings, Configuration
+from agentic_backend.agents.v2 import BasicReActV2Definition
 from agentic_backend.core.agents.agent_cache import ActiveAgentCache, AgentCacheStats
+from agentic_backend.core.agents.agent_class_resolver import (
+    AgentImplementationKind,
+    resolve_agent_class,
+)
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_service import AgentService
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.leader.leader_flow import LeaderFlow
+from agentic_backend.core.agents.v2.adapters import (
+    DefaultFredChatModelFactory,
+    FredArtifactPublisher,
+    FredKnowledgeSearchToolInvoker,
+    FredMcpToolProvider,
+    FredResourceReader,
+)
+from agentic_backend.core.agents.v2.catalog import (
+    apply_react_profile_to_definition,
+    apply_profile_defaults_to_settings,
+    build_bound_runtime_context,
+    build_definition_from_settings,
+    definition_to_agent_settings,
+    instantiate_definition_class,
+)
+from agentic_backend.core.agents.v2.graph_runtime import GraphRuntime
+from agentic_backend.core.agents.v2.models import (
+    AgentDefinition,
+    GraphAgentDefinition,
+    ReActAgentDefinition,
+)
+from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
+from agentic_backend.core.agents.v2.runtime import RuntimeServices
+from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
+from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
 
 logger = logging.getLogger(__name__)
+
+RuntimeAgentInstance = AgentFlow | V2SessionAgent
+
+
+def _internal_profile_agent_id(profile_id: str) -> str:
+    return f"internal.react_profile.{profile_id}"
 
 
 class BaseAgentFactory:
@@ -39,7 +75,17 @@ class BaseAgentFactory:
         agent_id: str,
         runtime_context: RuntimeContext,
         session_id: str,
-    ) -> Tuple[AgentFlow, bool]:
+    ) -> Tuple[RuntimeAgentInstance, bool]:
+        pass
+
+    @abstractmethod
+    async def create_and_init_internal_profile(
+        self,
+        user: KeycloakUser,
+        profile_id: str,
+        runtime_context: RuntimeContext,
+        session_id: str,
+    ) -> Tuple[RuntimeAgentInstance, bool]:
         pass
 
     @abstractmethod
@@ -62,8 +108,15 @@ class BaseAgentFactory:
 class NoOpAgentFactory(BaseAgentFactory):
     async def create_and_init(
         self,
-    ) -> Tuple[AgentFlow, bool]:
+    ) -> Tuple[RuntimeAgentInstance, bool]:
         raise NotImplementedError("NoOpAgentFactory cannot create agents.")
+
+    async def create_and_init_internal_profile(
+        self,
+    ) -> Tuple[RuntimeAgentInstance, bool]:
+        raise NotImplementedError(
+            "NoOpAgentFactory cannot create internal profile agents."
+        )
 
     async def teardown_session_agents(self, session_id: str) -> None:
         pass
@@ -84,12 +137,13 @@ class AgentFactory(BaseAgentFactory):
     def __init__(
         self, configuration: Configuration, manager: AgentManager, loader: AgentLoader
     ):
-        self._agent_cache: ActiveAgentCache[Tuple[str, str], AgentFlow] = (
+        self._agent_cache: ActiveAgentCache[Tuple[str, str], RuntimeAgentInstance] = (
             ActiveAgentCache(max_size=configuration.ai.max_concurrent_agents)
         )
         self.service = AgentService(agent_manager=manager)
         self.loader = loader
         self._main_event_loop = asyncio.get_event_loop()
+        self._v2_checkpointer: FredSqlCheckpointer | None = None
 
     # ---------- Public entry point ----------
     async def create_and_init(
@@ -98,19 +152,28 @@ class AgentFactory(BaseAgentFactory):
         agent_id: str,
         runtime_context: RuntimeContext,
         session_id: str,
-    ) -> Tuple[AgentFlow, bool]:
+    ) -> Tuple[RuntimeAgentInstance, bool]:
         """
         Returns a warm agent. Reuses cache when possible; otherwise:
           1) instantiate from authoritative settings,
           2) set runtime context,
-          3) initialize runtime lifecycle (with crew when Leader).
+          3) initialize runtime lifecycle.
         """
         cache_key = (session_id, agent_id)
         cached = self._agent_cache.get(cache_key)
         if cached is not None:
             self._agent_cache.acquire(cache_key)
             # Why: tokens/context may change between requests; always refresh on reuse.
-            cached.set_runtime_context(runtime_context)
+            if isinstance(cached, AgentFlow):
+                cached.set_runtime_context(runtime_context)
+            else:
+                cached.rebind(
+                    build_bound_runtime_context(
+                        user=user,
+                        runtime_context=runtime_context,
+                        agent_id=agent_id,
+                    )
+                )
             logger.info(
                 "[AGENTS] Reusing cached agent '%s' for session '%s'",
                 agent_id,
@@ -119,15 +182,18 @@ class AgentFactory(BaseAgentFactory):
             return cached, True
 
         # Build fresh
-        settings, agent = await self._instantiate_from_settings(user, agent_id)
-        # Always apply merged settings and bind context before runtime initialization.
-        # The explicit bind keeps compatibility with legacy async_init() overrides that
-        # do not call super().async_init(...).
-        agent.apply_settings(settings)
-        agent.set_runtime_context(runtime_context)
-
-        # Initialize (Leader vs simple Agent handled here)
-        await self._initialize_agent(user, agent, settings, runtime_context)
+        settings, agent = await self._instantiate_from_settings(
+            user=user,
+            agent_id=agent_id,
+            runtime_context=runtime_context,
+        )
+        if isinstance(agent, AgentFlow):
+            # Always apply merged settings and bind context before runtime initialization.
+            # The explicit bind keeps compatibility with legacy async_init() overrides that
+            # do not call super().async_init(...).
+            agent.apply_settings(settings)
+            agent.set_runtime_context(runtime_context)
+            await self._initialize_agent(user, agent, settings, runtime_context)
 
         # Cache and return
         self._agent_cache.set(cache_key, agent)
@@ -139,11 +205,62 @@ class AgentFactory(BaseAgentFactory):
         )
         return agent, False
 
+    async def create_and_init_internal_profile(
+        self,
+        user: KeycloakUser,
+        profile_id: str,
+        runtime_context: RuntimeContext,
+        session_id: str,
+    ) -> Tuple[RuntimeAgentInstance, bool]:
+        internal_agent_id = _internal_profile_agent_id(profile_id)
+        cache_key = (session_id, internal_agent_id)
+        cached = self._agent_cache.get(cache_key)
+        if cached is not None:
+            self._agent_cache.acquire(cache_key)
+            if isinstance(cached, AgentFlow):
+                cached.set_runtime_context(runtime_context)
+            else:
+                cached.rebind(
+                    build_bound_runtime_context(
+                        user=user,
+                        runtime_context=runtime_context,
+                        agent_id=internal_agent_id,
+                    )
+                )
+            logger.info(
+                "[AGENTS] Reusing cached internal profile '%s' for session '%s'",
+                profile_id,
+                session_id,
+            )
+            return cached, True
+
+        settings, agent = await self._instantiate_from_internal_profile(
+            user=user,
+            profile_id=profile_id,
+            runtime_context=runtime_context,
+        )
+        if isinstance(agent, AgentFlow):
+            agent.apply_settings(settings)
+            agent.set_runtime_context(runtime_context)
+            await self._initialize_agent(user, agent, settings, runtime_context)
+
+        self._agent_cache.set(cache_key, agent)
+        self._agent_cache.acquire(cache_key)
+        logger.info(
+            "[AGENTS] Created and cached internal profile '%s' for session '%s'",
+            profile_id,
+            session_id,
+        )
+        return agent, False
+
     # ---------- Helpers (why-focused, no duplication) ----------
 
     async def _instantiate_from_settings(
-        self, user: KeycloakUser, agent_id: str
-    ) -> Tuple[AgentSettings, AgentFlow]:
+        self,
+        user: KeycloakUser,
+        agent_id: str,
+        runtime_context: RuntimeContext,
+    ) -> Tuple[AgentSettings, RuntimeAgentInstance]:
         """
         Why: the Manager is the single source of truth for settings/class_path.
         Keeps class loading + validation in one place.
@@ -153,9 +270,124 @@ class AgentFactory(BaseAgentFactory):
             raise ValueError(f"Agent '{agent_id}' not found in catalog.")
         if not settings.class_path:
             raise ValueError(f"Agent '{agent_id}' has no class_path defined.")
-        agent_cls = self.loader._import_agent_class(settings.class_path)
-        agent = cast(AgentFlow, agent_cls(agent_settings=settings))
-        return settings, agent
+        resolved = resolve_agent_class(settings.class_path)
+        if resolved.implementation_kind == AgentImplementationKind.FLOW:
+            agent_cls = self.loader._import_agent_class(settings.class_path)
+            agent = cast(AgentFlow, agent_cls(agent_settings=settings))
+            return settings, agent
+
+        definition = build_definition_from_settings(
+            definition_class=resolved.cls,
+            settings=settings,
+        )
+        effective_settings = apply_profile_defaults_to_settings(
+            definition=definition,
+            settings=settings,
+        )
+        if not isinstance(definition, (ReActAgentDefinition, GraphAgentDefinition)):
+            raise NotImplementedError(
+                f"V2 execution category '{definition.execution_category.value}' is not wired yet."
+            )
+
+        return effective_settings, self._build_v2_session_agent(
+            user=user,
+            runtime_context=runtime_context,
+            definition=definition,
+            effective_settings=effective_settings,
+        )
+
+    async def _instantiate_from_internal_profile(
+        self,
+        user: KeycloakUser,
+        profile_id: str,
+        runtime_context: RuntimeContext,
+    ) -> Tuple[AgentSettings, RuntimeAgentInstance]:
+        base_definition = instantiate_definition_class(BasicReActV2Definition)
+        definition = apply_react_profile_to_definition(base_definition, profile_id)
+        internal_agent_id = _internal_profile_agent_id(profile_id)
+        definition = definition.model_copy(update={"agent_id": internal_agent_id})
+        settings = definition_to_agent_settings(
+            definition,
+            class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+            enabled=True,
+        )
+        effective_settings = apply_profile_defaults_to_settings(
+            definition=definition,
+            settings=settings,
+        )
+        return effective_settings, self._build_v2_session_agent(
+            user=user,
+            runtime_context=runtime_context,
+            definition=definition,
+            effective_settings=effective_settings,
+        )
+
+    def _build_v2_session_agent(
+        self,
+        *,
+        user: KeycloakUser,
+        runtime_context: RuntimeContext,
+        definition: AgentDefinition,
+        effective_settings: AgentSettings,
+    ) -> V2SessionAgent:
+        binding = build_bound_runtime_context(
+            user=user,
+            runtime_context=runtime_context,
+            agent_id=effective_settings.id,
+        )
+        services = RuntimeServices(
+            chat_model_factory=DefaultFredChatModelFactory(),
+            tool_invoker=FredKnowledgeSearchToolInvoker(
+                binding=binding,
+                settings=effective_settings,
+            ),
+            tool_provider=FredMcpToolProvider(
+                binding=binding,
+                settings=effective_settings,
+            ),
+            artifact_publisher=FredArtifactPublisher(
+                binding=binding,
+                settings=effective_settings,
+            ),
+            resource_reader=FredResourceReader(
+                binding=binding,
+                settings=effective_settings,
+            ),
+            checkpointer=self._get_v2_checkpointer(),
+        )
+        if isinstance(definition, ReActAgentDefinition):
+            runtime = ReActRuntime(
+                definition=definition,
+                services=services,
+            )
+        elif isinstance(definition, GraphAgentDefinition):
+            runtime = GraphRuntime(
+                definition=definition,
+                services=services,
+            )
+        else:
+            raise NotImplementedError(
+                f"V2 execution category '{definition.execution_category.value}' is not wired yet."
+            )
+        runtime.bind(binding)
+        return V2SessionAgent(runtime=runtime)
+
+    def _get_v2_checkpointer(self) -> FredSqlCheckpointer:
+        """
+        Reuse one durable checkpointer across v2 runtimes.
+
+        Why this matters:
+        - checkpoints should survive executor rebuilds and process boundaries
+        - the runtime contract should not silently depend on per-agent memory
+        - Fred already owns a shared SQL engine lifecycle for durable stores
+        """
+
+        if self._v2_checkpointer is None:
+            self._v2_checkpointer = FredSqlCheckpointer(
+                get_pg_async_engine(),
+                kpi=get_kpi_writer(),
+            )
+        return self._v2_checkpointer
 
     async def _initialize_agent(
         self,
@@ -167,47 +399,9 @@ class AgentFactory(BaseAgentFactory):
         """
         Why: unify init for simple agents and leaders.
         - Simple AgentFlow: await agent.initialize_runtime(runtime_context=...)
-        - LeaderFlow: build crew once, then await leader.async_init(runtime_context, crew)
         """
-        if isinstance(agent, LeaderFlow):
-            crew = await self._build_leader_crew(
-                user, cast(Leader, settings_obj), runtime_context
-            )
-            logger.info(
-                "[AGENTS] leader='%s' async_init invoked (crew size=%d).",
-                agent.get_id(),
-                len(crew),
-            )
-            await agent.async_init(runtime_context, crew)
-            return
-
         logger.info("[AGENTS] agent='%s' initialize_runtime invoked.", agent.get_id())
         await agent.initialize_runtime(runtime_context=runtime_context)
-
-    async def _build_leader_crew(
-        self,
-        user: KeycloakUser,
-        leader_settings: Leader,
-        runtime_context: RuntimeContext,
-    ) -> Dict[str, AgentFlow]:
-        """
-        Why: leaders orchestrate expert agents. We build each expert exactly like a simple agent:
-        instantiate → apply settings → initialize runtime — then hand to the Leader.
-        """
-        crew: Dict[str, AgentFlow] = {}
-        for expert_id in leader_settings.crew:
-            expert_settings, expert = await self._instantiate_from_settings(
-                user, expert_id
-            )
-            expert.apply_settings(expert_settings)
-            # Compatibility for legacy async_init() overrides that do not call super().
-            expert.set_runtime_context(runtime_context)
-            logger.info(
-                "[AGENTS] expert='%s' initialize_runtime invoked.", expert.get_id()
-            )
-            await expert.initialize_runtime(runtime_context=runtime_context)
-            crew[expert_id] = expert
-        return crew
 
     async def teardown_session_agents(self, session_id: str) -> None:
         """
@@ -231,7 +425,9 @@ class AgentFactory(BaseAgentFactory):
                 # 2. Await cleanup directly in this current task
                 await self._execute_aclose(agent, key)
 
-    async def _execute_aclose(self, agent: AgentFlow, key: Tuple[str, str]) -> None:
+    async def _execute_aclose(
+        self, agent: RuntimeAgentInstance, key: Tuple[str, str]
+    ) -> None:
         """Helper to safely execute aclose and log the result."""
         session_id, agent_id = key
         try:

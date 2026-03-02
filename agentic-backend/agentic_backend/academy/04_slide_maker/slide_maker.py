@@ -25,7 +25,6 @@ from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.kf_workspace_client import WorkspaceRetrievalError
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
-from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     LinkKind,
     LinkPart,
@@ -85,10 +84,11 @@ class SlideMaker(AgentFlow):
     _graph: Optional[StateGraph] = None
     TARGET_PLACEHOLDER_INDEX = 1  # Hardcoded index for content insertion
 
-    async def async_init(self, runtime_context: RuntimeContext):
-        await super().async_init(runtime_context)
-        self.model = get_default_chat_model()
+    def build_runtime_structure(self) -> None:
         self._graph = self._build_graph()
+
+    async def activate_runtime(self) -> None:
+        self.model = get_default_chat_model()
 
     def _build_graph(self) -> StateGraph:
         """Sets up the two-node linear flow: plan -> render -> END."""

@@ -117,11 +117,6 @@ ai:
         search_policy_selection: false
         libraries_selection: false
         attach_files: false
-    - id: "Sammy"
-      name: "Sammy"
-      type: "agent"
-      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
-      enabled: true
     - id: "Rico"
       name: "Rico"
       type: "agent"
@@ -136,6 +131,16 @@ ai:
       metadata:
         # Deep-search delegation target
         deep_search_delegate_to: "Rico Senior"
+    - id: "Basic ReAct V2"
+      name: "Basic ReAct V2"
+      type: "agent"
+      class_path: "agentic_backend.agents.v2.basic_react.BasicReActV2Definition"
+      enabled: true
+    - id: "RAG Expert V2"
+      name: "RAG Expert V2"
+      type: "agent"
+      class_path: "agentic_backend.agents.v2.rag_expert.RagExpertV2Definition"
+      enabled: true
     - id: "Rico Senior"
       name: "Rico Senior"
       type: "agent"
@@ -152,11 +157,6 @@ ai:
       name: "Tessa"
       type: "agent"
       class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-      enabled: true
-    - id: "Travel_agent"
-      name: "Travel_agent"
-      type: "agent"
-      class_path: "agentic_backend.academy.07_travel_agent.travel_agent.Travel"
       enabled: true
     - id: "Raph"
       name: "Raph"

@@ -1,11 +1,18 @@
 # MCP Runtime & Toolkit — Dev Guide
 
+Status note:
+
+- this document is still operationally relevant
+- but examples below use the legacy `AgentFlow` shape
+- in the v2 world, MCP is increasingly consumed through runtime services such as `ToolProviderPort`, not hand-managed by each author
+
 This document explains **how to use** the `MCPRuntime`, `McpToolkit`, and the resilient tools node in our agent framework, and **why** we need these pieces to make OAuth-protected MCP servers work reliably with LLM tool-calling.
 
 ---
 
 ## TL;DR
 
+- For new work, prefer v2 agents and let Fred runtime provide MCP tools.
 - Use **`MCPRuntime`** to create and refresh the MCP client + toolkit for an agent.
 - Build graph structure in `build_runtime_structure()` and do MCP connection in `activate_runtime()`.
 - Bind tools from **`McpToolkit`** to your model.
@@ -17,6 +24,25 @@ This document explains **how to use** the `MCPRuntime`, `McpToolkit`, and the re
   - Provide **safe, rich logs** without leaking secrets.
 
 Agents should not talk directly to `MultiServerMCPClient`. They should rely on `MCPRuntime`.
+
+---
+
+## v2-first Reading
+
+If you are writing a new Fred agent, you usually should not instantiate `MCPRuntime` yourself.
+
+Preferred mental model:
+
+- authors declare tools or rely on runtime-provided MCP tools
+- Fred runtime activates MCP and binds the effective tool set
+- `ToolProviderPort` and `ToolInvokerPort` are the v2-facing seams
+
+Current v2 examples:
+
+- profile-based ReAct agents that consume UI-configured MCP servers
+- `TrackingGraphDemoDefinition`, which exercises runtime tools inside `GraphRuntime`
+
+Use direct `MCPRuntime` handling only when maintaining a legacy `AgentFlow` agent.
 
 ---
 

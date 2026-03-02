@@ -3,6 +3,24 @@
 - **Features**
 
   - HITL improvements demonstrated around a MCP use case (#1207)
+  - Add v2 ReAct profiles so a generic agent can be specialized with default prompt, MCP servers, and approval policy
+  - Allow generic v2 ReAct agents to consume UI-configured MCP tools at runtime
+  - Add a geo demo v2 profile and structured geo/link capability support for ReAct tool outputs
+  - Add the first executable GraphAgentDefinition runtime contract with typed state, node handlers, tool calls, HITL resume, and structured final output
+
+- **Improvements**
+
+  - Move default v2 agent prompts to packaged Markdown resources
+  - Move ReAct profile selection to agent creation so admins choose a starting profile or custom class up front
+  - Replace the experimental graph endpoint with a dedicated v2 inspection endpoint and model
+  - Improve MCP runtime resilience with retry and short backoff on transient connection failures
+  - Improve the debug drawer with sanitized runtime context, grouping by exchange, per-exchange copy, and local scrolling
+
+- **Bug Fixes**
+
+  - Fix duplicate assistant bubbles during streamed tool-based exchanges
+  - Fix transient duplicate user messages during optimistic send and server echo reconciliation
+  - Fix restored ReAct tool-call history so multi-turn conversations resume correctly after tool usage
 
 **v1.2.7** — 2026-02-26
 

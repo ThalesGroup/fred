@@ -186,6 +186,19 @@ def pg_async_tx():
     return get_app_context().begin_pg_transaction()
 
 
+def get_pg_async_engine():
+    """
+    Expose Fred's shared async SQL engine.
+
+    Why this helper exists:
+    - v2 runtime infrastructure such as durable checkpointing should reuse the
+      same engine lifecycle as the rest of Fred's SQL-backed stores
+    - agent code should still stay unaware of SQL infrastructure details
+    """
+
+    return get_app_context().get_pg_async_engine()
+
+
 def get_rebac_engine() -> RebacEngine:
     """Expose the shared ReBAC engine instance."""
 

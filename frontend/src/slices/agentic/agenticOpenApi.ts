@@ -19,11 +19,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
     }),
-    getAgentGraphAgenticV1AgentsAgentIdGraphGet: build.query<
-      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse,
-      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg
+    listReactAgentProfilesAgenticV1AgentsReactProfilesGet: build.query<
+      ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse,
+      ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}/graph` }),
+      query: () => ({ url: `/agentic/v1/agents/react-profiles` }),
+    }),
+    inspectV2AgentAgenticV1AgentsAgentIdInspectGet: build.query<
+      InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiResponse,
+      InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}/inspect` }),
     }),
     listDeclaredAgentClassPathsAgenticV1AgentsClassPathsGet: build.query<
       ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse,
@@ -35,7 +41,7 @@ const injectedRtkApi = api.injectEndpoints({
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentSettings }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentInput }),
     }),
     deleteAgentAgenticV1AgentsAgentIdDelete: build.mutation<
       DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse,
@@ -317,14 +323,7 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as agenticApi };
-export type ListAgentsAgenticV1AgentsGetApiResponse = /** status 200 Successful Response */ (
-  | ({
-      type: "agent";
-    } & Agent)
-  | ({
-      type: "leader";
-    } & Leader)
-)[];
+export type ListAgentsAgenticV1AgentsGetApiResponse = /** status 200 Successful Response */ Agent[];
 export type ListAgentsAgenticV1AgentsGetApiArg = {
   ownerFilter?: OwnerFilter | null;
   teamId?: string | null;
@@ -333,8 +332,12 @@ export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Suc
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   createAgentRequest: CreateAgentRequest;
 };
-export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse = /** status 200 Successful Response */ string;
-export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg = {
+export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse =
+  /** status 200 Successful Response */ ReActProfileSummary[];
+export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiArg = void;
+export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiResponse =
+  /** status 200 Successful Response */ AgentInspection;
+export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg = {
   agentId: string;
 };
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
@@ -342,13 +345,7 @@ export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg = void;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
-  agentSettings:
-    | ({
-        type: "agent";
-      } & Agent2)
-    | ({
-        type: "leader";
-      } & Leader2);
+  agentInput: Agent2;
 };
 export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse = unknown;
 export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiArg = {
@@ -632,25 +629,6 @@ export type Agent = {
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
 };
-export type Leader = {
-  id: string;
-  name: string;
-  /** Owning team id when this is a team-owned agent. */
-  team_id?: string | null;
-  enabled?: boolean;
-  class_path?: string | null;
-  tuning?: AgentTuning | null;
-  chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
-  metadata?: {
-    [key: string]: any;
-  } | null;
-  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
-  mcp_servers?: McpServerConfiguration[];
-  type?: "leader";
-  /** IDs of agents in this leader's crew (if any). */
-  crew?: string[];
-};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -667,6 +645,51 @@ export type CreateAgentRequest = {
   a2a_base_url?: string | null;
   a2a_token?: string | null;
   class_path?: string | null;
+  profile_id?: string | null;
+};
+export type ReActProfileSummary = {
+  profile_id: string;
+  title: string;
+  description: string;
+  agent_description: string;
+  tags: string[];
+};
+export type ExecutionCategory = "graph" | "react" | "proxy";
+export type ToolCapabilityRequirement = {
+  required?: boolean;
+  description?: string | null;
+  kind?: "capability";
+  capability: string;
+};
+export type ToolRefRequirement = {
+  required?: boolean;
+  description?: string | null;
+  kind?: "tool_ref";
+  tool_ref: string;
+};
+export type PreviewKind = "none" | "mermaid" | "dag" | "text";
+export type AgentPreview = {
+  kind: PreviewKind;
+  content?: string;
+  note?: string | null;
+};
+export type AgentInspection = {
+  agent_id: string;
+  role: string;
+  description: string;
+  tags?: string[];
+  fields?: FieldSpec[];
+  execution_category: ExecutionCategory;
+  tool_requirements?: (
+    | ({
+        kind: "capability";
+      } & ToolCapabilityRequirement)
+    | ({
+        kind: "tool_ref";
+      } & ToolRefRequirement)
+  )[];
+  default_mcp_servers?: McpServerRef[];
+  preview?: AgentPreview;
 };
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
@@ -693,25 +716,6 @@ export type Agent2 = {
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
-};
-export type Leader2 = {
-  id: string;
-  name: string;
-  /** Owning team id when this is a team-owned agent. */
-  team_id?: string | null;
-  enabled?: boolean;
-  class_path?: string | null;
-  tuning?: AgentTuning2 | null;
-  chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
-  metadata?: {
-    [key: string]: any;
-  } | null;
-  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
-  mcp_servers?: McpServerConfiguration[];
-  type?: "leader";
-  /** IDs of agents in this leader's crew (if any). */
-  crew?: string[];
 };
 export type SaveMcpServerRequest = {
   server: McpServerConfiguration;
@@ -914,7 +918,9 @@ export type AwaitingHumanEvent = {
       };
 };
 export type ChatAskInput = {
-  agent_id: string;
+  agent_id?: string | null;
+  internal_profile_id?: string | null;
+  internal_capability?: string | null;
   runtime_context?: RuntimeContext | null;
   access_token?: string | null;
   refresh_token?: string | null;
@@ -1243,8 +1249,10 @@ export const {
   useListAgentsAgenticV1AgentsGetQuery,
   useLazyListAgentsAgenticV1AgentsGetQuery,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
-  useGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
-  useLazyGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
+  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
+  useLazyListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
+  useInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
+  useLazyInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,

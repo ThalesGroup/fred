@@ -15,6 +15,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Autocomplete,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -23,8 +24,13 @@ import {
   FormControl,
   FormControlLabel,
   FormLabel,
+  Paper,
+  Radio,
+  RadioGroup,
+  Stack,
   Switch,
   TextField,
+  Typography,
 } from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
 import React from "react";
@@ -37,15 +43,20 @@ import {
   CreateAgentRequest,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
+  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
 } from "../../slices/agentic/agenticOpenApi";
 
 import { KeyCloakService } from "../../security/KeycloakService";
 import { useToast } from "../ToastProvider";
 
+const DEFAULT_REACT_PROFILE_ID = "generic_assistant";
+
 const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
   z.object({
     name: z.string().min(1, { message: t("validation.required") }),
     type: z.enum(["basic", "a2a_proxy"]),
+    creation_mode: z.enum(["basic", "profile", "class"]),
+    profile_id: z.string().optional(),
     a2a_base_url: z.union([
       z.literal(""),
       z
@@ -103,19 +114,29 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
     defaultValues: {
       name: "",
       type: initialType,
+      creation_mode: "basic",
+      profile_id: DEFAULT_REACT_PROFILE_ID,
       a2a_base_url: "",
       a2a_token: "",
       class_path: "",
     },
   });
   const watchType = useWatch({ control, name: "type", defaultValue: initialType });
+  const watchCreationMode = useWatch({ control, name: "creation_mode", defaultValue: "basic" });
+  const watchProfileId = useWatch({ control, name: "profile_id", defaultValue: DEFAULT_REACT_PROFILE_ID });
   const isA2aType = watchType === "a2a_proxy";
+  const isProfileCreation = !isA2aType && watchCreationMode === "profile";
+  const isClassCreation = isAdmin && !isA2aType && watchCreationMode === "class";
+  const { data: reactProfiles = [], isFetching: isProfilesLoading } = useListReactProfilesQuery(undefined, {
+    skip: isA2aType,
+  });
   const { data: declaredClassPaths = [], isFetching: isClassPathLoading } = useListDeclaredAgentClassPathsQuery(
     undefined,
     {
-      skip: !isAdmin || isA2aType,
+      skip: !isAdmin || isA2aType || !isClassCreation,
     },
   );
+  const selectedProfile = reactProfiles.find((profile) => profile.profile_id === watchProfileId) ?? null;
 
   const submit = async (data: FormData) => {
     if (data.type === "a2a_proxy" && !data.a2a_base_url) {
@@ -126,13 +147,36 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       return;
     }
 
+    if (data.type !== "a2a_proxy" && data.creation_mode === "profile" && !data.profile_id?.trim()) {
+      showError({
+        summary: t("validation.required"),
+        detail: t("agentHub.fields.profileRequired"),
+      });
+      return;
+    }
+
+    if (data.type !== "a2a_proxy" && data.creation_mode === "class" && !data.class_path?.trim()) {
+      showError({
+        summary: t("validation.required"),
+        detail: t("agentHub.fields.classPathRequired"),
+      });
+      return;
+    }
+
     const req: CreateAgentRequest = {
       name: data.name.trim(),
       type: data.type,
       team_id: teamId,
       a2a_base_url: data.type === "a2a_proxy" ? data.a2a_base_url?.trim() || undefined : undefined,
       a2a_token: data.type === "a2a_proxy" ? data.a2a_token?.trim() || undefined : undefined,
-      class_path: data.class_path?.trim() || undefined,
+      class_path:
+        data.type !== "a2a_proxy" && data.creation_mode === "class"
+          ? data.class_path?.trim() || undefined
+          : undefined,
+      profile_id:
+        data.type !== "a2a_proxy" && data.creation_mode === "profile"
+          ? data.profile_id?.trim() || undefined
+          : undefined,
     };
 
     try {
@@ -204,7 +248,127 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
               </Grid2>
             )}
 
-            {isAdmin && !isA2aType && (
+            {!isA2aType && (
+              <Grid2 size={12}>
+                <FormControl component="fieldset" fullWidth>
+                  <FormLabel component="legend">{t("agentHub.fields.creationMode")}</FormLabel>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                    {t("agentHub.fields.creationModeHelp")}
+                  </Typography>
+                  <Controller
+                    name="creation_mode"
+                    control={control}
+                    render={({ field: f }) => {
+                      const options = [
+                        {
+                          value: "basic",
+                          title: t("agentHub.fields.creationModeBasic"),
+                          description: t("agentHub.fields.creationModeBasicHelp"),
+                        },
+                        {
+                          value: "profile",
+                          title: t("agentHub.fields.creationModeProfile"),
+                          description: t("agentHub.fields.creationModeProfileHelp"),
+                        },
+                        ...(isAdmin
+                          ? [
+                              {
+                                value: "class",
+                                title: t("agentHub.fields.creationModeClass"),
+                                description: t("agentHub.fields.creationModeClassHelp"),
+                              },
+                            ]
+                          : []),
+                      ];
+
+                      return (
+                        <RadioGroup
+                          value={f.value}
+                          onChange={(event) => {
+                            f.onChange(event.target.value);
+                          }}
+                        >
+                          <Stack spacing={1.25}>
+                            {options.map((option) => {
+                              const selected = f.value === option.value;
+                              return (
+                                <Paper
+                                  key={option.value}
+                                  variant="outlined"
+                                  onClick={() => f.onChange(option.value)}
+                                  sx={{
+                                    p: 1.5,
+                                    cursor: "pointer",
+                                    borderColor: selected ? "primary.main" : "divider",
+                                    backgroundColor: selected ? "action.selected" : "background.paper",
+                                  }}
+                                >
+                                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                                    <Radio
+                                      checked={selected}
+                                      value={option.value}
+                                      onChange={(event) => f.onChange(event.target.value)}
+                                      sx={{ mt: -0.5 }}
+                                    />
+                                    <Box>
+                                      <Typography variant="subtitle2">{option.title}</Typography>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {option.description}
+                                      </Typography>
+                                    </Box>
+                                  </Stack>
+                                </Paper>
+                              );
+                            })}
+                          </Stack>
+                        </RadioGroup>
+                      );
+                    }}
+                  />
+                </FormControl>
+              </Grid2>
+            )}
+
+            {isProfileCreation && (
+              <Grid2 size={12}>
+                <Controller
+                  name="profile_id"
+                  control={control}
+                  render={({ field: f }) => (
+                    <Autocomplete
+                      options={reactProfiles}
+                      loading={isProfilesLoading}
+                      value={selectedProfile}
+                      isOptionEqualToValue={(option, value) => option.profile_id === value.profile_id}
+                      getOptionLabel={(option) => option.title}
+                      onChange={(_, value) => {
+                        f.onChange(value?.profile_id || "");
+                      }}
+                      noOptionsText={t("agentHub.fields.profileNoOptions")}
+                      renderOption={(props, option) => (
+                        <li {...props} key={option.profile_id}>
+                          <div>
+                            <div>{option.title}</div>
+                            <small>{option.description}</small>
+                          </div>
+                        </li>
+                      )}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          fullWidth
+                          size="small"
+                          label={t("agentHub.fields.profile")}
+                          helperText={selectedProfile?.agent_description || t("agentHub.fields.profileHelp")}
+                        />
+                      )}
+                    />
+                  )}
+                />
+              </Grid2>
+            )}
+
+            {isClassCreation && (
               <Grid2 size={12}>
                 <Controller
                   name="class_path"

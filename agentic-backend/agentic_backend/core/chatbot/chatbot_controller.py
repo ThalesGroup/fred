@@ -352,6 +352,23 @@ def _hydrate_runtime_context(
     return ctx
 
 
+def _authorize_internal_profile_request(
+    user: KeycloakUser, profile_id: str | None
+) -> None:
+    if not profile_id:
+        return
+    if profile_id != "log_genius":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported internal profile '{profile_id}'.",
+        )
+    if "admin" not in (user.roles or []):
+        raise HTTPException(
+            status_code=403,
+            detail="This internal capability requires admin privileges.",
+        )
+
+
 @router.websocket("/chatbot/query/ws")
 async def websocket_chatbot_question(
     websocket: WebSocket,
@@ -430,6 +447,7 @@ async def websocket_chatbot_question(
         2. Forwards StreamEvents via ws_callback
         3. Sends FinalEvent at the end
         """
+        _authorize_internal_profile_request(user, payload.internal_profile_id)
         session, final_messages = await session_orchestrator.chat_ask_websocket(
             user=user,
             callback=ws_callback,
@@ -439,6 +457,8 @@ async def websocket_chatbot_question(
             agent_id=payload.agent_id,
             runtime_context=runtime_context,
             client_exchange_id=payload.client_exchange_id,
+            internal_profile_id=payload.internal_profile_id,
+            internal_capability=payload.internal_capability,
         )
         if not await _safe_ws_send_text(
             websocket,

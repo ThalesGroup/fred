@@ -15,16 +15,16 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "info"
+  log_level: "warning"
   reload: false
   reload_dir: "."
   metrics_enabled: true
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
   # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 5
+  kpi_log_summary_interval_sec: 5.0
+  kpi_log_summary_top_n: 20
 
 scheduler:
   enabled: true
@@ -150,11 +150,6 @@ ai:
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:
-    - id: "Custodian"
-      name: "Custodian"
-      type: "agent"
-      class_path: "agentic_backend.agents.custodian.custodian.Custodian"
-      enabled: true
     - id: "Georges"
       name: "Georges"
       type: "agent"
@@ -162,11 +157,6 @@ ai:
       enabled: true
       chat_options:
         attach_files: false
-    - id: "Sammy"
-      name: "Sammy"
-      type: "agent"
-      class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
-      enabled: true
     - id: "Rico"
       name: "Rico"
       type: "agent"
@@ -178,6 +168,21 @@ ai:
         deep_search_delegate: false
         attach_files: true
         include_corpus_in_search: true # default value, set to false if you want to prevent the agent from searching in the corpus. Coupled with libraries_selection=false gives you an agent only capable of searching through attachments with a disabled widget for searching through the libraries.
+    - id: "Basic ReAct V2"
+      name: "Basic ReAct V2"
+      type: "agent"
+      class_path: "agentic_backend.agents.v2.basic_react.BasicReActV2Definition"
+      enabled: true
+    - id: "RAG Expert V2"
+      name: "RAG Expert V2"
+      type: "agent"
+      class_path: "agentic_backend.agents.v2.rag_expert.RagExpertV2Definition"
+      enabled: true
+    - id: "Tracking Graph Demo V2"
+      name: "Tracking Graph Demo V2"
+      type: "agent"
+      class_path: "agentic_backend.agents.v2.tracking_graph_demo.TrackingGraphDemoDefinition"
+      enabled: true
     - id: "Rico Senior"
       name: "Rico Senior"
       type: "agent"
@@ -225,21 +230,6 @@ ai:
       type: "agent"
       class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
       enabled: false
-    - id: "LogGenius"
-      name: "LogGenius"
-      type: "agent"
-      class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
-      enabled: true
-    - id: "BusinessAgent"
-      name: "BusinessAgent"
-      type: "agent"
-      class_path: "agentic_backend.academy.08_business_workflow.business_agent.BusinessAgent"
-      enabled: true
-    - id: "HITL"
-      name: "HITL"
-      type: "agent"
-      class_path: "agentic_backend.academy.10_human_in_the_loop.hitl_agent.HitlAgent"
-      enabled: true
     - id: "ParcelOpsAgent"
       name: "ParcelOpsAgent"
       type: "agent"

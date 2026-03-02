@@ -21,7 +21,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Uni
 
 from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import (
@@ -225,10 +225,18 @@ class ChatMetadata(BaseModel):
 
 
 class BaseWsInput(BaseModel):
-    agent_id: str
+    agent_id: str | None = None
+    internal_profile_id: str | None = None
+    internal_capability: str | None = None
     runtime_context: Optional[RuntimeContext] = None
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "BaseWsInput":
+        if not self.agent_id and not self.internal_profile_id:
+            raise ValueError("Either agent_id or internal_profile_id must be provided.")
+        return self
 
 
 class ChatAskInput(BaseWsInput):

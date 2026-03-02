@@ -17,6 +17,8 @@
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from agentic_backend.common.structures import Agent
+
 
 class TestChatbotController:
     base_payload = {
@@ -36,3 +38,35 @@ class TestChatbotController:
         flows = response.json()
         assert isinstance(flows, list)
         assert all("name" in flow for flow in flows)
+
+    def test_inspect_v2_agent_returns_structured_inspection(
+        self, client: TestClient, app_context
+    ):
+        v2_agent = Agent(
+            id="basic-v2-inspect",
+            name="Basic ReAct V2 Inspect",
+            class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+            enabled=True,
+        )
+        app_context.configuration.ai.agents.append(v2_agent)
+        try:
+            response = client.get(
+                "/agentic/v1/agents/basic-v2-inspect/inspect", headers=self.headers
+            )
+        finally:
+            app_context.configuration.ai.agents.pop()
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.json()
+        assert payload["agent_id"] == "basic-v2-inspect"
+        assert payload["execution_category"] == "react"
+        assert payload["preview"]["kind"] == "text"
+        assert "ReAct runtime" in payload["preview"]["content"]
+
+    def test_inspect_legacy_agent_is_rejected(self, client: TestClient) -> None:
+        response = client.get(
+            "/agentic/v1/agents/Georges/inspect", headers=self.headers
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "only supported for v2" in response.json()["detail"]
