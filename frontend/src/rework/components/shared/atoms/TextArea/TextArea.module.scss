@@ -1,0 +1,34 @@
+@use "src/index.scss" as *;
+
+.text-area {
+  outline: 2px solid var(--text-area-outline, transparent);
+  border: 1px solid var(--text-area-border, var(--outline-muted));
+  border-radius: var(--spacing-xs);
+  background-color: var(--surface-container-lowest);
+  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-s) var(--spacing-s);
+  width: 100%;
+  height: 100%;
+  resize: none;
+  color: var(--label-color, var(--on-surface-retreat));
+
+  @include typography("body", "large");
+
+  &:not(:disabled):hover {
+    --text-area-border: var(--outline);
+  }
+
+  &:focus {
+    --text-area-outline: var(--primary);
+  }
+
+  &:not(:disabled).error {
+    --text-area-border: var(--error);
+  }
+
+  &:not(:disabled):focus.error {
+    --text-area-outline: var(--error);
+  }
+
+  &:disabled {
+  }
+}

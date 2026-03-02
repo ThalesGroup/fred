@@ -1,11 +1,11 @@
 import styles from "./Button.module.scss";
-import { ButtonSize, ButtonVariant, Types } from "../../utils/Types.ts";
+import { ButtonSize, ButtonVariant, Type } from "../../utils/Type.ts";
 import React, { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
   children: React.ReactNode;
-  color: Types;
+  color: Type;
   variant: ButtonVariant;
   size: ButtonSize;
   icon?: IconProps;

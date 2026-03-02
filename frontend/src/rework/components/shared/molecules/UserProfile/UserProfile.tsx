@@ -14,12 +14,14 @@ export default function UserProfile() {
         <span className={styles["user-identity-name"]}>{userFullName}</span>
         <span className={styles["user-identity-id"]}>{username}</span>
       </span>
+      <span className={styles["user-settings-button"]}>
         <IconButton
           color={"primary"}
           variant={"icon"}
           size={"medium"}
           icon={{ category: "outlined", type: "Settings", filled: true }}
         />
+      </span>
     </div>
   );
 }

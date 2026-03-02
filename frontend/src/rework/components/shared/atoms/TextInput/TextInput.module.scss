@@ -1,0 +1,68 @@
+@use "src/index.scss" as *;
+
+.input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+
+  input {
+    outline: 2px solid var(--input-outline, transparent);
+    border: 1px solid var(--input-border, var(--outline-muted));
+    border-radius: var(--spacing-xs);
+    background-color: var(--surface-container-lowest);
+    padding: 0 var(--spacing-xs) 0 var(--spacing-s);
+    height: 3rem;
+
+    @include typography("body", "large");
+  }
+
+  &:not(.error) input:not(:disabled) {
+    &:hover {
+      border-color: var(--outline);
+    }
+
+    &:focus {
+      border-color: transparent;
+      --input-outline: var(--primary);
+    }
+  }
+
+  &.error input:not(:disabled) {
+    --input-border: var(--error);
+
+    &:focus {
+      --input-outline: var(--error);
+    }
+  }
+}
+
+.label {
+  color: var(--label-color, var(--on-surface-retreat));
+
+  @include typography("label", "large");
+}
+
+.hint {
+  color: var(--on-surface-retreat);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  min-height: 1.25rem;
+  @include typography("body", "medium");
+}
+
+.error .hint {
+  color: var(--error);
+}
+
+.error .label {
+  color: var(--error);
+}
+
+.disabled .label, .disabled .hint {
+  color: var(--on-surface-retreat);
+}
+
+.input:focus-within .label {
+  --label-color: var(--on-surface);
+}

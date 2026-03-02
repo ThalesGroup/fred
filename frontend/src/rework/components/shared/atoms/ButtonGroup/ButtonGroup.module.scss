@@ -1,0 +1,7 @@
+.button-group {
+  display: flex;
+  gap: var(--spacing-2xs);
+  background-color: var(--surface-container);
+  padding: var(--spacing-2xs);;
+  border-radius: var(--spacing-2xl);
+}

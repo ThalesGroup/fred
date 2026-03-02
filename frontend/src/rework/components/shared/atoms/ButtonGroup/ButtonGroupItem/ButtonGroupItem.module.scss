@@ -1,0 +1,81 @@
+@use "src/index.scss" as *;
+
+.button-group-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  padding: 0;
+  text-wrap: nowrap;
+
+  @include typography("label", "large");
+}
+
+.state-layer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--spacing-2xl);
+  background-color: var(--item-background-color, var(--surface-container));
+  padding: var(--spacing-xs);
+  height: 100%;
+}
+
+.label {
+  color: var(--label-color);
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--icon-color);
+}
+
+.btn-small {
+  height: 2rem;
+
+  &.state-layer {
+    gap: var(--spacing-2xs);
+  }
+
+  .icon {
+    font-size: 1.25rem;
+  }
+}
+
+.btn-medium {
+  height: 2.5rem;
+
+  &.state-layer {
+    gap: var(--spacing-xs);
+  }
+
+
+  .icon {
+    font-size: 1.5rem;
+  }
+}
+@each $name, $scheme in $color-schemes {
+  .btn-#{$name}:active :not(.selected).state-layer {
+    --item-background-color: #{map-get($scheme, "on-container-pressed")};
+  }
+
+  .btn-#{$name}:hover:not(:active) :not(.selected).state-layer {
+    --item-background-color: #{map-get($scheme, "on-container-hover")};
+  }
+
+  .btn-#{$name} .selected {
+    --item-background-color: #{map-get($scheme, "container")};
+  }
+
+  .btn-#{$name} .label {
+    --label-color: #{map-get($scheme, "on-container")};
+  }
+
+  .btn-#{$name} .icon {
+    --icon-color: #{map-get($scheme, "on-container")};
+  }
+}

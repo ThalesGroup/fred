@@ -1,0 +1,75 @@
+@use "src/index.scss" as *;
+
+.trigger {
+  all: unset;
+}
+
+.select-container {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+
+  &:hover {
+    --border-color: var(--outline)
+  }
+
+  &[data-state="open"] {
+    --border-color: transparent;
+    --select-outline: var(--primary);
+  }
+
+  &[data-error="true"] {
+    --border-color: transparent;
+    --select-outline: var(--error);
+  }
+
+  &[data-disabled="true"] {
+  }
+}
+
+.state-layer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--border-color, var(--outline-muted));
+  outline: 2px solid var(--select-outline, transparent);
+  border-radius: var(--spacing-xs);
+  height: 3rem;
+  background-color: var(--bg-color, var(--surface-container-lowest));
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+.label {
+  @include typography("label", "large");
+}
+
+.value {
+  @include typography("body", "large");
+}
+
+.error-message {
+  color: var(--error);
+  padding: 0 var(--spacing-xs);
+  height: 1rem;
+
+  @include typography("body", "small");
+}
+
+.menu-popover {
+  position: absolute;
+  top: anchor(bottom);
+  left: anchor(left);
+  margin: var(--spacing-3xs) 0 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: anchor-size(width);
+  overflow: visible;
+}
