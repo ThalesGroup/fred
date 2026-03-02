@@ -281,6 +281,125 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             **passthrough,
         )
 
+    # --- Provider: Vertex AI (Gemini / GenAI) ---
+    if provider == ModelProvider.VERTEX_AI.value:
+        if not cfg.name:
+            raise ValueError(
+                "Vertex AI chat requires 'name' (model id, e.g., gemini-2.5-flash)."
+            )
+        _require_settings(settings, ["project", "location"], "Vertex AI chat")
+        project = str(settings.pop("project"))
+        location = str(settings.pop("location"))
+        request_timeout = settings.pop("request_timeout", None)
+        if request_timeout is not None and "timeout" not in settings:
+            settings["timeout"] = request_timeout
+        # Force Vertex backend path (not Google AI Studio API key mode).
+        settings.setdefault("vertexai", True)
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+        except ImportError as e:
+            raise ImportError(
+                "Provider 'vertex-ai' chat requires package 'langchain-google-genai'."
+            ) from e
+
+        log_settings = dict(settings)
+        log_settings.update({"project": project, "location": location})
+        _info_provider(cfg, log_settings)
+        logger.info(
+            "[MODEL][VERTEX_AI] Constructing ChatGoogleGenerativeAI model=%s project=%s location=%s",
+            cfg.name,
+            project,
+            location,
+        )
+        return ChatGoogleGenerativeAI(
+            model=cfg.name,
+            project=project,
+            location=location,
+            **settings,
+        )
+
+    # --- Provider: Vertex AI Model Garden (generic) ---
+    if provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
+        if not cfg.name:
+            raise ValueError(
+                "Vertex AI Model Garden requires 'name' (model id)."
+            )
+        _require_settings(
+            settings,
+            ["project", "location", "model_family"],
+            "Vertex AI Model Garden chat",
+        )
+        project = str(settings.pop("project"))
+        location = str(settings.pop("location"))
+        model_family = str(settings.pop("model_family")).strip().lower()
+        request_timeout = settings.pop("request_timeout", None)
+        if request_timeout is not None and "timeout" not in settings:
+            settings["timeout"] = request_timeout
+        model_cls: Any
+        if model_family == "mistral":
+            try:
+                from langchain_google_vertexai.model_garden_maas.mistral import (
+                    VertexModelGardenMistral,
+                )
+            except ImportError as e:
+                raise ImportError(
+                    "Provider 'vertex-ai-model-garden' with model_family='mistral' requires 'langchain-google-vertexai' and 'langchain-mistralai'."
+                ) from e
+            model_cls = VertexModelGardenMistral
+        elif model_family == "llama":
+            try:
+                from langchain_google_vertexai.model_garden_maas.llama import (
+                    VertexModelGardenLlama,
+                )
+            except ImportError as e:
+                raise ImportError(
+                    "Provider 'vertex-ai-model-garden' with model_family='llama' requires package 'langchain-google-vertexai'."
+                ) from e
+            model_cls = VertexModelGardenLlama
+        elif model_family in {"anthropic", "claude"}:
+            try:
+                from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+            except ImportError as e:
+                raise ImportError(
+                    "Provider 'vertex-ai-model-garden' with model_family='anthropic' requires package 'langchain-google-vertexai'."
+                ) from e
+            model_cls = ChatAnthropicVertex
+        else:
+            raise ValueError(
+                "Unsupported model_family for 'vertex-ai-model-garden'. Supported values: mistral, llama, anthropic."
+            )
+
+        ctor_candidates: list[Dict[str, Any]] = [
+            {"model_name": cfg.name, "project": project, "location": location},
+            {"model": cfg.name, "project": project, "location": location},
+            {"model_id": cfg.name, "project": project, "location": location},
+        ]
+        log_settings = dict(settings)
+        log_settings.update(
+            {"project": project, "location": location, "model_family": model_family}
+        )
+        _info_provider(cfg, log_settings)
+        logger.info(
+            "[MODEL][VERTEX_AI_MODEL_GARDEN] Constructing %s model=%s family=%s project=%s location=%s",
+            model_cls.__name__,
+            cfg.name,
+            model_family,
+            project,
+            location,
+        )
+
+        last_error: Optional[TypeError] = None
+        for ctor_kwargs in ctor_candidates:
+            try:
+                return model_cls(**ctor_kwargs, **settings)
+            except TypeError as e:
+                last_error = e
+
+        raise TypeError(
+            "Unable to construct Vertex AI Model Garden chat model with known model kwargs "
+            "(tried model_name/model/model_id)."
+        ) from last_error
+
     # --- Provider: Ollama ---
     if provider == ModelProvider.OLLAMA.value:
         if not cfg.name:
@@ -416,6 +535,35 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             **passthrough,
         )
 
+    if provider == ModelProvider.VERTEX_AI.value:
+        if not name:
+            raise ValueError(
+                "Vertex AI embeddings require 'name' (e.g., text-embedding-005)."
+            )
+        _require_settings(
+            settings, ["project", "location"], "Vertex AI embeddings"
+        )
+        project = str(settings.pop("project"))
+        location = str(settings.pop("location"))
+        # VertexAIEmbeddings does not accept request_timeout in constructor.
+        settings.pop("request_timeout", None)
+        try:
+            from langchain_google_vertexai import VertexAIEmbeddings
+        except ImportError as e:
+            raise ImportError(
+                "Provider 'vertex-ai' embeddings requires package 'langchain-google-vertexai'."
+            ) from e
+
+        log_settings = dict(settings)
+        log_settings.update({"project": project, "location": location})
+        _info_provider(cfg, log_settings)
+        return VertexAIEmbeddings(
+            model=name,
+            project=project,
+            location=location,
+            **settings,
+        )
+
     if provider == ModelProvider.OLLAMA.value:
         if not name:
             raise ValueError("Ollama embeddings require 'name' (model).")
@@ -447,6 +595,8 @@ def get_structured_chain(schema: Type[BaseModel], model_config: ModelConfigurati
         ModelProvider.OPENAI.value,
         ModelProvider.AZURE_OPENAI.value,
         ModelProvider.AZURE_APIM.value,
+        ModelProvider.VERTEX_AI.value,
+        ModelProvider.VERTEX_AI_MODEL_GARDEN.value,
     }:
         try:
             structured = model.with_structured_output(schema, method="function_calling")

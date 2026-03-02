@@ -265,6 +265,45 @@ crossencoder_model:
 #     azure_openai_api_version: "2024-06-01"
 #     azure_tenant_id: "your-tenant-id"
 
+# chat_model:
+#   provider: vertex-ai
+#   name: gemini-2.5-flash
+#   settings:
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     temperature: 0
+#     max_retries: 2
+#     request_timeout: 90
+
+# chat_model:
+#   provider: vertex-ai-model-garden
+#   name: mistral-small-3.1-24b-instruct-2503
+#   settings:
+#     model_family: mistral # or llama / anthropic
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     temperature: 0
+#     max_retries: 2
+#     request_timeout: 90
+
+# embedding_model:
+#   provider: vertex-ai
+#   name: text-embedding-005 # or gemini-embedding-001
+#   settings:
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     max_retries: 2
+
+# vision_model:
+#   provider: vertex-ai
+#   name: gemini-2.5-flash
+#   settings:
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     temperature: 0
+#     max_retries: 2
+#     request_timeout: 90
+
 storage:
   tabular_stores:
     base_database:

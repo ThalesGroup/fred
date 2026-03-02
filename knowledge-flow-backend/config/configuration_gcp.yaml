@@ -203,17 +203,12 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
-  provider: openai
-  name: text-embedding-3-large
+  provider: vertex-ai
+  name: text-embedding-005
   settings:
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    project: your-gcp-project-id
+    location: europe-west1
+    max_retries: 2
 
 # Example embeddings alternatives:
 # embedding_model:
@@ -240,18 +235,15 @@ embedding_model:
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 chat_model:
-  provider: openai # openai | azure | azure-apim | ollama | vertex-ai | vertex-ai-model-garden
-  name: "gpt-4o-mini"
+  provider: vertex-ai-model-garden
+  name: "mistral-small-3.1-24b-instruct-2503"
   settings:
+    model_family: mistral
+    project: your-gcp-project-id
+    location: europe-west1
     temperature: 0
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    max_retries: 2
+    request_timeout: 90
 
   # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
 # chat_model:
@@ -283,18 +275,14 @@ chat_model:
 #     azure_openai_api_version: "2024-06-01"
 #     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
 vision_model:
-  provider: openai
-  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  provider: vertex-ai
+  name: gemini-2.5-flash
   settings:
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
-    temperature: 0 # optional
+    project: your-gcp-project-id
+    location: europe-west1
+    temperature: 0
+    max_retries: 2
+    request_timeout: 90
 
 # Example Vertex Google vision model (Gemini):
 # vision_model:
