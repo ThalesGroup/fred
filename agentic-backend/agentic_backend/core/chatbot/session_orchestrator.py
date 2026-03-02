@@ -48,6 +48,7 @@ from langchain_core.messages import (
 
 from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
+from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
@@ -1256,6 +1257,41 @@ class SessionOrchestrator:
                         doc_uid,
                         exc_info=True,
                     )
+        # Workspace file cleanup (files are stored under {session_id}/ prefix)
+        if access_token:
+            try:
+                ws_client = KfWorkspaceClient(access_token=access_token)
+                blobs = await ws_client.list_user_blobs(
+                    prefix=f"{session_id}/", access_token=access_token
+                )
+                blob_keys = [b["path"] for b in blobs if b.get("path")]
+                if blob_keys:
+                    results = await asyncio.gather(
+                        *(
+                            ws_client.delete_user_blob(k, access_token=access_token)
+                            for k in blob_keys
+                        ),
+                        return_exceptions=True,
+                    )
+                    for key, result in zip(blob_keys, results):
+                        if isinstance(result, Exception):
+                            logger.warning(
+                                "[SESSIONS] Failed to delete workspace file %s during session cleanup: %s",
+                                key,
+                                result,
+                            )
+                        else:
+                            logger.info(
+                                "[SESSIONS] Deleted workspace file %s (session cleanup)",
+                                key,
+                            )
+            except Exception:
+                logger.warning(
+                    "[SESSIONS] Failed to list workspace files for session %s during cleanup",
+                    session_id,
+                    exc_info=True,
+                )
+
         logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
