@@ -129,6 +129,18 @@ What you should observe:
 - tool calls appear in the conversation
 - the agent code did not need to hard-code server URLs
 
+Important distinction:
+
+- runtime-provided MCP tools are one way Fred can expose capabilities at runtime
+- but when Fred already provides a stable business tool ref, agent authors
+  should prefer that tool ref over a direct MCP dependency
+
+Example:
+
+- for standard corpus retrieval, prefer `knowledge.search`
+- do not bind a new product agent directly to `mcp-knowledge-flow-mcp-text`
+  unless the needed capability is not yet exposed by Fred as a first-class tool
+
 ### 3.4 Human Approval In ReAct
 
 What it is:
@@ -158,6 +170,13 @@ How it fits v2:
 - the agent declares a business tool, `knowledge.search`
 - tool results carry structured `sources`
 - the final message preserves them
+
+Why this matters:
+
+- the authoring contract is "this agent needs corpus retrieval"
+- not "this agent talks to this exact MCP endpoint"
+- this keeps retrieval transport-agnostic and lets Fred preserve chat-selected
+  library scope, selected documents, and knowledge mode centrally
 
 Best thing to test:
 - `RAG Expert V2`

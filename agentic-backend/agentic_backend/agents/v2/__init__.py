@@ -6,6 +6,7 @@ definition/runtime split with real agents before Fred migrates a broader fleet.
 """
 
 from .basic_react import BasicReActV2Definition
+from .bid_intake_graph import BidIntakeGraphV2Definition
 from .artifact_report_demo import ArtifactReportDemoV2Definition
 from .rag_expert import RagExpertV2Definition
 from .tracking_graph_demo import TrackingGraphDemoDefinition
@@ -13,6 +14,7 @@ from .tracking_graph_demo import TrackingGraphDemoDefinition
 __all__ = [
     "ArtifactReportDemoV2Definition",
     "BasicReActV2Definition",
+    "BidIntakeGraphV2Definition",
     "RagExpertV2Definition",
     "TrackingGraphDemoDefinition",
 ]

@@ -1,4 +1,4 @@
-# Fred Agent Authoring Guide (v2-first)
+# Fred V2 Agent Authoring Guide
 
 This document describes the authoring model Fred now wants to standardize.
 
@@ -170,6 +170,28 @@ The important rule is:
 - declare what the agent needs
 - let Fred bind how the tools are actually provided
 
+More precisely:
+
+- agent definitions should declare a stable business capability such as
+  `knowledge.search`
+- agent definitions should not hard-code a specific MCP endpoint or server id
+  when Fred already exposes that capability through a first-class tool ref
+- MCP server ids and endpoint wiring are platform/infrastructure concerns, not
+  the primary authoring contract for product agents
+
+Example:
+
+- prefer `ToolRefRequirement(tool_ref="knowledge.search")`
+- do not make the agent definition depend directly on
+  `mcp-knowledge-flow-mcp-text` just to perform standard corpus retrieval
+
+Rule of thumb:
+
+- if Fred already exposes a business tool ref, use it
+- if a needed capability exists only behind raw MCP and this starts recurring
+  across agents, treat that as pressure to elevate a new Fred capability rather
+  than copying transport details into each agent
+
 For a practical retest checklist of the current v2 world, see
 [V2_FEATURE_MAP.md](./V2_FEATURE_MAP.md).
 
@@ -190,6 +212,14 @@ Two v2 capability families are important:
 
 These are platform capabilities.
 They should not be rebuilt ad hoc inside every agent.
+
+Important clarification:
+
+- in Fred v2, HITL is not limited to "choose one option among N"
+- HITL also covers pauses where the runtime expects a free-text human reply,
+  for example a clarification request in a workflow
+- the common platform contract is: the runtime pauses, emits `awaiting_human`,
+  persists a checkpoint, then resumes with an explicit human payload
 
 ## 8. Migration Guidance
 

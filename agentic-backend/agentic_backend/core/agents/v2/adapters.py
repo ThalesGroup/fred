@@ -540,7 +540,7 @@ class FredArtifactPublisher(ArtifactPublisherPort):
             file_name=result.file_name,
             size=result.size,
             href=result.download_url,
-            document_uid=result.document_uid,
+            document_uid=_coerce_optional_string(result.document_uid),
             mime=content_type,
             title=request.title or request.file_name,
             link_kind=request.link_kind,
@@ -758,6 +758,17 @@ def _coerce_float(value: object) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _coerce_optional_string(value: object) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    if isinstance(value, int | float):
+        return None if value == 0 else str(value)
+    return str(value)
 
 
 def _summarize_geo_points(*, title: str, point_labels: list[str], count: int) -> str:

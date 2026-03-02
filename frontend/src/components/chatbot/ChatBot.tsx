@@ -1641,11 +1641,14 @@ const ChatBot = ({
       parts: [{ type: "text", text: input }],
       metadata: {
         agent_id: agent ? agent.id : currentAgent.id,
-        extras: options?.internalCapability
-          ? {
-              internal_capability: options.internalCapability,
-            }
-          : {},
+        extras: {
+          optimistic_user: true,
+          ...(options?.internalCapability
+            ? {
+                internal_capability: options.internalCapability,
+              }
+            : {}),
+        },
         runtime_context: runtimeContext ?? null,
       },
     };
@@ -1718,7 +1721,7 @@ const ChatBot = ({
   };
 
   const respondHumanInLoop = useCallback(
-    async (answerOrChoice: string | boolean, freeText?: string, eventOverride?: AwaitingHumanEvent | null) => {
+    async (answerOrChoice?: string | boolean, freeText?: string, eventOverride?: AwaitingHumanEvent | null) => {
       const target = eventOverride || pendingHitl;
       if (!target || !chatSessionId) return;
       try {
@@ -1729,21 +1732,24 @@ const ChatBot = ({
         const refreshToken = KeyCloakService.GetRefreshToken();
         const accessToken = KeyCloakService.GetToken();
         const hitlPayload = (target as any)?.payload ?? {};
+        const hasExplicitChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
         const selectedChoice =
-          typeof answerOrChoice === "string" && Array.isArray(hitlPayload?.choices)
+          hasExplicitChoices && typeof answerOrChoice === "string" && Array.isArray(hitlPayload?.choices)
             ? hitlPayload.choices.find((c: any) => c?.id === answerOrChoice)
             : undefined;
+        const normalizedFreeText = typeof freeText === "string" ? freeText.trim() || undefined : undefined;
+        const answerValue = !hasExplicitChoices && normalizedFreeText ? normalizedFreeText : answerOrChoice;
         const payload = {
           type: "human_resume",
           session_id: chatSessionId,
           exchange_id: target.exchange_id,
           payload: {
-            answer: answerOrChoice,
-            choice_id: typeof answerOrChoice === "string" ? answerOrChoice : undefined,
+            answer: answerValue,
+            choice_id: hasExplicitChoices && typeof answerOrChoice === "string" ? answerOrChoice : undefined,
             _hitl_choice_label: selectedChoice?.label,
             _hitl_title: hitlPayload?.title,
             _hitl_stage: hitlPayload?.stage,
-            text: freeText,
+            text: hasExplicitChoices ? normalizedFreeText : undefined,
             checkpoint_id: hitlPayload?.checkpoint_id,
           },
           agent_id: currentAgent?.id,
@@ -1826,14 +1832,17 @@ const ChatBot = ({
   );
 
   const handleHitlSubmit = useCallback(
-    (choiceId: string, freeText?: string) => {
+    (choiceId?: string, freeText?: string) => {
       if (!pendingHitl) return;
       const hasExplicitChoices = Boolean(pendingHitl.payload?.choices?.length);
-      let answer: string | boolean = choiceId;
       if (!hasExplicitChoices) {
-        if (choiceId === "yes") answer = true;
-        else if (choiceId === "no") answer = false;
+        respondHumanInLoop(undefined, freeText, pendingHitl);
+        return;
       }
+      if (!choiceId) return;
+      let answer: string | boolean = choiceId;
+      if (choiceId === "yes") answer = true;
+      else if (choiceId === "no") answer = false;
       respondHumanInLoop(answer, freeText, pendingHitl);
     },
     [pendingHitl, respondHumanInLoop],

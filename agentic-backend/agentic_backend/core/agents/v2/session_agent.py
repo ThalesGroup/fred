@@ -306,7 +306,7 @@ def _legacy_events_from_runtime_event(
         return [
             {
                 "__interrupt__": {
-                    "value": event.request.model_dump(mode="json", exclude_none=True),
+                    "value": _interrupt_payload_from_request(event.request),
                 }
             }
         ]
@@ -371,6 +371,15 @@ def _legacy_events_from_runtime_event(
         ]
 
     return []
+
+
+def _interrupt_payload_from_request(request: Any) -> dict[str, object]:
+    payload = request.model_dump(mode="json", exclude_none=True)
+    if payload.get("choices") == []:
+        payload.pop("choices", None)
+    if payload.get("metadata") == {}:
+        payload.pop("metadata", None)
+    return payload
 
 
 def _tool_response_metadata(event: ToolResultRuntimeEvent) -> dict[str, object]:

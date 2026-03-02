@@ -61,6 +61,8 @@ from agentic_backend.core.agents.v2.react_profiles import (
 )
 from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
 from agentic_backend.core.agents.v2.runtime import AssistantDeltaRuntimeEvent
+from agentic_backend.core.agents.v2.runtime import AwaitingHumanRuntimeEvent
+from agentic_backend.core.agents.v2.runtime import HumanInputRequest
 from agentic_backend.core.agents.v2.models import ToolRefRequirement
 from agentic_backend.core.agents.v2.session_agent import (
     V2SessionAgent,
@@ -101,6 +103,33 @@ class RecordingToolInvoker(ToolInvokerPort):
             ),
             sources=(_vector_search_hit(),),
         )
+
+
+def test_v2_session_agent_omits_empty_choices_for_free_text_interrupts() -> None:
+    legacy_events = _legacy_events_from_runtime_event(
+        AwaitingHumanRuntimeEvent(
+            request=HumanInputRequest(
+                stage="bid_intake_clarification",
+                title="Preciser les informations manquantes",
+                question="Merci de completer les informations d'offre manquantes.",
+                free_text=True,
+            )
+        ),
+        requested_modes=frozenset({"updates"}),
+    )
+
+    assert legacy_events == [
+        {
+            "__interrupt__": {
+                "value": {
+                    "stage": "bid_intake_clarification",
+                    "title": "Preciser les informations manquantes",
+                    "question": "Merci de completer les informations d'offre manquantes.",
+                    "free_text": True,
+                }
+            }
+        }
+    ]
 
 
 def _binding(session_id: str, *, agent_id: str) -> BoundRuntimeContext:

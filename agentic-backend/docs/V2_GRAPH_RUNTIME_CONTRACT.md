@@ -208,6 +208,12 @@ In a HITL turn:
 - the runtime persists a durable checkpoint with a checkpoint identity
 - the conversation history still persists the visible messages around that pause
 
+This HITL payload may represent different business shapes:
+
+- a discrete choice among explicit options
+- an approval / rejection decision
+- a free-text clarification request when the workflow needs missing information
+
 On resume:
 
 - conversation history rebuilds what the user sees and what the model should

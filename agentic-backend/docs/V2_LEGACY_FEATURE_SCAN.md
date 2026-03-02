@@ -40,6 +40,13 @@ V2 status:
 - runtime tools can come from declared `tool_requirements`
 - runtime tools can also come from MCP bindings
 
+Follow-up rule worth keeping in mind:
+
+- repeated pressure to bind new product agents directly to raw MCP endpoints is
+  often a signal that Fred is still missing a first-class business capability
+- when that pattern repeats, the better move is usually to elevate a stable tool
+  ref in v2 rather than normalizing transport details in each agent definition
+
 ### 2.2 Human in the loop
 
 Seen in legacy:

@@ -287,7 +287,7 @@ class KfWorkspaceClient(KfBaseClient):
                 key=meta.get("key", key),
                 file_name=meta.get("file_name", filename),
                 size=meta.get("size", 0),
-                document_uid=meta.get("document_uid", 0),
+                document_uid=_coerce_optional_document_uid(meta.get("document_uid")),
                 download_url=meta.get("download_url"),
             )
         except requests.exceptions.HTTPError as e:
@@ -382,3 +382,14 @@ class KfWorkspaceClient(KfBaseClient):
             access_token=access_token,
         )
         r.raise_for_status()
+
+
+def _coerce_optional_document_uid(value: object) -> Optional[str]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned if cleaned and cleaned != "0" else None
+    if isinstance(value, int | float):
+        return None if value == 0 else str(value)
+    return str(value)

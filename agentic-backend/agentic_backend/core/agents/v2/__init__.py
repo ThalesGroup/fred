@@ -29,6 +29,10 @@ from .graph_runtime import (
     GraphRuntime,
 )
 from .inspection import inspect_agent
+from .lexicon_resources import (
+    load_agent_lexicon_json,
+    load_packaged_json_object,
+)
 from .models import (
     AgentDefinition,
     AgentInspection,
@@ -181,5 +185,7 @@ __all__ = [
     "WorkspaceClientPort",
     "get_react_profile",
     "inspect_agent",
+    "load_agent_lexicon_json",
+    "load_packaged_json_object",
     "list_react_profiles",
 ]

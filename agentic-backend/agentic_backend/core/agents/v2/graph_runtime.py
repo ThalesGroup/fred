@@ -22,10 +22,13 @@ import inspect
 import json
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Protocol, cast
 
 from fred_core import VectorSearchHit
+from fred_core.kpi import BaseKPIWriter, KPIActor
+from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -114,6 +117,13 @@ class GraphNodeContext(Protocol):
 
     def emit_assistant_delta(self, delta: str) -> None: ...
 
+    async def invoke_model(
+        self,
+        messages: list[BaseMessage],
+        *,
+        operation: str = "default",
+    ) -> BaseMessage: ...
+
     async def invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
     ) -> ToolInvocationResult: ...
@@ -195,6 +205,8 @@ class _GraphNodeExecutionContext:
     services: RuntimeServices
     model: BaseChatModel | None
     workspace_client: WorkspaceClientPort | None
+    graph_agent_id: str
+    node_id: str
     allowed_tool_refs: frozenset[str]
     runtime_tools: Mapping[str, BaseTool]
     _events: list[RuntimeEvent] = field(default_factory=list)
@@ -211,6 +223,30 @@ class _GraphNodeExecutionContext:
 
     def emit_assistant_delta(self, delta: str) -> None:
         self._events.append(AssistantDeltaRuntimeEvent(sequence=0, delta=delta))
+
+    async def invoke_model(
+        self,
+        messages: list[BaseMessage],
+        *,
+        operation: str = "default",
+    ) -> BaseMessage:
+        if self.model is None:
+            raise RuntimeError("GraphRuntime requires a bound chat model.")
+
+        model_name = _resolve_model_name(self.model)
+        with _graph_phase_timer(
+            kpi=self.services.kpi,
+            binding=self.binding,
+            agent_id=self.graph_agent_id,
+            phase="v2_graph_model",
+            agent_step=f"{self.node_id}:{operation}",
+            extra_dims={
+                "node_id": self.node_id,
+                "operation": operation,
+                "model_name": model_name,
+            },
+        ):
+            return cast(BaseMessage, await self.model.ainvoke(messages))
 
     async def invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
@@ -232,13 +268,26 @@ class _GraphNodeExecutionContext:
                 arguments=payload,
             )
         )
-        result = await tool_invoker.invoke(
-            ToolInvocationRequest(
-                tool_ref=tool_ref,
-                payload=payload,
-                context=self.binding.portable_context,
+        with _graph_phase_timer(
+            kpi=self.services.kpi,
+            binding=self.binding,
+            agent_id=self.graph_agent_id,
+            phase="v2_graph_tool",
+            agent_step=f"{self.node_id}:{tool_ref}",
+            extra_dims={
+                "node_id": self.node_id,
+                "tool_name": tool_ref,
+            },
+        ) as kpi_dims:
+            result = await tool_invoker.invoke(
+                ToolInvocationRequest(
+                    tool_ref=tool_ref,
+                    payload=payload,
+                    context=self.binding.portable_context,
+                )
             )
-        )
+            if result.is_error:
+                kpi_dims["status"] = "error"
         self._events.append(
             ToolResultRuntimeEvent(
                 sequence=0,
@@ -268,30 +317,41 @@ class _GraphNodeExecutionContext:
                 arguments=arguments,
             )
         )
-        try:
-            raw_result = await tool.ainvoke(arguments)
-            normalized = _normalize_runtime_tool_output(raw_result)
-            self._events.append(
-                ToolResultRuntimeEvent(
-                    sequence=0,
-                    call_id=call_id,
-                    tool_name=tool_name,
-                    content=_stringify_content(normalized),
-                    is_error=False,
+        with _graph_phase_timer(
+            kpi=self.services.kpi,
+            binding=self.binding,
+            agent_id=self.graph_agent_id,
+            phase="v2_graph_runtime_tool",
+            agent_step=f"{self.node_id}:{tool_name}",
+            extra_dims={
+                "node_id": self.node_id,
+                "tool_name": tool_name,
+            },
+        ):
+            try:
+                raw_result = await tool.ainvoke(arguments)
+                normalized = _normalize_runtime_tool_output(raw_result)
+                self._events.append(
+                    ToolResultRuntimeEvent(
+                        sequence=0,
+                        call_id=call_id,
+                        tool_name=tool_name,
+                        content=_stringify_content(normalized),
+                        is_error=False,
+                    )
                 )
-            )
-            return normalized
-        except Exception as exc:
-            self._events.append(
-                ToolResultRuntimeEvent(
-                    sequence=0,
-                    call_id=call_id,
-                    tool_name=tool_name,
-                    content=str(exc),
-                    is_error=True,
+                return normalized
+            except Exception as exc:
+                self._events.append(
+                    ToolResultRuntimeEvent(
+                        sequence=0,
+                        call_id=call_id,
+                        tool_name=tool_name,
+                        content=str(exc),
+                        is_error=True,
+                    )
                 )
-            )
-            raise
+                raise
 
     async def publish_text(
         self,
@@ -468,41 +528,56 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 services=self._services,
                 model=self._model,
                 workspace_client=self._workspace_client,
+                graph_agent_id=self._definition.agent_id,
+                node_id=node_id,
                 allowed_tool_refs=self._allowed_tool_refs,
                 runtime_tools=self._runtime_tools,
                 _resume_payload=resume_payload,
             )
-            try:
-                raw_result = handler(state, node_context)
-                result = (
-                    await raw_result
-                    if inspect.isawaitable(raw_result)
-                    else cast(GraphNodeResult, raw_result)
-                )
-                result = GraphNodeResult.model_validate(result)
-            except _AwaitHumanInterrupt as interrupt:
-                pending_checkpoint = _PendingGraphCheckpoint(
-                    state=state,
-                    node_id=node_id,
-                    request=interrupt.request,
-                )
-                pending_checkpoint = await self._store_pending_checkpoint(
-                    checkpoint_key=checkpoint_key,
-                    config=config,
-                    pending=pending_checkpoint,
-                )
-                self._pending_checkpoints[checkpoint_key] = pending_checkpoint
-                if emit_event is not None:
-                    request = pending_checkpoint.request
-                    if pending_checkpoint.checkpoint_id is not None:
-                        request = request.model_copy(
-                            update={"checkpoint_id": pending_checkpoint.checkpoint_id}
+            with _graph_phase_timer(
+                kpi=self._services.kpi,
+                binding=self._binding,
+                agent_id=self._definition.agent_id,
+                phase="v2_graph_node",
+                agent_step=node_id,
+                extra_dims={"node_id": node_id},
+            ) as kpi_dims:
+                try:
+                    raw_result = handler(state, node_context)
+                    result = (
+                        await raw_result
+                        if inspect.isawaitable(raw_result)
+                        else cast(GraphNodeResult, raw_result)
+                    )
+                    result = GraphNodeResult.model_validate(result)
+                except _AwaitHumanInterrupt as interrupt:
+                    kpi_dims["status"] = "awaiting_human"
+                    pending_checkpoint = _PendingGraphCheckpoint(
+                        state=state,
+                        node_id=node_id,
+                        request=interrupt.request,
+                    )
+                    pending_checkpoint = await self._store_pending_checkpoint(
+                        checkpoint_key=checkpoint_key,
+                        config=config,
+                        pending=pending_checkpoint,
+                    )
+                    self._pending_checkpoints[checkpoint_key] = pending_checkpoint
+                    if emit_event is not None:
+                        request = pending_checkpoint.request
+                        if pending_checkpoint.checkpoint_id is not None:
+                            request = request.model_copy(
+                                update={
+                                    "checkpoint_id": pending_checkpoint.checkpoint_id
+                                }
+                            )
+                        emit_event(
+                            AwaitingHumanRuntimeEvent(sequence=0, request=request)
                         )
-                    emit_event(AwaitingHumanRuntimeEvent(sequence=0, request=request))
-                    return self._definition.output_model().model_construct()
-                raise RuntimeError(
-                    "Graph execution is awaiting human input. Use stream() to surface the request."
-                ) from interrupt
+                        return self._definition.output_model().model_construct()
+                    raise RuntimeError(
+                        "Graph execution is awaiting human input. Use stream() to surface the request."
+                    ) from interrupt
 
             if emit_event is not None:
                 for event in node_context.events:
@@ -952,6 +1027,42 @@ def _validated_handlers(
             )
         validated[node.node_id] = cast(GraphNodeHandler, handler)
     return validated
+
+
+def _graph_phase_timer(
+    *,
+    kpi: BaseKPIWriter | None,
+    binding: BoundRuntimeContext,
+    agent_id: str,
+    phase: str,
+    agent_step: str,
+    extra_dims: Mapping[str, str | None] | None = None,
+):
+    if kpi is None:
+        return nullcontext({})
+    dims: dict[str, str | None] = {
+        "phase": phase,
+        "agent_id": agent_id,
+        "agent_step": agent_step,
+    }
+    if extra_dims:
+        dims.update(dict(extra_dims))
+    return kpi.timer(
+        "app.phase_latency_ms",
+        dims=dims,
+        actor=KPIActor(
+            type="system",
+            groups=binding.runtime_context.user_groups,
+        ),
+    )
+
+
+def _resolve_model_name(model: BaseChatModel) -> str | None:
+    for attr_name in ("model_name", "model"):
+        raw_value = getattr(model, attr_name, None)
+        if isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+    return None
 
 
 def _merge_state(state: BaseModel, update: Mapping[str, object]) -> BaseModel:

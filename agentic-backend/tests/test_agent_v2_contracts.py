@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import cast
+import time
+from contextlib import AbstractContextManager
+from typing import Any, Callable, Iterable, Optional, cast
 
 import pytest
+from fred_core.kpi import BaseKPIWriter
+from fred_core.kpi.kpi_writer_structures import Dims, KPIActor, MetricType
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
 
 from agentic_backend.core.agents.agent_spec import FieldSpec
@@ -12,6 +18,7 @@ from agentic_backend.core.agents.v2 import (
     ArtifactPublisherPort,
     AwaitingHumanRuntimeEvent,
     BoundRuntimeContext,
+    ChatModelFactoryPort,
     ExecutionConfig,
     FetchedResource,
     FinalRuntimeEvent,
@@ -90,6 +97,173 @@ class DemoToolInvoker(ToolInvokerPort):
                 ),
             ),
         )
+
+
+class StaticChatModelFactory(ChatModelFactoryPort):
+    def __init__(self, model: FakeMessagesListChatModel) -> None:
+        self.model = model
+
+    def build(self, definition, binding: BoundRuntimeContext):  # type: ignore[override]
+        del definition, binding
+        return self.model
+
+
+class RecordingKPIWriter(BaseKPIWriter):
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    def emit(
+        self,
+        *,
+        name: str,
+        type: MetricType,
+        value: Optional[float] = None,
+        unit: Optional[str] = None,
+        dims: Optional[Dims] = None,
+        cost: Optional[dict] = None,
+        quantities: Optional[dict] = None,
+        labels: Optional[Iterable[str]] = None,
+        trace: Optional[dict] = None,
+        timestamp=None,
+        actor: KPIActor,
+    ) -> None:
+        self.events.append(
+            {
+                "name": name,
+                "type": type,
+                "value": value,
+                "unit": unit,
+                "dims": dict(dims or {}),
+                "actor": actor,
+            }
+        )
+
+    class _Timer(AbstractContextManager[Dims]):
+        def __init__(
+            self,
+            *,
+            writer: RecordingKPIWriter,
+            name: str,
+            dims: Optional[Dims],
+            unit: str,
+            actor: KPIActor,
+        ) -> None:
+            self._writer = writer
+            self._name = name
+            self._dims = dict(dims or {})
+            self._unit = unit
+            self._actor = actor
+            self._start = 0.0
+
+        def __enter__(self) -> Dims:
+            self._start = time.perf_counter()
+            return self._dims
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            if exc_type is not None and "status" not in self._dims:
+                self._dims["status"] = "error"
+            elif "status" not in self._dims:
+                self._dims["status"] = "ok"
+            elapsed_ms = (time.perf_counter() - self._start) * 1000.0
+            self._writer.emit(
+                name=self._name,
+                type="timer",
+                value=elapsed_ms if self._unit == "ms" else elapsed_ms / 1000.0,
+                unit=self._unit,
+                dims=self._dims,
+                actor=self._actor,
+            )
+            return False
+
+    def timer(
+        self,
+        name: str,
+        *,
+        dims: Optional[Dims] = None,
+        unit: str = "ms",
+        labels: Optional[Iterable[str]] = None,
+        actor: KPIActor,
+    ) -> AbstractContextManager[Dims]:
+        del labels
+        return self._Timer(
+            writer=self,
+            name=name,
+            dims=dims,
+            unit=unit,
+            actor=actor,
+        )
+
+    def timed(
+        self,
+        name: str,
+        *,
+        unit: str = "ms",
+        static_dims: Optional[Dims] = None,
+        actor: KPIActor,
+    ) -> Callable:
+        def decorator(fn: Callable) -> Callable:
+            def wrapped(*args: Any, **kwargs: Any):
+                with self.timer(name, unit=unit, dims=static_dims, actor=actor):
+                    return fn(*args, **kwargs)
+
+            return wrapped
+
+        return decorator
+
+    def count(
+        self,
+        name: str,
+        inc: int = 1,
+        *,
+        dims: Optional[Dims] = None,
+        labels: Optional[Iterable[str]] = None,
+        actor: KPIActor,
+    ) -> None:
+        del labels
+        self.emit(
+            name=name,
+            type="counter",
+            value=float(inc),
+            unit="count",
+            dims=dims,
+            actor=actor,
+        )
+
+    def gauge(
+        self,
+        name: str,
+        value: float,
+        *,
+        unit: Optional[str] = None,
+        dims: Optional[Dims] = None,
+        actor: KPIActor,
+    ) -> None:
+        self.emit(
+            name=name,
+            type="gauge",
+            value=value,
+            unit=unit,
+            dims=dims,
+            actor=actor,
+        )
+
+    def log_llm(self, **kwargs) -> None:
+        return None
+
+    def doc_used(self, **kwargs) -> None:
+        return None
+
+    def vectorization_result(self, **kwargs) -> None:
+        return None
+
+    def api_call(self, **kwargs) -> None:
+        return None
+
+    def api_error(self, **kwargs) -> None:
+        return None
+
+    def record_error(self, **kwargs) -> None:
+        return None
 
 
 class DemoArtifactPublisher(ArtifactPublisherPort):
@@ -343,6 +517,54 @@ class ResourceGraphAgent(GraphAgentDefinition):
         )
 
 
+class ModelGraphAgent(GraphAgentDefinition):
+    agent_id: str = "model.graph"
+    role: str = "model demo"
+    description: str = "Model invocation demo graph agent"
+
+    def build_graph(self) -> GraphDefinition:
+        return GraphDefinition(
+            state_model_name="DemoState",
+            entry_node="draft",
+            nodes=(GraphNodeDefinition(node_id="draft", title="Draft response"),),
+        )
+
+    def input_model(self) -> type[BaseModel]:
+        return DemoInput
+
+    def state_model(self) -> type[BaseModel]:
+        return DemoState
+
+    def output_model(self) -> type[BaseModel]:
+        return GraphExecutionOutput
+
+    def build_initial_state(
+        self, input_model: BaseModel, binding: BoundRuntimeContext
+    ) -> BaseModel:
+        del binding
+        model = cast(DemoInput, input_model)
+        return DemoState(text=model.text)
+
+    def node_handlers(self) -> dict[str, object]:
+        return {"draft": self.draft}
+
+    def build_output(self, state: BaseModel) -> BaseModel:
+        graph_state = cast(DemoState, state)
+        return GraphExecutionOutput(content=graph_state.final_text or "")
+
+    async def draft(
+        self, state: BaseModel, context: GraphNodeContext
+    ) -> GraphNodeResult:
+        graph_state = cast(DemoState, state)
+        response = await context.invoke_model(
+            [HumanMessage(content=graph_state.text)],
+            operation="draft_summary",
+        )
+        return GraphNodeResult(
+            state_update={"final_text": cast(str, getattr(response, "content", ""))}
+        )
+
+
 def _binding(session_id: str) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(session_id=session_id, user_id="user-1"),
@@ -464,6 +686,57 @@ async def test_graph_runtime_supports_tool_calls_hitl_resume_and_structured_outp
 
 
 @pytest.mark.asyncio
+async def test_graph_runtime_emits_phase_metrics_per_node_and_tool_call() -> None:
+    definition = DemoGraphAgent()
+    tool_invoker = DemoToolInvoker()
+    kpi = RecordingKPIWriter()
+    runtime = GraphRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            tool_invoker=tool_invoker,
+            kpi=kpi,
+        ),
+    )
+    runtime.bind(_binding("metrics-session"))
+
+    executor = await runtime.get_executor()
+    _ = [
+        event
+        async for event in executor.stream(
+            DemoInput(text="parcel-456"),
+            ExecutionConfig(),
+        )
+    ]
+
+    phase_events = [
+        event for event in kpi.events if event["name"] == "app.phase_latency_ms"
+    ]
+
+    assert len(phase_events) >= 3
+    assert any(
+        event["dims"].get("phase") == "v2_graph_node"
+        and event["dims"].get("agent_id") == "demo.graph"
+        and event["dims"].get("agent_step") == "lookup"
+        and event["dims"].get("status") == "ok"
+        for event in phase_events
+    )
+    assert any(
+        event["dims"].get("phase") == "v2_graph_tool"
+        and event["dims"].get("agent_id") == "demo.graph"
+        and event["dims"].get("agent_step") == "lookup:search:v1"
+        and event["dims"].get("tool_name") == "search:v1"
+        and event["dims"].get("status") == "ok"
+        for event in phase_events
+    )
+    assert any(
+        event["dims"].get("phase") == "v2_graph_node"
+        and event["dims"].get("agent_step") == "approval"
+        and event["dims"].get("status") == "awaiting_human"
+        for event in phase_events
+    )
+
+
+@pytest.mark.asyncio
 async def test_graph_runtime_fetches_agent_resources_through_typed_reader() -> None:
     resource_reader = DemoResourceReader()
     runtime = GraphRuntime(
@@ -481,3 +754,40 @@ async def test_graph_runtime_fetches_agent_resources_through_typed_reader() -> N
     assert output.content == "Loaded template: # Template"
     assert resource_reader.bind_calls == ["resource-session"]
     assert resource_reader.keys == ["report-template.md"]
+
+
+@pytest.mark.asyncio
+async def test_graph_runtime_emits_phase_metrics_for_model_invocation() -> None:
+    kpi = RecordingKPIWriter()
+    runtime = GraphRuntime(
+        definition=ModelGraphAgent(),
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(
+                FakeMessagesListChatModel(
+                    responses=[AIMessage(content="Model draft complete")]
+                )
+            ),
+            kpi=kpi,
+        ),
+    )
+    runtime.bind(_binding("model-session"))
+
+    executor = await runtime.get_executor()
+    output = await executor.invoke(
+        DemoInput(text="prepare a short summary"),
+        ExecutionConfig(),
+    )
+
+    assert output.content == "Model draft complete"
+    phase_events = [
+        event for event in kpi.events if event["name"] == "app.phase_latency_ms"
+    ]
+    assert any(
+        event["dims"].get("phase") == "v2_graph_model"
+        and event["dims"].get("agent_id") == "model.graph"
+        and event["dims"].get("agent_step") == "draft:draft_summary"
+        and event["dims"].get("node_id") == "draft"
+        and event["dims"].get("operation") == "draft_summary"
+        and event["dims"].get("status") == "ok"
+        for event in phase_events
+    )

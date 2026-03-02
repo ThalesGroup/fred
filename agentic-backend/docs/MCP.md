@@ -37,6 +37,15 @@ Preferred mental model:
 - Fred runtime activates MCP and binds the effective tool set
 - `ToolProviderPort` and `ToolInvokerPort` are the v2-facing seams
 
+Important boundary for new v2 product agents:
+
+- prefer a Fred business tool ref when one already exists, for example
+  `knowledge.search`
+- do not wire a new agent directly to a specific MCP server id or endpoint just
+  because that is the current backend implementation
+- direct MCP dependency in the authoring layer is the fallback path for
+  capabilities Fred does not yet expose cleanly
+
 Current v2 examples:
 
 - profile-based ReAct agents that consume UI-configured MCP servers

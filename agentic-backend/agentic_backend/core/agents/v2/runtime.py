@@ -24,6 +24,7 @@ from enum import Enum
 from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
 
 from fred_core import VectorSearchHit
+from fred_core.kpi import BaseKPIWriter
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
@@ -292,6 +293,7 @@ class RuntimeServices:
     artifact_publisher: ArtifactPublisherPort | None = None
     resource_reader: ResourceReaderPort | None = None
     workspace_client_factory: WorkspaceClientFactoryPort | None = None
+    kpi: BaseKPIWriter | None = None
     checkpointer: Checkpointer = None
 
 

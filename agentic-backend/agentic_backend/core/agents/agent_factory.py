@@ -353,6 +353,7 @@ class AgentFactory(BaseAgentFactory):
                 binding=binding,
                 settings=effective_settings,
             ),
+            kpi=get_kpi_writer(),
             checkpointer=self._get_v2_checkpointer(),
         )
         if isinstance(definition, ReActAgentDefinition):

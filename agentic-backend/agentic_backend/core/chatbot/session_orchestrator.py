@@ -170,6 +170,7 @@ def _build_hitl_decision_message(
     checkpoint_id = _stringify_hitl_value(resume_payload.get("checkpoint_id"))
 
     decision_display = choice_label or choice_id or answer_value
+    has_explicit_choice = bool(choice_id or choice_label)
     if not decision_display and not note_text:
         return None
 
@@ -179,13 +180,14 @@ def _build_hitl_decision_message(
     if stage:
         context_bits.append(stage)
 
+    lead_label = "Decision" if has_explicit_choice else "Response"
     if context_bits:
         decision_line = (
-            f"Decision ({' / '.join(context_bits)}): "
+            f"{lead_label} ({' / '.join(context_bits)}): "
             f"{decision_display or 'Provided input'}"
         )
     else:
-        decision_line = f"Decision: {decision_display or 'Provided input'}"
+        decision_line = f"{lead_label}: {decision_display or 'Provided input'}"
 
     if choice_id and choice_label and choice_id != choice_label:
         decision_line += f" (`{choice_id}`)"

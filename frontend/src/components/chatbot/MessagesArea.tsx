@@ -38,7 +38,7 @@ type Props = {
   chatContextNameById?: Record<string, string>;
   hiddenUserExchangeIds?: Set<string>;
   hitlEvent?: AwaitingHumanEvent | null;
-  onHitlSubmit?: (choiceId: string, freeText?: string) => void;
+  onHitlSubmit?: (choiceId?: string, freeText?: string) => void;
   onHitlCancel?: () => void;
 };
 
@@ -284,6 +284,9 @@ function Area({
     chatContextNameById,
     hiddenUserExchangeIds,
     isWaiting,
+    hitlEvent,
+    onHitlSubmit,
+    onHitlCancel,
   ]);
 
   return (

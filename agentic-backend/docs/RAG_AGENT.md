@@ -30,6 +30,17 @@ In v2, that typically means:
 - a retrieval tool such as `knowledge.search`
 - final answers that carry sources in metadata
 
+Important authoring rule:
+
+- declare retrieval through a Fred business tool ref such as `knowledge.search`
+- do not make a new v2 RAG agent depend directly on a raw MCP endpoint such as
+  `mcp-knowledge-flow-mcp-text` when the platform already exposes the retrieval
+  capability in a transport-agnostic way
+
+The point is not to hide MCP exists.
+The point is to keep the product-agent contract stable while Fred remains free
+to route that capability through the most appropriate backend integration.
+
 ## 3. Legacy RAG Agents
 
 Legacy agents such as `Rico`, `AdvancedRico`, `Aegis`, and `Archie` still exist.

@@ -5,6 +5,11 @@ const exchangeKeyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;
 
 const stableConversationKeyOf = (m: ChatMessage) => `${exchangeKeyOf(m)}|${m.role}|${m.channel}`;
 
+const isOptimisticUserMessage = (m: ChatMessage) =>
+  m.role === "user" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
+
 const hasStreamingPartialFlag = (m: ChatMessage) =>
   m.role === "assistant" &&
   m.channel === "final" &&
@@ -18,8 +23,6 @@ const shouldClearStreamingPartials = (m: ChatMessage) =>
     (m.role === "assistant" && m.channel === "final" && !hasStreamingPartialFlag(m))
   );
 
-const shouldUseStableConversationKey = (m: ChatMessage) => m.role === "user" && m.channel === "final";
-
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
   const exchangeKey = exchangeKeyOf(m);
@@ -30,7 +33,11 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
   const stableConversationKey = stableConversationKeyOf(m);
   const idx = base.findIndex((x) => {
     if (keyOf(x) === k) return true;
-    if (shouldUseStableConversationKey(m) && shouldUseStableConversationKey(x)) {
+    if (
+      isOptimisticUserMessage(x) &&
+      m.role === "user" &&
+      m.channel === "final"
+    ) {
       return stableConversationKeyOf(x) === stableConversationKey;
     }
     return false;
@@ -53,9 +60,11 @@ export const sortMessages = (arr: ChatMessage[]) =>
   });
 
 export const mergeAuthoritative = (existing: ChatMessage[], finals: ChatMessage[]) => {
-  const authoritativeExchangeKeys = new Set(finals.map(exchangeKeyOf));
-  const preserved = existing.filter((m) => !authoritativeExchangeKeys.has(exchangeKeyOf(m)));
-  return sortMessages([...preserved, ...finals]);
+  let merged = [...existing];
+  for (const msg of finals) {
+    merged = upsertOne(merged, msg);
+  }
+  return sortMessages(merged);
 };
 
 // Convert http(s) API base to ws(s) chat endpoint reliably

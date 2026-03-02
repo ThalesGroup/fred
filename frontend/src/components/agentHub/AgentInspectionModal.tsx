@@ -1,7 +1,6 @@
 import CloseIcon from "@mui/icons-material/Close";
 import InsightsIcon from "@mui/icons-material/Insights";
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
-import RouteIcon from "@mui/icons-material/Route";
 import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
 import {
   Alert,
@@ -10,7 +9,6 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  Divider,
   Grid,
   IconButton,
   Stack,
@@ -28,13 +26,6 @@ interface AgentInspectionModalProps {
   open: boolean;
   onClose: () => void;
 }
-
-const PREVIEW_LABEL: Record<string, string> = {
-  none: "No preview",
-  text: "Text preview",
-  mermaid: "Structural preview",
-  dag: "DAG preview",
-};
 
 const EXECUTION_LABEL: Record<string, string> = {
   react: "ReAct runtime",
@@ -89,7 +80,6 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
     }
   }, [open, agent, triggerGetInspection]);
 
-  const preview = inspection?.preview;
   const tags = inspection?.tags ?? [];
   const fields = inspection?.fields ?? [];
   const tools = inspection?.tool_requirements ?? [];
@@ -161,7 +151,6 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
                 </Typography>
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                   <Chip size="small" label={EXECUTION_LABEL[inspection.execution_category] ?? inspection.execution_category} />
-                  <Chip size="small" variant="outlined" label={PREVIEW_LABEL[preview?.kind ?? "none"]} />
                   {tags.map((tag) => (
                     <Chip key={tag} size="small" variant="outlined" label={tag} />
                   ))}
@@ -219,7 +208,7 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
 
                       {defaultMcpServers.length > 0 && (
                         <>
-                          {tools.length > 0 && <Divider />}
+                          {tools.length > 0 && <Box sx={{ borderTop: (theme) => `1px solid ${theme.palette.divider}` }} />}
                           <Stack spacing={1}>
                             <Typography variant="caption" color="text.secondary">
                               Default MCP servers
@@ -244,40 +233,6 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
                 </Section>
               </Grid>
 
-              <Grid item xs={12}>
-                <Section icon={<RouteIcon fontSize="small" color="primary" />} title="Preview">
-                  {preview?.content ? (
-                    <Box
-                      component="pre"
-                      sx={{
-                        m: 0,
-                        p: 2,
-                        borderRadius: 1.5,
-                        bgcolor: (theme) =>
-                          theme.palette.mode === "dark"
-                            ? alpha(theme.palette.common.black, 0.36)
-                            : alpha(theme.palette.common.white, 0.9),
-                        border: (theme) => `1px solid ${theme.palette.divider}`,
-                        overflow: "auto",
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                        fontSize: 13,
-                        fontFamily:
-                          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                      }}
-                    >
-                      {preview.content}
-                    </Box>
-                  ) : (
-                    <EmptyState text={preview?.note || "No preview is available for this definition."} />
-                  )}
-                  {preview?.kind === "mermaid" && (
-                    <Typography variant="caption" color="text.secondary">
-                      Mermaid is shown as a structural preview only. This UI no longer renders agent graphs directly.
-                    </Typography>
-                  )}
-                </Section>
-              </Grid>
             </Grid>
           </Stack>
         )}

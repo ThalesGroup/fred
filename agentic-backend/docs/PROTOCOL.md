@@ -139,6 +139,24 @@ Partial assistant streaming uses:
 
 This event is emitted when the runtime pauses for HITL.
 
+The payload is not limited to multiple-choice decisions.
+It may also represent a free-text clarification, for example:
+
+```json
+{
+  "type": "awaiting_human",
+  "session_id": "session-123",
+  "exchange_id": "exchange-123",
+  "payload": {
+    "stage": "bid_intake_clarification",
+    "title": "Preciser les informations manquantes",
+    "question": "Merci de repondre en texte libre avec les informations que vous connaissez.",
+    "free_text": true,
+    "checkpoint_id": "ckpt-123"
+  }
+}
+```
+
 ### 2.4 `final`
 
 ```json
