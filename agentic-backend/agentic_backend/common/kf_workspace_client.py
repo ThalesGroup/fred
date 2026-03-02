@@ -74,9 +74,16 @@ class KfWorkspaceClient(KfBaseClient):
     3) Agent per-user notes (agent-private, per end-user): `fetch_agent_user_*`, `upload_agent_user_file`, `delete_agent_user_file`.
     """
 
-    def __init__(self, agent: "AgentFlow"):
+    def __init__(
+        self,
+        agent: Optional["AgentFlow"] = None,
+        *,
+        access_token: Optional[str] = None,
+    ):
         super().__init__(
-            agent=agent, allowed_methods=frozenset({"GET", "POST", "DELETE"})
+            agent=agent,
+            access_token=access_token,
+            allowed_methods=frozenset({"GET", "POST", "DELETE"}),
         )
 
     # ---------------- Path helpers (dedicated) ----------------
@@ -345,6 +352,20 @@ class KfWorkspaceClient(KfBaseClient):
         """Déposer une note privée pour un utilisateur spécifique (carnet de l'agent)."""
         path = self._path_agent_user_upload(agent_id, target_user_id)
         return await self._upload_blob(path, key, file_content, filename, content_type)
+
+    async def list_user_blobs(
+        self, prefix: str = "", access_token: Optional[str] = None
+    ) -> list[dict]:
+        """List files in the user's storage, optionally filtered by prefix."""
+        r = await self._request_with_token_refresh(
+            "GET",
+            "/storage/user",
+            phase_name="kf_workspace_list_user",
+            params={"prefix": prefix} if prefix else None,
+            access_token=access_token,
+        )
+        r.raise_for_status()
+        return r.json()
 
     async def delete_user_blob(self, key: str, access_token: str) -> None:
         """Supprimer un fichier côté espace utilisateur."""
