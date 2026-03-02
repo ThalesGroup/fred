@@ -14,9 +14,9 @@
 
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import TerminalIcon from "@mui/icons-material/Terminal";
-import { Box, Chip, Collapse, IconButton, ListItemButton, Stack, Typography } from "@mui/material";
+import { Box, Chip, IconButton, ListItemButton, Stack, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import React, { useState } from "react";
+import React from "react";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import type { Channel, ChatMessage } from "../../slices/agentic/agenticOpenApi";
 
@@ -74,7 +74,6 @@ export default function ReasoningStepBadge({
 }) {
   const theme = useTheme();
   const color = channelColor(m.channel);
-  const [expanded, setExpanded] = useState(false);
 
   const baseAccent = (() => {
     switch (color) {
@@ -124,12 +123,10 @@ export default function ReasoningStepBadge({
         ? "warning"
         : "default";
 
-  const toggleExpanded = () => setExpanded((prev) => !prev);
-
   return (
     <ListItemButton
       component="div"
-      onClick={toggleExpanded}
+      onClick={onToggleDetails}
       disableRipple
       disableTouchRipple
       sx={{
@@ -193,7 +190,7 @@ export default function ReasoningStepBadge({
       </Box>
 
       <Stack spacing={0.75} sx={{ minWidth: 0, flex: 1, pr: 1 }}>
-        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" sx={{ opacity: 0.95 }}>
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="nowrap" sx={{ opacity: 0.95, minWidth: 0 }}>
           <Chip label={chipChannel} size="small" variant="outlined" color={color} sx={{ fontWeight: 600 }} />
           {toolName && (
             <Chip
@@ -218,67 +215,60 @@ export default function ReasoningStepBadge({
               sx={{ fontWeight: 600, textTransform: "lowercase" }}
             />
           )}
+          {chipTask && chipTask !== chipNode && <Chip label={chipTask} size="small" />}
+          {primaryText && (
+            <SimpleTooltip
+              title={primaryTooltip ?? ""}
+              // ATTENTION enterTouchDelay={0}
+              //disableHoverListener={!primaryTooltip}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  minWidth: 0,
+                  flex: 1,
+                  fontWeight: 500,
+                  color: theme.palette.text.primary,
+                  whiteSpace: "nowrap",
+                  textOverflow: "ellipsis",
+                  overflow: "hidden",
+                  pl: 0.5,
+                }}
+              >
+                {primaryText}
+              </Typography>
+            </SimpleTooltip>
+          )}
         </Stack>
 
-        {(primaryText || secondaryText) && (
-          <Collapse in={expanded} timeout="auto" unmountOnExit sx={{ minWidth: 0 }}>
-            <Stack direction="column" spacing={0.75} sx={{ minWidth: 0, pr: 1 }}>
-              {chipTask && chipTask !== chipNode && (
-                <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
-                  <Chip label={chipTask} size="small" />
-                </Stack>
-              )}
-              {primaryText && (
-                <SimpleTooltip
-                  title={primaryTooltip ?? ""}
-                  // ATTENTION enterTouchDelay={0}
-                  //disableHoverListener={!primaryTooltip}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      minWidth: 0,
-                      maxWidth: "100%",
-                      fontWeight: 500,
-                      color: theme.palette.text.primary,
-                      whiteSpace: "nowrap",
-                      textOverflow: "ellipsis",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {primaryText}
-                  </Typography>
-                </SimpleTooltip>
-              )}
-              {secondaryText && (
-                <SimpleTooltip
-                  title={secondaryTooltip ?? ""}
-                  // ATTENTION enterTouchDelay={0}
-                  // disableHoverListener={!secondaryTooltip}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      minWidth: 0,
-                      maxWidth: "100%",
-                      color:
-                        typeof resultOk === "undefined"
-                          ? theme.palette.text.secondary
-                          : resultOk
-                            ? theme.palette.success.dark
-                            : theme.palette.error.main,
-                      fontWeight: resultOk === false ? 600 : 500,
-                      whiteSpace: "nowrap",
-                      textOverflow: "ellipsis",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {secondaryText}
-                  </Typography>
-                </SimpleTooltip>
-              )}
-            </Stack>
-          </Collapse>
+        {secondaryText && (
+          <Stack direction="column" spacing={0.75} sx={{ minWidth: 0, pr: 1 }}>
+            <SimpleTooltip
+              title={secondaryTooltip ?? ""}
+              // ATTENTION enterTouchDelay={0}
+              // disableHoverListener={!secondaryTooltip}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  minWidth: 0,
+                  maxWidth: "100%",
+                  color:
+                    typeof resultOk === "undefined"
+                      ? theme.palette.text.secondary
+                      : resultOk
+                        ? theme.palette.success.dark
+                        : theme.palette.error.main,
+                  fontWeight: resultOk === false ? 600 : 500,
+                  whiteSpace: "nowrap",
+                  textOverflow: "ellipsis",
+                  overflow: "hidden",
+                }}
+              >
+                {secondaryText}
+              </Typography>
+            </SimpleTooltip>
+          </Stack>
         )}
       </Stack>
 

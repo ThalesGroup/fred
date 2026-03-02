@@ -17,7 +17,7 @@ import mermaid from "mermaid";
 import { Box, IconButton, Modal } from "@mui/material";
 import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import SaveIcon from "@mui/icons-material/Save";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 
 interface MermaidProps {
   code: string;
@@ -27,6 +27,8 @@ interface MermaidRenderCandidate {
   name: string;
   code: string;
 }
+
+type PaletteMode = "light" | "dark";
 
 const uniqueCandidates = (candidates: MermaidRenderCandidate[]): MermaidRenderCandidate[] => {
   const seen = new Set<string>();
@@ -45,6 +47,58 @@ const toErrorMessage = (err: unknown): string => {
   } catch {
     return "Unknown Mermaid render error";
   }
+};
+
+const parseSvgLength = (value: string | null): number | null => {
+  if (!value) return null;
+  const match = value.trim().match(/^([0-9]*\.?[0-9]+)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const replaceOrAppendClassDef = (code: string, className: string, classDefLine: string): string => {
+  const re = new RegExp(`^\\s*classDef\\s+${className}\\b.*$`, "m");
+  if (re.test(code)) return code.replace(re, classDefLine);
+  return `${code.trimEnd()}\n${classDefLine}\n`;
+};
+
+const applyLangGraphContrastOverrides = (code: string, paletteMode: PaletteMode): string => {
+  // LangGraph draw_mermaid() commonly emits these class defs with pastel fills.
+  // In dark UI mode, Mermaid's dark-theme text can become too light on those pale nodes.
+  const looksLikeLangGraph =
+    code.includes("__start__") &&
+    /classDef\s+default\b/.test(code) &&
+    /classDef\s+first\b/.test(code) &&
+    /classDef\s+last\b/.test(code);
+
+  if (!looksLikeLangGraph) return code;
+
+  const defs =
+    paletteMode === "dark"
+      ? {
+          // Light nodes + dark text for readability in dark-mode UI
+          default:
+            "classDef default fill:#f8fafc,stroke:#64748b,stroke-width:1.25px,color:#0f172a,line-height:1.2",
+          // Start node is transparent in LangGraph style; keep it visible on dark background
+          first:
+            "classDef first fill-opacity:0,stroke:#cbd5e1,stroke-width:1px,color:#e5e7eb",
+          // End node accent with readable dark text
+          last: "classDef last fill:#93c5fd,stroke:#2563eb,stroke-width:1.25px,color:#0f172a",
+        }
+      : {
+          default:
+            "classDef default fill:#ffffff,stroke:#475569,stroke-width:1.25px,color:#111827,line-height:1.2",
+          first:
+            "classDef first fill-opacity:0,stroke:#94a3b8,stroke-width:1px,color:#334155",
+          last: "classDef last fill:#dbeafe,stroke:#2563eb,stroke-width:1.25px,color:#111827",
+        };
+
+  let out = code;
+  out = replaceOrAppendClassDef(out, "default", defs.default);
+  out = replaceOrAppendClassDef(out, "first", defs.first);
+  out = replaceOrAppendClassDef(out, "last", defs.last);
+  return out;
 };
 
 const cleanupMermaidArtifacts = (diagramId: string) => {
@@ -91,7 +145,10 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   const generatedDiagramId = diagramIdRef.current;
   const activeSvgUrlRef = useRef<string | null>(null);
   const theme = useTheme();
-  const baseCode = code.replace(/^mermaid\s*\n/i, "").trim();
+  const baseCode = applyLangGraphContrastOverrides(
+    code.replace(/^mermaid\s*\n/i, "").trim(),
+    theme.palette.mode === "dark" ? "dark" : "light"
+  );
 
   // Store the SVG data URI in state (via Blob URL, not innerHTML)
   const [svgSrc, setSvgSrc] = useState<string | null>(null);
@@ -126,6 +183,11 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
           { name: "legacyQuoted", code: quoted },
         ];
     const renderCandidates = uniqueCandidates(orderedCandidates);
+    const flowEdgeColor =
+      theme.palette.mode === "dark"
+        ? alpha(theme.palette.common.white, 0.72)
+        : alpha(theme.palette.text.primary, 0.5);
+    const flowEdgeWidth = theme.palette.mode === "dark" ? 2.1 : 1.8;
 
     // Initialize Mermaid with theme-aware colors for readability
     mermaid.initialize({
@@ -136,11 +198,30 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
       themeVariables: {
         primaryColor: theme.palette.primary.main,
         primaryTextColor: theme.palette.getContrastText(theme.palette.primary.main),
-        lineColor: theme.palette.divider,
+        textColor: theme.palette.text.primary,
+        lineColor: flowEdgeColor,
         background: theme.palette.background.paper,
+        mainBkg: theme.palette.background.paper,
+        primaryBorderColor: flowEdgeColor,
+        edgeLabelBackground: theme.palette.background.paper,
         noteBkgColor: theme.palette.background.paper,
         noteTextColor: theme.palette.text.primary,
       },
+      themeCSS: `
+        .edgePath .path,
+        path.flowchart-link,
+        .flowchart-link,
+        path.path {
+          stroke: ${flowEdgeColor} !important;
+          stroke-width: ${flowEdgeWidth}px !important;
+        }
+
+        .arrowheadPath,
+        .marker path {
+          stroke: ${flowEdgeColor} !important;
+          fill: ${flowEdgeColor} !important;
+        }
+      `,
     } as any);
 
     const tryRender = async () => {
@@ -177,22 +258,26 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         console.info("[Mermaid] render success strategy=", strategy);
 
         // Make the SVG responsive: strip fixed width/height, keep viewBox if present
-        let responsiveSvg = result.svg;
+        let responsiveSvg = result.svg.replace(/&nbsp;/g, "&#160;");
         try {
           const parser = new DOMParser();
-          const doc = parser.parseFromString(result.svg, "image/svg+xml");
+          const doc = parser.parseFromString(responsiveSvg, "image/svg+xml");
+          const parserError = doc.querySelector("parsererror");
+          if (parserError || doc.documentElement?.nodeName?.toLowerCase() === "parsererror") {
+            throw new Error("SVG XML parse error during Mermaid post-processing");
+          }
           const svgEl = doc.documentElement;
+          const originalWidth = svgEl.getAttribute("width");
+          const originalHeight = svgEl.getAttribute("height");
+          const hasViewBox = svgEl.hasAttribute("viewBox");
+          const originalWidthNum = parseSvgLength(originalWidth);
+          const originalHeightNum = parseSvgLength(originalHeight);
           svgEl.removeAttribute("width");
           svgEl.removeAttribute("height");
-          if (!svgEl.getAttribute("viewBox") && svgEl.hasAttribute("width") && svgEl.hasAttribute("height")) {
-            const w = svgEl.getAttribute("width");
-            const h = svgEl.getAttribute("height");
-            if (w && h) {
-              svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
-            }
+          if (!hasViewBox && originalWidthNum && originalHeightNum) {
+            svgEl.setAttribute("viewBox", `0 0 ${originalWidthNum} ${originalHeightNum}`);
           }
-          svgEl.setAttribute("width", "100%");
-          svgEl.setAttribute("height", "auto");
+          svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
           const serializer = new XMLSerializer();
           responsiveSvg = serializer.serializeToString(svgEl);
         } catch (e) {
@@ -261,6 +346,19 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
 
   const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
+  const previewMaxHeight = "60vh";
+  const previewSurfaceBg =
+    theme.palette.mode === "dark"
+      ? theme.palette.background.paper
+      : theme.palette.background.paper;
+  const previewSurfaceBorder =
+    theme.palette.mode === "dark"
+      ? `1px solid ${alpha(theme.palette.common.white, 0.14)}`
+      : `1px solid ${alpha(theme.palette.common.black, 0.12)}`;
+  const toolbarBg =
+    theme.palette.mode === "dark"
+      ? alpha(theme.palette.common.black, 0.38)
+      : alpha(theme.palette.background.paper, 0.9);
 
   // Save the SVG by creating an <a> link and triggering a download
   const handleSaveSvg = () => {
@@ -274,74 +372,118 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
 
   return (
     <>
-      {/* Only show buttons if we have a valid SVG to display */}
-      {svgSrc && (
-        <>
-          <IconButton onClick={handleOpenModal}>
-            <ZoomInIcon />
-          </IconButton>
-          <IconButton onClick={handleSaveSvg}>
-            <SaveIcon />
-          </IconButton>
-        </>
-      )}
-
       <Box
         id={`${generatedDiagramId}-box-container`}
         style={{
           width: "100%",
           maxWidth: "100%",
+          maxHeight: previewMaxHeight,
           overflow: "hidden",
           position: "relative",
-          border: "1px solid rgba(0,0,0,0.08)",
+          background: previewSurfaceBg,
+          border: previewSurfaceBorder,
           borderRadius: 8,
-          padding: 8,
+          padding: 10,
           boxSizing: "border-box",
-          margin: "8px 0",
+          margin: 0,
           display: "flex",
-          justifyContent: "center",
+          flexDirection: "column",
         }}
       >
-        {svgSrc ? (
-          <img
-            src={svgSrc}
-            alt="Mermaid Diagram"
-            style={{ display: "block", maxWidth: "100%", height: "auto", margin: 0 }}
-          />
-        ) : error ? (
-          <Box style={{ width: "100%" }}>
-            <p style={{ color: "#d32f2f", fontStyle: "italic", marginTop: 0 }}>{error}</p>
-            {errorDetails && (
-              <p style={{ color: "#b71c1c", opacity: 0.9, marginTop: 4, marginBottom: 8 }}>
-                {errorDetails}
-              </p>
-            )}
-            <p style={{ opacity: 0.8, marginTop: 0, marginBottom: 6 }}>
-              Fallback: showing Mermaid source code
-            </p>
+        {svgSrc && (
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 0.5,
+              mb: 1,
+            }}
+          >
             <Box
-              component="pre"
               sx={{
-                m: 0,
-                p: 1.5,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                bgcolor: "background.default",
-                color: "text.primary",
-                overflowX: "auto",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontFamily: "monospace",
-                fontSize: "0.85rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.25,
+                p: 0.25,
+                borderRadius: 999,
+                bgcolor: toolbarBg,
+                border: (theme) =>
+                  `1px solid ${
+                    theme.palette.mode === "dark"
+                      ? alpha(theme.palette.common.white, 0.06)
+                      : theme.palette.divider
+                  }`,
+                backdropFilter: "blur(6px)",
               }}
             >
-              {baseCode}
+              <IconButton onClick={handleOpenModal} size="small">
+                <ZoomInIcon fontSize="small" />
+              </IconButton>
+              <IconButton onClick={handleSaveSvg} size="small">
+                <SaveIcon fontSize="small" />
+              </IconButton>
             </Box>
           </Box>
-        ) : (
-          <p style={{ opacity: 0.7 }}>{loading ? "Loading diagram..." : "Diagram unavailable"}</p>
         )}
+
+        <Box
+          sx={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 0,
+          }}
+        >
+          {svgSrc ? (
+            <img
+              src={svgSrc}
+              alt="Mermaid Diagram"
+              style={{
+                display: "block",
+                width: "100%",
+                maxWidth: "100%",
+                maxHeight: "calc(60vh - 48px)",
+                height: "auto",
+                objectFit: "contain",
+                margin: 0,
+              }}
+            />
+          ) : error ? (
+            <Box style={{ width: "100%" }}>
+              <p style={{ color: "#d32f2f", fontStyle: "italic", marginTop: 0 }}>{error}</p>
+              {errorDetails && (
+                <p style={{ color: "#b71c1c", opacity: 0.9, marginTop: 4, marginBottom: 8 }}>
+                  {errorDetails}
+                </p>
+              )}
+              <p style={{ opacity: 0.8, marginTop: 0, marginBottom: 6 }}>
+                Fallback: showing Mermaid source code
+              </p>
+              <Box
+                component="pre"
+                sx={{
+                  m: 0,
+                  p: 1.5,
+                  borderRadius: 1,
+                  border: "1px solid",
+                  borderColor: "divider",
+                  bgcolor: "background.default",
+                  color: "text.primary",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontFamily: "monospace",
+                  fontSize: "0.85rem",
+                }}
+              >
+                {baseCode}
+              </Box>
+            </Box>
+          ) : (
+            <p style={{ opacity: 0.7 }}>{loading ? "Loading diagram..." : "Diagram unavailable"}</p>
+          )}
+        </Box>
       </Box>
 
       <Modal open={isModalOpen} onClose={handleCloseModal}>
@@ -380,4 +522,5 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   );
 };
 
+export { Mermaid };
 export default Mermaid;

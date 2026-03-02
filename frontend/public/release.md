@@ -1,3 +1,25 @@
+**Unrelease** — 2026-XX-XX
+
+- **Features**
+
+  - HITL improvements demonstrated around a MCP use case (#1207)
+
+**v1.2.7** — 2026-02-26
+
+- **Summary**
+
+  This release focuses on reliability and security. Mermaid diagram rendering has been significantly improved with robust error handling and clean fallbacks. Vector search security is tightened so agents only access vectors they are authorized to see.
+
+- **Improvements**
+
+  - Improve Mermaid diagram rendering with clean fallback and scoped HTML checks (#1206,#1211)
+  - Create a proper KF markdown media client method and fix sync function calls (#1214)
+
+- **Bug Fixes**
+
+  - Fix vector search returning all vectors when agent has no authorized tags (#1225)
+  - Fix editor permission to receive ingestion updates (#1212)
+
 **v1.2.6** — 2026-02-22
 
 - **Summary**

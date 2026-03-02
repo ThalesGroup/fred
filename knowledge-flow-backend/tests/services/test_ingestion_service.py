@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 
 import pytest
 from fred_core import KeycloakUser
@@ -39,27 +40,34 @@ def test_user():
     return KeycloakUser(uid="test-user", username="testuser", email="testuser@localhost", roles=["admin"], groups=["admins"])
 
 
-async def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
+def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
     service = IngestionService()
 
     # 🔍 Extract metadata
-    metadata = service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="uploads")
+    metadata = asyncio.run(
+        service.extract_metadata(
+            test_user,
+            sample_docx,
+            tags=["test"],
+            source_tag="uploads",
+        )
+    )
     assert isinstance(metadata, DocumentMetadata)
     assert metadata.document_uid is not None
-    assert metadata.tags == ["test"]
+    assert "test" in set(metadata.tags.tag_ids + metadata.tags.tag_names)
     assert metadata.source_tag == "uploads"
 
     # 💾 Save metadata and reload it
-    await service.save_metadata(test_user, metadata)
-    restored = await service.get_metadata(test_user, metadata.document_uid)
+    asyncio.run(service.save_metadata(test_user, metadata))
+    restored = asyncio.run(service.get_metadata(test_user, metadata.document_uid))
     assert restored is not None
     assert restored.document_uid == metadata.document_uid
-    assert restored.tags == ["test"]
+    assert "test" in set(restored.tags.tag_ids + restored.tags.tag_names)
 
 
 def test_process_input(sample_docx, output_dir, test_user):
     service = IngestionService()
-    metadata = service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred")
+    metadata = asyncio.run(service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred"))
 
     # ⚙️ Process the file into output directory
     service.process_input(test_user, sample_docx, output_dir, metadata)
@@ -72,7 +80,7 @@ def test_process_input(sample_docx, output_dir, test_user):
 
 def test_process_input_then_output(sample_docx, output_dir, test_user):
     service = IngestionService()
-    metadata = service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred")
+    metadata = asyncio.run(service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred"))
 
     # First process input
     service.process_input(test_user, sample_docx, output_dir, metadata)
@@ -84,7 +92,7 @@ def test_process_input_then_output(sample_docx, output_dir, test_user):
 
 def test_get_preview_file_fallback(sample_docx, output_dir, test_user):
     service = IngestionService()
-    metadata = service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred")
+    metadata = asyncio.run(service.extract_metadata(test_user, sample_docx, tags=["test"], source_tag="fred"))
 
     # Write a dummy preview
     preview = output_dir / "table.csv"

@@ -118,7 +118,7 @@ ai:
       max_retries: 0
       timeout:
         connect: 10.0
-        read: 30.0
+        read: 120.0
         write: 30.0
         pool: 5.0
       http_client_limits:
@@ -138,7 +138,7 @@ ai:
       max_retries: 0
       timeout:
         connect: 10.0
-        read: 30.0
+        read: 120.0
         write: 30.0
         pool: 5.0
       http_client_limits:
@@ -240,6 +240,11 @@ ai:
       type: "agent"
       class_path: "agentic_backend.academy.10_human_in_the_loop.hitl_agent.HitlAgent"
       enabled: true
+    - id: "ParcelOpsAgent"
+      name: "ParcelOpsAgent"
+      type: "agent"
+      class_path: "agentic_backend.agents.postal.tracking.TrackingAgent"
+      enabled: true
 
 mcp:
   servers:
@@ -295,6 +300,29 @@ mcp:
       url: "http://localhost:8111/knowledge-flow/v1/mcp-neo4j"
       sse_read_timeout: 2000
       auth_mode: "user_token"
+    - id: "mcp-postal-business-demo"
+      name: "LaPoste Demo Postal Business MCP"
+      description: "Local demo MCP server for postal business actions (tracking, reroute, notifications, claims)"
+      enabled: true
+      transport: "streamable_http"
+      url: "http://localhost:9797/mcp"
+      sse_read_timeout: 5000
+      auth_mode: "user_token"
+    - id: "mcp-iot-tracking-demo"
+      name: "LaPoste Demo IoT Tracking MCP"
+      description: "Local demo MCP server for simulated hub, vehicle, locker, and telemetry events"
+      enabled: true
+      transport: "streamable_http"
+      url: "http://localhost:9798/mcp"
+      sse_read_timeout: 5000
+      auth_mode: "user_token"
+    - id: "mcp-web-github-readonly"
+      name: "mcp.servers.web_github_readonly.name"
+      description: "mcp.servers.web_github_readonly.description"
+      enabled: true
+      transport: "inprocess"
+      provider: "web_github_readonly"
+      auth_mode: "no_token"
 
 storage:
   sqlite:

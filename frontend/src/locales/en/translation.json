@@ -437,10 +437,15 @@
         "name": "Name",
         "url": "URL",
         "transport": "Transport",
-        "transport_http": "streamable_http",
+        "transport_http": "HTTP",
         "transport_local": "stdio",
         "command": "Command",
-        "timeout": "Timeout"
+        "timeout": "Timeout",
+        "transport_inprocess": "inprocess",
+        "provider": "Provider",
+        "source": "Source",
+        "source_mcp": "MCP",
+        "source_local": "Local"
       }
     },
     "actions": {
@@ -479,14 +484,14 @@
   },
   "mcpHub": {
     "title": "Tools",
-    "subtitle": "Register and edit MCP servers available to agents.",
-    "restoreButton": "Restore from configuration",
-    "addButton": "Add MCP server",
-    "addTitle": "New MCP server",
-    "editTitle": "Edit MCP server",
-    "emptyTitle": "No MCP servers yet",
-    "emptyHint": "Create a server entry to let agents connect to it.",
-    "countLabel": "servers",
+    "subtitle": "Register and edit tool connectors available to agents (remote MCP endpoints or local capabilities).",
+    "restoreButton": "Restore catalog from configuration",
+    "addButton": "Add tool connector",
+    "addTitle": "New tool connector",
+    "editTitle": "Edit tool connector",
+    "emptyTitle": "No tool connectors yet",
+    "emptyHint": "Create an entry so agents can use this capability.",
+    "countLabel": "connectors",
     "search": "Search",
     "filter": "Filter",
     "confirmDeleteTitle": "Delete MCP server?",
@@ -502,11 +507,13 @@
       "env": "Environment variables",
       "enabled": "Enabled",
       "timeout": "SSE timeout (s)",
-      "auth_mode": "Auth mode"
+      "auth_mode": "Auth mode",
+      "provider": "Local provider"
     },
     "helpers": {
       "args": "Space or comma separated arguments",
-      "env": "One KEY=VALUE per line"
+      "env": "One KEY=VALUE per line",
+      "provider": "Example: web_github_readonly"
     },
     "status": {
       "enabled": "Enabled",
@@ -514,9 +521,10 @@
     },
     "transport": {
       "stdio": "stdio",
-      "streamable_http": "streamable_http",
+      "streamable_http": "HTTP",
       "sse": "Server-sent events",
-      "websocket": "WebSocket"
+      "websocket": "WebSocket",
+      "inprocess": "inprocess"
     },
     "auth": {
       "user_token": "User token",
@@ -535,7 +543,24 @@
       "error": "Operation failed"
     },
     "confirmRestoreTitle": "Overwrite MCP servers with configuration?",
-    "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone."
+    "confirmRestoreMessage": "This will replace all MCP server changes saved in the UI with the YAML configuration. You will lose those changes. This cannot be undone.",
+    "source": {
+      "mcp": "MCP",
+      "local": "Local"
+    },
+    "searchPlaceholder": "Search by id, name, description, URL, command, or provider",
+    "clearFilters": "Reset",
+    "resultsLabel": "results",
+    "noResultsTitle": "No connector matches your search",
+    "noResultsHint": "Try removing filters or broadening the search.",
+    "filters": {
+      "source": "Source",
+      "transport": "Transport",
+      "status": "Status",
+      "all": "All",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    }
   },
   "chatbot": {
     "ragScope": {
@@ -1156,6 +1181,10 @@
       "local_stdio": {
         "name": "Local stdio MCP",
         "description": "Run a local MCP server over stdio (process-based tools)"
+      },
+      "web_github_readonly": {
+        "name": "Web + GitHub Read-only",
+        "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)"
       }
     }
   },

@@ -1,0 +1,123 @@
+name: "La Poste Tracking - Demo script (v2)"
+agent_target:
+  display_name: "TrackingAgent"
+  class_path: "agentic_backend.agents.postal.tracking.TrackingAgent"
+goal:
+  - "Montrer un agent custom (graph deterministic) avec routage d'intention LLM"
+  - "Montrer la difference entre info, visualisation GeoMap, et action/HITL"
+  - "Eviter l'effet demo '3 cartes a l'ecran' non demandees"
+
+prerequisites:
+  - "Selectionner l'agent ParcelOpsDeterministic"
+  - "Demarrer les 2 MCP de demo (postal + iot)"
+  - "Ouvrir une NOUVELLE session de chat"
+  - "Backend redemarre apres les derniers patches"
+
+notes_for_presenter:
+  - "La premiere question peut seed un colis + scenario IoT de demo: c'est normal pour initialiser un contexte reproductible."
+  - "La GeoMap doit apparaitre seulement quand la demande de visualisation/localisation est explicite."
+  - "Le HITL doit apparaitre seulement quand une action est explicitement demandee."
+
+steps:
+  - id: 1
+    title: "Identification utilisateur + colis trouve"
+    user_prompt: "Bonjour, ai-je un colis en cours pour le moment ?"
+    intent_expected: "followup_info"
+    ui_expected:
+      - "Reponse texte (pas de HITL)"
+      - "Pas de GeoMap (question d'identification uniquement)"
+      - "tracking_id mentionne"
+    tool_trace_expected_min:
+      - "seed_demo_parcel_exception_for_current_user (si aucun tracking_id en session)"
+      - "seed_demo_tracking_incident (possible pour initialiser l'IoT demo)"
+      - "track_package"
+    success_criteria:
+      - "Le colis est trouve et l'utilisateur est correctement relie au scenario de demo"
+      - "Le message final reste concis et sans carte"
+
+  - id: 2
+    title: "Visualisation des points de retrait (GeoMap)"
+    user_prompt: "Peux-tu me montrer sur une carte les differents points de retrait disponibles autour de mon colis ?"
+    intent_expected: "followup_info + needs_map + pickup_points"
+    ui_expected:
+      - "Reponse texte + 1 GeoMap"
+      - "La carte affiche au moins des points de retrait (pickup points)"
+      - "Pas de HITL (demande de visualisation seulement)"
+    tool_trace_expected_min:
+      - "track_package"
+      - "get_pickup_points_nearby"
+      - "get_live_tracking_snapshot (souvent utile pour overlay)"
+      - "get_route_geometry (si la map montre aussi trajectoire)"
+    fallback_prompt_if_router_hesitates: "Visualise les points relais sur une carte, avec les marqueurs des points de retrait."
+    success_criteria:
+      - "La liste pickup_points n'est pas vide"
+      - "Une GeoMap est visible et pertinente"
+
+  - id: 3
+    title: "Diagnostic de congestion (sans action)"
+    user_prompt: "Quel est le probleme sur ce colis ? Y a-t-il une congestion au hub et quelles consequences sur le delai ?"
+    intent_expected: "followup_info"
+    ui_expected:
+      - "Reponse texte diagnostique"
+      - "Pas de HITL"
+      - "GeoMap optionnelle (idealement non, sauf si tu demandes localisation)"
+    tool_trace_expected_min:
+      - "track_package"
+      - "get_live_tracking_snapshot"
+      - "list_tracking_events (souvent)"
+    success_criteria:
+      - "Le diagnostic mentionne congestion / retard / phase IoT"
+      - "Aucune action n'est executee"
+
+  - id: 4
+    title: "Demande d'action explicite -> HITL"
+    user_prompt: "Le colis est en retard. Je veux agir: propose-moi une action de resolution et demande ma validation via la carte HITL (point relais ou replanification)."
+    intent_expected: "action_flow (explicite)"
+    ui_expected:
+      - "Diagnostic pre-action (texte, carte possible)"
+      - "Carte HITL de choix (reroute / reschedule / cancel)"
+      - "Aucune action metier avant la reponse HITL"
+    tool_trace_expected_min:
+      - "track_package"
+      - "get_live_tracking_snapshot"
+      - "get_pickup_points_nearby"
+      - "eventuellement list_tracking_events / get_route_geometry"
+    hitl_test_choices:
+      - label: "Reroutage point relais (recommande)"
+        choice_id_example: "reroute:PP-PAR-001"
+        expect_after_resume:
+          - "reroute_package_to_pickup_point"
+          - "notify_customer"
+          - "Message final de confirmation"
+      - label: "Replanification domicile"
+        choice_id_example: "reschedule:afternoon"
+        expect_after_resume:
+          - "reschedule_delivery"
+          - "notify_customer"
+          - "Message final de confirmation"
+      - label: "Annuler"
+        choice_id_example: "cancel"
+        expect_after_resume:
+          - "Pas d'action metier"
+          - "Message de conservation du diagnostic"
+    success_criteria:
+      - "Le HITL apparait uniquement ici (action explicite)"
+      - "Le choix humain pilote bien la branche finale"
+
+quick_regression_checks:
+  - prompt: "Quels sont tes outils a ta disposition ?"
+    expect:
+      - "Branche capabilities"
+      - "Pas de seed de scenario"
+      - "Pas de GeoMap"
+      - "Pas de HITL"
+  - prompt: "Ou est mon colis ? Montre-moi la carte."
+    expect:
+      - "GeoMap oui"
+      - "HITL non"
+
+debrief_points:
+  - "LLM = comprehension de l'intention (router JSON)"
+  - "Code = controle des side-effects (seed, tools, HITL)"
+  - "Graphe = sequencing deterministic et observable"
+  - "Policy de rendu = carte seulement quand demandee"

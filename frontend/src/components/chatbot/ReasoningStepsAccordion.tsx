@@ -90,29 +90,47 @@ function asPlainText(v: unknown, max = 120): string | undefined {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
-function summarizeToolResult(m: ChatMessage): string | undefined {
-  const p = m.parts.find((p) => p.type === "tool_result") as
+function formatLatencyMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms / 1000)}s`;
+}
+
+function extrasSummary(m: ChatMessage): string | undefined {
+  const ex = getExtras(m);
+  const summary = ex?.summary;
+  if (typeof summary !== "string") return undefined;
+  const trimmed = summary.trim();
+  return trimmed || undefined;
+}
+
+function summarizeToolResultCompact(m: ChatMessage): string | undefined {
+  const explicitSummary = extrasSummary(m);
+  if (explicitSummary) return explicitSummary;
+
+  const p = m.parts.find((part) => part.type === "tool_result") as
     | Extract<ChatMessage["parts"][number], { type: "tool_result" }>
     | undefined;
   if (!p) return undefined;
 
-  // content might already be a stringified JSON
-  let data: any = p.content;
-  if (typeof data === "string") {
-    try {
-      data = JSON.parse(data);
-    } catch {
-      /* keep raw string */
-    }
-  }
+  const sourceCount = Array.isArray(m.metadata?.sources) ? m.metadata.sources.length : 0;
+  const latencyMs =
+    typeof p.latency_ms === "number"
+      ? p.latency_ms
+      : typeof m.metadata?.latency_ms === "number"
+        ? m.metadata.latency_ms
+        : undefined;
 
-  // Prefer a compact, human hint
-  if (data && typeof data === "object") {
-    if (data.error) return `error: ${asPlainText(data.error, 80)}`;
-    if (Array.isArray(data.rows)) return `rows: ${data.rows.length}`;
-    if (data.sql_query) return asPlainText(data.sql_query, 100);
+  if (sourceCount > 0 && typeof latencyMs === "number") {
+    return `${sourceCount} result${sourceCount > 1 ? "s" : ""} in ${formatLatencyMs(latencyMs)}`;
   }
-  return asPlainText(p.content, 60);
+  if (sourceCount > 0) {
+    return `${sourceCount} result${sourceCount > 1 ? "s" : ""}`;
+  }
+  if (typeof latencyMs === "number") {
+    return `${p.ok === false ? "Failed" : "Completed"} in ${formatLatencyMs(latencyMs)}`;
+  }
+  return p.ok === false ? "Failed" : "Completed";
 }
 
 export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false }: Props) {
@@ -204,48 +222,22 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                 const chipTask = !chipNode && typeof taskRaw === "string" ? taskRaw : undefined;
                 const chipChannel = formatChannel(message.channel);
 
-                // Prefer tool_result summary when available; else preview/node/task/channel
-                const primarySolo = summarizeToolResult(message) || previewText || chipNode || chipTask || chipChannel;
+                const primarySolo =
+                  message.channel === "tool_result"
+                    ? summarizeToolResultCompact(message) || chipChannel
+                    : previewText || chipNode || chipTask || chipChannel;
 
-                const callJustification =
-                  entry.kind === "combo"
-                    ? (() => {
-                        const firstPart = entry.call.parts?.[0];
-                        if (firstPart?.type === "tool_call") {
-                          const justification = (firstPart as any)?.args?.justification;
-                          return typeof justification === "string" ? justification : undefined;
-                        }
-                        return undefined;
-                      })()
-                    : undefined;
-                const callPreview = entry.kind === "combo" ? asPlainText(textPreview(entry.call)) : undefined;
                 const resultSummary =
-                  entry.kind === "combo" && entry.result ? summarizeToolResult(entry.result) : undefined;
+                  entry.kind === "combo" && entry.result ? summarizeToolResultCompact(entry.result) : undefined;
                 const pendingResult = entry.kind === "combo" && !entry.result ? "waiting for result…" : undefined;
-
-                const primary = entry.kind === "combo" ? callJustification || callPreview || chipChannel : primarySolo;
-                const primaryTooltip =
+                const primary =
                   entry.kind === "combo"
-                    ? (() => {
-                        const firstPart = entry.call.parts?.[0];
-                        if (firstPart?.type === "tool_call") {
-                          const argsPreview = asPlainText(firstPart.args, 200);
-                          return argsPreview;
-                        }
-                        return undefined;
-                      })()
-                    : undefined;
+                    ? resultSummary || pendingResult || chipChannel
+                    : primarySolo;
+                const primaryTooltip = undefined;
 
-                const secondary = entry.kind === "combo" ? resultSummary || pendingResult : undefined;
-                const secondaryTooltip =
-                  entry.kind === "combo" && entry.result
-                    ? (() => {
-                        const part = entry.result.parts?.find((p) => p.type === "tool_result") as
-                          | Extract<ChatMessage["parts"][number], { type: "tool_result" }>
-                          | undefined;
-                        return part ? asPlainText(part.content, 200) : undefined;
-                      })()
-                    : undefined;
+                const secondary = entry.kind === "combo" ? undefined : undefined;
+                const secondaryTooltip = undefined;
                 const resultOk =
                   entry.kind === "combo" && entry.result
                     ? okFlag(entry.result)
