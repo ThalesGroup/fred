@@ -102,6 +102,117 @@ def _utcnow_dt() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+_HITL_RESUME_UI_META_KEYS = {
+    "_hitl_choice_label",
+    "_hitl_title",
+    "_hitl_stage",
+    "_hitl_question",
+}
+
+
+def _stringify_hitl_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        txt = value.strip()
+        return txt or None
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except Exception:
+        return str(value)
+
+
+def _build_hitl_decision_message(
+    *,
+    session_id: str,
+    exchange_id: str,
+    rank: int,
+    agent_id: str,
+    resume_payload: Dict[str, Any],
+) -> Optional[ChatMessage]:
+    """
+    Build a user-visible transcript entry for a HITL resume payload.
+
+    This keeps the agent code free from formatting/persistence concerns while still
+    preserving human decisions in the chat history.
+    """
+    if not isinstance(resume_payload, dict) or not resume_payload:
+        return None
+
+    choice_id = _stringify_hitl_value(resume_payload.get("choice_id"))
+    choice_label = _stringify_hitl_value(resume_payload.get("_hitl_choice_label"))
+    answer_value = _stringify_hitl_value(resume_payload.get("answer"))
+    note_text = _stringify_hitl_value(
+        resume_payload.get("text") or resume_payload.get("notes")
+    )
+    stage = _stringify_hitl_value(resume_payload.get("_hitl_stage"))
+    title = _stringify_hitl_value(resume_payload.get("_hitl_title"))
+    checkpoint_id = _stringify_hitl_value(resume_payload.get("checkpoint_id"))
+
+    decision_display = choice_label or choice_id or answer_value
+    if not decision_display and not note_text:
+        return None
+
+    context_bits: List[str] = []
+    if title:
+        context_bits.append(title)
+    if stage:
+        context_bits.append(stage)
+
+    if context_bits:
+        decision_line = (
+            f"Decision ({' / '.join(context_bits)}): "
+            f"{decision_display or 'Provided input'}"
+        )
+    else:
+        decision_line = f"Decision: {decision_display or 'Provided input'}"
+
+    if choice_id and choice_label and choice_id != choice_label:
+        decision_line += f" (`{choice_id}`)"
+
+    lines = [decision_line]
+    if note_text:
+        lines.append(f"Note: {note_text}")
+
+    hitl_meta: Dict[str, Any] = {
+        "kind": "decision",
+        "auto_recorded": True,
+    }
+    if choice_id:
+        hitl_meta["choice_id"] = choice_id
+    if choice_label:
+        hitl_meta["choice_label"] = choice_label
+    if stage:
+        hitl_meta["stage"] = stage
+    if title:
+        hitl_meta["title"] = title
+    if checkpoint_id:
+        hitl_meta["checkpoint_id"] = checkpoint_id
+
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=_utcnow_dt(),
+        role=Role.user,
+        channel=Channel.final,
+        parts=[TextPart(text="\n".join(lines))],
+        metadata=ChatMetadata(agent_id=agent_id, extras={"hitl": hitl_meta}),
+    )
+
+
+def _strip_hitl_resume_ui_meta(resume_payload: Dict[str, Any]) -> None:
+    """Remove UI-only HITL metadata before forwarding resume payload to the agent."""
+    if not isinstance(resume_payload, dict):
+        return
+    for key in _HITL_RESUME_UI_META_KEYS:
+        resume_payload.pop(key, None)
+
+
 class SessionOrchestrator:
     """
     Why this class exists (architecture note):
@@ -752,6 +863,25 @@ class SessionOrchestrator:
                 session.id,
             )
             all_msgs: List[ChatMessage] = []
+            next_rank_cursor = base_rank
+
+            # Auto-record the human decision as a chat message so it survives reloads.
+            # This avoids requiring every HITL agent to add a custom DecisionMessage.
+            decision_msg = _build_hitl_decision_message(
+                session_id=session.id,
+                exchange_id=exchange_id,
+                rank=next_rank_cursor,
+                agent_id=actual_agent_id,
+                resume_payload=resume_payload or {},
+            )
+            if decision_msg is not None:
+                all_msgs.append(decision_msg)
+                await self._emit(callback, decision_msg)
+                next_rank_cursor += 1
+
+            # Do not pass UI-only labels/context to the agent resume payload.
+            if isinstance(resume_payload, dict):
+                _strip_hitl_resume_ui_meta(resume_payload)
 
             try:
                 with self.kpi.timer(
@@ -770,7 +900,7 @@ class SessionOrchestrator:
                         session_id=session.id,
                         exchange_id=exchange_id,
                         agent_id=actual_agent_id,
-                        base_rank=base_rank,
+                        base_rank=next_rank_cursor,
                         start_seq=0,
                         callback=callback,
                         user_context=user,
@@ -1676,7 +1806,8 @@ class SessionOrchestrator:
 
             # Unknown/other roles → ignore (by design)
 
-        # Tail: if transcript ends with pending calls and no results, keep the grouped AI(tool_calls=...)
+        # Tail: flush any remaining exchange state. Calls without a tool_result in the
+        # same exchange are intentionally skipped by flush_exchange_calls_if_any().
         flush_exchange_calls_if_any(current_exchange)
         try:
             logger.info(

@@ -7,6 +7,7 @@ This document explains **how to use** the `MCPRuntime`, `McpToolkit`, and the re
 ## TL;DR
 
 - Use **`MCPRuntime`** to create and refresh the MCP client + toolkit for an agent.
+- Build graph structure in `build_runtime_structure()` and do MCP connection in `activate_runtime()`.
 - Bind tools from **`McpToolkit`** to your model.
 - Run tools via our **resilient ToolNode** so a 401/timeout never corrupts your chat turn (no “dangling tool calls”).
 - We automatically:
@@ -91,17 +92,8 @@ class MyExpert(AgentFlow):
             context_provider=lambda: self.get_runtime_context(),
         )
 
-    async def async_init(self):
-        # 2) Model first
-        self.model = get_default_chat_model()
-
-        # 3) Connect MCP & wrap tools
-        await self.mcp_runtime.init()
-
-        # 4) Bind tools to the model
-        self.model = self.model.bind_tools(self.mcp_runtime.get_tools())
-
-        # 5) Build graph with resilient ToolNode
+    def build_runtime_structure(self) -> None:
+        # 2) Build graph topology without connecting MCP
         tools_node = make_resilient_tools_node(
             get_tools=self.mcp_runtime.get_tools,
             refresh_cb=self._refresh_and_rebind,  # see below
@@ -115,7 +107,16 @@ class MyExpert(AgentFlow):
         builder.add_conditional_edges("reasoner", tools_condition)
         builder.add_edge("tools", "reasoner")
         self._graph = builder
-        super().__init__(graph=self._graph, ...)
+
+    async def activate_runtime(self) -> None:
+        # 3) Model first
+        self.model = get_default_chat_model()
+
+        # 4) Connect MCP & wrap tools
+        await self.mcp_runtime.init()
+
+        # 5) Bind tools to the model
+        self.model = self.model.bind_tools(self.mcp_runtime.get_tools())
 
     async def _refresh_and_rebind(self) -> None:
         # Called by the resilient ToolNode when it detects 401/timeout/closed stream.
@@ -123,4 +124,10 @@ class MyExpert(AgentFlow):
 
     async def aclose(self):
         await self.mcp_runtime.aclose()
+```
+
+Execution path reminder:
+
+```python
+await agent.initialize_runtime(runtime_context)
 ```

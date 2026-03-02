@@ -5,7 +5,7 @@ This is the **minimal Fred agent** used to introduce the core concepts.
 ## What it shows
 
 - How to declare `AgentTuning` so the UI can edit a system prompt.
-- How to implement `async_init()` and build a tiny `StateGraph`.
+- How to implement `build_runtime_structure()` (and optionally `activate_runtime()`) and build a tiny `StateGraph`.
 - How to write a single node that returns a **state delta**:
   - `{"messages": [AIMessage(...)]}` only, no full state rewrite.
 
