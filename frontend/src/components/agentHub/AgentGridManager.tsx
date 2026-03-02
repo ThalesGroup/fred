@@ -33,6 +33,7 @@ import { A2aCardDialog } from "./A2aCardDialog";
 import { AgentCard } from "./AgentCard";
 import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentEditDrawer } from "./AgentEditDrawer";
+import { AgentGraphModal } from "./AgentGraphModal";
 import { CreateAgentModal } from "./CreateAgentModal";
 import { CrewEditor } from "./CrewEditor";
 
@@ -90,6 +91,8 @@ export const AgentGridManager = ({
   const [createModalType, setCreateModalType] = useState<"basic" | "a2a_proxy">("basic");
   const [assetManagerOpen, setAssetManagerOpen] = useState(false);
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
+  const [graphModalOpen, setGraphModalOpen] = useState(false);
+  const [agentForGraph, setAgentForGraph] = useState<AnyAgent | null>(null);
   const [a2aCardView, setA2aCardView] = useState<{ open: boolean; card: any | null; agentName: string | null }>({
     open: false,
     card: null,
@@ -185,6 +188,16 @@ export const AgentGridManager = ({
     setAgentForAssetManagement(null);
   };
 
+  const handleInspectGraph = (agent: AnyAgent) => {
+    setAgentForGraph(agent);
+    setGraphModalOpen(true);
+  };
+
+  const handleCloseGraphModal = () => {
+    setGraphModalOpen(false);
+    setAgentForGraph(null);
+  };
+
   const handleRefetch = async () => {
     if (onRefetchAgents) {
       await onRefetchAgents();
@@ -241,6 +254,7 @@ export const AgentGridManager = ({
                           onManageAssets={canEdit ? handleManageAssets : undefined}
                           onInspectCode={handleInspectCode}
                           onViewA2ACard={showA2ACard ? handleViewA2ACard : undefined}
+                          onInspectGraph={handleInspectGraph}
                         />
                       </Box>
                     </Fade>
@@ -382,6 +396,7 @@ export const AgentGridManager = ({
           </Box>
         </Box>
       </Box>
+      <AgentGraphModal agent={agentForGraph} open={graphModalOpen} onClose={handleCloseGraphModal} />
     </>
   );
 };

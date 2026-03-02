@@ -3,6 +3,7 @@
 import json
 import logging
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from langchain.tools import tool
@@ -53,23 +54,16 @@ class ExportTools:
     def get_fill_template_tool(self):
         """Create the fill_template tool."""
 
-        # Define the schema for the tool
+        # Define the schema — each section is a top-level kwarg so the LLM
+        # doesn't have to nest them inside a wrapper object.
         tool_schema = {
             "type": "object",
             "properties": {
-                "data": {
-                    "type": "object",
-                    "properties": {
-                        "enjeuxBesoins": {"$ref": "#/$defs/EnjeuxBesoins"},
-                        "cv": {"$ref": "#/$defs/CV"},
-                        "prestationFinanciere": {
-                            "$ref": "#/$defs/PrestationFinanciere"
-                        },
-                    },
-                    "required": ["enjeuxBesoins", "cv", "prestationFinanciere"],
-                },
+                "enjeuxBesoins": {"$ref": "#/$defs/EnjeuxBesoins"},
+                "cv": {"$ref": "#/$defs/CV"},
+                "prestationFinanciere": {"$ref": "#/$defs/PrestationFinanciere"},
             },
-            "required": ["data"],
+            "required": ["enjeuxBesoins", "cv", "prestationFinanciere"],
             "$defs": {
                 "EnjeuxBesoins": EnjeuxBesoins.model_json_schema(),
                 "CV": CV.model_json_schema(),
@@ -78,24 +72,23 @@ class ExportTools:
         }
 
         @tool(args_schema=tool_schema)
-        async def fill_template(data: dict):
+        async def fill_template(**kwargs):
             """
             Génère le fichier PowerPoint à partir des données extraites.
 
             Args:
-                data: Dictionnaire contenant les trois sections:
-                    - enjeuxBesoins: Contexte et missions du projet
-                    - cv: Informations CV de l'intervenant
-                    - prestationFinanciere: Informations financières
+                enjeuxBesoins: Contexte et missions du projet
+                cv: Informations CV de l'intervenant
+                prestationFinanciere: Informations financières
 
             Returns:
                 Lien de téléchargement du fichier PowerPoint généré
             """
             try:
                 # 1. Extract and validate the three sections (max_length enforced here)
-                enjeux_data = data.get("enjeuxBesoins", {})
-                cv_data = data.get("cv", {})
-                prestation_data = data.get("prestationFinanciere", {})
+                enjeux_data = kwargs.get("enjeuxBesoins", {})
+                cv_data = kwargs.get("cv", {})
+                prestation_data = kwargs.get("prestationFinanciere", {})
 
                 validation_errors = []
                 for section_name, model_cls, section_data in [
@@ -156,19 +149,19 @@ class ExportTools:
                 ) as out:
                     output_path = Path(out.name)
 
-                fill_slide_from_structured_response(
-                    template_path, template_data, output_path
-                )
+                    fill_slide_from_structured_response(
+                        template_path, template_data, output_path
+                    )
 
                 # 6. Upload to user storage
-                user_id = self.agent.get_end_user_id()
-                final_key = f"{user_id}_{output_path.name}"
+                timestamp = datetime.now().strftime("%m%d%H%M")
+                final_key = f"Prop_commerciale_{timestamp}.pptx"
 
                 with open(output_path, "rb") as f:
                     upload_result = await self.agent.upload_user_blob(
                         key=final_key,
                         file_content=f,
-                        filename=f"Reference_Filled_{self.agent.get_id()}.pptx",
+                        filename=final_key,
                         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     )
 
@@ -178,10 +171,10 @@ class ExportTools:
                 # Return LinkPart directly for proper UI rendering
                 return LinkPart(
                     href=upload_result.download_url,
-                    title=f"📥 Télécharger {upload_result.file_name}",
+                    title=upload_result.file_name,
                     kind=LinkKind.download,
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                )
+                ).model_dump(mode="json")
 
             except json.JSONDecodeError as e:
                 error_msg = f"❌ Erreur de parsing JSON: {str(e)}"

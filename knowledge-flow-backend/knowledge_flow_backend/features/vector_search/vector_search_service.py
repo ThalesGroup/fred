@@ -232,7 +232,7 @@ class VectorSearchService:
         question: str,
         user: KeycloakUser,
         k: int,
-        library_tags_ids: List[str],
+        library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
     ) -> List[VectorSearchHit]:
         """
@@ -253,7 +253,7 @@ class VectorSearchService:
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
 
-        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+        sf = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms)
 
         base_dims = self._kpi_search_dims(policy="semantic")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
@@ -316,7 +316,7 @@ class VectorSearchService:
         question: str,
         user: KeycloakUser,
         k: int,
-        library_tags_ids: List[str],
+        library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
     ) -> List[VectorSearchHit]:
         """
@@ -341,7 +341,7 @@ class VectorSearchService:
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
-        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms)
 
         base_dims = self._kpi_search_dims(policy="strict")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
@@ -380,7 +380,7 @@ class VectorSearchService:
         question: str,
         user: KeycloakUser,
         k: int,
-        library_tags_ids: List[str],
+        library_tags_ids: List[str] | None,
         metadata_terms_extra: Optional[dict[str, Any]] = None,
     ) -> List[VectorSearchHit]:
         """
@@ -405,7 +405,7 @@ class VectorSearchService:
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
             metadata_terms.update(metadata_terms_extra)
-        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else [], metadata_terms=metadata_terms)
+        search_filter = SearchFilter(tag_ids=sorted(library_tags_ids) if library_tags_ids else library_tags_ids, metadata_terms=metadata_terms)
 
         base_dims = self._kpi_search_dims(policy="hybrid")
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
@@ -523,12 +523,14 @@ class VectorSearchService:
                     question=question,
                     user=user,
                     k=top_k,
-                    library_tags_ids=[],
+                    library_tags_ids=None,
                     metadata_terms_extra=attachment_metadata,
                 )
 
             # Corpus/library query (scoped by authorized tags, excludes session vectors)
-            if include_corpus_scope:
+            if include_corpus_scope and not authorized_tag_ids:
+                logger.info("[VECTOR][SEARCH][CORPUS] user has no authorized tags; skipping corpus search.")
+            if include_corpus_scope and authorized_tag_ids:
                 corpus_metadata: dict[str, Any] = {"scope": ["!session"]}
                 if authorized_document_uids:
                     corpus_metadata["document_uid"] = list(authorized_document_uids)

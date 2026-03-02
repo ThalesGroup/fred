@@ -108,8 +108,8 @@ This section aims to explore the endpoints provided by knowledge-flow’s Tabula
 
 To have tables available, we recommend starting Fred and adding these documents in the resources section:
 
-- `fred-academy/discover/documents/Clients.csv`
-- `fred-academy/discover/documents/Sales.csv`
+- `fred-academy/labs/discover/documents/Clients.csv`
+- `fred-academy/labs/discover/documents/Sales.csv`
 
 ## 2.2 - Exercises on knowledge-flow Tabular endpoints
 

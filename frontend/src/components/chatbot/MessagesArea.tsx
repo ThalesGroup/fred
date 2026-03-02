@@ -101,14 +101,14 @@ function Area({
       const reasoningSteps: ChatMessage[] = [];
       const finals: ChatMessage[] = [];
       const others: ChatMessage[] = [];
-      let userMessage: ChatMessage | undefined;
+      const userMessages: ChatMessage[] = [];
       let keptSources: any[] | undefined;
       const groupKey = `${group[0].session_id}-${group[0].exchange_id}`;
       const isActiveExchange = !!activeExchangeKey && groupKey === activeExchangeKey;
 
       for (const msg of group) {
         if (msg.role === "user" && msg.channel === "final") {
-          userMessage = msg;
+          userMessages.push(msg);
           continue;
         }
 
@@ -153,17 +153,24 @@ function Area({
         others.push(msg);
       }
 
-      const shouldHideUserMessage = userMessage && hiddenUserExchangeIds?.has(userMessage.exchange_id);
-      if (userMessage && !shouldHideUserMessage) {
+      const visibleUserMessages = userMessages.filter((msg, idx) => {
+        const hidePrimary = idx === 0 && hiddenUserExchangeIds?.has(msg.exchange_id);
+        return !hidePrimary;
+      });
+      const primaryUserVisible = visibleUserMessages[0];
+      const renderPrimaryUserBeforeTrace =
+        Boolean(primaryUserVisible) && userMessages[0] === primaryUserVisible;
+
+      if (renderPrimaryUserBeforeTrace && primaryUserVisible) {
         elements.push(
           <MessageCard
-            key={`user-${userMessage.session_id}-${userMessage.exchange_id}-${userMessage.rank}`}
-            message={userMessage}
+            key={`user-${primaryUserVisible.session_id}-${primaryUserVisible.exchange_id}-${primaryUserVisible.rank}`}
+            message={primaryUserVisible}
             agent={currentAgent}
             side="right"
             enableCopy
             enableThumbs
-            pending={isActiveExchange}
+            pending={isActiveExchange && visibleUserMessages.length === 1}
             suppressText={false}
             libraryNameById={libraryNameById}
             chatContextNameById={chatContextNameById}
@@ -197,30 +204,50 @@ function Area({
         );
       }
 
-      // ---------- intermediary assistant/user messages ----------
-      for (const msg of others) {
-        // const agenticFlow = resolveAgent(msg);
-        const inlineSrc = msg.metadata?.sources;
+      // ---------- dialogue messages after trace (chronological within exchange) ----------
+      const trailingUserMessages = renderPrimaryUserBeforeTrace ? visibleUserMessages.slice(1) : visibleUserMessages;
+      const timelineMessages = [...trailingUserMessages, ...others, ...finals].sort((a, b) => {
+        if (a.rank !== b.rank) return a.rank - b.rank;
+        return String(a.timestamp ?? "").localeCompare(String(b.timestamp ?? ""));
+      });
+      const lastVisibleUser = visibleUserMessages[visibleUserMessages.length - 1];
+
+      for (const msg of timelineMessages) {
+        const inlineSrc = msg.metadata?.sources as any[] | undefined;
+        const isAssistantFinal = msg.role === "assistant" && msg.channel === "final";
 
         elements.push(
-          <React.Fragment key={`other-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}>
-            {!keptSources && inlineSrc?.length && (
+          <React.Fragment key={`timeline-${msg.session_id}-${msg.exchange_id}-${msg.rank}-${msg.role}-${msg.channel}`}>
+            {isAssistantFinal && (keptSources ?? inlineSrc)?.length ? (
               <Sources
+                key={`sources-final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
+                sources={(keptSources ?? inlineSrc) as any[]}
+                enableSources
+                expandSources={false}
+                highlightUid={highlightUid ?? undefined}
+              />
+            ) : !isAssistantFinal && !keptSources && inlineSrc?.length ? (
+              <Sources
+                key={`sources-inline-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
                 sources={inlineSrc as any[]}
                 enableSources
                 expandSources={false}
                 highlightUid={highlightUid ?? undefined}
               />
-            )}
+            ) : null}
 
             <MessageCard
-              key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
+              key={`msg-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
               message={msg}
-              agent={currentAgent}
+              agent={msg.role === "assistant" ? resolveAgent(msg) : currentAgent}
               side={msg.role === "user" ? "right" : "left"}
               enableCopy
               enableThumbs
-              pending={isActiveExchange && isWaiting && msg.role === "assistant" && !hasNonEmptyText(msg)}
+              pending={
+                msg.role === "user"
+                  ? isActiveExchange && msg === lastVisibleUser
+                  : isActiveExchange && isWaiting && msg.role === "assistant" && !hasNonEmptyText(msg)
+              }
               suppressText={false}
               libraryNameById={libraryNameById}
               chatContextNameById={chatContextNameById}
@@ -228,45 +255,6 @@ function Area({
               onCitationClick={(uid) => setHighlightUid(uid)}
             />
           </React.Fragment>,
-        );
-      }
-
-      // ---------- final assistant message ----------
-      for (const msg of finals) {
-        // const agenticFlow = resolveAgent(msg);
-        const finalSources = keptSources ?? (msg.metadata?.sources as any[] | undefined);
-
-        // 1) Sources first (expanded)
-        if (finalSources?.length) {
-          elements.push(
-            <Sources
-              key={`sources-final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
-              sources={finalSources}
-              enableSources
-              expandSources={false}
-              highlightUid={highlightUid ?? undefined}
-            />,
-          );
-        }
-        const agent = resolveAgent(msg);
-        // 2) Single MessageCard (always markdown, inline [n] handled inside)
-
-        // 2) Final message card
-        elements.push(
-          <MessageCard
-            key={`final-${msg.session_id}-${msg.exchange_id}-${msg.rank}`}
-            message={msg}
-            agent={agent}
-            side="left"
-            enableCopy
-            enableThumbs
-            pending={isActiveExchange && isWaiting && !hasNonEmptyText(msg)}
-            suppressText={false}
-            libraryNameById={libraryNameById}
-            chatContextNameById={chatContextNameById}
-            onCitationHover={(uid) => setHighlightUid(uid)}
-            onCitationClick={(uid) => setHighlightUid(uid)}
-          />,
         );
       }
 
@@ -279,7 +267,7 @@ function Area({
 
       // Typing indicator should sit after the latest content of the active exchange
       if (isActiveExchange && isWaiting) {
-        const indicatorAgent = resolveAgent(userMessage ?? group[group.length - 1]);
+        const indicatorAgent = resolveAgent(userMessages[0] ?? group[group.length - 1]);
         elements.push(<TypingIndicatorRow key={`typing-${groupKey}`} agent={indicatorAgent} />);
       }
     }

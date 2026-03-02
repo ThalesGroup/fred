@@ -20,6 +20,7 @@ from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
 from fred_core import VectorSearchHit
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agentic_backend.common.structures import AgentSettings
@@ -46,6 +47,12 @@ class Channel(str, Enum):
     tool_result = "tool_result"
     error = "error"  # agent-level error (transport errors use ErrorEvent)
     system_note = "system_note"  # injected context, tips, etc.
+
+
+class DecisionMessage(HumanMessage):
+    """A message representing a user's decision in a HITL flow."""
+
+    type: Literal["decision"] = "decision"
 
 
 class FinishReason(str, Enum):
@@ -188,12 +195,20 @@ class ChatTokenUsage(BaseModel):
     total_tokens: int = 0
 
 
+class TokenUsageSource(str, Enum):
+    updates = "updates"
+    messages = "messages"
+    messages_backfill = "messages_backfill"
+    unavailable = "unavailable"
+
+
 # ---------- Message metadata (small, strong) ----------
 class ChatMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: Optional[str] = None
     token_usage: Optional[ChatTokenUsage] = None
+    token_usage_source: Optional[TokenUsageSource] = None
     # Keep your VectorSearchHit untouched
     sources: List[VectorSearchHit] = Field(default_factory=list)
 

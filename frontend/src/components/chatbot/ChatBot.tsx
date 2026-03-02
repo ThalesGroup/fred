@@ -392,6 +392,8 @@ const ChatBot = ({
   const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waitStartedAtRef = useRef<number>(0);
   const waitSeqRef = useRef<number>(0);
+  const waitingSessionIdRef = useRef<string | null>(null);
+  const waitingExchangeIdRef = useRef<string | null>(null);
   const debugLoader = false;
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const { roles } = useAuth();
@@ -470,6 +472,12 @@ const ChatBot = ({
     refetchOnReconnect: false,
   });
   const attachmentSessionId = effectiveSessionId;
+  const waitResponseForCurrentSession =
+    !waitResponse
+      ? false
+      : !effectiveSessionId
+        ? waitResponse
+        : waitingSessionIdRef.current === effectiveSessionId;
   useEffect(() => {
     if (attachmentSessionId) {
       refetchSessions();
@@ -505,7 +513,14 @@ const ChatBot = ({
   } = options.state;
   const { selectAgent, setSearchPolicy, setSearchRagScope, setDeepSearchEnabled, seedSessionPrefs } = options.actions;
 
-  const beginWaiting = () => {
+  type WaitTarget = {
+    sessionId?: string | null;
+    exchangeId?: string | null;
+  };
+
+  const beginWaiting = ({ sessionId, exchangeId }: WaitTarget = {}) => {
+    if (sessionId !== undefined) waitingSessionIdRef.current = sessionId ?? null;
+    if (exchangeId !== undefined) waitingExchangeIdRef.current = exchangeId ?? null;
     waitSeqRef.current += 1;
     waitStartedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
     if (waitTimerRef.current) {
@@ -516,7 +531,22 @@ const ChatBot = ({
     setWaitResponse(true);
   };
 
-  const endWaiting = ({ immediate = false }: { immediate?: boolean } = {}) => {
+  const endWaiting = ({
+    immediate = false,
+    sessionId,
+    exchangeId,
+  }: {
+    immediate?: boolean;
+    sessionId?: string | null;
+    exchangeId?: string | null;
+  } = {}) => {
+    if (sessionId && waitingSessionIdRef.current && waitingSessionIdRef.current !== sessionId) {
+      return;
+    }
+    if (exchangeId && waitingExchangeIdRef.current && waitingExchangeIdRef.current !== exchangeId) {
+      return;
+    }
+
     const seq = waitSeqRef.current;
     const MIN_MS = 200;
 
@@ -526,7 +556,11 @@ const ChatBot = ({
     }
 
     const finish = () => {
-      if (seq === waitSeqRef.current) setWaitResponse(false);
+      if (seq === waitSeqRef.current) {
+        waitingSessionIdRef.current = null;
+        waitingExchangeIdRef.current = null;
+        setWaitResponse(false);
+      }
     };
 
     if (immediate) {
@@ -638,18 +672,23 @@ const ChatBot = ({
               messagesRef.current = upsertOne(messagesRef.current, msg);
               setMessages(messagesRef.current);
               // Defensive: ensure loader is visible while we are streaming a response.
-              beginWaiting();
+              beginWaiting({ sessionId: msg.session_id, exchangeId: msg.exchange_id });
               // ⛔ no scrolling logic here — the layout effect handles it post-render
               break;
             }
 
             case "final": {
               const finalEvent = response as FinalEvent;
+              const finalSessionId = finalEvent.session?.id;
+              const finalExchangeId =
+                finalEvent.messages.find((m) => m.role === "assistant" && m.channel === "final")?.exchange_id ||
+                finalEvent.messages[0]?.exchange_id;
 
               // Ignore finals for another session than the one being viewed
               const activeSessionId = activeSessionIdRef.current;
-              if (activeSessionId && finalEvent.session?.id && finalEvent.session.id !== activeSessionId) {
-                console.warn("Ignoring final for another session:", finalEvent.session.id);
+              if (activeSessionId && finalSessionId && finalSessionId !== activeSessionId) {
+                console.warn("Ignoring final for another session:", finalSessionId);
+                endWaiting({ sessionId: finalSessionId, exchangeId: finalExchangeId });
                 break;
               }
 
@@ -663,7 +702,7 @@ const ChatBot = ({
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
-              endWaiting();
+              endWaiting({ sessionId: finalSessionId, exchangeId: finalExchangeId });
               break;
             }
 
@@ -679,16 +718,27 @@ const ChatBot = ({
             }
 
             case "error": {
+              const errorSessionId =
+                typeof (response as any)?.session_id === "string" ? ((response as any).session_id as string) : undefined;
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
-              endWaiting({ immediate: true });
+              endWaiting({
+                immediate: true,
+                sessionId: errorSessionId && errorSessionId !== "unknown-session" ? errorSessionId : undefined,
+              });
               break;
             }
 
             case "awaiting_human": {
               const awaiting = response as AwaitingHumanEvent;
+              const activeSessionId = activeSessionIdRef.current;
+              if (activeSessionId && awaiting.session_id !== activeSessionId) {
+                console.warn("Ignoring awaiting_human for another session:", awaiting.session_id);
+                endWaiting({ immediate: true, sessionId: awaiting.session_id, exchangeId: awaiting.exchange_id });
+                break;
+              }
               setPendingHitl(awaiting);
-              endWaiting({ immediate: true });
+              endWaiting({ immediate: true, sessionId: awaiting.session_id, exchangeId: awaiting.exchange_id });
               break;
             }
 
@@ -1055,7 +1105,7 @@ const ChatBot = ({
     }
     setMessages(messagesRef.current);
     // Show loader immediately (even while WS is connecting).
-    beginWaiting();
+    beginWaiting({ sessionId: sid, exchangeId });
     // Get tokens for backend use. This proacively allows the backend to perform
     // user-authenticated operations (e.g., vector search) on behalf of the user.
     // The backend is then responsible for refreshing tokens as needed. Which will rarely be needed
@@ -1108,6 +1158,11 @@ const ChatBot = ({
         }
         const refreshToken = KeyCloakService.GetRefreshToken();
         const accessToken = KeyCloakService.GetToken();
+        const hitlPayload = (target as any)?.payload ?? {};
+        const selectedChoice =
+          typeof answerOrChoice === "string" && Array.isArray(hitlPayload?.choices)
+            ? hitlPayload.choices.find((c: any) => c?.id === answerOrChoice)
+            : undefined;
         const payload = {
           type: "human_resume",
           session_id: chatSessionId,
@@ -1115,8 +1170,11 @@ const ChatBot = ({
           payload: {
             answer: answerOrChoice,
             choice_id: typeof answerOrChoice === "string" ? answerOrChoice : undefined,
+            _hitl_choice_label: selectedChoice?.label,
+            _hitl_title: hitlPayload?.title,
+            _hitl_stage: hitlPayload?.stage,
             text: freeText,
-            checkpoint_id: (target as any)?.payload?.checkpoint_id,
+            checkpoint_id: hitlPayload?.checkpoint_id,
           },
           agent_id: currentAgent?.id,
           access_token: accessToken || undefined,
@@ -1135,7 +1193,7 @@ const ChatBot = ({
           ws_state: socket.readyState,
         });
         setPendingHitl(null);
-        beginWaiting();
+        beginWaiting({ sessionId: chatSessionId, exchangeId: target.exchange_id });
       } catch (err) {
         console.error("[CHATBOT] Failed to send HITL resume", err);
         showError({ summary: "Connection Error", detail: "Could not send your answer — connection failed." });
@@ -1172,10 +1230,10 @@ const ChatBot = ({
       !loadState.historyReady ||
       !loadState.prefsReady ||
       Boolean(loadError));
-  const showWelcome = isNewConversation && !isSessionLoadBlocked && !waitResponse && messages.length === 0;
+  const showWelcome = isNewConversation && !isSessionLoadBlocked && !waitResponseForCurrentSession && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
   const showHistoryLoading =
-    !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponse && !isClientCreatedSession;
+    !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponseForCurrentSession && !isClientCreatedSession;
   const debugWidgetProps = {
     isAdmin,
     debugDrawerOpen,
@@ -1222,7 +1280,7 @@ const ChatBot = ({
         loadError={hasLoadError}
         showWelcome={showWelcome}
         showHistoryLoading={showHistoryLoading}
-        waitResponse={waitResponse}
+        waitResponse={waitResponseForCurrentSession}
         isHydratingSession={isHydratingSession && !isClientCreatedSession}
         conversationPrefs={conversationPrefs}
         currentAgent={currentAgent}

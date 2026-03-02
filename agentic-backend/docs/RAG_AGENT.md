@@ -18,14 +18,18 @@
 
 ---
 
-## 🛠 Initialization (Async)
+## 🛠 Initialization (Recommended Lifecycle)
 
-The `async_init` method bootstraps the agent asynchronously:
+In the recommended `AgentFlow` lifecycle, a RAG agent should split initialization as follows:
 
-- Loads the language model via `get_model(...)`.
-- Builds the base prompt (`_generate_prompt()`).
-- Constructs the LangGraph (`_build_graph()`).
-- Calls the `AgentFlow` constructor with all metadata and graph logic.
+- `build_runtime_structure()`:
+  - Builds the base prompt (`_generate_prompt()`).
+  - Constructs the LangGraph (`_build_graph()`).
+- `activate_runtime()`:
+  - Loads the language model via `get_model(...)`.
+  - Initializes any runtime clients (retrievers, HTTP clients, etc.) if needed.
+
+Fred then uses `initialize_runtime(runtime_context)` to orchestrate the steps in order.
 
 ---
 
