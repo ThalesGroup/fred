@@ -34,7 +34,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: "v1.0.10"
+      tag: ""
       pullPolicy: IfNotPresent
     command:
       enabled: true
@@ -416,7 +416,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/frontend
-      tag: "v1.0.10"
+      tag: ""
       pullPolicy: IfNotPresent
     command:
       enabled: false
@@ -534,7 +534,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: "v1.0.10"
+      tag: ""
     command:
       enabled: true
       data:
@@ -929,7 +929,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: "v1.0.10"
+      tag: ""
     command:
       enabled: true
       data:

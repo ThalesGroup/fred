@@ -103,17 +103,14 @@ class AgentFactory(BaseAgentFactory):
         Returns a warm agent. Reuses cache when possible; otherwise:
           1) instantiate from authoritative settings,
           2) set runtime context,
-          3) run async init (with crew when Leader).
+          3) initialize runtime lifecycle (with crew when Leader).
         """
         cache_key = (session_id, agent_id)
         cached = self._agent_cache.get(cache_key)
         if cached is not None:
             self._agent_cache.acquire(cache_key)
             # Why: tokens/context may change between requests; always refresh on reuse.
-            try:
-                cached.set_runtime_context(runtime_context)
-            except Exception:
-                setattr(cached, "runtime_context", runtime_context)
+            cached.set_runtime_context(runtime_context)
             logger.info(
                 "[AGENTS] Reusing cached agent '%s' for session '%s'",
                 agent_id,
@@ -123,10 +120,11 @@ class AgentFactory(BaseAgentFactory):
 
         # Build fresh
         settings, agent = await self._instantiate_from_settings(user, agent_id)
-        # Always apply merged settings and context before init
+        # Always apply merged settings and bind context before runtime initialization.
+        # The explicit bind keeps compatibility with legacy async_init() overrides that
+        # do not call super().async_init(...).
         agent.apply_settings(settings)
-        if runtime_context:
-            agent.set_runtime_context(runtime_context)
+        agent.set_runtime_context(runtime_context)
 
         # Initialize (Leader vs simple Agent handled here)
         await self._initialize_agent(user, agent, settings, runtime_context)
@@ -168,7 +166,7 @@ class AgentFactory(BaseAgentFactory):
     ) -> None:
         """
         Why: unify init for simple agents and leaders.
-        - Simple AgentFlow: await agent.async_init(runtime_context=...)
+        - Simple AgentFlow: await agent.initialize_runtime(runtime_context=...)
         - LeaderFlow: build crew once, then await leader.async_init(runtime_context, crew)
         """
         if isinstance(agent, LeaderFlow):
@@ -183,10 +181,8 @@ class AgentFactory(BaseAgentFactory):
             await agent.async_init(runtime_context, crew)
             return
 
-        # Simple agent
-        if hasattr(agent, "async_init"):
-            logger.info("[AGENTS] agent='%s' async_init invoked.", agent.get_id())
-            await agent.async_init(runtime_context=runtime_context)
+        logger.info("[AGENTS] agent='%s' initialize_runtime invoked.", agent.get_id())
+        await agent.initialize_runtime(runtime_context=runtime_context)
 
     async def _build_leader_crew(
         self,
@@ -196,7 +192,7 @@ class AgentFactory(BaseAgentFactory):
     ) -> Dict[str, AgentFlow]:
         """
         Why: leaders orchestrate expert agents. We build each expert exactly like a simple agent:
-        instantiate → apply settings → set context → async_init — then hand to the Leader.
+        instantiate → apply settings → initialize runtime — then hand to the Leader.
         """
         crew: Dict[str, AgentFlow] = {}
         for expert_id in leader_settings.crew:
@@ -204,10 +200,12 @@ class AgentFactory(BaseAgentFactory):
                 user, expert_id
             )
             expert.apply_settings(expert_settings)
+            # Compatibility for legacy async_init() overrides that do not call super().
             expert.set_runtime_context(runtime_context)
-            if hasattr(expert, "async_init"):
-                logger.info("[AGENTS] expert='%s' async_init invoked.", expert.get_id())
-                await expert.async_init(runtime_context=runtime_context)
+            logger.info(
+                "[AGENTS] expert='%s' initialize_runtime invoked.", expert.get_id()
+            )
+            await expert.initialize_runtime(runtime_context=runtime_context)
             crew[expert_id] = expert
         return crew
 

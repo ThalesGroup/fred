@@ -14,9 +14,10 @@
 
 import importlib
 import inspect
+import logging
 import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, cast
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -28,6 +29,7 @@ from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
     AgentSettings,
 )
+from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
@@ -40,8 +42,11 @@ from agentic_backend.core.agents.agent_service import (
     MissingTeamIdError,
 )
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
+
+logger = logging.getLogger(__name__)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -207,6 +212,61 @@ async def create_agent(
         a2a_token=request.a2a_token,
         class_path=request.class_path,
     )
+
+
+@router.get(
+    "/agents/{agent_id}/graph",
+    summary="Get the Mermaid graph representation of an agent",
+    response_class=PlainTextResponse,
+)
+async def get_agent_graph(
+    agent_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+):
+    service = AgentService(agent_manager=agent_manager)
+    settings = await service.get_agent_by_id(user, agent_id)
+    if not settings:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if not settings.class_path:
+        raise HTTPException(status_code=400, detail="Agent has no class path")
+
+    try:
+        agent_cls = agent_manager.loader._import_agent_class(settings.class_path)
+        agent_inst = cast(AgentFlow, agent_cls(agent_settings=settings))
+
+        # Non-activating structural graph path:
+        # bind a minimal runtime context, build graph structure only, then render Mermaid.
+        # No MCP/model activation should happen here.
+        try:
+            agent_inst.bind_runtime_context(RuntimeContext())
+            agent_inst.build_runtime_structure()
+            mermaid = agent_inst.get_graph_mermaid()
+            if mermaid:
+                return mermaid
+
+            logger.info(
+                "No structural graph available for agent %s (class=%s)",
+                agent_id,
+                settings.class_path,
+            )
+            return "graph TD;\nError[No graph available];"
+        except Exception:
+            logger.info(
+                "Structural graph build unavailable for agent %s (class=%s)",
+                agent_id,
+                settings.class_path,
+                exc_info=True,
+            )
+            return "graph TD;\nError[No graph available];"
+
+    except Exception as e:
+        logger.error(
+            f"Failed to generate graph for agent {agent_id}: {e}", exc_info=True
+        )
+        safe_err = str(e).replace('"', "'").replace(";", "")
+        return f"graph TD;\nError[Error: {safe_err}];"
 
 
 @router.get(

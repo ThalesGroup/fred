@@ -25,6 +25,7 @@ from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerRef
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.interrupts.hitl_i18n import select_hitl_payload
 from agentic_backend.core.tools.tool_loop import build_tool_loop
 
 logger = logging.getLogger(__name__)
@@ -88,8 +89,9 @@ class Custodian(AgentFlow):
             }
 
         async def hitl_callback(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-            decision = interrupt(
-                {
+            payload = select_hitl_payload(
+                self,
+                en={
                     "stage": "corpus",
                     "title": "Confirm corpus operation",
                     "question": (
@@ -114,6 +116,37 @@ class Custodian(AgentFlow):
                             "description": "Do nothing for now.",
                         },
                     ],
+                },
+                fr={
+                    "stage": "corpus",
+                    "title": "Confirmer l'opération sur le corpus",
+                    "question": (
+                        f"Je peux exécuter `{tool_name}` sur le corpus. Choisis l'action à effectuer "
+                        "et ajoute éventuellement des notes avant de modifier le corpus."
+                    ),
+                    "choices": [
+                        {
+                            "id": "proceed",
+                            "label": "Exécuter l'action",
+                            "description": "Lancer maintenant l'opération demandée sur le corpus.",
+                            "default": True,
+                        },
+                        {
+                            "id": "adjust",
+                            "label": "Exécuter avec ajustements",
+                            "description": "J'appliquerai les notes que tu ajoutes.",
+                        },
+                        {
+                            "id": "cancel",
+                            "label": "Annuler",
+                            "description": "Ne rien faire pour le moment.",
+                        },
+                    ],
+                },
+            )
+            decision = interrupt(
+                {
+                    **payload,
                     "free_text": True,
                     "metadata": {"action": tool_name, "args": args},
                 }

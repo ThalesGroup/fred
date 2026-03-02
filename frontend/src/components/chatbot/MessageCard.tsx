@@ -41,6 +41,7 @@ import { getExtras, isToolCall, isToolResult } from "./ChatBotUtils.tsx";
 import GeoMapRenderer from "./GeoMapRenderer.tsx";
 import { MessagePart, toCopyText, toMarkdown, toPlainText } from "./messageParts.ts";
 import MessageRuntimeContextHeader from "./MessageRuntimeContextHeader.tsx";
+import { tokenUsageSourceLabel } from "./tokenUsage.ts";
 import { useMessageContentPagination } from "./useMessageContentPagination.tsx";
 import { workspaceUserFileDownloader } from "./workspaceUserFileDownloader.tsx";
 
@@ -264,6 +265,18 @@ export default function MessageCard({
                           {String(extras.label)}
                         </Typography>
                       )}
+                      {showMetaChips && extras?.hitl?.kind === "decision" && (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          label={
+                            extras?.hitl?.stage
+                              ? `Decision · ${String(extras.hitl.stage)}`
+                              : "HITL decision"
+                          }
+                        />
+                      )}
                       {isCall && pending && (
                         <Typography fontSize=".8rem" sx={{ opacity: 0.7 }}>
                           ⏳ {t("chat.message.waiting")}
@@ -400,11 +413,6 @@ export default function MessageCard({
                       </Box>
                     )}
                   </Box>
-                  {geoPart && (
-                    <Box px={0} pt={0.5} pb={1}>
-                      <GeoMapRenderer part={geoPart} />
-                    </Box>
-                  )}
                   {/* 🌟 DOWNLOAD / VIEW LINKS 🌟 */}
                   {(downloadLinkPart || viewLinkPart) && (
                     <Box px={0} pt={0.5} pb={1} display="flex" gap={1} flexWrap="wrap">
@@ -449,6 +457,14 @@ export default function MessageCard({
                 </Box>
               </Grid2>
 
+              {geoPart && (
+                <Grid2 size={12} sx={{ width: "100%" }}>
+                  <Box px={0} pt={0.5} pb={1} sx={{ width: "100%" }}>
+                    <GeoMapRenderer part={geoPart} />
+                  </Box>
+                </Grid2>
+              )}
+
               {/* Footer controls (assistant side) */}
               {side === "left" ? (
                 <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
@@ -474,11 +490,17 @@ export default function MessageCard({
 
                   {renderMessage.metadata?.token_usage && (
                     <SimpleTooltip
-                      title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? 0} · Out: ${renderMessage.metadata.token_usage?.output_tokens ?? 0}`}
+                      title={`In: ${renderMessage.metadata.token_usage?.input_tokens ?? "—"} · Out: ${
+                        renderMessage.metadata.token_usage?.output_tokens ?? "—"
+                      }${
+                        tokenUsageSourceLabel(renderMessage.metadata?.token_usage_source)
+                          ? ` · Source: ${tokenUsageSourceLabel(renderMessage.metadata?.token_usage_source)}`
+                          : ""
+                      }`}
                       placement="top"
                     >
                       <Typography color={theme.palette.text.secondary} fontSize=".7rem" sx={{ wordBreak: "normal" }}>
-                        {renderMessage.metadata.token_usage?.output_tokens ?? 0} tokens
+                        {renderMessage.metadata.token_usage?.output_tokens ?? "—"} tokens
                       </Typography>
                     </SimpleTooltip>
                   )}

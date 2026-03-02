@@ -25,7 +25,6 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +45,8 @@ class SimpleAgentFlow(AgentFlow):
     Developers only need to implement the asynchronous 'arun' method.
     """
 
-    async def async_init(self, runtime_context: RuntimeContext):
-        """Initializes the internal graph structure."""
+    def build_runtime_structure(self) -> None:
+        """Build and compile the internal graph structure without I/O."""
         self._graph = self._build_graph()
         self.get_compiled_graph()
 
@@ -118,12 +117,16 @@ class SimpleAgentFlow(AgentFlow):
 
         # Fallback coercion: Convert any other BaseMessage into a guaranteed AIMessage.
         # This is safe because all BaseMessages have 'content' and 'additional_kwargs'.
-        return AIMessage(
-            content=temp_message.content,
-            additional_kwargs=temp_message.additional_kwargs,
+        kwargs: Dict[str, Any] = {
+            "content": temp_message.content,
+            "additional_kwargs": temp_message.additional_kwargs,
             # Note: response_metadata is often critical and should be preserved
-            response_metadata=getattr(temp_message, "response_metadata", {}),
-        )
+            "response_metadata": getattr(temp_message, "response_metadata", {}),
+        }
+        usage_metadata = getattr(temp_message, "usage_metadata", None)
+        if usage_metadata is not None:
+            kwargs["usage_metadata"] = usage_metadata
+        return AIMessage(**kwargs)
 
     # --- State schema for Temporal hydration ---
     def get_state_schema(self):

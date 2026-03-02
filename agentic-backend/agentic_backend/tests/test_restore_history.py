@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
 from fred_core import KeycloakUser
 from fred_core.kpi import NoOpKPIWriter
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -23,6 +24,8 @@ from agentic_backend.core.chatbot.chat_schema import (
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore
 from agentic_backend.core.session.noop_session_store import NoOpSessionStore
+
+pytestmark = pytest.mark.asyncio
 
 # -----------------------
 # tiny helpers (test-only)
@@ -91,10 +94,10 @@ async def test_empty_history_returns_empty(minimal_generalist_config, monkeypatc
     user, session = _mk_user_session()
     await store.save(session)
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return []
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
     assert await orch._restore_history(user=user, session=session) == []
 
 
@@ -128,10 +131,10 @@ async def test_orders_strictly_by_rank_not_exchange(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[0], HumanMessage) and "U1" in out[0].content
@@ -191,10 +194,10 @@ async def test_groups_tool_calls_then_tool_result_and_text(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
 
@@ -256,10 +259,10 @@ async def test_skips_orphan_tool_result_cross_exchange(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     # Only one ToolMessage should make it (the valid one in e1)
@@ -318,10 +321,10 @@ async def test_multiple_tool_calls_in_one_exchange(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     ai_calls = [
@@ -334,9 +337,12 @@ async def test_multiple_tool_calls_in_one_exchange(
     assert {m.tool_call_id for m in tool_msgs} == {"a", "b"}
 
 
-async def test_flushes_pending_calls_at_end(minimal_generalist_config, monkeypatch):
+async def test_skips_pending_calls_without_results_at_end(
+    minimal_generalist_config, monkeypatch
+):
     """
-    Fred rationale: If the transcript ends during planning (tool calls) we must still preserve that intent.
+    Fred rationale: Pending tool calls without any tool result in the same exchange
+    are skipped during restore (avoid replaying unexecuted tool intent).
     """
     orch, store = _mk_orchestrator(minimal_generalist_config)
     user, session = _mk_user_session()
@@ -363,14 +369,17 @@ async def test_flushes_pending_calls_at_end(minimal_generalist_config, monkeypat
         # No tool result; end of transcript.
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
-    assert isinstance(out[-1], AIMessage)
-    assert getattr(out[-1], "tool_calls")[0]["id"] == "tail"
+    assert len(out) == 1
+    assert isinstance(out[0], HumanMessage) and out[0].content == "U"
+    assert not any(
+        isinstance(m, AIMessage) and getattr(m, "tool_calls", None) for m in out
+    )
 
 
 async def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
@@ -420,10 +429,10 @@ async def test_windowing_keeps_whole_exchanges_and_preserves_chronology(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
 
@@ -469,12 +478,20 @@ async def test_args_dict_and_string_and_unparseable_string(
             channel=Channel.tool_call,
             parts=[ToolCallPart(call_id="c", name="t", args=json.loads('"not-json"'))],
         ),
+        _msg(
+            session_id=session.id,
+            exchange_id=e,
+            rank=3,
+            role=Role.tool,
+            channel=Channel.tool_result,
+            parts=[ToolResultPart(call_id="a", ok=True, content="ok")],
+        ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     ai = [
@@ -522,10 +539,10 @@ async def test_system_messages_are_emitted(minimal_generalist_config, monkeypatc
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[0], SystemMessage) and "SYS" in out[0].content
@@ -563,10 +580,10 @@ async def test_tool_result_emits_only_after_flushing_calls(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     assert (
@@ -614,10 +631,10 @@ async def test_ignores_unrelated_roles_or_channels_safely(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     out = await orch._restore_history(user=user, session=session)
     assert isinstance(out[0], HumanMessage) and "U" in out[0].content
@@ -710,10 +727,10 @@ async def test_sample_from_prompt_checks(
         ),
     ]
 
-    async def _fake_history(_sid, _u):
+    async def _fake_history(_sid):
         return hist
 
-    monkeypatch.setattr(orch, "get_session_history", _fake_history)
+    monkeypatch.setattr(orch.history_store, "get", _fake_history)
 
     lc_messages = await orch._restore_history(user=user, session=session)
     assert isinstance(lc_messages[0], HumanMessage) and "U-e1" in lc_messages[0].content

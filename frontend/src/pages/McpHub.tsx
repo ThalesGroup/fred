@@ -2,11 +2,26 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import SearchIcon from "@mui/icons-material/Search";
-import { Box, Button, Card, CardContent, Chip, Fade, Stack, Typography, useTheme } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Fade,
+  FormControl,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import Grid2 from "@mui/material/Grid2";
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "../common/TopBar";
 import { useConfirmationDialog } from "../components/ConfirmationDialogProvider";
@@ -24,39 +39,11 @@ import {
 } from "../slices/agentic/agenticOpenApi";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 
-const ActionButton = ({
-  icon,
-  children,
-  ...props
-}: {
-  icon: ReactNode;
-  children: ReactNode;
-} & React.ComponentProps<typeof Button>) => {
-  const theme = useTheme();
-  return (
-    <Button
-      startIcon={<Box component="span" sx={{ color: "inherit", display: "flex" }}>{icon}</Box>}
-      size="small"
-      {...props}
-      sx={{
-        borderRadius: 1.5,
-        textTransform: "none",
-        px: 1.25,
-        height: 32,
-        border: `1px solid ${theme.palette.divider}`,
-        bgcolor: "transparent",
-        color: "text.primary",
-        "&:hover": {
-          borderColor: theme.palette.primary.main,
-          backgroundColor: theme.palette.mode === "dark" ? "rgba(25,118,210,0.10)" : "rgba(25,118,210,0.06)",
-        },
-        ...props.sx,
-      }}
-    >
-      {children}
-    </Button>
-  );
-};
+const normalizeTransport = (server: McpServerConfiguration) =>
+  (server.transport || "streamable_http").toLowerCase();
+
+const sourceKindForServer = (server: McpServerConfiguration) =>
+  normalizeTransport(server) === "inprocess" ? "local" : "mcp";
 
 export const McpHub = () => {
   const { t } = useTranslation();
@@ -78,6 +65,10 @@ export const McpHub = () => {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<McpServerConfiguration | null>(null);
   const [showElements, setShowElements] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "mcp" | "local">("all");
+  const [transportFilter, setTransportFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
 
   const sortedServers = useMemo(
     () =>
@@ -90,11 +81,63 @@ export const McpHub = () => {
   const transportCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     sortedServers.forEach((s) => {
-      const key = (s.transport || "streamable_http").toLowerCase();
+      const key = normalizeTransport(s);
       counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
   }, [sortedServers]);
+
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = { mcp: 0, local: 0 };
+    sortedServers.forEach((s) => {
+      const key = sourceKindForServer(s);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [sortedServers]);
+
+  const availableTransports = useMemo(
+    () => Array.from(new Set(sortedServers.map((s) => normalizeTransport(s)))).sort(),
+    [sortedServers],
+  );
+
+  const filteredServers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return sortedServers.filter((server) => {
+      const transport = normalizeTransport(server);
+      const sourceKind = sourceKindForServer(server);
+      const enabled = server.enabled !== false;
+
+      if (sourceFilter !== "all" && sourceKind !== sourceFilter) return false;
+      if (transportFilter !== "all" && transport !== transportFilter) return false;
+      if (statusFilter === "enabled" && !enabled) return false;
+      if (statusFilter === "disabled" && enabled) return false;
+
+      if (!q) return true;
+
+      const searchHaystack = [
+        server.id,
+        server.name,
+        t(server.name),
+        server.description || "",
+        server.description ? t(server.description) : "",
+        server.url || "",
+        server.command || "",
+        server.provider || "",
+        ...(server.args || []),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchHaystack.includes(q);
+    });
+  }, [sortedServers, searchQuery, sourceFilter, transportFilter, statusFilter, t]);
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    sourceFilter !== "all" ||
+    transportFilter !== "all" ||
+    statusFilter !== "all";
 
   useEffect(() => {
     setShowElements(true);
@@ -202,6 +245,13 @@ export const McpHub = () => {
     });
   };
 
+  const resetFilters = () => {
+    setSearchQuery("");
+    setSourceFilter("all");
+    setTransportFilter("all");
+    setStatusFilter("all");
+  };
+
   return (
     <Box>
       <TopBar title={t("mcpHub.title")} description={t("mcpHub.subtitle")} />
@@ -228,37 +278,165 @@ export const McpHub = () => {
             }}
           >
             <CardContent sx={{ py: 1.5, px: { xs: 1.5, md: 2 } }}>
-              <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2} alignItems="center">
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                  <Chip
-                    label={`${sortedServers.length} ${t("mcpHub.countLabel")}`}
-                    color="primary"
-                    variant="outlined"
-                    size="small"
-                  />
-                  {Object.entries(transportCounts).map(([transport, count]) => (
+              <Stack spacing={1.5}>
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  justifyContent="space-between"
+                  gap={2}
+                  alignItems={{ xs: "stretch", md: "center" }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography variant="subtitle2" sx={{ mr: 0.5 }}>
+                      {t("mcpHub.title")}
+                    </Typography>
                     <Chip
-                      key={transport}
-                      label={`${t(`mcpHub.transport.${transport}`, transport)}: ${count}`}
+                      label={`${sortedServers.length} ${t("mcpHub.countLabel")}`}
+                      color="primary"
+                      variant="outlined"
+                      size="small"
+                    />
+                    <Chip
+                      label={`${t("mcpHub.source.mcp", "MCP")}: ${sourceCounts.mcp || 0}`}
                       size="small"
                       sx={{ borderRadius: 1 }}
                     />
-                  ))}
+                    <Chip
+                      label={`${t("mcpHub.source.local", "Local")}: ${sourceCounts.local || 0}`}
+                      size="small"
+                      sx={{ borderRadius: 1 }}
+                    />
+                    {Object.entries(transportCounts).map(([transport, count]) => (
+                      <Chip
+                        key={transport}
+                        label={`${t(`mcpHub.transport.${transport}`, transport)}: ${count}`}
+                        size="small"
+                        sx={{ borderRadius: 1 }}
+                      />
+                    ))}
+                    {hasActiveFilters && (
+                      <Chip
+                        label={`${filteredServers.length} ${t("mcpHub.resultsLabel", "results")}`}
+                        size="small"
+                        color="secondary"
+                        variant="outlined"
+                        sx={{ borderRadius: 1 }}
+                      />
+                    )}
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<RefreshIcon />}
+                      onClick={canEdit ? handleRestore : undefined}
+                      disabled={!canEdit || isRestoring}
+                      sx={{ textTransform: "none" }}
+                    >
+                      {t("mcpHub.restoreButton")}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      onClick={canEdit ? handleCreate : undefined}
+                      disabled={!canEdit}
+                      sx={{ textTransform: "none" }}
+                    >
+                      {t("mcpHub.addButton")}
+                    </Button>
+                  </Stack>
                 </Stack>
-                <Box display="flex" gap={1}>
-                  <ActionButton icon={<SearchIcon />}>{t("mcpHub.search")}</ActionButton>
-                  <ActionButton icon={<FilterListIcon />}>{t("mcpHub.filter")}</ActionButton>
-                  <ActionButton
-                    icon={<RefreshIcon />}
-                    onClick={canEdit ? handleRestore : undefined}
-                    disabled={!canEdit || isRestoring}
+
+                <Stack
+                  direction={{ xs: "column", lg: "row" }}
+                  spacing={1.25}
+                  alignItems={{ xs: "stretch", lg: "center" }}
+                >
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t(
+                      "mcpHub.searchPlaceholder",
+                      "Search by id, name, description, URL, command, or provider",
+                    )}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ flex: 1.2 }}
+                  />
+
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ flex: 1 }}>
+                    <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
+                      <InputLabel id="mcp-source-filter-label">
+                        {t("mcpHub.filters.source", "Source")}
+                      </InputLabel>
+                      <Select
+                        labelId="mcp-source-filter-label"
+                        label={t("mcpHub.filters.source", "Source")}
+                        value={sourceFilter}
+                        onChange={(e) => setSourceFilter(e.target.value as "all" | "mcp" | "local")}
+                      >
+                        <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
+                        <MenuItem value="mcp">{t("mcpHub.source.mcp", "MCP")}</MenuItem>
+                        <MenuItem value="local">{t("mcpHub.source.local", "Local")}</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    <FormControl size="small" sx={{ minWidth: 170, flex: 1 }}>
+                      <InputLabel id="mcp-transport-filter-label">
+                        {t("mcpHub.filters.transport", "Transport")}
+                      </InputLabel>
+                      <Select
+                        labelId="mcp-transport-filter-label"
+                        label={t("mcpHub.filters.transport", "Transport")}
+                        value={transportFilter}
+                        onChange={(e) => setTransportFilter(e.target.value)}
+                      >
+                        <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
+                        {availableTransports.map((transport) => (
+                          <MenuItem key={transport} value={transport}>
+                            {t(`mcpHub.transport.${transport}`, transport)}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+
+                    <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
+                      <InputLabel id="mcp-status-filter-label">
+                        {t("mcpHub.filters.status", "Status")}
+                      </InputLabel>
+                      <Select
+                        labelId="mcp-status-filter-label"
+                        label={t("mcpHub.filters.status", "Status")}
+                        value={statusFilter}
+                        onChange={(e) =>
+                          setStatusFilter(e.target.value as "all" | "enabled" | "disabled")
+                        }
+                      >
+                        <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
+                        <MenuItem value="enabled">{t("mcpHub.filters.enabled", "Enabled")}</MenuItem>
+                        <MenuItem value="disabled">{t("mcpHub.filters.disabled", "Disabled")}</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Stack>
+
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={resetFilters}
+                    disabled={!hasActiveFilters}
+                    sx={{ textTransform: "none", minWidth: 110 }}
                   >
-                    {t("mcpHub.restoreButton")}
-                  </ActionButton>
-                  <ActionButton icon={<AddIcon />} onClick={canEdit ? handleCreate : undefined} disabled={!canEdit}>
-                    {t("mcpHub.addButton")}
-                  </ActionButton>
-                </Box>
+                    {t("mcpHub.clearFilters", "Reset")}
+                  </Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
@@ -302,9 +480,31 @@ export const McpHub = () => {
                     {t("mcpHub.addButton")}
                   </Button>
                 </Box>
+              ) : filteredServers.length === 0 ? (
+                <Box
+                  sx={{
+                    border: `1px dashed ${theme.palette.divider}`,
+                    borderRadius: 2,
+                    p: 4,
+                    textAlign: "center",
+                  }}
+                >
+                  <Typography variant="subtitle1">{t("mcpHub.noResultsTitle", "No connector matches your search")}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {t("mcpHub.noResultsHint", "Try removing filters or broadening the search.")}
+                  </Typography>
+                  <Button
+                    sx={{ mt: 2 }}
+                    variant="outlined"
+                    onClick={resetFilters}
+                    disabled={!hasActiveFilters}
+                  >
+                    {t("mcpHub.clearFilters", "Reset")}
+                  </Button>
+                </Box>
               ) : (
                 <Grid2 container spacing={2}>
-                  {sortedServers.map((server) => (
+                  {filteredServers.map((server) => (
                     <Grid2
                       key={server.id}
                       size={{ xs: 12, sm: 12, md: 6, lg: 6 }}

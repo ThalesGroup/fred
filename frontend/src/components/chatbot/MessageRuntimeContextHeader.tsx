@@ -9,7 +9,7 @@ import { useTheme } from "@mui/material/styles";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
-import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
+import type { ChatMessage, TokenUsageSource } from "../../slices/agentic/agenticOpenApi";
 import { getExtras } from "./ChatBotUtils";
 import MessageRuntimeContextPopover from "./MessageRuntimeContextPopover";
 
@@ -95,12 +95,13 @@ export default function MessageRuntimeContextHeader({ message, libraryNameById, 
   const latencyMs: number | undefined = meta?.latency_ms ?? meta?.timings?.durationMs ?? meta?.latency?.ms ?? undefined;
   const inTokens = message.metadata?.token_usage?.input_tokens;
   const outTokens = message.metadata?.token_usage?.output_tokens;
+  const tokenUsageSource: TokenUsageSource | undefined = message.metadata?.token_usage_source ?? undefined;
 
   const showLibs = libsLabeled.length > 0;
   const showChatCtx = ctxLabeled.length > 0;
   const showAny = showLibs || showChatCtx;
 
-  if (!showAny && !searchPolicy && usedTemperature == null && modelName == null && latencyMs == null) {
+  if (!showAny && !searchPolicy && usedTemperature == null && modelName == null && latencyMs == null && !tokenUsageSource) {
     return null;
   }
 
@@ -205,6 +206,7 @@ export default function MessageRuntimeContextHeader({ message, libraryNameById, 
           node={extras?.node}
           modelName={modelName}
           tokens={{ in: inTokens, out: outTokens }}
+          tokenUsageSource={tokenUsageSource}
           latencyMs={latencyMs}
           searchPolicy={searchPolicy}
           temperature={typeof usedTemperature === "number" ? usedTemperature : undefined}

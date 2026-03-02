@@ -40,6 +40,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     MessagePart,
     Role,
     TextPart,
+    TokenUsageSource,
     ToolCallPart,
     ToolResultPart,
     validate_hitl_payload,
@@ -50,6 +51,12 @@ from agentic_backend.core.chatbot.message_part import (
     extract_tool_calls,
     hydrate_fred_parts,
     parts_from_raw_content,
+)
+from agentic_backend.core.chatbot.tool_result_contract import (
+    coerce_latency_ms as _coerce_latency_ms,
+)
+from agentic_backend.core.chatbot.tool_result_contract import (
+    normalize_tool_result_contract,
 )
 from agentic_backend.core.interrupts.base_interrupt_handler import InterruptHandler
 
@@ -64,46 +71,6 @@ CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
 def _utcnow_dt():
     """UTC timestamp (seconds precision) for ISO-8601 serialization."""
     return datetime.now(timezone.utc).replace(microsecond=0)
-
-
-def _infer_tool_ok_flag(raw_md: dict, content: str) -> Optional[bool]:
-    """
-    Best-effort determination of tool_result.ok.
-    - Honour explicit metadata provided by the tool (ok / success / status).
-    - Detect common error markers when metadata is missing so the UI does not
-      show a green “ok” badge for a textual error payload.
-    """
-    if isinstance(raw_md, dict):
-        explicit_ok = raw_md.get("ok")
-        if isinstance(explicit_ok, bool):
-            return explicit_ok
-
-        success = raw_md.get("success")
-        if isinstance(success, bool):
-            return success
-
-        status = raw_md.get("status")
-        if isinstance(status, str):
-            status_lc = status.lower()
-            if status_lc in ("ok", "success", "succeeded", "completed"):
-                return True
-            if status_lc in ("error", "failed", "fail", "exception"):
-                return False
-
-        if raw_md.get("error") or raw_md.get("is_error") is True:
-            return False
-        if raw_md.get("failed") is True:
-            return False
-
-    if isinstance(content, str):
-        stripped = content.strip()
-        lowered = stripped.lower()
-        if lowered.startswith("error") or lowered.startswith("exception"):
-            return False
-        if "toolexception" in lowered or "traceback" in lowered:
-            return False
-
-    return None
 
 
 def _extract_vector_search_hits(raw: Any) -> Optional[List[VectorSearchHit]]:
@@ -196,6 +163,91 @@ def _additional_kwargs_emptyish(raw: Any) -> bool:
     if not isinstance(raw, dict):
         return True
     return all(v in (None, "", [], {}, False) for v in raw.values())
+
+
+def _split_stream_event_mode(raw_event: Any) -> tuple[str, Any]:
+    """
+    LangGraph shape:
+      - single mode: event payload directly
+      - multi mode: (mode_name, payload)
+    """
+    if (
+        isinstance(raw_event, tuple)
+        and len(raw_event) == 2
+        and isinstance(raw_event[0], str)
+    ):
+        return raw_event[0], raw_event[1]
+    return "updates", raw_event
+
+
+def _extract_chunk_text(raw_chunk: Any) -> str:
+    content = getattr(raw_chunk, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if isinstance(item, dict):
+                txt = item.get("text") or item.get("input_text")
+                if isinstance(txt, str):
+                    parts.append(txt)
+        return "".join(parts)
+    return ""
+
+
+def _is_assistant_stream_chunk(raw_chunk: Any) -> bool:
+    """
+    Accept assistant chunks across LangChain variants.
+
+    Observed values:
+      - AIMessage            -> type == "ai"
+      - AIMessageChunk       -> type == "AIMessageChunk"
+    """
+    raw_type = getattr(raw_chunk, "type", None)
+    if isinstance(raw_type, str) and raw_type.lower() in {"ai", "aimessagechunk"}:
+        return True
+    return type(raw_chunk).__name__ == "AIMessageChunk"
+
+
+def _extract_chunk_metadata(raw_messages_event: Any) -> dict[str, Any]:
+    """
+    `messages` mode usually yields (message_chunk, metadata).
+    Keep this tolerant across runtime versions.
+    """
+    if (
+        isinstance(raw_messages_event, tuple)
+        and len(raw_messages_event) >= 2
+        and isinstance(raw_messages_event[1], dict)
+    ):
+        return raw_messages_event[1]
+    return {}
+
+
+def _token_usage_log_payload(token_usage: Any) -> dict[str, Any] | None:
+    if token_usage is None:
+        return None
+    if isinstance(token_usage, dict):
+        return {
+            "input_tokens": token_usage.get("input_tokens"),
+            "output_tokens": token_usage.get("output_tokens"),
+            "total_tokens": token_usage.get("total_tokens"),
+        }
+    model_dump = getattr(token_usage, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+        except Exception:
+            dumped = None
+        if isinstance(dumped, dict):
+            return {
+                "input_tokens": dumped.get("input_tokens"),
+                "output_tokens": dumped.get("output_tokens"),
+                "total_tokens": dumped.get("total_tokens"),
+            }
+    return {"raw": str(token_usage)}
 
 
 class InterruptRaised(Exception):
@@ -483,7 +535,15 @@ class StreamTranscoder:
 
         out: List[ChatMessage] = []
         seq = start_seq
-        final_sent = False
+        tool_activity_seen = False
+        pending_assistant_final: Optional[ChatMessage] = None
+        partial_stream_rank: Optional[int] = None
+        partial_stream_text = ""
+        pending_stream_token_usage = None
+        token_usage_seen_from_messages = False
+        token_usage_seen_from_updates = False
+        pending_final_token_source: Optional[TokenUsageSource] = None
+        post_tool_stream_node: Optional[str] = None
         pending_sources_payload: Optional[List[VectorSearchHit]] = None
         pending_fred_parts: List[MessagePart] = []
         msgs_any: list[AnyMessage] = [cast(AnyMessage, m) for m in input_messages]
@@ -499,13 +559,107 @@ class StreamTranscoder:
             graph_input = {"messages": msgs_any}
 
         try:
-            async for event in agent.astream_updates(
+            async for raw_event in agent.astream_updates(
                 state=graph_input,
                 config=config,
+                stream_mode=["updates", "messages"],
             ):
+                mode, event = _split_stream_event_mode(raw_event)
                 events_seen += 1
                 if t_first_event is None:
                     t_first_event = time.monotonic()
+
+                if mode == "messages":
+                    # Token/chunk stream (best-effort): enabled until we detect tool activity.
+                    chunk_obj = (
+                        event[0] if isinstance(event, tuple) and event else event
+                    )
+                    chunk_meta = _extract_chunk_metadata(event)
+                    # Stream only assistant/model chunks.
+                    # Tool chunks must not be surfaced as assistant final partials.
+                    if not _is_assistant_stream_chunk(chunk_obj):
+                        continue
+                    if tool_activity_seen:
+                        # After tool activity, lock streaming to a single LangGraph node
+                        # selected dynamically at runtime (first visible assistant chunk).
+                        # This avoids hardcoded node names and prevents mixed-node chunking.
+                        langgraph_node = chunk_meta.get("langgraph_node")
+                        if isinstance(langgraph_node, str) and langgraph_node:
+                            if post_tool_stream_node is None:
+                                post_tool_stream_node = langgraph_node
+                                if logger.isEnabledFor(logging.DEBUG):
+                                    logger.debug(
+                                        "[TRANSCODER][STREAM_NODE] selected session=%s exchange=%s agent=%s node=%s",
+                                        session_id,
+                                        exchange_id,
+                                        agent_id,
+                                        post_tool_stream_node,
+                                    )
+                            elif langgraph_node != post_tool_stream_node:
+                                continue
+                        elif post_tool_stream_node is not None:
+                            continue
+                    if extract_tool_calls(chunk_obj):
+                        continue
+                    chunk_md = getattr(chunk_obj, "response_metadata", {}) or {}
+                    chunk_additional_kwargs = (
+                        getattr(chunk_obj, "additional_kwargs", {}) or {}
+                    )
+                    chunk_usage = (
+                        clean_token_usage(
+                            getattr(chunk_obj, "usage_metadata", {}) or {}
+                        )
+                        or clean_token_usage(chunk_md.get("usage_metadata"))
+                        or clean_token_usage(chunk_md.get("token_usage"))
+                        or clean_token_usage(chunk_md.get("usage"))
+                        or clean_token_usage(chunk_additional_kwargs.get("token_usage"))
+                        or clean_token_usage(chunk_additional_kwargs.get("usage"))
+                    )
+                    if chunk_usage is not None:
+                        pending_stream_token_usage = chunk_usage
+                        if not token_usage_seen_from_messages:
+                            logger.info(
+                                "[TRANSCODER][TOKEN_USAGE][CAPTURE] session=%s exchange=%s agent=%s source=messages usage=%s",
+                                session_id,
+                                exchange_id,
+                                agent_id,
+                                _token_usage_log_payload(chunk_usage),
+                            )
+                            token_usage_seen_from_messages = True
+                    if "thought" in chunk_md:
+                        continue
+                    if getattr(chunk_obj, "tool_call_id", None):
+                        continue
+                    chunk_text = _extract_chunk_text(chunk_obj)
+                    if not chunk_text:
+                        continue
+                    partial_stream_text += chunk_text
+                    if not partial_stream_text.strip():
+                        continue
+                    if partial_stream_rank is None:
+                        partial_stream_rank = base_rank + seq
+                    partial_msg = ChatMessage(
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        rank=partial_stream_rank,
+                        timestamp=_utcnow_dt(),
+                        role=Role.assistant,
+                        channel=Channel.final,
+                        parts=[TextPart(text=partial_stream_text)],
+                        metadata=ChatMetadata(
+                            agent_id=agent_id,
+                            extras={"streaming_partial": True},
+                        ),
+                    )
+                    emit_start = time.monotonic()
+                    await self._emit(callback, partial_msg)
+                    emit_time_total += time.monotonic() - emit_start
+                    emit_count += 1
+                    continue
+
+                if mode != "updates":
+                    continue
+
                 # Handle LangGraph interrupt events explicitly
                 key = next(iter(event))
                 if logger.isEnabledFor(logging.DEBUG):
@@ -531,6 +685,7 @@ class StreamTranscoder:
 
                 # `event` looks like: {'node_name': {'messages': [...]} } or {'end': None}
                 key = next(iter(event))
+                node_name = key
                 payload = event[key]
                 if not isinstance(payload, dict):
                     continue
@@ -545,7 +700,27 @@ class StreamTranscoder:
 
                     model_name = raw_md.get("model_name") or raw_md.get("model")
                     finish_reason = coerce_finish_reason(raw_md.get("finish_reason"))
-                    token_usage = clean_token_usage(usage_raw)
+                    # Token usage can come from different wrappers/providers.
+                    token_usage = (
+                        clean_token_usage(usage_raw)
+                        or clean_token_usage(raw_md.get("usage_metadata"))
+                        or clean_token_usage(raw_md.get("token_usage"))
+                        or clean_token_usage(raw_md.get("usage"))
+                        or clean_token_usage(additional_kwargs.get("token_usage"))
+                        or clean_token_usage(additional_kwargs.get("usage"))
+                    )
+                    if token_usage is not None and not token_usage_seen_from_updates:
+                        logger.info(
+                            "[TRANSCODER][TOKEN_USAGE][CAPTURE] session=%s exchange=%s agent=%s source=updates node=%s msg_type=%s usage=%s",
+                            session_id,
+                            exchange_id,
+                            agent_id,
+                            node_name,
+                            getattr(msg, "type", None),
+                            _token_usage_log_payload(token_usage),
+                        )
+                        token_usage_seen_from_updates = True
+                    latency_ms = _coerce_latency_ms(raw_md.get("latency_ms"))
 
                     sources_payload = _normalize_sources_payload(
                         raw_md.get("sources") or additional_kwargs.get("sources")
@@ -554,6 +729,11 @@ class StreamTranscoder:
                     # ---------- TOOL CALLS ----------
                     tool_calls = extract_tool_calls(msg)
                     if tool_calls:
+                        tool_activity_seen = True
+                        post_tool_stream_node = None
+                        pending_assistant_final = None
+                        partial_stream_rank = None
+                        partial_stream_text = ""
                         if logger.isEnabledFor(logging.DEBUG):
                             logger.debug(
                                 "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
@@ -609,6 +789,11 @@ class StreamTranscoder:
 
                     # ---------- TOOL RESULT ----------
                     if getattr(msg, "type", "") == "tool":
+                        tool_activity_seen = True
+                        post_tool_stream_node = None
+                        pending_assistant_final = None
+                        partial_stream_rank = None
+                        partial_stream_text = ""
                         call_id = (
                             getattr(msg, "tool_call_id", None)
                             or raw_md.get("tool_call_id")
@@ -648,7 +833,13 @@ class StreamTranscoder:
                         content_str = raw_content or ""
                         if not isinstance(content_str, str):
                             content_str = json.dumps(content_str)
-                        ok_flag = _infer_tool_ok_flag(raw_md, content_str)
+                        ok_flag, tool_latency_ms, tool_extras = (
+                            normalize_tool_result_contract(
+                                raw_metadata=raw_md,
+                                content=content_str,
+                                source_count=len(sources_payload),
+                            )
+                        )
                         tr_msg = ChatMessage(
                             session_id=session_id,
                             exchange_id=exchange_id,
@@ -660,14 +851,15 @@ class StreamTranscoder:
                                 ToolResultPart(
                                     call_id=call_id,
                                     ok=ok_flag,
-                                    latency_ms=raw_md.get("latency_ms"),
+                                    latency_ms=tool_latency_ms,
                                     content=content_str,
                                 ),
                                 *tool_fred_parts,
                             ],
                             metadata=ChatMetadata(
                                 agent_id=agent_id,
-                                extras=raw_md.get("extras") or {},
+                                latency_ms=tool_latency_ms,
+                                extras=tool_extras,
                                 sources=sources_payload,
                             ),
                         )
@@ -721,7 +913,7 @@ class StreamTranscoder:
                         parts.extend(hydrate_fred_parts(additional_kwargs))
 
                     # Carry structured parts emitted by tool outputs to the next assistant message.
-                    if role == Role.assistant and not final_sent and pending_fred_parts:
+                    if role == Role.assistant and pending_fred_parts:
                         if not any(getattr(p, "type", None) == "link" for p in parts):
                             parts.extend(pending_fred_parts)
                         pending_fred_parts = []
@@ -752,32 +944,16 @@ class StreamTranscoder:
                             emit_time_total += time.monotonic() - emit_start
                             emit_count += 1
 
-                    # Channel selection
+                    # Assistant textual output handling:
+                    # keep only one pending final candidate and emit once at end-of-run,
+                    # so late metadata (token usage, finish reason, etc.) can be preserved.
                     if role == Role.assistant:
-                        ch = (
-                            Channel.final
-                            if (parts and not final_sent)
-                            else Channel.observation
-                        )
-                        if ch == Channel.final:
-                            final_sent = True
-                    elif role == Role.system:
-                        ch = Channel.system_note
-                    elif role == Role.user:
-                        ch = Channel.final
-                    else:
-                        ch = Channel.observation
-
-                    # Skip empty intermediary assistant observations (keeps UI clean)
-                    if role == Role.assistant and ch == Channel.observation:
                         if not parts or all(
                             getattr(p, "type", "") == "text"
                             and not getattr(p, "text", "").strip()
                             for p in parts
                         ):
                             continue
-
-                    if role == Role.assistant and ch == Channel.final:
                         existing_sources = (
                             len(sources_payload) if sources_payload else 0
                         )
@@ -819,29 +995,47 @@ class StreamTranscoder:
                                 )
                         pending_sources_payload = None
 
-                        msg_v2 = ChatMessage(
+                        candidate_token_usage = (
+                            token_usage or pending_stream_token_usage
+                        )
+                        candidate_token_source = (
+                            TokenUsageSource.updates
+                            if token_usage is not None
+                            else TokenUsageSource.messages
+                            if pending_stream_token_usage is not None
+                            else TokenUsageSource.unavailable
+                        )
+                        candidate_final = ChatMessage(
                             session_id=session_id,
                             exchange_id=exchange_id,
                             rank=base_rank + seq,
                             timestamp=_utcnow_dt(),
                             role=role,
-                            channel=ch,
+                            channel=Channel.final,
                             parts=parts or [TextPart(text="")],
                             metadata=ChatMetadata(
                                 model=model_name,
-                                token_usage=token_usage,
+                                token_usage=candidate_token_usage,
+                                token_usage_source=candidate_token_source,
                                 agent_id=agent_id,
+                                latency_ms=latency_ms,
                                 finish_reason=finish_reason,
                                 extras=raw_md.get("extras") or {},
                                 sources=sources_payload,
                             ),
                         )
-                        out.append(msg_v2)
-                        seq += 1
-                        emit_start = time.monotonic()
-                        await self._emit(callback, msg_v2)
-                        emit_time_total += time.monotonic() - emit_start
-                        emit_count += 1
+                        pending_assistant_final = candidate_final
+                        if pending_final_token_source != candidate_token_source:
+                            logger.info(
+                                "[TRANSCODER][TOKEN_USAGE][PENDING_FINAL] session=%s exchange=%s agent=%s source=%s usage=%s",
+                                session_id,
+                                exchange_id,
+                                agent_id,
+                                candidate_token_source.value,
+                                _token_usage_log_payload(candidate_token_usage),
+                            )
+                            pending_final_token_source = candidate_token_source
+                        continue
         except InterruptRaised as ir:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
@@ -863,6 +1057,77 @@ class StreamTranscoder:
                 len(out),
             )
             raise StreamAgentError(out, e) from e
+
+        if pending_assistant_final is not None:
+            final_token_source = (
+                pending_final_token_source or TokenUsageSource.unavailable
+            )
+            if (
+                pending_assistant_final.metadata.token_usage is None
+                and pending_stream_token_usage is not None
+            ):
+                pending_assistant_final = pending_assistant_final.model_copy(
+                    update={
+                        "metadata": pending_assistant_final.metadata.model_copy(
+                            update={
+                                "token_usage": pending_stream_token_usage,
+                                "token_usage_source": TokenUsageSource.messages_backfill,
+                            }
+                        )
+                    }
+                )
+                final_token_source = TokenUsageSource.messages_backfill
+            elif pending_assistant_final.metadata.token_usage is None:
+                pending_assistant_final = pending_assistant_final.model_copy(
+                    update={
+                        "metadata": pending_assistant_final.metadata.model_copy(
+                            update={"token_usage_source": TokenUsageSource.unavailable}
+                        )
+                    }
+                )
+                final_token_source = TokenUsageSource.unavailable
+            logger.info(
+                "[TRANSCODER][TOKEN_USAGE][FINAL] session=%s exchange=%s agent=%s source=%s from_messages=%s from_updates=%s usage=%s",
+                session_id,
+                exchange_id,
+                agent_id,
+                final_token_source.value,
+                token_usage_seen_from_messages,
+                token_usage_seen_from_updates,
+                _token_usage_log_payload(pending_assistant_final.metadata.token_usage),
+            )
+            # Final answer is emitted once, at end-of-run.
+            # Reuse the partial-stream rank when present so the UI replaces the
+            # streaming partial instead of showing two assistant final rows.
+            final_rank = (
+                partial_stream_rank
+                if partial_stream_rank is not None
+                else base_rank + seq
+            )
+            final_to_emit = pending_assistant_final.model_copy(
+                update={
+                    "rank": final_rank,
+                    "timestamp": _utcnow_dt(),
+                }
+            )
+            out.append(final_to_emit)
+            seq += 1
+            emit_start = time.monotonic()
+            await self._emit(callback, final_to_emit)
+            emit_time_total += time.monotonic() - emit_start
+            emit_count += 1
+        else:
+            logger.info(
+                "[TRANSCODER][TOKEN_USAGE][FINAL] session=%s exchange=%s agent=%s source=%s reason=no_final_message from_messages=%s from_updates=%s usage=%s",
+                session_id,
+                exchange_id,
+                agent_id,
+                TokenUsageSource.unavailable.value,
+                token_usage_seen_from_messages,
+                token_usage_seen_from_updates,
+                None,
+            )
+
         return out
 
     async def _emit(self, callback: CallbackType, message: ChatMessage) -> None:
