@@ -79,6 +79,8 @@ format: ## Use prettier to format all codebase
 
 .PHONY: update-agentic-api
 update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
+	@echo "🔧 Installing frontend dependencies..."
+	cd ../frontend && npm ci
 	@echo "🔧 Generating agentic backend OpenAPI specification..."
 	cd ../agentic-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for agentic backend..."

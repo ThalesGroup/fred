@@ -47,7 +47,7 @@ export function TeamDetailsPage() {
       label: capitalize(agentsNicknamePlural || "..."),
       path: `/team/${teamId}/${agentsNicknamePlural}`,
       component:
-        teamId == "user" ? (
+        teamId === "user" ? (
           <AgentHub />
         ) : (
           <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />
@@ -57,7 +57,7 @@ export function TeamDetailsPage() {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
       component:
-        teamId == "user" ? (
+        teamId === "user" ? (
           <KnowledgeHub />
         ) : (
           <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />

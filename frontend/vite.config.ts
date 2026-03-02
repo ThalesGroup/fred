@@ -53,7 +53,7 @@ export default defineConfig({
     react(),
     svgr({ exportType: "named" }),
     tsconfigPaths(),
-    visualizer({ open: true }),
+    visualizer({ open: false }),
   ],
   optimizeDeps: {
     force: true,

@@ -18,7 +18,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
       {items.map((item, index) => (
         <>
           <span key={index}>{item.label}</span>
-          {(item.separatorIcon && item.separatorIcon) || <KeyboardArrowRightIcon />}
+          {item.separatorIcon || <KeyboardArrowRightIcon />}
         </>
       ))}
     </div>

@@ -10,9 +10,7 @@ import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import React from "react";
 
-interface TeamContentNavbarProps {}
-
-export default function TeamContentNavbar({}: TeamContentNavbarProps) {
+export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -26,7 +24,7 @@ export default function TeamContentNavbar({}: TeamContentNavbarProps) {
   const teamsNavigationItems: NavigationMenuItemProps[] = [
     {
       label: t("rework.sidebar.menu.agents"),
-      icon: { category: "outlined", type: "person" },
+      icon: { category: "outlined", type: "Person" },
       selected: false,
       link: `/team/${teamId}/agents`,
     },

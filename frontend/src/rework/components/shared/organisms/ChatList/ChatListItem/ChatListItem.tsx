@@ -51,7 +51,7 @@ export default function ChatListItem({ chat, refetchSessions }: ChatListItemProp
               <span className={styles["icon"]}>
                 <Icon category={"outlined"} type={"Person"} />
               </span>
-              <div className={styles["agent-name"]}>{chat.agents.length != 0 ? chat.agents[0].name : ""}</div>
+              <div className={styles["agent-name"]}>{chat.agents.length !== 0 ? chat.agents[0].name : ""}</div>
             </span>
             <span className={styles["separator"]}>•</span>
             <span className={styles["date"]}>{new Intl.DateTimeFormat().format(new Date(chat.updated_at))}</span>

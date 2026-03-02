@@ -18,7 +18,7 @@ import "./styles.css";
 import "./styles/color-ramps.css";
 import "./styles/colors-semantic-dark.css";
 import "./styles/colors-state-semantic.css";
-import "./styles/colos-semantic-light.css";
+import "./styles/colors-semantic-light.css";
 import "./styles/radius.css";
 import "./styles/spacings.css";
 import "./styles/typography.css";
