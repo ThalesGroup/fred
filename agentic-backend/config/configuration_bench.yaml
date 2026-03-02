@@ -134,30 +134,6 @@ ai:
         max_keepalive_connections: 200
         keepalive_expiry_seconds: 10
 
-  # Example Vertex AI (Gemini via ChatGoogleGenerativeAI)
-  # default_chat_model:
-  #   provider: "vertex-ai"
-  #   name: "gemini-2.5-flash"
-  #   settings:
-  #     project: "your-gcp-project-id"
-  #     location: "europe-west1"
-  #     temperature: 0.0
-  #     max_retries: 2
-  #     request_timeout: 90
-
-  # Example Vertex AI Model Garden (generic)
-  # Supported model_family values: mistral | llama | anthropic
-  # default_chat_model:
-  #   provider: "vertex-ai-model-garden"
-  #   name: "mistral-small-3.1-24b-instruct-2503"
-  #   settings:
-  #     model_family: "mistral"
-  #     project: "your-gcp-project-id"
-  #     location: "europe-west1"
-  #     temperature: 0.0
-  #     max_retries: 2
-  #     request_timeout: 90
-
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   agents:

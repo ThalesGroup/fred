@@ -215,28 +215,6 @@ embedding_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
-# Example embeddings alternatives:
-# embedding_model:
-#   provider: ollama
-#   name: nomic-embed-text
-#   settings:
-#     base_url: http://localhost:11434
-#
-# embedding_model:
-#   provider: vertex-ai
-#   # Vertex AI embeddings (Gemini/GenAI family)
-#   # Use the model id available in your Vertex region.
-#   name: text-embedding-005 # or gemini-embedding-001
-#   settings:
-#     project: your-gcp-project-id
-#     location: europe-west1
-#     max_retries: 2
-#
-# NOTE:
-# - embedding_model supports provider `vertex-ai` for Google embeddings.
-# - For Model Garden MaaS models, use chat_model provider `vertex-ai-model-garden`
-#   with settings.model_family (mistral | llama | anthropic).
-
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 chat_model:
@@ -253,35 +231,6 @@ chat_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
-  # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-# chat_model:
-#   provider: ollama
-#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
-#   settings:
-#     base_url: http://localhost:11434
-#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-
-# chat_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-gpt-4o              # Azure deployment name for your chat model
-#   settings:
-#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     api_version: 2024-05-01-preview
-
-# chat_model:
-#   provider: azure-apim        # openai | azure | ollama
-#   # azure use deployment name instead of a plain model name as openai. The principle
-#   # is the same.
-#   name: fred-gpt-4o       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-#   settings:
-#     azure_ad_client_id: "5e5d67c9-22af-4044-bc8e-5df58d7a5e6e"
-#     azure_ad_client_scope: "api://5e5d67c9-22af-4044-bc8e-5df58d7a5e6e/.default"
-#     azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-#     azure_apim_resource_path: "/genai-aoai-inference/v2"
-#     azure_openai_api_version: "2024-06-01"
-#     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
@@ -295,29 +244,6 @@ vision_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
     temperature: 0 # optional
-
-# Example Vertex Google vision model (Gemini):
-# vision_model:
-#   provider: vertex-ai
-#   name: gemini-2.5-flash
-#   settings:
-#     project: your-gcp-project-id
-#     location: europe-west1
-#     temperature: 0
-#     max_retries: 2
-#     request_timeout: 90
-
-# Example Vertex Model Garden (Mistral Small 3.1) for chat:
-# chat_model:
-#   provider: vertex-ai-model-garden
-#   name: mistral-small-3.1-24b-instruct-2503
-#   settings:
-#     model_family: mistral # or llama / anthropic
-#     project: your-gcp-project-id
-#     location: europe-west1
-#     temperature: 0
-#     max_retries: 2
-#     request_timeout: 90
 
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
