@@ -18,6 +18,7 @@ dependencies = [
     "langchain-core>=1.2.7",
     "langchain-google-genai>=2.1.12",
     "langchain-ollama>=1.0.1",
+    "langchain-mistralai>=0.2.0",
     "langchain-google-vertexai>=2.0.28",
     "langchain-openai>=1.1.7",
     "azure-identity>=1.25.0",

@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -1009,6 +1009,7 @@ dependencies = [
     { name = "langchain-core", marker = "sys_platform == 'linux'" },
     { name = "langchain-google-genai", marker = "sys_platform == 'linux'" },
     { name = "langchain-google-vertexai", marker = "sys_platform == 'linux'" },
+    { name = "langchain-mistralai", marker = "sys_platform == 'linux'" },
     { name = "langchain-ollama", marker = "sys_platform == 'linux'" },
     { name = "langchain-openai", marker = "sys_platform == 'linux'" },
     { name = "minio", marker = "sys_platform == 'linux'" },
@@ -1040,6 +1041,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.2.7" },
     { name = "langchain-google-genai", specifier = ">=2.1.12" },
     { name = "langchain-google-vertexai", specifier = ">=2.0.28" },
+    { name = "langchain-mistralai", specifier = ">=0.2.0" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.1.7" },
     { name = "minio", specifier = ">=7.2.20" },
@@ -2030,6 +2032,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/81/36/6924d8321f661733c15685738d525de30b4dee5f0b288545f0a525ddf4e6/langchain_google_vertexai-3.2.2.tar.gz", hash = "sha256:089200b44e0002ef0a571243bf19cd6897446e8b5d17b7c3a8e6579820cda3a7", size = 375968, upload-time = "2026-01-30T18:29:13.229Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/d9/3adf09ff844a6d5c9dad9fe9ad6a032b706a1184eae71caa4c89bb470cbd/langchain_google_vertexai-3.2.2-py3-none-any.whl", hash = "sha256:aee8ea79f5aa19da74058e3905c78e0d3b882d5bc9eaf8549d92c13a5c458fda", size = 113381, upload-time = "2026-01-30T18:29:12.13Z" },
+]
+
+[[package]]
+name = "langchain-mistralai"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx", marker = "sys_platform == 'linux'" },
+    { name = "httpx-sse", marker = "sys_platform == 'linux'" },
+    { name = "langchain-core", marker = "sys_platform == 'linux'" },
+    { name = "pydantic", marker = "sys_platform == 'linux'" },
+    { name = "tokenizers", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/07/cdfcfed8dc680634ae470868aecb9ac48f953302b13c0bb119f6ee96e1be/langchain_mistralai-1.1.1.tar.gz", hash = "sha256:2430dd6c5e714252ce58bdf9453da4e1f2c694e239dde7e9c4d488a6d1ef2368", size = 143032, upload-time = "2025-12-12T22:11:54.594Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2f/96/67e029665e9c348a2f17d1a681dc139631a6d8241b7a8d8e6ee69ff70a4b/langchain_mistralai-1.1.1-py3-none-any.whl", hash = "sha256:47839fc69c879bad4ff60133f238c15574416c2dcd850121621a7e9de45800c1", size = 19439, upload-time = "2025-12-12T22:11:53.546Z" },
 ]
 
 [[package]]
