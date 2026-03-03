@@ -585,6 +585,11 @@ class StreamTranscoder:
                         # This avoids hardcoded node names and prevents mixed-node chunking.
                         langgraph_node = chunk_meta.get("langgraph_node")
                         if isinstance(langgraph_node, str) and langgraph_node:
+                            # Skip chunks from the tool-execution node. Those come from
+                            # inner LLM calls made *inside* tool functions (e.g. batch
+                            # generation helpers) and must never surface as assistant text.
+                            if langgraph_node == "tools":
+                                continue
                             if post_tool_stream_node is None:
                                 post_tool_stream_node = langgraph_node
                                 if logger.isEnabledFor(logging.DEBUG):
