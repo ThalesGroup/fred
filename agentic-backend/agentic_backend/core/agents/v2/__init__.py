@@ -1,10 +1,13 @@
 from .adapters import (
+    CompositeToolInvoker,
     DefaultFredChatModelFactory,
     FredArtifactPublisher,
     FredResourceReader,
     FredMcpToolProvider,
     InProcessToolInvoker,
 )
+from .authoring import ReActAgent as AuthoredReActAgent
+from .authoring import SearchBundle, ToolContext, ToolOutput, prompt_md, tool
 from .context import (
     ArtifactPublishRequest,
     ArtifactScope,
@@ -100,12 +103,23 @@ from .runtime import (
     WorkspaceClientFactoryPort,
     WorkspaceClientPort,
 )
+from .toolset_registry import (
+    ToolHandler,
+    ToolRefSpec,
+    ToolsetRegistration,
+    ToolsetRuntimePorts,
+    build_registered_tool_handlers,
+    get_registered_tool_spec,
+    get_toolset_registration,
+    register_toolset,
+)
 
 __all__ = [
     "AgentDefinition",
     "AgentInspection",
     "AgentPreview",
     "AgentRuntime",
+    "AuthoredReActAgent",
     "ArtifactPublishRequest",
     "ArtifactPublisherPort",
     "ArtifactScope",
@@ -114,6 +128,7 @@ __all__ = [
     "BoundRuntimeContext",
     "ChatModelFactoryPort",
     "CheckpointStrategy",
+    "CompositeToolInvoker",
     "DefaultFredChatModelFactory",
     "ExecutionCategory",
     "ExecutionConfig",
@@ -179,8 +194,19 @@ __all__ = [
     "ToolRefRequirement",
     "ToolRequirement",
     "ToolApprovalPolicy",
+    "ToolContext",
     "ToolSelectionPolicy",
+    "ToolOutput",
     "TracerPort",
+    "SearchBundle",
+    "ToolHandler",
+    "ToolRefSpec",
+    "ToolsetRegistration",
+    "ToolsetRuntimePorts",
+    "build_registered_tool_handlers",
+    "get_registered_tool_spec",
+    "get_toolset_registration",
+    "register_toolset",
     "WorkspaceClientFactoryPort",
     "WorkspaceClientPort",
     "get_react_profile",
@@ -188,4 +214,6 @@ __all__ = [
     "load_agent_lexicon_json",
     "load_packaged_json_object",
     "list_react_profiles",
+    "prompt_md",
+    "tool",
 ]

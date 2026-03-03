@@ -1,18 +1,11 @@
 """
-Generic tool-enabled assistant for the v2 contract.
+Smallest ReAct v2 example.
 
-Why this file exists:
-- It is the smallest real authoring example for the new API.
-- It shows the intended split: the agent definition expresses the business
-  identity of the assistant, while execution lives in the shared ReAct runtime.
-- It stays intentionally narrow so Fred can validate the new model without
-  carrying over every historical `AgentFlow` concern at once.
-
- Why a developer should care:
- - it is the clean starting point for assistants that are mainly conversational
- - it keeps the prompt, safety stance, and optional tools easy to reason about
- - it lets a team create several useful business assistants from one runtime
-   through profiles, instead of copying agent classes
+Use this file as a template when building a conversational assistant:
+- set role/description/tags
+- set prompt
+- declare tool refs
+- keep runtime logic in shared `ReActRuntime`
 """
 
 from __future__ import annotations
@@ -21,6 +14,7 @@ from pydantic import Field
 
 from agentic_backend.core.agents.agent_spec import FieldSpec, UIHints
 from agentic_backend.core.agents.v2 import (
+    GuardrailDefinition,
     ReActAgentDefinition,
     ReActPolicy,
     ToolApprovalPolicy,
@@ -29,7 +23,7 @@ from agentic_backend.core.agents.v2 import (
 from agentic_backend.core.agents.v2.prompt_resources import (
     load_packaged_markdown,
 )
-from agentic_backend.core.agents.v2.react_profiles import (
+from .profiles import (
     GENERIC_ASSISTANT_PROFILE_ID,
     list_react_profiles,
     profile_options_summary,
@@ -38,7 +32,13 @@ from agentic_backend.core.agents.v2.react_profiles import (
 
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
-    path_parts=("agents", "v2", "prompts", "basic_react_system_prompt.md"),
+    path_parts=(
+        "agents",
+        "v2",
+        "basic_react",
+        "prompts",
+        "basic_react_system_prompt.md",
+    ),
 )
 
 
@@ -109,21 +109,13 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
 
 class BasicReActV2Definition(ReActAgentDefinition):
     """
-    Standard v2 pattern for a general-purpose assistant.
+    Baseline definition for generic ReAct assistants.
 
-    A developer uses this definition when the business need is simple:
-    describe the assistant's role, tone, and permissions, then let Fred handle
-    the conversation and tool loop.
-
-    Developer guide:
-    - Edit `system_prompt_template` when you want to change how the assistant
-      should answer, reason at a high level, or speak to the user.
-    - Edit `tool_requirements` when you want this assistant to be allowed to
-      call one or more platform tools.
-    - Edit `fields` when you want the UI to expose developer-controlled tuning
-      options for this agent.
-    - Edit `policy()` when you want to summarize the main behavior rules in a
-      simple structured way for the shared runtime.
+    Quick edit guide:
+    - `system_prompt_template`: assistant behavior
+    - `tool_requirements`: allowed capabilities
+    - `fields`: what admins can tune in UI
+    - `policy()`: small runtime behavior switches
     """
 
     agent_id: str = "basic.react.v2"
@@ -153,6 +145,9 @@ class BasicReActV2Definition(ReActAgentDefinition):
     # This lets a developer protect specific business actions even when their
     # name does not match the default mutating-tool heuristics.
     approval_required_tools: tuple[str, ...] = ()
+    # Author-owned: explicit operating constraints appended by the runtime.
+    # Profiles can set these to enforce grounding/uncertainty style rules.
+    guardrails: tuple[GuardrailDefinition, ...] = ()
     # Author-owned: UI tuning surface exposed for this agent.
     # UI-exposed configuration for this agent.
     # A developer adds fields here when users should be able to tune prompts or
@@ -166,19 +161,7 @@ class BasicReActV2Definition(ReActAgentDefinition):
 
     def policy(self) -> ReActPolicy:
         """
-        Plain-English behavior contract for the shared ReAct runtime.
-
-        Developer view:
-        - `react_profile_id` selects a backend-defined starting recipe such as
-          `generic_assistant` or `custodian`.
-        - `system_prompt_template` is the main instruction set for the agent.
-        - `policy()` is the clean summary of how the assistant should behave.
-        - `tool_approval` tells the shared runtime whether some tool calls must
-          pause and wait for a user decision before execution.
-        - The framework reads this policy and builds the actual runtime loop.
-
-        This basic agent does not add extra guardrails yet, so the policy is
-        just the main prompt.
+        Return the runtime policy used by `ReActRuntime`.
         """
 
         # Author-owned: declare behavior. Framework-owned: execute it.
@@ -188,4 +171,5 @@ class BasicReActV2Definition(ReActAgentDefinition):
                 enabled=self.enable_tool_approval,
                 always_require_tools=tuple(self.approval_required_tools),
             ),
+            guardrails=self.guardrails,
         )

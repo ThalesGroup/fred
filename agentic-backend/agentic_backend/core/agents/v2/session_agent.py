@@ -1,14 +1,9 @@
 """
-Session-scoped compatibility wrapper for v2 runtimes.
+Compatibility bridge between v2 runtimes and the existing chat pipeline.
 
-Why this file exists:
-- The current chat stack expects an agent object with `astream_updates(...)`
-  semantics that look like LangGraph updates.
-- Rewriting the whole transcoder and orchestration stack at the same time would
-  blur the migration signal.
-- This wrapper keeps the boundary explicit: v2 runtimes stay platform-owned and
-  typed, while the existing chat pipeline receives the minimal event shape it
-  already knows how to persist and render.
+Today, the chat stack still calls `astream_updates(...)` with a LangGraph-like
+shape. This wrapper adapts v2 runtimes (ReAct/Graph) to that interface so we
+can migrate incrementally without rewriting transport and persistence in one go.
 """
 
 from __future__ import annotations
@@ -36,6 +31,7 @@ from .react_runtime import (
     ReActMessageRole,
     ReActRuntime,
     ReActToolCall,
+    _sanitize_tool_name,
 )
 from .runtime import (
     AssistantDeltaRuntimeEvent,
@@ -52,11 +48,12 @@ SessionCompatibleRuntime = ReActRuntime | GraphRuntime
 
 class V2SessionAgent:
     """
-    Small adapter exposing a subset of the legacy AgentFlow streaming surface.
+    Adapter exposed to the chat layer for one bound runtime instance.
 
-    This wrapper is intentionally session-scoped. It owns one runtime instance
-    already bound to one session context and only exists so the current UI/chat
-    path can start executing v2 agents immediately.
+    Practical role:
+    - convert incoming chat state to typed v2 input models
+    - run the runtime executor
+    - convert runtime events back to legacy stream events
     """
 
     def __init__(self, *, runtime: SessionCompatibleRuntime) -> None:
@@ -73,6 +70,10 @@ class V2SessionAgent:
     @property
     def definition(self) -> GraphAgentDefinition | ReActAgentDefinition:
         return self._runtime.definition
+
+    @property
+    def binding(self) -> BoundRuntimeContext:
+        return self._runtime.binding
 
     def rebind(self, binding: BoundRuntimeContext) -> None:
         tool_invoker = self._runtime.services.tool_invoker
@@ -170,7 +171,12 @@ def _react_message_from_langchain(message: AnyMessage) -> ReActMessage:
         return ReActMessage(
             role=ReActMessageRole.TOOL,
             content=_stringify_content(message.content),
-            tool_name=getattr(message, "name", None),
+            tool_name=(
+                _sanitize_tool_name(str(getattr(message, "name")))
+                if isinstance(getattr(message, "name", None), str)
+                and str(getattr(message, "name", "")).strip()
+                else None
+            ),
             tool_call_id=getattr(message, "tool_call_id", None),
         )
     return ReActMessage(
@@ -179,7 +185,7 @@ def _react_message_from_langchain(message: AnyMessage) -> ReActMessage:
         tool_calls=tuple(
             ReActToolCall(
                 call_id=str(tool_call.get("id") or ""),
-                name=str(tool_call.get("name") or ""),
+                name=_sanitize_tool_name(str(tool_call.get("name") or "")),
                 arguments=cast(dict[str, object], tool_call.get("args") or {}),
             )
             for tool_call in getattr(message, "tool_calls", []) or []
@@ -214,10 +220,17 @@ def _execution_config_from_runnable_config(
     if checkpoint_id is not None and not isinstance(checkpoint_id, str):
         checkpoint_id = str(checkpoint_id)
 
+    passthrough_config: dict[str, object] = {
+        key: value for key, value in config.items() if key != "configurable"
+    }
+    if isinstance(configurable, dict):
+        passthrough_config["configurable"] = dict(configurable)
+
     resume_payload = state.resume if isinstance(state, Command) else None
     return ExecutionConfig(
         thread_id=thread_id,
         checkpoint_id=checkpoint_id,
+        runnable_config=passthrough_config,
         resume_payload=resume_payload,
     )
 

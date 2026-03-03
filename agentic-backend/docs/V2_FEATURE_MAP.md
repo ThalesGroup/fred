@@ -354,6 +354,56 @@ Important note:
 - for ReAct agents, inspection is usually text-first
 - for graph agents, inspection can include Mermaid
 
+### 3.13 Runtime Observability Baseline
+
+What it is:
+- shared tracing conventions emitted by v2 runtime, not by each agent author
+
+How it fits v2:
+- runtime emits consistent spans for major execution steps
+- Langfuse metadata includes Fred business context (`agent_name`, `team_id`,
+  `user_name`, `fred_session_id`)
+
+Best thing to test:
+- one ReAct agent (`Basic ReAct V2`)
+- one graph agent (`Tracking Graph Demo V2`)
+
+What to try:
+- run one exchange with tool calls
+- filter Langfuse by `agent_name` + `fred_session_id`
+- check that model/tool/runtime spans are visible under the exchange trace
+
+What you should observe:
+- consistent runtime naming conventions:
+  - graph runtime: `v2.graph.*` spans (`v2.graph.node`, `v2.graph.model`, `v2.graph.tool`, ...)
+  - ReAct runtime: `v2.react.model` span for model calls (`operation=model_call`)
+- easier per-session filtering than raw opaque ids
+- if only a top-level span is visible, classify it as instrumentation gap and
+  fix runtime instrumentation
+
+### 3.14 Trace-Assisted Performance Triage
+
+What it is:
+- an admin-facing capability to summarize one conversation performance from
+  Langfuse traces
+
+How it fits v2:
+- exposed as a first-class tool ref (`traces.summarize_conversation`)
+- same runtime tool path as other platform capabilities
+
+Best thing to test:
+- `log_genius` profile
+
+What to try:
+- ask for performance analysis of the current conversation
+- compare the summary with Langfuse dashboard spans
+
+What you should observe:
+- bottleneck classification with explicit totals (`model_total_ms`,
+  `tool_total_ms`, `await_human_total_ms`)
+- explicit `instrumentation_gap` detection when breakdown is missing
+- concrete next actions instead of ambiguous “slow model” guesses
+
 ## 4. Suggested Retest Order
 
 If you want a clean manual review of the v2 world, this order is efficient:
@@ -386,6 +436,11 @@ If you want a clean manual review of the v2 world, this order is efficient:
    - one ReAct agent
    - one Graph agent
 
+9. Observability and trace triage
+   - verify Langfuse metadata filtering (`agent_name`, `team_id`, `user_name`, `fred_session_id`)
+   - run `traces.summarize_conversation` on a real exchange
+   - confirm no misleading bottleneck when instrumentation is missing
+
 ## 5. What This Map Is Meant To Validate
 
 If all of the tests above feel coherent, then the important v2 claim becomes
@@ -404,6 +459,7 @@ The features above are the ones that matter most for that claim:
 - resource fetching
 - graph workflows
 - inspection
+- observability
 
 If those all feel natural in the same model, then the v2 direction is strong.
 

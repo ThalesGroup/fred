@@ -16,6 +16,7 @@ conversation continuity survive executor rebuilds and process boundaries.
 from __future__ import annotations
 
 import logging
+import random
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
@@ -526,6 +527,32 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         self.blobs_table.c.thread_id == thread_id
                     )
                 )
+
+    def get_next_version(self, current: str | None, channel: None) -> str:  # type: ignore[override]
+        """
+        Return a monotonic string channel version compatible with LangGraph 1.x.
+
+        Why this override is required:
+        - LangGraph now calls `checkpointer.get_next_version(...)` during write
+          application.
+        - Base implementation raises `NotImplementedError` when `current` is a
+          string.
+        - Fred stores checkpoint channel versions durably and can receive
+          string-typed versions on resumed streams.
+        """
+
+        if current is None:
+            current_v = 0
+        elif isinstance(current, int):
+            current_v = current
+        else:
+            try:
+                current_v = int(str(current).split(".", 1)[0])
+            except ValueError:
+                current_v = 0
+        next_v = current_v + 1
+        # Keep lexical ordering stable while avoiding accidental collisions.
+        return f"{next_v:032}.{random.random():016}"
 
     async def _load_channel_values(
         self,

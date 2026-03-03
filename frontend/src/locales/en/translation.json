@@ -597,9 +597,14 @@
       "label": "Log Genius",
       "tooltip": "Analyze recent logs for quick diagnosis",
       "tooltipDescription": "Analyze recent logs and summarize likely issues with next steps.",
+      "panelTitle": "Diagnostics Assistant",
       "description": "Runs a short investigation over the last few minutes of logs and returns a ready-to-use diagnosis.",
       "action": "Ask for assistance or analysis",
-      "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps."
+      "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
+      "incidentAction": "Incident diagnosis",
+      "incidentDescription": "Investigates recent errors and abnormal signals, then returns a concise diagnosis with concrete remediation steps.",
+      "performanceAction": "Performance diagnosis",
+      "performanceDescription": "Analyzes conversation traces to identify bottlenecks (model, tools, step latency) and prioritize optimization actions."
     },
     "searchOptions": "Search options",
     "searchOptionsReset": "Back to default",

@@ -25,11 +25,13 @@ enough for day-to-day development.
 - [V2_FEATURE_MAP.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_FEATURE_MAP.md)
   - practical map of the implemented v2 feature surface and how to test it
 - [V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md)
-  - stable explanation of why Fred runtime and LangChain middleware are complementary
+  - stable explanation of why Fred runtime and LangChain middleware are complementary, with explicit pros/costs
 - [LANGGRAPH_POSTGRES_SAVER_EVALUATION.md](/home/dimi/run/reference/fred/agentic-backend/docs/LANGGRAPH_POSTGRES_SAVER_EVALUATION.md)
   - current decision note: keep Fred's own saver for now
 - [GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md](/home/dimi/run/reference/fred/agentic-backend/docs/GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md)
-  - current assessment of how much LangGraph remains and how robust Fred graph runtime is
+  - current assessment of how much LangGraph remains, how robust Fred graph runtime is, and the observability ownership trade-off
+- [V2_GRAPH_DEBUG_PLAYBOOK.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_GRAPH_DEBUG_PLAYBOOK.md)
+  - operator-facing guide to diagnose v2 graph agent behavior and latency with Langfuse + KPI phases
 
 ## 2. Stable Core, But Still Active Working Contract
 

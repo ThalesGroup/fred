@@ -50,6 +50,7 @@ import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
+import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
 
@@ -1031,7 +1032,9 @@ const ChatBot = ({
   );
 
   // --- Session preferences are handled by ConversationOptionsController ---
-  const effectiveSessionId = pendingSessionIdRef.current || chatSessionId || undefined;
+  // Always prioritize the active routed session id. A stale pending id must
+  // never shadow an explicit user-selected session.
+  const effectiveSessionId = chatSessionId || pendingSessionIdRef.current || undefined;
   const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
     refetchOnMountOrArgChange: true,
     refetchOnFocus: false,
@@ -1170,9 +1173,10 @@ const ChatBot = ({
     }
   };
 
-  // Clear pending session once parent propagated the real session
+  // Clear pending session once any explicit routed session is known.
+  // This avoids stale pending ids from hijacking session-scoped prefs/context.
   useEffect(() => {
-    if (chatSessionId && pendingSessionIdRef.current === chatSessionId) {
+    if (chatSessionId && pendingSessionIdRef.current) {
       pendingSessionIdRef.current = null;
     }
   }, [chatSessionId]);
@@ -1512,7 +1516,7 @@ const ChatBot = ({
   };
 
   const ensureSessionId = useCallback(async (): Promise<string> => {
-    const existing = pendingSessionIdRef.current || chatSessionId;
+    const existing = chatSessionId || pendingSessionIdRef.current;
     if (existing) return existing;
     try {
       const session = await createSession({
@@ -1566,7 +1570,7 @@ const ChatBot = ({
       }
 
       setIsUploadingAttachments(true);
-      let sid = pendingSessionIdRef.current || chatSessionId;
+      let sid = chatSessionId || pendingSessionIdRef.current;
       if (!sid) {
         try {
           sid = await ensureSessionId();
@@ -1619,7 +1623,7 @@ const ChatBot = ({
     options?: QueryChatOptions,
   ) => {
     console.debug(`[CHATBOT] Sending message: ${input}`);
-    let sid = pendingSessionIdRef.current || chatSessionId;
+    let sid = chatSessionId || pendingSessionIdRef.current;
     if (!sid) {
       try {
         sid = await ensureSessionId();
@@ -1778,15 +1782,27 @@ const ChatBot = ({
     [beginWaiting, chatSessionId, currentAgent, pendingHitl, setupWebSocket, showError],
   );
 
-  const handleRequestLogGenius = useCallback(() => {
-    const prompt = t(
-      "chatbot.logGenius.prompt",
-      "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
-    );
-    const traceThought = t(
-      "chatbot.logGenius.trace",
-      "Diagnosing the current conversation and runtime context.",
-    );
+  const handleRequestLogGenius = useCallback((mode: LogGeniusMode = "logs") => {
+    const prompt =
+      mode === "performance"
+        ? t(
+            "chatbot.logGenius.performancePrompt",
+            "Analyze this conversation performance from Langfuse traces and summarize bottlenecks, slow nodes/tools, and concrete actions.",
+          )
+        : t(
+            "chatbot.logGenius.prompt",
+            "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
+          );
+    const traceThought =
+      mode === "performance"
+        ? t(
+            "chatbot.logGenius.performanceTrace",
+            "Diagnosing conversation performance (trace timings and bottlenecks).",
+          )
+        : t(
+            "chatbot.logGenius.trace",
+            "Diagnosing the current conversation and runtime context.",
+          );
     const context = buildLogGeniusContext(messagesRef.current);
     const fullPrompt = context
       ? `${prompt}\n\nRecent conversation context (last ${LOG_GENIUS_CONTEXT_TURNS} turns, including tool calls):\n${context}`

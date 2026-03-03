@@ -598,9 +598,14 @@
       "label": "Log Genius",
       "tooltip": "Analyser les logs récents pour un diagnostic rapide",
       "tooltipDescription": "Analysez les logs récents et résumez les problèmes probables avec des prochaines étapes.",
+      "panelTitle": "Assistance",
       "description": "Lance une courte investigation sur les dernières minutes de logs et retourne un diagnostic prêt à l'emploi.",
       "action": "Demander de l'aide ou une analyse",
-      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes."
+      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes.",
+      "incidentAction": "Diagnostic d'incident",
+      "incidentDescription": "Analyse les erreurs récentes et les signaux anormaux, puis propose un diagnostic clair avec des actions de remédiation.",
+      "performanceAction": "Diagnostic de performance",
+      "performanceDescription": "Analyse les traces de conversation pour identifier les goulots d'étranglement (modèle, outils, latence par étape) et les optimisations prioritaires."
     },
     "searchOptions": "Options de recherche",
     "searchOptionsReset": "Réinitialiser",

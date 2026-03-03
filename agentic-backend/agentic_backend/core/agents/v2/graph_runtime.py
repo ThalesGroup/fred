@@ -1,19 +1,14 @@
 """
-Executable runtime for workflow-shaped v2 agents.
+Executable runtime for v2 graph agents.
 
-This is where Fred makes good on the promise of `GraphAgentDefinition`.
-The point is not to draw a Mermaid diagram. The point is to support agents
-whose business value comes from a controlled journey:
-- understand the request
-- gather the right context
-- pause when a user decision is required
-- execute the permitted action
-- keep the conversation coherent on the next turn
+Read this file when you need to answer practical questions:
+- Why did a node run (or not run)?
+- Why did the run pause for HITL?
+- Which tool call was made from which node?
+- Which state was persisted and resumed?
 
-The runtime therefore owns the generic concerns that nearly every serious graph
-agent needs: event emission, tool execution, pause/resume, and durable
-conversation state. The agent definition still decides *what* should be carried
-from one turn to the next.
+Graph agent business logic stays in definition files. This runtime handles
+orchestration, streaming events, checkpoints, and resume behavior.
 """
 
 from __future__ import annotations
@@ -94,11 +89,11 @@ class GraphNodeResult(FrozenModel):
 
 class GraphNodeContext(Protocol):
     """
-    What a business node is allowed to use while it runs.
+    Runtime capabilities available inside one node handler.
 
-    A node can emit user-visible progress, call tools, request human input, or
-    fetch admin-provided resources such as templates. It does not own
-    orchestration or persistence.
+    Node handlers should stay business-focused: read state, call these methods,
+    return `GraphNodeResult`. Orchestration and persistence are handled by the
+    runtime executor.
     """
 
     @property
@@ -234,6 +229,17 @@ class _GraphNodeExecutionContext:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
         model_name = _resolve_model_name(self.model)
+        span = _start_runtime_span(
+            services=self.services,
+            binding=self.binding,
+            name="v2.graph.model",
+            attributes={
+                "agent_id": self.graph_agent_id,
+                "node_id": self.node_id,
+                "operation": operation,
+                "model_name": model_name,
+            },
+        )
         with _graph_phase_timer(
             kpi=self.services.kpi,
             binding=self.binding,
@@ -246,7 +252,18 @@ class _GraphNodeExecutionContext:
                 "model_name": model_name,
             },
         ):
-            return cast(BaseMessage, await self.model.ainvoke(messages))
+            try:
+                response = cast(BaseMessage, await self.model.ainvoke(messages))
+                if span is not None:
+                    span.set_attribute("status", "ok")
+                return response
+            except Exception:
+                if span is not None:
+                    span.set_attribute("status", "error")
+                raise
+            finally:
+                if span is not None:
+                    span.end()
 
     async def invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
@@ -268,26 +285,49 @@ class _GraphNodeExecutionContext:
                 arguments=payload,
             )
         )
-        with _graph_phase_timer(
-            kpi=self.services.kpi,
+        span = _start_runtime_span(
+            services=self.services,
             binding=self.binding,
-            agent_id=self.graph_agent_id,
-            phase="v2_graph_tool",
-            agent_step=f"{self.node_id}:{tool_ref}",
-            extra_dims={
+            name="v2.graph.tool",
+            attributes={
+                "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
-                "tool_name": tool_ref,
+                "tool_ref": tool_ref,
+                "call_id": call_id,
             },
-        ) as kpi_dims:
-            result = await tool_invoker.invoke(
-                ToolInvocationRequest(
-                    tool_ref=tool_ref,
-                    payload=payload,
-                    context=self.binding.portable_context,
+        )
+        try:
+            with _graph_phase_timer(
+                kpi=self.services.kpi,
+                binding=self.binding,
+                agent_id=self.graph_agent_id,
+                phase="v2_graph_tool",
+                agent_step=f"{self.node_id}:{tool_ref}",
+                extra_dims={
+                    "node_id": self.node_id,
+                    "tool_name": tool_ref,
+                },
+            ) as kpi_dims:
+                result = await tool_invoker.invoke(
+                    ToolInvocationRequest(
+                        tool_ref=tool_ref,
+                        payload=payload,
+                        context=self.binding.portable_context,
+                    )
                 )
-            )
-            if result.is_error:
-                kpi_dims["status"] = "error"
+                if result.is_error:
+                    kpi_dims["status"] = "error"
+                    if span is not None:
+                        span.set_attribute("status", "error")
+                elif span is not None:
+                    span.set_attribute("status", "ok")
+        except Exception:
+            if span is not None:
+                span.set_attribute("status", "error")
+            raise
+        finally:
+            if span is not None:
+                span.end()
         self._events.append(
             ToolResultRuntimeEvent(
                 sequence=0,
@@ -317,6 +357,17 @@ class _GraphNodeExecutionContext:
                 arguments=arguments,
             )
         )
+        span = _start_runtime_span(
+            services=self.services,
+            binding=self.binding,
+            name="v2.graph.runtime_tool",
+            attributes={
+                "agent_id": self.graph_agent_id,
+                "node_id": self.node_id,
+                "tool_name": tool_name,
+                "call_id": call_id,
+            },
+        )
         with _graph_phase_timer(
             kpi=self.services.kpi,
             binding=self.binding,
@@ -340,6 +391,8 @@ class _GraphNodeExecutionContext:
                         is_error=False,
                     )
                 )
+                if span is not None:
+                    span.set_attribute("status", "ok")
                 return normalized
             except Exception as exc:
                 self._events.append(
@@ -351,7 +404,12 @@ class _GraphNodeExecutionContext:
                         is_error=True,
                     )
                 )
+                if span is not None:
+                    span.set_attribute("status", "error")
                 raise
+            finally:
+                if span is not None:
+                    span.end()
 
     async def publish_text(
         self,
@@ -390,18 +448,39 @@ class _GraphNodeExecutionContext:
             raise RuntimeError(
                 "GraphRuntime requires RuntimeServices.artifact_publisher to publish generated files."
             )
-        artifact = await artifact_publisher.publish(
-            ArtifactPublishRequest(
-                file_name=file_name,
-                content_bytes=content_bytes,
-                scope=scope,
-                key=key,
-                content_type=content_type,
-                title=title,
-                target_user_id=target_user_id,
-            )
+        span = _start_runtime_span(
+            services=self.services,
+            binding=self.binding,
+            name="v2.graph.publish_artifact",
+            attributes={
+                "agent_id": self.graph_agent_id,
+                "node_id": self.node_id,
+                "file_name": file_name,
+                "scope": scope.value,
+            },
         )
-        return artifact
+        try:
+            artifact = await artifact_publisher.publish(
+                ArtifactPublishRequest(
+                    file_name=file_name,
+                    content_bytes=content_bytes,
+                    scope=scope,
+                    key=key,
+                    content_type=content_type,
+                    title=title,
+                    target_user_id=target_user_id,
+                )
+            )
+            if span is not None:
+                span.set_attribute("status", "ok")
+            return artifact
+        except Exception:
+            if span is not None:
+                span.set_attribute("status", "error")
+            raise
+        finally:
+            if span is not None:
+                span.end()
 
     async def fetch_resource(
         self,
@@ -415,13 +494,35 @@ class _GraphNodeExecutionContext:
             raise RuntimeError(
                 "GraphRuntime requires RuntimeServices.resource_reader to fetch templates or supporting resources."
             )
-        return await resource_reader.fetch(
-            ResourceFetchRequest(
-                key=key,
-                scope=scope,
-                target_user_id=target_user_id,
-            )
+        span = _start_runtime_span(
+            services=self.services,
+            binding=self.binding,
+            name="v2.graph.fetch_resource",
+            attributes={
+                "agent_id": self.graph_agent_id,
+                "node_id": self.node_id,
+                "resource_key": key,
+                "scope": scope.value,
+            },
         )
+        try:
+            resource = await resource_reader.fetch(
+                ResourceFetchRequest(
+                    key=key,
+                    scope=scope,
+                    target_user_id=target_user_id,
+                )
+            )
+            if span is not None:
+                span.set_attribute("status", "ok")
+            return resource
+        except Exception:
+            if span is not None:
+                span.set_attribute("status", "error")
+            raise
+        finally:
+            if span is not None:
+                span.end()
 
     async def fetch_text_resource(
         self,
@@ -443,10 +544,34 @@ class _GraphNodeExecutionContext:
             payload = self._resume_payload
             self._resume_payload = None
             return payload
+        span = _start_runtime_span(
+            services=self.services,
+            binding=self.binding,
+            name="v2.graph.await_human",
+            attributes={
+                "agent_id": self.graph_agent_id,
+                "node_id": self.node_id,
+                "stage": request.stage or "unspecified",
+            },
+        )
+        if span is not None:
+            span.set_attribute("status", "awaiting_human")
+            span.end()
         raise _AwaitHumanInterrupt(request)
 
 
 class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
+    """
+    Deterministic step-by-step graph executor.
+
+    Execution loop:
+    1. Compute starting point (fresh turn or resume).
+    2. Run one node handler.
+    3. Merge state update.
+    4. Resolve next node from route/direct edge.
+    5. Persist completion or pending HITL checkpoint.
+    """
+
     def __init__(
         self,
         *,
@@ -534,6 +659,16 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 runtime_tools=self._runtime_tools,
                 _resume_payload=resume_payload,
             )
+            node_span = _start_runtime_span(
+                services=self._services,
+                binding=self._binding,
+                name="v2.graph.node",
+                attributes={
+                    "agent_id": self._definition.agent_id,
+                    "node_id": node_id,
+                    "step_index": steps,
+                },
+            )
             with _graph_phase_timer(
                 kpi=self._services.kpi,
                 binding=self._binding,
@@ -550,8 +685,12 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                         else cast(GraphNodeResult, raw_result)
                     )
                     result = GraphNodeResult.model_validate(result)
+                    if node_span is not None:
+                        node_span.set_attribute("status", "ok")
                 except _AwaitHumanInterrupt as interrupt:
                     kpi_dims["status"] = "awaiting_human"
+                    if node_span is not None:
+                        node_span.set_attribute("status", "awaiting_human")
                     pending_checkpoint = _PendingGraphCheckpoint(
                         state=state,
                         node_id=node_id,
@@ -578,6 +717,13 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                     raise RuntimeError(
                         "Graph execution is awaiting human input. Use stream() to surface the request."
                     ) from interrupt
+                except Exception:
+                    if node_span is not None:
+                        node_span.set_attribute("status", "error")
+                    raise
+                finally:
+                    if node_span is not None:
+                        node_span.end()
 
             if emit_event is not None:
                 for event in node_context.events:
@@ -967,6 +1113,15 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
 
 
 class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
+    """
+    Runtime implementation for `GraphAgentDefinition`.
+
+    Where to look when debugging:
+    - runtime tool/model wiring: `on_activate(...)`
+    - executor construction: `build_executor(...)`
+    - pending HITL lifecycle: `_pending_checkpoints`
+    """
+
     def __init__(self, *, definition: GraphAgentDefinition, services: RuntimeServices):
         super().__init__(definition=definition, services=services)
         self._model: BaseChatModel | None = None
@@ -1055,6 +1210,26 @@ def _graph_phase_timer(
             groups=binding.runtime_context.user_groups,
         ),
     )
+
+
+def _start_runtime_span(
+    *,
+    services: RuntimeServices,
+    binding: BoundRuntimeContext,
+    name: str,
+    attributes: Mapping[str, str | int | float | bool | None] | None = None,
+):
+    tracer = services.tracer
+    if tracer is None:
+        return None
+    try:
+        return tracer.start_span(
+            name=name,
+            context=binding.portable_context,
+            attributes=attributes,
+        )
+    except Exception:
+        return None
 
 
 def _resolve_model_name(model: BaseChatModel) -> str | None:

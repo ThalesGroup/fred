@@ -36,12 +36,16 @@ class FrozenModel(BaseModel):
 
 
 class ExecutionCategory(str, Enum):
+    """Top-level execution family used by runtime dispatch and inspection."""
+
     GRAPH = "graph"
     REACT = "react"
     PROXY = "proxy"
 
 
 class PreviewKind(str, Enum):
+    """Safe preview rendering format shown to developers in inspection views."""
+
     NONE = "none"
     MERMAID = "mermaid"
     DAG = "dag"
@@ -49,22 +53,30 @@ class PreviewKind(str, Enum):
 
 
 class GraphNodeShape(str, Enum):
+    """Visual hint for graph previews; does not affect runtime behavior."""
+
     RECT = "rect"
     ROUND = "round"
     DIAMOND = "diamond"
 
 
 class ToolRequirementBase(FrozenModel):
+    """Common requirement fields shared by all tool requirement variants."""
+
     required: bool = True
     description: str | None = None
 
 
 class ToolRefRequirement(ToolRequirementBase):
+    """Requirement that names one concrete runtime tool (for example `knowledge.search`)."""
+
     kind: Literal["tool_ref"] = "tool_ref"
     tool_ref: str = Field(..., min_length=1)
 
 
 class ToolCapabilityRequirement(ToolRequirementBase):
+    """Requirement by abstract capability (reserved for future runtime resolution)."""
+
     kind: Literal["capability"] = "capability"
     capability: str = Field(..., min_length=1)
 
@@ -76,6 +88,8 @@ ToolRequirement = Annotated[
 
 
 class AgentPreview(FrozenModel):
+    """Non-executable preview payload returned by inspection endpoints."""
+
     kind: PreviewKind
     content: str = ""
     note: str | None = None
@@ -108,6 +122,8 @@ class AgentInspection(FrozenModel):
 
 
 class GraphNodeDefinition(FrozenModel):
+    """One named business step in a graph authoring definition."""
+
     node_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
     description: str | None = None
@@ -115,18 +131,24 @@ class GraphNodeDefinition(FrozenModel):
 
 
 class GraphEdgeDefinition(FrozenModel):
+    """Unconditional transition from one graph node to another."""
+
     source: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
     label: str | None = None
 
 
 class GraphRouteDefinition(FrozenModel):
+    """Named branch target emitted by conditional node handlers."""
+
     route_key: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
     label: str | None = None
 
 
 class GraphConditionalDefinition(FrozenModel):
+    """Conditional routing table attached to one source node."""
+
     source: str = Field(..., min_length=1)
     routes: tuple[GraphRouteDefinition, ...]
     default_route_key: str | None = None
@@ -273,14 +295,71 @@ class GraphDefinition(FrozenModel):
 
 
 class GuardrailDefinition(FrozenModel):
-    guardrail_id: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-    description: str = Field(..., min_length=1)
+    """
+    Declarative runtime guardrail for a ReAct assistant.
+
+    Current v2 runtime behavior:
+    - guardrails are visible in inspection and preview
+    - guardrails are appended to the system prompt under
+      "Operating guardrails"
+
+    Why keep guardrails separate from `system_prompt_template`:
+    - prompt text defines broad assistant behavior and persona
+    - guardrails isolate non-negotiable operating constraints so they can be
+      reviewed, counted, and tuned as explicit policy objects
+
+    This remains instruction-level steering, not a hard sandbox.
+
+    Typical examples:
+    - grounding: "Only claim facts supported by retrieved evidence."
+    - uncertainty: "If confidence is low, say what is missing."
+    - language: "Answer in French unless the user asks another language."
+    """
+
+    guardrail_id: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Stable technical identifier (for example: grounding, pii_redaction)."
+        ),
+    )
+    title: str = Field(
+        ...,
+        min_length=1,
+        description="Short human-readable label shown in inspection and debug views.",
+    )
+    description: str = Field(
+        ...,
+        min_length=1,
+        description="Exact behavioral rule injected into ReAct operating guidance.",
+    )
 
 
 class ToolSelectionPolicy(FrozenModel):
-    allow_parallel_calls: bool = False
-    max_tool_calls_per_turn: int | None = Field(default=None, ge=1)
+    """
+    Declarative policy controlling how tool usage is explored in a ReAct turn.
+
+    Practical presets:
+    - default assistant: `allow_parallel_calls=False`, no explicit call limit
+    - fast investigation: `allow_parallel_calls=True` for independent reads
+    - strict mode: set `max_tool_calls_per_turn=1` to cap exploration
+      (note: call limit is not enforced yet in the first v2 runtime)
+    """
+
+    allow_parallel_calls: bool = Field(
+        default=False,
+        description=(
+            "Allow the runtime to execute independent tool calls in parallel."
+        ),
+    )
+    max_tool_calls_per_turn: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Optional cap for tool calls in one assistant turn. Reserved for now: "
+            "first v2 ReAct runtime does not enforce this limit yet."
+        ),
+    )
 
 
 class ToolApprovalPolicy(FrozenModel):
@@ -290,10 +369,29 @@ class ToolApprovalPolicy(FrozenModel):
     Why this is separate from tool selection:
     - tool selection answers "may the agent call tools?"
     - tool approval answers "when must a human validate a tool call first?"
+
+    How to read this policy:
+    - `enabled=False`: no approval pauses
+    - `enabled=True`: apply explicit tool list first, then runtime heuristics
+      for read-only vs mutating tool names
+
+    Example:
+    - `enabled=True` and `always_require_tools=("delete_ticket",)` means
+      `delete_ticket` always pauses for approval, and mutating tools like
+      `update_*` also pause via heuristic.
     """
 
-    enabled: bool = False
-    always_require_tools: tuple[str, ...] = ()
+    enabled: bool = Field(
+        default=False,
+        description="Enable human approval checks before selected tool executions.",
+    )
+    always_require_tools: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Exact tool names that always require approval when enabled, "
+            "for example ('delete_ticket', 'artifact.publish')."
+        ),
+    )
 
 
 class ReActPolicy(FrozenModel):
@@ -302,21 +400,60 @@ class ReActPolicy(FrozenModel):
 
     This is the right abstraction when the developer wants to describe how the
     assistant should behave in general, not to script a workflow step by step.
+
+    Prompt vs guardrails:
+    - `system_prompt_template` is the broad strategy and tone
+    - `guardrails` are explicit operating constraints attached as policy data
+
+    Common policy shapes:
+    - "Prompt only": no tools, no approval, no guardrails
+    - "RAG helper": search tools + grounding/uncertainty guardrails
+    - "Operations copilot": tools + explicit approval on risky actions
     """
 
-    system_prompt_template: str = Field(..., min_length=1)
-    tool_selection: ToolSelectionPolicy = Field(default_factory=ToolSelectionPolicy)
-    tool_approval: ToolApprovalPolicy = Field(default_factory=ToolApprovalPolicy)
-    guardrails: tuple[GuardrailDefinition, ...] = ()
+    system_prompt_template: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Primary assistant instructions rendered as the runtime system prompt."
+        ),
+    )
+    tool_selection: ToolSelectionPolicy = Field(
+        default_factory=ToolSelectionPolicy,
+        description="How tool calls are selected and paced during a turn.",
+    )
+    tool_approval: ToolApprovalPolicy = Field(
+        default_factory=ToolApprovalPolicy,
+        description=(
+            "When a tool call must pause for explicit human validation first."
+        ),
+    )
+    guardrails: tuple[GuardrailDefinition, ...] = Field(
+        default=(),
+        description=(
+            "Declarative behavioral constraints injected into runtime "
+            "operating guidance."
+        ),
+    )
 
 
 class ProxyTransportKind(str, Enum):
+    """Transport mechanism used by proxy agents to reach external executors."""
+
     HTTP = "http"
     MCP = "mcp"
     QUEUE = "queue"
 
 
 class ProxySpec(FrozenModel):
+    """
+    Typed transport target for a `ProxyAgentDefinition`.
+
+    Exactly one target style is valid:
+    - HTTP/MCP: `endpoint_url`
+    - QUEUE: `queue_name`
+    """
+
     transport: ProxyTransportKind
     endpoint_url: AnyUrl | None = None
     queue_name: str | None = None
@@ -491,6 +628,8 @@ class ReActAgentDefinition(AgentDefinition, ABC):
 
 
 class ProxyAgentDefinition(AgentDefinition, ABC):
+    """Authoring contract for agents delegated to an external runtime endpoint."""
+
     execution_category: Literal[ExecutionCategory.PROXY] = ExecutionCategory.PROXY
 
     @abstractmethod

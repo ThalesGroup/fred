@@ -264,3 +264,69 @@ Use Fred v2 runtime for:
 That is why building Fred v2 was not a wasteful duplication.
 It was the step needed to move from “agent code on top of a framework” to a
 safer, more governed runtime platform.
+
+## 11. Honest Pros And Costs (Current Stage)
+
+The practical trade-off is not theoretical anymore. It is visible in day-to-day
+development.
+
+Main benefits we get from v2:
+
+- simpler ReAct authoring for product agents:
+  - small tools + declarative definition
+  - less runtime plumbing in each agent file
+- stronger platform consistency:
+  - one runtime contract for pause/resume, inspection, and structured outputs
+  - one place to enforce behavior across all agents
+- explicit decoupling from execution substrate:
+  - LangChain/LangGraph can evolve underneath without rewriting authoring model
+- shared observability baseline:
+  - runtime-level spans and metadata conventions can be enforced centrally
+  - teams debug with the same tracing vocabulary instead of ad hoc logs
+  - ReAct model calls are traced by runtime under a standard span name (`v2.react.model`)
+
+Main costs we accept with v2:
+
+- runtime ownership tax:
+  - Fred must maintain contracts that framework users get “for free”
+- observability ownership tax:
+  - if instrumentation is missing in Fred runtime, Langfuse analysis degrades
+  - we must actively maintain span coverage and naming quality
+- migration tax:
+  - legacy `AgentFlow` agents need deliberate porting and retesting
+- capability curation tax:
+  - we must decide when to elevate recurring MCP usage into first-class tool refs
+
+How we keep those costs under control:
+
+- keep agent authoring small and declarative; move runtime complexity into shared layer
+- enforce runtime span taxonomy in code review and tests
+- treat “instrumentation_gap” as a product bug, not as optional tech debt
+- avoid creating new runtime models for business variants that can be solved by profiles
+
+## 11.1 Current ReAct Verdict (v1 vs v2)
+
+For product ReAct agents, the current v2 position is now clearer:
+
+- v1 style (agent-local `create_agent` composition) gives flexibility, but observability quality depends on each agent implementation.
+- v2 ReAct centralizes runtime instrumentation and trace metadata conventions in one shared layer.
+- This gives a more reliable baseline in Langfuse across agents (`agent_name`, `team_id`, `user_name`, `fred_session_id`) and runtime-owned model spans (`v2.react.model`, `operation=model_call`).
+- trade-off remains: if runtime instrumentation regresses, impact is platform-wide. This is why instrumentation quality must be treated as a runtime release criterion.
+
+So yes: for operated product agents, v2 ReAct is the cleaner and safer default than v1-style per-agent runtime wiring.
+
+## 12. Pragmatic Decision Rule
+
+Use plain framework patterns directly when:
+
+- the scope is local, short-lived, and not a platform concern
+- no shared pause/resume, inspect, or policy semantics are required
+
+Use Fred v2 runtime when:
+
+- the agent is a product capability operated by multiple teams
+- governance, HITL, structured outputs, and durable continuity matter
+- you want common behavior, common observability, and cleaner future adapter swaps
+
+That is the real criterion.
+Not “is middleware useful?” but “do we need a governed runtime contract?”

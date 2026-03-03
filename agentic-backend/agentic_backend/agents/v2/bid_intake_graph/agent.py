@@ -1,14 +1,12 @@
 """
-Minimal graph-style bid intake assistant for the v2 contract.
+Graph v2 example for initial bid qualification.
 
-Why this file exists:
-- It gives Fred a first serious bid-management workflow without pretending the
-  whole Chorus process is already implemented.
-- It focuses on the first business step that matters in practice: understand
-  the customer brief, list requirements and constraints, identify gaps, and ask
-  for clarification when the intake is too weak.
-- It is intentionally small so a real bid manager can evaluate the graph shape
-  early, before the platform grows a full gate-driven bid workflow.
+This workflow intentionally covers only the first useful step:
+- route request
+- retrieve context from corpus
+- extract requirements/constraints
+- ask clarifications when data is missing
+- publish a structured summary
 """
 
 # TODO(bid-intake): Do one more authoring-alignment pass after the first field
@@ -78,16 +76,16 @@ class BidIntakeRoutingLexicon(FrozenModel):
 
 DEFAULT_ROUTING_LEXICON = BidIntakeRoutingLexicon.model_validate(
     load_agent_lexicon_json(
-        package="agentic_backend.agents.v2",
+        package="agentic_backend.agents.v2.bid_intake_graph",
         file_name="bid_intake_routing_lexicon.json",
     )
 )
 DEFAULT_ROUTER_PROMPT = load_agent_prompt_markdown(
-    package="agentic_backend.agents.v2",
+    package="agentic_backend.agents.v2.bid_intake_graph",
     file_name="bid_intake_router_prompt.md",
 )
 DEFAULT_ANALYSIS_PROMPT = load_agent_prompt_markdown(
-    package="agentic_backend.agents.v2",
+    package="agentic_backend.agents.v2.bid_intake_graph",
     file_name="bid_intake_analysis_prompt.md",
 )
 
@@ -203,14 +201,13 @@ class BidIntakeGraphState(BaseModel):
 
 class BidIntakeGraphV2Definition(GraphAgentDefinition):
     """
-    Small bid-management graph focused on the first useful qualification step.
+    Focused bid-intake workflow built with `GraphAgentDefinition`.
 
-    This is intentionally not a full Chorus implementation. It proves the
-    business value of graph execution on one concrete promise:
-    - read the customer material
-    - extract requirements and constraints deterministically
-    - ask targeted clarification when the intake is incomplete
-    - return a bid-manager-friendly qualification summary
+    Quick edit guide:
+    - node sequence and branches: `build_graph()`
+    - extraction prompts: markdown resources
+    - fallback vocabulary: `routing_lexicon`
+    - output document shape: `_render_summary(...)`
     """
 
     agent_id: str = "bid.intake.graph.v2"

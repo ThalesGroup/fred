@@ -18,6 +18,7 @@ Useful reading order:
 - current doc status map: [V2_DOC_STATUS.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_DOC_STATUS.md)
 - current feature surface: [V2_FEATURE_MAP.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_FEATURE_MAP.md)
 - graph runtime maturity and remaining LangGraph usage: [GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md](/home/dimi/run/reference/fred/agentic-backend/docs/GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md)
+- explicit v2 trade-offs against middleware/framework-native layering: [V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md)
 
 ## 1. Preferred Authoring Model
 
@@ -33,9 +34,9 @@ For new work, prefer:
 
 Concrete examples already present in the repo:
 
-- `agentic_backend/agents/v2/basic_react.py`
-- `agentic_backend/agents/v2/rag_expert.py`
-- `agentic_backend/agents/v2/tracking_graph_demo.py`
+- `agentic_backend/agents/v2/basic_react/agent.py`
+- `agentic_backend/agents/v2/basic_react/profiles/rag_expert.py`
+- `agentic_backend/agents/v2/tracking_graph_demo/agent.py`
 
 ## 2. What The Author Owns
 
@@ -83,6 +84,12 @@ Examples:
 
 Profiles are only a convenient initialization layer.
 They are not a separate runtime model.
+
+Observability note for ReAct in v2:
+
+- ReAct runtime instrumentation is shared and enforced centrally, not left to each agent author.
+- The runtime emits a standard model-call span (`v2.react.model`, `operation=model_call`) and shared metadata context for Langfuse filtering.
+- Compared to legacy v1-style agent-local runtime wiring, this reduces per-agent drift in tracing quality.
 
 ## 4. Graph Agents
 

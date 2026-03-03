@@ -21,13 +21,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import inspect
-from typing import TYPE_CHECKING, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 
 from fred_core import (
     LogFilter,
@@ -37,6 +38,8 @@ from fred_core import (
     get_keycloak_client_id,
     get_keycloak_url,
 )
+import httpx
+from langfuse import Langfuse
 from langchain_core.tools import BaseTool
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
@@ -64,6 +67,8 @@ from .context import (
     ArtifactScope,
     BoundRuntimeContext,
     FetchedResource,
+    JsonScalar,
+    PortableContext,
     PublishedArtifact,
     ResourceFetchRequest,
     ResourceScope,
@@ -72,10 +77,18 @@ from .context import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
+from .builtin_tools import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    TOOL_REF_KNOWLEDGE_SEARCH,
+    TOOL_REF_LOGS_QUERY,
+    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+)
 from .runtime import (
     ArtifactPublisherPort,
     ChatModelFactoryPort,
     ResourceReaderPort,
+    SpanPort,
+    TracerPort,
     ToolInvokerPort,
     ToolProviderPort,
 )
@@ -89,6 +102,121 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 _LEVEL_ORDER: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 _DEFAULT_LOG_MAX_GROUPS = 8
 _DEFAULT_LOG_SAMPLES = 20
+_TRACE_MODEL_SPAN_NAMES = frozenset({"v2.graph.model", "v2.react.model"})
+_TRACE_AWAIT_HUMAN_SPAN_NAMES = frozenset({"v2.graph.await_human"})
+_TRACE_TOOL_SPAN_NAMES = frozenset(
+    {"v2.graph.tool", "v2.graph.runtime_tool", "tool.invoke"}
+)
+
+
+class LangfuseSpanAdapter(SpanPort):
+    """
+    Thin `SpanPort` adapter over a Langfuse span.
+
+    Attributes are buffered and flushed as metadata updates to keep the runtime
+    tracing contract generic and side-effect free.
+    """
+
+    def __init__(self, span: "_LangfuseSpanLike"):
+        self._span = span
+        self._metadata: dict[str, object] = {}
+        self._ended = False
+
+    def set_attribute(self, key: str, value: JsonScalar) -> None:
+        if self._ended:
+            return
+        self._metadata[key] = value
+
+    def end(self) -> None:
+        if self._ended:
+            return
+        try:
+            if self._metadata:
+                self._span.update(metadata=dict(self._metadata))
+            self._span.end()
+        finally:
+            self._ended = True
+
+
+class LangfuseTracerAdapter(TracerPort):
+    """
+    Langfuse-backed implementation of the v2 runtime tracing port.
+    """
+
+    def __init__(self, client: Langfuse):
+        self._client = client
+
+    def start_span(
+        self,
+        *,
+        name: str,
+        context: PortableContext,
+        attributes: Mapping[str, JsonScalar] | None = None,
+    ) -> SpanPort:
+        trace_seed = (
+            context.trace_id
+            or context.correlation_id
+            or context.request_id
+            or context.session_id
+            or context.actor
+        )
+        trace_id = self._client.create_trace_id(seed=trace_seed)
+        metadata: dict[str, object] = {
+            "agent_id": context.agent_id,
+            "agent_name": context.agent_name,
+            "session_id": context.session_id,
+            "fred_session_id": context.session_id,
+            "correlation_id": context.correlation_id,
+            "request_id": context.request_id,
+            "actor": context.actor,
+            "user_id": context.user_id,
+            "user_name": context.user_name,
+            "team_id": context.team_id,
+            "tenant": context.tenant,
+            "environment": context.environment.value,
+        }
+        if attributes:
+            metadata.update(attributes)
+        span = self._client.start_span(
+            name=name,
+            trace_context={"trace_id": trace_id},
+            metadata=metadata,
+        )
+        return LangfuseSpanAdapter(span)
+
+
+_LANGFUSE_TRACER: TracerPort | None | bool = False
+
+
+class _LangfuseSpanLike(Protocol):
+    def update(
+        self, *, metadata: Mapping[str, object] | None = None, **kwargs
+    ) -> object: ...
+
+    def end(self, *, end_time: int | None = None) -> object: ...
+
+
+def build_langfuse_tracer() -> TracerPort | None:
+    """
+    Return a shared Langfuse tracer when credentials are configured.
+    """
+
+    global _LANGFUSE_TRACER
+    if _LANGFUSE_TRACER is not False:
+        return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
+
+    has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+    has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
+    if not (has_public and has_secret):
+        _LANGFUSE_TRACER = None
+        return None
+
+    try:
+        _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
+    except Exception:
+        logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
+        _LANGFUSE_TRACER = None
+    return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
@@ -132,6 +260,36 @@ class InProcessToolInvoker(ToolInvokerPort):
         return result
 
 
+class CompositeToolInvoker(ToolInvokerPort):
+    """
+    Dispatch local registered tool refs first, then fall back to Fred defaults.
+
+    This is the runtime bridge that lets a declarative v2 definition expose
+    domain-specific tool refs without teaching the shared runtime about each
+    business tool individually.
+    """
+
+    def __init__(
+        self,
+        *,
+        handlers: Mapping[str, ToolHandler],
+        fallback: ToolInvokerPort | None = None,
+    ) -> None:
+        self._handlers = dict(handlers)
+        self._fallback = fallback
+
+    async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
+        handler = self._handlers.get(request.tool_ref)
+        if handler is not None:
+            result = handler(request)
+            if inspect.isawaitable(result):
+                return await result
+            return result
+        if self._fallback is None:
+            raise RuntimeError(f"No tool handler registered for {request.tool_ref!r}.")
+        return await self._fallback.invoke(request)
+
+
 @dataclass(frozen=True)
 class _LogEventSnapshot:
     source: str
@@ -155,15 +313,19 @@ class _GroupedLogEvent(TypedDict):
     last_ts: float
 
 
+class _TraceAggregate(TypedDict):
+    name: str
+    count: int
+    total_ms: int
+    max_ms: int
+
+
 class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
     """
     First concrete Fred-side tool invoker for v2 agents.
 
     Current scope:
-    - exposes transport-independent tool refs:
-      - `knowledge.search`
-      - `logs.query`
-      - `geo.render_points`
+    - exposes transport-independent built-in tool refs from `builtin_tools.py`
 
     Why this limited shape is intentional:
     - it makes the new RAG agent immediately useful from the UI
@@ -186,14 +348,20 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         self._logs_client = KfLogsClient(
             agent=_VectorSearchAgentShim(binding=binding, settings=self._settings)
         )
+        self._builtins: dict[str, ToolHandler] = {
+            TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
+            TOOL_REF_LOGS_QUERY: self._invoke_logs_query,
+            TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
+            TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
+        }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
-        if request.tool_ref == "knowledge.search":
-            return await self._invoke_knowledge_search(request)
-        if request.tool_ref == "logs.query":
-            return await self._invoke_logs_query(request)
-        if request.tool_ref == "geo.render_points":
-            return self._invoke_geo_render_points(request)
+        handler = self._builtins.get(request.tool_ref)
+        if handler is not None:
+            result = handler(request)
+            if inspect.isawaitable(result):
+                return await result
+            return result
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
 
     async def _invoke_knowledge_search(
@@ -307,6 +475,76 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             sources=(),
+        )
+
+    async def _invoke_traces_summarize_conversation(
+        self, request: ToolInvocationRequest
+    ) -> ToolInvocationResult:
+        payload = request.payload
+        session_id = (
+            _coerce_optional_string(payload.get("fred_session_id"))
+            or _coerce_optional_string(payload.get("session_id"))
+            or self._binding.runtime_context.session_id
+        )
+        trace_limit = _positive_int(payload.get("trace_limit"), default=50, maximum=200)
+        top_spans = _positive_int(payload.get("top_spans"), default=10, maximum=50)
+        include_timeline = bool(payload.get("include_timeline", True))
+
+        query_filters = {
+            "fred_session_id": session_id,
+            "agent_name": _coerce_optional_string(payload.get("agent_name")),
+            "agent_id": _coerce_optional_string(payload.get("agent_id")),
+            "team_id": _coerce_optional_string(payload.get("team_id"))
+            or self._settings.team_id,
+            "user_name": _coerce_optional_string(payload.get("user_name")),
+            "trace_limit": trace_limit,
+            "top_spans": top_spans,
+            "include_timeline": include_timeline,
+        }
+
+        try:
+            digest = await asyncio.to_thread(
+                _summarize_langfuse_conversation,
+                query_filters=query_filters,
+            )
+        except Exception as exc:
+            logger.warning(
+                "v2 traces.summarize_conversation failed: %s", exc, exc_info=True
+            )
+            return ToolInvocationResult(
+                tool_ref=request.tool_ref,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.TEXT,
+                        text=(
+                            "Langfuse summary failed. Check LANGFUSE_HOST/"
+                            "LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY and trace filters."
+                        ),
+                    ),
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data={
+                            "status": "error",
+                            "error": str(exc),
+                            "query_filters": query_filters,
+                        },
+                    ),
+                ),
+                is_error=True,
+            )
+
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.TEXT,
+                    text=_render_trace_digest_summary(digest),
+                ),
+                ToolContentBlock(
+                    kind=ToolContentKind.JSON,
+                    data=digest,
+                ),
+            ),
         )
 
     def _invoke_geo_render_points(
@@ -968,3 +1206,452 @@ def _build_log_digest(
         ],
         "rule_hints": _log_rule_hints(events_sorted),
     }
+
+
+def _render_trace_digest_summary(digest: dict[str, object]) -> str:
+    status = str(digest.get("status") or "unknown")
+    if status != "ok":
+        return (
+            f"Langfuse conversation summary status={status}. "
+            "No matching trace was found with the requested filters."
+        )
+
+    selected = digest.get("selected_trace")
+    selected_trace = selected if isinstance(selected, dict) else {}
+    trace_id = str(selected_trace.get("trace_id") or "n/a")
+    agent_name = str(selected_trace.get("agent_name") or "n/a")
+    session_id = str(selected_trace.get("fred_session_id") or "n/a")
+    bottleneck = str(digest.get("bottleneck") or "unknown")
+    bottleneck_ms = _safe_int(digest.get("bottleneck_ms"))
+    tool_total_ms = _safe_int(digest.get("tool_total_ms"))
+    model_total_ms = _safe_int(digest.get("model_total_ms"))
+    await_total_ms = _safe_int(digest.get("await_human_total_ms"))
+    trace_total_ms = _safe_int(digest.get("trace_total_ms"))
+    unclassified_total_ms = _safe_int(digest.get("unclassified_total_ms"))
+    instrumentation_gap = bool(digest.get("instrumentation_gap_detected"))
+    return (
+        "Conversation trace summary:\n"
+        f"- trace_id: {trace_id}\n"
+        f"- agent: {agent_name}\n"
+        f"- fred_session_id: {session_id}\n"
+        f"- bottleneck: {bottleneck} ({bottleneck_ms} ms)\n"
+        f"- trace_total_ms: {trace_total_ms}\n"
+        f"- model_total_ms: {model_total_ms}\n"
+        f"- tool_total_ms: {tool_total_ms}\n"
+        f"- await_human_total_ms: {await_total_ms}\n"
+        f"- unclassified_total_ms: {unclassified_total_ms}\n"
+        f"- instrumentation_gap_detected: {str(instrumentation_gap).lower()}"
+    )
+
+
+def _summarize_langfuse_conversation(
+    *,
+    query_filters: dict[str, object],
+) -> dict[str, object]:
+    credentials = _langfuse_credentials()
+    if credentials is None:
+        raise RuntimeError(
+            "Langfuse credentials are not configured. Expected LANGFUSE_HOST, "
+            "LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY."
+        )
+    host, public_key, secret_key = credentials
+    trace_limit = _positive_int(
+        query_filters.get("trace_limit"), default=50, maximum=200
+    )
+    top_spans = _positive_int(query_filters.get("top_spans"), default=10, maximum=50)
+    include_timeline = bool(query_filters.get("include_timeline", True))
+
+    traces_payload = _langfuse_get_json(
+        host=host,
+        public_key=public_key,
+        secret_key=secret_key,
+        path="/api/public/traces",
+        params={"limit": str(trace_limit)},
+    )
+    raw_traces = traces_payload.get("data")
+    traces = raw_traces if isinstance(raw_traces, list) else []
+
+    matched: list[dict[str, object]] = []
+    for trace in traces:
+        if not isinstance(trace, dict):
+            continue
+        metadata = trace.get("metadata")
+        md = metadata if isinstance(metadata, dict) else {}
+        if not _trace_matches_filters(md, query_filters):
+            continue
+        matched.append(trace)
+
+    if not matched:
+        return {
+            "status": "not_found",
+            "query_filters": query_filters,
+            "candidate_trace_count": len(traces),
+            "note": "No trace matched the requested conversation filters.",
+        }
+
+    selected_trace = max(
+        matched,
+        key=lambda trace: str(trace.get("timestamp") or trace.get("updatedAt") or ""),
+    )
+    trace_id = _coerce_optional_string(selected_trace.get("id"))
+    if not trace_id:
+        return {
+            "status": "not_found",
+            "query_filters": query_filters,
+            "candidate_trace_count": len(traces),
+            "note": "Selected trace did not expose a valid trace id.",
+        }
+
+    trace_detail = _langfuse_get_json(
+        host=host,
+        public_key=public_key,
+        secret_key=secret_key,
+        path=f"/api/public/traces/{trace_id}",
+    )
+    raw_observations = trace_detail.get("observations")
+    observations = raw_observations if isinstance(raw_observations, list) else []
+    span_rows = _extract_interesting_spans(observations)
+    span_rows.sort(key=lambda row: str(row.get("start_time") or ""))
+
+    top_latency_rows = sorted(
+        span_rows,
+        key=lambda row: _safe_int(row.get("latency_ms")),
+        reverse=True,
+    )[:top_spans]
+
+    node_totals = _aggregate_by_key(span_rows, key_name="node_id")
+    model_totals = _aggregate_by_key(
+        [row for row in span_rows if row.get("category") == "model"],
+        key_name="operation_label",
+    )
+    tool_totals = _aggregate_by_key(
+        [row for row in span_rows if row.get("category") == "tool"],
+        key_name="tool_label",
+    )
+
+    model_total_ms = sum(
+        _safe_int(row.get("latency_ms"))
+        for row in span_rows
+        if row.get("category") == "model"
+    )
+    tool_total_ms = sum(
+        _safe_int(row.get("latency_ms"))
+        for row in span_rows
+        if row.get("category") == "tool"
+    )
+    await_human_total_ms = sum(
+        _safe_int(row.get("latency_ms"))
+        for row in span_rows
+        if row.get("category") == "await_human"
+    )
+    trace_total_ms = _trace_total_latency_ms(selected_trace=selected_trace)
+    instrumented_total_ms = model_total_ms + tool_total_ms + await_human_total_ms
+    unclassified_total_ms = max(0, trace_total_ms - instrumented_total_ms)
+    bottleneck, bottleneck_ms = _classify_trace_bottleneck(
+        model_total_ms=model_total_ms,
+        tool_total_ms=tool_total_ms,
+        await_human_total_ms=await_human_total_ms,
+        trace_total_ms=trace_total_ms,
+        unclassified_total_ms=unclassified_total_ms,
+        interesting_span_count=len(span_rows),
+    )
+
+    selected_metadata = selected_trace.get("metadata")
+    selected_md = selected_metadata if isinstance(selected_metadata, dict) else {}
+    digest: dict[str, object] = {
+        "status": "ok",
+        "query_filters": query_filters,
+        "selected_trace": {
+            "trace_id": trace_id,
+            "timestamp": selected_trace.get("timestamp"),
+            "name": selected_trace.get("name"),
+            "latency_s": selected_trace.get("latency"),
+            "agent_id": selected_md.get("agent_id"),
+            "agent_name": selected_md.get("agent_name"),
+            "team_id": selected_md.get("team_id"),
+            "user_id": selected_md.get("user_id"),
+            "user_name": selected_md.get("user_name"),
+            "fred_session_id": selected_md.get("fred_session_id")
+            or selected_md.get("session_id"),
+            "correlation_id": selected_md.get("correlation_id"),
+            "request_id": selected_md.get("request_id"),
+        },
+        "observation_count": len(observations),
+        "interesting_span_count": len(span_rows),
+        "top_spans_by_latency": top_latency_rows,
+        "node_totals_ms": node_totals,
+        "model_operation_totals_ms": model_totals,
+        "tool_totals_ms": tool_totals,
+        "model_total_ms": model_total_ms,
+        "tool_total_ms": tool_total_ms,
+        "await_human_total_ms": await_human_total_ms,
+        "trace_total_ms": trace_total_ms,
+        "instrumented_total_ms": instrumented_total_ms,
+        "unclassified_total_ms": unclassified_total_ms,
+        "instrumentation_gap_detected": bottleneck == "instrumentation_gap",
+        "bottleneck": bottleneck,
+        "bottleneck_ms": bottleneck_ms,
+        "recommendations": _trace_recommendations(bottleneck),
+    }
+    if include_timeline:
+        digest["timeline"] = span_rows
+    return digest
+
+
+def _trace_matches_filters(
+    metadata: dict[str, object], query_filters: dict[str, object]
+) -> bool:
+    def _matches(key: str, metadata_keys: tuple[str, ...] = ()) -> bool:
+        raw = query_filters.get(key)
+        expected = _coerce_optional_string(raw)
+        if not expected:
+            return True
+        values = [metadata.get(key), *[metadata.get(alias) for alias in metadata_keys]]
+        return any(_coerce_optional_string(value) == expected for value in values)
+
+    return (
+        _matches("fred_session_id", metadata_keys=("session_id",))
+        and _matches("agent_name")
+        and _matches("agent_id")
+        and _matches("team_id")
+        and _matches("user_name")
+    )
+
+
+def _extract_interesting_spans(observations: list[object]) -> list[dict[str, object]]:
+    interesting_prefixes = ("v2.graph.", "v2.react.")
+    interesting_names = {
+        "agent.stream",
+        "tool.invoke",
+        "artifact.publish",
+        "resource.fetch",
+    }
+    rows: list[dict[str, object]] = []
+    for raw in observations:
+        if not isinstance(raw, dict):
+            continue
+        obs_type = str(raw.get("type") or "")
+        if obs_type == "GENERATION":
+            latency_ms = _safe_int(raw.get("latency"))
+            metadata = raw.get("metadata")
+            md = metadata if isinstance(metadata, dict) else {}
+            operation = _coerce_optional_string(raw.get("name"))
+            model_name = _coerce_optional_string(
+                raw.get("model")
+            ) or _coerce_optional_string(md.get("model_name"))
+            rows.append(
+                {
+                    "name": "langfuse.generation",
+                    "start_time": raw.get("startTime"),
+                    "end_time": raw.get("endTime"),
+                    "latency_ms": latency_ms,
+                    "node_id": _coerce_optional_string(md.get("node_id")),
+                    "step_index": _safe_int(md.get("step_index")),
+                    "operation": operation,
+                    "tool_ref": None,
+                    "tool_name": None,
+                    "tool_label": "n/a",
+                    "operation_label": operation or "generation",
+                    "model_name": model_name,
+                    "status": _coerce_optional_string(md.get("status")),
+                    "stage": _coerce_optional_string(md.get("stage")),
+                    "category": "model",
+                }
+            )
+            continue
+        if obs_type != "SPAN":
+            continue
+        name = str(raw.get("name") or "")
+        if not (name.startswith(interesting_prefixes) or name in interesting_names):
+            continue
+        metadata = raw.get("metadata")
+        md = metadata if isinstance(metadata, dict) else {}
+        latency_ms = _safe_int(raw.get("latency"))
+        node_id = _coerce_optional_string(md.get("node_id"))
+        operation = _coerce_optional_string(md.get("operation"))
+        tool_ref = _coerce_optional_string(md.get("tool_ref"))
+        tool_name = _coerce_optional_string(md.get("tool_name"))
+        model_name = _coerce_optional_string(md.get("model_name"))
+        category = "other"
+        if name in _TRACE_MODEL_SPAN_NAMES:
+            category = "model"
+        elif name in _TRACE_TOOL_SPAN_NAMES:
+            category = "tool"
+        elif name in _TRACE_AWAIT_HUMAN_SPAN_NAMES:
+            category = "await_human"
+        rows.append(
+            {
+                "name": name,
+                "start_time": raw.get("startTime"),
+                "end_time": raw.get("endTime"),
+                "latency_ms": latency_ms,
+                "node_id": node_id,
+                "step_index": _safe_int(md.get("step_index")),
+                "operation": operation,
+                "tool_ref": tool_ref,
+                "tool_name": tool_name,
+                "tool_label": tool_ref or tool_name or "n/a",
+                "operation_label": operation or "n/a",
+                "model_name": model_name,
+                "status": _coerce_optional_string(md.get("status")),
+                "stage": _coerce_optional_string(md.get("stage")),
+                "category": category,
+            }
+        )
+    return rows
+
+
+def _aggregate_by_key(
+    rows: list[dict[str, object]],
+    *,
+    key_name: str,
+) -> list[_TraceAggregate]:
+    totals: dict[str, _TraceAggregate] = {}
+    for row in rows:
+        label = _coerce_optional_string(row.get(key_name)) or "n/a"
+        latency_ms = _safe_int(row.get("latency_ms"))
+        if label not in totals:
+            totals[label] = {
+                "name": label,
+                "count": 1,
+                "total_ms": latency_ms,
+                "max_ms": latency_ms,
+            }
+        else:
+            aggregate = totals[label]
+            aggregate["count"] += 1
+            aggregate["total_ms"] += latency_ms
+            aggregate["max_ms"] = max(aggregate["max_ms"], latency_ms)
+    return sorted(
+        totals.values(),
+        key=lambda aggregate: (aggregate["total_ms"], aggregate["max_ms"]),
+        reverse=True,
+    )
+
+
+def _classify_trace_bottleneck(
+    *,
+    model_total_ms: int,
+    tool_total_ms: int,
+    await_human_total_ms: int,
+    trace_total_ms: int,
+    unclassified_total_ms: int,
+    interesting_span_count: int,
+) -> tuple[str, int]:
+    instrumented_total_ms = model_total_ms + tool_total_ms + await_human_total_ms
+    if instrumented_total_ms == 0:
+        if trace_total_ms > 0 or interesting_span_count > 0:
+            return "instrumentation_gap", max(trace_total_ms, unclassified_total_ms)
+        return "unknown", 0
+    if unclassified_total_ms > max(model_total_ms, tool_total_ms, await_human_total_ms):
+        return "instrumentation_gap", unclassified_total_ms
+    candidates = {
+        "model_latency": model_total_ms,
+        "tool_latency": tool_total_ms,
+        "awaiting_human": await_human_total_ms,
+    }
+    bottleneck = max(candidates, key=lambda key: candidates[key])
+    return bottleneck, candidates[bottleneck]
+
+
+def _trace_recommendations(bottleneck: str) -> list[str]:
+    if bottleneck == "instrumentation_gap":
+        return [
+            "Instrument model/tool calls as child spans to avoid opaque top-level latency.",
+            "Capture model_name, tool_name/tool_ref, and operation on each child span.",
+        ]
+    if bottleneck == "model_latency":
+        return [
+            "Inspect analysis prompt/context size and reduce low-signal retrieved text.",
+            "Split heavy analysis into smaller model operations when possible.",
+        ]
+    if bottleneck == "tool_latency":
+        return [
+            "Inspect downstream tool backend latency and scope filters.",
+            "Validate retrieval query width (top_k, corpus scope, selected libraries).",
+        ]
+    if bottleneck == "awaiting_human":
+        return [
+            "Treat this as business wait time, not backend compute latency.",
+            "Track HITL wait separately from runtime performance metrics.",
+        ]
+    return ["No dominant bottleneck found; inspect top span timeline manually."]
+
+
+def _safe_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return max(0, int(value))
+    if isinstance(value, str):
+        try:
+            return max(0, int(float(value.strip())))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _trace_total_latency_ms(*, selected_trace: dict[str, object]) -> int:
+    raw_latency = selected_trace.get("latency")
+    if isinstance(raw_latency, bool):
+        return 0
+    if isinstance(raw_latency, int | float):
+        # Langfuse public trace latency is expressed in seconds.
+        return max(0, int(float(raw_latency) * 1000))
+    if isinstance(raw_latency, str):
+        try:
+            return max(0, int(float(raw_latency.strip()) * 1000))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _langfuse_credentials() -> tuple[str, str, str] | None:
+    host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
+    public_key = _coerce_optional_string(os.getenv("LANGFUSE_PUBLIC_KEY"))
+    secret_key = _coerce_optional_string(os.getenv("LANGFUSE_SECRET_KEY"))
+    if not host or not public_key or not secret_key:
+        return None
+    return host.rstrip("/"), public_key, secret_key
+
+
+def _langfuse_get_json(
+    *,
+    host: str,
+    public_key: str,
+    secret_key: str,
+    path: str,
+    params: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    url = f"{host}{path}"
+    try:
+        response = httpx.get(
+            url,
+            params=dict(params) if params else None,
+            auth=(public_key, secret_key),
+            headers={"Accept": "application/json"},
+            timeout=15.0,
+        )
+        response.raise_for_status()
+        payload = response.text
+    except httpx.HTTPStatusError as exc:
+        body = (exc.response.text or "")[:300]
+        raise RuntimeError(
+            f"Langfuse API HTTP {exc.response.status_code} for {path}: {body}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"Langfuse API connection failed for {path}: {exc}") from exc
+
+    try:
+        raw = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Langfuse API returned non-JSON payload for {path}."
+        ) from exc
+    if not isinstance(raw, dict):
+        raise RuntimeError(
+            f"Langfuse API returned unexpected payload shape for {path}."
+        )
+    return raw

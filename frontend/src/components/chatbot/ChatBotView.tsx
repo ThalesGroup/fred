@@ -40,6 +40,7 @@ import {
   type ConversationOptionsController,
   type ConversationPrefs,
 } from "./ConversationOptionsController.tsx";
+import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { type UserInputContent } from "./user_input/UserInput.tsx";
 
@@ -94,7 +95,7 @@ type ChatBotViewProps = {
   };
   onSend: (content: UserInputContent) => void;
   onStop: () => void;
-  onRequestLogGenius?: () => void;
+  onRequestLogGenius?: (mode: LogGeniusMode) => void;
   onSelectAgent: (agent: AnyAgent) => Promise<void> | void;
   setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
   setSearchRagScope: (next: SearchRagScope) => void;

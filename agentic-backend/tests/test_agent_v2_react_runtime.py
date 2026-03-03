@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from fred_core import PostgresStoreConfig
 from fred_core.sql import create_async_engine_from_config
 from fred_core import VectorSearchHit
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel
@@ -43,8 +46,15 @@ from agentic_backend.core.agents.v2.react_runtime import (
     ReActMessage,
     ReActMessageRole,
     ReActRuntime,
+    ReActToolCall,
+    _to_runnable_config,
+    _to_langchain_message,
 )
-from agentic_backend.core.agents.v2.runtime import FinalRuntimeEvent
+from agentic_backend.core.agents.v2.runtime import (
+    FinalRuntimeEvent,
+    SpanPort,
+    TracerPort,
+)
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
 
 
@@ -172,6 +182,40 @@ class RecordingResourceReader(ResourceReaderPort):
         )
 
 
+class RecordingSpan(SpanPort):
+    def __init__(
+        self,
+        *,
+        name: str,
+        attributes: dict[str, object],
+        sink: list[dict[str, object]],
+    ) -> None:
+        self._record = {
+            "name": name,
+            "attributes": dict(attributes),
+        }
+        self._sink = sink
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self._record["attributes"][key] = value
+
+    def end(self) -> None:
+        self._sink.append(self._record)
+
+
+class RecordingTracer(TracerPort):
+    def __init__(self) -> None:
+        self.finished_spans: list[dict[str, object]] = []
+
+    def start_span(self, *, name, context, attributes=None):  # type: ignore[override]
+        del context
+        return RecordingSpan(
+            name=name,
+            attributes=dict(attributes or {}),
+            sink=self.finished_spans,
+        )
+
+
 def _binding(session_id: str, *, agent_id: str) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
@@ -207,6 +251,56 @@ def _vector_search_hit() -> VectorSearchHit:
             "rank": 1,
         }
     )
+
+
+def test_react_runtime_sanitizes_legacy_dotted_tool_names_from_history() -> None:
+    assistant_message = ReActMessage(
+        role=ReActMessageRole.ASSISTANT,
+        content="",
+        tool_calls=(
+            ReActToolCall(
+                call_id="call-1",
+                name="traces.summarize_conversation",
+                arguments={"fred_session_id": "Km-bI9qp-DQ"},
+            ),
+        ),
+    )
+    assistant_lc = _to_langchain_message(assistant_message)
+    assert isinstance(assistant_lc, AIMessage)
+    assert assistant_lc.tool_calls[0]["name"] == "traces_summarize_conversation"
+
+    tool_message = ReActMessage(
+        role=ReActMessageRole.TOOL,
+        content="ok",
+        tool_name="logs.query",
+        tool_call_id="call-1",
+    )
+    tool_lc = _to_langchain_message(tool_message)
+    assert isinstance(tool_lc, ToolMessage)
+    assert getattr(tool_lc, "name", None) == "logs_query"
+
+
+def test_to_runnable_config_preserves_callbacks_and_configurable_values() -> None:
+    callback = object()
+    runnable = _to_runnable_config(
+        ExecutionConfig(
+            thread_id="thread-1",
+            checkpoint_id="checkpoint-1",
+            runnable_config={
+                "callbacks": [callback],
+                "tags": ["perf"],
+                "configurable": {"tenant": "fred"},
+            },
+        )
+    )
+
+    assert isinstance(runnable, dict)
+    assert cast(list[object], runnable["callbacks"]) == [callback]
+    assert cast(list[str], runnable["tags"]) == ["perf"]
+    configurable = cast(dict[str, object], runnable["configurable"])
+    assert isinstance(configurable, dict)
+    assert configurable["tenant"] == "fred"
+    assert configurable["thread_id"] == "thread-1"
 
 
 @pytest.mark.asyncio
@@ -278,6 +372,41 @@ async def test_basic_react_runtime_stream_preserves_model_and_token_usage() -> N
 
 
 @pytest.mark.asyncio
+async def test_basic_react_runtime_emits_model_span_per_model_call() -> None:
+    definition = BasicReActV2Definition()
+    model = ToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="Hello from the traced model call.")]
+    )
+    tracer = RecordingTracer()
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tracer=tracer,
+        ),
+    )
+    runtime.bind(_binding("basic-model-span", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    events = [
+        event
+        async for event in executor.stream(
+            _user_input("Say hello with tracing."),
+            ExecutionConfig(),
+        )
+    ]
+
+    assert events[-1].kind == RuntimeEventKind.FINAL
+    model_spans = [
+        span for span in tracer.finished_spans if span["name"] == "v2.react.model"
+    ]
+    assert len(model_spans) >= 1
+    model_span_attributes = cast(dict[str, object], model_spans[0]["attributes"])
+    assert model_span_attributes["operation"] == "model_call"
+    assert model_span_attributes["status"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_basic_react_runtime_uses_runtime_provided_tools() -> None:
     definition = BasicReActV2Definition()
     model = ToolFriendlyFakeChatModel(
@@ -314,6 +443,58 @@ async def test_basic_react_runtime_uses_runtime_provided_tools() -> None:
     assert tool_provider.bind_calls == ["ops-session"]
     assert tool_provider.activate_calls == 1
     assert output.final_message.content == "The cluster status is green."
+
+
+@pytest.mark.asyncio
+async def test_basic_react_runtime_emits_runtime_tool_span_for_provider_tools() -> None:
+    definition = BasicReActV2Definition()
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-1",
+                        "name": "ops_status",
+                        "args": {},
+                    }
+                ],
+            ),
+            AIMessage(content="The cluster status is green."),
+        ]
+    )
+    tracer = RecordingTracer()
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_provider=RecordingToolProvider(),
+            tracer=tracer,
+        ),
+    )
+    runtime.bind(_binding("ops-session-traced", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    events = [
+        event
+        async for event in executor.stream(
+            _user_input("Check the platform status."),
+            ExecutionConfig(),
+        )
+    ]
+
+    assert events[-1].kind == RuntimeEventKind.FINAL
+    span_names = [span["name"] for span in tracer.finished_spans]
+    assert "agent.stream" in span_names
+    assert "v2.graph.runtime_tool" in span_names
+    runtime_tool_span = next(
+        span
+        for span in tracer.finished_spans
+        if span["name"] == "v2.graph.runtime_tool"
+    )
+    runtime_tool_attributes = cast(dict[str, object], runtime_tool_span["attributes"])
+    assert runtime_tool_attributes["tool_name"] == "ops_status"
+    assert runtime_tool_attributes["status"] == "ok"
 
 
 @pytest.mark.asyncio
@@ -905,6 +1086,69 @@ async def test_basic_react_runtime_routes_logs_query_through_tool_invoker() -> N
     assert (
         output.final_message.content
         == "The main issue is repeated permission failures."
+    )
+
+
+@pytest.mark.asyncio
+async def test_basic_react_runtime_routes_trace_summary_through_tool_invoker() -> None:
+    definition = BasicReActV2Definition(
+        tool_requirements=(
+            ToolRefRequirement(
+                tool_ref="traces.summarize_conversation",
+                description="Summarize one Fred conversation from Langfuse traces.",
+            ),
+        )
+    )
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-trace-1",
+                        "name": "traces_summarize_conversation",
+                        "args": {
+                            "fred_session_id": "Km-bI9qp-DQ",
+                            "agent_name": "BidMgr",
+                            "top_spans": 8,
+                        },
+                    }
+                ],
+            ),
+            AIMessage(content="The bottleneck is model latency in analyze_intake."),
+        ]
+    )
+    tool_invoker = RecordingToolInvoker()
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_invoker=tool_invoker,
+        ),
+    )
+    runtime.bind(_binding("trace-session", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    output = await executor.invoke(
+        _user_input("Summarize the latest BidMgr conversation trace."),
+        ExecutionConfig(),
+    )
+
+    assert len(tool_invoker.calls) == 1
+    assert tool_invoker.calls[0].tool_ref == "traces.summarize_conversation"
+    assert tool_invoker.calls[0].payload == {
+        "fred_session_id": "Km-bI9qp-DQ",
+        "agent_name": "BidMgr",
+        "agent_id": None,
+        "team_id": None,
+        "user_name": None,
+        "trace_limit": 50,
+        "top_spans": 8,
+        "include_timeline": True,
+    }
+    assert (
+        output.final_message.content
+        == "The bottleneck is model latency in analyze_intake."
     )
 
 

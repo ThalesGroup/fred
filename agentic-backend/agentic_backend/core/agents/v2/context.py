@@ -40,8 +40,12 @@ class PortableContext(FrozenModel):
     trace_id: str | None = None
     client_app: str | None = None
     agent_id: str | None = None
+    agent_name: str | None = None
     agent_version: str | None = None
     session_id: str | None = None
+    user_id: str | None = None
+    user_name: str | None = None
+    team_id: str | None = None
     baggage: dict[str, str] = Field(default_factory=dict)
 
 

@@ -1,20 +1,13 @@
 """
-Concrete v2 runtime for ReAct-style agents.
+Executable runtime for v2 ReAct agents.
 
-Why this file exists:
-- It gives the v2 contract one real, runnable execution category instead of
-  leaving the new API as a pure specification exercise.
-- It keeps agent definitions declarative: prompts and tool requirements stay on
-  the definition side, while model resolution and tool transport stay platform-
-  owned runtime capabilities.
-- It uses the same capability seams that a broader GenAI SDK would expect:
-  model provisioning, tracing, and transport-agnostic tool invocation.
+Use this file to understand how a ReAct definition is executed in Fred:
+1. Convert typed input messages to LangChain messages.
+2. Build the tool loop from declared `tool_requirements`.
+3. Stream runtime events (assistant delta, tool call/result, final).
 
-What this file intentionally does not do:
-- It does not assume MCP directly.
-- It does not introduce a second lifecycle surface for agent authors.
-- It does not try to solve every future ReAct feature (approvals, registry
-  resolution, advanced memory policies) before the first runnable slice exists.
+If you are debugging a ReAct agent in production, this is the first file to
+open.
 """
 
 from __future__ import annotations
@@ -24,7 +17,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Literal, Protocol, cast
+from typing import Protocol, cast
 
 from fred_core import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -47,6 +40,13 @@ except Exception:  # pragma: no cover - compatibility fallback
 else:
     _langgraph_create_react_agent = None
 
+try:  # pragma: no cover - optional middleware import for compatibility
+    from langchain.agents.middleware.types import (
+        AgentMiddleware as _LangchainAgentMiddleware,
+    )
+except Exception:  # pragma: no cover - compatibility fallback
+    _LangchainAgentMiddleware = None
+
 from .context import (
     ArtifactPublishRequest,
     BoundRuntimeContext,
@@ -59,7 +59,12 @@ from .context import (
     UiPart,
 )
 from agentic_backend.core.tools.tool_loop import build_tool_loop
+from .builtin_tools import (
+    BuiltinToolBackend,
+    get_builtin_tool_spec,
+)
 from .models import ReActAgentDefinition, ToolApprovalPolicy, ToolRefRequirement
+from .toolset_registry import get_registered_tool_spec
 from .runtime import (
     AgentRuntime,
     AssistantDeltaRuntimeEvent,
@@ -71,6 +76,8 @@ from .runtime import (
     HumanInputRequest,
     RuntimeEvent,
     RuntimeServices,
+    SpanPort,
+    TracerPort,
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
 )
@@ -112,11 +119,11 @@ class ReActMessage(FrozenModel):
 
 class ReActInput(FrozenModel):
     """
-    Minimal typed input for the first v2 ReAct runtime.
+    Typed chat input accepted by `ReActRuntime`.
 
-    This is intentionally chat-shaped because both the generic assistant and the
-    first RAG-oriented agent are conversational agents. If Fred later needs a
-    richer request envelope, that can wrap this model instead of replacing it.
+    Minimum contract:
+    - at least one message
+    - at least one user message
     """
 
     messages: tuple[ReActMessage, ...]
@@ -139,146 +146,15 @@ class ReActOutput(FrozenModel):
 
 class _ToolPayloadModel(BaseModel):
     """
-    Generic payload schema for transport-routed tools.
+    Generic args schema used when no specific schema is registered.
 
-    We keep this intentionally small for the first slice: the portable runtime
-    knows that a tool exists and how to call it, but not yet each tool's full
-    domain schema. That richer schema can later come from registry metadata.
+    In practice, tool-specific schemas are preferred when available because they
+    produce more reliable model tool-calls.
     """
 
     payload: dict[str, object] = Field(
         default_factory=dict,
         description="JSON payload forwarded to the platform tool transport.",
-    )
-
-
-class _KnowledgeSearchToolArgs(BaseModel):
-    """
-    Explicit tool schema for the first built-in Fred retrieval tool.
-
-    We special-case this because it is the first real production tool wired into
-    the v2 runtime. A concrete schema makes model tool-calling far more reliable
-    than the generic `payload` wrapper.
-    """
-
-    query: str = Field(
-        ...,
-        min_length=1,
-        description="Natural-language search query to run against the selected corpus.",
-    )
-    top_k: int = Field(
-        default=8,
-        ge=1,
-        le=20,
-        description="Maximum number of retrieved snippets to return.",
-    )
-
-
-class _LogsQueryToolArgs(BaseModel):
-    window_minutes: int = Field(
-        default=5,
-        ge=1,
-        le=60,
-        description="How far back to scan logs.",
-    )
-    limit: int = Field(
-        default=500,
-        ge=1,
-        le=5000,
-        description="Maximum number of events to fetch per backend.",
-    )
-    min_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="WARNING",
-        description="Minimum log level to include in the query.",
-    )
-    include_agentic: bool = Field(
-        default=True,
-        description="Whether to include Agentic backend logs.",
-    )
-    include_knowledge_flow: bool = Field(
-        default=True,
-        description="Whether to include Knowledge Flow logs.",
-    )
-    max_events: int = Field(
-        default=200,
-        ge=50,
-        le=1000,
-        description="Cap the events kept in the returned triage digest.",
-    )
-
-
-class _GeoPointArgs(BaseModel):
-    name: str | None = Field(
-        default=None,
-        description="Human-readable point label shown in map popups when available.",
-    )
-    latitude: float = Field(..., ge=-90, le=90)
-    longitude: float = Field(..., ge=-180, le=180)
-    properties: dict[str, object] = Field(
-        default_factory=dict,
-        description="Additional GeoJSON properties attached to the point.",
-    )
-
-
-class _GeoRenderPointsArgs(BaseModel):
-    title: str = Field(
-        default="Map results",
-        description="Short textual summary accompanying the rendered map.",
-    )
-    points: list[_GeoPointArgs] = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        description="Latitude/longitude points to render as a GeoJSON feature collection.",
-    )
-    popup_property: str | None = Field(
-        default="name",
-        description="Feature property to show in popups when present.",
-    )
-    fit_bounds: bool = Field(
-        default=True,
-        description="Whether the UI should fit the map viewport to the returned features.",
-    )
-
-
-class _ArtifactPublishTextArgs(BaseModel):
-    file_name: str = Field(
-        ...,
-        min_length=1,
-        description="File name to give the generated artifact, for example report.md or summary.txt.",
-    )
-    content: str = Field(
-        ...,
-        min_length=1,
-        description="Full textual content to publish for the user.",
-    )
-    title: str | None = Field(
-        default=None,
-        description="Optional user-facing title shown for the returned download link.",
-    )
-    content_type: str = Field(
-        default="text/plain; charset=utf-8",
-        description="MIME type of the generated text artifact.",
-    )
-    key: str | None = Field(
-        default=None,
-        description="Optional logical storage key. Leave empty to let Fred generate one.",
-    )
-
-
-class _ResourceFetchTextArgs(BaseModel):
-    key: str = Field(
-        ...,
-        min_length=1,
-        description="Logical storage key of the template or supporting text resource to read.",
-    )
-    scope: ResourceScope = Field(
-        default=ResourceScope.AGENT_CONFIG,
-        description="Where the resource lives. Agent configuration is the usual location for templates.",
-    )
-    target_user_id: str | None = Field(
-        default=None,
-        description="Required only for per-user agent resources.",
     )
 
 
@@ -345,7 +221,7 @@ def _to_langchain_message(message: ReActMessage) -> BaseMessage:
             tool_calls=[
                 {
                     "id": tool_call.call_id,
-                    "name": tool_call.name,
+                    "name": _sanitize_tool_name(tool_call.name),
                     "args": tool_call.arguments,
                 }
                 for tool_call in message.tool_calls
@@ -357,7 +233,11 @@ def _to_langchain_message(message: ReActMessage) -> BaseMessage:
         return ToolMessage(
             content=message.content,
             tool_call_id=message.tool_call_id,
-            name=message.tool_name,
+            name=(
+                _sanitize_tool_name(message.tool_name)
+                if isinstance(message.tool_name, str) and message.tool_name.strip()
+                else None
+            ),
         )
     return HumanMessage(content=message.content)
 
@@ -384,7 +264,7 @@ def _from_langchain_message(message: BaseMessage) -> ReActMessage:
         tool_calls=tuple(
             ReActToolCall(
                 call_id=str(tool_call.get("id") or ""),
-                name=str(tool_call.get("name") or ""),
+                name=_sanitize_tool_name(str(tool_call.get("name") or "")),
                 arguments=cast(dict[str, object], tool_call.get("args") or {}),
             )
             for tool_call in getattr(message, "tool_calls", []) or []
@@ -842,6 +722,13 @@ class _CompiledReActAgent(Protocol):
 
 
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
+    """
+    Executes one ReAct run against the compiled LangChain/LangGraph agent.
+
+    This class is responsible for runtime event emission. When streaming output
+    looks wrong in UI, debug here first.
+    """
+
     def __init__(
         self,
         *,
@@ -1000,9 +887,21 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
 
 
 def _to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
-    if config.thread_id is None:
-        return None
-    return {"configurable": {"thread_id": config.thread_id}}
+    merged: dict[str, object] = dict(config.runnable_config)
+    configurable_raw = merged.get("configurable")
+    configurable: dict[str, object] = (
+        dict(configurable_raw) if isinstance(configurable_raw, Mapping) else {}
+    )
+
+    if config.thread_id is not None:
+        configurable["thread_id"] = config.thread_id
+
+    if configurable:
+        merged["configurable"] = configurable
+    else:
+        merged.pop("configurable", None)
+
+    return merged or None
 
 
 def _graph_input(
@@ -1017,11 +916,12 @@ def _graph_input(
 
 class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     """
-    Platform-owned runtime for pure v2 ReAct agent definitions.
+    Runtime implementation for `ReActAgentDefinition`.
 
-    This is the first concrete runtime because it offers the best leverage:
-    a small authoring surface, a generic execution engine, and a clean path to
-    portable tool invocation through injected platform services.
+    Where to look when customizing behavior:
+    - tool wiring: `build_executor(...)` and `_build_tool_loop(...)`
+    - streaming/final event shape: `_TransportBackedReActExecutor`
+    - bind/activation logic: `on_bind(...)` and `on_activate(...)`
     """
 
     def __init__(self, *, definition: ReActAgentDefinition, services: RuntimeServices):
@@ -1076,6 +976,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             binding=binding,
             approval_policy=policy.tool_approval,
             checkpointer=self.services.checkpointer,
+            tracer=self.services.tracer,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -1099,6 +1000,13 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                 "Use explicit tool_ref requirements for now."
             )
         return tuple(tool_requirements)
+
+    def _toolset_key(self) -> str | None:
+        raw = getattr(self.definition, "toolset_key", None)
+        if not isinstance(raw, str):
+            return None
+        cleaned = raw.strip()
+        return cleaned or None
 
     def _build_tools(self, binding: BoundRuntimeContext) -> list[_BoundTool]:
         tools: list[_BoundTool] = []
@@ -1126,6 +1034,12 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         tools: list[_BoundTool] = []
         for requirement in requirements:
             base_name = _sanitize_tool_name(requirement.tool_ref)
+            registered_spec = get_registered_tool_spec(
+                toolset_key=self._toolset_key(),
+                tool_ref=requirement.tool_ref,
+            )
+            if registered_spec is not None and registered_spec.runtime_name:
+                base_name = _sanitize_tool_name(registered_spec.runtime_name)
             tool_name = base_name
             suffix = 2
             while tool_name in used_names:
@@ -1133,303 +1047,236 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                 suffix += 1
             used_names.add(tool_name)
 
-            if requirement.tool_ref == "knowledge.search":
-                if tool_invoker is None:
-                    raise RuntimeError(
-                        "ReActRuntime requires RuntimeServices.tool_invoker for knowledge.search."
-                    )
-
-                async def _invoke_knowledge_search(
-                    query: str,
-                    top_k: int = 8,
-                    *,
-                    tool_ref: str = requirement.tool_ref,
-                    tool_name_for_span: str = tool_name,
-                ) -> tuple[str, ToolInvocationResult]:
-                    span = None
-                    if self.services.tracer is not None:
-                        span = self.services.tracer.start_span(
-                            name="tool.invoke",
-                            context=binding.portable_context,
-                            attributes={
-                                "tool_name": tool_name_for_span,
-                                "tool_ref": tool_ref,
-                            },
-                        )
-                    try:
-                        result = await tool_invoker.invoke(
-                            ToolInvocationRequest(
-                                tool_ref=tool_ref,
-                                payload={"query": query, "top_k": top_k},
-                                context=binding.portable_context,
-                            )
-                        )
-                        return (_render_tool_result(result), result)
-                    finally:
-                        if span is not None:
-                            span.end()
-
-                tools.append(
-                    _BoundTool(
-                        runtime_name=tool_name,
-                        description=requirement.description
-                        or f"Platform-routed tool {requirement.tool_ref}.",
-                        tool=StructuredTool.from_function(
-                            func=None,
-                            coroutine=_invoke_knowledge_search,
-                            name=tool_name,
-                            description=requirement.description
-                            or f"Platform-routed tool {requirement.tool_ref}.",
-                            args_schema=_KnowledgeSearchToolArgs,
-                            response_format="content_and_artifact",
-                        ),
-                    )
+            builtin_spec = get_builtin_tool_spec(requirement.tool_ref)
+            if builtin_spec is not None:
+                description = (
+                    requirement.description
+                    or builtin_spec.default_description
+                    or f"Platform-routed tool {requirement.tool_ref}."
                 )
-                continue
 
-            if requirement.tool_ref == "logs.query":
-                if tool_invoker is None:
-                    raise RuntimeError(
-                        "ReActRuntime requires RuntimeServices.tool_invoker for logs.query."
-                    )
-
-                async def _invoke_logs_query(
-                    window_minutes: int = 5,
-                    limit: int = 500,
-                    min_level: Literal[
-                        "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-                    ] = "WARNING",
-                    include_agentic: bool = True,
-                    include_knowledge_flow: bool = True,
-                    max_events: int = 200,
-                    *,
-                    tool_ref: str = requirement.tool_ref,
-                    tool_name_for_span: str = tool_name,
-                ) -> tuple[str, ToolInvocationResult]:
-                    span = None
-                    if self.services.tracer is not None:
-                        span = self.services.tracer.start_span(
-                            name="tool.invoke",
-                            context=binding.portable_context,
-                            attributes={
-                                "tool_name": tool_name_for_span,
-                                "tool_ref": tool_ref,
-                            },
+                if builtin_spec.backend == BuiltinToolBackend.TOOL_INVOKER:
+                    if tool_invoker is None:
+                        raise RuntimeError(
+                            f"ReActRuntime requires RuntimeServices.tool_invoker for {requirement.tool_ref}."
                         )
-                    try:
-                        result = await tool_invoker.invoke(
-                            ToolInvocationRequest(
-                                tool_ref=tool_ref,
-                                payload={
-                                    "window_minutes": window_minutes,
-                                    "limit": limit,
-                                    "min_level": min_level,
-                                    "include_agentic": include_agentic,
-                                    "include_knowledge_flow": include_knowledge_flow,
-                                    "max_events": max_events,
+
+                    async def _invoke_builtin_tool(
+                        *,
+                        tool_ref: str = requirement.tool_ref,
+                        tool_name_for_span: str = tool_name,
+                        **payload: object,
+                    ) -> tuple[str, ToolInvocationResult]:
+                        span = None
+                        if self.services.tracer is not None:
+                            span = self.services.tracer.start_span(
+                                name="tool.invoke",
+                                context=binding.portable_context,
+                                attributes={
+                                    "tool_name": tool_name_for_span,
+                                    "tool_ref": tool_ref,
                                 },
-                                context=binding.portable_context,
                             )
+                        try:
+                            result = await tool_invoker.invoke(
+                                ToolInvocationRequest(
+                                    tool_ref=tool_ref,
+                                    payload=cast(
+                                        dict[str, object],
+                                        _normalize_payload(dict(payload)),
+                                    ),
+                                    context=binding.portable_context,
+                                )
+                            )
+                            return (_render_tool_result(result), result)
+                        finally:
+                            if span is not None:
+                                span.end()
+
+                    tools.append(
+                        _BoundTool(
+                            runtime_name=tool_name,
+                            description=description,
+                            tool=StructuredTool.from_function(
+                                func=None,
+                                coroutine=_invoke_builtin_tool,
+                                name=tool_name,
+                                description=description,
+                                args_schema=builtin_spec.args_schema,
+                                response_format="content_and_artifact",
+                            ),
                         )
-                        return (_render_tool_result(result), result)
-                    finally:
-                        if span is not None:
-                            span.end()
-
-                tools.append(
-                    _BoundTool(
-                        runtime_name=tool_name,
-                        description=requirement.description
-                        or f"Platform-routed tool {requirement.tool_ref}.",
-                        tool=StructuredTool.from_function(
-                            func=None,
-                            coroutine=_invoke_logs_query,
-                            name=tool_name,
-                            description=requirement.description
-                            or f"Platform-routed tool {requirement.tool_ref}.",
-                            args_schema=_LogsQueryToolArgs,
-                            response_format="content_and_artifact",
-                        ),
                     )
-                )
-                continue
+                    continue
 
-            if requirement.tool_ref == "geo.render_points":
-                if tool_invoker is None:
-                    raise RuntimeError(
-                        "ReActRuntime requires RuntimeServices.tool_invoker for geo.render_points."
-                    )
-
-                async def _invoke_geo_render_points(
-                    title: str = "Map results",
-                    points: list[dict[str, object]] | None = None,
-                    popup_property: str | None = "name",
-                    fit_bounds: bool = True,
-                    *,
-                    tool_ref: str = requirement.tool_ref,
-                    tool_name_for_span: str = tool_name,
-                ) -> tuple[str, ToolInvocationResult]:
-                    span = None
-                    if self.services.tracer is not None:
-                        span = self.services.tracer.start_span(
-                            name="tool.invoke",
-                            context=binding.portable_context,
-                            attributes={
-                                "tool_name": tool_name_for_span,
-                                "tool_ref": tool_ref,
-                            },
+                if builtin_spec.backend == BuiltinToolBackend.ARTIFACT_PUBLISHER:
+                    artifact_publisher = self.services.artifact_publisher
+                    if artifact_publisher is None:
+                        raise RuntimeError(
+                            "ReActRuntime requires RuntimeServices.artifact_publisher for artifacts.publish_text."
                         )
-                    try:
-                        result = await tool_invoker.invoke(
-                            ToolInvocationRequest(
-                                tool_ref=tool_ref,
-                                payload={
-                                    "title": title,
-                                    "points": points or [],
-                                    "popup_property": popup_property,
-                                    "fit_bounds": fit_bounds,
+                    publisher = artifact_publisher
+
+                    async def _invoke_artifact_publish_text(
+                        file_name: str,
+                        content: str,
+                        title: str | None = None,
+                        content_type: str = "text/plain; charset=utf-8",
+                        key: str | None = None,
+                        *,
+                        tool_ref: str = requirement.tool_ref,
+                        tool_name_for_span: str = tool_name,
+                    ) -> tuple[str, ToolInvocationResult]:
+                        span = None
+                        if self.services.tracer is not None:
+                            span = self.services.tracer.start_span(
+                                name="artifact.publish",
+                                context=binding.portable_context,
+                                attributes={
+                                    "tool_name": tool_name_for_span,
+                                    "artifact_file_name": file_name,
                                 },
-                                context=binding.portable_context,
                             )
-                        )
-                        return (_render_tool_result(result), result)
-                    finally:
-                        if span is not None:
-                            span.end()
-
-                tools.append(
-                    _BoundTool(
-                        runtime_name=tool_name,
-                        description=requirement.description
-                        or f"Platform-routed tool {requirement.tool_ref}.",
-                        tool=StructuredTool.from_function(
-                            func=None,
-                            coroutine=_invoke_geo_render_points,
-                            name=tool_name,
-                            description=requirement.description
-                            or f"Platform-routed tool {requirement.tool_ref}.",
-                            args_schema=_GeoRenderPointsArgs,
-                            response_format="content_and_artifact",
-                        ),
-                    )
-                )
-                continue
-
-            if requirement.tool_ref == "artifacts.publish_text":
-                artifact_publisher = self.services.artifact_publisher
-                if artifact_publisher is None:
-                    raise RuntimeError(
-                        "ReActRuntime requires RuntimeServices.artifact_publisher for artifacts.publish_text."
-                    )
-                publisher = artifact_publisher
-
-                async def _invoke_artifact_publish_text(
-                    file_name: str,
-                    content: str,
-                    title: str | None = None,
-                    content_type: str = "text/plain; charset=utf-8",
-                    key: str | None = None,
-                    *,
-                    tool_name_for_span: str = tool_name,
-                ) -> tuple[str, ToolInvocationResult]:
-                    span = None
-                    if self.services.tracer is not None:
-                        span = self.services.tracer.start_span(
-                            name="artifact.publish",
-                            context=binding.portable_context,
-                            attributes={
-                                "tool_name": tool_name_for_span,
-                                "artifact_file_name": file_name,
-                            },
-                        )
-                    try:
-                        artifact = await publisher.publish(
-                            ArtifactPublishRequest(
-                                file_name=file_name,
-                                content_bytes=content.encode("utf-8"),
-                                key=key,
-                                content_type=content_type,
-                                title=title,
+                        try:
+                            artifact = await publisher.publish(
+                                ArtifactPublishRequest(
+                                    file_name=file_name,
+                                    content_bytes=content.encode("utf-8"),
+                                    key=key,
+                                    content_type=content_type,
+                                    title=title,
+                                )
                             )
-                        )
-                        link_part = artifact.to_link_part()
-                        result = ToolInvocationResult(
-                            tool_ref="artifacts.publish_text",
-                            blocks=(
-                                ToolContentBlock(
-                                    kind=ToolContentKind.TEXT,
-                                    text=(
-                                        f"Published {artifact.file_name} for the user."
+                            link_part = artifact.to_link_part()
+                            result = ToolInvocationResult(
+                                tool_ref=tool_ref,
+                                blocks=(
+                                    ToolContentBlock(
+                                        kind=ToolContentKind.TEXT,
+                                        text=f"Published {artifact.file_name} for the user.",
                                     ),
                                 ),
+                                ui_parts=(link_part,),
+                            )
+                            return (_render_tool_result(result), result)
+                        finally:
+                            if span is not None:
+                                span.end()
+
+                    tools.append(
+                        _BoundTool(
+                            runtime_name=tool_name,
+                            description=description,
+                            tool=StructuredTool.from_function(
+                                func=None,
+                                coroutine=_invoke_artifact_publish_text,
+                                name=tool_name,
+                                description=description,
+                                args_schema=builtin_spec.args_schema,
+                                response_format="content_and_artifact",
                             ),
-                            ui_parts=(link_part,),
                         )
-                        return (_render_tool_result(result), result)
-                    finally:
-                        if span is not None:
-                            span.end()
-
-                tools.append(
-                    _BoundTool(
-                        runtime_name=tool_name,
-                        description=requirement.description
-                        or "Publish a generated text artifact for the user and return a download link.",
-                        tool=StructuredTool.from_function(
-                            func=None,
-                            coroutine=_invoke_artifact_publish_text,
-                            name=tool_name,
-                            description=requirement.description
-                            or "Publish a generated text artifact for the user and return a download link.",
-                            args_schema=_ArtifactPublishTextArgs,
-                            response_format="content_and_artifact",
-                        ),
                     )
-                )
-                continue
+                    continue
 
-            if requirement.tool_ref == "resources.fetch_text":
-                resource_reader = self.services.resource_reader
-                if resource_reader is None:
+                if builtin_spec.backend == BuiltinToolBackend.RESOURCE_READER:
+                    resource_reader = self.services.resource_reader
+                    if resource_reader is None:
+                        raise RuntimeError(
+                            "ReActRuntime requires RuntimeServices.resource_reader for resources.fetch_text."
+                        )
+                    reader = resource_reader
+
+                    async def _invoke_resource_fetch_text(
+                        key: str,
+                        scope: object,
+                        target_user_id: str | None = None,
+                        *,
+                        tool_ref: str = requirement.tool_ref,
+                        tool_name_for_span: str = tool_name,
+                    ) -> tuple[str, ToolInvocationResult]:
+                        if not isinstance(scope, ResourceScope):
+                            raise RuntimeError(
+                                "resources.fetch_text received an invalid scope."
+                            )
+                        span = None
+                        if self.services.tracer is not None:
+                            span = self.services.tracer.start_span(
+                                name="resource.fetch",
+                                context=binding.portable_context,
+                                attributes={
+                                    "tool_name": tool_name_for_span,
+                                    "resource_key": key,
+                                    "resource_scope": scope.value,
+                                },
+                            )
+                        try:
+                            resource = await reader.fetch(
+                                ResourceFetchRequest(
+                                    key=key,
+                                    scope=scope,
+                                    target_user_id=target_user_id,
+                                )
+                            )
+                            result = ToolInvocationResult(
+                                tool_ref=tool_ref,
+                                blocks=(
+                                    ToolContentBlock(
+                                        kind=ToolContentKind.TEXT,
+                                        text=resource.as_text(),
+                                    ),
+                                ),
+                            )
+                            return (_render_tool_result(result), result)
+                        finally:
+                            if span is not None:
+                                span.end()
+
+                    tools.append(
+                        _BoundTool(
+                            runtime_name=tool_name,
+                            description=description,
+                            tool=StructuredTool.from_function(
+                                func=None,
+                                coroutine=_invoke_resource_fetch_text,
+                                name=tool_name,
+                                description=description,
+                                args_schema=builtin_spec.args_schema,
+                                response_format="content_and_artifact",
+                            ),
+                        )
+                    )
+                    continue
+
+            if registered_spec is not None:
+                if tool_invoker is None:
                     raise RuntimeError(
-                        "ReActRuntime requires RuntimeServices.resource_reader for resources.fetch_text."
+                        "ReActRuntime requires RuntimeServices.tool_invoker for registered declared tools."
                     )
-                reader = resource_reader
 
-                async def _invoke_resource_fetch_text(
-                    key: str,
-                    scope: ResourceScope = ResourceScope.AGENT_CONFIG,
-                    target_user_id: str | None = None,
+                async def _invoke_registered_tool(
                     *,
+                    tool_ref: str = requirement.tool_ref,
                     tool_name_for_span: str = tool_name,
+                    **payload: object,
                 ) -> tuple[str, ToolInvocationResult]:
                     span = None
                     if self.services.tracer is not None:
                         span = self.services.tracer.start_span(
-                            name="resource.fetch",
+                            name="tool.invoke",
                             context=binding.portable_context,
                             attributes={
                                 "tool_name": tool_name_for_span,
-                                "resource_key": key,
-                                "resource_scope": scope.value,
+                                "tool_ref": tool_ref,
                             },
                         )
                     try:
-                        resource = await reader.fetch(
-                            ResourceFetchRequest(
-                                key=key,
-                                scope=scope,
-                                target_user_id=target_user_id,
+                        result = await tool_invoker.invoke(
+                            ToolInvocationRequest(
+                                tool_ref=tool_ref,
+                                payload=dict(payload),
+                                context=binding.portable_context,
                             )
-                        )
-                        result = ToolInvocationResult(
-                            tool_ref="resources.fetch_text",
-                            blocks=(
-                                ToolContentBlock(
-                                    kind=ToolContentKind.TEXT,
-                                    text=resource.as_text(),
-                                ),
-                            ),
                         )
                         return (_render_tool_result(result), result)
                     finally:
@@ -1440,14 +1287,16 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                     _BoundTool(
                         runtime_name=tool_name,
                         description=requirement.description
-                        or "Fetch a Fred-managed text template or supporting resource.",
+                        or registered_spec.description
+                        or f"Platform-routed tool {requirement.tool_ref}.",
                         tool=StructuredTool.from_function(
                             func=None,
-                            coroutine=_invoke_resource_fetch_text,
+                            coroutine=_invoke_registered_tool,
                             name=tool_name,
                             description=requirement.description
-                            or "Fetch a Fred-managed text template or supporting resource.",
-                            args_schema=_ResourceFetchTextArgs,
+                            or registered_spec.description
+                            or f"Platform-routed tool {requirement.tool_ref}.",
+                            args_schema=registered_spec.args_schema,
                             response_format="content_and_artifact",
                         ),
                     )
@@ -1514,8 +1363,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             return []
 
         tools: list[_BoundTool] = []
-        for tool in tool_provider.get_tools():
-            tool_name = tool.name.strip()
+        for runtime_tool in tool_provider.get_tools():
+            tool_name = runtime_tool.name.strip()
             if not tool_name:
                 raise RuntimeError(
                     "Runtime-provided tool has an empty name. "
@@ -1527,15 +1376,84 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                     "Tool names must be unique in one ReAct runtime."
                 )
             used_names.add(tool_name)
-            description = tool.description.strip() or "No description provided."
+            description = runtime_tool.description.strip() or "No description provided."
+
+            async def _invoke_runtime_provider_tool(
+                *,
+                _tool: BaseTool = runtime_tool,
+                _tool_name: str = tool_name,
+                **payload: object,
+            ) -> str:
+                span = None
+                if self.services.tracer is not None:
+                    span = self.services.tracer.start_span(
+                        name="v2.graph.runtime_tool",
+                        context=self.binding.portable_context,
+                        attributes={
+                            "tool_name": _tool_name,
+                            "tool_ref": _tool_name,
+                        },
+                    )
+                try:
+                    raw_result = await _tool.ainvoke(
+                        cast(dict[str, object], _normalize_payload(dict(payload)))
+                    )
+                    if isinstance(raw_result, ToolInvocationResult):
+                        result = _render_tool_result(raw_result)
+                    elif isinstance(raw_result, tuple) and len(raw_result) == 2:
+                        rendered_content = _stringify_content(raw_result[0]).strip()
+                        artifact = _normalize_tool_artifact(raw_result[1])
+                        if rendered_content:
+                            result = rendered_content
+                        elif artifact is not None:
+                            result = _render_tool_result(artifact)
+                        else:
+                            result = _stringify_content(raw_result[0])
+                    elif isinstance(raw_result, dict):
+                        result = json.dumps(raw_result, ensure_ascii=False, indent=2)
+                    else:
+                        result = _stringify_content(raw_result)
+                    if span is not None:
+                        span.set_attribute("status", "ok")
+                    return result
+                except Exception:
+                    if span is not None:
+                        span.set_attribute("status", "error")
+                    raise
+                finally:
+                    if span is not None:
+                        span.end()
+
+            args_schema = getattr(runtime_tool, "args_schema", None)
             tools.append(
                 _BoundTool(
                     runtime_name=tool_name,
                     description=description,
-                    tool=tool,
+                    tool=StructuredTool.from_function(
+                        func=None,
+                        coroutine=_invoke_runtime_provider_tool,
+                        name=tool_name,
+                        description=description,
+                        args_schema=args_schema,
+                    ),
                 )
             )
         return tools
+
+
+def _normalize_payload(value: object) -> object:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {
+            str(key): cast(object, _normalize_payload(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [cast(object, _normalize_payload(item)) for item in value]
+    if isinstance(value, tuple):
+        return [cast(object, _normalize_payload(item)) for item in value]
+    return value
 
 
 def _sanitize_tool_name(tool_ref: str) -> str:
@@ -1573,6 +1491,133 @@ def _build_runtime_tool_prompt_suffix(bound_tools: Sequence[_BoundTool]) -> str:
     return "\n".join(lines)
 
 
+_TRACE_MODEL_SPAN_NAME = "v2.react.model"
+_TRACE_MODEL_OPERATION = "model_call"
+
+
+def _extract_model_name_from_message(message: BaseMessage | object) -> str | None:
+    if not isinstance(message, BaseMessage):
+        return None
+    response_metadata = getattr(message, "response_metadata", {}) or {}
+    if not isinstance(response_metadata, dict):
+        return None
+    raw_model_name = response_metadata.get("model_name") or response_metadata.get(
+        "model"
+    )
+    if isinstance(raw_model_name, str) and raw_model_name.strip():
+        return raw_model_name.strip()
+    return None
+
+
+def _extract_model_name_from_object(value: object) -> str | None:
+    if isinstance(value, BaseChatModel):
+        for attr in ("model_name", "model", "model_id"):
+            raw = getattr(value, attr, None)
+            if isinstance(raw, str) and raw.strip():
+                return raw.strip()
+    return None
+
+
+def _extract_model_name_from_model_response(response: object) -> str | None:
+    if isinstance(response, AIMessage):
+        return _extract_model_name_from_message(response)
+
+    model_response = getattr(response, "model_response", None)
+    if model_response is not None:
+        response = model_response
+
+    result = getattr(response, "result", None)
+    if not isinstance(result, list):
+        return None
+
+    for item in reversed(result):
+        model_name = _extract_model_name_from_message(item)
+        if model_name is not None:
+            return model_name
+    return None
+
+
+if _LangchainAgentMiddleware is not None:  # pragma: no branch
+
+    class _ReActModelTracingMiddleware(_LangchainAgentMiddleware):  # type: ignore[misc]
+        """
+        Runtime middleware that traces each ReAct model call as a child span.
+
+        This keeps model latency visible even when the underlying LangChain
+        execution graph does not emit granular node spans by default.
+        """
+
+        def __init__(
+            self, *, tracer: TracerPort | None, binding: BoundRuntimeContext
+        ) -> None:
+            super().__init__()
+            self._tracer = tracer
+            self._binding = binding
+
+        def _start_span(self, request: object):
+            if self._tracer is None:
+                return None
+            attributes: dict[str, object] = {"operation": _TRACE_MODEL_OPERATION}
+            request_model = getattr(request, "model", None)
+            request_model_name = _extract_model_name_from_object(request_model)
+            if request_model_name is not None:
+                attributes["model_name"] = request_model_name
+            return self._tracer.start_span(
+                name=_TRACE_MODEL_SPAN_NAME,
+                context=self._binding.portable_context,
+                attributes=cast(dict[str, str | int | float | bool | None], attributes),
+            )
+
+        @staticmethod
+        def _mark_ok(span: object, response: object) -> None:
+            span_port = cast(SpanPort, span)
+            span_port.set_attribute("status", "ok")
+            model_name = _extract_model_name_from_model_response(response)
+            if model_name is not None:
+                span_port.set_attribute("model_name", model_name)
+
+        def wrap_model_call(self, request, handler):  # type: ignore[override]
+            span = self._start_span(request)
+            try:
+                response = handler(request)
+                if span is not None:
+                    self._mark_ok(span, response)
+                return response
+            except Exception:
+                if span is not None:
+                    cast(SpanPort, span).set_attribute("status", "error")
+                raise
+            finally:
+                if span is not None:
+                    cast(SpanPort, span).end()
+
+        async def awrap_model_call(self, request, handler):  # type: ignore[override]
+            span = self._start_span(request)
+            try:
+                response = await handler(request)
+                if span is not None:
+                    self._mark_ok(span, response)
+                return response
+            except Exception:
+                if span is not None:
+                    cast(SpanPort, span).set_attribute("status", "error")
+                raise
+            finally:
+                if span is not None:
+                    cast(SpanPort, span).end()
+
+else:
+    _ReActModelTracingMiddleware = None
+
+
+def _react_model_tracing_middlewares(
+    *, tracer: TracerPort | None, binding: BoundRuntimeContext
+) -> Sequence[object]:
+    if tracer is None or _ReActModelTracingMiddleware is None:
+        return ()
+    return (_ReActModelTracingMiddleware(tracer=tracer, binding=binding),)
+
+
 def _create_compiled_react_agent(
     *,
     model: BaseChatModel,
@@ -1581,6 +1626,7 @@ def _create_compiled_react_agent(
     binding: BoundRuntimeContext,
     approval_policy: ToolApprovalPolicy,
     checkpointer: Checkpointer,
+    tracer: TracerPort | None,
 ) -> _CompiledReActAgent:
     if approval_policy.enabled:
         bound_model = model.bind_tools(tools)
@@ -1636,6 +1682,10 @@ def _create_compiled_react_agent(
             model=model,
             tools=tools,
             system_prompt=system_prompt,
+            middleware=_react_model_tracing_middlewares(
+                tracer=tracer,
+                binding=binding,
+            ),
             checkpointer=checkpointer,
         ),
     )

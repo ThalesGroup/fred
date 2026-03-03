@@ -1,21 +1,11 @@
 """
-Graph v2 demo derived from the legacy postal tracking workflow.
+Graph v2 example for a real workflow (postal tracking).
 
-Why this file exists:
-- It is the first real business-shaped `GraphAgentDefinition`, not just a
-  structural test.
-- It exercises the graph contract against a realistic mix of runtime tools,
-  HITL, and rich UI output (`GeoPart`).
-- It shows, in a concrete business role, why a workflow agent is different
-  from a broad ReAct assistant.
-
-Why this matters to a developer:
-- the user does not want a generic assistant, they want help with *their*
-  parcel
-- the workflow must identify the right parcel, collect the right context, and
-  gate customer-impacting actions
-- this file is meant to teach when a graph is the better product choice, not
-  just how to assemble nodes
+Use this file as reference when you need:
+- intent routing + deterministic steps
+- tool calls across multiple systems
+- HITL decision gate before sensitive action
+- rich final output (text + map)
 """
 
 from __future__ import annotations
@@ -96,19 +86,13 @@ class TrackingGraphDemoState(BaseModel):
 
 class TrackingGraphDemoDefinition(GraphAgentDefinition):
     """
-    First business-shaped graph definition for the v2 SDK.
+    Example of a production-like graph agent.
 
-    This demo is intentionally focused on one production-like story:
-    - understand a user request about *their* parcel
-    - resolve parcel context from identity or explicit tracking id
-    - gather business + IoT context deterministically through MCP tools
-    - answer informational questions, optionally with a map
-    - gate rerouting behind human approval
-    - return a final text plus a real map
-
-    The purpose is not to rebuild every legacy branch. The purpose is to prove
-    that a serious service workflow can be written with the v2 graph contract
-    in a way that remains readable to a business-minded developer.
+    Quick edit guide:
+    - graph structure: `build_graph()`
+    - business logic: node handler methods
+    - UI / human decisions: `HumanInputRequest` payloads
+    - tool contracts: `tool_requirements` and runtime calls in nodes
     """
 
     agent_id: str = "tracking.graph.demo.v2"

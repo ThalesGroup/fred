@@ -33,11 +33,13 @@ from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_service import AgentService
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2.adapters import (
+    CompositeToolInvoker,
     DefaultFredChatModelFactory,
     FredArtifactPublisher,
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredResourceReader,
+    build_langfuse_tracer,
 )
 from agentic_backend.core.agents.v2.catalog import (
     apply_react_profile_to_definition,
@@ -47,6 +49,7 @@ from agentic_backend.core.agents.v2.catalog import (
     definition_to_agent_settings,
     instantiate_definition_class,
 )
+from agentic_backend.core.agents.v2.context import BoundRuntimeContext
 from agentic_backend.core.agents.v2.graph_runtime import GraphRuntime
 from agentic_backend.core.agents.v2.models import (
     AgentDefinition,
@@ -54,9 +57,13 @@ from agentic_backend.core.agents.v2.models import (
     ReActAgentDefinition,
 )
 from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
-from agentic_backend.core.agents.v2.runtime import RuntimeServices
+from agentic_backend.core.agents.v2.runtime import RuntimeServices, ToolInvokerPort
 from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
+from agentic_backend.core.agents.v2.toolset_registry import (
+    ToolsetRuntimePorts,
+    build_registered_tool_handlers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,11 +174,14 @@ class AgentFactory(BaseAgentFactory):
             if isinstance(cached, AgentFlow):
                 cached.set_runtime_context(runtime_context)
             else:
+                cached_portable = cached.binding.portable_context
                 cached.rebind(
                     build_bound_runtime_context(
                         user=user,
                         runtime_context=runtime_context,
                         agent_id=agent_id,
+                        agent_name=cached_portable.agent_name,
+                        team_id=cached_portable.team_id,
                     )
                 )
             logger.info(
@@ -220,11 +230,14 @@ class AgentFactory(BaseAgentFactory):
             if isinstance(cached, AgentFlow):
                 cached.set_runtime_context(runtime_context)
             else:
+                cached_portable = cached.binding.portable_context
                 cached.rebind(
                     build_bound_runtime_context(
                         user=user,
                         runtime_context=runtime_context,
                         agent_id=internal_agent_id,
+                        agent_name=cached_portable.agent_name,
+                        team_id=cached_portable.team_id,
                     )
                 )
             logger.info(
@@ -334,25 +347,44 @@ class AgentFactory(BaseAgentFactory):
             user=user,
             runtime_context=runtime_context,
             agent_id=effective_settings.id,
+            agent_name=effective_settings.name,
+            team_id=effective_settings.team_id,
+        )
+        chat_model_factory = DefaultFredChatModelFactory()
+        base_tool_invoker = FredKnowledgeSearchToolInvoker(
+            binding=binding,
+            settings=effective_settings,
+        )
+        tool_provider = FredMcpToolProvider(
+            binding=binding,
+            settings=effective_settings,
+        )
+        artifact_publisher = FredArtifactPublisher(
+            binding=binding,
+            settings=effective_settings,
+        )
+        resource_reader = FredResourceReader(
+            binding=binding,
+            settings=effective_settings,
         )
         services = RuntimeServices(
-            chat_model_factory=DefaultFredChatModelFactory(),
-            tool_invoker=FredKnowledgeSearchToolInvoker(
+            tracer=build_langfuse_tracer(),
+            chat_model_factory=chat_model_factory,
+            tool_invoker=self._build_v2_tool_invoker(
+                definition=definition,
                 binding=binding,
-                settings=effective_settings,
+                effective_settings=effective_settings,
+                base_tool_invoker=base_tool_invoker,
+                ports=ToolsetRuntimePorts(
+                    chat_model_factory=chat_model_factory,
+                    artifact_publisher=artifact_publisher,
+                    resource_reader=resource_reader,
+                    fallback_tool_invoker=base_tool_invoker,
+                ),
             ),
-            tool_provider=FredMcpToolProvider(
-                binding=binding,
-                settings=effective_settings,
-            ),
-            artifact_publisher=FredArtifactPublisher(
-                binding=binding,
-                settings=effective_settings,
-            ),
-            resource_reader=FredResourceReader(
-                binding=binding,
-                settings=effective_settings,
-            ),
+            tool_provider=tool_provider,
+            artifact_publisher=artifact_publisher,
+            resource_reader=resource_reader,
             kpi=get_kpi_writer(),
             checkpointer=self._get_v2_checkpointer(),
         )
@@ -372,6 +404,30 @@ class AgentFactory(BaseAgentFactory):
             )
         runtime.bind(binding)
         return V2SessionAgent(runtime=runtime)
+
+    def _build_v2_tool_invoker(
+        self,
+        *,
+        definition: AgentDefinition,
+        binding: BoundRuntimeContext,
+        effective_settings: AgentSettings,
+        base_tool_invoker: ToolInvokerPort,
+        ports: ToolsetRuntimePorts,
+    ):
+        toolset_key = getattr(definition, "toolset_key", None)
+        handlers = build_registered_tool_handlers(
+            definition=definition,
+            toolset_key=toolset_key,
+            binding=binding,
+            settings=effective_settings,
+            ports=ports,
+        )
+        if not handlers:
+            return base_tool_invoker
+        return CompositeToolInvoker(
+            handlers=handlers,
+            fallback=base_tool_invoker,
+        )
 
     def _get_v2_checkpointer(self) -> FredSqlCheckpointer:
         """

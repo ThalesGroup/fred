@@ -126,6 +126,53 @@ That is not a weakness by itself.
 It only becomes a problem if Fred starts pretending it has already built a
 general workflow framework. That would be premature.
 
+## Observability Reality (Langfuse)
+
+Now that graph execution is Fred-owned, Langfuse visibility depends on Fred span
+instrumentation quality.
+
+What this means concretely:
+
+- we no longer get automatic “native LangGraph engine internals” for free
+- we do get a stable Fred span taxonomy:
+  - `v2.graph.node`
+  - `v2.graph.model`
+  - `v2.graph.tool`
+  - `v2.graph.runtime_tool`
+  - `v2.graph.await_human`
+  - `v2.graph.publish_artifact`
+  - `v2.graph.fetch_resource`
+- we get Fred metadata for filtering:
+  - `agent_name`, `team_id`, `user_name`, `fred_session_id`, etc.
+
+So the trade-off is explicit:
+
+- less framework-native introspection surface
+- more platform-controlled and consistent business tracing
+
+If a trace cannot explain latency breakdown, that is a Fred instrumentation
+issue to fix in runtime, not an unavoidable limit.
+
+## Pros / Cons For Reviewers
+
+Pros in the current state:
+
+- graph authoring stays focused on business nodes and routes
+- runtime semantics (HITL/checkpoint/session continuity) are explicit and testable
+- observability contracts can be improved once for every graph agent
+
+Cons to keep in mind:
+
+- runtime team must maintain tracing coverage and naming discipline
+- generic workflow-engine features still remain intentionally narrower than LangGraph
+- regressions in runtime instrumentation can affect every graph agent at once
+
+The right governance stance is:
+
+- accept this ownership model
+- keep strict regression tests and debug playbooks around it
+- treat observability gaps as release-blocking quality issues
+
 ## One-line summary
 
 Fred v2 graph runtime is robust for the graph workflows Fred currently wants to

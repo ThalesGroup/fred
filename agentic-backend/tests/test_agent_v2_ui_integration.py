@@ -47,6 +47,7 @@ from agentic_backend.core.agents.v2 import (
 from agentic_backend.core.agents.v2.catalog import (
     apply_react_profile_to_definition,
     apply_profile_defaults_to_settings,
+    build_bound_runtime_context,
     build_definition_from_settings,
     definition_to_agent_settings,
     definition_to_agent_tuning,
@@ -174,9 +175,30 @@ def _test_user() -> KeycloakUser:
     )
 
 
+def test_build_bound_runtime_context_carries_readable_trace_identity() -> None:
+    binding = build_bound_runtime_context(
+        user=_test_user(),
+        runtime_context=RuntimeContext(
+            session_id="session-42",
+            user_id="user-1",
+        ),
+        agent_id="agent-uuid-123",
+        agent_name="Rico",
+        team_id="team-bidgpt",
+    )
+    portable = binding.portable_context
+
+    assert portable.agent_id == "agent-uuid-123"
+    assert portable.agent_name == "Rico"
+    assert portable.session_id == "session-42"
+    assert portable.user_id == "user-1"
+    assert portable.user_name == "alice"
+    assert portable.team_id == "team-bidgpt"
+
+
 def test_resolve_agent_class_accepts_v2_definitions() -> None:
     resolved = resolve_agent_class(
-        "agentic_backend.agents.v2.rag_expert.RagExpertV2Definition"
+        "agentic_backend.agents.v2.basic_react.profiles.rag_expert_agent.RagExpertV2Definition"
     )
 
     assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
@@ -228,7 +250,7 @@ def test_build_definition_from_settings_applies_persisted_prompt_override() -> N
     settings = Agent(
         id="rag-ui-agent",
         name="RAG UI Agent",
-        class_path="agentic_backend.agents.v2.rag_expert.RagExpertV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.profiles.rag_expert_agent.RagExpertV2Definition",
         tuning=AgentTuning(
             role="Persisted role",
             description="Persisted description",
@@ -459,8 +481,10 @@ def test_build_definition_from_settings_applies_log_genius_profile_defaults() ->
     assert definition.react_profile_id == LOG_GENIUS_PROFILE_ID
     assert definition.role == "log_genius"
     assert "logs_query" in definition.system_prompt_template
-    assert len(definition.tool_requirements) == 1
-    assert definition.tool_requirements[0].tool_ref == "logs.query"
+    assert [tool.tool_ref for tool in definition.tool_requirements] == [
+        "logs.query",
+        "traces.summarize_conversation",
+    ]
     assert effective_settings.tuning is not None
     assert effective_settings.tuning.mcp_servers == []
 

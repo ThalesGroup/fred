@@ -244,6 +244,8 @@ def build_bound_runtime_context(
     user: KeycloakUser,
     runtime_context: RuntimeContext,
     agent_id: str,
+    agent_name: str | None = None,
+    team_id: str | None = None,
 ) -> BoundRuntimeContext:
     """
     Build the portable execution context used by v2 runtimes.
@@ -265,7 +267,11 @@ def build_bound_runtime_context(
             trace_id=None,
             client_app="fred-ui",
             agent_id=agent_id,
+            agent_name=agent_name,
             session_id=runtime_context.session_id,
+            user_id=user.uid or runtime_context.user_id,
+            user_name=user.username,
+            team_id=team_id,
             baggage={},
         ),
     )
@@ -315,6 +321,7 @@ def _apply_profile_to_definition(
         "system_prompt_template": profile.system_prompt_template,
         "enable_tool_approval": profile.enable_tool_approval,
         "approval_required_tools": profile.approval_required_tools,
+        "guardrails": profile.guardrails,
         "tool_requirements": profile.tool_requirements,
     }
     supported_updates = {

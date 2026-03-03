@@ -13,7 +13,7 @@ For new RAG work in Fred, prefer v2 ReAct authoring:
 
 Current concrete v2 example:
 
-- `agentic_backend/agents/v2/rag_expert.py`
+- `agentic_backend/agents/v2/basic_react/profiles/rag_expert.py`
 
 ## 2. What A Good Fred RAG Agent Should Expose
 

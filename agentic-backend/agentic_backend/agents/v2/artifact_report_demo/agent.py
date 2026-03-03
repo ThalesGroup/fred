@@ -1,24 +1,8 @@
 """
-Downloadable report demo for the v2 contract.
+ReAct v2 example focused on generated deliverables.
 
-Why this file exists:
-- It is the clean replacement for the old academy downloadable-content demo.
-- It shows the intended business pattern for artifact-producing assistants:
-  understand the request, draft a useful deliverable, publish it through Fred,
-  and return a secure link to the user.
-- It is intentionally ReAct-based because this job is mostly conversational and
-  tool-light. The agent does not need a controlled workflow graph; it needs one
-  clear publishing capability.
-
-Why a developer should care:
-- many real assistants are only valuable once they can hand back a report,
-  summary, export, or brief as a durable file
-- those deliverables often need an admin-provided template or house style guide
-- this example teaches the v2 capability directly, without falling back to
-  `AgentFlow.upload_user_blob(...)`
-- it demonstrates the right boundary in both directions:
-  - fetch existing templates/resources from Fred
-  - publish the generated file back through Fred
+Use this pattern when a chat answer is not enough and the user needs a file
+(brief, report, markdown export) they can download and reuse.
 """
 
 from __future__ import annotations
@@ -36,7 +20,13 @@ from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdo
 
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
-    path_parts=("agents", "v2", "prompts", "artifact_report_demo_system_prompt.md"),
+    path_parts=(
+        "agents",
+        "v2",
+        "artifact_report_demo",
+        "prompts",
+        "artifact_report_demo_system_prompt.md",
+    ),
 )
 
 
@@ -59,14 +49,12 @@ def _artifact_report_fields() -> tuple[FieldSpec, ...]:
 
 class ArtifactReportDemoV2Definition(ReActAgentDefinition):
     """
-    Business demo of a downloadable deliverable agent.
+    Simple deliverable-producing assistant.
 
-    Use this pattern when the assistant should produce something durable for the
-    user, not just a chat answer. The definition stays small:
-    - one clear business role
-    - one resource-reading capability for templates
-    - one publishing capability for the generated file
-    - one prompt that explains when to draft, fetch, and publish
+    Quick edit guide:
+    - prompt: writing style and workflow
+    - `resources.fetch_text`: read templates/style guides
+    - `artifacts.publish_text`: publish final file
     """
 
     agent_id: str = "artifact.report.demo.v2"
@@ -94,11 +82,7 @@ class ArtifactReportDemoV2Definition(ReActAgentDefinition):
 
     def policy(self) -> ReActPolicy:
         """
-        Structured behavior contract for the shared ReAct runtime.
-
-        The important business promise is simple:
-        - answer directly when the user only wants a normal explanation
-        - publish a file when the user asks for a deliverable they should keep
+        Return runtime policy for this assistant.
         """
 
         return ReActPolicy(system_prompt_template=self.system_prompt_template)
