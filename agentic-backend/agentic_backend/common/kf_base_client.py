@@ -197,8 +197,11 @@ class KfBaseClient:
                 path,
             )
             if self._try_refresh_token():
+                # Drop the stale explicit token so _execute_authenticated_request
+                # falls back to _current_access_token() and picks up the refreshed one.
+                retry_kwargs = {k: v for k, v in kwargs.items() if k != "access_token"}
                 r = await self._execute_authenticated_request(
-                    method=method, path=path, **kwargs
+                    method=method, path=path, **retry_kwargs
                 )
 
             r.raise_for_status()
