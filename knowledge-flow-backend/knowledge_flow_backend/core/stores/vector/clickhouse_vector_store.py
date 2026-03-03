@@ -670,7 +670,9 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                     if include_values:
                         conditions.append(col.in_([str(v) for v in include_values]))
                     if exclude_values:
-                        conditions.append(~col.in_([str(v) for v in exclude_values]))
+                        # Keep NULL values when excluding terms (e.g. scope != 'session'):
+                        # in SQL, NOT IN over NULL yields NULL (filtered out) without this guard.
+                        conditions.append(or_(col.is_(None), ~col.in_([str(v) for v in exclude_values])))
                     continue
 
                 if not _SAFE_METADATA_FIELD.match(field):
@@ -681,7 +683,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                 if include_values:
                     conditions.append(json_expr.in_([str(v) for v in include_values]))
                 if exclude_values:
-                    conditions.append(~json_expr.in_([str(v) for v in exclude_values]))
+                    conditions.append(or_(json_expr.is_(None), ~json_expr.in_([str(v) for v in exclude_values])))
 
         return conditions
 
