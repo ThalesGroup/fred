@@ -1084,6 +1084,10 @@ class ApplicationContext:
         elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass
+        elif provider == ModelProvider.VERTEX_AI.value:
+            pass
+        elif provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
+            pass
         else:
             logger.error("     ❌ Unsupported embedding provider: %s", provider)
             raise ValueError(f"Unsupported embedding provider: {provider}")
