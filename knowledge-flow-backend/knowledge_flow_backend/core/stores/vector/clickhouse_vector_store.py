@@ -514,9 +514,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
     def get_chunks_for_document(self, document_uid: str) -> List[Dict[str, Any]]:
         try:
             t = self._orm_table
-            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable).where(
-                t.c.document_uid == document_uid
-            )
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable).where(t.c.document_uid == document_uid)
             with Session(self._engine, future=True) as session:
                 rows = session.execute(stmt).all()
             out: List[Dict[str, Any]] = []
@@ -540,11 +538,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:
         try:
             t = self._orm_table
-            stmt = (
-                select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable)
-                .where(t.c.document_uid == document_uid, t.c.chunk_uid == chunk_uid)
-                .limit(1)
-            )
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable).where(t.c.document_uid == document_uid, t.c.chunk_uid == chunk_uid).limit(1)
             with Session(self._engine, future=True) as session:
                 rows = session.execute(stmt).all()
             if not rows:
@@ -563,9 +557,13 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
     def delete_chunk(self, document_uid: str, chunk_uid: str) -> None:
         try:
             t = self._orm_table
-            stmt = select(func.count()).select_from(t).where(
-                t.c.document_uid == document_uid,
-                t.c.chunk_uid == chunk_uid,
+            stmt = (
+                select(func.count())
+                .select_from(t)
+                .where(
+                    t.c.document_uid == document_uid,
+                    t.c.chunk_uid == chunk_uid,
+                )
             )
             with Session(self._engine, future=True) as session:
                 exists = int(session.execute(stmt).scalar_one() or 0)
