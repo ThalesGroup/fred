@@ -1,6 +1,23 @@
 """Helper functions for Jira agent."""
 
 import re
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def ensure_pydantic_model(response: Any, model_class: type[T]) -> T:
+    """Return response as a Pydantic model instance.
+
+    LangChain's with_structured_output(method="json_schema") occasionally
+    returns a raw dict instead of the model instance. This helper normalises
+    the result so callers always get the expected type.
+    """
+    if isinstance(response, model_class):
+        return response
+    return model_class.model_validate(response)
 
 
 def get_max_id_number(items: list[dict], pattern: str) -> int:

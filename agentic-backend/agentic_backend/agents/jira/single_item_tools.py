@@ -4,10 +4,10 @@ import json
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from agentic_backend.agents.jira.helpers import (
+    ensure_pydantic_model,
     get_next_requirement_id,
     get_next_test_id,
     get_next_user_story_id,
@@ -29,15 +29,6 @@ class SingleItemTools:
     def __init__(self, agent):
         """Initialize single-item tools with reference to parent agent."""
         self.agent = agent
-
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
 
     async def _expand_requirement(
         self,
@@ -82,11 +73,10 @@ Génère une description de l'exigence qui:
             QuickRequirement, method="json_schema"
         )
         try:
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                QuickRequirement,
             )
-            if not isinstance(result, QuickRequirement):
-                result = QuickRequirement.model_validate(result)
             return result.model_dump()
         except Exception as e:
             raise RuntimeError(
@@ -125,11 +115,10 @@ Génère:
             QuickUserStory, method="json_schema"
         )
         try:
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                QuickUserStory,
             )
-            if not isinstance(result, QuickUserStory):
-                result = QuickUserStory.model_validate(result)
             return result.model_dump()
         except Exception as e:
             raise RuntimeError(
@@ -178,11 +167,10 @@ Génère:
             QuickTest, method="json_schema"
         )
         try:
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                QuickTest,
             )
-            if not isinstance(result, QuickTest):
-                result = QuickTest.model_validate(result)
             return result.model_dump()
         except Exception as e:
             raise RuntimeError(f"Erreur lors de la génération du test: {e}") from e

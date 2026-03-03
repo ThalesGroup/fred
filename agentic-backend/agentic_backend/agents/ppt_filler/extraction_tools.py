@@ -1,5 +1,6 @@
 """Schema-driven extraction tools for PPT Filler agent."""
 
+import asyncio
 import json
 import logging
 from typing import Type
@@ -7,7 +8,6 @@ from typing import Type
 import httpx
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel
 
@@ -65,15 +65,6 @@ class ExtractionTools:
     def __init__(self, agent):
         """Initialize extraction tools with reference to parent agent."""
         self.agent = agent
-
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
 
     async def _enrich_with_skill_mastery(self, chunks_text: str) -> str:
         """Fetch skill images referenced in chunks and inject mastery alt text.
@@ -158,9 +149,7 @@ Règles:
         model = get_default_chat_model().with_structured_output(
             SearchQueries, method="json_schema"
         )
-        result = await model.ainvoke(
-            [SystemMessage(content=prompt)], config=self._build_llm_config()
-        )
+        result = await model.ainvoke([SystemMessage(content=prompt)])
         if not isinstance(result, SearchQueries):
             result = SearchQueries.model_validate(result)
 
@@ -186,26 +175,28 @@ Règles:
             logger.error("Search tool not found")
             return "❌ Outil de recherche documentaire introuvable.", []
 
-        # Run all queries and collect results
-        all_chunks: list[dict] = []
-        seen = set()
-
-        for query, top_k in queries:
+        # Run all queries in parallel and collect results
+        async def _run_query(query: str, top_k: int) -> list[dict]:
             try:
                 result = await search_tool.ainvoke({"question": query, "top_k": top_k})
-                if not result:
-                    continue
-
-                for hit in json.loads(result):
-                    # Deduplicate by (uid, content prefix)
-                    key = (hit.get("uid", ""), hit.get("content", "")[:100])
-                    if key not in seen:
-                        seen.add(key)
-                        all_chunks.append(hit)
+                return json.loads(result) if result else []
             except Exception:
                 logger.warning(
                     f"[ExtractionTools] Search failed for query: {query}", exc_info=True
                 )
+                return []
+
+        query_results = await asyncio.gather(*[_run_query(q, k) for q, k in queries])
+
+        all_chunks: list[dict] = []
+        seen = set()
+        for hits in query_results:
+            for hit in hits:
+                # Deduplicate by (uid, content prefix)
+                key = (hit.get("uid", ""), hit.get("content", "")[:100])
+                if key not in seen:
+                    seen.add(key)
+                    all_chunks.append(hit)
 
         if not all_chunks:
             return "❌ Aucun document trouvé.", []
@@ -280,8 +271,7 @@ RÈGLES IMPORTANTES:
                 [
                     SystemMessage(content=extraction_prompt),
                     HumanMessage(content=chunks_text),
-                ],
-                config=self._build_llm_config(),
+                ]
             )
             if not isinstance(result, EnjeuxBesoins):
                 result = EnjeuxBesoins.model_construct(**dict(result))
@@ -370,8 +360,7 @@ RÈGLES IMPORTANTES:
                         )
                     ),
                     HumanMessage(content=chunks_text),
-                ],
-                config=self._build_llm_config(),
+                ]
             )
             if not isinstance(result, CV):
                 result = CV.model_construct(**dict(result))
@@ -444,8 +433,7 @@ RÈGLES IMPORTANTES:
                 [
                     SystemMessage(content=extraction_prompt),
                     HumanMessage(content=chunks_text),
-                ],
-                config=self._build_llm_config(),
+                ]
             )
             if not isinstance(result, PrestationFinanciere):
                 result = PrestationFinanciere.model_construct(**dict(result))

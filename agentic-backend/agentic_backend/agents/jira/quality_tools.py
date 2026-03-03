@@ -5,10 +5,10 @@ from typing import Literal
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from agentic_backend.agents.jira.helpers import ensure_pydantic_model
 from agentic_backend.application_context import get_default_chat_model
 
 # ---------------------------------------------------------------------------
@@ -154,15 +154,6 @@ class QualityTools:
         """Initialize quality tools with reference to parent agent."""
         self.agent = agent
 
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
-
     def _format_assessment_report(
         self,
         title: str,
@@ -262,11 +253,10 @@ class QualityTools:
             model = get_default_chat_model().with_structured_output(
                 UserStoryAssessment, method="json_schema"
             )
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                UserStoryAssessment,
             )
-            if not isinstance(result, UserStoryAssessment):
-                result = UserStoryAssessment.model_validate(result)
 
             # Format the report
             report = self._format_assessment_report(
@@ -367,11 +357,10 @@ class QualityTools:
             model = get_default_chat_model().with_structured_output(
                 TestAssessment, method="json_schema"
             )
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                TestAssessment,
             )
-            if not isinstance(result, TestAssessment):
-                result = TestAssessment.model_validate(result)
 
             # Format the report
             report = self._format_assessment_report(

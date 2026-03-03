@@ -1,14 +1,14 @@
 """Batch generation tools for Jira agent."""
 
+import asyncio
 import json
 import logging
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
-from agentic_backend.agents.jira.helpers import get_max_id_number
+from agentic_backend.agents.jira.helpers import ensure_pydantic_model, get_max_id_number
 from agentic_backend.agents.jira.pydantic_models import (
     RequirementsList,
     TestsList,
@@ -24,18 +24,11 @@ logger = logging.getLogger(__name__)
 class BatchTools:
     """Batch generation tools for requirements, user stories, and tests."""
 
+    BATCH_SIZE = 10
+
     def __init__(self, agent):
         """Initialize batch tools with reference to parent agent."""
         self.agent = agent
-
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
 
     def get_requirements_tool(self):
         """Tool that generates requirements using a separate LLM call."""
@@ -98,9 +91,7 @@ Règles:
                 )
             ]
 
-            response = await model.ainvoke(messages, config=self._build_llm_config())
-            if not isinstance(response, RequirementsList):
-                response = RequirementsList.model_validate(response)
+            response = ensure_pydantic_model(await model.ainvoke(messages), RequirementsList)
             requirements = [r.model_dump() for r in response.items]
 
             return Command(
@@ -228,9 +219,7 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, UserStoryTitlesList):
-            response = UserStoryTitlesList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), UserStoryTitlesList)
         return [t.model_dump() for t in response.items]
 
     async def _generate_user_story_batch(
@@ -316,9 +305,7 @@ Exigences à respecter:
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, UserStoriesList):
-            response = UserStoriesList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), UserStoriesList)
         return [s.model_dump() for s in response.items]
 
     def get_user_stories_tool(self):
@@ -351,7 +338,7 @@ Exigences à respecter:
             Returns:
                 Message de confirmation avec le nombre total de stories générées
             """
-            batch_size = 10
+            batch_size = self.BATCH_SIZE
 
             # Validation
             if len(context_summary.strip()) < 200:
@@ -379,36 +366,34 @@ Exigences à respecter:
             )
 
             # Batch processing setup
-            all_generated_stories = []
             total_to_generate = len(pending_titles)
-            batches_completed = 0
+            batches = [
+                pending_titles[i : i + batch_size]
+                for i in range(0, total_to_generate, batch_size)
+            ]
 
             logger.info(
-                f"[JiraAgent] Starting batch generation: {total_to_generate} user stories in batches of {batch_size}"
+                f"[JiraAgent] Starting batch generation: {total_to_generate} user stories in {len(batches)} parallel batches of {batch_size}"
             )
 
-            # Process batches
-            while pending_titles:
-                current_batch_size = min(batch_size, len(pending_titles))
-                titles_batch = pending_titles[:current_batch_size]
-                pending_titles = pending_titles[current_batch_size:]
+            # Process all batches in parallel
+            batch_results = await asyncio.gather(
+                *[
+                    self._generate_user_story_batch(batch, context_summary, requirements)
+                    for batch in batches
+                ]
+            )
+            all_generated_stories = [s for batch in batch_results for s in batch]
 
-                new_stories = await self._generate_user_story_batch(
-                    titles_batch, context_summary, requirements
-                )
-                all_generated_stories.extend(new_stories)
-                batches_completed += 1
-
-                logger.info(
-                    f"[JiraAgent] Batch {batches_completed} complete: "
-                    f"{len(all_generated_stories)}/{total_to_generate} user stories generated"
-                )
+            logger.info(
+                f"[JiraAgent] All {len(all_generated_stories)}/{total_to_generate} user stories generated"
+            )
 
             # Build success message and return
             stories_generated = len(all_generated_stories)
             total_stories = len(existing_stories) + stories_generated
             msg = (
-                f"✓ {stories_generated} User Stories générées en {batches_completed} lots. "
+                f"✓ {stories_generated} User Stories générées en {len(batches)} lots. "
                 f"Total: {total_stories} User Stories complètes! "
                 f"Appelle export_deliverables() pour exporter les livrables."
             )
@@ -504,9 +489,7 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, TestTitlesList):
-            response = TestTitlesList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), TestTitlesList)
         return [t.model_dump() for t in response.items]
 
     async def _generate_test_batch(
@@ -578,9 +561,7 @@ Règles:
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, TestsList):
-            response = TestsList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), TestsList)
         return [t.model_dump() for t in response.items]
 
     def get_tests_tool(self):
@@ -610,7 +591,7 @@ Règles:
             Returns:
                 Message de confirmation avec le nombre total de tests générés
             """
-            batch_size = 10
+            batch_size = self.BATCH_SIZE
 
             # Get existing data from state
             existing_tests = runtime.state.get("tests") or []
@@ -637,36 +618,34 @@ Règles:
             stories_by_id = {s.get("id"): s for s in all_stories}
 
             # Batch processing setup
-            all_generated_tests = []
             total_to_generate = len(pending_titles)
-            batches_completed = 0
+            batches = [
+                pending_titles[i : i + batch_size]
+                for i in range(0, total_to_generate, batch_size)
+            ]
 
             logger.info(
-                f"[JiraAgent] Starting batch generation: {total_to_generate} tests in batches of {batch_size}"
+                f"[JiraAgent] Starting batch generation: {total_to_generate} tests in {len(batches)} parallel batches of {batch_size}"
             )
 
-            # Process batches
-            while pending_titles:
-                current_batch_size = min(batch_size, len(pending_titles))
-                titles_batch = pending_titles[:current_batch_size]
-                pending_titles = pending_titles[current_batch_size:]
+            # Process all batches in parallel
+            batch_results = await asyncio.gather(
+                *[
+                    self._generate_test_batch(batch, stories_by_id, jdd)
+                    for batch in batches
+                ]
+            )
+            all_generated_tests = [t for batch in batch_results for t in batch]
 
-                new_tests = await self._generate_test_batch(
-                    titles_batch, stories_by_id, jdd
-                )
-                all_generated_tests.extend(new_tests)
-                batches_completed += 1
-
-                logger.info(
-                    f"[JiraAgent] Batch {batches_completed} complete: "
-                    f"{len(all_generated_tests)}/{total_to_generate} tests generated"
-                )
+            logger.info(
+                f"[JiraAgent] All {len(all_generated_tests)}/{total_to_generate} tests generated"
+            )
 
             # Build success message and return
             tests_generated = len(all_generated_tests)
             total_tests = len(existing_tests) + tests_generated
             msg = (
-                f"✓ {tests_generated} tests générés en {batches_completed} lots. "
+                f"✓ {tests_generated} tests générés en {len(batches)} lots. "
                 f"Total: {total_tests} tests complets! "
                 f"Appelle export_deliverables() pour exporter les livrables."
             )
