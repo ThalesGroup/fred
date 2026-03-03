@@ -89,21 +89,21 @@ ai:
     read: 15 # Time to wait for a response in seconds
   default_chat_model:
     provider: "vertex-ai-model-garden"
-    name: "mistral-small-3.1-24b-instruct-2503"
+    name: "mistral-small-2503"
     settings:
       model_family: "mistral"
       project: "your-gcp-project-id"
-      location: "europe-west1"
+      location: "europe-west4"
       temperature: 0.0
       max_retries: 2
       request_timeout: 90
   default_language_model:
     provider: "vertex-ai-model-garden"
-    name: "mistral-small-3.1-24b-instruct-2503"
+    name: "mistral-small-2503"
     settings:
       model_family: "mistral"
       project: "your-gcp-project-id"
-      location: "europe-west1"
+      location: "europe-west4"
       temperature: 0.0
       max_retries: 2
       request_timeout: 90

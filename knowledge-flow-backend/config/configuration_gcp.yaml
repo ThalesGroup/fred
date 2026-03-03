@@ -207,18 +207,18 @@ embedding_model:
   name: text-embedding-005
   settings:
     project: your-gcp-project-id
-    location: europe-west1
+    location: europe-west4
     max_retries: 2
 
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 chat_model:
   provider: vertex-ai-model-garden
-  name: "mistral-small-3.1-24b-instruct-2503"
+  name: "mistral-small-2503"
   settings:
     model_family: mistral
     project: your-gcp-project-id
-    location: europe-west1
+    location: europe-west4
     temperature: 0
     max_retries: 2
     request_timeout: 90
@@ -228,7 +228,7 @@ vision_model:
   name: gemini-2.5-flash
   settings:
     project: your-gcp-project-id
-    location: europe-west1
+    location: europe-west4
     temperature: 0
     max_retries: 2
     request_timeout: 90
