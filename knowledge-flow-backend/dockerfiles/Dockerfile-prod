@@ -64,12 +64,7 @@ RUN apt-get update && \
     inkscape \
     libgl1 \
     libmagic1 \
-    poppler-utils \
     ffmpeg \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-fra \
-    tesseract-ocr-osd \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
