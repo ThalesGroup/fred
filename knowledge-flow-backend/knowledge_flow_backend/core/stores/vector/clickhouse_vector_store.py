@@ -25,7 +25,7 @@ from urllib.parse import quote_plus
 import clickhouse_connect
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from sqlalchemy import MetaData, Table, create_engine, distinct, func, select
+from sqlalchemy import MetaData, Table, create_engine, distinct, func, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -257,7 +257,7 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
 
     def _query_rows(self, sql: str, parameters: Optional[Dict[str, Any]] = None) -> List[tuple]:
         res = self._client.query(sql, parameters=parameters or {})
-        return list(res.result_rows or [])
+        return [tuple(r) for r in (res.result_rows or [])]
 
     def _command(self, sql: str, parameters: Optional[Dict[str, Any]] = None) -> Any:
         return self._client.command(sql, parameters=parameters or {})
@@ -300,10 +300,12 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             self._ensure_table_exists()
             expected_dim = self._expected_dim or self._get_embedding_dimension()
             self._expected_dim = expected_dim
-
-            rows = self._query_rows(f"SELECT embedding_dim FROM {self._table_ref} FINAL WHERE embedding_dim > 0 LIMIT 1")
-            if rows:
-                actual_dim = int(rows[0][0])
+            t = self._orm_table
+            stmt = select(t.c.embedding_dim).where(t.c.embedding_dim > 0).limit(1)
+            with Session(self._engine, future=True) as session:
+                row = session.execute(stmt).first()
+            if row:
+                actual_dim = int(row[0])
                 if actual_dim != expected_dim:
                     raise ValueError(
                         "ClickHouse vector table is not compatible with the configured embedding model.\n"
@@ -631,26 +633,23 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             logger.debug("[VECTOR][CLICKHOUSE][FULLTEXT] built hits count=%d", len(hits))
         return hits
 
-    def _build_where_clause(self, f: Optional[SearchFilter]) -> tuple[str, Dict[str, Any]]:
-        if not f:
-            return "", {}
-        clauses: List[str] = []
-        params: Dict[str, Any] = {}
-        idx = 0
+    def _build_filter_conditions(self, search_filter: Optional[SearchFilter], table: Table) -> List[Any]:
+        if not search_filter:
+            return []
+        conditions: List[Any] = []
 
-        if f.tag_ids:
-            clauses.append("hasAny(tag_ids, {tag_ids:Array(String)})")
-            params["tag_ids"] = [str(x) for x in f.tag_ids]
+        if search_filter.tag_ids:
+            conditions.append(func.hasAny(table.c.tag_ids, [str(x) for x in search_filter.tag_ids]))
 
         direct_columns = {
-            "document_uid": _DOC_UID_COLUMN,
-            "user_id": _USER_COLUMN,
-            "session_id": _SESSION_COLUMN,
-            "scope": _SCOPE_COLUMN,
+            "document_uid": table.c.document_uid,
+            "user_id": table.c.user_id,
+            "session_id": table.c.session_id,
+            "scope": table.c.scope,
         }
 
-        if f.metadata_terms:
-            for field, values in f.metadata_terms.items():
+        if search_filter.metadata_terms:
+            for field, values in search_filter.metadata_terms.items():
                 values_list = _as_list(values)
                 if not values_list:
                     continue
@@ -659,55 +658,37 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
                     want_true = any(_is_true_value(v) for v in values_list)
                     want_false = any(_is_false_value(v) for v in values_list)
                     if want_true and not want_false:
-                        clauses.append(f"({_RETRIEVABLE_COLUMN} = 1 OR {_RETRIEVABLE_COLUMN} IS NULL)")
+                        conditions.append(or_(table.c.retrievable == 1, table.c.retrievable.is_(None)))
                     elif want_false and not want_true:
-                        clauses.append(f"({_RETRIEVABLE_COLUMN} = 0 OR {_RETRIEVABLE_COLUMN} IS NULL)")
+                        conditions.append(or_(table.c.retrievable == 0, table.c.retrievable.is_(None)))
                     continue
 
                 include_values, exclude_values = _split_metadata_values(values_list)
                 col = direct_columns.get(field)
 
-                if col:
+                if col is not None:
                     if include_values:
-                        key = f"inc_{idx}"
-                        idx += 1
-                        clauses.append(f"{col} IN {{{key}:Array(String)}}")
-                        params[key] = [str(v) for v in include_values]
+                        conditions.append(col.in_([str(v) for v in include_values]))
                     if exclude_values:
-                        key = f"exc_{idx}"
-                        idx += 1
-                        clauses.append(f"NOT ({col} IN {{{key}:Array(String)}})")
-                        params[key] = [str(v) for v in exclude_values]
+                        conditions.append(~col.in_([str(v) for v in exclude_values]))
                     continue
 
                 if not _SAFE_METADATA_FIELD.match(field):
-                    logger.warning(
-                        "[VECTOR][CLICKHOUSE][FILTER] ignoring unsupported metadata field '%s'",
-                        field,
-                    )
+                    logger.warning("[VECTOR][CLICKHOUSE][FILTER] ignoring unsupported metadata field '%s'", field)
                     continue
 
-                meta_expr = f"JSONExtractString(metadata, '{field}')"
+                json_expr = func.JSONExtractString(table.c.metadata, field)
                 if include_values:
-                    key = f"inc_{idx}"
-                    idx += 1
-                    clauses.append(f"{meta_expr} IN {{{key}:Array(String)}}")
-                    params[key] = [str(v) for v in include_values]
+                    conditions.append(json_expr.in_([str(v) for v in include_values]))
                 if exclude_values:
-                    key = f"exc_{idx}"
-                    idx += 1
-                    clauses.append(f"NOT ({meta_expr} IN {{{key}:Array(String)}})")
-                    params[key] = [str(v) for v in exclude_values]
+                    conditions.append(~json_expr.in_([str(v) for v in exclude_values]))
 
-        if clauses:
-            logger.debug("[VECTOR][CLICKHOUSE][FILTER] where=%s params=%s", clauses, params)
-        return " AND ".join(clauses), params
+        return conditions
 
     def ann_search(self, query: str, *, k: int, search_filter: Optional[SearchFilter] = None) -> List[AnnHit]:
         logger.debug("[VECTOR][CLICKHOUSE][ANN] query=%r k=%d search_filter=%s", query, k, search_filter)
         if k <= 0:
             return []
-        where_clause, params = self._build_where_clause(search_filter)
 
         try:
             query_vector = self._embedding_model.embed_query(query)
@@ -715,33 +696,20 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
             logger.exception("[VECTOR][CLICKHOUSE] failed to compute embedding.")
             raise RuntimeError("Embedding model failed.") from e
 
-        sql = f"""
-        SELECT
-            chunk_uid,
-            text,
-            metadata,
-            retrievable,
-            1.0 - cosineDistance(embedding, {{query_vector:Array(Float32)}}) AS score
-        FROM {self._table_ref} FINAL
-        {"WHERE " + where_clause if where_clause else ""}
-        ORDER BY score DESC
-        LIMIT {{k:UInt32}}
-        """
-
         try:
-            rows = self._query_rows(
-                sql,
-                {
-                    **params,
-                    "query_vector": [float(v) for v in query_vector],
-                    "k": int(k),
-                },
-            )
+            t = self._orm_table
+            score = (1.0 - func.cosineDistance(t.c.embedding, [float(v) for v in query_vector])).label("score")
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, score)
+            for cond in self._build_filter_conditions(search_filter, t):
+                stmt = stmt.where(cond)
+            stmt = stmt.order_by(score.desc()).limit(int(k))
+            with Session(self._engine, future=True) as session:
+                rows = session.execute(stmt).all()
         except Exception as e:
             logger.warning("[VECTOR][CLICKHOUSE][ANN] query failed: %s", str(e))
             raise RuntimeError(str(e)) from e
 
-        return self._build_ann_hits(rows)
+        return self._build_ann_hits([tuple(r) for r in rows])
 
     def full_text_search(
         self,
@@ -751,32 +719,21 @@ class ClickHouseVectorStoreAdapter(BaseVectorStore):
     ) -> List[FullTextHit]:
         if top_k <= 0:
             return []
-        where_clause, params = self._build_where_clause(search_filter)
-        where_parts = []
-        if where_clause:
-            where_parts.append(where_clause)
-        where_parts.append("positionCaseInsensitiveUTF8(text, {q:String}) > 0")
-
-        sql = f"""
-        SELECT
-            chunk_uid,
-            text,
-            metadata,
-            retrievable,
-            1.0 / (1.0 + positionCaseInsensitiveUTF8(text, {{q:String}})) AS score
-        FROM {self._table_ref} FINAL
-        WHERE {" AND ".join(where_parts)}
-        ORDER BY score DESC
-        LIMIT {{k:UInt32}}
-        """
-
         try:
-            rows = self._query_rows(sql, {**params, "q": query, "k": int(top_k)})
+            t = self._orm_table
+            pos = func.positionCaseInsensitiveUTF8(t.c.text, query)
+            score = (1.0 / (1.0 + pos)).label("score")
+            stmt = select(t.c.chunk_uid, t.c.text, t.c.metadata, t.c.retrievable, score)
+            for cond in self._build_filter_conditions(search_filter, t):
+                stmt = stmt.where(cond)
+            stmt = stmt.where(pos > 0).order_by(score.desc()).limit(int(top_k))
+            with Session(self._engine, future=True) as session:
+                rows = session.execute(stmt).all()
         except Exception as e:
             logger.warning("[VECTOR][CLICKHOUSE][FULLTEXT] query failed: %s", str(e))
             raise RuntimeError(str(e)) from e
 
-        return self._build_fulltext_hits(rows)
+        return self._build_fulltext_hits([tuple(r) for r in rows])
 
     def hybrid_search(
         self,
