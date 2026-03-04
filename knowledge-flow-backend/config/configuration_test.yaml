@@ -180,14 +180,6 @@ embedding_model:
     base_url: http://localhost:11434
     max_retries: 0
 
-# Optional vision model. If absent and rich.process_images=true, the processor
-# logs a warning and continues without image descriptions.
-# vision_model:
-#   provider: ollama
-#   name: llava:7b
-#   settings:
-#     base_url: http://localhost:11434
-
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:

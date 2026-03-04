@@ -5,7 +5,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional, Protocol, Set, cast, runtime_checkable
 
 from fred_core import Action, KeycloakUser, OwnerFilter, Resource, VectorSearchHit, authorize
 from fred_core.kpi import BaseKPIWriter, KPIActor
@@ -13,12 +13,31 @@ from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, FullTextHit, HybridHit, SearchFilter
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class SupportsFullTextSearch(Protocol):
+    def full_text_search(
+        self,
+        query: str,
+        top_k: int,
+        search_filter: Optional[SearchFilter] = None,
+    ) -> List[FullTextHit]: ...
+
+
+@runtime_checkable
+class SupportsHybridSearch(Protocol):
+    def hybrid_search(
+        self,
+        query: str,
+        top_k: int,
+        search_filter: Optional[SearchFilter] = None,
+    ) -> List[HybridHit]: ...
 
 
 def _merge_attachment_and_corpus_hits(
@@ -333,10 +352,11 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
 
         Raises:
-            TypeError: If the vector_store is not an instance of OpenSearchVectorStoreAdapter.
+            TypeError: If the vector_store does not expose full_text_search.
         """
-        if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
-            raise TypeError(f"Strict search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
+        if not isinstance(self.vector_store, SupportsFullTextSearch):
+            raise TypeError(f"Strict search requires a backend exposing full_text_search, but vector_store is {type(self.vector_store).__name__}")
+        full_text_store = cast(SupportsFullTextSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
@@ -347,7 +367,7 @@ class VectorSearchService:
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 hits: List[FullTextHit] = await asyncio.to_thread(
-                    self.vector_store.full_text_search,
+                    full_text_store.full_text_search,
                     query=question,
                     top_k=k,
                     search_filter=search_filter,
@@ -397,10 +417,11 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of search hits with relevant metadata.
 
         Raises:
-            TypeError: If the vector store is not an instance of OpenSearchVectorStoreAdapter.
+            TypeError: If the vector store does not expose hybrid_search.
         """
-        if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
-            raise TypeError(f"Hybrid search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
+        if not isinstance(self.vector_store, SupportsHybridSearch):
+            raise TypeError(f"Hybrid search requires a backend exposing hybrid_search, but vector_store is {type(self.vector_store).__name__}")
+        hybrid_store = cast(SupportsHybridSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
@@ -411,7 +432,7 @@ class VectorSearchService:
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 hits: List[HybridHit] = await asyncio.to_thread(
-                    self.vector_store.hybrid_search,
+                    hybrid_store.hybrid_search,
                     query=question,
                     top_k=k,
                     search_filter=search_filter,

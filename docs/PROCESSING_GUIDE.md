@@ -116,19 +116,6 @@ Additional runtime/model dependencies:
 - `inkscape` (DOCX EMF conversion support)
 - Python deps for lite/heavy processors (already in environment)
 
-### Present in current prod Dockerfile but not always required for default fast path
-- `poppler-utils`
-- `ffmpeg`
-- `tesseract-ocr` (+ language packs)
-- `libmagic1`
-
-These are useful for optional/legacy/advanced paths and troubleshooting, but they increase image weight.
-
-If image size reduction is a priority:
-1. Confirm which processors are truly enabled in profiles and attachments.
-2. Remove unused Python deps (notably unstructured stack if fully deprecated).
-3. Remove unused system packages from Dockerfile accordingly.
-
 ---
 
 ## 7) Offline / Air-Gapped Hardening Checklist

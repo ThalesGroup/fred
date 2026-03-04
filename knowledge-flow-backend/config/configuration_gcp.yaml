@@ -13,18 +13,17 @@
 app:
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
-  address: "127.0.0.1"
-  port: 8112
+  address: "0.0.0.0"
+  port: 8111
   log_level: "info"
   reload: false
   reload_dir: "."
-  max_ingestion_workers: 3
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9111
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 10
+  kpi_log_summary_interval_sec: 10.0
+  kpi_log_summary_top_n: 20
 
 processing:
   default_profile: fast
@@ -35,7 +34,7 @@ processing:
       process_images: false
       pdf:
         backend: pypdfium2
-        images_scale: 2.0
+        images_scale: 1.0
         generate_picture_images: false
         generate_page_images: false
         generate_table_images: false
@@ -56,21 +55,39 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
         - suffix: ".xlsm"
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     medium:
       use_gpu: true
       generate_summary: false
       process_images: false
       pdf:
-        backend: pypdfium2
+        backend: dlparse_v4
         images_scale: 2.0
         generate_picture_images: false
-        generate_page_images: false
+        generate_page_images: true
         generate_table_images: false
         do_table_structure: false
         do_ocr: false
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"
@@ -83,6 +100,24 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
         - suffix: ".xlsm"
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     rich:
       use_gpu: true
       generate_summary: false
@@ -110,6 +145,24 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
         - suffix: ".xlsm"
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 
 security:
   m2m:
@@ -129,7 +182,7 @@ security:
 
 scheduler:
   enabled: true
-  backend: "temporal"
+  backend: "memory"
   temporal:
     host: "localhost:7233"
     namespace: "default"
@@ -138,111 +191,79 @@ scheduler:
     connect_timeout_seconds: 5
 
 content_storage:
-  type: minio
-  endpoint: http://localhost:9000
-  access_key: "admin"
-  bucket_name: "knowledge-flow-content"
-  secure: false
-
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
 document_sources:
   fred:
     type: push
     description: "Documents manually uploaded by users"
-
-chat_model:
-  provider: openai
-  name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
-  settings:
-    temperature: 0
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+  local:
+    type: pull
+    provider: local_path
+    base_path: ~/Documents/Fred
+    description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
-  provider: openai
-  name: text-embedding-3-large # or text-embedding-3-small
+  provider: vertex-ai
+  name: text-embedding-005
   settings:
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    project: your-gcp-project-id
+    location: europe-west4
+    max_retries: 2
+
+# Configuration for the LLM used for summary, keyword generation
+# and other text generation tasks.
+chat_model:
+  provider: vertex-ai-model-garden
+  name: "mistral-small-2503"
+  settings:
+    model_family: mistral
+    project: your-gcp-project-id
+    location: europe-west4
+    temperature: 0
+    max_retries: 2
+    request_timeout: 90
 
 vision_model:
-  provider: openai
-  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  provider: vertex-ai
+  name: gemini-2.5-flash
   settings:
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
-    temperature: 0 # optional
+    project: your-gcp-project-id
+    location: europe-west4
+    temperature: 0
+    max_retries: 2
+    request_timeout: 90
+
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
     online: true
     local_path: ~/.cache/huggingface/hub
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
 
 storage:
   postgres:
-    host: localhost
-    port: 5432
-    database: fred
-    username: fred
-    pool_size: 2
-    max_overflow: 0
-    pool_timeout: 30
-    pool_recycle: 1800
-    pool_pre_ping: true
-
+    sqlite_path: "~/.fred/knowledge-flow/knowledge-flow.db"
   opensearch:
     host: https://localhost:9200
     secure: true
     verify_certs: false
     username: admin
-  # clickhouse:
-  #   host: localhost
-  #   port: 8123
-  #   database: fred
-  #   username: fred
-  #   secure: false
-  #   verify: true
-
   catalog_store:
     type: "postgres"
     table: catalog
-
   prompt_store:
     type: "postgres"
-    table: prompt
-
+    table: prompts
   resource_store:
     type: "postgres"
     table: resource
-
+  kpi_store:
+    type: "log"
+    level: "DEBUG"
+  log_store:
+    type: "in_memory"
   tag_store:
     type: "postgres"
-    table: tag
-
+    table: tags
   metadata_store:
     type: "postgres"
     table: metadata
@@ -250,35 +271,15 @@ storage:
     type: "postgres"
     table: workflow_tasks
     prefix: "sched_"
-
   vector_store:
-    type: opensearch
-    index: vector-index
-    # type: clickhouse
-    # table: fred_vectors
-    # bulk_size: 1000
-    # Default bulk size for vector insertions is 500. Increase if you have
-    # enough memory and want faster ingestion. Or if run into ingestion errors
-    # while ingesting large documents.
-    bulk_size: 1000
-
-  kpi_store:
-    type: "log"
-    level: "DEBUG"
-
-  log_store:
-    type: "in_memory"
-
+    type: chroma
   tabular_stores:
-    base_database:
+    base_database: # Minimal configuration to enable CSV document ingestion
       type: "sql"
+      driver: "duckdb"
+      database: "base_database"
+      path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
-      driver: "postgresql+psycopg2"
-      host: "localhost"
-      port: 5432
-      database: "data"
-      path: null # (important: remove the `path` default value)
-      username: "tabular"
 
 mcp:
   reports_enabled: true
@@ -293,13 +294,8 @@ mcp:
   filesystem_enabled: true
 
 filesystem:
-  type: minio
-  endpoint: http://localhost:9000
-  access_key: admin
-  bucket_name: filesystem
-  secure: false
+  type: local
 
-# Workspace storage layout (paths inside the bucket/filesystem)
 workspace_layout:
   user_pattern: "users/{user_id}/{key}"
   agent_config_pattern: "agents/{agent_id}/config/{key}"

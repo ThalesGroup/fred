@@ -116,6 +116,7 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 .PHONY: docker-build
 docker-build: ## Build the Docker image
 	docker build \
+		--network=$(API_DOCKER_NETWORK) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)
