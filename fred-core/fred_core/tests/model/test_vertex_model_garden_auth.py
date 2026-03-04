@@ -155,8 +155,14 @@ async def test_patch_vertex_maas_auth_endurance_simulation() -> None:
 
         assert len(seen_sync) == rounds
         assert len(seen_async) == rounds
-        assert all(value is not None and value.startswith("Bearer token-") for value in seen_sync)
-        assert all(value is not None and value.startswith("Bearer token-") for value in seen_async)
+        assert all(
+            value is not None and value.startswith("Bearer token-")
+            for value in seen_sync
+        )
+        assert all(
+            value is not None and value.startswith("Bearer token-")
+            for value in seen_async
+        )
         assert credentials.refresh_count >= rounds * 2
     finally:
         model.client.close()

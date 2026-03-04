@@ -50,7 +50,9 @@ class _GcpTokenAuth(httpx.Auth):
       long-running Fred processes.
     """
 
-    def __init__(self, credentials: object | None = None, request_adapter: object | None = None):
+    def __init__(
+        self, credentials: object | None = None, request_adapter: object | None = None
+    ):
         self._credentials = credentials
         self._request = request_adapter
         if self._credentials is None or self._request is None:
