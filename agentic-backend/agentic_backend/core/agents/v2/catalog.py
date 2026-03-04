@@ -51,7 +51,8 @@ def definition_to_agent_tuning(definition: AgentDefinition) -> AgentTuning:
 def definition_to_agent_settings(
     definition: AgentDefinition,
     *,
-    class_path: str,
+    class_path: str | None = None,
+    definition_ref: str | None = None,
     enabled: bool = True,
 ) -> AgentSettings:
     tuning = definition_to_agent_tuning(definition)
@@ -60,6 +61,7 @@ def definition_to_agent_settings(
         id=definition.agent_id,
         name=definition.role,
         class_path=class_path,
+        definition_ref=definition_ref,
         enabled=enabled,
         tuning=tuning,
         chat_options=chat_options,

@@ -2,7 +2,7 @@ import pytest
 
 from agentic_backend.common.structures import Agent
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.adapters import (
+from agentic_backend.integrations.v2_runtime.adapters import (
     FredKnowledgeSearchToolInvoker,
     _classify_trace_bottleneck,
     _extract_interesting_spans,
@@ -154,7 +154,7 @@ async def test_traces_summarize_conversation_returns_graceful_error_when_langfus
             tool_ref=TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
             payload={},
             context=binding.portable_context,
-        )
+        ),
     )
 
     assert result.is_error is True

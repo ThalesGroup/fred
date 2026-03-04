@@ -16,9 +16,9 @@ conversation continuity survive executor rebuilds and process boundaries.
 from __future__ import annotations
 
 import logging
-import random
-from contextlib import asynccontextmanager
+import secrets
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from typing import Any, cast
 
 from fred_core.kpi import BaseKPIWriter, phase_timer
@@ -552,7 +552,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                 current_v = 0
         next_v = current_v + 1
         # Keep lexical ordering stable while avoiding accidental collisions.
-        return f"{next_v:032}.{random.random():016}"
+        return f"{next_v:032}.{secrets.token_hex(8)}"
 
     async def _load_channel_values(
         self,

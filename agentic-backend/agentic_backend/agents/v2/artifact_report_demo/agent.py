@@ -17,7 +17,6 @@ from agentic_backend.core.agents.v2 import (
 )
 from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
 
-
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
     path_parts=(

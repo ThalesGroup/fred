@@ -46,7 +46,7 @@ Runtime semantics live below it.
   - `agentic_backend/core/chatbot/stream_transcoder.py`
 - MCP runtime / tool provider layer
   - `agentic_backend/common/mcp_runtime.py`
-  - `agentic_backend/core/agents/v2/adapters.py`
+  - `agentic_backend/integrations/v2_runtime/adapters.py`
 
 ## 3. Authoring vs Runtime Boundary
 
@@ -96,7 +96,7 @@ Runtime responsibilities:
 
 Used for:
 
-- `TrackingGraphDemoDefinition`
+- `PostalTrackingDefinition`
 
 Runtime responsibilities:
 

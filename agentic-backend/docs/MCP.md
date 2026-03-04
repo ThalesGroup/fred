@@ -46,10 +46,18 @@ Important boundary for new v2 product agents:
 - direct MCP dependency in the authoring layer is the fallback path for
   capabilities Fred does not yet expose cleanly
 
+Important clarification:
+
+- not every Fred runtime tool is MCP-backed
+- example: `traces.summarize_conversation` is a built-in runtime tool that calls
+  Langfuse Public API endpoints directly over HTTP (`/api/public/traces` and
+  `/api/public/traces/{trace_id}`)
+- so using that tool does not require a Langfuse MCP server
+
 Current v2 examples:
 
 - profile-based ReAct agents that consume UI-configured MCP servers
-- `TrackingGraphDemoDefinition`, which exercises runtime tools inside `GraphRuntime`
+- `PostalTrackingDefinition`, which exercises runtime tools inside `GraphRuntime`
 
 Use direct `MCPRuntime` handling only when maintaining a legacy `AgentFlow` agent.
 

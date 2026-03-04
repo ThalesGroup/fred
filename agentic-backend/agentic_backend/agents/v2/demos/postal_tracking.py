@@ -37,7 +37,6 @@ from agentic_backend.core.agents.v2 import (
 )
 from agentic_backend.core.chatbot.chat_schema import GeoPart
 
-
 RequestMode = Literal[
     "unknown", "unsupported", "capabilities_info", "followup_info", "action_flow"
 ]
@@ -84,7 +83,7 @@ class TrackingGraphDemoState(BaseModel):
     final_text: str | None = None
 
 
-class TrackingGraphDemoDefinition(GraphAgentDefinition):
+class Definition(GraphAgentDefinition):
     """
     Example of a production-like graph agent.
 
@@ -1559,9 +1558,7 @@ class TrackingGraphDemoDefinition(GraphAgentDefinition):
 
     @staticmethod
     def _parcel_choice_description(candidate: dict[str, Any]) -> str | None:
-        location = TrackingGraphDemoDefinition._as_dict(
-            candidate.get("current_location")
-        )
+        location = Definition._as_dict(candidate.get("current_location"))
         parts: list[str] = []
         if candidate.get("status"):
             parts.append(f"statut={candidate['status']}")

@@ -50,12 +50,13 @@ import { KeyCloakService } from "../../security/KeycloakService";
 import { useToast } from "../ToastProvider";
 
 const DEFAULT_REACT_PROFILE_ID = "generic_assistant";
+const LEGACY_V1_REACT_CLASS_PATH = "agentic_backend.core.agents.basic_react_agent.BasicReActAgent";
 
 const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
   z.object({
     name: z.string().min(1, { message: t("validation.required") }),
     type: z.enum(["basic", "a2a_proxy"]),
-    creation_mode: z.enum(["basic", "profile", "class"]),
+    creation_mode: z.enum(["basic", "profile", "legacy_v1", "class"]),
     profile_id: z.string().optional(),
     a2a_base_url: z.union([
       z.literal(""),
@@ -126,6 +127,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
   const watchProfileId = useWatch({ control, name: "profile_id", defaultValue: DEFAULT_REACT_PROFILE_ID });
   const isA2aType = watchType === "a2a_proxy";
   const isProfileCreation = !isA2aType && watchCreationMode === "profile";
+  const isLegacyV1Creation = !isA2aType && watchCreationMode === "legacy_v1";
   const isClassCreation = isAdmin && !isA2aType && watchCreationMode === "class";
   const { data: reactProfiles = [], isFetching: isProfilesLoading } = useListReactProfilesQuery(undefined, {
     skip: isA2aType,
@@ -170,8 +172,12 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       a2a_base_url: data.type === "a2a_proxy" ? data.a2a_base_url?.trim() || undefined : undefined,
       a2a_token: data.type === "a2a_proxy" ? data.a2a_token?.trim() || undefined : undefined,
       class_path:
-        data.type !== "a2a_proxy" && data.creation_mode === "class"
-          ? data.class_path?.trim() || undefined
+        data.type !== "a2a_proxy"
+          ? data.creation_mode === "class"
+            ? data.class_path?.trim() || undefined
+            : data.creation_mode === "legacy_v1"
+              ? LEGACY_V1_REACT_CLASS_PATH
+              : undefined
           : undefined,
       profile_id:
         data.type !== "a2a_proxy" && data.creation_mode === "profile"
@@ -269,6 +275,11 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                           value: "profile",
                           title: t("agentHub.fields.creationModeProfile"),
                           description: t("agentHub.fields.creationModeProfileHelp"),
+                        },
+                        {
+                          value: "legacy_v1",
+                          title: t("agentHub.fields.creationModeLegacyV1"),
+                          description: t("agentHub.fields.creationModeLegacyV1Help"),
                         },
                         ...(isAdmin
                           ? [
@@ -395,6 +406,14 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     />
                   )}
                 />
+              </Grid2>
+            )}
+
+            {isLegacyV1Creation && (
+              <Grid2 size={12}>
+                <Typography variant="body2" color="text.secondary">
+                  {t("agentHub.fields.creationModeLegacyV1Note")}
+                </Typography>
               </Grid2>
             )}
 

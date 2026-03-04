@@ -15,24 +15,32 @@
 import asyncio
 import logging
 from abc import abstractmethod
-from typing import Optional, Tuple, cast
+from typing import Callable, Optional, Tuple, cast
 
 from fred_core import KeycloakUser
 
+from agentic_backend.agents.v2 import BasicReActDefinition
+from agentic_backend.agents.v2.basic_react.model_routing_presets import (
+    build_default_policy_with_basic_react_presets,
+)
+from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
 from agentic_backend.application_context import get_kpi_writer, get_pg_async_engine
+from agentic_backend.common.catalog_overrides import (
+    MODEL_ROUTING_PRESETS_ENABLED_ENV,
+    ModelRoutingBootstrapConfig,
+)
 from agentic_backend.common.structures import AgentSettings, Configuration
-from agentic_backend.agents.v2 import BasicReActV2Definition
 from agentic_backend.core.agents.agent_cache import ActiveAgentCache, AgentCacheStats
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
-    resolve_agent_class,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_service import AgentService
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.adapters import (
+from agentic_backend.integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     DefaultFredChatModelFactory,
     FredArtifactPublisher,
@@ -42,8 +50,8 @@ from agentic_backend.core.agents.v2.adapters import (
     build_langfuse_tracer,
 )
 from agentic_backend.core.agents.v2.catalog import (
-    apply_react_profile_to_definition,
     apply_profile_defaults_to_settings,
+    apply_react_profile_to_definition,
     build_bound_runtime_context,
     build_definition_from_settings,
     definition_to_agent_settings,
@@ -51,13 +59,22 @@ from agentic_backend.core.agents.v2.catalog import (
 )
 from agentic_backend.core.agents.v2.context import BoundRuntimeContext
 from agentic_backend.core.agents.v2.graph_runtime import GraphRuntime
+from agentic_backend.core.agents.v2.model_routing import (
+    ModelRoutingResolver,
+    RoutedChatModelFactory,
+    load_model_routing_policy_from_catalog,
+)
 from agentic_backend.core.agents.v2.models import (
     AgentDefinition,
     GraphAgentDefinition,
     ReActAgentDefinition,
 )
 from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
-from agentic_backend.core.agents.v2.runtime import RuntimeServices, ToolInvokerPort
+from agentic_backend.core.agents.v2.runtime import (
+    ChatModelFactoryPort,
+    RuntimeServices,
+    ToolInvokerPort,
+)
 from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
 from agentic_backend.core.agents.v2.toolset_registry import (
@@ -68,6 +85,7 @@ from agentic_backend.core.agents.v2.toolset_registry import (
 logger = logging.getLogger(__name__)
 
 RuntimeAgentInstance = AgentFlow | V2SessionAgent
+ModelRoutingBootstrapProvider = Callable[[], ModelRoutingBootstrapConfig]
 
 
 def _internal_profile_agent_id(profile_id: str) -> str:
@@ -137,20 +155,56 @@ class NoOpAgentFactory(BaseAgentFactory):
 
 class AgentFactory(BaseAgentFactory):
     """
-    Factory that returns a **warm, per-(session, agent)** instance.
-    Why Fred caches: we persist tool working state across messages (e.g., Tessa’s selected DB).
+    Build and cache runtime agent instances for one `(session_id, agent_id)` pair.
+
+    Pragmatic role in the stack:
+    - reads authoritative agent settings through `AgentManager`/`AgentService`
+    - loads/instantiates agent classes through `AgentLoader`
+    - wires runtime dependencies (tools, tracing, checkpointer, model factory)
+    - keeps warm instances in cache so multi-turn sessions preserve runtime state
     """
 
     def __init__(
-        self, configuration: Configuration, manager: AgentManager, loader: AgentLoader
+        self,
+        configuration: Configuration,
+        manager: AgentManager,
+        loader: AgentLoader,
+        model_routing_bootstrap_provider: ModelRoutingBootstrapProvider,
     ):
+        """
+        Args:
+            configuration:
+                Loaded backend configuration (YAML + env-resolved values).
+            manager:
+                Agent catalog orchestrator. Responsible for bootstrapping configured
+                agents and serving the authoritative `AgentSettings` by id.
+            loader:
+                Class-path loader used to import/instantiate the concrete agent
+                implementation declared in settings.
+            model_routing_bootstrap_provider:
+                Centralized provider returning `ModelRoutingBootstrapConfig`
+                (catalog path, catalog existence, preset toggle). This keeps env/path
+                parsing out of factory logic.
+        """
+        self._configuration = configuration
         self._agent_cache: ActiveAgentCache[Tuple[str, str], RuntimeAgentInstance] = (
             ActiveAgentCache(max_size=configuration.ai.max_concurrent_agents)
         )
         self.service = AgentService(agent_manager=manager)
         self.loader = loader
+        self._model_routing_bootstrap_provider = model_routing_bootstrap_provider
         self._main_event_loop = asyncio.get_event_loop()
         self._v2_checkpointer: FredSqlCheckpointer | None = None
+        self._routed_chat_model_factory = self._build_routed_chat_model_factory()
+
+    def refresh_model_routing(self) -> None:
+        """
+        Rebuild the routed chat-model factory from current catalog/env settings.
+
+        This affects newly created v2 runtimes. Existing warm session runtimes
+        keep their currently bound chat model until they are recreated.
+        """
+        self._routed_chat_model_factory = self._build_routed_chat_model_factory()
 
     # ---------- Public entry point ----------
     async def create_and_init(
@@ -281,11 +335,12 @@ class AgentFactory(BaseAgentFactory):
         settings = await self.service.get_agent_by_id(user, agent_id)
         if not settings:
             raise ValueError(f"Agent '{agent_id}' not found in catalog.")
-        if not settings.class_path:
-            raise ValueError(f"Agent '{agent_id}' has no class_path defined.")
-        resolved = resolve_agent_class(settings.class_path)
+        resolved = resolve_agent_reference(
+            class_path=settings.class_path,
+            definition_ref=settings.definition_ref,
+        )
         if resolved.implementation_kind == AgentImplementationKind.FLOW:
-            agent_cls = self.loader._import_agent_class(settings.class_path)
+            agent_cls = self.loader._import_agent_class(resolved.class_path)
             agent = cast(AgentFlow, agent_cls(agent_settings=settings))
             return settings, agent
 
@@ -315,13 +370,14 @@ class AgentFactory(BaseAgentFactory):
         profile_id: str,
         runtime_context: RuntimeContext,
     ) -> Tuple[AgentSettings, RuntimeAgentInstance]:
-        base_definition = instantiate_definition_class(BasicReActV2Definition)
+        base_definition = instantiate_definition_class(BasicReActDefinition)
         definition = apply_react_profile_to_definition(base_definition, profile_id)
         internal_agent_id = _internal_profile_agent_id(profile_id)
         definition = definition.model_copy(update={"agent_id": internal_agent_id})
         settings = definition_to_agent_settings(
             definition,
-            class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+            class_path=None,
+            definition_ref=BASIC_REACT_DEFINITION_REF,
             enabled=True,
         )
         effective_settings = apply_profile_defaults_to_settings(
@@ -350,7 +406,7 @@ class AgentFactory(BaseAgentFactory):
             agent_name=effective_settings.name,
             team_id=effective_settings.team_id,
         )
-        chat_model_factory = DefaultFredChatModelFactory()
+        chat_model_factory = self._resolve_chat_model_factory(definition)
         base_tool_invoker = FredKnowledgeSearchToolInvoker(
             binding=binding,
             settings=effective_settings,
@@ -404,6 +460,121 @@ class AgentFactory(BaseAgentFactory):
             )
         runtime.bind(binding)
         return V2SessionAgent(runtime=runtime)
+
+    def _resolve_chat_model_factory(
+        self, definition: AgentDefinition
+    ) -> ChatModelFactoryPort:
+        """
+        Why this function exists:
+        - choose one chat-model factory for the runtime being built
+        - keep routing on/off decision in one place
+
+        Who calls it:
+        - `_build_v2_session_agent(...)`
+
+        When it is called:
+        - once for each fresh v2 runtime construction
+        - not called on every model invocation
+
+        Expected inputs / invariants:
+        - `definition` is the typed v2 definition resolved from `AgentSettings`
+        - `self._routed_chat_model_factory` was already prepared at startup/refresh
+
+        Return / side effects:
+        - returns one `ChatModelFactoryPort`
+        - no side effects (no I/O, no model client build)
+
+        Fallback / errors:
+        - fallback is always `DefaultFredChatModelFactory()` when routed factory
+          is unavailable or definition type is not v2 ReAct/Graph
+        - this function does not raise by design
+
+        Observability signals to look at:
+        - this function does not log directly
+        - routing activation is observable in `_build_routed_chat_model_factory()`
+          logs with prefix `[V2][MODEL_ROUTING]`
+        """
+        if self._routed_chat_model_factory is not None and isinstance(
+            definition, (ReActAgentDefinition, GraphAgentDefinition)
+        ):
+            return self._routed_chat_model_factory
+        return DefaultFredChatModelFactory()
+
+    def _build_routed_chat_model_factory(self) -> RoutedChatModelFactory | None:
+        """
+        Why this function exists:
+        - build one routed-factory snapshot for this `AgentFactory` instance
+        - keep startup/refresh routing bootstrap out of runtime hot path
+
+        Who calls it:
+        - `AgentFactory.__init__` (service startup)
+        - `refresh_model_routing()` (after catalog/UI changes)
+
+        When it is called:
+        - at startup and explicit refresh events
+        - not called during each message turn
+
+        Expected inputs / invariants:
+        - bootstrap provider returns a valid `ModelRoutingBootstrapConfig`
+          (`catalog_path`, `catalog_exists`, `presets_enabled`)
+        - policy loaded from catalog/presets is compatible with resolver contracts
+
+        Return / side effects:
+        - returns `RoutedChatModelFactory` when routing is enabled
+        - returns `None` when routing is disabled (default model factory path)
+        - logs bootstrap decisions (`catalog` or `presets`) via logger
+
+        Fallback / errors:
+        - catalog exists but invalid -> fail fast (raises)
+        - no catalog and presets disabled -> `None`
+        - no catalog and presets enabled but bootstrap fails -> logs exception and
+          returns `None`
+
+        Observability signals to look at:
+        - `[V2][MODEL_ROUTING] Enabled catalog routing ...`
+        - `[V2][MODEL_ROUTING] Enabled preset routing ...`
+        - `[V2][MODEL_ROUTING] Invalid catalog file ...`
+        - fallback path: absence of the two "Enabled ..." logs and default-model
+          behavior downstream
+        """
+        bootstrap = self._model_routing_bootstrap_provider()
+        catalog_path = bootstrap.catalog_path
+        catalog_exists = bootstrap.catalog_exists
+        try:
+            if catalog_exists:
+                policy = load_model_routing_policy_from_catalog(catalog_path)
+                logger.info(
+                    "[V2][MODEL_ROUTING] Enabled catalog routing from %s "
+                    "(main AI default model settings are ignored for routing).",
+                    catalog_path,
+                )
+            else:
+                if not bootstrap.presets_enabled:
+                    return None
+                policy = build_default_policy_with_basic_react_presets(
+                    ai_config=self._configuration.ai,
+                )
+                logger.info(
+                    "[V2][MODEL_ROUTING] Enabled preset routing via %s=1.",
+                    MODEL_ROUTING_PRESETS_ENABLED_ENV,
+                )
+            resolver = ModelRoutingResolver(policy)
+            return RoutedChatModelFactory(
+                resolver=resolver,
+                default_purpose="chat",
+            )
+        except Exception:
+            if catalog_exists:
+                logger.exception(
+                    "[V2][MODEL_ROUTING] Invalid catalog file at %s. "
+                    "Fix the catalog or remove it before startup.",
+                    catalog_path,
+                )
+                raise
+            logger.exception(
+                "[V2][MODEL_ROUTING] Failed to initialize routed chat model factory. Falling back to default chat model."
+            )
+            return None
 
     def _build_v2_tool_invoker(
         self,

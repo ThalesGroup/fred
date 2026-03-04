@@ -8,11 +8,10 @@ from agentic_backend.core.agents.v2.models import (
 )
 from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
 
-from ..profile_ids import RAG_EXPERT_PROFILE_ID
 from ..profile_model import ReActProfile
 
 RAG_EXPERT_PROFILE = ReActProfile(
-    profile_id=RAG_EXPERT_PROFILE_ID,
+    profile_id="rag_expert",
     title="RAG Expert",
     description="Document-grounded assistant for retrieval-augmented Q&A.",
     role="Document-grounded RAG expert",

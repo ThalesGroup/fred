@@ -26,7 +26,7 @@ from agentic_backend.common.structures import (
 )
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
-    resolve_agent_class,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_spec import (
@@ -218,9 +218,10 @@ class AgentManager:
             agent_id = settings.id
             static_catalogue[agent_id] = (settings, tunings)
             logger.info(
-                "[AGENTS] agent=%s loaded from YAML. Class: %s",
+                "[AGENTS] agent=%s loaded from YAML. class_path=%s definition_ref=%s",
                 agent_id,
                 settings.class_path,
+                settings.definition_ref,
             )
 
         # 2. Load persisted state directly from the store (no class instantiation needed)
@@ -279,10 +280,13 @@ class AgentManager:
             tuning = agent_cfg.tuning
             if not tuning:
                 try:
-                    if agent_cfg.class_path:
-                        resolved = resolve_agent_class(agent_cfg.class_path)
+                    if agent_cfg.class_path or agent_cfg.definition_ref:
+                        resolved = resolve_agent_reference(
+                            class_path=agent_cfg.class_path,
+                            definition_ref=agent_cfg.definition_ref,
+                        )
                         if resolved.implementation_kind == AgentImplementationKind.FLOW:
-                            cls = self.loader._import_agent_class(agent_cfg.class_path)
+                            cls = self.loader._import_agent_class(resolved.class_path)
                             tuning = getattr(cls, "tuning", None)
                         else:
                             tuning = definition_to_agent_tuning(

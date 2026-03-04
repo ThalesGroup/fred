@@ -45,7 +45,7 @@ class TestChatbotController:
         v2_agent = Agent(
             id="basic-v2-inspect",
             name="Basic ReAct V2 Inspect",
-            class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+            class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
             enabled=True,
         )
         app_context.configuration.ai.agents.append(v2_agent)

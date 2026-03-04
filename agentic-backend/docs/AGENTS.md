@@ -36,7 +36,7 @@ Concrete examples already present in the repo:
 
 - `agentic_backend/agents/v2/basic_react/agent.py`
 - `agentic_backend/agents/v2/basic_react/profiles/rag_expert.py`
-- `agentic_backend/agents/v2/tracking_graph_demo/agent.py`
+- `agentic_backend/agents/v2/demos/postal_tracking.py`
 
 ## 2. What The Author Owns
 
@@ -171,6 +171,7 @@ Current shapes:
   - `knowledge.search`
   - `logs.query`
   - `geo.render_points`
+  - `traces.summarize_conversation`
 
 The important rule is:
 
@@ -198,6 +199,12 @@ Rule of thumb:
 - if a needed capability exists only behind raw MCP and this starts recurring
   across agents, treat that as pressure to elevate a new Fred capability rather
   than copying transport details into each agent
+
+Note:
+
+- a first-class Fred tool ref is not automatically MCP-backed
+- `traces.summarize_conversation` is implemented through Langfuse Public API
+  calls, not through MCP
 
 For a practical retest checklist of the current v2 world, see
 [V2_FEATURE_MAP.md](./V2_FEATURE_MAP.md).

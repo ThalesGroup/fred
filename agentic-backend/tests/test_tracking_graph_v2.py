@@ -9,7 +9,7 @@ from fred_core.sql import create_async_engine_from_config
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 
-from agentic_backend.agents.v2 import TrackingGraphDemoDefinition
+from agentic_backend.agents.v2 import PostalTrackingDefinition
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
     AwaitingHumanRuntimeEvent,
@@ -461,7 +461,7 @@ def _binding(session_id: str) -> BoundRuntimeContext:
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_inspection_exposes_real_graph_preview() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
 
     inspection = inspect_agent(definition)
 
@@ -481,7 +481,7 @@ async def test_tracking_graph_demo_inspection_exposes_real_graph_preview() -> No
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_executes_hitl_reroute_and_returns_geo_part() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     tool_provider = TrackingDemoToolProvider()
     checkpointer = MemorySaver()
     runtime = GraphRuntime(
@@ -558,7 +558,7 @@ async def test_tracking_graph_demo_executes_hitl_reroute_and_returns_geo_part() 
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_executes_hitl_reschedule() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     tool_provider = TrackingDemoToolProvider()
     checkpointer = MemorySaver()
     runtime = GraphRuntime(
@@ -609,7 +609,7 @@ async def test_tracking_graph_demo_executes_hitl_reschedule() -> None:
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_remembers_selected_parcel_across_turns() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     tool_provider = MultiParcelTrackingDemoToolProvider()
     checkpointer = MemorySaver()
     runtime = GraphRuntime(
@@ -667,7 +667,7 @@ async def test_tracking_graph_demo_remembers_selected_parcel_across_turns() -> N
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_resume_survives_runtime_rebind() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     tool_provider = TrackingDemoToolProvider()
     checkpointer = MemorySaver()
     runtime = GraphRuntime(
@@ -717,7 +717,7 @@ async def test_tracking_graph_demo_resume_survives_runtime_rebind() -> None:
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_resume_survives_runtime_reconstruction() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     checkpointer = MemorySaver()
     first_runtime = GraphRuntime(
         definition=definition,
@@ -774,7 +774,7 @@ async def test_tracking_graph_demo_resume_survives_runtime_reconstruction() -> N
 async def test_tracking_graph_demo_resume_survives_sql_checkpointer_reconstruction(
     tmp_path,
 ) -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     sqlite_path = tmp_path / "tracking_graph_checkpoints.sqlite3"
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(sqlite_path))
@@ -837,7 +837,7 @@ async def test_tracking_graph_demo_resume_survives_sql_checkpointer_reconstructi
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_rejects_stale_checkpoint_replay() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     checkpointer = MemorySaver()
     runtime = GraphRuntime(
         definition=definition,
@@ -890,7 +890,7 @@ async def test_tracking_graph_demo_rejects_stale_checkpoint_replay() -> None:
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_accepts_natural_parcel_incident_request() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     tool_provider = TrackingDemoToolProvider()
     runtime = GraphRuntime(
         definition=definition,
@@ -917,7 +917,7 @@ async def test_tracking_graph_demo_accepts_natural_parcel_incident_request() -> 
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_rejects_non_postal_request() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     runtime = GraphRuntime(definition=definition, services=RuntimeServices())
     runtime.bind(_binding("tracking-demo-unsupported"))
     executor = await runtime.get_executor()
@@ -937,7 +937,7 @@ async def test_tracking_graph_demo_rejects_non_postal_request() -> None:
 
 @pytest.mark.asyncio
 async def test_tracking_graph_demo_accepts_json_string_runtime_tool_outputs() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     tool_provider = JsonStringTrackingDemoToolProvider()
     runtime = GraphRuntime(
         definition=definition,

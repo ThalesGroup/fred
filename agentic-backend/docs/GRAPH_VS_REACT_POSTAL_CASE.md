@@ -10,7 +10,7 @@ The real question is:
 
 - "for a customer-facing parcel operations role, what execution model best serves the business promise?"
 
-The concrete reference case is the v2 parcel demo agent in [tracking_graph_demo.py](/home/dimi/run/reference/fred/agentic-backend/agentic_backend/agents/v2/tracking_graph_demo.py).
+The concrete reference case is the v2 parcel demo agent in [postal_tracking.py](/home/dimi/run/reference/fred/agentic-backend/agentic_backend/agents/v2/demos/postal_tracking.py).
 
 ## 1. Start From The Business Role
 

@@ -153,7 +153,14 @@ class BaseAgent(BaseModel):
         description="Owning team id when this is a team-owned agent.",
     )
     enabled: bool = True
-    class_path: Optional[str] = None  # None → dynamic/UI agent
+    class_path: Optional[str] = None  # Legacy resolver key (v1 and compat path)
+    definition_ref: Optional[str] = Field(
+        default=None,
+        description=(
+            "Stable v2 definition identifier (preferred for v2 agents). "
+            "Example: 'v2.react.basic'."
+        ),
+    )
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
     metadata: Optional[Dict[str, Any]] = Field(
@@ -236,9 +243,12 @@ class AIConfig(BaseModel):
         50,
         description="Maximum size (in MB) for each attached file.",
     )
-    default_chat_model: ModelConfiguration = Field(
-        ...,
-        description="Default chat model configuration for all agents and services.",
+    default_chat_model: Optional[ModelConfiguration] = Field(
+        None,
+        description=(
+            "Default chat model configuration for all agents and services. "
+            "Required unless provided via models catalog override."
+        ),
     )
     default_language_model: Optional[ModelConfiguration] = Field(
         None,

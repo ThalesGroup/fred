@@ -2,12 +2,11 @@
 
 from agentic_backend.core.agents.agent_spec import MCPServerRef
 
-from ..profile_ids import CUSTODIAN_PROFILE_ID
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
 
 CUSTODIAN_PROFILE = ReActProfile(
-    profile_id=CUSTODIAN_PROFILE_ID,
+    profile_id="custodian",
     title="Custodian",
     description="Manage files and corpus operations with explicit human approval.",
     role="Data & Corpus Custodian",

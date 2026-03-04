@@ -2,12 +2,11 @@
 
 from agentic_backend.core.agents.agent_spec import MCPServerRef
 
-from ..profile_ids import SENTINEL_PROFILE_ID
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
 
 SENTINEL_PROFILE = ReActProfile(
-    profile_id=SENTINEL_PROFILE_ID,
+    profile_id="sentinel",
     title="Sentinel",
     description="Monitor platform health with OpenSearch and KPI MCP tools.",
     role="sentinel_expert",

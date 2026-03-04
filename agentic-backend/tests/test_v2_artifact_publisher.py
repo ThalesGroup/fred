@@ -7,15 +7,15 @@ import pytest
 from agentic_backend.common.kf_workspace_client import UserStorageUploadResult
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2 import adapters as v2_adapters
 from agentic_backend.core.agents.v2 import (
     ArtifactPublishRequest,
     ArtifactScope,
     BoundRuntimeContext,
-    FredArtifactPublisher,
     PortableContext,
     PortableEnvironment,
 )
+from agentic_backend.integrations.v2_runtime import adapters as v2_adapters
+from agentic_backend.integrations.v2_runtime.adapters import FredArtifactPublisher
 
 
 class FakeWorkspaceClient:

@@ -6,12 +6,11 @@ from agentic_backend.core.agents.v2.builtin_tools import (
 )
 from agentic_backend.core.agents.v2.models import ToolRefRequirement
 
-from ..profile_ids import LOG_GENIUS_PROFILE_ID
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
 
 LOG_GENIUS_PROFILE = ReActProfile(
-    profile_id=LOG_GENIUS_PROFILE_ID,
+    profile_id="log_genius",
     title="LogGenius",
     description="Analyze recent Agentic and Knowledge Flow logs for fast triage.",
     role="log_genius",

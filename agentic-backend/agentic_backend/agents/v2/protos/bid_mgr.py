@@ -76,16 +76,16 @@ class BidIntakeRoutingLexicon(FrozenModel):
 
 DEFAULT_ROUTING_LEXICON = BidIntakeRoutingLexicon.model_validate(
     load_agent_lexicon_json(
-        package="agentic_backend.agents.v2.bid_intake_graph",
+        package="agentic_backend.agents.v2.protos",
         file_name="bid_intake_routing_lexicon.json",
     )
 )
 DEFAULT_ROUTER_PROMPT = load_agent_prompt_markdown(
-    package="agentic_backend.agents.v2.bid_intake_graph",
+    package="agentic_backend.agents.v2.protos",
     file_name="bid_intake_router_prompt.md",
 )
 DEFAULT_ANALYSIS_PROMPT = load_agent_prompt_markdown(
-    package="agentic_backend.agents.v2.bid_intake_graph",
+    package="agentic_backend.agents.v2.protos",
     file_name="bid_intake_analysis_prompt.md",
 )
 
@@ -199,7 +199,7 @@ class BidIntakeGraphState(BaseModel):
     final_text: str | None = None
 
 
-class BidIntakeGraphV2Definition(GraphAgentDefinition):
+class Definition(GraphAgentDefinition):
     """
     Focused bid-intake workflow built with `GraphAgentDefinition`.
 

@@ -2,12 +2,11 @@
 
 from agentic_backend.core.agents.v2.models import ToolRefRequirement
 
-from ..profile_ids import GEO_DEMO_PROFILE_ID
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
 
 GEO_DEMO_PROFILE = ReActProfile(
-    profile_id=GEO_DEMO_PROFILE_ID,
+    profile_id="geo_demo",
     title="Geo Demo",
     description="Render lightweight maps from coordinates or well-known places for demos and MVPs.",
     role="geo_demo",

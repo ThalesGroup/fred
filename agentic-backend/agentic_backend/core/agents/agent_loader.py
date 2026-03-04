@@ -25,7 +25,7 @@ from agentic_backend.common.structures import (
 )
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
-    resolve_agent_class,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning
@@ -77,16 +77,19 @@ class AgentLoader:
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
-            if not agent_cfg.class_path:
+            if not agent_cfg.class_path and not agent_cfg.definition_ref:
                 logger.warning(
-                    "No class_path for static agent '%s' — skipping.",
+                    "No class_path/definition_ref for static agent '%s' — skipping.",
                     agent_cfg.id,
                 )
                 continue
             try:
-                resolved = resolve_agent_class(agent_cfg.class_path)
+                resolved = resolve_agent_reference(
+                    class_path=agent_cfg.class_path,
+                    definition_ref=agent_cfg.definition_ref,
+                )
                 if resolved.implementation_kind == AgentImplementationKind.FLOW:
-                    cls = self._import_agent_class(agent_cfg.class_path)
+                    cls = self._import_agent_class(resolved.class_path)
                     inst: AgentFlow = cls(agent_settings=agent_cfg)
                     entries.append(
                         LoadedAgentCatalogueEntry(
@@ -106,7 +109,12 @@ class AgentLoader:
                 )
                 derived = definition_to_agent_settings(
                     definition,
-                    class_path=agent_cfg.class_path,
+                    class_path=(
+                        None
+                        if resolved.definition_ref is not None
+                        else resolved.class_path
+                    ),
+                    definition_ref=resolved.definition_ref,
                     enabled=agent_cfg.enabled,
                 ).model_copy(
                     update={
@@ -115,6 +123,7 @@ class AgentLoader:
                         "team_id": agent_cfg.team_id,
                         "enabled": agent_cfg.enabled,
                         "metadata": agent_cfg.metadata,
+                        "definition_ref": resolved.definition_ref,
                         "chat_options": effective_settings.chat_options,
                     }
                 )
@@ -144,34 +153,45 @@ class AgentLoader:
         out: List[AgentFlow] = []
 
         for agent_settings in await self.store.load_all():
-            if not agent_settings.class_path:
+            if not agent_settings.class_path and not agent_settings.definition_ref:
                 logger.warning(
-                    "agent=%s No class_path found — deleting stale entry from store.",
+                    "agent=%s No class_path/definition_ref found — deleting stale entry from store.",
                     agent_settings.id,
                 )
                 try:
                     await self.store.delete(agent_settings.id)
                 except Exception:
                     logger.exception(
-                        "agent=%s Failed to delete stale entry without class_path",
+                        "agent=%s Failed to delete stale entry without class_path/definition_ref",
                         agent_settings.id,
                     )
                 continue
 
             try:
-                cls = self._import_agent_class(agent_settings.class_path)
+                resolved = resolve_agent_reference(
+                    class_path=agent_settings.class_path,
+                    definition_ref=agent_settings.definition_ref,
+                )
+                if resolved.implementation_kind != AgentImplementationKind.FLOW:
+                    logger.debug(
+                        "agent=%s persisted entry is v2 definition; AgentLoader.load_persisted() skips runtime instantiation.",
+                        agent_settings.id,
+                    )
+                    continue
+
+                cls = self._import_agent_class(resolved.class_path)
                 if not issubclass(cls, AgentFlow):
                     logger.error(
                         "agent=%s class=%s is not AgentFlow",
                         agent_settings.id,
-                        agent_settings.class_path,
+                        resolved.class_path,
                     )
                     continue
 
                 logger.debug(
                     "agent=%s class=%s loaded",
                     agent_settings.id,
-                    agent_settings.class_path,
+                    resolved.class_path,
                 )
                 inst: AgentFlow = cls(agent_settings=agent_settings)
                 out.append(inst)

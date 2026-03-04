@@ -68,71 +68,12 @@ ai:
   timeout:
     connect: 5 # Time to wait for a connection in seconds
     read: 15 # Time to wait for a response in seconds
-  default_chat_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
-    provider: "openai"
-    name: "gpt-4o"
-    settings:
-      temperature: 0.0
-      max_retries: 2
-      request_timeout: 30
+  # Model defaults are now loaded from config/models_catalog.yaml
+  # (or from FRED_MODELS_CATALOG_FILE / FRED_V2_MODELS_CATALOG_FILE).
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
-  agents:
-    - id: "SlideMaker"
-      name: "SlideMaker"
-      type: "agent"
-      class_path: "agentic_backend.academy.04_slide_maker.slide_maker.SlideMaker"
-      enabled: true
-    - id: "ArtifactReportDemoV2"
-      name: "Artifact Report Demo V2"
-      type: "agent"
-      class_path: "agentic_backend.agents.v2.artifact_report_demo.ArtifactReportDemoV2Definition"
-      enabled: true
-    - id: "Georges"
-      name: "Georges"
-      type: "agent"
-      class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-      enabled: true
-    - id: "Sage"
-      name: "Sage"
-      type: "agent"
-      class_path: "agentic_backend.agents.statistics.statistics_expert.Sage"
-      enabled: true
-
-mcp:
-  servers:
-    - name: "mcp-knowledge-flow-mcp-tabular"
-      transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-tabular"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
-    - name: "mcp-knowledge-flow-opensearch-ops"
-      transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-opensearch-ops"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
-    - name: "mcp-kubernetes-server"
-      transport: "streamable_http"
-      url: "http://localhost:8081/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
-    - name: "mcp-atlassian-jira-server"
-      transport: "streamable_http"
-      url: "http://localhost:8885/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
-    - name: "mcp-knowledge-flow-statistics"
-      transport: "streamable_http"
-      url: "http://localhost:8111/knowledge-flow/v1/mcp-statistics"
-      sse_read_timeout: 2000
-      auth_mode: "user_token"
-    - name: "minimal-mcp-service"
-      transport: "streamable_http"
-      url: "http://localhost:9797/mcp"
-      sse_read_timeout: 2000
-      auth_mode: "no_token"
+  # Agent declarations are loaded from config/agents_catalog.yaml
+  # (or from FRED_AGENTS_CATALOG_FILE).
 
 storage:
   postgres:

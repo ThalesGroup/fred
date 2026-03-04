@@ -24,7 +24,7 @@ This guide targets v2 agents running through:
 
 Primary reference example:
 
-- `agentic_backend/agents/v2/bid_intake_graph/agent.py`
+- `agentic_backend/agents/v2/protos/bid_mgr.py`
 - `agentic_backend/agents/v2/basic_react/agent.py`
 
 Quick runtime split (do this first):

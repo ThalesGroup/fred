@@ -23,12 +23,9 @@ from agentic_backend.core.agents.v2 import (
 from agentic_backend.core.agents.v2.prompt_resources import (
     load_packaged_markdown,
 )
-from .profiles import (
-    GENERIC_ASSISTANT_PROFILE_ID,
-    list_react_profiles,
-    profile_options_summary,
-)
 
+from .profile_registry import list_react_profiles, profile_options_summary
+from .profiles.generic_assistant import GENERIC_ASSISTANT_PROFILE
 
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
@@ -63,7 +60,7 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
                 f"{profile_options_summary()}"
             ),
             required=True,
-            default=GENERIC_ASSISTANT_PROFILE_ID,
+            default=GENERIC_ASSISTANT_PROFILE.profile_id,
             enum=[profile.profile_id for profile in list_react_profiles()],
             ui=UIHints(group="Profile"),
         ),
@@ -107,7 +104,7 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
     )
 
 
-class BasicReActV2Definition(ReActAgentDefinition):
+class BasicReActDefinition(ReActAgentDefinition):
     """
     Baseline definition for generic ReAct assistants.
 
@@ -128,7 +125,7 @@ class BasicReActV2Definition(ReActAgentDefinition):
     # Author/admin-owned: choose the business starting profile.
     # This does not create a new runtime. It selects a backend-defined recipe
     # that can prefill prompt, MCP defaults, and safety policy.
-    react_profile_id: str = GENERIC_ASSISTANT_PROFILE_ID
+    react_profile_id: str = GENERIC_ASSISTANT_PROFILE.profile_id
     # Author-owned: business instructions only.
     # Main business instruction for the agent.
     # A developer edits this when they want to change the answer style or core

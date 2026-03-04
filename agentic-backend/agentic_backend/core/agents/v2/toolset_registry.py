@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+
 from pydantic import BaseModel
 
 from agentic_backend.common.structures import AgentSettings

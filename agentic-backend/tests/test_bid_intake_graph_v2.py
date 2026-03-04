@@ -8,12 +8,11 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from agentic_backend.agents.v2 import BidIntakeGraphV2Definition
+from agentic_backend.agents.v2 import BidMgrDefinition
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.catalog import definition_to_agent_settings
 from agentic_backend.core.agents.v2 import (
-    ArtifactPublishRequest,
     ArtifactPublisherPort,
+    ArtifactPublishRequest,
     AwaitingHumanRuntimeEvent,
     BoundRuntimeContext,
     ChatModelFactoryPort,
@@ -30,6 +29,7 @@ from agentic_backend.core.agents.v2 import (
     ToolInvokerPort,
     inspect_agent,
 )
+from agentic_backend.core.agents.v2.catalog import definition_to_agent_settings
 from agentic_backend.core.agents.v2.runtime import FinalRuntimeEvent, RuntimeEventKind
 
 
@@ -115,7 +115,7 @@ def _binding(session_id: str) -> BoundRuntimeContext:
 
 @pytest.mark.asyncio
 async def test_bid_intake_graph_inspection_exposes_small_workflow_preview() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
 
     inspection = inspect_agent(definition)
 
@@ -129,7 +129,7 @@ async def test_bid_intake_graph_inspection_exposes_small_workflow_preview() -> N
 
 
 def test_bid_intake_graph_exposes_tunable_routing_lexicon_field() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
 
     routing_field = next(
         field for field in definition.fields if field.key == "routing_lexicon"
@@ -143,7 +143,7 @@ def test_bid_intake_graph_exposes_tunable_routing_lexicon_field() -> None:
 
 
 def test_bid_intake_graph_exposes_prompt_templates_as_prompt_fields() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
 
     router_prompt_field = next(
         field for field in definition.fields if field.key == "router_prompt_template"
@@ -167,7 +167,7 @@ def test_bid_intake_graph_exposes_prompt_templates_as_prompt_fields() -> None:
 
 
 def test_bid_intake_graph_exposes_retrieval_chat_options_by_default() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
 
     attach_files_field = next(
         field for field in definition.fields if field.key == "chat_options.attach_files"
@@ -189,7 +189,7 @@ def test_bid_intake_graph_exposes_retrieval_chat_options_by_default() -> None:
 
     settings = definition_to_agent_settings(
         definition,
-        class_path="agentic_backend.agents.v2.bid_intake_graph.BidIntakeGraphV2Definition",
+        class_path="agentic_backend.agents.v2.protos.bid_mgr.Definition",
     )
 
     assert settings.chat_options.attach_files is True
@@ -198,7 +198,7 @@ def test_bid_intake_graph_exposes_retrieval_chat_options_by_default() -> None:
 
 
 def test_bid_intake_graph_declares_native_corpus_search_tool() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
 
     assert len(definition.tool_requirements) == 1
     assert definition.tool_requirements[0].tool_ref == "knowledge.search"
@@ -208,7 +208,7 @@ def test_bid_intake_graph_declares_native_corpus_search_tool() -> None:
 async def test_bid_intake_graph_returns_single_pass_summary_when_brief_is_sufficient() -> (
     None
 ):
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
     model = FakeMessagesListChatModel(
         responses=[
             AIMessage(
@@ -304,7 +304,7 @@ async def test_bid_intake_graph_returns_single_pass_summary_when_brief_is_suffic
 async def test_bid_intake_graph_uses_native_corpus_search_when_tool_invoker_is_available() -> (
     None
 ):
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
     model = FakeMessagesListChatModel(
         responses=[
             AIMessage(
@@ -372,7 +372,7 @@ async def test_bid_intake_graph_uses_native_corpus_search_when_tool_invoker_is_a
 
 @pytest.mark.asyncio
 async def test_bid_intake_graph_requests_clarification_then_finalizes() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
     model = FakeMessagesListChatModel(
         responses=[
             AIMessage(
@@ -516,7 +516,7 @@ async def test_bid_intake_graph_requests_clarification_then_finalizes() -> None:
 async def test_bid_intake_graph_fallback_router_uses_centralized_lexicon_without_model() -> (
     None
 ):
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
     runtime = GraphRuntime(definition=definition, services=RuntimeServices())
     runtime.bind(_binding("bid-intake-fallback-lexicon"))
     executor = await runtime.get_executor()
@@ -544,7 +544,7 @@ async def test_bid_intake_graph_fallback_router_uses_centralized_lexicon_without
 async def test_bid_intake_graph_routes_semantic_bid_request_without_keyword_fallback() -> (
     None
 ):
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
     model = FakeMessagesListChatModel(
         responses=[
             AIMessage(
@@ -607,7 +607,7 @@ async def test_bid_intake_graph_routes_semantic_bid_request_without_keyword_fall
 
 @pytest.mark.asyncio
 async def test_bid_intake_graph_rejects_unrelated_request() -> None:
-    definition = BidIntakeGraphV2Definition()
+    definition = BidMgrDefinition()
     runtime = GraphRuntime(definition=definition, services=RuntimeServices())
     runtime.bind(_binding("bid-intake-unsupported"))
     executor = await runtime.get_executor()

@@ -38,7 +38,8 @@ from fred_core import (
     authorize,
 )
 
-from agentic_backend.agents.v2 import BasicReActV2Definition
+from agentic_backend.agents.v2 import BasicReActDefinition
+from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
 from agentic_backend.application_context import get_agent_store, get_rebac_engine
 from agentic_backend.common.structures import (
     Agent,
@@ -48,6 +49,7 @@ from agentic_backend.common.structures import (
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
     resolve_agent_class,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_spec import AgentTuning
@@ -62,6 +64,10 @@ from agentic_backend.core.agents.v2.catalog import (
 from agentic_backend.core.agents.v2.react_profiles import get_react_profile
 
 logger = logging.getLogger(__name__)
+
+LEGACY_V1_REACT_CLASS_PATH = (
+    "agentic_backend.core.agents.basic_react_agent.BasicReActAgent"
+)
 
 
 class MissingTeamIdError(Exception):
@@ -118,18 +124,24 @@ class AgentService:
         - add missing tuning fields from class defaults (by key)
         - recompute chat_options from the effective tuning
         """
-        if not agent_settings.class_path:
+        if not agent_settings.class_path and not agent_settings.definition_ref:
             return agent_settings
 
         try:
-            agent_cls = _validate_class_path(agent_settings.class_path)
-        except InvalidClassPathError:
-            return agent_settings
-
-        try:
-            resolved = resolve_agent_class(agent_settings.class_path)
+            resolved = resolve_agent_reference(
+                class_path=agent_settings.class_path,
+                definition_ref=agent_settings.definition_ref,
+            )
         except Exception:
             return agent_settings
+
+        if (
+            agent_settings.definition_ref
+            and agent_settings.class_path != resolved.class_path
+        ):
+            agent_settings = agent_settings.model_copy(update={"class_path": None})
+
+        agent_cls = resolved.cls
 
         if resolved.implementation_kind == AgentImplementationKind.FLOW:
             class_tuning = getattr(agent_cls, "tuning", None)
@@ -295,6 +307,7 @@ class AgentService:
         a2a_base_url: Optional[str] = None,
         a2a_token: Optional[str] = None,
         class_path: Optional[str] = None,
+        definition_ref: Optional[str] = None,
         profile_id: Optional[str] = None,
     ):
         """
@@ -306,10 +319,19 @@ class AgentService:
                 user, TeamPermission.CAN_UPDATE_AGENTS, team_id
             )
 
-        # If class_path is provided, check permission first (avoid leaking class info), then validate
+        # If class_path/definition_ref is provided, validate and resolve target class
         resolved_agent_cls: type[object] | None = None
-        basic_react_class_path = _class_path(BasicReActV2Definition)
+        resolved_definition_ref: str | None = None
+        resolved_class_path: str | None = None
+        basic_react_class_path = _class_path(BasicReActDefinition)
+        basic_react_definition_ref = BASIC_REACT_DEFINITION_REF
         normalized_profile_id = profile_id.strip() if profile_id else None
+        normalized_definition_ref = (
+            definition_ref.strip() if isinstance(definition_ref, str) else None
+        )
+        normalized_class_path = (
+            class_path.strip() if isinstance(class_path, str) else None
+        )
         if normalized_profile_id:
             try:
                 get_react_profile(normalized_profile_id)
@@ -317,33 +339,70 @@ class AgentService:
                 raise InvalidClassPathError(str(exc)) from exc
         if normalized_profile_id and agent_type == "a2a_proxy":
             raise InvalidClassPathError("profile_id cannot be set for a2a_proxy agents")
-        if class_path:
+        if normalized_class_path and normalized_definition_ref:
+            raise InvalidClassPathError(
+                "Provide either class_path or definition_ref, not both."
+            )
+
+        if normalized_definition_ref:
+            if agent_type == "a2a_proxy":
+                raise InvalidClassPathError(
+                    "definition_ref cannot be set for a2a_proxy agents"
+                )
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=None,
+                    definition_ref=normalized_definition_ref,
+                )
+            except Exception as exc:
+                raise InvalidClassPathError(str(exc)) from exc
+            resolved_agent_cls = resolved.cls
+            resolved_definition_ref = resolved.definition_ref
+            resolved_class_path = resolved.class_path
+            if (
+                normalized_profile_id
+                and resolved_definition_ref != basic_react_definition_ref
+            ):
+                raise InvalidClassPathError(
+                    "profile_id is only supported for v2.react.basic."
+                )
+        elif normalized_class_path:
             if agent_type == "a2a_proxy":
                 raise InvalidClassPathError(
                     "class_path cannot be set for a2a_proxy agents"
                 )
-            await self.rebac.check_user_permission_or_raise(
-                user,
-                OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
-                ORGANIZATION_ID,
-            )
-            resolved_agent_cls = _validate_class_path(class_path)
-            if normalized_profile_id and class_path != basic_react_class_path:
+            is_safe_builtin = normalized_class_path in {
+                basic_react_class_path,
+                LEGACY_V1_REACT_CLASS_PATH,
+            }
+            if not is_safe_builtin:
+                await self.rebac.check_user_permission_or_raise(
+                    user,
+                    OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+                    ORGANIZATION_ID,
+                )
+            resolved_agent_cls = _validate_class_path(normalized_class_path)
+            resolved_class_path = normalized_class_path
+            if (
+                normalized_profile_id
+                and normalized_class_path != basic_react_class_path
+            ):
                 raise InvalidClassPathError(
-                    "profile_id is only supported for BasicReActV2Definition"
+                    "profile_id is only supported for BasicReActDefinition"
                 )
 
         agent_id = str(uuid4())
 
         if resolved_agent_cls is None:
-            base_definition = instantiate_definition_class(BasicReActV2Definition)
+            base_definition = instantiate_definition_class(BasicReActDefinition)
             effective_definition = apply_react_profile_to_definition(
                 base_definition,
                 normalized_profile_id,
             )
             base_settings = definition_to_agent_settings(
                 base_definition,
-                class_path=basic_react_class_path,
+                class_path=None,
+                definition_ref=basic_react_definition_ref,
                 enabled=True,
             )
             default_settings = apply_profile_defaults_to_settings(
@@ -355,14 +414,16 @@ class AgentService:
                 description=effective_definition.description,
             )
             default_chat_options = default_settings.chat_options
-            default_class_path = basic_react_class_path
+            default_class_path = None
+            default_definition_ref = basic_react_definition_ref
         else:
-            assert class_path is not None
-            resolved = resolve_agent_class(class_path)
+            assert resolved_class_path is not None
+            resolved = resolve_agent_class(resolved_class_path)
             if resolved.implementation_kind == AgentImplementationKind.FLOW:
                 default_tuning = resolved.cls.tuning
                 default_chat_options = AgentChatOptions()
-                default_class_path = class_path
+                default_class_path = resolved_class_path
+                default_definition_ref = None
             else:
                 base_definition = instantiate_definition_class(resolved.cls)
                 effective_definition = (
@@ -370,12 +431,13 @@ class AgentService:
                         base_definition,
                         normalized_profile_id,
                     )
-                    if class_path == basic_react_class_path
+                    if resolved_class_path == basic_react_class_path
                     else base_definition
                 )
                 base_settings = definition_to_agent_settings(
                     base_definition,
-                    class_path=class_path,
+                    class_path=None if resolved_definition_ref else resolved_class_path,
+                    definition_ref=resolved_definition_ref,
                     enabled=True,
                 )
                 default_settings = apply_profile_defaults_to_settings(
@@ -386,12 +448,16 @@ class AgentService:
                     effective_definition
                 )
                 default_chat_options = default_settings.chat_options
-                default_class_path = class_path
+                default_class_path = (
+                    None if resolved_definition_ref else resolved_class_path
+                )
+                default_definition_ref = resolved_definition_ref
         agent_settings = Agent(
             id=agent_id,
             name=name,
             team_id=team_id,
             class_path=default_class_path,
+            definition_ref=default_definition_ref,
             enabled=True,
             tuning=default_tuning,
             chat_options=default_chat_options,
@@ -420,6 +486,26 @@ class AgentService:
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
+        if agent_settings.class_path and agent_settings.definition_ref:
+            raise InvalidClassPathError(
+                "Provide either class_path or definition_ref, not both."
+            )
+
+        if agent_settings.definition_ref:
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=None,
+                    definition_ref=agent_settings.definition_ref,
+                )
+            except Exception as exc:
+                raise InvalidClassPathError(str(exc)) from exc
+            agent_settings = agent_settings.model_copy(
+                update={
+                    "class_path": None,
+                    "definition_ref": resolved.definition_ref,
+                }
+            )
+
         current = await self.agent_manager.get_agent_settings(agent_settings.id)
         if current is not None:
             current = await self._enrich_settings_with_authoritative_team_id(current)

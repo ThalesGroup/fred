@@ -31,7 +31,7 @@ from agentic_backend.common.structures import (
 )
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
-    resolve_agent_class,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
@@ -180,6 +180,7 @@ class CreateAgentRequest(BaseModel):
     a2a_base_url: str | None = None
     a2a_token: str | None = None
     class_path: str | None = None
+    definition_ref: str | None = None
     profile_id: str | None = None
 
 
@@ -226,6 +227,7 @@ async def create_agent(
         a2a_base_url=request.a2a_base_url,
         a2a_token=request.a2a_token,
         class_path=request.class_path,
+        definition_ref=request.definition_ref,
         profile_id=request.profile_id,
     )
 
@@ -265,11 +267,11 @@ async def inspect_v2_agent(
     if not settings:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if not settings.class_path:
-        raise HTTPException(status_code=400, detail="Agent has no class path")
-
     try:
-        resolved = resolve_agent_class(settings.class_path)
+        resolved = resolve_agent_reference(
+            class_path=settings.class_path,
+            definition_ref=settings.definition_ref,
+        )
         if resolved.implementation_kind != AgentImplementationKind.V2_DEFINITION:
             raise HTTPException(
                 status_code=409,
@@ -285,6 +287,8 @@ async def inspect_v2_agent(
     except Exception as e:
         if isinstance(e, HTTPException):
             raise
+        if isinstance(e, (ValueError, TypeError)):
+            raise HTTPException(status_code=400, detail=str(e)) from e
         logger.error(f"Failed to inspect agent {agent_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to inspect agent") from e
 
@@ -383,8 +387,16 @@ async def runtime_source_by_object(
     if obj is None and key.startswith("agent."):
         agent_id = key.split(".", 1)[1]
         agent_settings = await agent_manager.get_agent_settings(agent_id)
-        if agent_settings and agent_settings.class_path:
-            obj = _import_class(agent_settings.class_path)
+        if agent_settings:
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=agent_settings.class_path,
+                    definition_ref=agent_settings.definition_ref,
+                )
+            except Exception:
+                resolved = None
+            if resolved is not None:
+                obj = _import_class(resolved.class_path)
     if obj is None:
         raise HTTPException(status_code=404, detail="Unknown registry key")
     blob = _sourcelines(obj)

@@ -44,6 +44,8 @@ as active design/contract material rather than frozen truth.
   - active contract for graph responsibilities and state semantics
 - [GENAI_SDK_SPEC.md](/home/dimi/run/reference/fred/agentic-backend/docs/GENAI_SDK_SPEC.md)
   - architectural reading of how Fred could align with a broader SDK substrate
+- [V2_MODEL_PROVIDER_PRIMER.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_MODEL_PROVIDER_PRIMER.md)
+  - short meeting-ready primer for model routing/provider pattern and profile-level tuning
 
 ## 3. Deliberately Exploratory / Needs Continued Review
 

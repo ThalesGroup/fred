@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from fred_core import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -47,6 +47,12 @@ try:  # pragma: no cover - optional middleware import for compatibility
 except Exception:  # pragma: no cover - compatibility fallback
     _LangchainAgentMiddleware = None
 
+from agentic_backend.core.tools.tool_loop import build_tool_loop
+
+from .builtin_tools import (
+    BuiltinToolBackend,
+    get_builtin_tool_spec,
+)
 from .context import (
     ArtifactPublishRequest,
     BoundRuntimeContext,
@@ -58,13 +64,8 @@ from .context import (
     ToolInvocationResult,
     UiPart,
 )
-from agentic_backend.core.tools.tool_loop import build_tool_loop
-from .builtin_tools import (
-    BuiltinToolBackend,
-    get_builtin_tool_spec,
-)
+from .model_routing import RoutedChatModelFactory
 from .models import ReActAgentDefinition, ToolApprovalPolicy, ToolRefRequirement
-from .toolset_registry import get_registered_tool_spec
 from .runtime import (
     AgentRuntime,
     AssistantDeltaRuntimeEvent,
@@ -77,11 +78,12 @@ from .runtime import (
     RuntimeEvent,
     RuntimeServices,
     SpanPort,
-    TracerPort,
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
+    TracerPort,
 )
 from .tool_approval import requires_tool_approval
+from .toolset_registry import get_registered_tool_spec
 
 
 class FrozenModel(BaseModel):
@@ -977,6 +979,8 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             approval_policy=policy.tool_approval,
             checkpointer=self.services.checkpointer,
             tracer=self.services.tracer,
+            chat_model_factory=self.services.chat_model_factory,
+            definition=self.definition,
         )
         return _TransportBackedReActExecutor(
             compiled_agent=compiled_agent,
@@ -1492,7 +1496,8 @@ def _build_runtime_tool_prompt_suffix(bound_tools: Sequence[_BoundTool]) -> str:
 
 
 _TRACE_MODEL_SPAN_NAME = "v2.react.model"
-_TRACE_MODEL_OPERATION = "model_call"
+_REACT_MODEL_OPERATION_ROUTING = "routing"
+_REACT_MODEL_OPERATION_PLANNING = "planning"
 
 
 def _extract_model_name_from_message(message: BaseMessage | object) -> str | None:
@@ -1537,9 +1542,128 @@ def _extract_model_name_from_model_response(response: object) -> str | None:
     return None
 
 
+def _infer_react_model_operation_from_messages(
+    messages: Sequence[object],
+) -> str:
+    """
+    Why this function exists:
+    - infer ReAct phase for model routing from current message history
+
+    Who calls it:
+    - `_ReActDynamicModelRoutingMiddleware`
+    - HITL `model_resolver` callback (`_model_for_state`)
+    - tracing middleware (operation attribute)
+
+    When it is called:
+    - before each model call that uses dynamic routing/tracing metadata
+
+    Expected inputs / invariants:
+    - `messages` is a chronological conversation list (oldest -> newest)
+
+    Return / side effects:
+    - returns `"planning"` when the latest relevant message is a `ToolMessage`
+    - returns `"routing"` when the latest relevant message is a `HumanMessage`
+    - defaults to `"routing"` when nothing is inferable
+    - no side effects
+
+    Fallback / errors:
+    - never raises (best-effort inference)
+
+    Observability signals to look at:
+    - value is propagated into model routing (`operation`) and tracing span
+      attribute `operation` (`v2.react.model`)
+    """
+    for message in reversed(messages):
+        if isinstance(message, ToolMessage):
+            return _REACT_MODEL_OPERATION_PLANNING
+        if isinstance(message, HumanMessage):
+            return _REACT_MODEL_OPERATION_ROUTING
+    return _REACT_MODEL_OPERATION_ROUTING
+
+
+_ReActDynamicModelRoutingMiddleware: type[Any] | None = None
+_ReActModelTracingMiddleware: type[Any] | None = None
+
 if _LangchainAgentMiddleware is not None:  # pragma: no branch
 
-    class _ReActModelTracingMiddleware(_LangchainAgentMiddleware):  # type: ignore[misc]
+    class _ReActDynamicModelRoutingMiddlewareImpl(_LangchainAgentMiddleware):  # type: ignore[misc]
+        """
+        Why this class exists:
+        - apply model-routing policy at each ReAct model call without changing
+          agent definition code
+
+        Who instantiates it:
+        - `_react_model_middlewares(...)` when:
+          - LangChain middleware API is available
+          - chat factory is `RoutedChatModelFactory`
+
+        When it is executed:
+        - on every model call passing through LangChain agent middleware
+          (`wrap_model_call` / `awrap_model_call`)
+
+        Expected inputs / invariants:
+        - request object provides `messages` and `override(model=...)`
+        - routed factory can resolve `purpose="chat"` with operation
+          (`routing` or `planning`)
+
+        Return / side effects:
+        - returns underlying model handler response unchanged
+        - side effect: swaps request model dynamically before handler call
+        - caches resolved models per operation in `_models_by_operation`
+          (avoids rebuilding model object repeatedly in same runtime)
+
+        Fallback / errors:
+        - if request messages are malformed, falls back to `routing` operation
+        - routing/provider errors propagate
+
+        Observability signals to look at:
+        - routing decision logs from `RoutedChatModelFactory.build_for_chat`
+          with prefix `[V2][MODEL_ROUTING]`
+        """
+
+        def __init__(
+            self,
+            *,
+            routed_factory: RoutedChatModelFactory,
+            definition: ReActAgentDefinition,
+            binding: BoundRuntimeContext,
+        ) -> None:
+            super().__init__()
+            self._routed_factory = routed_factory
+            self._definition = definition
+            self._binding = binding
+            self._models_by_operation: dict[str, BaseChatModel] = {}
+
+        def _operation_from_request(self, request: object) -> str:
+            raw_messages = getattr(request, "messages", [])
+            if not isinstance(raw_messages, list):
+                return _REACT_MODEL_OPERATION_ROUTING
+            return _infer_react_model_operation_from_messages(raw_messages)
+
+        def _resolved_model(self, *, operation: str) -> BaseChatModel:
+            cached = self._models_by_operation.get(operation)
+            if cached is not None:
+                return cached
+            model, _ = self._routed_factory.build_for_chat(
+                definition=self._definition,
+                binding=self._binding,
+                purpose="chat",
+                operation=operation,
+            )
+            self._models_by_operation[operation] = model
+            return model
+
+        def wrap_model_call(self, request, handler):  # type: ignore[override]
+            operation = self._operation_from_request(request)
+            request = request.override(model=self._resolved_model(operation=operation))
+            return handler(request)
+
+        async def awrap_model_call(self, request, handler):  # type: ignore[override]
+            operation = self._operation_from_request(request)
+            request = request.override(model=self._resolved_model(operation=operation))
+            return await handler(request)
+
+    class _ReActModelTracingMiddlewareImpl(_LangchainAgentMiddleware):  # type: ignore[misc]
         """
         Runtime middleware that traces each ReAct model call as a child span.
 
@@ -1557,7 +1681,13 @@ if _LangchainAgentMiddleware is not None:  # pragma: no branch
         def _start_span(self, request: object):
             if self._tracer is None:
                 return None
-            attributes: dict[str, object] = {"operation": _TRACE_MODEL_OPERATION}
+            request_messages = getattr(request, "messages", [])
+            operation = (
+                _infer_react_model_operation_from_messages(request_messages)
+                if isinstance(request_messages, list)
+                else _REACT_MODEL_OPERATION_ROUTING
+            )
+            attributes: dict[str, object] = {"operation": operation}
             request_model = getattr(request, "model", None)
             request_model_name = _extract_model_name_from_object(request_model)
             if request_model_name is not None:
@@ -1606,16 +1736,61 @@ if _LangchainAgentMiddleware is not None:  # pragma: no branch
                 if span is not None:
                     cast(SpanPort, span).end()
 
-else:
-    _ReActModelTracingMiddleware = None
+    _ReActDynamicModelRoutingMiddleware = _ReActDynamicModelRoutingMiddlewareImpl
+    _ReActModelTracingMiddleware = _ReActModelTracingMiddlewareImpl
 
 
-def _react_model_tracing_middlewares(
-    *, tracer: TracerPort | None, binding: BoundRuntimeContext
+def _react_model_middlewares(
+    *,
+    tracer: TracerPort | None,
+    binding: BoundRuntimeContext,
+    chat_model_factory: object | None,
+    definition: ReActAgentDefinition,
 ) -> Sequence[object]:
-    if tracer is None or _ReActModelTracingMiddleware is None:
-        return ()
-    return (_ReActModelTracingMiddleware(tracer=tracer, binding=binding),)
+    """
+    Build middleware stack for ReAct model calls.
+
+    Why this exists:
+    - keep middleware activation rules centralized and explicit
+
+    Who calls it:
+    - `_create_compiled_react_agent(...)` in LangChain `create_agent` path
+
+    When it is called:
+    - once when compiled agent is created
+
+    Expected inputs / invariants:
+    - `chat_model_factory` may or may not be routed
+    - tracing is optional
+
+    Return / side effects:
+    - returns immutable tuple of middleware instances (possibly empty)
+    - no side effects
+
+    Fallback / errors:
+    - no dynamic routing middleware when LangChain middleware API is unavailable
+      or factory is not routed
+    - tracing middleware omitted when tracer is absent
+
+    Observability signals to look at:
+    - when routing middleware is active, model selection logs appear with
+      `[V2][MODEL_ROUTING]`
+    - when tracing middleware is active, child span `v2.react.model` is emitted
+    """
+    middleware: list[object] = []
+    if _ReActDynamicModelRoutingMiddleware is not None and isinstance(
+        chat_model_factory, RoutedChatModelFactory
+    ):
+        middleware.append(
+            _ReActDynamicModelRoutingMiddleware(
+                routed_factory=chat_model_factory,
+                definition=definition,
+                binding=binding,
+            )
+        )
+    if tracer is not None and _ReActModelTracingMiddleware is not None:
+        middleware.append(_ReActModelTracingMiddleware(tracer=tracer, binding=binding))
+    return tuple(middleware)
 
 
 def _create_compiled_react_agent(
@@ -1627,12 +1802,97 @@ def _create_compiled_react_agent(
     approval_policy: ToolApprovalPolicy,
     checkpointer: Checkpointer,
     tracer: TracerPort | None,
+    chat_model_factory: object | None,
+    definition: ReActAgentDefinition,
 ) -> _CompiledReActAgent:
+    """
+    Create the compiled ReAct agent implementation used at runtime.
+
+    Why this exists:
+    - isolate runtime construction differences between:
+      - HITL tool-loop path
+      - plain ReAct path (LangGraph/LangChain agent factory)
+
+    Who calls it:
+    - `ReActRuntime.build_executor(...)` during runtime build
+
+    When it is called:
+    - once per fresh runtime instance
+
+    Expected inputs / invariants:
+    - `model` is a base chat model already selected by runtime factory
+    - `tools` are validated and ready to bind
+    - `checkpointer` is available for resumability
+
+    Return / side effects:
+    - returns one compiled agent implementing `_CompiledReActAgent`
+    - no immediate side effects beyond graph/agent object construction
+
+    Fallback / errors:
+    - HITL enabled -> force `build_tool_loop` path
+    - HITL disabled and LangGraph helper available -> use it
+    - else fallback to LangChain `create_agent`
+    - construction errors propagate
+
+    Observability signals to look at:
+    - dynamic routing path: `[V2][MODEL_ROUTING]` logs
+    - tracing middleware path: `v2.react.model` spans
+    """
     if approval_policy.enabled:
-        bound_model = model.bind_tools(tools)
+        bound_models_by_operation: dict[str, object] = {}
 
         def _system_builder(_: object) -> str:
             return system_prompt
+
+        def _model_for_state(state: object) -> object:
+            """
+            HITL model resolver used by `build_tool_loop`.
+
+            Why this exists:
+            - apply the same phase-aware routing in HITL flow as in middleware flow
+
+            Who calls it:
+            - `build_tool_loop` before each model step
+
+            When it is called:
+            - each model step in HITL graph execution
+
+            Expected inputs / invariants:
+            - `state` may contain `messages`; if absent/malformed, routing phase
+              defaults to `routing`
+
+            Return / side effects:
+            - returns a tool-bound model object for current operation
+            - caches bound model per operation (`routing` / `planning`)
+
+            Fallback / errors:
+            - if chat factory is not routed, falls back to base `model.bind_tools`
+            - routing/provider errors propagate
+
+            Observability signals to look at:
+            - routed selections are logged by `RoutedChatModelFactory.build_for_chat`
+              (`[V2][MODEL_ROUTING] ... operation=...`)
+            """
+            if not isinstance(chat_model_factory, RoutedChatModelFactory):
+                return model.bind_tools(tools)
+            messages = state.get("messages", []) if isinstance(state, dict) else []
+            operation = (
+                _infer_react_model_operation_from_messages(messages)
+                if isinstance(messages, list)
+                else _REACT_MODEL_OPERATION_ROUTING
+            )
+            cached = bound_models_by_operation.get(operation)
+            if cached is not None:
+                return cached
+            resolved_model, _ = chat_model_factory.build_for_chat(
+                definition=definition,
+                binding=binding,
+                purpose="chat",
+                operation=operation,
+            )
+            bound = resolved_model.bind_tools(tools)
+            bound_models_by_operation[operation] = bound
+            return bound
 
         def _requires_human_approval(tool_name: str) -> bool:
             return requires_tool_approval(
@@ -1655,9 +1915,10 @@ def _create_compiled_react_agent(
             return {}
 
         graph = build_tool_loop(
-            model=bound_model,
+            model=model.bind_tools(tools),
             tools=list(tools),
             system_builder=_system_builder,
+            model_resolver=_model_for_state,
             requires_hitl=_requires_human_approval,
             hitl_callback=_hitl_callback,
         )
@@ -1682,9 +1943,14 @@ def _create_compiled_react_agent(
             model=model,
             tools=tools,
             system_prompt=system_prompt,
-            middleware=_react_model_tracing_middlewares(
-                tracer=tracer,
-                binding=binding,
+            middleware=cast(
+                Sequence[Any],
+                _react_model_middlewares(
+                    tracer=tracer,
+                    binding=binding,
+                    chat_model_factory=chat_model_factory,
+                    definition=definition,
+                ),
             ),
             checkpointer=checkpointer,
         ),

@@ -23,11 +23,11 @@ from typing import Protocol, cast
 
 from fred_core import VectorSearchHit
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.common.tool_node_utils import normalize_mcp_content

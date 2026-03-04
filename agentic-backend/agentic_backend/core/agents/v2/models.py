@@ -19,13 +19,14 @@ inspect safely before anything is executed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import Enum
 from typing import Annotated, Literal
-from collections.abc import Mapping
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from agentic_backend.core.agents.agent_spec import FieldSpec, MCPServerRef
+
 from .context import BoundRuntimeContext
 
 

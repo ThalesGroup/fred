@@ -19,6 +19,7 @@ Current scope:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -27,9 +28,9 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import inspect
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 
+import httpx
 from fred_core import (
     LogFilter,
     LogQuery,
@@ -38,9 +39,8 @@ from fred_core import (
     get_keycloak_client_id,
     get_keycloak_url,
 )
-import httpx
-from langfuse import Langfuse
 from langchain_core.tools import BaseTool
+from langfuse import Langfuse
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
 from agentic_backend.common.kf_logs_client import KfLogsClient
@@ -62,7 +62,13 @@ from agentic_backend.core.agents.runtime_context import (
 )
 from agentic_backend.core.chatbot.chat_schema import GeoPart
 
-from .context import (
+from agentic_backend.core.agents.v2.builtin_tools import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    TOOL_REF_KNOWLEDGE_SEARCH,
+    TOOL_REF_LOGS_QUERY,
+    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+)
+from agentic_backend.core.agents.v2.context import (
     ArtifactPublishRequest,
     ArtifactScope,
     BoundRuntimeContext,
@@ -77,20 +83,14 @@ from .context import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
-from .builtin_tools import (
-    TOOL_REF_GEO_RENDER_POINTS,
-    TOOL_REF_KNOWLEDGE_SEARCH,
-    TOOL_REF_LOGS_QUERY,
-    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
-)
-from .runtime import (
+from agentic_backend.core.agents.v2.runtime import (
     ArtifactPublisherPort,
     ChatModelFactoryPort,
     ResourceReaderPort,
     SpanPort,
-    TracerPort,
     ToolInvokerPort,
     ToolProviderPort,
+    TracerPort,
 )
 
 logger = logging.getLogger(__name__)

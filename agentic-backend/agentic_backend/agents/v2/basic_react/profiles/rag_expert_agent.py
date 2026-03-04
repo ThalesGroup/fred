@@ -15,16 +15,15 @@ from agentic_backend.core.agents.v2.models import (
     ToolRefRequirement,
 )
 
-from ..agent import BasicReActV2Definition
+from ..agent import BasicReActDefinition
 from .rag_expert import RAG_EXPERT_PROFILE
-from ..profile_ids import RAG_EXPERT_PROFILE_ID
 
 
-class RagExpertV2Definition(BasicReActV2Definition):
+class RagExpertV2Definition(BasicReActDefinition):
     """Document-grounded ReAct assistant as a Basic ReAct profile preset."""
 
     agent_id: str = "rag.expert.v2"
-    react_profile_id: str = RAG_EXPERT_PROFILE_ID
+    react_profile_id: str = RAG_EXPERT_PROFILE.profile_id
     role: str = RAG_EXPERT_PROFILE.role
     description: str = RAG_EXPERT_PROFILE.agent_description
     tags: tuple[str, ...] = RAG_EXPERT_PROFILE.tags
@@ -33,10 +32,10 @@ class RagExpertV2Definition(BasicReActV2Definition):
         min_length=1,
     )
     fields: tuple[FieldSpec, ...] = tuple(
-        field.model_copy(update={"default": RAG_EXPERT_PROFILE_ID})
+        field.model_copy(update={"default": RAG_EXPERT_PROFILE.profile_id})
         if field.key == "react_profile_id"
         else field.model_copy(deep=True)
-        for field in BasicReActV2Definition().fields
+        for field in BasicReActDefinition().fields
     )
     tool_requirements: tuple[ToolRefRequirement, ...] = (
         RAG_EXPERT_PROFILE.tool_requirements

@@ -1,11 +1,10 @@
 """Generic assistant starting profile."""
 
-from ..profile_ids import GENERIC_ASSISTANT_PROFILE_ID
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
 
 GENERIC_ASSISTANT_PROFILE = ReActProfile(
-    profile_id=GENERIC_ASSISTANT_PROFILE_ID,
+    profile_id="generic_assistant",
     title="Generic Assistant",
     description="A general-purpose assistant that can later be equipped with tools.",
     role="General assistant with optional tools",

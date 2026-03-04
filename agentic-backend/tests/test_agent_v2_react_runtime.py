@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
-from fred_core import PostgresStoreConfig
+from fred_core import ModelConfiguration, PostgresStoreConfig, VectorSearchHit
 from fred_core.sql import create_async_engine_from_config
-from fred_core import VectorSearchHit
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolMessage
@@ -13,12 +12,11 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel
 
-from agentic_backend.agents.v2 import BasicReActV2Definition, RagExpertV2Definition
+from agentic_backend.agents.v2 import BasicReActDefinition, RagExpertV2Definition
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.chatbot.chat_schema import GeoPart, LinkKind, LinkPart
 from agentic_backend.core.agents.v2 import (
-    ArtifactPublishRequest,
     ArtifactPublisherPort,
+    ArtifactPublishRequest,
     AwaitingHumanRuntimeEvent,
     BoundRuntimeContext,
     ChatModelFactoryPort,
@@ -40,6 +38,16 @@ from agentic_backend.core.agents.v2 import (
     ToolProviderPort,
     inspect_agent,
 )
+from agentic_backend.core.agents.v2 import react_runtime as react_runtime_module
+from agentic_backend.core.agents.v2.model_routing import (
+    ModelCapability,
+    ModelProfile,
+    ModelRouteMatch,
+    ModelRouteRule,
+    ModelRoutingPolicy,
+    ModelRoutingResolver,
+    RoutedChatModelFactory,
+)
 from agentic_backend.core.agents.v2.models import ToolRefRequirement
 from agentic_backend.core.agents.v2.react_runtime import (
     ReActInput,
@@ -47,8 +55,8 @@ from agentic_backend.core.agents.v2.react_runtime import (
     ReActMessageRole,
     ReActRuntime,
     ReActToolCall,
-    _to_runnable_config,
     _to_langchain_message,
+    _to_runnable_config,
 )
 from agentic_backend.core.agents.v2.runtime import (
     FinalRuntimeEvent,
@@ -56,6 +64,7 @@ from agentic_backend.core.agents.v2.runtime import (
     TracerPort,
 )
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
+from agentic_backend.core.chatbot.chat_schema import GeoPart, LinkKind, LinkPart
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
@@ -79,6 +88,21 @@ class StaticChatModelFactory(ChatModelFactoryPort):
     def build(self, definition, binding: BoundRuntimeContext):  # type: ignore[override]
         self.calls.append((definition.agent_id, binding.runtime_context.session_id))
         return self.model
+
+
+class RecordingRoutingModelProvider:
+    def __init__(self, models_by_name: dict[str, ToolFriendlyFakeChatModel]) -> None:
+        self._models_by_name = models_by_name
+        self.calls: list[tuple[str, str]] = []
+
+    def build_model(  # type: ignore[override]
+        self,
+        model_config: ModelConfiguration,
+        *,
+        capability: ModelCapability,
+    ) -> object:
+        self.calls.append((capability.value, model_config.name))
+        return self._models_by_name[model_config.name]
 
 
 class RecordingToolInvoker(ToolInvokerPort):
@@ -305,7 +329,7 @@ def test_to_runnable_config_preserves_callbacks_and_configurable_values() -> Non
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_invokes_without_tools() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
     model = ToolFriendlyFakeChatModel(
         responses=[AIMessage(content="Hello from the v2 runtime.")]
     )
@@ -327,7 +351,7 @@ async def test_basic_react_runtime_invokes_without_tools() -> None:
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_stream_preserves_model_and_token_usage() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -373,7 +397,7 @@ async def test_basic_react_runtime_stream_preserves_model_and_token_usage() -> N
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_emits_model_span_per_model_call() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
     model = ToolFriendlyFakeChatModel(
         responses=[AIMessage(content="Hello from the traced model call.")]
     )
@@ -402,13 +426,142 @@ async def test_basic_react_runtime_emits_model_span_per_model_call() -> None:
     ]
     assert len(model_spans) >= 1
     model_span_attributes = cast(dict[str, object], model_spans[0]["attributes"])
-    assert model_span_attributes["operation"] == "model_call"
+    assert model_span_attributes["operation"] == "routing"
     assert model_span_attributes["status"] == "ok"
 
 
 @pytest.mark.asyncio
+async def test_basic_react_runtime_routes_chat_model_by_phase() -> None:
+    if react_runtime_module._LangchainAgentMiddleware is None:
+        pytest.skip("LangChain middleware is not available in this environment.")
+
+    definition = BasicReActDefinition()
+    routing_model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-1",
+                        "name": "ops_status",
+                        "args": {},
+                    }
+                ],
+            )
+        ]
+    )
+    planning_model = ToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="Done after planning.")]
+    )
+    default_model = ToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="Default model response.")]
+    )
+    provider = RecordingRoutingModelProvider(
+        {
+            "default-model": default_model,
+            "routing-model": routing_model,
+            "planning-model": planning_model,
+        }
+    )
+    policy = ModelRoutingPolicy(
+        default_profile_by_capability={ModelCapability.CHAT: "profile.default"},
+        profiles=(
+            ModelProfile(
+                profile_id="profile.default",
+                capability=ModelCapability.CHAT,
+                model=ModelConfiguration(
+                    provider="openai",
+                    name="default-model",
+                    settings={},
+                ),
+            ),
+            ModelProfile(
+                profile_id="profile.routing",
+                capability=ModelCapability.CHAT,
+                model=ModelConfiguration(
+                    provider="openai",
+                    name="routing-model",
+                    settings={},
+                ),
+            ),
+            ModelProfile(
+                profile_id="profile.planning",
+                capability=ModelCapability.CHAT,
+                model=ModelConfiguration(
+                    provider="openai",
+                    name="planning-model",
+                    settings={},
+                ),
+            ),
+        ),
+        rules=(
+            ModelRouteRule(
+                rule_id="react.routing",
+                capability=ModelCapability.CHAT,
+                target_profile_id="profile.routing",
+                match=ModelRouteMatch(
+                    purpose="chat",
+                    agent_id=definition.agent_id,
+                    operation="routing",
+                ),
+            ),
+            ModelRouteRule(
+                rule_id="react.planning",
+                capability=ModelCapability.CHAT,
+                target_profile_id="profile.planning",
+                match=ModelRouteMatch(
+                    purpose="chat",
+                    agent_id=definition.agent_id,
+                    operation="planning",
+                ),
+            ),
+        ),
+    )
+    routed_factory = RoutedChatModelFactory(
+        resolver=ModelRoutingResolver(policy),
+        provider=provider,
+        default_purpose="chat",
+    )
+    tracer = RecordingTracer()
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=routed_factory,
+            tool_provider=RecordingToolProvider(),
+            tracer=tracer,
+        ),
+    )
+    runtime.bind(_binding("react-phase-routing", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    events = [
+        event
+        async for event in executor.stream(
+            _user_input("Check status and summarize."),
+            ExecutionConfig(),
+        )
+    ]
+
+    final_event = events[-1]
+    assert isinstance(final_event, FinalRuntimeEvent)
+    assert final_event.content == "Done after planning."
+    model_spans = [
+        span for span in tracer.finished_spans if span["name"] == "v2.react.model"
+    ]
+    operations = {
+        cast(dict[str, object], span["attributes"]).get("operation")
+        for span in model_spans
+    }
+    assert "routing" in operations
+    assert "planning" in operations
+    selected_model_names = {name for _, name in provider.calls}
+    assert "routing-model" in selected_model_names
+    assert "planning-model" in selected_model_names
+
+
+@pytest.mark.asyncio
 async def test_basic_react_runtime_uses_runtime_provided_tools() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -447,7 +600,7 @@ async def test_basic_react_runtime_uses_runtime_provided_tools() -> None:
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_emits_runtime_tool_span_for_provider_tools() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -499,7 +652,7 @@ async def test_basic_react_runtime_emits_runtime_tool_span_for_provider_tools() 
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_publish_text_tool_returns_link_part() -> None:
-    definition = BasicReActV2Definition(
+    definition = BasicReActDefinition(
         tool_requirements=(
             ToolRefRequirement(
                 tool_ref="artifacts.publish_text",
@@ -558,7 +711,7 @@ async def test_basic_react_runtime_publish_text_tool_returns_link_part() -> None
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_fetch_text_tool_returns_template_text() -> None:
-    definition = BasicReActV2Definition(
+    definition = BasicReActDefinition(
         tool_requirements=(
             ToolRefRequirement(
                 tool_ref="resources.fetch_text",
@@ -613,7 +766,7 @@ async def test_basic_react_runtime_fetch_text_tool_returns_template_text() -> No
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_pauses_for_tool_approval_and_resumes() -> None:
-    definition = BasicReActV2Definition(enable_tool_approval=True)
+    definition = BasicReActDefinition(enable_tool_approval=True)
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -706,7 +859,7 @@ async def test_basic_react_runtime_pauses_for_tool_approval_and_resumes() -> Non
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_resume_survives_runtime_rebind() -> None:
-    definition = BasicReActV2Definition(enable_tool_approval=True)
+    definition = BasicReActDefinition(enable_tool_approval=True)
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -792,7 +945,7 @@ async def test_basic_react_runtime_resume_survives_runtime_rebind() -> None:
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_resume_survives_runtime_reconstruction() -> None:
-    definition = BasicReActV2Definition(enable_tool_approval=True)
+    definition = BasicReActDefinition(enable_tool_approval=True)
     checkpointer = MemorySaver()
 
     def _build_runtime(model: ToolFriendlyFakeChatModel) -> ReActRuntime:
@@ -887,7 +1040,7 @@ async def test_basic_react_runtime_resume_survives_runtime_reconstruction() -> N
 async def test_basic_react_runtime_resume_survives_sql_checkpointer_reconstruction(
     tmp_path,
 ) -> None:
-    definition = BasicReActV2Definition(enable_tool_approval=True)
+    definition = BasicReActDefinition(enable_tool_approval=True)
     sqlite_path = tmp_path / "react_runtime_checkpoints.sqlite3"
     engine = create_async_engine_from_config(
         PostgresStoreConfig(sqlite_path=str(sqlite_path))
@@ -1027,7 +1180,7 @@ async def test_rag_react_runtime_routes_tool_calls_through_tool_invoker() -> Non
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_logs_query_through_tool_invoker() -> None:
-    definition = BasicReActV2Definition(
+    definition = BasicReActDefinition(
         tool_requirements=(
             ToolRefRequirement(
                 tool_ref="logs.query",
@@ -1091,7 +1244,7 @@ async def test_basic_react_runtime_routes_logs_query_through_tool_invoker() -> N
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_trace_summary_through_tool_invoker() -> None:
-    definition = BasicReActV2Definition(
+    definition = BasicReActDefinition(
         tool_requirements=(
             ToolRefRequirement(
                 tool_ref="traces.summarize_conversation",
@@ -1154,7 +1307,7 @@ async def test_basic_react_runtime_routes_trace_summary_through_tool_invoker() -
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_geo_render_points_with_ui_parts() -> None:
-    definition = BasicReActV2Definition(
+    definition = BasicReActDefinition(
         tool_requirements=(
             ToolRefRequirement(
                 tool_ref="geo.render_points",

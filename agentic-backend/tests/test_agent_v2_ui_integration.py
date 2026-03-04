@@ -13,21 +13,22 @@ from pydantic import BaseModel
 
 from agentic_backend.agents.v2 import (
     ArtifactReportDemoV2Definition,
-    BasicReActV2Definition,
+    BasicReActDefinition,
+    PostalTrackingDefinition,
     RagExpertV2Definition,
-    TrackingGraphDemoDefinition,
 )
+from agentic_backend.agents.v2.basic_react.profiles.custodian import CUSTODIAN_PROFILE
+from agentic_backend.agents.v2.basic_react.profiles.geo_demo import GEO_DEMO_PROFILE
+from agentic_backend.agents.v2.basic_react.profiles.georges import GEORGES_PROFILE
+from agentic_backend.agents.v2.basic_react.profiles.log_genius import (
+    LOG_GENIUS_PROFILE,
+)
+from agentic_backend.agents.v2.basic_react.profiles.sentinel import SENTINEL_PROFILE
 from agentic_backend.common.structures import Agent
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
     resolve_agent_class,
-)
-from agentic_backend.core.chatbot.chat_schema import (
-    GeoPart,
-    LinkKind,
-    LinkPart,
-    TextPart,
-    TokenUsageSource,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -45,30 +46,32 @@ from agentic_backend.core.agents.v2 import (
     ToolProviderPort,
 )
 from agentic_backend.core.agents.v2.catalog import (
-    apply_react_profile_to_definition,
     apply_profile_defaults_to_settings,
+    apply_react_profile_to_definition,
     build_bound_runtime_context,
     build_definition_from_settings,
     definition_to_agent_settings,
     definition_to_agent_tuning,
 )
-from agentic_backend.core.agents.v2.react_profiles import (
-    CUSTODIAN_PROFILE_ID,
-    GEORGES_PROFILE_ID,
-    GEO_DEMO_PROFILE_ID,
-    LOG_GENIUS_PROFILE_ID,
-    SENTINEL_PROFILE_ID,
-    list_react_profiles,
-)
-from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
-from agentic_backend.core.agents.v2.runtime import AssistantDeltaRuntimeEvent
-from agentic_backend.core.agents.v2.runtime import AwaitingHumanRuntimeEvent
-from agentic_backend.core.agents.v2.runtime import HumanInputRequest
 from agentic_backend.core.agents.v2.models import ToolRefRequirement
+from agentic_backend.core.agents.v2.react_profiles import list_react_profiles
+from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
+from agentic_backend.core.agents.v2.runtime import (
+    AssistantDeltaRuntimeEvent,
+    AwaitingHumanRuntimeEvent,
+    HumanInputRequest,
+)
 from agentic_backend.core.agents.v2.session_agent import (
     V2SessionAgent,
-    _react_input_from_state,
     _legacy_events_from_runtime_event,
+    _react_input_from_state,
+)
+from agentic_backend.core.chatbot.chat_schema import (
+    GeoPart,
+    LinkKind,
+    LinkPart,
+    TextPart,
+    TokenUsageSource,
 )
 from agentic_backend.core.chatbot.stream_transcoder import StreamTranscoder
 from tests.test_agent_v2_react_runtime import (
@@ -76,6 +79,12 @@ from tests.test_agent_v2_react_runtime import (
     ToolFriendlyFakeChatModel,
 )
 from tests.test_tracking_graph_v2 import TrackingDemoToolProvider
+
+CUSTODIAN_PROFILE_ID = CUSTODIAN_PROFILE.profile_id
+GEORGES_PROFILE_ID = GEORGES_PROFILE.profile_id
+GEO_DEMO_PROFILE_ID = GEO_DEMO_PROFILE.profile_id
+LOG_GENIUS_PROFILE_ID = LOG_GENIUS_PROFILE.profile_id
+SENTINEL_PROFILE_ID = SENTINEL_PROFILE.profile_id
 
 
 class RecordingToolInvoker(ToolInvokerPort):
@@ -206,7 +215,7 @@ def test_resolve_agent_class_accepts_v2_definitions() -> None:
 
 def test_resolve_agent_class_accepts_v2_graph_definitions() -> None:
     resolved = resolve_agent_class(
-        "agentic_backend.agents.v2.tracking_graph_demo.TrackingGraphDemoDefinition"
+        "agentic_backend.agents.v2.demos.postal_tracking.Definition"
     )
 
     assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
@@ -218,6 +227,20 @@ def test_resolve_agent_class_accepts_v2_artifact_report_definition() -> None:
     )
 
     assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
+
+
+def test_resolve_agent_reference_accepts_v2_definition_ref() -> None:
+    resolved = resolve_agent_reference(
+        class_path=None,
+        definition_ref="v2.react.basic",
+    )
+
+    assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
+    assert resolved.definition_ref == "v2.react.basic"
+    assert (
+        resolved.class_path
+        == "agentic_backend.agents.v2.basic_react.BasicReActDefinition"
+    )
 
 
 def test_artifact_report_demo_declares_publish_capability() -> None:
@@ -274,7 +297,7 @@ def test_build_definition_from_settings_applies_persisted_prompt_override() -> N
 
 
 def test_basic_react_profile_field_lists_available_backend_profiles() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
 
     profile_field = next(
         field for field in definition.fields if field.key == "react_profile_id"
@@ -287,7 +310,7 @@ def test_basic_react_profile_field_lists_available_backend_profiles() -> None:
 
 
 def test_build_definition_from_settings_applies_custodian_profile_defaults() -> None:
-    base_definition = BasicReActV2Definition()
+    base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
@@ -300,7 +323,7 @@ def test_build_definition_from_settings_applies_custodian_profile_defaults() -> 
     settings = Agent(
         id="custodian-react-agent",
         name="Custodian",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -310,7 +333,7 @@ def test_build_definition_from_settings_applies_custodian_profile_defaults() -> 
     )
 
     definition = build_definition_from_settings(
-        definition_class=BasicReActV2Definition,
+        definition_class=BasicReActDefinition,
         settings=settings,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -338,7 +361,7 @@ def test_build_definition_from_settings_applies_custodian_profile_defaults() -> 
 
 
 def test_build_definition_from_settings_applies_georges_profile_defaults() -> None:
-    base_definition = BasicReActV2Definition()
+    base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
@@ -351,7 +374,7 @@ def test_build_definition_from_settings_applies_georges_profile_defaults() -> No
     settings = Agent(
         id="georges-react-agent",
         name="Georges",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -361,7 +384,7 @@ def test_build_definition_from_settings_applies_georges_profile_defaults() -> No
     )
 
     definition = build_definition_from_settings(
-        definition_class=BasicReActV2Definition,
+        definition_class=BasicReActDefinition,
         settings=settings,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -378,14 +401,14 @@ def test_build_definition_from_settings_applies_georges_profile_defaults() -> No
 
 
 def test_profiled_basic_react_creation_settings_start_with_selected_profile() -> None:
-    base_definition = BasicReActV2Definition()
+    base_definition = BasicReActDefinition()
     effective_definition = apply_react_profile_to_definition(
         base_definition,
         GEORGES_PROFILE_ID,
     )
     base_settings = definition_to_agent_settings(
         base_definition,
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
         enabled=True,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -405,7 +428,7 @@ def test_profiled_basic_react_creation_settings_start_with_selected_profile() ->
 
 
 def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> None:
-    base_definition = BasicReActV2Definition()
+    base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
@@ -418,7 +441,7 @@ def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> N
     settings = Agent(
         id="sentinel-react-agent",
         name="Sentinel",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -428,7 +451,7 @@ def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> N
     )
 
     definition = build_definition_from_settings(
-        definition_class=BasicReActV2Definition,
+        definition_class=BasicReActDefinition,
         settings=settings,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -447,7 +470,7 @@ def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> N
 
 
 def test_build_definition_from_settings_applies_log_genius_profile_defaults() -> None:
-    base_definition = BasicReActV2Definition()
+    base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
@@ -460,7 +483,7 @@ def test_build_definition_from_settings_applies_log_genius_profile_defaults() ->
     settings = Agent(
         id="log-genius-react-agent",
         name="LogGenius",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -470,7 +493,7 @@ def test_build_definition_from_settings_applies_log_genius_profile_defaults() ->
     )
 
     definition = build_definition_from_settings(
-        definition_class=BasicReActV2Definition,
+        definition_class=BasicReActDefinition,
         settings=settings,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -490,12 +513,10 @@ def test_build_definition_from_settings_applies_log_genius_profile_defaults() ->
 
 
 def test_graph_definition_applies_default_mcp_servers_to_effective_settings() -> None:
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     settings = definition_to_agent_settings(
         definition,
-        class_path=(
-            "agentic_backend.agents.v2.tracking_graph_demo.TrackingGraphDemoDefinition"
-        ),
+        class_path=("agentic_backend.agents.v2.demos.postal_tracking.Definition"),
         enabled=True,
     )
 
@@ -512,7 +533,7 @@ def test_graph_definition_applies_default_mcp_servers_to_effective_settings() ->
 
 
 def test_build_definition_from_settings_applies_geo_demo_profile_defaults() -> None:
-    base_definition = BasicReActV2Definition()
+    base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
@@ -525,7 +546,7 @@ def test_build_definition_from_settings_applies_geo_demo_profile_defaults() -> N
     settings = Agent(
         id="geo-demo-react-agent",
         name="Geo Demo",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActV2Definition",
+        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -535,7 +556,7 @@ def test_build_definition_from_settings_applies_geo_demo_profile_defaults() -> N
     )
 
     definition = build_definition_from_settings(
-        definition_class=BasicReActV2Definition,
+        definition_class=BasicReActDefinition,
         settings=settings,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -646,7 +667,7 @@ async def test_stream_transcoder_handles_v2_session_agent() -> None:
 
 @pytest.mark.asyncio
 async def test_stream_transcoder_carries_v2_token_usage_to_final_message() -> None:
-    definition = BasicReActV2Definition()
+    definition = BasicReActDefinition()
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -698,7 +719,7 @@ async def test_stream_transcoder_carries_v2_token_usage_to_final_message() -> No
 async def test_stream_transcoder_carries_v2_geo_and_link_parts_from_tool_results() -> (
     None
 ):
-    definition = BasicReActV2Definition(
+    definition = BasicReActDefinition(
         tool_requirements=(
             ToolRefRequirement(
                 tool_ref="geo.render_points",
@@ -800,7 +821,7 @@ async def test_stream_transcoder_carries_v2_geo_and_link_parts_from_tool_results
 
 @pytest.mark.asyncio
 async def test_v2_session_agent_supports_interrupt_resume() -> None:
-    definition = BasicReActV2Definition(enable_tool_approval=True)
+    definition = BasicReActDefinition(enable_tool_approval=True)
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -948,7 +969,7 @@ def test_v2_session_agent_bridge_exposes_assistant_deltas_in_messages_mode() -> 
 async def test_v2_session_agent_bridge_supports_graph_runtime_hitl_and_geo_parts() -> (
     None
 ):
-    definition = TrackingGraphDemoDefinition()
+    definition = PostalTrackingDefinition()
     checkpointer = MemorySaver()
     runtime = GraphRuntime(
         definition=definition,

@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
-from agentic_backend.agents.v2 import BasicReActV2Definition
+from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -187,7 +187,7 @@ def _build_runtime(
     checkpointer: FredSqlCheckpointer,
     session_id: str,
 ) -> ReActRuntime:
-    definition = BasicReActV2Definition(enable_tool_approval=True)
+    definition = BasicReActDefinition(enable_tool_approval=True)
     runtime = ReActRuntime(
         definition=definition,
         services=RuntimeServices(

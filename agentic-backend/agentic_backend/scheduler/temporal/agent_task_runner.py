@@ -27,8 +27,8 @@ from agentic_backend.application_context import (
 )
 from agentic_backend.common.config_loader import load_configuration
 from agentic_backend.common.structures import Configuration
-from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_factory import AgentFactory
+from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -46,12 +46,16 @@ logger = logging.getLogger(__name__)
 class AgentTaskRunner:
     def __init__(self, configuration: Configuration) -> None:
         self._configuration = configuration
+        app_context = get_app_context()
         self._agent_loader = AgentLoader(configuration, get_agent_store())
         self._agent_manager = AgentManager(
             configuration, self._agent_loader, get_agent_store()
         )
         self._agent_factory = AgentFactory(
-            configuration, self._agent_manager, self._agent_loader
+            configuration,
+            self._agent_manager,
+            self._agent_loader,
+            model_routing_bootstrap_provider=app_context.get_model_routing_bootstrap_config,
         )
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()

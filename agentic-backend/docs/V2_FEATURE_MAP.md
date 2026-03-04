@@ -390,6 +390,10 @@ What it is:
 How it fits v2:
 - exposed as a first-class tool ref (`traces.summarize_conversation`)
 - same runtime tool path as other platform capabilities
+- intentionally implemented as a Fred built-in runtime tool, not as an MCP tool
+- current backend path is Langfuse Public API over HTTP (`/api/public/traces`,
+  `/api/public/traces/{trace_id}`) using `LANGFUSE_HOST`,
+  `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`
 
 Best thing to test:
 - `log_genius` profile
