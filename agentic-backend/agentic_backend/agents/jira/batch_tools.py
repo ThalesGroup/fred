@@ -666,7 +666,10 @@ Règles:
             for i, result in enumerate(batch_results):
                 if isinstance(result, BaseException):
                     failed_batches += 1
-                    logger.error(f"[JiraAgent] Test batch {i + 1} failed: {result}")
+                    logger.error(
+                        f"[JiraAgent] Test batch {i + 1} failed: {result}",
+                        exc_info=(type(result), result, result.__traceback__),
+                    )
                 else:
                     all_generated_tests.extend(result)
 
