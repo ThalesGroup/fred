@@ -2,9 +2,11 @@ environments:
   prd:
     values:
       - namespace: dc2-wd1-six-prd-kns-pri
+      - chartVersion: 1.2.7-prism.1
   int:
     values:
       - namespace: dc2-wd1-six-int-kns-pri
+      - chartVersion: 0.0.0-dev-prism
 ---
 helmDefaults:
   createNamespace: false
@@ -13,8 +15,8 @@ helmDefaults:
 releases:
   - name: fred
     namespace: "{{ .Values.namespace }}"
-    # tofix: use tagged chart image
-    chart: ../../charts/fred
+    chart: helm-internal/fred
+    version: "{{ .Values.chartVersion }}"
     values:
       - values/{{ .Environment.Name }}/values-fred.yaml
     secrets:

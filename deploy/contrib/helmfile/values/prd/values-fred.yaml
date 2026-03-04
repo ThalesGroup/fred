@@ -180,7 +180,6 @@ applications:
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
-      tag: &prism-tag "0.0.25-prism"
     imagePullSecrets: &carma-pull-secret
       - name: "carma-pull-secret"
 
@@ -393,14 +392,13 @@ applications:
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend
-      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
 
     # Set UI ingress
     ingress:
       annotations:
         # Increase max file upload size
-        nginx.ingress.kubernetes.io/proxy-body-size: 60m
+        nginx.ingress.kubernetes.io/proxy-body-size: 150m
         nginx.org/proxy-connect-timeout: 300s
         nginx.org/proxy-read-timeout: 300s
       hosts:
@@ -449,7 +447,6 @@ applications:
     # Set Carma registry and PRISM tag
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
-      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
 
     # Disable service acount
