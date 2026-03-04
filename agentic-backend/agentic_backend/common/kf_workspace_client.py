@@ -480,9 +480,11 @@ class KfWorkspaceClient(KfBaseClient):
             return "unknown"
         if raw in {"file", "filesystemresourceinfo.file"} or raw.endswith(".file"):
             return "file"
-        if raw in {"directory", "dir", "filesystemresourceinfo.directory"} or raw.endswith(
-            ".directory"
-        ):
+        if raw in {
+            "directory",
+            "dir",
+            "filesystemresourceinfo.directory",
+        } or raw.endswith(".directory"):
             return "directory"
         return "unknown"
 
