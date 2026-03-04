@@ -654,9 +654,7 @@ Règles:
 
             async def _run_test_batch(batch):
                 async with semaphore:
-                    return await self._generate_test_batch(
-                        batch, stories_by_id, jdd
-                    )
+                    return await self._generate_test_batch(batch, stories_by_id, jdd)
 
             batch_results = await asyncio.gather(
                 *[_run_test_batch(batch) for batch in batches],
@@ -668,9 +666,7 @@ Règles:
             for i, result in enumerate(batch_results):
                 if isinstance(result, BaseException):
                     failed_batches += 1
-                    logger.error(
-                        f"[JiraAgent] Test batch {i + 1} failed: {result}"
-                    )
+                    logger.error(f"[JiraAgent] Test batch {i + 1} failed: {result}")
                 else:
                     all_generated_tests.extend(result)
 

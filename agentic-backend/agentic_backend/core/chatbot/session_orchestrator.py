@@ -1264,7 +1264,11 @@ class SessionOrchestrator:
                 blobs = await ws_client.list_user_blobs(
                     prefix=f"{session_id}/", access_token=access_token
                 )
-                blob_keys = [b["path"] for b in blobs if b.get("path") and b.get("type") != "directory"]
+                blob_keys = [
+                    b["path"]
+                    for b in blobs
+                    if b.get("path") and b.get("type") != "directory"
+                ]
                 if blob_keys:
                     results = await asyncio.gather(
                         *(
