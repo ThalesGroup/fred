@@ -1,4 +1,4 @@
-# V2 Model Provider Primer (Quick Sync)
+# Model Provider Primer (Quick Sync)
 
 Status: practical onboarding note for model routing in Fred v2
 
@@ -38,7 +38,7 @@ This is aligned with genai_sdk principles:
 - Routed model selection is currently enabled for **v2 ReAct** when:
   - `FRED_V2_MODEL_ROUTING_PRESETS_ENABLED=1`
 - Presets live in:
-  - `agents/v2/basic_react/model_routing_presets.py`
+  - `agents/v2/production/basic_react/model_routing_presets.py`
 - Graph runtime is not yet switched to routed factory by default.
 - The abstraction is already compatible with future Graph integration because
   Graph and ReAct both consume `RuntimeServices.chat_model_factory`.
@@ -56,7 +56,7 @@ This is aligned with genai_sdk principles:
 ```python
 from fred_core import ModelConfiguration
 
-from agentic_backend.agents.v2.basic_react.model_routing_presets import (
+from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (
     build_default_policy_with_basic_react_presets,
 )
 
@@ -140,12 +140,12 @@ model switches inside each graph agent.
 
 ## 7. Current files to open during the demo
 
-- `docs/V2_MODEL_ROUTING_PATTERN.md`
+- `docs/MODEL_ROUTING_PATTERN.md`
 - `core/agents/v2/model_routing/provider.py`
 - `core/agents/v2/model_routing/contracts.py`
-- `agents/v2/basic_react/model_routing_presets.py`
+- `agents/v2/production/basic_react/model_routing_presets.py`
 - `core/agents/agent_factory.py` (`_build_routed_chat_model_factory`)
-- `agents/v2/aegis_graph_skeleton/agent.py` (Aegis-like v2 graph scaffold)
+- `agents/v2/candidate/aegis_graph_skeleton/agent.py` (Aegis-like v2 graph scaffold)
 
 ## 8. Concrete bridge example: v1 Aegis
 

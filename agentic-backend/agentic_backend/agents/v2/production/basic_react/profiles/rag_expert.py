@@ -25,6 +25,7 @@ RAG_EXPERT_PROFILE = ReActProfile(
         path_parts=(
             "agents",
             "v2",
+            "production",
             "basic_react",
             "prompts",
             "basic_react_rag_expert_system_prompt.md",

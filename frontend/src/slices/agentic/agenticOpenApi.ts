@@ -619,9 +619,11 @@ export type Agent = {
   team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
+  /** Stable v2 definition identifier (preferred for v2 agents). Example: 'v2.react.basic'. */
+  definition_ref?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  /** Optional arbitrary metadata for integrations. */
   metadata?: {
     [key: string]: any;
   } | null;
@@ -640,11 +642,10 @@ export type HttpValidationError = {
 export type OwnerFilter = "personal" | "team";
 export type CreateAgentRequest = {
   name: string;
-  type?: string;
+  type?: "basic";
   team_id?: string | null;
-  a2a_base_url?: string | null;
-  a2a_token?: string | null;
   class_path?: string | null;
+  definition_ref?: string | null;
   profile_id?: string | null;
 };
 export type ReActProfileSummary = {
@@ -707,9 +708,11 @@ export type Agent2 = {
   team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
+  /** Stable v2 definition identifier (preferred for v2 agents). Example: 'v2.react.basic'. */
+  definition_ref?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  /** Optional arbitrary metadata for integrations. */
   metadata?: {
     [key: string]: any;
   } | null;
@@ -1080,7 +1083,6 @@ export type Properties = {
   contactSupportLink?: string | null;
   /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
   agentIconName?: string | null;
-  showAgentRegisterA2A?: boolean;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentDisableButton?: boolean;
   showAgentCode?: boolean;

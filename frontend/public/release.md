@@ -1,4 +1,8 @@
-**Unrelease** — 2026-XX-XX
+**v1.3.0** — 2026-03-04
+
+- **Summary**
+
+  This release introduces the first full v2 agent stack for production use (ReAct + Graph), with a cleaner configuration model based on catalogs and a simplified agent creation flow. It keeps backward compatibility for existing v1 agents while preparing multimodal model selection (chat, language, embedding, image) through policy-based routing.
 
 - **Features**
 
@@ -7,6 +11,8 @@
   - Allow generic v2 ReAct agents to consume UI-configured MCP tools at runtime
   - Add a geo demo v2 profile and structured geo/link capability support for ReAct tool outputs
   - Add the first executable GraphAgentDefinition runtime contract with typed state, node handlers, tool calls, HITL resume, and structured final output
+  - Add catalog-based model routing policies with deterministic matching (`capability`/`purpose`/`operation` + team/user/agent scope)
+  - Add dedicated catalog files for models, agents, and MCP servers (`models_catalog.yaml`, `agents_catalog.yaml`, `mcp_catalog.yaml`)
 
 - **Improvements**
 
@@ -15,6 +21,9 @@
   - Replace the experimental graph endpoint with a dedicated v2 inspection endpoint and model
   - Improve MCP runtime resilience with retry and short backoff on transient connection failures
   - Improve the debug drawer with sanitized runtime context, grouping by exchange, per-exchange copy, and local scrolling
+  - Keep startup compatibility: when catalogs are absent, runtime falls back to legacy `configuration.yaml` sections
+  - Document Helm wiring for optional catalog mounts and env overrides
+  - Remove A2A proxy registration/card flow from backend and UI to simplify the runtime surface
 
 - **Bug Fixes**
 

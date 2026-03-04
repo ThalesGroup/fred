@@ -17,13 +17,21 @@ from agentic_backend.agents.v2 import (
     PostalTrackingDefinition,
     RagExpertV2Definition,
 )
-from agentic_backend.agents.v2.basic_react.profiles.custodian import CUSTODIAN_PROFILE
-from agentic_backend.agents.v2.basic_react.profiles.geo_demo import GEO_DEMO_PROFILE
-from agentic_backend.agents.v2.basic_react.profiles.georges import GEORGES_PROFILE
-from agentic_backend.agents.v2.basic_react.profiles.log_genius import (
+from agentic_backend.agents.v2.production.basic_react.profiles.custodian import (
+    CUSTODIAN_PROFILE,
+)
+from agentic_backend.agents.v2.production.basic_react.profiles.geo_demo import (
+    GEO_DEMO_PROFILE,
+)
+from agentic_backend.agents.v2.production.basic_react.profiles.georges import (
+    GEORGES_PROFILE,
+)
+from agentic_backend.agents.v2.production.basic_react.profiles.log_genius import (
     LOG_GENIUS_PROFILE,
 )
-from agentic_backend.agents.v2.basic_react.profiles.sentinel import SENTINEL_PROFILE
+from agentic_backend.agents.v2.production.basic_react.profiles.sentinel import (
+    SENTINEL_PROFILE,
+)
 from agentic_backend.common.structures import Agent
 from agentic_backend.core.agents.agent_class_resolver import (
     AgentImplementationKind,
@@ -207,7 +215,7 @@ def test_build_bound_runtime_context_carries_readable_trace_identity() -> None:
 
 def test_resolve_agent_class_accepts_v2_definitions() -> None:
     resolved = resolve_agent_class(
-        "agentic_backend.agents.v2.basic_react.profiles.rag_expert_agent.RagExpertV2Definition"
+        "agentic_backend.agents.v2.production.basic_react.profiles.rag_expert_agent.RagExpertV2Definition"
     )
 
     assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
@@ -223,7 +231,7 @@ def test_resolve_agent_class_accepts_v2_graph_definitions() -> None:
 
 def test_resolve_agent_class_accepts_v2_artifact_report_definition() -> None:
     resolved = resolve_agent_class(
-        "agentic_backend.agents.v2.artifact_report_demo.ArtifactReportDemoV2Definition"
+        "agentic_backend.agents.v2.demos.artifact_report.ArtifactReportDemoV2Definition"
     )
 
     assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
@@ -239,7 +247,7 @@ def test_resolve_agent_reference_accepts_v2_definition_ref() -> None:
     assert resolved.definition_ref == "v2.react.basic"
     assert (
         resolved.class_path
-        == "agentic_backend.agents.v2.basic_react.BasicReActDefinition"
+        == "agentic_backend.agents.v2.production.basic_react.BasicReActDefinition"
     )
 
 
@@ -273,7 +281,7 @@ def test_build_definition_from_settings_applies_persisted_prompt_override() -> N
     settings = Agent(
         id="rag-ui-agent",
         name="RAG UI Agent",
-        class_path="agentic_backend.agents.v2.basic_react.profiles.rag_expert_agent.RagExpertV2Definition",
+        class_path="agentic_backend.agents.v2.production.basic_react.profiles.rag_expert_agent.RagExpertV2Definition",
         tuning=AgentTuning(
             role="Persisted role",
             description="Persisted description",
@@ -323,7 +331,7 @@ def test_build_definition_from_settings_applies_custodian_profile_defaults() -> 
     settings = Agent(
         id="custodian-react-agent",
         name="Custodian",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -374,7 +382,7 @@ def test_build_definition_from_settings_applies_georges_profile_defaults() -> No
     settings = Agent(
         id="georges-react-agent",
         name="Georges",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -408,7 +416,7 @@ def test_profiled_basic_react_creation_settings_start_with_selected_profile() ->
     )
     base_settings = definition_to_agent_settings(
         base_definition,
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         enabled=True,
     )
     effective_settings = apply_profile_defaults_to_settings(
@@ -441,7 +449,7 @@ def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> N
     settings = Agent(
         id="sentinel-react-agent",
         name="Sentinel",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -483,7 +491,7 @@ def test_build_definition_from_settings_applies_log_genius_profile_defaults() ->
     settings = Agent(
         id="log-genius-react-agent",
         name="LogGenius",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,
@@ -546,7 +554,7 @@ def test_build_definition_from_settings_applies_geo_demo_profile_defaults() -> N
     settings = Agent(
         id="geo-demo-react-agent",
         name="Geo Demo",
-        class_path="agentic_backend.agents.v2.basic_react.BasicReActDefinition",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
             description=base_definition.description,

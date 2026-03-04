@@ -28,7 +28,6 @@ import { LoadingSpinner } from "../../utils/loadingSpinner";
 import { useToast } from "../ToastProvider";
 
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
-import { A2aCardDialog } from "./A2aCardDialog";
 import { AgentCard } from "./AgentCard";
 import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentEditDrawer } from "./AgentEditDrawer";
@@ -56,9 +55,6 @@ interface AgentGridManagerProps {
   onRestore?: () => void;
   isRestoring?: boolean;
 
-  // Feature flags
-  showA2ACard?: boolean;
-
   // Customization
   emptyStateMessage?: string;
 }
@@ -74,7 +70,6 @@ export const AgentGridManager = ({
   showRestoreButton = false,
   onRestore,
   isRestoring = false,
-  showA2ACard = true,
   emptyStateMessage,
 }: AgentGridManagerProps) => {
   const theme = useTheme();
@@ -85,16 +80,10 @@ export const AgentGridManager = ({
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createModalType, setCreateModalType] = useState<"basic" | "a2a_proxy">("basic");
   const [assetManagerOpen, setAssetManagerOpen] = useState(false);
   const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
   const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
   const [agentForInspection, setAgentForInspection] = useState<AnyAgent | null>(null);
-  const [a2aCardView, setA2aCardView] = useState<{ open: boolean; card: any | null; agentName: string | null }>({
-    open: false,
-    card: null,
-    agentName: null,
-  });
   const [codeDrawer, setCodeDrawer] = useState<{
     open: boolean;
     title: string;
@@ -106,7 +95,6 @@ export const AgentGridManager = ({
 
   // Handlers for create modal
   const handleOpenCreateAgent = () => {
-    setCreateModalType("basic");
     setCreateModalOpen(true);
   };
 
@@ -141,19 +129,6 @@ export const AgentGridManager = ({
         detail: `Could not retrieve source for ${agent.id}. Details: ${detail}`,
       });
     }
-  };
-
-  // A2A card handler
-  const handleViewA2ACard = (agent: AnyAgent) => {
-    const card = (agent as any)?.metadata?.a2a_card;
-    if (!card) {
-      showError({
-        summary: t("agentHub.noA2ACardSummary"),
-        detail: t("agentHub.noA2ACardDetail"),
-      });
-      return;
-    }
-    setA2aCardView({ open: true, card, agentName: agent.id });
   };
 
   // Action handlers wired to card
@@ -244,7 +219,6 @@ export const AgentGridManager = ({
                           onToggleEnabled={canEdit ? handleToggleEnabled : undefined}
                           onManageAssets={canEdit ? handleManageAssets : undefined}
                           onInspectCode={handleInspectCode}
-                          onViewA2ACard={showA2ACard ? handleViewA2ACard : undefined}
                           onInspectAgent={handleInspectAgent}
                         />
                       </Box>
@@ -280,17 +254,9 @@ export const AgentGridManager = ({
                   handleCloseCreateAgent();
                   handleRefetch();
                 }}
-                initialType={createModalType}
-                disableTypeToggle
                 teamId={teamId}
               />
             )}
-
-            <A2aCardDialog
-              open={a2aCardView.open}
-              onClose={() => setA2aCardView({ open: false, card: null, agentName: null })}
-              card={a2aCardView.card}
-            />
           </>
         )}
       </CardContent>

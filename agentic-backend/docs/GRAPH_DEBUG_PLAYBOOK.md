@@ -1,4 +1,4 @@
-# Fred V2 Debug Playbook (Langfuse)
+# Fred Debug Playbook (Langfuse)
 
 Status: practical playbook for day-to-day v2 debugging (Graph + ReAct)
 
@@ -24,8 +24,8 @@ This guide targets v2 agents running through:
 
 Primary reference example:
 
-- `agentic_backend/agents/v2/protos/bid_mgr.py`
-- `agentic_backend/agents/v2/basic_react/agent.py`
+- `agentic_backend/agents/v2/candidate/bid_mgr/agent.py`
+- `agentic_backend/agents/v2/production/basic_react/agent.py`
 
 Quick runtime split (do this first):
 

@@ -430,10 +430,6 @@
       "creationModeClassHelp": "Reserved for workflow agents or backend-specific implementations that do not fit the standard model.",
       "base_prompt": "Base Prompt",
       "agent_type": "Agent Type",
-      "a2aProxyToggle": "A2A Proxy",
-      "a2aBaseUrl": "A2A Base URL",
-      "a2aBaseUrlRequired": "A2A base URL is required for an A2A agent.",
-      "a2aToken": "A2A Token (optional)",
       "profile": "Starting profile",
       "profileHelp": "Choose a backend-defined profile. You can refine prompt, tools, and safety settings after creation.",
       "profileNoOptions": "No ReAct profile is currently available.",
@@ -485,17 +481,7 @@
       "title": "Tools"
     },
     "confirmRestoreTitle": "Overwrite agents with configuration?",
-    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone.",
-    "registerA2A": "Register",
-    "noA2ACardSummary": "No A2A card stored",
-    "noA2ACardDetail": "This agent does not have a stored A2A agent card yet.",
-    "a2aCardTitle": "A2A Agent Card",
-    "a2aCapabilities": "Capabilities",
-    "a2aStreaming": "Streaming",
-    "a2aPush": "Push notifications",
-    "a2aHistory": "State history",
-    "a2aSkills": "Skills",
-    "a2aExamples": "Examples"
+    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone."
   },
   "mcpHub": {
     "title": "Tools",
@@ -756,7 +742,6 @@
     "manageAssets": "Manage Assets",
     "inspectCode": "Inspect source code",
     "inspectAgent": "Inspect agent definition",
-    "viewA2ACard": "View A2A card",
     "enable": "Enable"
   },
   "dialogs": {

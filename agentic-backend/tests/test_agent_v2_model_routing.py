@@ -6,7 +6,7 @@ import pytest
 from fred_core import ModelConfiguration
 from pydantic import ValidationError
 
-from agentic_backend.agents.v2.basic_react.model_routing_presets import (
+from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (
     BasicReActPresetProfileIds,
     BasicReActPresetRuleIds,
     build_default_policy_with_basic_react_presets,

@@ -8,7 +8,7 @@ Historical note:
 
 For the current target contract, prefer:
 
-- `docs/AGENT_SPECIFICATION_V2.md`
+- `docs/AGENT_SPECIFICATION.md`
 - `docs/AGENTS.md`
 - `docs/RUNTIME_ARCHITECTURE.md`
 
@@ -378,7 +378,6 @@ Implication:
 
 Representative example:
 
-- `A2AProxyAgent`
 
 Implication:
 

@@ -36,7 +36,7 @@ from .tools import (
 )
 
 DEFAULT_SYSTEM_PROMPT = prompt_md(
-    package="agentic_backend.agents.v2.ppt_filler_react",
+    package="agentic_backend.agents.v2.production.ppt_filler_react",
     file_name="ppt_filler_react_system_prompt.md",
 )
 

@@ -17,7 +17,7 @@ import inspect
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -175,10 +175,8 @@ router = APIRouter(tags=["Agents"])
 
 class CreateAgentRequest(BaseModel):
     name: str
-    type: str = "basic"
+    type: Literal["basic"] = "basic"
     team_id: str | None = None
-    a2a_base_url: str | None = None
-    a2a_token: str | None = None
     class_path: str | None = None
     definition_ref: str | None = None
     profile_id: str | None = None
@@ -224,8 +222,6 @@ async def create_agent(
         request.name,
         agent_type=request.type,
         team_id=request.team_id,
-        a2a_base_url=request.a2a_base_url,
-        a2a_token=request.a2a_token,
         class_path=request.class_path,
         definition_ref=request.definition_ref,
         profile_id=request.profile_id,

@@ -165,7 +165,7 @@ class BaseAgent(BaseModel):
     chat_options: AgentChatOptions = AgentChatOptions()
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Optional arbitrary metadata for integrations (e.g., A2A proxy config).",
+        description="Optional arbitrary metadata for integrations.",
     )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
@@ -284,7 +284,6 @@ class Properties(BaseModel):
         default=None,
         description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
     )
-    showAgentRegisterA2A: bool = True
     showAgentRestoreFromConfiguration: bool = True
     showAgentDisableButton: bool = True
     showAgentCode: bool = True

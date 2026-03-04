@@ -1,4 +1,4 @@
-# V2 Model Routing Pattern (GenAI SDK Style, Isolated)
+# Model Routing Pattern (GenAI SDK Style, Isolated)
 
 ## Why this exists
 
@@ -18,7 +18,7 @@ This document describes an isolated pattern added under:
 The slice is intentionally **not wired by default** into runtime creation.
 
 User-facing rule examples are documented in:
-- [V2_MODEL_ROUTING_USER_RULES_SPEC.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_MODEL_ROUTING_USER_RULES_SPEC.md)
+- [MODEL_ROUTING_USER_RULES_SPEC.md](/home/dimi/run/reference/fred/agentic-backend/docs/MODEL_ROUTING_USER_RULES_SPEC.md)
 
 For the broader cross-domain catalog strategy (`models`, `agents`, `mcp`),
 see [`CATALOG_FILES_PATTERN.md`](/home/dimi/run/reference/fred/agentic-backend/docs/CATALOG_FILES_PATTERN.md).
@@ -50,7 +50,7 @@ see [`CATALOG_FILES_PATTERN.md`](/home/dimi/run/reference/fred/agentic-backend/d
 - `catalog.py`
   - strict loader for external `models_catalog.yaml` (Pydantic-validated)
 
-- `agents/v2/basic_react/model_routing_presets.py`
+- `agents/v2/production/basic_react/model_routing_presets.py`
   - `build_default_policy_with_basic_react_presets(...)` concrete Basic ReAct
     presets for:
     - `internal.react_profile.log_genius` (lightweight by default)

@@ -20,7 +20,7 @@ from typing import Callable, Optional, Tuple, cast
 from fred_core import KeycloakUser
 
 from agentic_backend.agents.v2 import BasicReActDefinition
-from agentic_backend.agents.v2.basic_react.model_routing_presets import (
+from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (
     build_default_policy_with_basic_react_presets,
 )
 from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF

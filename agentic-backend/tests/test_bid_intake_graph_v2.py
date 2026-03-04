@@ -189,7 +189,7 @@ def test_bid_intake_graph_exposes_retrieval_chat_options_by_default() -> None:
 
     settings = definition_to_agent_settings(
         definition,
-        class_path="agentic_backend.agents.v2.protos.bid_mgr.Definition",
+        class_path="agentic_backend.agents.v2.candidate.bid_mgr.Definition",
     )
 
     assert settings.chat_options.attach_files is True

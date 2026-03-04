@@ -1,4 +1,4 @@
-# V2 Legacy Feature Scan
+# Legacy Feature Scan (v1 to Current Runtime)
 
 Status: exploratory scan, follow-up topics still open
 

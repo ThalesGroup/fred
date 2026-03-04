@@ -14,14 +14,9 @@
 
 import asyncio
 import logging
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Union
 from uuid import uuid4
 
-import httpx
-from a2a.client import A2ACardResolver
-from a2a.client.errors import A2AClientJSONError
-from a2a.types import AgentCard
-from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
 from fred_core import (
     ORGANIZATION_ID,
     Action,
@@ -302,10 +297,8 @@ class AgentService:
         user: KeycloakUser,
         name: str,
         *,
-        agent_type: str = "basic",
+        agent_type: Literal["basic"] = "basic",
         team_id: Optional[str] = None,
-        a2a_base_url: Optional[str] = None,
-        a2a_token: Optional[str] = None,
         class_path: Optional[str] = None,
         definition_ref: Optional[str] = None,
         profile_id: Optional[str] = None,
@@ -337,18 +330,12 @@ class AgentService:
                 get_react_profile(normalized_profile_id)
             except ValueError as exc:
                 raise InvalidClassPathError(str(exc)) from exc
-        if normalized_profile_id and agent_type == "a2a_proxy":
-            raise InvalidClassPathError("profile_id cannot be set for a2a_proxy agents")
         if normalized_class_path and normalized_definition_ref:
             raise InvalidClassPathError(
                 "Provide either class_path or definition_ref, not both."
             )
 
         if normalized_definition_ref:
-            if agent_type == "a2a_proxy":
-                raise InvalidClassPathError(
-                    "definition_ref cannot be set for a2a_proxy agents"
-                )
             try:
                 resolved = resolve_agent_reference(
                     class_path=None,
@@ -367,10 +354,6 @@ class AgentService:
                     "profile_id is only supported for v2.react.basic."
                 )
         elif normalized_class_path:
-            if agent_type == "a2a_proxy":
-                raise InvalidClassPathError(
-                    "class_path cannot be set for a2a_proxy agents"
-                )
             is_safe_builtin = normalized_class_path in {
                 basic_react_class_path,
                 LEGACY_V1_REACT_CLASS_PATH,
@@ -583,58 +566,3 @@ class AgentService:
         readable_ids = {ref.id for ref in readable_refs}
         filtered_ids = {ref.id for ref in owned}
         return readable_ids & filtered_ids
-
-    async def _fetch_a2a_card(
-        self, base_url: str, token: Optional[str]
-    ) -> Optional[dict]:
-        """
-        Resolve and return the agent card as a plain dict for persistence.
-        Best-effort: if fetching or validation fails, returns None.
-        """
-        base, card_path = self._split_discovery_url(base_url)
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resolver = A2ACardResolver(httpx_client=client, base_url=base)
-                try:
-                    card = await resolver.get_agent_card(relative_card_path=card_path)
-                except A2AClientJSONError:
-                    # Fallback for agents advertising protocolVersion instead of version
-                    resp = await client.get(f"{base}/{card_path}")
-                    resp.raise_for_status()
-                    data = resp.json()
-                    if "version" not in data and data.get("protocolVersion"):
-                        data["version"] = data["protocolVersion"]
-                    card = AgentCard.model_validate(data)
-
-                if card.supports_authenticated_extended_card and token:
-                    try:
-                        card = await resolver.get_agent_card(
-                            relative_card_path=EXTENDED_AGENT_CARD_PATH,
-                            http_kwargs={
-                                "headers": {"Authorization": f"Bearer {token}"}
-                            },
-                        )
-                    except Exception:
-                        logger.exception(
-                            "[AGENT][A2A] Failed to fetch extended agent card; keeping public card."
-                        )
-                return card.model_dump(exclude_none=True)
-        except Exception:
-            logger.exception("[AGENT][A2A] Failed to fetch agent card during creation.")
-            return None
-
-    @staticmethod
-    def _split_discovery_url(url: str) -> Tuple[str, str]:
-        """
-        Accept either a base URL (http://host:port) or a full discovery URL ending in /.well-known/agent-card.json.
-        Returns (base_url_without_trailing_slash, relative_card_path).
-        """
-        cleaned = url.strip()
-        default_path = ".well-known/agent-card.json"
-        marker = "/.well-known/agent-card.json"
-        if marker in cleaned:
-            idx = cleaned.find(marker)
-            base = cleaned[:idx] or cleaned
-            path = cleaned[idx + 1 :]  # drop leading slash
-            return base.rstrip("/"), path
-        return cleaned.rstrip("/"), default_path

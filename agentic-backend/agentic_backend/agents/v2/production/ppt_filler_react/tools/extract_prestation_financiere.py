@@ -28,7 +28,7 @@ PRESTATION_FINANCIERE_QUERIES: list[tuple[str, int]] = [
 ]
 
 EXTRACT_PRESTATION_FINANCIERE_PROMPT = prompt_md(
-    package="agentic_backend.agents.v2.ppt_filler_react",
+    package="agentic_backend.agents.v2.production.ppt_filler_react",
     file_name="ppt_filler_extract_prestation_prompt.md",
 )
 

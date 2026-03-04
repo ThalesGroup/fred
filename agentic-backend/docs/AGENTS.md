@@ -1,4 +1,4 @@
-# Fred V2 Agent Authoring Guide
+# Fred Agent Authoring Guide (v2-first)
 
 This document describes the authoring model Fred now wants to standardize.
 
@@ -15,10 +15,10 @@ The goal is to expose a stable Fred SDK above the runtime engine.
 
 Useful reading order:
 
-- current doc status map: [V2_DOC_STATUS.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_DOC_STATUS.md)
-- current feature surface: [V2_FEATURE_MAP.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_FEATURE_MAP.md)
+- current doc status map: [DOC_STATUS.md](/home/dimi/run/reference/fred/agentic-backend/docs/DOC_STATUS.md)
+- current feature surface: [FEATURE_MAP.md](/home/dimi/run/reference/fred/agentic-backend/docs/FEATURE_MAP.md)
 - graph runtime maturity and remaining LangGraph usage: [GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md](/home/dimi/run/reference/fred/agentic-backend/docs/GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md)
-- explicit v2 trade-offs against middleware/framework-native layering: [V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md)
+- explicit v2 trade-offs against middleware/framework-native layering: [RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](/home/dimi/run/reference/fred/agentic-backend/docs/RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md)
 
 ## 1. Preferred Authoring Model
 
@@ -34,9 +34,17 @@ For new work, prefer:
 
 Concrete examples already present in the repo:
 
-- `agentic_backend/agents/v2/basic_react/agent.py`
-- `agentic_backend/agents/v2/basic_react/profiles/rag_expert.py`
-- `agentic_backend/agents/v2/demos/postal_tracking.py`
+- `agentic_backend/agents/v2/production/basic_react/agent.py`
+- `agentic_backend/agents/v2/production/basic_react/profiles/rag_expert.py`
+- `agentic_backend/agents/v2/demos/postal_tracking/agent.py`
+- `agentic_backend/agents/v2/samples/tutorial_tools/agent.py`
+
+Folder intent in `agents/v2/`:
+
+- `samples/`: copy/paste-ready authoring starters (not catalog-wired by default)
+- `demos/`: executable demonstrations for runtime capabilities
+- `candidate/`: exploratory agents under active evaluation
+- `production/`: agents intended for real usage
 
 ## 2. What The Author Owns
 
@@ -207,7 +215,7 @@ Note:
   calls, not through MCP
 
 For a practical retest checklist of the current v2 world, see
-[V2_FEATURE_MAP.md](./V2_FEATURE_MAP.md).
+[FEATURE_MAP.md](./FEATURE_MAP.md).
 
 ## 7. HITL and Structured UI Capabilities
 
@@ -260,13 +268,17 @@ Use `AgentFlow` only when:
 
 Do not choose `AgentFlow` for new product work unless there is a very explicit platform reason.
 
+Legacy v1-oriented guides are grouped in:
+
+- `docs/deprecated/v1/`
+
 ## 10. Related Docs
 
-- `docs/AGENT_SPECIFICATION_V2.md`
-- `docs/V2_GRAPH_RUNTIME_CONTRACT.md`
-- `docs/V2_GRAPH_RUNTIME_CONTRACT.md` (see especially the section on
+- `docs/AGENT_SPECIFICATION.md`
+- `docs/GRAPH_RUNTIME_CONTRACT.md`
+- `docs/GRAPH_RUNTIME_CONTRACT.md` (see especially the section on
   conversation history vs runtime checkpoints)
-- `docs/V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md`
+- `docs/RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md`
 - `docs/RUNTIME_ARCHITECTURE.md`
 - `docs/GENAI_SDK_SPEC.md`
 - `docs/GENAI_SDK_COMPATIBILITY_CHALLENGE.md`

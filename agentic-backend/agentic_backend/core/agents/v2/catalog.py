@@ -1,15 +1,32 @@
-"""
-Compatibility helpers between v2 definitions and Fred's existing catalog/store.
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Why this file exists:
-- Fred still persists and exposes `AgentSettings`, while the new authoring model
-  is `AgentDefinition`.
-- The UI and the store still speak in terms of settings, names, MCP defaults,
-  and editable fields.
-- The clean v2 move is therefore not to duplicate that world, but to derive it
-  from a pure definition in one place.
-- That keeps the business meaning stable: a definition says what the agent is,
-  and this bridge says how Fred should present and persist it today.
+"""
+Bridge between v2 `AgentDefinition` and legacy `AgentSettings`.
+
+This module provides functions to convert between the new v2 authoring model
+(`AgentDefinition`) and the `AgentSettings` model used by the agent store and UI.
+
+What this is for:
+- `definition_to_agent_settings`: Convert a v2 definition into the legacy settings format for storage.
+- `build_definition_from_settings`: Recreate a v2 definition instance from stored settings, applying user overrides.
+- `apply_profile_defaults_to_settings`: Get the "effective" settings for an agent that uses a profile, including all defaults.
+- `build_bound_runtime_context`: Create the execution context for a v2 agent run.
+
+WARNING: This module contains complex logic for merging user overrides with profile defaults. Be very careful when modifying, and consider the implications for both the UI and runtime behavior of agents.
+It is meant to be simplified after the UI fully migrates to v2 definitions and no longer relies on `AgentSettings`.
+
 """
 
 from __future__ import annotations
@@ -35,6 +52,11 @@ DefinitionT = TypeVar("DefinitionT", bound=AgentDefinition)
 
 
 def definition_to_agent_tuning(definition: AgentDefinition) -> AgentTuning:
+    """
+    Creates an `AgentTuning` object from an `AgentDefinition`.
+
+    This extracts the role, description, tags, fields, and default MCP servers.
+    """
     tuning = AgentTuning(
         role=definition.role,
         description=definition.description,
@@ -55,6 +77,12 @@ def definition_to_agent_settings(
     definition_ref: str | None = None,
     enabled: bool = True,
 ) -> AgentSettings:
+    """
+    Creates a legacy `AgentSettings` object from a v2 `AgentDefinition`.
+
+    Use this to make a v2 agent compatible with the agent store and UI, which
+    still operate on the `AgentSettings` model.
+    """
     tuning = definition_to_agent_tuning(definition)
     chat_options = _chat_options_from_definition(definition)
     return Agent(
@@ -74,13 +102,11 @@ def build_definition_from_settings(
     settings: AgentSettings,
 ) -> DefinitionT:
     """
-    Hydrate a v2 definition instance from persisted settings.
+    Hydrate a v2 definition instance from persisted `AgentSettings`.
 
-    The current Fred catalog persists editable values as `FieldSpec.default`.
-    For v2 definitions, the convention is:
-    - `FieldSpec.key` matches a model field name for editable definition values
-    - `role`, `description`, `tags`, and `fields` are derived from the current
-      persisted tuning view
+    This function reconstructs a `Definition` object by applying the stored
+    `tuning` values from `AgentSettings` over the base definition's class defaults.
+    It also handles the application of ReAct profiles if one is selected.
     """
     base_definition = instantiate_definition_class(definition_class)
     tuning = settings.tuning or definition_to_agent_tuning(base_definition)
@@ -136,14 +162,12 @@ def apply_profile_defaults_to_settings(
     settings: AgentSettings,
 ) -> AgentSettings:
     """
-    Build the effective settings view for a profiled v2 definition.
+    Build the effective `AgentSettings` view for a v2 definition.
 
-    Why this helper exists:
-    - runtime adapters and the UI still consume `AgentSettings`
-    - some defaults that matter to the business experience, such as MCP
-      services or chat affordances, live outside simple model fields
-    - the UI should receive one coherent view of "what this agent effectively
-      is" instead of trying to rebuild profile logic on the client
+    This is what the UI and runtime adapters should consume. It computes the final
+    state of an agent's settings after applying any selected profile defaults
+    (e.g., for ReAct agents) and merging them with user-persisted overrides.
+    The result is a single, coherent `AgentSettings` object.
     """
 
     base_definition = instantiate_definition_class(type(definition))
@@ -194,14 +218,11 @@ def apply_profile_defaults_to_settings(
 
 
 def instantiate_definition_class(definition_class: type[DefinitionT]) -> DefinitionT:
-    """
-    Build a pure v2 definition instance from its class defaults.
+    """Create a default instance of a definition class.
 
-    We intentionally instantiate through Pydantic validation rather than a raw
-    zero-arg constructor call because the base `AgentDefinition` type has
-    required fields while concrete subclasses provide defaults.
+    This uses `model_validate({})` to correctly initialize a Pydantic model
+    from its class-level field defaults.
     """
-
     return definition_class.model_validate({})
 
 
@@ -210,14 +231,12 @@ def apply_react_profile_to_definition(
     profile_id: str | None,
 ) -> DefinitionT:
     """
-    Apply one backend-defined ReAct profile to a definition instance.
+    Apply a named ReAct profile to a definition instance.
 
-    Why this helper exists:
-    - creation flows should be able to choose a starting profile immediately
-    - callers should not need to know about the internal field-default plumbing
-    - non-profiled definitions should pass through unchanged
+    This returns a new definition instance with defaults (role, description,
+    prompts, etc.) overridden by the selected profile. This is used during agent
+    creation to provide a starting point.
     """
-
     if not isinstance(profile_id, str) or not profile_id.strip():
         return definition
     profiled_definition = _apply_profile_to_definition(
@@ -249,14 +268,12 @@ def build_bound_runtime_context(
     agent_name: str | None = None,
     team_id: str | None = None,
 ) -> BoundRuntimeContext:
-    """
-    Build the portable execution context used by v2 runtimes.
+    """Create the `BoundRuntimeContext` for a v2 agent execution.
 
-    This is the point where a Fred session, user, and agent id are turned into
-    the smaller context envelope that tools, tracing, and future SDK-aligned
-    capabilities can share consistently.
+    This function combines the Fred-specific `RuntimeContext` with a `PortableContext`
+    that contains standardized, transportable information like trace IDs and
+    actor identity, suitable for use by tools and other backend services.
     """
-
     tenant = runtime_context.user_id or user.uid or "fred"
     return BoundRuntimeContext(
         runtime_context=runtime_context.model_copy(deep=True),

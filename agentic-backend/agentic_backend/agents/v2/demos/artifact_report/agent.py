@@ -22,7 +22,8 @@ DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     path_parts=(
         "agents",
         "v2",
-        "artifact_report_demo",
+        "demos",
+        "artifact_report",
         "prompts",
         "artifact_report_demo_system_prompt.md",
     ),

@@ -1,10 +1,10 @@
-# V2 Model Routing User Rules Spec
+# Model Routing User Rules Spec
 
 This document is a user-facing specification for model routing rules.
 It is intentionally simple and example-first.
 
 For technical internals, see:
-- [V2_MODEL_ROUTING_PATTERN.md](/home/dimi/run/reference/fred/agentic-backend/docs/V2_MODEL_ROUTING_PATTERN.md)
+- [MODEL_ROUTING_PATTERN.md](/home/dimi/run/reference/fred/agentic-backend/docs/MODEL_ROUTING_PATTERN.md)
 
 ## Goal
 

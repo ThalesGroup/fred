@@ -27,7 +27,7 @@ ENJEUX_BESOINS_QUERIES: list[tuple[str, int]] = [
 ]
 
 EXTRACT_ENJEUX_BESOINS_PROMPT = prompt_md(
-    package="agentic_backend.agents.v2.ppt_filler_react",
+    package="agentic_backend.agents.v2.production.ppt_filler_react",
     file_name="ppt_filler_extract_enjeux_prompt.md",
 )
 

@@ -32,6 +32,7 @@ DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     path_parts=(
         "agents",
         "v2",
+        "production",
         "basic_react",
         "prompts",
         "basic_react_system_prompt.md",

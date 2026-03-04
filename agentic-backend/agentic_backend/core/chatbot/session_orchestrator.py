@@ -1553,7 +1553,7 @@ class SessionOrchestrator:
             session = await self.session_store.get(session_id)
 
         if session is None:
-            # A2A proxy sessions are not persisted locally; allow access to avoid noisy warnings.
+            # Missing sessions are handled by the caller; avoid noisy warnings here.
             return False
 
         # For now, ignore action, only owners can access their sessions

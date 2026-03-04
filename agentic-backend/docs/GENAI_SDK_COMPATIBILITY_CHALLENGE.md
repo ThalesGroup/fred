@@ -4,7 +4,7 @@ This document is not an adoption plan.
 It is a challenge checklist meant to prevent naive convergence work.
 
 For the more specific question of how Fred v2 relates to LangChain middleware,
-see [V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](./V2_RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md).
+see [RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](./RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md).
 
 The question is not:
 

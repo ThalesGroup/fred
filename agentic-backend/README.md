@@ -94,7 +94,7 @@ If you want to learn how to build agents in Fred, start with the **Academy** sam
 - [`agentic_backend/academy/ACADEMY.md`](agentic_backend/academy/ACADEMY.md) – overview of all training steps
 - Each step has its own folder and (for most) a local README:
   - `agentic_backend/academy/04_slide_maker/README.md` – slide/outline generator
-  - `agentic_backend/agents/v2/artifact_report_demo.py` – v2 downloadable report pattern
+  - `agentic_backend/agents/v2/demos/artifact_report/agent.py` – v2 downloadable report pattern
 
 On GitHub, these links are clickable and let readers drill down from the top‑level README to any sample.
 

@@ -431,10 +431,6 @@
       "creationModeClassHelp": "Réservé aux agents workflow ou implémentations backend spécifiques qui ne rentrent pas dans le modèle standard.",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
-      "a2aProxyToggle": "Proxy A2A",
-      "a2aBaseUrl": "URL de base A2A",
-      "a2aBaseUrlRequired": "L'URL de base A2A est requise pour un agent A2A.",
-      "a2aToken": "Jeton A2A (optionnel)",
       "profile": "Profil de départ",
       "profileHelp": "Choisissez un profil défini côté backend. Vous pourrez ensuite affiner le prompt, les outils et la sécurité dans les réglages.",
       "profileNoOptions": "Aucun profil ReAct n'est disponible actuellement.",
@@ -486,17 +482,7 @@
       "title": "Outils"
     },
     "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
-    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible.",
-    "registerA2A": "Enrôler",
-    "noA2ACardSummary": "Aucune carte A2A stockée",
-    "noA2ACardDetail": "Cet agent ne possède pas encore de carte A2A stockée.",
-    "a2aCardTitle": "Carte Agent A2A",
-    "a2aCapabilities": "Capacités",
-    "a2aStreaming": "Streaming",
-    "a2aPush": "Notifications push",
-    "a2aHistory": "Historique d'état",
-    "a2aSkills": "Compétences",
-    "a2aExamples": "Exemples"
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
   },
   "mcpHub": {
     "title": "Outils",
@@ -757,7 +743,6 @@
     "manageAssets": "Gérer les ressources",
     "inspectCode": "Inspecter le code source",
     "inspectAgent": "Inspecter la définition de l'agent",
-    "viewA2ACard": "Voir la carte A2A",
     "enable": "Activer"
   },
   "dialogs": {

@@ -14,14 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import CodeIcon from "@mui/icons-material/Code";
 import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import TuneIcon from "@mui/icons-material/Tune";
-import { Box, Card, CardContent, IconButton, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Card, CardContent, IconButton, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 // OpenAPI types
@@ -35,7 +33,6 @@ type AgentCardProps = {
   onToggleEnabled?: (agent: AnyAgent) => void;
   onManageAssets?: (agent: AnyAgent) => void;
   onInspectCode?: (agent: AnyAgent) => void;
-  onViewA2ACard?: (agent: AnyAgent) => void;
   onInspectAgent?: (agent: AnyAgent) => void;
 };
 
@@ -53,15 +50,10 @@ export const AgentCard = ({
   onToggleEnabled,
   onManageAssets,
   onInspectCode,
-  onViewA2ACard,
   onInspectAgent,
 }: AgentCardProps) => {
   const { t } = useTranslation();
-  const theme = useTheme();
   const isEnabled = agent.enabled !== false;
-  const hasA2aCard = Boolean(agent.metadata && (agent.metadata as any).a2a_card);
-  const isA2A = Boolean(agent.metadata && (agent.metadata as any).a2a_base_url);
-  const a2aBorder = theme.palette.success.main;
   const showInspection = Boolean(onInspectAgent && isLikelyV2DefinitionAgent(agent));
 
   const { showAgentCode, showAgentDisableButton } = useFrontendProperties();
@@ -99,47 +91,13 @@ export const AgentCard = ({
         >
           {/* Left: Agent Chip (includes name) */}
           <Box sx={{ flexShrink: 0 }}>
-            {isA2A ? (
-              <Box
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 0.6,
-                  minWidth: 0,
-                }}
-              >
-                <CloudQueueIcon
-                  sx={{
-                    fontSize: 18,
-                    color: a2aBorder,
-                    flexShrink: 0,
-                  }}
-                />
-                <Typography
-                  variant="body1"
-                  fontWeight={700}
-                  sx={{
-                    color: a2aBorder,
-                    lineHeight: 1.2,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    maxWidth: 180,
-                  }}
-                  title={agent.name}
-                >
-                  {agent.name}
-                </Typography>
-              </Box>
-            ) : (
-              <Typography
-                variant="subtitle1"
-                color="primary"
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
-              >
-                {agent.name}
-              </Typography>
-            )}
+            <Typography
+              variant="subtitle1"
+              color="primary"
+              sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
+            >
+              {agent.name}
+            </Typography>
           </Box>
         </Box>
 
@@ -180,7 +138,7 @@ export const AgentCard = ({
         </Typography>
         {/* Footer actions (unchanged) */}
         <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
-          {!isA2A && onManageAssets && (
+          {onManageAssets && (
             <SimpleTooltip title={t("agentCard.manageAssets")}>
               <IconButton
                 size="small"
@@ -192,7 +150,7 @@ export const AgentCard = ({
               </IconButton>
             </SimpleTooltip>
           )}
-          {!isA2A && onEdit && (
+          {onEdit && (
             <SimpleTooltip title={t("agentCard.edit")}>
               <IconButton
                 size="small"
@@ -204,7 +162,7 @@ export const AgentCard = ({
               </IconButton>
             </SimpleTooltip>
           )}
-          {!isA2A && showAgentCode && onInspectCode && (
+          {showAgentCode && onInspectCode && (
             <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
               <IconButton
                 size="small"
@@ -229,19 +187,6 @@ export const AgentCard = ({
               </IconButton>
             </SimpleTooltip>
           )}
-          {onViewA2ACard && hasA2aCard && (
-            <SimpleTooltip title={t("agentCard.viewA2ACard", "View A2A card")}>
-              <IconButton
-                size="small"
-                onClick={() => onViewA2ACard(agent)}
-                sx={{ color: "text.secondary" }}
-                aria-label="view a2a card"
-              >
-                <VisibilityIcon fontSize="small" />
-              </IconButton>
-            </SimpleTooltip>
-          )}
-
           {showAgentDisableButton && onToggleEnabled && (
             <SimpleTooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable")}>
               <IconButton

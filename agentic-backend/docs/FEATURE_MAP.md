@@ -1,4 +1,4 @@
-# Fred V2 Feature Map
+# Fred Feature Map (Current Runtime)
 
 Status: stable reference for the current implemented v2 feature surface
 
@@ -468,5 +468,5 @@ The features above are the ones that matter most for that claim:
 If those all feel natural in the same model, then the v2 direction is strong.
 
 For a scan of what still remains in the legacy agents and whether it deserves
-promotion into a real v2 feature, see
-[V2_LEGACY_FEATURE_SCAN.md](./V2_LEGACY_FEATURE_SCAN.md).
+promotion into a real runtime feature, see
+[LEGACY_FEATURE_SCAN.md](./LEGACY_FEATURE_SCAN.md).

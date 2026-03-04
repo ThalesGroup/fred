@@ -8,13 +8,13 @@ definition/runtime split with real agents before Fred migrates a broader fleet.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
-    from .artifact_report_demo import ArtifactReportDemoV2Definition
-    from .basic_react import BasicReActDefinition
-    from .basic_react.profiles.rag_expert_agent import RagExpertV2Definition
+    from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
+    from .demos.artifact_report import ArtifactReportDemoV2Definition
+    from .production.basic_react import BasicReActDefinition
+    from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
     from .demos.postal_tracking import Definition as PostalTrackingDefinition
-    from .ppt_filler_react import PptFillerReActV2Definition
-    from .protos.bid_mgr import Definition as BidMgrDefinition
+    from .production.ppt_filler_react import PptFillerReActV2Definition
+    from .candidate.bid_mgr import Definition as BidMgrDefinition
 
 __all__ = [
     "AegisGraphV2SkeletonDefinition",
@@ -38,19 +38,19 @@ def __getattr__(name: str) -> object:
     """
 
     if name == "AegisGraphV2SkeletonDefinition":
-        from .aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
+        from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
 
         return AegisGraphV2SkeletonDefinition
     if name == "ArtifactReportDemoV2Definition":
-        from .artifact_report_demo import ArtifactReportDemoV2Definition
+        from .demos.artifact_report import ArtifactReportDemoV2Definition
 
         return ArtifactReportDemoV2Definition
     if name == "BasicReActDefinition":
-        from .basic_react import BasicReActDefinition
+        from .production.basic_react import BasicReActDefinition
 
         return BasicReActDefinition
     if name == "BidMgrDefinition":
-        from .protos.bid_mgr import Definition as BidMgrDefinition
+        from .candidate.bid_mgr import Definition as BidMgrDefinition
 
         return BidMgrDefinition
     if name == "PostalTrackingDefinition":
@@ -58,11 +58,13 @@ def __getattr__(name: str) -> object:
 
         return PostalTrackingDefinition
     if name == "PptFillerReActV2Definition":
-        from .ppt_filler_react import PptFillerReActV2Definition
+        from .production.ppt_filler_react import PptFillerReActV2Definition
 
         return PptFillerReActV2Definition
     if name == "RagExpertV2Definition":
-        from .basic_react.profiles.rag_expert_agent import RagExpertV2Definition
+        from .production.basic_react.profiles.rag_expert_agent import (
+            RagExpertV2Definition,
+        )
 
         return RagExpertV2Definition
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

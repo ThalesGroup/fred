@@ -1,10 +1,27 @@
-"""
-Single source of truth for built-in v2 tool references.
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-Why this file exists:
-- avoid scattering hard-coded `tool_ref` literals across runtime and adapters
-- keep argument schemas close to the contract identifier
-- make it obvious which backend port executes each built-in tool
+"""
+Definitions for platform-native tools available to v2 agents.
+
+This file contains:
+1. Stable `tool_ref` constants (e.g. `knowledge.search`) used in agent definitions.
+2. Pydantic models defining the input arguments for these tools.
+3. A registry mapping tool refs to their execution backend (e.g. ToolInvoker vs ArtifactPublisher).
+
+Use this module to look up the arguments expected by built-in tools or to find
+the correct `tool_ref` string when adding capabilities to an agent.
 """
 
 from __future__ import annotations

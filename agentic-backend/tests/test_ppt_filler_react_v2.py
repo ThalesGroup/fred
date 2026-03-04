@@ -4,7 +4,9 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
-from agentic_backend.agents.v2.ppt_filler_react import PptFillerReActV2Definition
+from agentic_backend.agents.v2.production.ppt_filler_react import (
+    PptFillerReActV2Definition,
+)
 from agentic_backend.core.agents.agent_factory import AgentFactory
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
@@ -131,7 +133,7 @@ def test_agent_factory_builds_composite_invoker_for_registered_toolset() -> None
 
     effective_settings = definition_to_agent_settings(
         definition,
-        class_path="agentic_backend.agents.v2.ppt_filler_react.PptFillerReActV2Definition",
+        class_path="agentic_backend.agents.v2.production.ppt_filler_react.PptFillerReActV2Definition",
     )
     base_tool_invoker = RecordingToolInvoker()
     invoker = AgentFactory._build_v2_tool_invoker(

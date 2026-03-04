@@ -84,7 +84,7 @@ explicit precedence.
 ## Agent-layer presets (example)
 
 ```python
-from agentic_backend.agents.v2.basic_react.model_routing_presets import (
+from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (
     build_default_policy_with_basic_react_presets,
 )
 
