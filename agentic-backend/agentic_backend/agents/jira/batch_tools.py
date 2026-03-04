@@ -357,10 +357,9 @@ Exigences à respecter:
 
             # If generate_requirements is in the same batch, its state update
             # hasn't been applied yet — ask the LLM to retry on the next turn.
-            if not requirements:
-                conflict = check_batch_conflict(runtime, "generate_user_stories")
-                if conflict:
-                    return conflict
+            conflict = check_batch_conflict(runtime, "generate_user_stories")
+            if conflict:
+                return conflict
 
             # Generate titles
             pending_titles = await self._generate_user_story_titles(
