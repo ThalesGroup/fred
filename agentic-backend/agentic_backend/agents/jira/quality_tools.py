@@ -212,16 +212,7 @@ class QualityTools:
                     break
 
             if not story:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ User Story {story_id} non trouvée.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ User Story {story_id} non trouvée."
 
             # Gather linked requirements
             requirements = runtime.state.get("requirements") or []
@@ -308,16 +299,7 @@ class QualityTools:
                     break
 
             if not target_test:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Test {test_id} non trouvé.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Test {test_id} non trouvé."
 
             # Find linked user story
             us_id = target_test.get("user_story_id")

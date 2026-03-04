@@ -100,16 +100,9 @@ class DiscoveryTools:
             """
             search_tool = self._find_search_tool()
             if not search_tool:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Outil de recherche documentaire introuvable. "
-                                "Vérifiez la connexion au serveur MCP.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
+                return (
+                    "❌ Outil de recherche documentaire introuvable. "
+                    "Vérifiez la connexion au serveur MCP."
                 )
 
             # Run all predefined queries in parallel and collect results
@@ -141,16 +134,9 @@ class DiscoveryTools:
                         all_chunks.append(hit)
 
             if not all_chunks:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucun document trouvé. Vérifiez qu'une bibliothèque "
-                                "documentaire contenant des documents projet est sélectionnée.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
+                return (
+                    "❌ Aucun document trouvé. Vérifiez qu'une bibliothèque "
+                    "documentaire contenant des documents projet est sélectionnée."
                 )
 
             # Sort by score (descending) and keep top chunks

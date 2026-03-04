@@ -8,7 +8,11 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.types import Command
 
-from agentic_backend.agents.jira.helpers import ensure_pydantic_model, get_max_id_number
+from agentic_backend.agents.jira.helpers import (
+    check_batch_conflict,
+    ensure_pydantic_model,
+    get_max_id_number,
+)
 from agentic_backend.agents.jira.pydantic_models import (
     RequirementsList,
     TestsList,
@@ -51,18 +55,11 @@ class BatchTools:
             """
             # Validate context_summary has meaningful content
             if len(context_summary.strip()) < 200:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
-                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
-                                "(search_documents, get_document_content) pour extraire les informations "
-                                "du projet, puis fournir un résumé détaillé en paramètre.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                    "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                    "(search_documents, get_document_content) pour extraire les informations "
+                    "du projet, puis fournir un résumé détaillé en paramètre."
                 )
 
             requirements_prompt = """Tu es un Business Analyst expert. Génère une liste d'exigences formelles basée sur le contexte projet suivant.
@@ -91,7 +88,9 @@ Règles:
                 )
             ]
 
-            response = ensure_pydantic_model(await model.ainvoke(messages), RequirementsList)
+            response = ensure_pydantic_model(
+                await model.ainvoke(messages), RequirementsList
+            )
             requirements = [r.model_dump() for r in response.items]
 
             return Command(
@@ -219,7 +218,9 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        response = ensure_pydantic_model(await model.ainvoke(messages), UserStoryTitlesList)
+        response = ensure_pydantic_model(
+            await model.ainvoke(messages), UserStoryTitlesList
+        )
         return [t.model_dump() for t in response.items]
 
     async def _generate_user_story_batch(
@@ -342,23 +343,23 @@ Exigences à respecter:
 
             # Validation
             if len(context_summary.strip()) < 200:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
-                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
-                                "(search_documents, get_document_content) pour extraire les informations "
-                                "du projet, puis fournir un résumé détaillé en paramètre.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                    "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                    "(search_documents, get_document_content) pour extraire les informations "
+                    "du projet, puis fournir un résumé détaillé en paramètre."
                 )
 
             # Get existing data from state
             existing_stories = runtime.state.get("user_stories") or []
             requirements = runtime.state.get("requirements")
+
+            # If generate_requirements is in the same batch, its state update
+            # hasn't been applied yet — ask the LLM to retry on the next turn.
+            if not requirements:
+                conflict = check_batch_conflict(runtime, "generate_user_stories")
+                if conflict:
+                    return conflict
 
             # Generate titles
             pending_titles = await self._generate_user_story_titles(
@@ -379,7 +380,9 @@ Exigences à respecter:
             # Process all batches in parallel
             batch_results = await asyncio.gather(
                 *[
-                    self._generate_user_story_batch(batch, context_summary, requirements)
+                    self._generate_user_story_batch(
+                        batch, context_summary, requirements
+                    )
                     for batch in batches
                 ]
             )
@@ -597,18 +600,16 @@ Règles:
             existing_tests = runtime.state.get("tests") or []
             all_stories = runtime.state.get("user_stories") or []
 
-            # Validation
+            # If generate_user_stories is in the same batch, its state update
+            # hasn't been applied yet — defer to the next turn.
+            conflict = check_batch_conflict(runtime, "generate_tests")
+            if conflict:
+                return conflict
+
             if not all_stories:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucune User Story n'a été générée. "
-                                "Appelle d'abord generate_user_stories() pour créer les User Stories.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "❌ Aucune User Story n'a été générée. "
+                    "Appelle d'abord generate_user_stories() pour créer les User Stories."
                 )
 
             # Generate titles
