@@ -34,9 +34,7 @@ def check_batch_conflict(runtime: Any, tool_name: str) -> str | None:
     if last_ai is None:
         return None
 
-    batch_tools = {
-        tc.get("name") for tc in (getattr(last_ai, "tool_calls", []) or [])
-    }
+    batch_tools = {tc.get("name") for tc in (getattr(last_ai, "tool_calls", []) or [])}
     found = conflicts & batch_tools
     if not found:
         return None
@@ -51,6 +49,7 @@ def check_batch_conflict(runtime: Any, tool_name: str) -> str | None:
         f"Les données produites par {', '.join(found)} ne sont pas encore disponibles. "
         f"Appelle {tool_name}() seul dans ton prochain message."
     )
+
 
 T = TypeVar("T", bound=BaseModel)
 
