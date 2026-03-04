@@ -106,11 +106,24 @@ class KfBaseClient:
         """Uniform accessor for the access token regardless of mode."""
         if self._agent:
             token = getattr(self._agent.runtime_context, "access_token", None)
-            if not token:
-                raise ValueError("AgentFlow runtime_context has no access_token.")
-            return token
+            if token:
+                return token
+            # Centralized fallback: if token is missing, attempt a refresh once.
+            if self._try_refresh_token():
+                refreshed = getattr(self._agent.runtime_context, "access_token", None)
+                if refreshed:
+                    return refreshed
+            raise ValueError(
+                "AgentFlow runtime_context has no access_token and refresh failed."
+            )
+
+        if not self._static_access_token and self._refresh_cb:
+            if self._try_refresh_token() and self._static_access_token:
+                return self._static_access_token
         if not self._static_access_token:
-            raise ValueError("No access_token provided for session-scoped client.")
+            raise ValueError(
+                "No access_token provided for session-scoped client and refresh failed."
+            )
         return self._static_access_token
 
     def _try_refresh_token(self) -> bool:

@@ -48,6 +48,10 @@ from langchain_core.messages import (
 
 from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
+from agentic_backend.common.kf_workspace_client import (
+    KfWorkspaceClient,
+    UserStorageResourceInfo,
+)
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
@@ -108,6 +112,20 @@ _HITL_RESUME_UI_META_KEYS = {
     "_hitl_stage",
     "_hitl_question",
 }
+
+
+def _workspace_file_keys_for_session_cleanup(
+    resources: List[UserStorageResourceInfo],
+) -> List[str]:
+    """
+    Return user-storage keys safe to delete for one session prefix cleanup.
+
+    Only file entries are kept. Directory-like entries are ignored to avoid
+    local-filesystem `unlink()` errors and parent/child delete races.
+    """
+    keys = [entry.path for entry in resources if entry.path and entry.is_file()]
+    # Preserve order and drop duplicates.
+    return list(dict.fromkeys(keys))
 
 
 def _stringify_hitl_value(value: Any) -> Optional[str]:
@@ -1256,6 +1274,43 @@ class SessionOrchestrator:
                         doc_uid,
                         exc_info=True,
                     )
+        # Workspace file cleanup (files are stored under {session_id}/ prefix)
+        if access_token:
+            try:
+                ws_client = KfWorkspaceClient(access_token=access_token)
+                blobs = await ws_client.list_user_blobs(prefix=f"{session_id}/")
+                blob_keys = _workspace_file_keys_for_session_cleanup(blobs)
+                skipped_non_files = sum(1 for entry in blobs if not entry.is_file())
+                if skipped_non_files:
+                    logger.debug(
+                        "[SESSIONS] Workspace cleanup skipped %s non-file entries under prefix %s/",
+                        skipped_non_files,
+                        session_id,
+                    )
+                if blob_keys:
+                    results = await asyncio.gather(
+                        *(ws_client.delete_user_blob(k) for k in blob_keys),
+                        return_exceptions=True,
+                    )
+                    for key, result in zip(blob_keys, results):
+                        if isinstance(result, Exception):
+                            logger.warning(
+                                "[SESSIONS] Failed to delete workspace file %s during session cleanup: %s",
+                                key,
+                                result,
+                            )
+                        else:
+                            logger.info(
+                                "[SESSIONS] Deleted workspace file %s (session cleanup)",
+                                key,
+                            )
+            except Exception:
+                logger.warning(
+                    "[SESSIONS] Failed to list workspace files for session %s during cleanup",
+                    session_id,
+                    exc_info=True,
+                )
+
         logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------

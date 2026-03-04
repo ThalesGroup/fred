@@ -877,6 +877,11 @@ class AgentFlow:
         Raises:
             AssetUploadError: If the upload fails (e.g., HTTP error).
         """
+        # Scope files under the session so they can be cleaned up on session delete
+        session_id = getattr(self.runtime_context, "session_id", None)
+        if session_id:
+            key = f"{session_id}/{key}"
+
         logger.info(
             "UPLOADING_ASSET: Attempting to upload asset to user store: %s", key
         )
