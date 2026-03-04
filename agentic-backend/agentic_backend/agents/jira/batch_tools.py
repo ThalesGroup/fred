@@ -397,7 +397,8 @@ Exigences à respecter:
                 if isinstance(result, BaseException):
                     failed_batches += 1
                     logger.error(
-                        f"[JiraAgent] User story batch {i + 1} failed: {result}"
+                        f"[JiraAgent] User story batch {i + 1} failed: {result}",
+                        exc_info=(type(result), result, result.__traceback__),
                     )
                 else:
                     all_generated_stories.extend(result)
