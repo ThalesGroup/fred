@@ -53,18 +53,19 @@ VERSION ?=
 .PHONY: set-version
 set-version: ## Update project version everywhere (usage: make set-version VERSION=x.y.z)
 	@if [ -z "$(VERSION)" ]; then echo "ERROR: VERSION is required. Usage: make set-version VERSION=x.y.z"; exit 1; fi
-	@echo "Setting version to $(VERSION)..."
+	$(eval PY_VERSION := $(shell echo "$(VERSION)" | sed 's/-/+/'))
+	@echo "Setting version to $(VERSION) (Python: $(PY_VERSION))..."
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	@echo "--- fred-core ---"
-	sed -i 's/^version = .*/version = "$(VERSION)"/' fred-core/pyproject.toml
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' fred-core/pyproject.toml
 	cd fred-core && uv lock
 	@echo "--- agentic-backend ---"
-	sed -i 's/^version = .*/version = "$(VERSION)"/' agentic-backend/pyproject.toml
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' agentic-backend/pyproject.toml
 	cd agentic-backend && uv lock
 	@echo "--- knowledge-flow-backend ---"
-	sed -i 's/^version = .*/version = "$(VERSION)"/' knowledge-flow-backend/pyproject.toml
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' knowledge-flow-backend/pyproject.toml
 	cd knowledge-flow-backend && uv lock
 	@echo "--- frontend ---"
 	cd frontend && npm version $(VERSION) --no-git-tag-version

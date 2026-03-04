@@ -98,20 +98,6 @@ ai:
   default_chat_model:
     # Required in .env:
     # - OPENAI_API_KEY
-    # provider: "azure-openai"
-    # name: "gpt-4o"
-    # settings:
-    #   azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-    #   azure_openai_api_version: "2024-06-01"
-    # provider: "azure-apim"
-    # name: "gpt-4o"
-    # settings:
-    #   azure_apim_base_url: "https://trustnest.azure-api.net"
-    #   azure_apim_resource_path: "/genai-aoai-inference/v2"
-    #   azure_openai_api_version: "2024-06-01"
-    #   azure_tenant_id: "your-tenant-id"
-    #   azure_ad_client_id: "your-client-id"
-    #   azure_ad_client_scope: "api://your-client-id/.default"
     provider: "openai"
     name: "gpt-5.1"
     settings:
@@ -146,6 +132,105 @@ ai:
         max_keepalive_connections: 200
         keepalive_expiry_seconds: 10
       temperature: 0.0
+
+  # Model provider examples:
+  # NOTE: Keep secrets in .env; only non-secret model settings go here.
+  #
+  # Ollama
+  # default_chat_model:
+  #   provider: "ollama"
+  #   name: "qwen2.5:3b-instruct"
+  #   settings:
+  #     base_url: "http://localhost:11434"
+  #     temperature: 0.0
+  # default_language_model:
+  #   provider: "ollama"
+  #   name: "qwen2.5:3b-instruct"
+  #   settings:
+  #     base_url: "http://localhost:11434"
+  #     temperature: 0.0
+  #
+  # Azure OpenAI
+  # default_chat_model:
+  #   provider: "azure-openai"
+  #   name: "your-chat-deployment"
+  #   settings:
+  #     azure_endpoint: "https://<your-azure-openai>.openai.azure.com"
+  #     azure_openai_api_version: "2024-06-01"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
+  # default_language_model:
+  #   provider: "azure-openai"
+  #   name: "your-language-deployment"
+  #   settings:
+  #     azure_endpoint: "https://<your-azure-openai>.openai.azure.com"
+  #     azure_openai_api_version: "2024-06-01"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
+  #
+  # Azure APIM
+  # default_chat_model:
+  #   provider: "azure-apim"
+  #   name: "your-chat-deployment"
+  #   settings:
+  #     azure_ad_client_id: "your-client-id"
+  #     azure_ad_client_scope: "api://your-client-id/.default"
+  #     azure_apim_base_url: "https://trustnest.azure-api.net"
+  #     azure_apim_resource_path: "/genai-aoai-inference/v2"
+  #     azure_openai_api_version: "2024-06-01"
+  #     azure_tenant_id: "your-tenant-id"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
+  # default_language_model:
+  #   provider: "azure-apim"
+  #   name: "your-language-deployment"
+  #   settings:
+  #     azure_ad_client_id: "your-client-id"
+  #     azure_ad_client_scope: "api://your-client-id/.default"
+  #     azure_apim_base_url: "https://trustnest.azure-api.net"
+  #     azure_apim_resource_path: "/genai-aoai-inference/v2"
+  #     azure_openai_api_version: "2024-06-01"
+  #     azure_tenant_id: "your-tenant-id"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
+  #
+  # Vertex AI (Gemini via ChatGoogleGenerativeAI)
+  # default_chat_model:
+  #   provider: "vertex-ai"
+  #   name: "gemini-2.5-flash"
+  #   settings:
+  #     project: "your-gcp-project-id"
+  #     location: "europe-west1"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
+  #
+  # Vertex AI Model Garden (generic)
+  # Supported model_family: mistral | llama | anthropic
+  # default_chat_model:
+  #   provider: "vertex-ai-model-garden"
+  #   name: "mistral-small-3.1-24b-instruct-2503"
+  #   settings:
+  #     model_family: "mistral"
+  #     project: "your-gcp-project-id"
+  #     location: "europe-west1"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
+  # default_language_model:
+  #   provider: "vertex-ai-model-garden"
+  #   name: "mistral-small-3.1-24b-instruct-2503"
+  #   settings:
+  #     model_family: "mistral"
+  #     project: "your-gcp-project-id"
+  #     location: "europe-west1"
+  #     temperature: 0.0
+  #     max_retries: 2
+  #     request_timeout: 90
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model

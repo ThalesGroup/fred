@@ -210,54 +210,40 @@ crossencoder_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
+# Model provider examples:
+# NOTE: Keep secrets in .env; only non-secret model settings go here.
+#
+# Ollama
 # chat_model:
 #   provider: ollama
-#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
+#   name: qwen2.5:3b-instruct
 #   settings:
 #     base_url: http://localhost:11434
-#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-
+#     temperature: 0.7
 # embedding_model:
 #   provider: ollama
-#   name: nomic-embed-text            # embedding model served by Ollama
+#   name: nomic-embed-text
 #   settings:
 #     base_url: http://localhost:11434
-
+#
+# Azure OpenAI
 # chat_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-gpt-4o              # Azure deployment name for your chat model
+#   provider: azure-openai
+#   name: your-chat-deployment
 #   settings:
 #     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     azure_openai_api_version: 2024-05-01-preview
+#     azure_openai_api_version: 2024-06-01
 # embedding_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-embed-3             # Azure deployment name for your embedding model
+#   provider: azure-openai
+#   name: your-embedding-deployment
 #   settings:
 #     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     azure_openai_api_version: 2024-05-01-preview
-
-# embedding_model:
+#     azure_openai_api_version: 2024-06-01
+#
+# Azure APIM
+# chat_model:
 #   provider: azure-apim
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-text-embedding-3-large
-#   settings:
-#     azure_ad_client_id: "your-client-id"
-#     azure_ad_client_scope: "api://your-client-id/.default"
-#     azure_apim_base_url: "https://trustnest.azure-api.net"
-#     azure_apim_resource_path: "/genai-aoai-inference/v1"
-#     azure_openai_api_version: "2024-06-01"
-#     azure_tenant_id: "your-tenant-id"
-
-# chat_model:
-#   provider: azure-apim        # openai | azure | ollama
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: gpt-4o
+#   name: your-chat-deployment
 #   settings:
 #     azure_ad_client_id: "your-client-id"
 #     azure_ad_client_scope: "api://your-client-id/.default"
@@ -265,6 +251,56 @@ crossencoder_model:
 #     azure_apim_resource_path: "/genai-aoai-inference/v2"
 #     azure_openai_api_version: "2024-06-01"
 #     azure_tenant_id: "your-tenant-id"
+# embedding_model:
+#   provider: azure-apim
+#   name: your-embedding-deployment
+#   settings:
+#     azure_ad_client_id: "your-client-id"
+#     azure_ad_client_scope: "api://your-client-id/.default"
+#     azure_apim_base_url: "https://trustnest.azure-api.net"
+#     azure_apim_resource_path: "/genai-aoai-inference/v1"
+#     azure_openai_api_version: "2024-06-01"
+#     azure_tenant_id: "your-tenant-id"
+#
+# Vertex AI (Gemini / GenAI)
+# chat_model:
+#   provider: vertex-ai
+#   name: gemini-2.5-flash
+#   settings:
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     temperature: 0
+#     max_retries: 2
+#     request_timeout: 90
+# embedding_model:
+#   provider: vertex-ai
+#   name: text-embedding-005
+#   settings:
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     max_retries: 2
+# vision_model:
+#   provider: vertex-ai
+#   name: gemini-2.5-flash
+#   settings:
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     temperature: 0
+#     max_retries: 2
+#     request_timeout: 90
+#
+# Vertex AI Model Garden (generic)
+# Supported model_family: mistral | llama | anthropic
+# chat_model:
+#   provider: vertex-ai-model-garden
+#   name: mistral-small-3.1-24b-instruct-2503
+#   settings:
+#     model_family: mistral
+#     project: your-gcp-project-id
+#     location: europe-west1
+#     temperature: 0
+#     max_retries: 2
+#     request_timeout: 90
 
 storage:
   tabular_stores:

@@ -50,7 +50,10 @@ class ModelConfiguration(BaseModel):
     name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
     settings: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
-        description="Additional provider-specific settings, e.g., Azure deployment name.",
+        description=(
+            "Additional provider-specific settings, "
+            "e.g. Azure endpoint/API version or Vertex AI project/location."
+        ),
     )
 
 
