@@ -220,6 +220,13 @@ class AIConfig(BaseModel):
             "persistent configurations are ignored."
         ),
     )
+    enable_v2_sql_checkpointer: bool = Field(
+        False,
+        description=(
+            "Enable durable SQL checkpointing for v2 runtimes. "
+            "Disabled by default."
+        ),
+    )
     restore_max_exchanges: int = Field(
         20,
         description="Number of past exchanges to restore when initializing an agent session.",

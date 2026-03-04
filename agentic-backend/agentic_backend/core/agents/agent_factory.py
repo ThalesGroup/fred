@@ -423,6 +423,11 @@ class AgentFactory(BaseAgentFactory):
             binding=binding,
             settings=effective_settings,
         )
+        checkpointer = (
+            self._get_v2_checkpointer()
+            if self._configuration.ai.enable_v2_sql_checkpointer
+            else None
+        )
         services = RuntimeServices(
             tracer=build_langfuse_tracer(),
             chat_model_factory=chat_model_factory,
@@ -442,7 +447,7 @@ class AgentFactory(BaseAgentFactory):
             artifact_publisher=artifact_publisher,
             resource_reader=resource_reader,
             kpi=get_kpi_writer(),
-            checkpointer=self._get_v2_checkpointer(),
+            checkpointer=checkpointer,
         )
         if isinstance(definition, ReActAgentDefinition):
             runtime = ReActRuntime(
