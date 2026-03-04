@@ -29,6 +29,7 @@ class BatchTools:
     """Batch generation tools for requirements, user stories, and tests."""
 
     BATCH_SIZE = 10
+    MAX_CONCURRENT_BATCHES = 3
 
     def __init__(self, agent):
         """Initialize batch tools with reference to parent agent."""
@@ -377,19 +378,38 @@ Exigences à respecter:
                 f"[JiraAgent] Starting batch generation: {total_to_generate} user stories in {len(batches)} parallel batches of {batch_size}"
             )
 
-            # Process all batches in parallel
-            batch_results = await asyncio.gather(
-                *[
-                    self._generate_user_story_batch(
+            # Process batches with bounded concurrency
+            semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_BATCHES)
+
+            async def _run_us_batch(batch):
+                async with semaphore:
+                    return await self._generate_user_story_batch(
                         batch, context_summary, requirements
                     )
-                    for batch in batches
-                ]
+
+            batch_results = await asyncio.gather(
+                *[_run_us_batch(batch) for batch in batches],
+                return_exceptions=True,
             )
-            all_generated_stories = [s for batch in batch_results for s in batch]
+
+            all_generated_stories = []
+            failed_batches = 0
+            for i, result in enumerate(batch_results):
+                if isinstance(result, BaseException):
+                    failed_batches += 1
+                    logger.error(
+                        f"[JiraAgent] User story batch {i + 1} failed: {result}"
+                    )
+                else:
+                    all_generated_stories.extend(result)
+
+            if failed_batches:
+                logger.warning(
+                    f"[JiraAgent] {failed_batches}/{len(batches)} user story batches failed"
+                )
 
             logger.info(
-                f"[JiraAgent] All {len(all_generated_stories)}/{total_to_generate} user stories generated"
+                f"[JiraAgent] {len(all_generated_stories)}/{total_to_generate} user stories generated ({failed_batches} batch failures)"
             )
 
             # Build success message and return
@@ -629,17 +649,38 @@ Règles:
                 f"[JiraAgent] Starting batch generation: {total_to_generate} tests in {len(batches)} parallel batches of {batch_size}"
             )
 
-            # Process all batches in parallel
+            # Process batches with bounded concurrency
+            semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_BATCHES)
+
+            async def _run_test_batch(batch):
+                async with semaphore:
+                    return await self._generate_test_batch(
+                        batch, stories_by_id, jdd
+                    )
+
             batch_results = await asyncio.gather(
-                *[
-                    self._generate_test_batch(batch, stories_by_id, jdd)
-                    for batch in batches
-                ]
+                *[_run_test_batch(batch) for batch in batches],
+                return_exceptions=True,
             )
-            all_generated_tests = [t for batch in batch_results for t in batch]
+
+            all_generated_tests = []
+            failed_batches = 0
+            for i, result in enumerate(batch_results):
+                if isinstance(result, BaseException):
+                    failed_batches += 1
+                    logger.error(
+                        f"[JiraAgent] Test batch {i + 1} failed: {result}"
+                    )
+                else:
+                    all_generated_tests.extend(result)
+
+            if failed_batches:
+                logger.warning(
+                    f"[JiraAgent] {failed_batches}/{len(batches)} test batches failed"
+                )
 
             logger.info(
-                f"[JiraAgent] All {len(all_generated_tests)}/{total_to_generate} tests generated"
+                f"[JiraAgent] {len(all_generated_tests)}/{total_to_generate} tests generated ({failed_batches} batch failures)"
             )
 
             # Build success message and return
