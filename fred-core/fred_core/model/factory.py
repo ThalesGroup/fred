@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import threading
+from collections.abc import AsyncGenerator, Generator
 from typing import Any, Dict, Iterable, Optional, Type
 
+import httpx
 from langchain_core.embeddings import Embeddings as LCEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
@@ -27,6 +31,111 @@ from fred_core.model.http_clients import get_shared_stack, strip_transport_setti
 from fred_core.model.models import ModelProvider
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Vertex AI Model Garden auth hardening (token auto-refresh)
+# ---------------------------------------------------------------------------
+
+_GCP_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+class _GcpTokenAuth(httpx.Auth):
+    """
+    Attach a valid GCP Bearer token on each request.
+
+    Why this exists:
+    - langchain-google-vertexai Model Garden classes currently initialize
+      `httpx` clients with a static `Authorization: Bearer <token>` header.
+    - token lifetime is short (~1h), which triggers ACCESS_TOKEN_EXPIRED in
+      long-running Fred processes.
+    """
+
+    def __init__(self, credentials: object | None = None, request_adapter: object | None = None):
+        self._credentials = credentials
+        self._request = request_adapter
+        if self._credentials is None or self._request is None:
+            try:
+                from google import auth as google_auth
+                from google.auth.transport import requests as google_auth_requests
+            except ImportError as exc:
+                raise ImportError(
+                    "google-auth is required for Vertex AI providers."
+                ) from exc
+
+            resolved_credentials = self._credentials
+            if resolved_credentials is None:
+                resolved_credentials = google_auth.default(
+                    scopes=[_GCP_CLOUD_PLATFORM_SCOPE]
+                )[0]
+            if getattr(resolved_credentials, "requires_scopes", False) and hasattr(
+                resolved_credentials, "with_scopes"
+            ):
+                resolved_credentials = resolved_credentials.with_scopes(
+                    [_GCP_CLOUD_PLATFORM_SCOPE]
+                )
+            self._credentials = resolved_credentials
+            self._request = google_auth_requests.Request()
+
+        self._lock = threading.Lock()
+
+    def _refresh_if_needed(self) -> None:
+        with self._lock:
+            valid = bool(getattr(self._credentials, "valid", False))
+            token = getattr(self._credentials, "token", None)
+            if valid and token:
+                return
+            refresh = getattr(self._credentials, "refresh", None)
+            if not callable(refresh):
+                raise TypeError("GCP credentials object does not expose refresh().")
+            refresh(self._request)
+            refreshed_token = getattr(self._credentials, "token", None)
+            if not refreshed_token:
+                raise ValueError("Could not retrieve a refreshed GCP access token.")
+
+    def auth_flow(
+        self, request: httpx.Request
+    ) -> Generator[httpx.Request, httpx.Response, None]:
+        self._refresh_if_needed()
+        request.headers["Authorization"] = f"Bearer {self._credentials.token}"
+        yield request
+
+    async def async_auth_flow(
+        self, request: httpx.Request
+    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._refresh_if_needed)
+        request.headers["Authorization"] = f"Bearer {self._credentials.token}"
+        yield request
+
+
+def _patch_vertex_maas_auth(model: Any) -> None:
+    """
+    Replace static Authorization header with auto-refreshing auth object.
+
+    This patch is best-effort and only applies when the model exposes both
+    `client` and `async_client` as `httpx` clients.
+    """
+
+    sync_client = getattr(model, "client", None)
+    async_client = getattr(model, "async_client", None)
+    if not isinstance(sync_client, httpx.Client) or not isinstance(
+        async_client, httpx.AsyncClient
+    ):
+        logger.warning(
+            "[MODEL][VERTEX_MAAS] Unable to patch auto-refresh auth for %s: model does not expose expected httpx clients.",
+            type(model).__name__,
+        )
+        return
+
+    auth = _GcpTokenAuth(credentials=getattr(model, "credentials", None))
+    for client in (sync_client, async_client):
+        client.auth = auth
+        client.headers.pop("Authorization", None)
+    logger.info(
+        "[MODEL][VERTEX_MAAS] Enabled auto-refreshing GCP auth for %s.",
+        type(model).__name__,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Logging hygiene
@@ -387,16 +496,25 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         )
 
         last_error: Optional[TypeError] = None
+        constructed: Any | None = None
         for ctor_kwargs in ctor_candidates:
             try:
-                return model_cls(**ctor_kwargs, **settings)
+                constructed = model_cls(**ctor_kwargs, **settings)
+                break
             except TypeError as e:
                 last_error = e
 
-        raise TypeError(
-            "Unable to construct Vertex AI Model Garden chat model with known model kwargs "
-            "(tried model_name/model/model_id)."
-        ) from last_error
+        if constructed is None:
+            raise TypeError(
+                "Unable to construct Vertex AI Model Garden chat model with known model kwargs "
+                "(tried model_name/model/model_id)."
+            ) from last_error
+
+        # LangChain Vertex MaaS currently builds static bearer headers at model
+        # construction time. Patch mistral/llama clients to refresh tokens.
+        if model_family in {"mistral", "llama"}:
+            _patch_vertex_maas_auth(constructed)
+        return constructed
 
     # --- Provider: Ollama ---
     if provider == ModelProvider.OLLAMA.value:
