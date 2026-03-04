@@ -10,7 +10,7 @@ import logging
 import os
 import threading
 from collections.abc import AsyncGenerator, Generator
-from typing import Any, Dict, Iterable, Optional, Type
+from typing import Any, Dict, Iterable, Optional, Protocol, Sequence, Type, cast
 
 import httpx
 from langchain_core.embeddings import Embeddings as LCEmbeddings
@@ -39,6 +39,20 @@ logger = logging.getLogger(__name__)
 _GCP_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 
+class _GcpCredentials(Protocol):
+    """
+    Minimal protocol for google-auth credentials used by _GcpTokenAuth.
+    """
+
+    valid: bool
+    token: str | None
+    requires_scopes: bool
+
+    def refresh(self, request: object) -> None: ...
+
+    def with_scopes(self, scopes: Sequence[str]) -> "_GcpCredentials": ...
+
+
 class _GcpTokenAuth(httpx.Auth):
     """
     Attach a valid GCP Bearer token on each request.
@@ -53,18 +67,17 @@ class _GcpTokenAuth(httpx.Auth):
     def __init__(
         self, credentials: object | None = None, request_adapter: object | None = None
     ):
-        self._credentials = credentials
-        self._request = request_adapter
-        if self._credentials is None or self._request is None:
+        resolved_credentials = credentials
+        resolved_request = request_adapter
+        if resolved_credentials is None or resolved_request is None:
             try:
-                from google import auth as google_auth
+                import google.auth as google_auth
                 from google.auth.transport import requests as google_auth_requests
             except ImportError as exc:
                 raise ImportError(
                     "google-auth is required for Vertex AI providers."
                 ) from exc
 
-            resolved_credentials = self._credentials
             if resolved_credentials is None:
                 resolved_credentials = google_auth.default(
                     scopes=[_GCP_CLOUD_PLATFORM_SCOPE]
@@ -72,11 +85,20 @@ class _GcpTokenAuth(httpx.Auth):
             if getattr(resolved_credentials, "requires_scopes", False) and hasattr(
                 resolved_credentials, "with_scopes"
             ):
-                resolved_credentials = resolved_credentials.with_scopes(
-                    [_GCP_CLOUD_PLATFORM_SCOPE]
-                )
-            self._credentials = resolved_credentials
-            self._request = google_auth_requests.Request()
+                resolved_credentials = cast(
+                    _GcpCredentials, resolved_credentials
+                ).with_scopes([_GCP_CLOUD_PLATFORM_SCOPE])
+            resolved_request = google_auth_requests.Request()
+
+        if resolved_credentials is None or resolved_request is None:
+            raise ValueError(
+                "Unable to initialize GCP auth credentials/request adapter."
+            )
+        if not callable(getattr(resolved_credentials, "refresh", None)):
+            raise TypeError("GCP credentials object does not expose refresh().")
+
+        self._credentials = cast(_GcpCredentials, resolved_credentials)
+        self._request = resolved_request
 
         self._lock = threading.Lock()
 
@@ -98,7 +120,10 @@ class _GcpTokenAuth(httpx.Auth):
         self, request: httpx.Request
     ) -> Generator[httpx.Request, httpx.Response, None]:
         self._refresh_if_needed()
-        request.headers["Authorization"] = f"Bearer {self._credentials.token}"
+        token = self._credentials.token
+        if not token:
+            raise ValueError("Could not retrieve a valid GCP access token.")
+        request.headers["Authorization"] = f"Bearer {token}"
         yield request
 
     async def async_auth_flow(
@@ -106,7 +131,10 @@ class _GcpTokenAuth(httpx.Auth):
     ) -> AsyncGenerator[httpx.Request, httpx.Response]:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._refresh_if_needed)
-        request.headers["Authorization"] = f"Bearer {self._credentials.token}"
+        token = self._credentials.token
+        if not token:
+            raise ValueError("Could not retrieve a valid GCP access token.")
+        request.headers["Authorization"] = f"Bearer {token}"
         yield request
 
 
