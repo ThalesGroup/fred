@@ -171,7 +171,7 @@ global:
       gabriel.helan@thalesgroup.com
       maxance.demilly-duquesnoy@thalesgroup.com
       alejandro.velez-velasquez@thalesgroup.com
-      
+      karim.ayadi@thalesgroup.com
 
 applications:
   agentic-backend:
@@ -252,6 +252,7 @@ applications:
           provider: "openai"
           name: "mistral"
           settings:
+            stream_usage: false
             base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
         default_language_model: *tgs-mistral-medium
 
