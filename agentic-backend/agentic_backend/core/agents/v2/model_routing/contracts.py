@@ -21,7 +21,7 @@ This file is intentionally "product-first": read it as a data contract for
 Minimal mental model:
 
 1. A `ModelProfile` is a named model configuration.
-2. A `ModelRouteRule` says "when `match` is true, use `target_profile_id`".
+2. A `ModelRouteRule` says "when criteria match, use `target_profile_id`".
 3. A `ModelRoutingPolicy` contains defaults + profiles + ordered rules.
 
 Concrete scenario (team-a, R1/R2 ReAct, G1 Graph):
@@ -172,8 +172,20 @@ class ModelRouteRule(FrozenModel):
     One routing decision rule.
 
     Reads as:
-    "If `match` applies and `capability` matches, then use
+    "If rule criteria apply and `capability` matches, then use
     `target_profile_id`."
+
+    Supported catalog formats:
+    - Preferred flat format:
+      `operation` (required) + optional criteria (`purpose`, `agent_id`,
+      `team_id`, `user_id`) at rule root.
+    - Legacy format:
+      `match: { ... }` block.
+
+    Transition behavior:
+    - both formats are accepted;
+    - when both are present, criteria are merged and conflicting values fail
+      fast.
 
     Notes:
     - `rule_id` is only a stable technical identifier.
@@ -184,7 +196,70 @@ class ModelRouteRule(FrozenModel):
     rule_id: str = Field(..., min_length=1)
     capability: ModelCapability
     target_profile_id: str = Field(..., min_length=1)
-    match: ModelRouteMatch
+    purpose: MatchValue | None = None
+    agent_id: MatchValue | None = None
+    team_id: MatchValue | None = None
+    user_id: MatchValue | None = None
+    operation: MatchValue | None = None
+    match: ModelRouteMatch = Field(default_factory=ModelRouteMatch)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_rule_shape(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+
+        payload = dict(value)
+        criteria_fields = ("purpose", "agent_id", "team_id", "user_id", "operation")
+        merged_criteria: dict[str, MatchValue] = {}
+
+        for field_name in criteria_fields:
+            field_value = payload.get(field_name)
+            if field_value is not None:
+                merged_criteria[field_name] = field_value
+
+        match_value = payload.get("match")
+        if isinstance(match_value, ModelRouteMatch):
+            match_payload = match_value.model_dump(exclude_none=True)
+        elif isinstance(match_value, dict):
+            match_payload = {
+                field_name: field_value
+                for field_name, field_value in match_value.items()
+                if field_value is not None
+            }
+        elif match_value is None:
+            match_payload = {}
+        else:
+            # Let Pydantic emit the type validation error for malformed `match`.
+            return payload
+
+        for field_name in criteria_fields:
+            if field_name not in match_payload:
+                continue
+            existing = merged_criteria.get(field_name)
+            incoming = match_payload[field_name]
+            if existing is not None and existing != incoming:
+                raise ValueError(
+                    f"ModelRouteRule has conflicting values for '{field_name}' between root and match."
+                )
+            merged_criteria[field_name] = incoming
+
+        # Flat-shape guardrail: once criteria are provided at rule root, operation
+        # must be explicit to avoid broad rules that are hard to reason about.
+        root_criteria_present = any(
+            payload.get(name) is not None for name in criteria_fields
+        )
+        if root_criteria_present and merged_criteria.get("operation") is None:
+            raise ValueError(
+                "ModelRouteRule flat format requires 'operation' at rule root."
+            )
+
+        if merged_criteria:
+            payload["match"] = merged_criteria
+            for field_name in criteria_fields:
+                payload[field_name] = merged_criteria.get(field_name)
+
+        return payload
 
     @model_validator(mode="after")
     def validate_non_empty_match(self) -> "ModelRouteRule":

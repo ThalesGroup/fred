@@ -90,6 +90,7 @@ def minimal_generalist_config() -> Configuration:
         security=fake_security_config,
         ai=AIConfig(
             use_static_config_only=True,
+            enable_v2_sql_checkpointer=False,
             max_concurrent_agents=128,
             restore_max_exchanges=20,
             knowledge_flow_url="http://localhost:8000/agentic/v1",

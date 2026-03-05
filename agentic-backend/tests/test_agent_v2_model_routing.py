@@ -259,6 +259,18 @@ def test_model_routing_rule_rejects_legacy_priority_field() -> None:
         )
 
 
+def test_model_routing_flat_rule_requires_operation() -> None:
+    with pytest.raises(
+        ValueError, match="flat format requires 'operation' at rule root"
+    ):
+        ModelRouteRule(
+            rule_id="missing-operation",
+            capability=ModelCapability.CHAT,
+            target_profile_id="baseline",
+            purpose="chat",
+        )
+
+
 def test_model_routing_uses_capability_specific_default() -> None:
     policy = ModelRoutingPolicy(
         default_profile_by_capability={
@@ -457,9 +469,59 @@ profiles:
 rules:
   - rule_id: bid-intake-analysis
     capability: chat
+    operation: analysis
+    agent_id: bid.intake.graph.v2
+    target_profile_id: graph.analysis
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    policy = load_model_routing_policy_from_catalog(catalog_file)
+    resolver = ModelRoutingResolver(policy)
+
+    decision = resolver.resolve(
+        ModelSelectionRequest(
+            capability=ModelCapability.CHAT,
+            purpose="chat",
+            agent_id="bid.intake.graph.v2",
+            team_id="team-bid",
+            user_id="alice",
+            operation="analysis",
+        )
+    )
+    assert decision.source == ModelSelectionSource.RULE
+    assert decision.rule_id == "bid-intake-analysis"
+    assert decision.profile_id == "graph.analysis"
+    assert decision.model.name == "gpt-5"
+
+
+def test_model_catalog_file_accepts_legacy_match_rule_shape(tmp_path) -> None:
+    catalog_file = tmp_path / "models_catalog.yaml"
+    catalog_file.write_text(
+        """
+version: v1
+default_profile_by_capability:
+  chat: default.chat
+profiles:
+  - profile_id: default.chat
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-5-mini
+      settings:
+        temperature: 0.0
+  - profile_id: graph.analysis
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-5
+      settings:
+        temperature: 0.0
+rules:
+  - rule_id: bid-intake-analysis
+    capability: chat
     target_profile_id: graph.analysis
     match:
-      purpose: chat
       agent_id: bid.intake.graph.v2
       operation: analysis
         """.strip(),

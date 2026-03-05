@@ -223,8 +223,7 @@ class AIConfig(BaseModel):
     enable_v2_sql_checkpointer: bool = Field(
         False,
         description=(
-            "Enable durable SQL checkpointing for v2 runtimes. "
-            "Disabled by default."
+            "Enable durable SQL checkpointing for v2 runtimes. Disabled by default."
         ),
     )
     restore_max_exchanges: int = Field(

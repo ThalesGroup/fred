@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
+    from .candidate.bid_mgr import Definition as BidMgrDefinition
     from .demos.artifact_report import ArtifactReportDemoV2Definition
+    from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.basic_react import BasicReActDefinition
     from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
-    from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.ppt_filler_react import PptFillerReActV2Definition
-    from .candidate.bid_mgr import Definition as BidMgrDefinition
 
 __all__ = [
     "AegisGraphV2SkeletonDefinition",

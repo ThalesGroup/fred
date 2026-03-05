@@ -30,7 +30,7 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
-from langgraph.types import Checkpointer, Command, interrupt
+from langgraph.types import Checkpointer, Command
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 try:
@@ -46,8 +46,6 @@ try:  # pragma: no cover - optional middleware import for compatibility
     )
 except Exception:  # pragma: no cover - compatibility fallback
     _LangchainAgentMiddleware = None
-
-from agentic_backend.core.tools.tool_loop import build_tool_loop
 
 from .builtin_tools import (
     BuiltinToolBackend,
@@ -66,6 +64,7 @@ from .context import (
 )
 from .model_routing import RoutedChatModelFactory
 from .models import ReActAgentDefinition, ToolApprovalPolicy, ToolRefRequirement
+from .react_hitl import build_hitl_compiled_react_agent
 from .runtime import (
     AgentRuntime,
     AssistantDeltaRuntimeEvent,
@@ -73,7 +72,6 @@ from .runtime import (
     ExecutionConfig,
     Executor,
     FinalRuntimeEvent,
-    HumanChoiceOption,
     HumanInputRequest,
     RuntimeEvent,
     RuntimeServices,
@@ -82,7 +80,6 @@ from .runtime import (
     ToolResultRuntimeEvent,
     TracerPort,
 )
-from .tool_approval import requires_tool_approval
 from .toolset_registry import get_registered_tool_spec
 
 
@@ -608,97 +605,6 @@ def _merge_ui_parts(
     return tuple(merged)
 
 
-def _truncate_for_human_review(value: object, *, max_chars: int = 1200) -> str:
-    try:
-        rendered = json.dumps(value, ensure_ascii=False)
-    except Exception:
-        rendered = str(value)
-    if len(rendered) <= max_chars:
-        return rendered
-    return rendered[: max_chars - 3] + "..."
-
-
-def _is_french_language(language: str | None) -> bool:
-    if language is None:
-        return False
-    return language.strip().lower().replace("_", "-").startswith("fr")
-
-
-def _build_tool_approval_request(
-    *,
-    binding: BoundRuntimeContext,
-    tool_name: str,
-    tool_args: dict[str, object],
-) -> HumanInputRequest:
-    if _is_french_language(binding.runtime_context.language):
-        return HumanInputRequest(
-            stage="tool_approval",
-            title="Confirmer l'execution de l'outil",
-            question=(
-                f"L'agent souhaite executer `{tool_name}`. "
-                "Cette action peut modifier un etat ou declencher une action externe. "
-                "Veux-tu continuer ?"
-            ),
-            choices=(
-                HumanChoiceOption(
-                    id="proceed",
-                    label="Continuer",
-                    description="Executer cet outil maintenant.",
-                    default=True,
-                ),
-                HumanChoiceOption(
-                    id="cancel",
-                    label="Annuler",
-                    description="Ne pas executer cet outil et laisser l'agent se replanifier.",
-                ),
-            ),
-            free_text=True,
-            metadata={
-                "tool_name": tool_name,
-                "tool_args_preview": _truncate_for_human_review(tool_args),
-            },
-        )
-
-    return HumanInputRequest(
-        stage="tool_approval",
-        title="Confirm tool execution",
-        question=(
-            f"The agent wants to execute `{tool_name}`. "
-            "This may modify state or trigger an external action. "
-            "Do you want to continue?"
-        ),
-        choices=(
-            HumanChoiceOption(
-                id="proceed",
-                label="Proceed",
-                description="Run this tool now.",
-                default=True,
-            ),
-            HumanChoiceOption(
-                id="cancel",
-                label="Cancel",
-                description="Do not run this tool; let the agent replan.",
-            ),
-        ),
-        free_text=True,
-        metadata={
-            "tool_name": tool_name,
-            "tool_args_preview": _truncate_for_human_review(tool_args),
-        },
-    )
-
-
-def _is_cancelled_human_decision(decision: object) -> bool:
-    if isinstance(decision, dict):
-        raw_choice = decision.get("choice_id") or decision.get("answer")
-        if isinstance(raw_choice, str):
-            return raw_choice.strip().lower() == "cancel"
-        return False
-    if isinstance(decision, str):
-        return decision.strip().lower() == "cancel"
-    return False
-
-
 @dataclass(frozen=True, slots=True)
 class _BoundTool:
     runtime_name: str
@@ -921,7 +827,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     Runtime implementation for `ReActAgentDefinition`.
 
     Where to look when customizing behavior:
-    - tool wiring: `build_executor(...)` and `_build_tool_loop(...)`
+    - tool wiring: `build_executor(...)` and `_create_compiled_react_agent(...)`
     - streaming/final event shape: `_TransportBackedReActExecutor`
     - bind/activation logic: `on_bind(...)` and `on_activate(...)`
     """
@@ -1839,92 +1745,20 @@ def _create_compiled_react_agent(
     - tracing middleware path: `v2.react.model` spans
     """
     if approval_policy.enabled:
-        bound_models_by_operation: dict[str, object] = {}
-
-        def _system_builder(_: object) -> str:
-            return system_prompt
-
-        def _model_for_state(state: object) -> object:
-            """
-            HITL model resolver used by `build_tool_loop`.
-
-            Why this exists:
-            - apply the same phase-aware routing in HITL flow as in middleware flow
-
-            Who calls it:
-            - `build_tool_loop` before each model step
-
-            When it is called:
-            - each model step in HITL graph execution
-
-            Expected inputs / invariants:
-            - `state` may contain `messages`; if absent/malformed, routing phase
-              defaults to `routing`
-
-            Return / side effects:
-            - returns a tool-bound model object for current operation
-            - caches bound model per operation (`routing` / `planning`)
-
-            Fallback / errors:
-            - if chat factory is not routed, falls back to base `model.bind_tools`
-            - routing/provider errors propagate
-
-            Observability signals to look at:
-            - routed selections are logged by `RoutedChatModelFactory.build_for_chat`
-              (`[V2][MODEL_ROUTING] ... operation=...`)
-            """
-            if not isinstance(chat_model_factory, RoutedChatModelFactory):
-                return model.bind_tools(tools)
-            messages = state.get("messages", []) if isinstance(state, dict) else []
-            operation = (
-                _infer_react_model_operation_from_messages(messages)
-                if isinstance(messages, list)
-                else _REACT_MODEL_OPERATION_ROUTING
-            )
-            cached = bound_models_by_operation.get(operation)
-            if cached is not None:
-                return cached
-            resolved_model, _ = chat_model_factory.build_for_chat(
-                definition=definition,
-                binding=binding,
-                purpose="chat",
-                operation=operation,
-            )
-            bound = resolved_model.bind_tools(tools)
-            bound_models_by_operation[operation] = bound
-            return bound
-
-        def _requires_human_approval(tool_name: str) -> bool:
-            return requires_tool_approval(
-                tool_name,
-                approval_enabled=True,
-                exact_required_tools=set(approval_policy.always_require_tools),
-            )
-
-        async def _hitl_callback(
-            tool_name: str, args: dict[str, object]
-        ) -> dict[str, object]:
-            request = _build_tool_approval_request(
-                binding=binding,
-                tool_name=tool_name,
-                tool_args=args,
-            )
-            decision = interrupt(request.model_dump(mode="json"))
-            if _is_cancelled_human_decision(decision):
-                return {"cancel": True}
-            return {}
-
-        graph = build_tool_loop(
-            model=model.bind_tools(tools),
-            tools=list(tools),
-            system_builder=_system_builder,
-            model_resolver=_model_for_state,
-            requires_hitl=_requires_human_approval,
-            hitl_callback=_hitl_callback,
-        )
         return cast(
             _CompiledReActAgent,
-            graph.compile(checkpointer=checkpointer),
+            build_hitl_compiled_react_agent(
+                model=model,
+                tools=tools,
+                system_prompt=system_prompt,
+                binding=binding,
+                approval_policy=approval_policy,
+                checkpointer=checkpointer,
+                chat_model_factory=chat_model_factory,
+                definition=definition,
+                infer_operation_from_messages=_infer_react_model_operation_from_messages,
+                default_operation=_REACT_MODEL_OPERATION_ROUTING,
+            ),
         )
 
     if _langgraph_create_react_agent is not None:

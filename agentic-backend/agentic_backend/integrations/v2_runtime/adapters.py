@@ -60,8 +60,6 @@ from agentic_backend.core.agents.runtime_context import (
     get_search_policy,
     get_vector_search_scopes,
 )
-from agentic_backend.core.chatbot.chat_schema import GeoPart
-
 from agentic_backend.core.agents.v2.builtin_tools import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
@@ -92,6 +90,7 @@ from agentic_backend.core.agents.v2.runtime import (
     ToolProviderPort,
     TracerPort,
 )
+from agentic_backend.core.chatbot.chat_schema import GeoPart
 
 logger = logging.getLogger(__name__)
 
@@ -502,6 +501,31 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             "include_timeline": include_timeline,
         }
 
+        if _langfuse_credentials() is None:
+            logger.info(
+                "[V2][TRACES] summarize_conversation skipped: Langfuse credentials are not configured."
+            )
+            return ToolInvocationResult(
+                tool_ref=request.tool_ref,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.TEXT,
+                        text=(
+                            "Performance trace summary is not enabled in this environment "
+                            "(Langfuse is not configured)."
+                        ),
+                    ),
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data={
+                            "status": "disabled",
+                            "reason": "langfuse_not_configured",
+                            "query_filters": query_filters,
+                        },
+                    ),
+                ),
+            )
+
         try:
             digest = await asyncio.to_thread(
                 _summarize_langfuse_conversation,
@@ -509,7 +533,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             )
         except Exception as exc:
             logger.warning(
-                "v2 traces.summarize_conversation failed: %s", exc, exc_info=True
+                "[V2][TRACES] summarize_conversation failed: %s",
+                exc,
+                exc_info=True,
             )
             return ToolInvocationResult(
                 tool_ref=request.tool_ref,

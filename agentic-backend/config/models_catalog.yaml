@@ -20,6 +20,7 @@ default_profile_by_capability:
 profiles:
   - profile_id: default.chat.openai.prod
     capability: chat
+    description: "Default balanced chat model for production conversations."
     model:
       provider: openai
       name: gpt-5.1
@@ -27,6 +28,7 @@ profiles:
 
   - profile_id: default.language.openai.prod
     capability: language
+    description: "Default balanced language model for structured text tasks."
     model:
       provider: openai
       name: gpt-5.1
@@ -34,6 +36,7 @@ profiles:
 
   - profile_id: default.chat.local
     capability: chat
+    description: "Local default chat profile with retries and shorter timeout."
     model:
       provider: openai
       name: gpt-5.1
@@ -44,6 +47,7 @@ profiles:
 
   - profile_id: default.language.local
     capability: language
+    description: "Local default language profile with retries and shorter timeout."
     model:
       provider: openai
       name: gpt-5.1
@@ -54,6 +58,7 @@ profiles:
 
   - profile_id: chat.openai.gpt52
     capability: chat
+    description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
     model:
       provider: openai
       name: gpt-5.2
@@ -61,6 +66,7 @@ profiles:
 
   - profile_id: language.openai.gpt52
     capability: language
+    description: "Highest-quality GPT-5.2 profile for demanding language workloads."
     model:
       provider: openai
       name: gpt-5.2
@@ -68,6 +74,7 @@ profiles:
 
   - profile_id: chat.openai.gpt5
     capability: chat
+    description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
     model:
       provider: openai
       name: gpt-5
@@ -75,6 +82,7 @@ profiles:
 
   - profile_id: language.openai.gpt5
     capability: language
+    description: "General-purpose GPT-5 language profile with strong overall quality."
     model:
       provider: openai
       name: gpt-5
@@ -82,6 +90,7 @@ profiles:
 
   - profile_id: chat.openai.gpt5mini
     capability: chat
+    description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
     model:
       provider: openai
       name: gpt-5-mini
@@ -89,6 +98,7 @@ profiles:
 
   - profile_id: language.openai.gpt5mini
     capability: language
+    description: "Faster and lower-cost GPT-5 Mini profile for lightweight language tasks."
     model:
       provider: openai
       name: gpt-5-mini
@@ -96,6 +106,7 @@ profiles:
 
   - profile_id: chat.openai.gpt5nano
     capability: chat
+    description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
     model:
       provider: openai
       name: gpt-5-nano
@@ -103,6 +114,7 @@ profiles:
 
   - profile_id: language.openai.gpt5nano
     capability: language
+    description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple language tasks."
     model:
       provider: openai
       name: gpt-5-nano
@@ -110,6 +122,7 @@ profiles:
 
   - profile_id: chat.openai.gpt41
     capability: chat
+    description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
     model:
       provider: openai
       name: gpt-4.1
@@ -117,6 +130,7 @@ profiles:
 
   - profile_id: language.openai.gpt41
     capability: language
+    description: "Reliable GPT-4.1 language profile for stable text generation."
     model:
       provider: openai
       name: gpt-4.1
@@ -124,6 +138,7 @@ profiles:
 
   - profile_id: chat.openai.gpt41mini
     capability: chat
+    description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
     model:
       provider: openai
       name: gpt-4.1-mini
@@ -131,6 +146,7 @@ profiles:
 
   - profile_id: language.openai.gpt41mini
     capability: language
+    description: "Cost-efficient GPT-4.1 Mini profile for lightweight language work."
     model:
       provider: openai
       name: gpt-4.1-mini
@@ -138,6 +154,7 @@ profiles:
 
   - profile_id: chat.azure_apim.gpt4o
     capability: chat
+    description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
     model:
       provider: azure-apim
       name: gpt-4o
@@ -151,6 +168,7 @@ profiles:
 
   - profile_id: chat.ollama.mistral
     capability: chat
+    description: "Local Ollama Mistral profile for private/offline chat experimentation."
     model:
       provider: ollama
       name: "mistral:latest"
@@ -159,10 +177,53 @@ profiles:
 
   - profile_id: language.ollama.mistral
     capability: language
+    description: "Local Ollama Mistral profile for private/offline language tasks."
     model:
       provider: ollama
       name: "mistral:latest"
       settings:
         base_url: "http://host.docker.internal:11434"
 
-rules: []
+rules:
+  # -------------------------------------------
+  # ReAct global phase routing (team-agnostic)
+  # -------------------------------------------
+  - rule_id: react.phase.routing.fast
+    capability: chat
+    operation: routing
+    target_profile_id: chat.openai.gpt5mini
+
+  - rule_id: react.phase.planning.quality
+    capability: chat
+    operation: planning
+    target_profile_id: chat.openai.gpt5
+
+  # ----------------------------------------------------------------
+  # Generic graph/reasoning phases (operation naming best practices)
+  # ----------------------------------------------------------------
+  # Any agent can benefit by using the same operation labels.
+  # This is future-ready for graph per-operation routing.
+  - rule_id: phase.generate_draft.quality
+    capability: chat
+    operation: generate_draft
+    target_profile_id: chat.openai.gpt52
+
+  - rule_id: phase.self_check.fast
+    capability: chat
+    operation: self_check
+    target_profile_id: chat.openai.gpt5mini
+
+  - rule_id: phase.corrective_queries.fast
+    capability: chat
+    operation: corrective_queries
+    target_profile_id: chat.openai.gpt5mini
+
+  - rule_id: phase.analysis.quality
+    capability: chat
+    operation: analysis
+    target_profile_id: chat.openai.gpt5
+
+  - rule_id: phase.intent_router.fast
+    capability: chat
+    operation: intent_router
+    target_profile_id: chat.openai.gpt5mini

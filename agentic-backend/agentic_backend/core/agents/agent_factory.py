@@ -20,10 +20,10 @@ from typing import Callable, Optional, Tuple, cast
 from fred_core import KeycloakUser
 
 from agentic_backend.agents.v2 import BasicReActDefinition
+from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
 from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (
     build_default_policy_with_basic_react_presets,
 )
-from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
 from agentic_backend.application_context import get_kpi_writer, get_pg_async_engine
 from agentic_backend.common.catalog_overrides import (
     MODEL_ROUTING_PRESETS_ENABLED_ENV,
@@ -40,15 +40,6 @@ from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_service import AgentService
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.integrations.v2_runtime.adapters import (
-    CompositeToolInvoker,
-    DefaultFredChatModelFactory,
-    FredArtifactPublisher,
-    FredKnowledgeSearchToolInvoker,
-    FredMcpToolProvider,
-    FredResourceReader,
-    build_langfuse_tracer,
-)
 from agentic_backend.core.agents.v2.catalog import (
     apply_profile_defaults_to_settings,
     apply_react_profile_to_definition,
@@ -80,6 +71,15 @@ from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
 from agentic_backend.core.agents.v2.toolset_registry import (
     ToolsetRuntimePorts,
     build_registered_tool_handlers,
+)
+from agentic_backend.integrations.v2_runtime.adapters import (
+    CompositeToolInvoker,
+    DefaultFredChatModelFactory,
+    FredArtifactPublisher,
+    FredKnowledgeSearchToolInvoker,
+    FredMcpToolProvider,
+    FredResourceReader,
+    build_langfuse_tracer,
 )
 
 logger = logging.getLogger(__name__)

@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from contextlib import nullcontext
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from fred_core.kpi import BaseKPIWriter, KPIActor

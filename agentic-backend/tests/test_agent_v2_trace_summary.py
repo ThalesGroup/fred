@@ -2,12 +2,6 @@ import pytest
 
 from agentic_backend.common.structures import Agent
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.integrations.v2_runtime.adapters import (
-    FredKnowledgeSearchToolInvoker,
-    _classify_trace_bottleneck,
-    _extract_interesting_spans,
-    _render_trace_digest_summary,
-)
 from agentic_backend.core.agents.v2.builtin_tools import (
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
@@ -17,6 +11,12 @@ from agentic_backend.core.agents.v2.context import (
     PortableEnvironment,
     ToolContentKind,
     ToolInvocationRequest,
+)
+from agentic_backend.integrations.v2_runtime.adapters import (
+    FredKnowledgeSearchToolInvoker,
+    _classify_trace_bottleneck,
+    _extract_interesting_spans,
+    _render_trace_digest_summary,
 )
 
 
@@ -132,7 +132,7 @@ def test_extract_interesting_spans_classifies_react_model_span_as_model() -> Non
 
 
 @pytest.mark.asyncio
-async def test_traces_summarize_conversation_returns_graceful_error_when_langfuse_is_not_configured(
+async def test_traces_summarize_conversation_returns_disabled_status_when_langfuse_is_not_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("LANGFUSE_HOST", raising=False)
@@ -157,12 +157,13 @@ async def test_traces_summarize_conversation_returns_graceful_error_when_langfus
         ),
     )
 
-    assert result.is_error is True
+    assert result.is_error is False
     assert len(result.blocks) == 2
     text_block, json_block = result.blocks
     assert text_block.kind == ToolContentKind.TEXT
     assert text_block.text is not None
-    assert "Langfuse summary failed" in text_block.text
+    assert "not enabled" in text_block.text
     assert json_block.kind == ToolContentKind.JSON
     assert json_block.data is not None
-    assert json_block.data.get("status") == "error"
+    assert json_block.data.get("status") == "disabled"
+    assert json_block.data.get("reason") == "langfuse_not_configured"

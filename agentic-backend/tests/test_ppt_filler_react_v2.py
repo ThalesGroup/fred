@@ -20,7 +20,6 @@ from agentic_backend.core.agents.v2 import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
-from agentic_backend.integrations.v2_runtime.adapters import CompositeToolInvoker
 from agentic_backend.core.agents.v2.catalog import definition_to_agent_settings
 from agentic_backend.core.agents.v2.react_runtime import (
     ReActInput,
@@ -33,6 +32,7 @@ from agentic_backend.core.agents.v2.toolset_registry import (
     ToolsetRuntimePorts,
     get_registered_tool_spec,
 )
+from agentic_backend.integrations.v2_runtime.adapters import CompositeToolInvoker
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
