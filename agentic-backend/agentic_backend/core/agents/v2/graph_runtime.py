@@ -45,6 +45,7 @@ from .context import (
     ToolInvocationResult,
     UiPart,
 )
+from .model_routing.provider import RoutedChatModelFactory
 from .models import (
     GraphAgentDefinition,
     GraphConditionalDefinition,
@@ -199,6 +200,7 @@ class _GraphNodeExecutionContext:
     binding: BoundRuntimeContext
     services: RuntimeServices
     model: BaseChatModel | None
+    model_resolver: Callable[[str], BaseChatModel | None] | None
     workspace_client: WorkspaceClientPort | None
     graph_agent_id: str
     node_id: str
@@ -225,10 +227,15 @@ class _GraphNodeExecutionContext:
         *,
         operation: str = "default",
     ) -> BaseMessage:
-        if self.model is None:
+        resolved_model = (
+            self.model_resolver(operation)
+            if self.model_resolver is not None
+            else self.model
+        )
+        if resolved_model is None:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
-        model_name = _resolve_model_name(self.model)
+        model_name = _resolve_model_name(resolved_model)
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
@@ -253,7 +260,7 @@ class _GraphNodeExecutionContext:
             },
         ):
             try:
-                response = cast(BaseMessage, await self.model.ainvoke(messages))
+                response = cast(BaseMessage, await resolved_model.ainvoke(messages))
                 if span is not None:
                     span.set_attribute("status", "ok")
                 return response
@@ -587,6 +594,14 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         self._binding = binding
         self._services = services
         self._model = model
+        self._routed_model_factory = (
+            services.chat_model_factory
+            if isinstance(services.chat_model_factory, RoutedChatModelFactory)
+            else None
+        )
+        self._models_by_operation: dict[str, BaseChatModel] = {}
+        if model is not None:
+            self._models_by_operation["default"] = model
         self._runtime_tools = {tool.name: tool for tool in runtime_tools}
         self._workspace_client = workspace_client
         self._graph = definition.build_graph()
@@ -597,6 +612,21 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             if isinstance(requirement, ToolRefRequirement)
         )
         self._pending_checkpoints = pending_checkpoints
+
+    def _model_for_operation(self, operation: str) -> BaseChatModel | None:
+        cached = self._models_by_operation.get(operation)
+        if cached is not None:
+            return cached
+        if self._routed_model_factory is None:
+            return self._model
+        model, _ = self._routed_model_factory.build_for_chat(
+            definition=self._definition,
+            binding=self._binding,
+            purpose="chat",
+            operation=operation,
+        )
+        self._models_by_operation[operation] = model
+        return model
 
     async def invoke(
         self, input_model: BaseModel, config: ExecutionConfig
@@ -652,6 +682,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 binding=self._binding,
                 services=self._services,
                 model=self._model,
+                model_resolver=self._model_for_operation,
                 workspace_client=self._workspace_client,
                 graph_agent_id=self._definition.agent_id,
                 node_id=node_id,

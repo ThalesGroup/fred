@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Callable, Iterable, Optional, cast
 
 import pytest
+from fred_core import ModelConfiguration
 from fred_core.kpi import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import Dims, KPIActor, MetricType
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -51,6 +52,15 @@ from agentic_backend.core.agents.v2 import (
     WorkspaceClientFactoryPort,
     WorkspaceClientPort,
     inspect_agent,
+)
+from agentic_backend.core.agents.v2.model_routing import (
+    ModelCapability,
+    ModelProfile,
+    ModelRouteMatch,
+    ModelRouteRule,
+    ModelRoutingPolicy,
+    ModelRoutingResolver,
+    RoutedChatModelFactory,
 )
 
 
@@ -106,6 +116,21 @@ class StaticChatModelFactory(ChatModelFactoryPort):
     def build(self, definition, binding: BoundRuntimeContext):  # type: ignore[override]
         del definition, binding
         return self.model
+
+
+class RecordingRoutingModelProvider:
+    def __init__(self, models_by_name: dict[str, FakeMessagesListChatModel]) -> None:
+        self._models_by_name = models_by_name
+        self.calls: list[tuple[str, str]] = []
+
+    def build_model(  # type: ignore[override]
+        self,
+        model_config: ModelConfiguration,
+        *,
+        capability: ModelCapability,
+    ) -> object:
+        self.calls.append((capability.value, model_config.name))
+        return self._models_by_name[model_config.name]
 
 
 class RecordingKPIWriter(BaseKPIWriter):
@@ -565,6 +590,76 @@ class ModelGraphAgent(GraphAgentDefinition):
         )
 
 
+class MultiModelGraphState(BaseModel):
+    text: str
+    draft_text: str = ""
+    final_text: str | None = None
+
+
+class MultiModelGraphAgent(GraphAgentDefinition):
+    agent_id: str = "multi_model.graph"
+    role: str = "multi model graph demo"
+    description: str = "Graph agent testing operation-based routed models."
+
+    def build_graph(self) -> GraphDefinition:
+        return GraphDefinition(
+            state_model_name="MultiModelGraphState",
+            entry_node="draft",
+            nodes=(
+                GraphNodeDefinition(node_id="draft", title="Draft"),
+                GraphNodeDefinition(node_id="self_check", title="Self-check"),
+            ),
+            edges=(GraphEdgeDefinition(source="draft", target="self_check"),),
+        )
+
+    def input_model(self) -> type[BaseModel]:
+        return DemoInput
+
+    def state_model(self) -> type[BaseModel]:
+        return MultiModelGraphState
+
+    def output_model(self) -> type[BaseModel]:
+        return GraphExecutionOutput
+
+    def build_initial_state(
+        self, input_model: BaseModel, binding: BoundRuntimeContext
+    ) -> BaseModel:
+        del binding
+        model = cast(DemoInput, input_model)
+        return MultiModelGraphState(text=model.text)
+
+    def node_handlers(self) -> dict[str, object]:
+        return {"draft": self.draft, "self_check": self.self_check}
+
+    def build_output(self, state: BaseModel) -> BaseModel:
+        graph_state = cast(MultiModelGraphState, state)
+        return GraphExecutionOutput(content=graph_state.final_text or "")
+
+    async def draft(
+        self, state: BaseModel, context: GraphNodeContext
+    ) -> GraphNodeResult:
+        graph_state = cast(MultiModelGraphState, state)
+        response = await context.invoke_model(
+            [HumanMessage(content=graph_state.text)],
+            operation="generate_draft",
+        )
+        return GraphNodeResult(
+            state_update={"draft_text": cast(str, getattr(response, "content", ""))}
+        )
+
+    async def self_check(
+        self, state: BaseModel, context: GraphNodeContext
+    ) -> GraphNodeResult:
+        graph_state = cast(MultiModelGraphState, state)
+        response = await context.invoke_model(
+            [HumanMessage(content=graph_state.draft_text)],
+            operation="self_check",
+        )
+        return GraphNodeResult(
+            state_update={"final_text": cast(str, getattr(response, "content", ""))}
+        )
+
+
 def _binding(session_id: str) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(session_id=session_id, user_id="user-1"),
@@ -791,3 +886,97 @@ async def test_graph_runtime_emits_phase_metrics_for_model_invocation() -> None:
         and event["dims"].get("status") == "ok"
         for event in phase_events
     )
+
+
+@pytest.mark.asyncio
+async def test_graph_runtime_routes_model_per_operation_with_routed_factory() -> None:
+    definition = MultiModelGraphAgent()
+    provider = RecordingRoutingModelProvider(
+        {
+            "default-model": FakeMessagesListChatModel(
+                responses=[AIMessage(content="default response")]
+            ),
+            "draft-model": FakeMessagesListChatModel(
+                responses=[AIMessage(content="draft response")]
+            ),
+            "check-model": FakeMessagesListChatModel(
+                responses=[AIMessage(content="checked response")]
+            ),
+        }
+    )
+    policy = ModelRoutingPolicy(
+        default_profile_by_capability={ModelCapability.CHAT: "profile.default"},
+        profiles=(
+            ModelProfile(
+                profile_id="profile.default",
+                capability=ModelCapability.CHAT,
+                model=ModelConfiguration(
+                    provider="openai",
+                    name="default-model",
+                    settings={},
+                ),
+            ),
+            ModelProfile(
+                profile_id="profile.draft",
+                capability=ModelCapability.CHAT,
+                model=ModelConfiguration(
+                    provider="openai",
+                    name="draft-model",
+                    settings={},
+                ),
+            ),
+            ModelProfile(
+                profile_id="profile.check",
+                capability=ModelCapability.CHAT,
+                model=ModelConfiguration(
+                    provider="openai",
+                    name="check-model",
+                    settings={},
+                ),
+            ),
+        ),
+        rules=(
+            ModelRouteRule(
+                rule_id="graph.generate_draft",
+                capability=ModelCapability.CHAT,
+                target_profile_id="profile.draft",
+                match=ModelRouteMatch(
+                    purpose="chat",
+                    agent_id=definition.agent_id,
+                    operation="generate_draft",
+                ),
+            ),
+            ModelRouteRule(
+                rule_id="graph.self_check",
+                capability=ModelCapability.CHAT,
+                target_profile_id="profile.check",
+                match=ModelRouteMatch(
+                    purpose="chat",
+                    agent_id=definition.agent_id,
+                    operation="self_check",
+                ),
+            ),
+        ),
+    )
+    runtime = GraphRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=RoutedChatModelFactory(
+                resolver=ModelRoutingResolver(policy),
+                provider=provider,
+                default_purpose="chat",
+            )
+        ),
+    )
+    runtime.bind(_binding("graph-model-routing"))
+
+    executor = await runtime.get_executor()
+    output = await executor.invoke(
+        DemoInput(text="Prepare a concise answer."),
+        ExecutionConfig(),
+    )
+
+    assert output.content == "checked response"
+    selected_model_names = [name for _, name in provider.calls]
+    assert selected_model_names.count("draft-model") == 1
+    assert selected_model_names.count("check-model") == 1

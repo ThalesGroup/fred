@@ -114,21 +114,41 @@ Fred allows administrators to define **rules mapping operations to model profile
 Example:
 
 ```yaml
-- rule_id: react.phase.routing.fast
-  capability: chat
-  operation: routing
-  target_profile_id: chat.openai.gpt5mini
+rules:
+  - rule_id: phase.routing.fast
+    capability: chat
+    operation: routing
+    target_profile_id: chat.openai.gpt5mini
 
-- rule_id: react.phase.planning.quality
-  capability: chat
-  operation: planning
-  target_profile_id: chat.openai.gpt5
+  - rule_id: phase.planning.quality
+    capability: chat
+    operation: planning
+    target_profile_id: chat.openai.gpt5
+
+  - rule_id: phase.generate_draft.quality
+    capability: chat
+    purpose: gap_analysis
+    operation: generate_draft
+    target_profile_id: chat.openai.gpt5
+
+  - rule_id: phase.self_check.fast
+    capability: chat
+    purpose: gap_analysis
+    operation: self_check
+    target_profile_id: chat.openai.gpt5mini
+
+  - rule_id: phase.corrective.fast
+    capability: chat
+    purpose: gap_analysis
+    operation: corrective_queries
+    target_profile_id: chat.openai.gpt5mini
 ```
 
 In this configuration:
 
 * routing uses a **fast inexpensive model**
 * planning uses a **strong reasoning model**
+* etc..
 
 Agents automatically benefit from these policies without changing their code.
 
