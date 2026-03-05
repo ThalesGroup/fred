@@ -405,8 +405,8 @@ async def get_team_model_routing_config(
         TeamModelRoutingProfileDTO(
             profile_id=profile.profile_id,
             capability=profile.capability.value,
-            provider=profile.model.provider,
-            model_name=profile.model.name,
+            provider=profile.model.provider or "unknown",
+            model_name=profile.model.name or "unknown",
             description=profile.description,
             is_default=profile.profile_id in default_profile_ids,
         )

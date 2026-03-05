@@ -14,7 +14,9 @@
 
 # agentic_backend/tests/controllers/test_chatbot_controller.py
 
-from fastapi import status
+from typing import cast
+
+from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 from fred_core import KeycloakUser, get_current_user
 
@@ -125,11 +127,13 @@ rules:
             encoding="utf-8",
         )
         monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(catalog_file))
-        client.app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
-            uid="admin-1",
-            username="admin",
-            email="admin@example.com",
-            roles=["admin"],
+        cast(FastAPI, client.app).dependency_overrides[get_current_user] = lambda: (
+            KeycloakUser(
+                uid="admin-1",
+                username="admin",
+                email="admin@example.com",
+                roles=["admin"],
+            )
         )
 
         response = client.get(
