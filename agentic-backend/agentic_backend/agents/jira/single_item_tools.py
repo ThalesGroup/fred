@@ -4,10 +4,10 @@ import json
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from agentic_backend.agents.jira.helpers import (
+    ensure_pydantic_model,
     get_next_requirement_id,
     get_next_test_id,
     get_next_user_story_id,
@@ -29,15 +29,6 @@ class SingleItemTools:
     def __init__(self, agent):
         """Initialize single-item tools with reference to parent agent."""
         self.agent = agent
-
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
 
     async def _expand_requirement(
         self,
@@ -82,11 +73,10 @@ Génère une description de l'exigence qui:
             QuickRequirement, method="json_schema"
         )
         try:
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                QuickRequirement,
             )
-            if not isinstance(result, QuickRequirement):
-                result = QuickRequirement.model_validate(result)
             return result.model_dump()
         except Exception as e:
             raise RuntimeError(
@@ -125,11 +115,10 @@ Génère:
             QuickUserStory, method="json_schema"
         )
         try:
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                QuickUserStory,
             )
-            if not isinstance(result, QuickUserStory):
-                result = QuickUserStory.model_validate(result)
             return result.model_dump()
         except Exception as e:
             raise RuntimeError(
@@ -178,11 +167,10 @@ Génère:
             QuickTest, method="json_schema"
         )
         try:
-            result = await model.ainvoke(
-                [SystemMessage(content=prompt)], config=self._build_llm_config()
+            result = ensure_pydantic_model(
+                await model.ainvoke([SystemMessage(content=prompt)]),
+                QuickTest,
             )
-            if not isinstance(result, QuickTest):
-                result = QuickTest.model_validate(result)
             return result.model_dump()
         except Exception as e:
             raise RuntimeError(f"Erreur lors de la génération du test: {e}") from e
@@ -411,16 +399,9 @@ Génère:
                     break
 
             if not story_context:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"⚠️ User Story {user_story_id} non trouvée. "
-                                f"Assure-toi que la User Story existe avant d'ajouter un test.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
+                return (
+                    f"⚠️ User Story {user_story_id} non trouvée. "
+                    f"Assure-toi que la User Story existe avant d'ajouter un test."
                 )
 
             # Generate ID
@@ -503,32 +484,14 @@ Génère:
             """
             valid_types = ["requirements", "user_stories", "tests"]
             if item_type not in valid_types:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Type invalide: {item_type}. Types valides: {', '.join(valid_types)}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Type invalide: {item_type}. Types valides: {', '.join(valid_types)}"
 
             # Check if item exists before removing
             existing = runtime.state.get(item_type) or []
             item_exists = any(item.get("id") == item_id for item in existing)
 
             if not item_exists:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"⚠️ Élément {item_id} non trouvé dans {item_type}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"⚠️ Élément {item_id} non trouvé dans {item_type}"
 
             type_labels = {
                 "requirements": "exigence",
@@ -582,16 +545,7 @@ Génère:
                     break
 
             if not existing:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Exigence {item_id} non trouvée.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Exigence {item_id} non trouvée."
 
             # Build update fields
             update_fields = {}
@@ -611,45 +565,18 @@ Génère:
                 # Validate priority
                 valid_priorities = ["Haute", "Moyenne", "Basse"]
                 if priority not in valid_priorities:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}"
                 update_fields["priority"] = priority
 
             if not update_fields:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "⚠️ Aucun champ à mettre à jour fourni.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return "⚠️ Aucun champ à mettre à jour fourni."
 
             # Validate with Pydantic (merge with existing to validate full object)
             merged = {**existing, **update_fields}
             try:
                 Requirement.model_validate(merged)
             except Exception as e:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de validation: {e}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Erreur de validation: {e}"
 
             # Return update command
             return Command(
@@ -709,16 +636,7 @@ Génère:
                     break
 
             if not existing:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ User Story {item_id} non trouvée.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ User Story {item_id} non trouvée."
 
             # Build update fields
             update_fields = {}
@@ -749,30 +667,12 @@ Génère:
             if priority is not None:
                 valid_priorities = ["Haute", "Moyenne", "Basse"]
                 if priority not in valid_priorities:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}"
                 update_fields["priority"] = priority
 
             if story_points is not None:
                 if story_points < 1 or story_points > 21:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Story points invalides: {story_points}. Doit être entre 1 et 21.",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ Story points invalides: {story_points}. Doit être entre 1 et 21."
                 update_fields["story_points"] = story_points
 
             if labels is not None:
@@ -786,16 +686,7 @@ Génère:
                     rid for rid in requirement_ids if rid not in existing_req_ids
                 ]
                 if invalid_ids:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Exigences non trouvées: {', '.join(invalid_ids)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ Exigences non trouvées: {', '.join(invalid_ids)}"
                 update_fields["requirement_ids"] = requirement_ids
 
             if dependencies is not None:
@@ -803,60 +694,24 @@ Génère:
                 existing_story_ids = {s.get("id") for s in user_stories}
                 invalid_deps = [d for d in dependencies if d not in existing_story_ids]
                 if invalid_deps:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ User Stories non trouvées: {', '.join(invalid_deps)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ User Stories non trouvées: {', '.join(invalid_deps)}"
                 # Check for self-reference
                 if item_id in dependencies:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    "❌ Dépendance circulaire: une User Story ne peut pas dépendre d'elle-même.",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return "❌ Dépendance circulaire: une User Story ne peut pas dépendre d'elle-même."
                 update_fields["dependencies"] = dependencies
 
             if acceptance_criteria is not None:
                 update_fields["acceptance_criteria"] = acceptance_criteria
 
             if not update_fields:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "⚠️ Aucun champ à mettre à jour fourni.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return "⚠️ Aucun champ à mettre à jour fourni."
 
             # Validate with Pydantic
             merged = {**existing, **update_fields}
             try:
                 UserStory.model_validate(merged)
             except Exception as e:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de validation: {e}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Erreur de validation: {e}"
 
             # Return update command
             return Command(
@@ -916,16 +771,7 @@ Génère:
                     break
 
             if not existing:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Test {item_id} non trouvé.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Test {item_id} non trouvé."
 
             # Build update fields
             update_fields = {}
@@ -943,16 +789,7 @@ Génère:
                         break
 
                 if not story_context:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ User Story {user_story_id} non trouvée.",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ User Story {user_story_id} non trouvée."
                 update_fields["user_story_id"] = user_story_id
 
             if description is not None:
@@ -986,63 +823,27 @@ Génère:
             if priority is not None:
                 valid_priorities = ["Haute", "Moyenne", "Basse"]
                 if priority not in valid_priorities:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ Priorité invalide: {priority}. Valeurs acceptées: {', '.join(valid_priorities)}"
                 update_fields["priority"] = priority
 
             if test_type is not None:
                 valid_types = ["Nominal", "Limite", "Erreur"]
                 if test_type not in valid_types:
-                    return Command(
-                        update={
-                            "messages": [
-                                ToolMessage(
-                                    f"❌ Type de test invalide: {test_type}. Valeurs acceptées: {', '.join(valid_types)}",
-                                    tool_call_id=runtime.tool_call_id,
-                                )
-                            ]
-                        }
-                    )
+                    return f"❌ Type de test invalide: {test_type}. Valeurs acceptées: {', '.join(valid_types)}"
                 update_fields["test_type"] = test_type
 
             if expected_result is not None:
                 update_fields["expected_result"] = expected_result
 
             if not update_fields:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "⚠️ Aucun champ à mettre à jour fourni.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return "⚠️ Aucun champ à mettre à jour fourni."
 
             # Validate with Pydantic
             merged = {**existing, **update_fields}
             try:
                 Test.model_validate(merged)
             except Exception as e:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Erreur de validation: {e}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Erreur de validation: {e}"
 
             # Return update command
             return Command(
@@ -1077,16 +878,7 @@ Génère:
             """
             valid_types = ["requirements", "user_stories", "tests"]
             if item_type not in valid_types:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"❌ Type invalide: {item_type}. Types valides: {', '.join(valid_types)}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"❌ Type invalide: {item_type}. Types valides: {', '.join(valid_types)}"
 
             type_labels = {
                 "requirements": "exigence(s)",
@@ -1098,28 +890,10 @@ Génère:
             items = runtime.state.get(item_type) or []
 
             if not items:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"ℹ️ Aucun(e) {label} n'existe encore.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"ℹ️ Aucun(e) {label} n'existe encore."
 
             if ids == "all":
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                f"📋 {len(items)} {label}:\n\n{json.dumps(items, indent=2, ensure_ascii=False)}",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
-                )
+                return f"📋 {len(items)} {label}:\n\n{json.dumps(items, indent=2, ensure_ascii=False)}"
 
             if not isinstance(ids, list):
                 ids = [ids]
@@ -1141,15 +915,6 @@ Génère:
             if missing:
                 message_parts.append(f"⚠️ Non trouvé(e)(s): {', '.join(missing)}")
 
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            "\n\n".join(message_parts),
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
-            )
+            return "\n\n".join(message_parts)
 
         return read_items

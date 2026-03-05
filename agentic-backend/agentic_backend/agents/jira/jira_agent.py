@@ -1,12 +1,10 @@
 """Jira Agent for extracting requirements and user stories from project documents."""
 
 import logging
-import os
 import re
 from typing import Annotated
 
 from langchain.agents import AgentState, create_agent
-from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
@@ -265,19 +263,6 @@ class JiraAgent(AgentFlow):
         self.import_tools = ImportTools(self)
         self.quality_tools = QualityTools(self)
         self.discovery_tools = DiscoveryTools(self)
-
-        # Check if Langfuse is configured
-        self.langfuse_enabled = bool(
-            os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")
-        )
-        if self.langfuse_enabled:
-            logger.info("[JiraAgent] Langfuse tracing enabled")
-
-    def _get_langfuse_handler(self) -> LangfuseCallbackHandler | None:
-        """Create a Langfuse callback handler for tracing LLM calls."""
-        if not self.langfuse_enabled:
-            return None
-        return LangfuseCallbackHandler()
 
     async def aclose(self):
         """Clean up resources."""

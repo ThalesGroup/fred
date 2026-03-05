@@ -101,7 +101,6 @@ ai:
 
   # Model defaults are now loaded from config/models_catalog.yaml
   # (or from FRED_MODELS_CATALOG_FILE / FRED_V2_MODELS_CATALOG_FILE).
-
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
   # Agent declarations are loaded from config/agents_catalog.yaml

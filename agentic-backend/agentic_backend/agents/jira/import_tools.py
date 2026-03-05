@@ -241,28 +241,10 @@ class ImportTools:
                 mode: "merge" (défaut) pour fusionner avec les éléments existants, "overwrite" pour remplacer tous les éléments existants
             """
             if mode not in ("merge", "overwrite"):
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                '❌ Mode invalide. Valeurs acceptées: "merge", "overwrite".',
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+                return '❌ Mode invalide. Valeurs acceptées: "merge", "overwrite".'
 
             if not markdown_content or len(markdown_content.strip()) < 50:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Le contenu Markdown fourni est trop court ou vide.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
-                )
+                return "❌ Le contenu Markdown fourni est trop court ou vide."
 
             # Deterministic parsing — no LLM calls
             sections = _split_into_sections(markdown_content)
@@ -272,17 +254,10 @@ class ImportTools:
             tests = _parse_tests(sections.get("Scénarios de Tests", ""))
 
             if not any([requirements, user_stories, tests]):
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "⚠️ Aucun élément n'a pu être extrait du Markdown fourni. "
-                                "Vérifie que le fichier contient des sections "
-                                "Exigences, User Stories ou Scénarios de Tests.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "⚠️ Aucun élément n'a pu être extrait du Markdown fourni. "
+                    "Vérifie que le fichier contient des sections "
+                    "Exigences, User Stories ou Scénarios de Tests."
                 )
 
             # Build state update

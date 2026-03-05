@@ -52,6 +52,90 @@ profiles:
         request_timeout: 90
         temperature: 0.0
 
+  - profile_id: chat.openai.gpt52
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-5.2
+      settings: {}
+
+  - profile_id: language.openai.gpt52
+    capability: language
+    model:
+      provider: openai
+      name: gpt-5.2
+      settings: {}
+
+  - profile_id: chat.openai.gpt5
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-5
+      settings: {}
+
+  - profile_id: language.openai.gpt5
+    capability: language
+    model:
+      provider: openai
+      name: gpt-5
+      settings: {}
+
+  - profile_id: chat.openai.gpt5mini
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-5-mini
+      settings: {}
+
+  - profile_id: language.openai.gpt5mini
+    capability: language
+    model:
+      provider: openai
+      name: gpt-5-mini
+      settings: {}
+
+  - profile_id: chat.openai.gpt5nano
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-5-nano
+      settings: {}
+
+  - profile_id: language.openai.gpt5nano
+    capability: language
+    model:
+      provider: openai
+      name: gpt-5-nano
+      settings: {}
+
+  - profile_id: chat.openai.gpt41
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-4.1
+      settings: {}
+
+  - profile_id: language.openai.gpt41
+    capability: language
+    model:
+      provider: openai
+      name: gpt-4.1
+      settings: {}
+
+  - profile_id: chat.openai.gpt41mini
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-4.1-mini
+      settings: {}
+
+  - profile_id: language.openai.gpt41mini
+    capability: language
+    model:
+      provider: openai
+      name: gpt-4.1-mini
+      settings: {}
+
   - profile_id: chat.azure_apim.gpt4o
     capability: chat
     model:
