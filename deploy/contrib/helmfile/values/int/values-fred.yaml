@@ -1,0 +1,410 @@
+global:
+  create_index:
+    enabled: false
+    image: "carma.corp.thales/proxy-docker-internal-c2/fred/opensearchproject/opensearch:2.19.3"
+
+  persistence:
+    # Enable duckdb save in pvc
+    # enabled: true
+    # dynamic: true
+    # Set storage class
+    accessModes: "ReadWriteMany"
+    storageClass: "ontap-nfs"
+
+applications:
+  agentic-backend:
+    replicaCount: 2
+
+    # Set Carma registry and PRISM tag
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
+      # Use dev tag + always pull policy
+      tag: &prism-tag dev-prism
+      pullPolicy: &prism-pullPolicy Always
+    imagePullSecrets: &carma-pull-secret
+      - name: "carma-pull-secret"
+
+    # Disable service acount
+    serviceAccount: &disable-service-account
+      rbac:
+        enabled: false
+
+    # Add SSL certs
+    extraEnvVars: &ssl-extra-env-vars
+      - name: SSL_CERT_FILE
+        value: "/etc/ssl/certs/thales.pem"
+      - name: REQUESTS_CA_BUNDLE
+        value: "/etc/ssl/certs/thales.pem"
+    extraVolumes: &ssl-extra-volumes
+      - name: thales-certificate
+        secret:
+          secretName: "thales-secret-chain"
+    extraVolumeMounts: &ssl-extra-volume-mounts
+      - name: thales-certificate
+        mountPath: /etc/ssl/certs/thales.pem
+        subPath: tls.crt
+        readOnly: true
+
+    configuration:
+      app:
+        log_level: "info"
+        # log_level: "debug"
+
+      # Set Keycloak url
+      security: &security-configuration
+        m2m:
+          realm_url: &realm-url https://prism-idp-int.six.cloud.thales/realms/app
+        user:
+          realm_url: *realm-url
+        authorized_origins:
+          - "http://prism-ui-int.six.cloud.thales"
+          - "https://prism-ui-int.six.cloud.thales"
+        rebac:
+          enabled: true
+
+      # Set UI title and logo
+      frontend_settings:
+        properties:
+          logoName: "logo_PRISM_light"
+          logoNameDark: "logo_PRISM_dark"
+          logoHeight: "24px"
+          logoWidth: "129px"
+          faviconName: "favicon_PRISM_light"
+          faviconNameDark: "favicon_PRISM_dark"
+          siteDisplayName: "PRISM.AI"
+          agentsNicknameSingular: "Lumi"
+          agentsNicknamePlural: "Lumis"
+          contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
+          agentIconName: "icon_lumi"
+          showAgentRegisterA2A: false
+          showAgentRestoreFromConfiguration: false
+          showAgentCode: false
+          allowAgentSwitchInOneConversation: false
+          showAgentDisableButton: false
+
+      ai:
+        max_concurrent_sessions_per_user: 9999
+
+        # Set KF right url
+        knowledge_flow_url: "https://prism-ui-int.six.cloud.thales/knowledge-flow/v1"
+
+        # Use mistral medium from TGS as LLM
+        default_chat_model: &tgs-mistral-medium
+          provider: "openai"
+          name: "mistral"
+          settings:
+            base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+            request_timeout: 300
+            stream_usage: false
+        default_language_model: *tgs-mistral-medium
+
+        # Remove local agents (only dynamic ones)
+        agents: []
+
+      # Remove all except text and filesystem
+      mcp:
+        servers:
+          - id: "mcp-knowledge-flow-mcp-text"
+            name: "mcp.servers.search_documents.name"
+            description: "mcp.servers.search_documents.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          # - id: "mcp-knowledge-flow-mcp-tabular"
+          #  name: "mcp.servers.tabular.name"
+          #  description: "mcp.servers.tabular.description"
+          #  transport: "streamable_http"
+          #  url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
+          #  sse_read_timeout: 2000
+          #  auth_mode: "user_token"
+          # - id: "mcp-knowledge-flow-fs"
+          #   name: "mcp.servers.filesystem.name"
+          #   description: "mcp.servers.filesystem.description"
+          #   enabled: true
+          #   transport: "streamable_http"
+          #   url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
+          #   sse_read_timeout: 2000
+          #   auth_mode: "user_token"
+          # - id: "mcp-knowledge-flow-opensearch-ops"
+          #   name: "mcp.servers.search_opensearch.name"
+          #   description: "mcp.servers.search_opensearch.description"
+          #   transport: "streamable_http"
+          #   url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
+          #   sse_read_timeout: 2000
+          #   auth_mode: "user_token"
+          # - id: "mcp-kubernetes-server"
+          #   name: "mcp.servers.kubernetes.name"
+          #   description: "mcp.servers.kubernetes.description"
+          #   enabled: false
+          #   transport: "streamable_http"
+          #   url: "http://mcp-kubernetes-server:8081/mcp"
+          #   sse_read_timeout: 2000
+          #   auth_mode: "user_token"
+
+      storage:
+        # Set Postgres connection params
+        postgres: &storage-postgres
+          host: "postgresql"
+          port: 5432
+          database: fred
+          # todo: use fred user
+          username: fred
+
+
+        # Set Opensearch connection params
+        opensearch: &storage-opensearch
+          host: https://prism-opensearch-int.six.cloud.thales
+          # verify_certs: true # todo: set to true
+
+        # Set most stores on Postgres
+        feedback_store:
+          type: "postgres"
+          table: feedbacks
+        agent_store:
+          type: "postgres"
+          table: agent
+        mcp_servers_store:
+          type: "postgres"
+          table: mcp-server
+        session_store:
+          type: "postgres"
+          table: session
+        attachments_store:
+          type: "postgres"
+          table: session_attachments
+        history_store:
+          type: "postgres"
+          table: session_history
+        # Set KPI and Logs on Opensearch
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
+        log_store:
+          type: "opensearch"
+          index: log-index
+        task_store:
+          type: "postgres"
+          table: agentic-tasks
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  frontend:
+    # Set Carma registry and PRISM tag
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+
+    # Set UI ingress
+    ingress:
+      annotations:
+        # Increase max file upload size
+        nginx.ingress.kubernetes.io/proxy-body-size: 150m
+        nginx.org/proxy-connect-timeout: 300s
+        nginx.org/proxy-read-timeout: 300s
+      hosts:
+        - host: prism-ui-int.six.cloud.thales
+          paths:
+            - path: /
+              pathType: Prefix
+              service:
+                name: frontend
+                port: 80
+            - path: /agentic
+              pathType: Prefix
+              service:
+                name: agentic-backend
+                port: 80
+            - path: /knowledge-flow
+              pathType: Prefix
+              service:
+                name: knowledge-flow-backend
+                port: 8000
+      tls:
+        - hosts:
+            - "prism-ui-int.six.cloud.thales"
+          secretName: "tls-dc2-wd1-six-int-kns-pri"
+
+    # Disable service acount
+    serviceAccount: *disable-service-account
+
+    # Add SSL certs
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration:
+      config_json:
+        # Set bakcend endpoints for frontend
+        backend_url_api: "https://prism-ui-int.six.cloud.thales"
+        backend_url_knowledge: "https://prism-ui-int.six.cloud.thales"
+        websocket_url: "ws://prism-ui-int.six.cloud.thales/fred/chatbot/query"
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  knowledge-flow-backend: &knowledgeFlowBackend
+    replicaCount: 1 # todo: set back to 2 once MCP bug is resolved
+
+    # Set Carma registry and PRISM tag
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+
+    # Disable service acount
+    serviceAccount: *disable-service-account
+
+    # Add SSL certs
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration: &knowledgeFlowBackendConfiguration
+      app:
+        log_level: "info"
+        # log_level: "debug"
+
+      processing:
+        profiles:
+          # disable gpu for now (todo: enable it ?)
+          fast:
+            use_gpu: &use_gpu_for_processing false
+          medium:
+            use_gpu: *use_gpu_for_processing
+          rich:
+            use_gpu: *use_gpu_for_processing
+
+      # Set Keycloak url
+      security: *security-configuration
+
+      # Enable scheduler
+      scheduler:
+        enabled: true
+        backend: "temporal"
+        temporal:
+          host: temporal-frontend:7233
+          namespace: "default"
+          task_queue: "ingestion"
+          workflow_prefix: "pipeline"
+          connect_timeout_seconds: 5
+
+      # Set Minio connection params
+      content_storage: &content-storage
+        type: minio
+        endpoint: http://minio:9000
+        access_key: "admin"
+        bucket_name: "knowledge-flow-content"
+        secure: false # todo: pass to true
+        public_endpoint: https://prism-minio-int.six.cloud.thales
+        public_secure: true
+
+      # Use bge-m3 from TGS as embedding model
+      embedding_model:
+        <<: *tgs-mistral-medium
+        name: bge-m3 # or text-embedding-3-small
+        # name: text-embedding-3-small
+        settings:
+          base_url: "https://api.corp.thales/corp/genai-embedding/v2"
+      # Use mistral medium from TGS as LLM
+      chat_model: *tgs-mistral-medium
+
+      storage:
+        # Set Postgres connection params
+        postgres: *storage-postgres
+        # Set Opensearch connection params
+        opensearch: *storage-opensearch
+
+        # Set most of stores on Postgres
+        catalog_store:
+          type: "postgres"
+          table: catalog
+        prompt_store:
+          type: "postgres"
+          table: prompt
+        resource_store:
+          type: "postgres"
+          table: resource
+        tag_store:
+          type: "postgres"
+          table: tag
+        metadata_store:
+          type: "postgres"
+          table: metadata
+        # Set KPI and vector on opensearch
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
+        vector_store:
+          type: "opensearch"
+          index: vector-index-3-large
+          # Default bulk size for vector insertions is 500. Increase if you have
+          # enough memory and want faster ingestion. Or if run into ingestion errors
+          # while ingesting large documents.
+          bulk_size: 1000
+        log_store:
+          type: "opensearch"
+          index: log-index
+        task_store:
+          type: "postgres"
+          table: workflow-tasks
+        # Set tabular store to opensearch
+        tabular_stores:
+          base_database:
+            <<: *storage-postgres
+            type: "sql"
+            mode: read_and_write
+            driver: "postgresql+psycopg2"
+            path: null # (important: remove the `path` default value)
+
+      # Only enable text and filesystem
+      mcp:
+        reports_enabled: false
+        kpi_enabled: false
+        tabular_enabled: false
+        statistic_enabled: false
+        text_enabled: true
+        templates_enabled: false
+        resources_enabled: false
+        opensearch_ops_enabled: false
+        neo4j_enabled: false
+        filesystem_enabled: false
+      # Set filesystem tools to use Minio
+      filesystem:
+        <<: *content-storage
+        bucket_name: filesystem
+
+    # Increase probes delay (todo: remove)
+    probes:
+      livenessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 600
+          failureThreshold: 20
+      readinessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 600
+          failureThreshold: 20
+
+  knowledge-flow-worker:
+    <<: *knowledgeFlowBackend
+    enabled: true
+    deployment:
+      enabled: true  
+    replicaCount: 2
+    configurationFileName: configuration_worker.yaml
+    env:
+      - name: LOG_LEVEL
+        value: "WARNING"
+      - name: ENV_FILE
+        value: "/app/config/.env"
+      - name: CONFIG_FILE
+        value: "/app/config/configuration_worker.yaml"
+    configuration:
+      <<: *knowledgeFlowBackendConfiguration
+      app:
+        metrics_enabled: false

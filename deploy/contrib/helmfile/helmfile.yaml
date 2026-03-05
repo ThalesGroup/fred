@@ -1,0 +1,23 @@
+environments:
+  prd:
+    values:
+      - namespace: dc2-wd1-six-prd-kns-pri
+      - chartVersion: 1.3.0-prism.1
+  int:
+    values:
+      - namespace: dc2-wd1-six-int-kns-pri
+      - chartVersion: 0.0.0-dev-prism
+---
+helmDefaults:
+  createNamespace: false
+  wait: true
+
+releases:
+  - name: fred
+    namespace: "{{ .Values.namespace }}"
+    chart: helm-internal/fred
+    version: "{{ .Values.chartVersion }}"
+    values:
+      - values/{{ .Environment.Name }}/values-fred.yaml
+    secrets:
+      - values/{{ .Environment.Name }}/values-fred.sec.yaml
