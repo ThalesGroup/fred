@@ -148,6 +148,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/config/permissions` }),
     }),
+    getTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGet: build.query<
+      GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiResponse,
+      GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/config/model-routing/teams/${queryArg.teamId}` }),
+    }),
     getSessionsAgenticV1ChatbotSessionsGet: build.query<
       GetSessionsAgenticV1ChatbotSessionsGetApiResponse,
       GetSessionsAgenticV1ChatbotSessionsGetApiArg
@@ -399,6 +405,11 @@ export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
 export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg = void;
+export type GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiResponse =
+  /** status 200 Successful Response */ TeamModelRoutingConfigDto;
+export type GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiArg = {
+  teamId: string;
+};
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
 export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
@@ -1102,6 +1113,36 @@ export type FrontendConfigDto = {
   user_auth: UserSecurity;
   is_rebac_enabled: boolean;
 };
+export type TeamModelRoutingProfileDto = {
+  profile_id: string;
+  capability: string;
+  provider: string;
+  model_name: string;
+  description?: string | null;
+  is_default?: boolean;
+};
+export type TeamModelRoutingRuleDto = {
+  rule_id: string;
+  capability: string;
+  operation?: string | string[] | null;
+  purpose?: string | string[] | null;
+  agent_id?: string | string[] | null;
+  user_id?: string | string[] | null;
+  target_profile_id: string;
+  target_model_name?: string | null;
+  scope: "global" | "team";
+};
+export type TeamModelRoutingConfigDto = {
+  team_id: string;
+  catalog_path: string;
+  catalog_exists: boolean;
+  catalog_version?: string | null;
+  default_profile_by_capability?: {
+    [key: string]: string;
+  };
+  profiles?: TeamModelRoutingProfileDto[];
+  rules?: TeamModelRoutingRuleDto[];
+};
 export type CreateSessionPayload = {
   agent_id?: string | null;
   title?: string | null;
@@ -1279,6 +1320,8 @@ export const {
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
   useLazyGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
+  useGetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetQuery,
+  useLazyGetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useCreateSessionAgenticV1ChatbotSessionPostMutation,

@@ -2,7 +2,22 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from importlib.resources import files
+from importlib.resources.abc import Traversable
+
+from .packaged_resources import load_packaged_resource
+
+
+def _decode_json_object(resource_path: Traversable) -> dict[str, object]:
+    try:
+        payload = json.loads(resource_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid packaged JSON resource: {resource_path}") from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"Packaged JSON resource must contain an object at top level: {resource_path}"
+        )
+    return payload
 
 
 def load_packaged_json_object(
@@ -19,25 +34,12 @@ def load_packaged_json_object(
       non-code resources that may later become tunable
     """
 
-    if not path_parts:
-        raise ValueError("path_parts must contain at least one path segment.")
-
-    resource_path = files(package)
-    for part in path_parts:
-        resource_path = resource_path.joinpath(part)
-
-    try:
-        payload = json.loads(resource_path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Missing packaged JSON resource: {resource_path}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid packaged JSON resource: {resource_path}") from exc
-
-    if not isinstance(payload, dict):
-        raise RuntimeError(
-            f"Packaged JSON resource must contain an object at top level: {resource_path}"
-        )
-    return payload
+    return load_packaged_resource(
+        package=package,
+        path_parts=path_parts,
+        decoder=_decode_json_object,
+        missing_resource_kind="JSON",
+    )
 
 
 def load_agent_lexicon_json(

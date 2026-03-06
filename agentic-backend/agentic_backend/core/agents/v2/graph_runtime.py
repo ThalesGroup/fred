@@ -98,35 +98,44 @@ class GraphNodeContext(Protocol):
     """
 
     @property
-    def binding(self) -> BoundRuntimeContext: ...
+    def binding(self) -> BoundRuntimeContext:
+        raise NotImplementedError()
 
     @property
-    def services(self) -> RuntimeServices: ...
+    def services(self) -> RuntimeServices:
+        raise NotImplementedError()
 
     @property
-    def model(self) -> BaseChatModel | None: ...
+    def model(self) -> BaseChatModel | None:
+        raise NotImplementedError()
 
     @property
-    def workspace_client(self) -> WorkspaceClientPort | None: ...
+    def workspace_client(self) -> WorkspaceClientPort | None:
+        raise NotImplementedError()
 
-    def emit_status(self, status: str, detail: str | None = None) -> None: ...
+    def emit_status(self, status: str, detail: str | None = None) -> None:
+        raise NotImplementedError()
 
-    def emit_assistant_delta(self, delta: str) -> None: ...
+    def emit_assistant_delta(self, delta: str) -> None:
+        raise NotImplementedError()
 
     async def invoke_model(
         self,
         messages: list[BaseMessage],
         *,
         operation: str = "default",
-    ) -> BaseMessage: ...
+    ) -> BaseMessage:
+        raise NotImplementedError()
 
     async def invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
-    ) -> ToolInvocationResult: ...
+    ) -> ToolInvocationResult:
+        raise NotImplementedError()
 
     async def invoke_runtime_tool(
         self, tool_name: str, arguments: dict[str, object]
-    ) -> object: ...
+    ) -> object:
+        raise NotImplementedError()
 
     async def publish_text(
         self,
@@ -138,7 +147,8 @@ class GraphNodeContext(Protocol):
         content_type: str = "text/plain; charset=utf-8",
         scope: ArtifactScope = ArtifactScope.USER,
         target_user_id: str | None = None,
-    ) -> PublishedArtifact: ...
+    ) -> PublishedArtifact:
+        raise NotImplementedError()
 
     async def publish_bytes(
         self,
@@ -150,7 +160,8 @@ class GraphNodeContext(Protocol):
         content_type: str | None = None,
         scope: ArtifactScope = ArtifactScope.USER,
         target_user_id: str | None = None,
-    ) -> PublishedArtifact: ...
+    ) -> PublishedArtifact:
+        raise NotImplementedError()
 
     async def fetch_resource(
         self,
@@ -158,7 +169,8 @@ class GraphNodeContext(Protocol):
         key: str,
         scope: ResourceScope = ResourceScope.AGENT_CONFIG,
         target_user_id: str | None = None,
-    ) -> FetchedResource: ...
+    ) -> FetchedResource:
+        raise NotImplementedError()
 
     async def fetch_text_resource(
         self,
@@ -167,9 +179,11 @@ class GraphNodeContext(Protocol):
         scope: ResourceScope = ResourceScope.AGENT_CONFIG,
         target_user_id: str | None = None,
         encoding: str = "utf-8",
-    ) -> str: ...
+    ) -> str:
+        raise NotImplementedError()
 
-    async def request_human_input(self, request: HumanInputRequest) -> object: ...
+    async def request_human_input(self, request: HumanInputRequest) -> object:
+        raise NotImplementedError()
 
 
 GraphNodeHandler = Callable[

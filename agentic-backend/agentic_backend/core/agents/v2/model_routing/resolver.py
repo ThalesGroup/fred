@@ -165,13 +165,13 @@ class ModelRoutingResolver:
         if not candidates:
             return self._default_selection(capability=request.capability)
 
-        winner = sorted(
+        winner = min(
             candidates,
             key=lambda candidate: (
                 -candidate.specificity,
                 candidate.order_index,
             ),
-        )[0]
+        )
         profile = self._profile(winner.rule.target_profile_id)
         return ModelSelection(
             source=ModelSelectionSource.RULE,

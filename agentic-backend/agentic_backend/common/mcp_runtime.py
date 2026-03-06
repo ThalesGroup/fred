@@ -163,7 +163,11 @@ class MCPRuntime:
                 or not self._is_retryable_connection_error(last_error)
             ):
                 await self._aclose_inprocess_toolkits()
-                raise last_error
+                if last_error is not None:
+                    raise last_error
+                raise RuntimeError(
+                    "MCPRuntime lifecycle failed but no lifecycle error was set."
+                )
 
             delay_secs = MCP_CONNECT_RETRY_BASE_DELAY_SECS * (2 ** (attempt - 1))
             logger.warning(

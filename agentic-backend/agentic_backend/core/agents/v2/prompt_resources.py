@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from importlib.resources import files
+
+from .packaged_resources import load_packaged_resource
 
 
 def load_packaged_markdown(*, package: str, path_parts: Sequence[str]) -> str:
@@ -15,19 +16,12 @@ def load_packaged_markdown(*, package: str, path_parts: Sequence[str]) -> str:
       for ad hoc filesystem logic
     """
 
-    if not path_parts:
-        raise ValueError("path_parts must contain at least one path segment.")
-
-    resource_path = files(package)
-    for part in path_parts:
-        resource_path = resource_path.joinpath(part)
-
-    try:
-        return resource_path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            f"Missing packaged Markdown resource: {resource_path}"
-        ) from exc
+    return load_packaged_resource(
+        package=package,
+        path_parts=path_parts,
+        decoder=lambda resource_path: resource_path.read_text(encoding="utf-8"),
+        missing_resource_kind="Markdown",
+    )
 
 
 def load_agent_prompt_markdown(

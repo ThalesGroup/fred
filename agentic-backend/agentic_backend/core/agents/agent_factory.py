@@ -133,11 +133,19 @@ class BaseAgentFactory:
 class NoOpAgentFactory(BaseAgentFactory):
     async def create_and_init(
         self,
+        user: KeycloakUser,
+        agent_id: str,
+        runtime_context: RuntimeContext,
+        session_id: str,
     ) -> Tuple[RuntimeAgentInstance, bool]:
         raise NotImplementedError("NoOpAgentFactory cannot create agents.")
 
     async def create_and_init_internal_profile(
         self,
+        user: KeycloakUser,
+        profile_id: str,
+        runtime_context: RuntimeContext,
+        session_id: str,
     ) -> Tuple[RuntimeAgentInstance, bool]:
         raise NotImplementedError(
             "NoOpAgentFactory cannot create internal profile agents."

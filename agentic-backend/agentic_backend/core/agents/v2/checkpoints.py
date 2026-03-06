@@ -24,9 +24,8 @@ class CheckpointTupleLike(Protocol):
 
 
 class AsyncCheckpointReader(Protocol):
-    async def aget_tuple(
-        self, config: RunnableConfig
-    ) -> CheckpointTupleLike | None: ...
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTupleLike | None:
+        raise NotImplementedError()
 
 
 class AsyncCheckpointWriter(AsyncCheckpointReader, Protocol):
@@ -36,7 +35,8 @@ class AsyncCheckpointWriter(AsyncCheckpointReader, Protocol):
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: Mapping[str, str | int | float],
-    ) -> RunnableConfig: ...
+    ) -> RunnableConfig:
+        raise NotImplementedError()
 
 
 def checkpoint_config(
