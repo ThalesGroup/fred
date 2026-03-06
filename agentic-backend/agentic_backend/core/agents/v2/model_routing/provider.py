@@ -37,7 +37,8 @@ class ModelProvider(Protocol):
 
     def build_model(
         self, model_config: ModelConfiguration, *, capability: ModelCapability
-    ) -> object: ...
+    ) -> object:
+        pass
 
 
 class FredCoreModelProvider(ModelProvider):
