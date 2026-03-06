@@ -15,4 +15,3 @@ BASE_ASSISTANT_PROFILE = ReActProfile(
     tags=("assistant", "react"),
     system_prompt_template=load_basic_react_prompt("basic_react_system_prompt.md"),
 )
-

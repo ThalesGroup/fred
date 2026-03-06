@@ -55,14 +55,14 @@ from agentic_backend.application_context import (
 )
 from agentic_backend.common.catalog_overrides import resolve_models_catalog_path
 from agentic_backend.common.structures import FrontendSettings
-from agentic_backend.core.agents.v2.model_routing.catalog import load_model_catalog
-from agentic_backend.core.agents.v2.model_routing.contracts import MatchValue
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     # get_deep_search_enabled,
     # get_rag_knowledge_scope,
 )
+from agentic_backend.core.agents.v2.model_routing.catalog import load_model_catalog
+from agentic_backend.core.agents.v2.model_routing.contracts import MatchValue
 from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_schema import (
     AwaitingHumanEvent,
