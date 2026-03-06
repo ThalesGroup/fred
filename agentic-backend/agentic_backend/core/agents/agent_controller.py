@@ -48,7 +48,7 @@ from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
 from agentic_backend.core.agents.v2.catalog import build_definition_from_settings
 from agentic_backend.core.agents.v2.inspection import inspect_agent
 from agentic_backend.core.agents.v2.models import AgentInspection
-from agentic_backend.core.agents.v2.react_profiles import list_react_profiles
+from agentic_backend.core.agents.v2.react_profiles import list_react_profiles_filtered
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 
@@ -235,7 +235,11 @@ async def create_agent(
 )
 async def list_react_agent_profiles(
     user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
 ) -> list[ReActProfileSummary]:
+    profiles = list_react_profiles_filtered(
+        agent_manager.config.ai.react_profile_allowlist
+    )
     return [
         ReActProfileSummary(
             profile_id=profile.profile_id,
@@ -244,7 +248,7 @@ async def list_react_agent_profiles(
             agent_description=profile.agent_description,
             tags=list(profile.tags),
         )
-        for profile in list_react_profiles()
+        for profile in profiles
     ]
 
 

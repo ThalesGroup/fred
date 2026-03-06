@@ -56,7 +56,10 @@ from agentic_backend.core.agents.v2.catalog import (
     definition_to_agent_tuning,
     instantiate_definition_class,
 )
-from agentic_backend.core.agents.v2.react_profiles import get_react_profile
+from agentic_backend.core.agents.v2.react_profiles import (
+    get_react_profile,
+    is_react_profile_allowed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +329,13 @@ class AgentService:
             class_path.strip() if isinstance(class_path, str) else None
         )
         if normalized_profile_id:
+            if not is_react_profile_allowed(
+                normalized_profile_id,
+                self.agent_manager.config.ai.react_profile_allowlist,
+            ):
+                raise InvalidClassPathError(
+                    f"ReAct profile '{normalized_profile_id}' is not allowed by current configuration."
+                )
             try:
                 get_react_profile(normalized_profile_id)
             except ValueError as exc:

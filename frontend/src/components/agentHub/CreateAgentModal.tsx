@@ -47,14 +47,11 @@ import {
 import { KeyCloakService } from "../../security/KeycloakService";
 import { useToast } from "../ToastProvider";
 
-const DEFAULT_REACT_PROFILE_ID = "generic_assistant";
-const LEGACY_V1_REACT_CLASS_PATH = "agentic_backend.core.agents.basic_react_agent.BasicReActAgent";
-
 const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
   z.object({
     name: z.string().min(1, { message: t("validation.required") }),
     type: z.literal("basic"),
-    creation_mode: z.enum(["basic", "profile", "legacy_v1", "class"]),
+    creation_mode: z.enum(["basic", "profile", "class"]),
     profile_id: z.string().optional(),
     class_path: z.string().optional(),
   });
@@ -86,6 +83,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
   const {
     control,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormData>({
@@ -94,18 +92,36 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       name: "",
       type: initialType,
       creation_mode: "basic",
-      profile_id: DEFAULT_REACT_PROFILE_ID,
+      profile_id: "",
       class_path: "",
     },
   });
   const watchCreationMode = useWatch({ control, name: "creation_mode", defaultValue: "basic" });
-  const watchProfileId = useWatch({ control, name: "profile_id", defaultValue: DEFAULT_REACT_PROFILE_ID });
-  const isProfileCreation = watchCreationMode === "profile";
-  const isLegacyV1Creation = watchCreationMode === "legacy_v1";
+  const watchProfileId = useWatch({ control, name: "profile_id", defaultValue: "" });
   const isClassCreation = isAdmin && watchCreationMode === "class";
   const { data: reactProfiles = [], isFetching: isProfilesLoading } = useListReactProfilesQuery(undefined, {
     skip: false,
   });
+  const hasReactProfiles = reactProfiles.length > 0;
+  const isProfileCreation = watchCreationMode === "profile" && hasReactProfiles;
+
+  React.useEffect(() => {
+    if (!hasReactProfiles && watchCreationMode === "profile") {
+      setValue("creation_mode", "basic", { shouldDirty: true });
+      setValue("profile_id", "", { shouldDirty: true });
+      return;
+    }
+
+    if (!hasReactProfiles) {
+      return;
+    }
+
+    const selectedStillExists = reactProfiles.some((profile) => profile.profile_id === watchProfileId);
+    if (!selectedStillExists) {
+      setValue("profile_id", reactProfiles[0].profile_id, { shouldDirty: false });
+    }
+  }, [hasReactProfiles, reactProfiles, setValue, watchCreationMode, watchProfileId]);
+
   const { data: declaredClassPaths = [], isFetching: isClassPathLoading } = useListDeclaredAgentClassPathsQuery(
     undefined,
     {
@@ -138,9 +154,7 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       class_path:
         data.creation_mode === "class"
           ? data.class_path?.trim() || undefined
-          : data.creation_mode === "legacy_v1"
-            ? LEGACY_V1_REACT_CLASS_PATH
-            : undefined,
+          : undefined,
       profile_id:
         data.creation_mode === "profile" ? data.profile_id?.trim() || undefined : undefined,
     };
@@ -206,16 +220,15 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                         title: t("agentHub.fields.creationModeBasic"),
                         description: t("agentHub.fields.creationModeBasicHelp"),
                       },
-                      {
-                        value: "profile",
-                        title: t("agentHub.fields.creationModeProfile"),
-                        description: t("agentHub.fields.creationModeProfileHelp"),
-                      },
-                      {
-                        value: "legacy_v1",
-                        title: t("agentHub.fields.creationModeLegacyV1"),
-                        description: t("agentHub.fields.creationModeLegacyV1Help"),
-                      },
+                      ...(hasReactProfiles
+                        ? [
+                            {
+                              value: "profile",
+                              title: t("agentHub.fields.creationModeProfile"),
+                              description: t("agentHub.fields.creationModeProfileHelp"),
+                            },
+                          ]
+                        : []),
                       ...(isAdmin
                         ? [
                             {
@@ -340,14 +353,6 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     />
                   )}
                 />
-              </Grid2>
-            )}
-
-            {isLegacyV1Creation && (
-              <Grid2 size={12}>
-                <Typography variant="body2" color="text.secondary">
-                  {t("agentHub.fields.creationModeLegacyV1Note")}
-                </Typography>
               </Grid2>
             )}
 

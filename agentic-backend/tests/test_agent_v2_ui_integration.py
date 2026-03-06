@@ -20,14 +20,11 @@ from agentic_backend.agents.v2 import (
 from agentic_backend.agents.v2.production.basic_react.profiles.custodian import (
     CUSTODIAN_PROFILE,
 )
-from agentic_backend.agents.v2.production.basic_react.profiles.geo_demo import (
-    GEO_DEMO_PROFILE,
-)
-from agentic_backend.agents.v2.production.basic_react.profiles.georges import (
-    GEORGES_PROFILE,
-)
 from agentic_backend.agents.v2.production.basic_react.profiles.log_genius import (
     LOG_GENIUS_PROFILE,
+)
+from agentic_backend.agents.v2.production.basic_react.profiles.rag_expert import (
+    RAG_EXPERT_PROFILE,
 )
 from agentic_backend.agents.v2.production.basic_react.profiles.sentinel import (
     SENTINEL_PROFILE,
@@ -89,9 +86,8 @@ from tests.test_agent_v2_react_runtime import (
 from tests.test_tracking_graph_v2 import TrackingDemoToolProvider
 
 CUSTODIAN_PROFILE_ID = CUSTODIAN_PROFILE.profile_id
-GEORGES_PROFILE_ID = GEORGES_PROFILE.profile_id
-GEO_DEMO_PROFILE_ID = GEO_DEMO_PROFILE.profile_id
 LOG_GENIUS_PROFILE_ID = LOG_GENIUS_PROFILE.profile_id
+RAG_EXPERT_PROFILE_ID = RAG_EXPERT_PROFILE.profile_id
 SENTINEL_PROFILE_ID = SENTINEL_PROFILE.profile_id
 
 
@@ -314,7 +310,7 @@ def test_basic_react_profile_field_lists_available_backend_profiles() -> None:
 
     assert profile_field.type == "select"
     assert profile_field.enum == available_profile_ids
-    assert profile_field.default == "generic_assistant"
+    assert profile_field.default == available_profile_ids[0]
 
 
 def test_build_definition_from_settings_applies_custodian_profile_defaults() -> None:
@@ -368,20 +364,20 @@ def test_build_definition_from_settings_applies_custodian_profile_defaults() -> 
     ]
 
 
-def test_build_definition_from_settings_applies_georges_profile_defaults() -> None:
+def test_build_definition_from_settings_applies_rag_expert_profile_defaults() -> None:
     base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
             tuned_fields.append(
-                field.model_copy(update={"default": GEORGES_PROFILE_ID})
+                field.model_copy(update={"default": RAG_EXPERT_PROFILE_ID})
             )
         else:
             tuned_fields.append(field.model_copy(deep=True))
 
     settings = Agent(
-        id="georges-react-agent",
-        name="Georges",
+        id="rag-expert-react-agent",
+        name="RAG Expert",
         class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
@@ -400,19 +396,25 @@ def test_build_definition_from_settings_applies_georges_profile_defaults() -> No
         settings=settings,
     )
 
-    assert definition.react_profile_id == GEORGES_PROFILE_ID
-    assert definition.role == "Broad and general knowledge assistant"
+    assert definition.react_profile_id == RAG_EXPERT_PROFILE_ID
+    assert definition.role == "Document-grounded RAG expert"
     assert definition.enable_tool_approval is False
-    assert "friendly generalist assistant" in definition.system_prompt_template
+    assert "retrieval-augmented assistant" in definition.description.lower()
+    assert [tool.tool_ref for tool in definition.tool_requirements] == [
+        "knowledge.search"
+    ]
     assert effective_settings.tuning is not None
     assert effective_settings.tuning.mcp_servers == []
+    assert effective_settings.chat_options.attach_files is True
+    assert effective_settings.chat_options.libraries_selection is True
+    assert effective_settings.chat_options.search_rag_scoping is True
 
 
 def test_profiled_basic_react_creation_settings_start_with_selected_profile() -> None:
     base_definition = BasicReActDefinition()
     effective_definition = apply_react_profile_to_definition(
         base_definition,
-        GEORGES_PROFILE_ID,
+        RAG_EXPERT_PROFILE_ID,
     )
     base_settings = definition_to_agent_settings(
         base_definition,
@@ -432,7 +434,7 @@ def test_profiled_basic_react_creation_settings_start_with_selected_profile() ->
         for field in effective_settings.tuning.fields
         if field.key == "react_profile_id"
     )
-    assert react_profile_field.default == GEORGES_PROFILE_ID
+    assert react_profile_field.default == RAG_EXPERT_PROFILE_ID
 
 
 def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> None:
@@ -540,20 +542,20 @@ def test_graph_definition_applies_default_mcp_servers_to_effective_settings() ->
     ]
 
 
-def test_build_definition_from_settings_applies_geo_demo_profile_defaults() -> None:
+def test_build_definition_from_settings_applies_rag_expert_tool_defaults() -> None:
     base_definition = BasicReActDefinition()
     tuned_fields = []
     for field in base_definition.fields:
         if field.key == "react_profile_id":
             tuned_fields.append(
-                field.model_copy(update={"default": GEO_DEMO_PROFILE_ID})
+                field.model_copy(update={"default": RAG_EXPERT_PROFILE_ID})
             )
         else:
             tuned_fields.append(field.model_copy(deep=True))
 
     settings = Agent(
-        id="geo-demo-react-agent",
-        name="Geo Demo",
+        id="rag-expert-tool-react-agent",
+        name="RAG Expert Tool",
         class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
         tuning=AgentTuning(
             role=base_definition.role,
@@ -572,12 +574,12 @@ def test_build_definition_from_settings_applies_geo_demo_profile_defaults() -> N
         settings=settings,
     )
 
-    assert definition.react_profile_id == GEO_DEMO_PROFILE_ID
-    assert definition.role == "geo_demo"
-    assert "geographic visualization assistant" in definition.system_prompt_template
+    assert definition.react_profile_id == RAG_EXPERT_PROFILE_ID
     assert len(definition.tool_requirements) == 1
-    assert definition.tool_requirements[0].tool_ref == "geo.render_points"
+    assert definition.tool_requirements[0].tool_ref == "knowledge.search"
     assert effective_settings.tuning is not None
+    assert effective_settings.chat_options.attach_files is True
+    assert effective_settings.chat_options.libraries_selection is True
     assert effective_settings.tuning.mcp_servers == []
 
 

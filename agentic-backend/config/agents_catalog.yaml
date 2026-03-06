@@ -1,7 +1,15 @@
 version: v1
 
 agents:
-  - id: "RicoV1"
+  - id: "Georges"
+    name: "Georges"
+    type: "agent"
+    class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+    enabled: true
+    chat_options:
+      attach_files: false
+
+  - id: "Rico"
     name: "Rico"
     type: "agent"
     class_path: "agentic_backend.agents.rags.rag_expert.Rico"
@@ -10,35 +18,21 @@ agents:
       search_policy_selection: true
       libraries_selection: true
       search_rag_scoping: true
-      deep_search_delegate: true
+      deep_search_delegate: false
       attach_files: true
       include_corpus_in_search: true
-    metadata:
-      deep_search_delegate_to: "Rico Senior"
 
-  - id: "ReActV2"
-    name: "ReActV2"
+  - id: "Rico Senior"
+    name: "Rico Senior"
     type: "agent"
-    definition_ref: "v2.react.basic"
+    class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
     enabled: true
-
-  - id: "PostalTrackingV2"
-    name: "PostalTrackingV2"
-    type: "agent"
-    definition_ref: "v2.demo.postal_tracking"
-    enabled: true
-
-  - id: "BidMgrV2"
-    name: "BidMgrV2"
-    type: "agent"
-    definition_ref: "v2.proto.bid_mgr"
-    enabled: true
-
-  - id: "KelliaV2"
-    name: "KelliaV2"
-    type: "agent"
-    definition_ref: "v2.react.ppt_filler"
-    enabled: true
+    chat_options:
+      search_policy_selection: true
+      libraries_selection: true
+      search_rag_scoping: true
+      deep_search_delegate: false
+      attach_files: true
 
   - id: "Aegis"
     name: "Aegis"
@@ -46,8 +40,8 @@ agents:
     class_path: "agentic_backend.agents.aegis.aegis_rag_expert.Aegis"
     enabled: true
 
-  - id: "ArchieV1"
-    name: "ArchieV1"
+  - id: "Archie"
+    name: "Archie"
     type: "agent"
     class_path: "agentic_backend.agents.rags.archie.Archie"
     enabled: true
@@ -58,29 +52,8 @@ agents:
       search_rag_scoping: true
       attach_files: true
 
-  - id: "TessaV1"
-    name: "TessaV1"
+  - id: "Tessa"
+    name: "Tessa"
     type: "agent"
     class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
     enabled: true
-
-  - id: "RaphV1"
-    name: "RaphV1"
-    type: "agent"
-    class_path: "agentic_backend.agents.reference_editor.reference_editor.ReferenceEditor"
-    enabled: true
-
-  - id: "CoachDGV1"
-    name: "CoachDGV1"
-    type: "agent"
-    class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
-    enabled: false
-
-  - id: "JimV1"
-    name: "JimV1"
-    type: "agent"
-    class_path: "agentic_backend.agents.jira.jira_agent.JiraAgent"
-    enabled: true
-    chat_options:
-      libraries_selection: true
-      attach_files: true

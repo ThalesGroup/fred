@@ -37,9 +37,15 @@ class _CatalogFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ReactProfileCatalogItem(_CatalogFile):
+    profile_id: str = Field(..., min_length=1)
+    enabled: bool = True
+
+
 class AgentsCatalog(_CatalogFile):
     version: Literal["v1"] = "v1"
     agents: list[AgentSettings] = Field(default_factory=list)
+    react_profiles: list[ReactProfileCatalogItem] | None = None
 
 
 class McpCatalog(_CatalogFile):
@@ -188,6 +194,10 @@ def apply_external_catalog_overrides(configuration: Configuration) -> Configurat
     - if it does not exist, current configuration.yaml values remain unchanged.
     """
 
+    # ReAct profile visibility is catalog-driven.
+    # Safe default is "none exposed" when no catalog/profile section is provided.
+    configuration.ai.react_profile_allowlist = []
+
     agents_catalog_path = _resolve_catalog_path(
         AGENTS_CATALOG_ENV, AGENTS_CATALOG_DEFAULT_PATH
     )
@@ -196,6 +206,22 @@ def apply_external_catalog_overrides(configuration: Configuration) -> Configurat
         configuration.ai.agents = [
             agent.model_copy(deep=True) for agent in agents_catalog.agents
         ]
+        allowlist: list[str] = []
+        seen: set[str] = set()
+        for item in agents_catalog.react_profiles or []:
+            if not item.enabled:
+                continue
+            profile_id = item.profile_id.strip()
+            if not profile_id or profile_id in seen:
+                continue
+            seen.add(profile_id)
+            allowlist.append(profile_id)
+        configuration.ai.react_profile_allowlist = allowlist
+        logger.info(
+            "[CONFIG][CATALOG] Applied react profile allowlist from %s (enabled_profiles=%d).",
+            agents_catalog_path,
+            len(allowlist),
+        )
         logger.info(
             "[CONFIG][CATALOG] Loaded agents catalog from %s (agents=%d).",
             agents_catalog_path,

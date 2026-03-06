@@ -167,6 +167,7 @@ def test_missing_catalog_files_keep_configuration_values(tmp_path, monkeypatch) 
     assert [server.id for server in configuration.mcp.servers] == [
         "mcp-knowledge-flow-opensearch-ops"
     ]
+    assert configuration.ai.react_profile_allowlist == []
 
 
 def test_invalid_agents_catalog_fails_fast(tmp_path, monkeypatch) -> None:
@@ -178,6 +179,86 @@ def test_invalid_agents_catalog_fails_fast(tmp_path, monkeypatch) -> None:
 
     with pytest.raises(Exception):
         apply_external_catalog_overrides(configuration)
+
+
+def test_agents_catalog_can_define_react_profile_allowlist(
+    tmp_path, monkeypatch
+) -> None:
+    configuration = _minimal_configuration()
+    agents_catalog = tmp_path / "agents_catalog.yaml"
+    agents_catalog.write_text(
+        """
+version: v1
+agents:
+  - id: "Catalog Agent"
+    name: "Catalog Agent"
+    type: "agent"
+    definition_ref: "v2.react.basic"
+    enabled: true
+react_profiles:
+  - profile_id: "rag_expert"
+    enabled: true
+  - profile_id: "geo_demo"
+    enabled: false
+  - profile_id: " sentinel "
+    enabled: true
+        """.strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
+
+    apply_external_catalog_overrides(configuration)
+
+    assert configuration.ai.react_profile_allowlist == ["rag_expert", "sentinel"]
+
+
+def test_agents_catalog_allows_empty_react_profile_allowlist(
+    tmp_path, monkeypatch
+) -> None:
+    configuration = _minimal_configuration()
+    agents_catalog = tmp_path / "agents_catalog.yaml"
+    agents_catalog.write_text(
+        """
+version: v1
+agents: []
+react_profiles: []
+        """.strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
+
+    apply_external_catalog_overrides(configuration)
+
+    assert configuration.ai.react_profile_allowlist == []
+
+
+def test_agents_catalog_without_react_profiles_exposes_no_profiles(
+    tmp_path, monkeypatch
+) -> None:
+    configuration = _minimal_configuration()
+    configuration.ai.react_profile_allowlist = ["sentinel"]
+
+    agents_catalog = tmp_path / "agents_catalog.yaml"
+    agents_catalog.write_text(
+        """
+version: v1
+agents:
+  - id: "Catalog Agent"
+    name: "Catalog Agent"
+    type: "agent"
+    definition_ref: "v2.react.basic"
+    enabled: true
+        """.strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
+
+    apply_external_catalog_overrides(configuration)
+
+    assert configuration.ai.react_profile_allowlist == []
 
 
 def test_models_catalog_takes_precedence_when_present(tmp_path, monkeypatch) -> None:

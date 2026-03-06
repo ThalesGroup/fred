@@ -184,46 +184,4 @@ profiles:
       settings:
         base_url: "http://host.docker.internal:11434"
 
-rules:
-  # -------------------------------------------
-  # ReAct global phase routing (team-agnostic)
-  # -------------------------------------------
-  - rule_id: react.phase.routing.fast
-    capability: chat
-    operation: routing
-    target_profile_id: chat.openai.gpt5mini
-
-  - rule_id: react.phase.planning.quality
-    capability: chat
-    operation: planning
-    target_profile_id: chat.openai.gpt5
-
-  # ----------------------------------------------------------------
-  # Generic graph/reasoning phases (operation naming best practices)
-  # ----------------------------------------------------------------
-  # Any agent can benefit by using the same operation labels.
-  # This is future-ready for graph per-operation routing.
-  - rule_id: phase.generate_draft.quality
-    capability: chat
-    operation: generate_draft
-    target_profile_id: chat.openai.gpt52
-
-  - rule_id: phase.self_check.fast
-    capability: chat
-    operation: self_check
-    target_profile_id: chat.openai.gpt5mini
-
-  - rule_id: phase.corrective_queries.fast
-    capability: chat
-    operation: corrective_queries
-    target_profile_id: chat.openai.gpt5mini
-
-  - rule_id: phase.analysis.quality
-    capability: chat
-    operation: analysis
-    target_profile_id: chat.openai.gpt5
-
-  - rule_id: phase.intent_router.fast
-    capability: chat
-    operation: intent_router
-    target_profile_id: chat.openai.gpt5mini
+rules: []

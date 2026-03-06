@@ -260,9 +260,34 @@ class AIConfig(BaseModel):
         None,
         description="Default language model configuration for all agents and services (Optional).",
     )
+    react_profile_allowlist: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Internal allowlist of ReAct starting profile ids exposed to agent creation UX "
+            "and accepted by profile-based agent creation. This list is catalog-driven "
+            "(agents_catalog.react_profiles). Default is empty (no profile exposed)."
+        ),
+    )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
     )
+
+    @field_validator("react_profile_allowlist", mode="before")
+    @classmethod
+    def normalize_react_profile_allowlist(cls, value: Optional[List[str]]) -> List[str]:
+        if value is None:
+            return []
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            if not isinstance(raw, str):
+                continue
+            profile_id = raw.strip()
+            if not profile_id or profile_id in seen:
+                continue
+            seen.add(profile_id)
+            cleaned.append(profile_id)
+        return cleaned
 
 
 class FrontendFlags(BaseModel):
