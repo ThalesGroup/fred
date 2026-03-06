@@ -36,7 +36,8 @@ class KnowledgeFlowAgentContext(Protocol):
     runtime_context: "RuntimeContext"
     agent_settings: "AgentSettings"
 
-    def refresh_user_access_token(self) -> str: ...
+    def refresh_user_access_token(self) -> str:
+        raise NotImplementedError()
 
 
 TokenRefreshCallback = Callable[[], str]
