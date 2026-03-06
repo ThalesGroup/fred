@@ -46,6 +46,10 @@ def _default_react_profile_id() -> str:
             "No Basic ReAct profiles are available. "
             "Define at least one profile module under basic_react/profiles."
         )
+    for preferred_id in ("base_assistant",):
+        for profile in profiles:
+            if profile.profile_id == preferred_id:
+                return profile.profile_id
     return profiles[0].profile_id
 
 

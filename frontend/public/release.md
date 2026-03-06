@@ -4,8 +4,6 @@
 
   This release introduces the first full v2 agent stack for production use (ReAct + Graph), with a cleaner configuration model based on catalogs and a simplified agent creation flow. It keeps backward compatibility for existing v1 agents while preparing multimodal model selection (chat, language, embedding, image) through policy-based routing.
 
-  This release also introduces real-time agent response streaming in the UI and adds Human In the Loop support for react agents. It also hardens production deployments by removing exposed API documentation endpoints and fixes file download permissions and image rendering issues in production mode.
-
 - **Features**
 
   - HITL improvements demonstrated around a MCP use case (#1207)
