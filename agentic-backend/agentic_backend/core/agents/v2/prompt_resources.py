@@ -23,7 +23,7 @@ def load_packaged_markdown(*, package: str, path_parts: Sequence[str]) -> str:
         resource_path = resource_path.joinpath(part)
 
     try:
-        return resource_path.read_text(encoding="utf-8").strip()
+        return resource_path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise RuntimeError(
             f"Missing packaged Markdown resource: {resource_path}"
