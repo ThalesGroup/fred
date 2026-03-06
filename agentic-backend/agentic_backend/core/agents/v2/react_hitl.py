@@ -62,23 +62,23 @@ def _build_tool_approval_request(
     if _is_french_language(binding.runtime_context.language):
         return HumanInputRequest(
             stage="tool_approval",
-            title="Confirmer l'execution de l'outil",
+            title="Confirmer l'exécution de l'outil",
             question=(
-                f"L'agent souhaite executer `{tool_name}`. "
-                "Cette action peut modifier un etat ou declencher une action externe. "
+                f"L'agent souhaite exécuter `{tool_name}`. "
+                "Cette action peut modifier un état ou déclencher une action externe. "
                 "Veux-tu continuer ?"
             ),
             choices=(
                 HumanChoiceOption(
                     id="proceed",
                     label="Continuer",
-                    description="Executer cet outil maintenant.",
+                    description="Exécuter cet outil maintenant.",
                     default=True,
                 ),
                 HumanChoiceOption(
                     id="cancel",
                     label="Annuler",
-                    description="Ne pas executer cet outil et laisser l'agent se replanifier.",
+                    description="Ne pas exécuter cet outil et laisser l'agent se replanifier.",
                 ),
             ),
             free_text=True,
