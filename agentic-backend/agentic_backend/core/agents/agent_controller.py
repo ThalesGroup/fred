@@ -17,7 +17,7 @@ import inspect
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Optional, cast
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -29,7 +29,10 @@ from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import (
     AgentSettings,
 )
-from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_class_resolver import (
+    AgentImplementationKind,
+    resolve_agent_reference,
+)
 from agentic_backend.core.agents.agent_manager import (
     AgentAlreadyExistsException,
     AgentManager,
@@ -42,7 +45,10 @@ from agentic_backend.core.agents.agent_service import (
     MissingTeamIdError,
 )
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
-from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.v2.catalog import build_definition_from_settings
+from agentic_backend.core.agents.v2.inspection import inspect_agent
+from agentic_backend.core.agents.v2.models import AgentInspection
+from agentic_backend.core.agents.v2.react_profiles import list_react_profiles_filtered
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 
@@ -169,11 +175,19 @@ router = APIRouter(tags=["Agents"])
 
 class CreateAgentRequest(BaseModel):
     name: str
-    type: str = "basic"
+    type: Literal["basic"] = "basic"
     team_id: str | None = None
-    a2a_base_url: str | None = None
-    a2a_token: str | None = None
     class_path: str | None = None
+    definition_ref: str | None = None
+    profile_id: str | None = None
+
+
+class ReActProfileSummary(BaseModel):
+    profile_id: str
+    title: str
+    description: str
+    agent_description: str
+    tags: list[str]
 
 
 @router.get(
@@ -208,65 +222,75 @@ async def create_agent(
         request.name,
         agent_type=request.type,
         team_id=request.team_id,
-        a2a_base_url=request.a2a_base_url,
-        a2a_token=request.a2a_token,
         class_path=request.class_path,
+        definition_ref=request.definition_ref,
+        profile_id=request.profile_id,
     )
 
 
 @router.get(
-    "/agents/{agent_id}/graph",
-    summary="Get the Mermaid graph representation of an agent",
-    response_class=PlainTextResponse,
+    "/agents/react-profiles",
+    summary="List available v2 ReAct starting profiles",
+    response_model=list[ReActProfileSummary],
 )
-async def get_agent_graph(
+async def list_react_agent_profiles(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> list[ReActProfileSummary]:
+    profiles = list_react_profiles_filtered(
+        agent_manager.config.ai.react_profile_allowlist
+    )
+    return [
+        ReActProfileSummary(
+            profile_id=profile.profile_id,
+            title=profile.title,
+            description=profile.description,
+            agent_description=profile.agent_description,
+            tags=list(profile.tags),
+        )
+        for profile in profiles
+    ]
+
+
+@router.get(
+    "/agents/{agent_id}/inspect",
+    summary="Inspect a v2 agent definition without activation",
+    response_model=AgentInspection,
+)
+async def inspect_v2_agent(
     agent_id: str,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
-):
+) -> AgentInspection:
     service = AgentService(agent_manager=agent_manager)
     settings = await service.get_agent_by_id(user, agent_id)
     if not settings:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if not settings.class_path:
-        raise HTTPException(status_code=400, detail="Agent has no class path")
-
     try:
-        agent_cls = agent_manager.loader._import_agent_class(settings.class_path)
-        agent_inst = cast(AgentFlow, agent_cls(agent_settings=settings))
-
-        # Non-activating structural graph path:
-        # bind a minimal runtime context, build graph structure only, then render Mermaid.
-        # No MCP/model activation should happen here.
-        try:
-            agent_inst.bind_runtime_context(RuntimeContext())
-            agent_inst.build_runtime_structure()
-            mermaid = agent_inst.get_graph_mermaid()
-            if mermaid:
-                return mermaid
-
-            logger.info(
-                "No structural graph available for agent %s (class=%s)",
-                agent_id,
-                settings.class_path,
+        resolved = resolve_agent_reference(
+            class_path=settings.class_path,
+            definition_ref=settings.definition_ref,
+        )
+        if resolved.implementation_kind != AgentImplementationKind.V2_DEFINITION:
+            raise HTTPException(
+                status_code=409,
+                detail="Agent inspection is only supported for v2 agent definitions.",
             )
-            return "graph TD;\nError[No graph available];"
-        except Exception:
-            logger.info(
-                "Structural graph build unavailable for agent %s (class=%s)",
-                agent_id,
-                settings.class_path,
-                exc_info=True,
-            )
-            return "graph TD;\nError[No graph available];"
+
+        definition = build_definition_from_settings(
+            definition_class=resolved.cls,
+            settings=settings,
+        )
+        return inspect_agent(definition)
 
     except Exception as e:
-        logger.error(
-            f"Failed to generate graph for agent {agent_id}: {e}", exc_info=True
-        )
-        safe_err = str(e).replace('"', "'").replace(";", "")
-        return f"graph TD;\nError[Error: {safe_err}];"
+        if isinstance(e, HTTPException):
+            raise
+        if isinstance(e, (ValueError, TypeError)):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        logger.error(f"Failed to inspect agent {agent_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to inspect agent") from e
 
 
 @router.get(
@@ -363,8 +387,16 @@ async def runtime_source_by_object(
     if obj is None and key.startswith("agent."):
         agent_id = key.split(".", 1)[1]
         agent_settings = await agent_manager.get_agent_settings(agent_id)
-        if agent_settings and agent_settings.class_path:
-            obj = _import_class(agent_settings.class_path)
+        if agent_settings:
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=agent_settings.class_path,
+                    definition_ref=agent_settings.definition_ref,
+                )
+            except Exception:
+                resolved = None
+            if resolved is not None:
+                obj = _import_class(resolved.class_path)
     if obj is None:
         raise HTTPException(status_code=404, detail="Unknown registry key")
     blob = _sourcelines(obj)

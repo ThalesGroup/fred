@@ -53,6 +53,59 @@ applications:
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
+    # Optional catalogs (catalog-first configuration):
+    # 1) Create a ConfigMap named `agentic-backend-model-catalog`
+    #    with key `models_catalog.yaml`.
+    # 2) Create a ConfigMap named `agentic-backend-catalogs` with keys:
+    #    - `agents_catalog.yaml`
+    #    - `mcp_catalog.yaml`
+    #
+    # Catalog precedence:
+    # - if a catalog file exists, it is the source of truth
+    # - if missing, backend can still fallback to legacy `configuration.yaml` sections
+    #   for backward compatibility
+    # 3) Uncomment the entries below.
+    extraEnvVars:
+      # - name: FRED_MODELS_CATALOG_FILE
+      #   value: "/app/config/models_catalog.yaml"
+      # - name: FRED_V2_MODELS_CATALOG_FILE  # backward-compatible alias
+      #   value: "/app/config/models_catalog.yaml"
+      # - name: FRED_MODELS_DEFAULT_CHAT_PROFILE_ID
+      #   value: "chat.ollama.mistral"
+      # - name: FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID
+      #   value: "language.ollama.mistral"
+      # - name: FRED_AGENTS_CATALOG_FILE
+      #   value: "/app/config/agents_catalog.yaml"
+      # - name: FRED_MCP_CATALOG_FILE
+      #   value: "/app/config/mcp_catalog.yaml"
+    extraVolumeMounts:
+      # - name: agentic-backend-model-catalog-vol
+      #   mountPath: /app/config/models_catalog.yaml
+      #   subPath: models_catalog.yaml
+      #   readOnly: true
+      # - name: agentic-backend-catalogs-vol
+      #   mountPath: /app/config/agents_catalog.yaml
+      #   subPath: agents_catalog.yaml
+      #   readOnly: true
+      # - name: agentic-backend-catalogs-vol
+      #   mountPath: /app/config/mcp_catalog.yaml
+      #   subPath: mcp_catalog.yaml
+      #   readOnly: true
+    extraVolumes:
+      # - name: agentic-backend-model-catalog-vol
+      #   configMap:
+      #     name: agentic-backend-model-catalog
+      #     items:
+      #       - key: models_catalog.yaml
+      #         path: models_catalog.yaml
+      # - name: agentic-backend-catalogs-vol
+      #   configMap:
+      #     name: agentic-backend-catalogs
+      #     items:
+      #       - key: agents_catalog.yaml
+      #         path: agents_catalog.yaml
+      #       - key: mcp_catalog.yaml
+      #         path: mcp_catalog.yaml
     ports:
       - name: http
         containerPort: 8000
@@ -234,6 +287,9 @@ applications:
         # that allow users to create/update agents at runtime and change
         # their configuration without redeploying the application.
         use_static_config_only: false
+        # Enable durable SQL checkpointer for v2 runtimes.
+        # Disabled by default.
+        enable_v2_sql_checkpointer: false
         # Number of past exchanges to restore when initializing an agent session
         # This setting is used to limit the amount of historical context
         # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
@@ -258,99 +314,18 @@ applications:
         timeout:
           connect: 5 # Time to wait for a connection in seconds
           read: 15 # Time to wait for a response in seconds
-        default_chat_model:
-          provider: "openai"
-          name: "gpt-4o-mini"
-          settings:
-            temperature: 0.0
-            max_retries: 1
-            timeout:
-              connect: 10.0
-              read: 120.0
-              write: 30.0
-              pool: 5.0
-            http_client_limits:
-              max_connections: 500
-              max_keepalive_connections: 200
-              keepalive_expiry_seconds: 10
-        default_language_model:
-          provider: "openai"
-          name: "gpt-4o"
-          settings:
-            temperature: 0.0
-            max_retries: 1
-            timeout:
-              connect: 10.0
-              read: 180.0
-              write: 30.0
-              pool: 5.0
-            http_client_limits:
-              max_connections: 500
-              max_keepalive_connections: 200
-              keepalive_expiry_seconds: 10
+
+        # Model defaults are now loaded from `models_catalog.yaml`
+        # (image default path or mounted file via `FRED_MODELS_CATALOG_FILE`).
 
         recursion:
           recursion_limit: 40 # Number or max recursion use by the agents while using the chat model
-        agents:
-          - id: "Samy"
-            name: "Samy"
-            type: "agent"
-            class_path: "agentic_backend.agents.sentinel.sentinel_expert.SentinelExpert"
-            enabled: false
-          - id: "Georges"
-            name: "Georges"
-            type: "agent"
-            class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-            enabled: true
-            chat_options:
-              search_policy_selection: false
-              libraries_selection: false
-              attach_files: true
-          - id: "Tessa"
-            name: "Tessa"
-            type: "agent"
-            class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-            enabled: true
-          - id: "Rico"
-            name: "Rico"
-            type: "agent"
-            class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-            enabled: true
-            chat_options:
-              search_policy_selection: true
-              libraries_selection: true
-              search_rag_scoping: true
-              attach_files: true
-          - id: "Rico Senior"
-            name: "Rico Senior"
-            type: "agent"
-            role: "Advanced Document Retrieval Expert"
-            class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
-            enabled: false
-      mcp:
-        servers:
-          - id: "mcp-knowledge-flow-mcp-tabular"
-            name: "mcp.servers.tabular.name"
-            description: "mcp.servers.tabular.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-opensearch-ops"
-            name: "mcp.servers.search_opensearch.name"
-            description: "mcp.servers.search_opensearch.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-kubernetes-server"
-            name: "mcp.servers.kubernetes.name"
-            description: "mcp.servers.kubernetes.description"
-            enabled: false
-            transport: "streamable_http"
-            url: "http://mcp-kubernetes-server:8081/mcp"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
+
+        # Agent declarations are now loaded from `agents_catalog.yaml`
+        # (image default path or mounted file via `FRED_AGENTS_CATALOG_FILE`).
+
+      # MCP servers are now loaded from `mcp_catalog.yaml`
+      # (image default path or mounted file via `FRED_MCP_CATALOG_FILE`).
       storage:
         postgres:
           host: localhost

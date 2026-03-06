@@ -51,3 +51,17 @@ def test_payload_accepts_extra_keys():
     }
     validated = validate_hitl_payload(payload)
     assert validated.model_extra.get("extra_field") == "ok"
+
+
+def test_free_text_payload_allows_empty_choices_for_backward_compatibility():
+    payload = {
+        "title": "Clarification",
+        "question": "Please provide additional details.",
+        "choices": [],
+        "free_text": True,
+    }
+
+    validated = validate_hitl_payload(payload)
+
+    assert validated.free_text is True
+    assert validated.choices is None

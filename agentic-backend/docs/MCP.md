@@ -1,11 +1,18 @@
 # MCP Runtime & Toolkit — Dev Guide
 
+Status note:
+
+- this document is still operationally relevant
+- but examples below use the legacy `AgentFlow` shape
+- in the v2 world, MCP is increasingly consumed through runtime services such as `ToolProviderPort`, not hand-managed by each author
+
 This document explains **how to use** the `MCPRuntime`, `McpToolkit`, and the resilient tools node in our agent framework, and **why** we need these pieces to make OAuth-protected MCP servers work reliably with LLM tool-calling.
 
 ---
 
 ## TL;DR
 
+- For new work, prefer v2 agents and let Fred runtime provide MCP tools.
 - Use **`MCPRuntime`** to create and refresh the MCP client + toolkit for an agent.
 - Build graph structure in `build_runtime_structure()` and do MCP connection in `activate_runtime()`.
 - Bind tools from **`McpToolkit`** to your model.
@@ -17,6 +24,42 @@ This document explains **how to use** the `MCPRuntime`, `McpToolkit`, and the re
   - Provide **safe, rich logs** without leaking secrets.
 
 Agents should not talk directly to `MultiServerMCPClient`. They should rely on `MCPRuntime`.
+
+---
+
+## v2-first Reading
+
+If you are writing a new Fred agent, you usually should not instantiate `MCPRuntime` yourself.
+
+Preferred mental model:
+
+- authors declare tools or rely on runtime-provided MCP tools
+- Fred runtime activates MCP and binds the effective tool set
+- `ToolProviderPort` and `ToolInvokerPort` are the v2-facing seams
+
+Important boundary for new v2 product agents:
+
+- prefer a Fred business tool ref when one already exists, for example
+  `knowledge.search`
+- do not wire a new agent directly to a specific MCP server id or endpoint just
+  because that is the current backend implementation
+- direct MCP dependency in the authoring layer is the fallback path for
+  capabilities Fred does not yet expose cleanly
+
+Important clarification:
+
+- not every Fred runtime tool is MCP-backed
+- example: `traces.summarize_conversation` is a built-in runtime tool that calls
+  Langfuse Public API endpoints directly over HTTP (`/api/public/traces` and
+  `/api/public/traces/{trace_id}`)
+- so using that tool does not require a Langfuse MCP server
+
+Current v2 examples:
+
+- profile-based ReAct agents that consume UI-configured MCP servers
+- `PostalTrackingDefinition`, which exercises runtime tools inside `GraphRuntime`
+
+Use direct `MCPRuntime` handling only when maintaining a legacy `AgentFlow` agent.
 
 ---
 

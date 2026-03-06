@@ -692,6 +692,7 @@ class ApplicationContext:
             self._vector_store_instance = OpenSearchVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
+                kpi=self.get_kpi_writer(),
                 host=opensearch_config.host,
                 index=store.index,
                 username=opensearch_config.username,

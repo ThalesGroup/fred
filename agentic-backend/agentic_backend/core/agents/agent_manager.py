@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Tuple
 
 from agentic_backend.application_context import (
     get_mcp_configuration,
@@ -23,7 +23,10 @@ from agentic_backend.common.structures import (
     AgentChatOptions,
     AgentSettings,
     Configuration,
-    Leader,
+)
+from agentic_backend.core.agents.agent_class_resolver import (
+    AgentImplementationKind,
+    resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_spec import (
@@ -32,6 +35,10 @@ from agentic_backend.core.agents.agent_spec import (
 )
 from agentic_backend.core.agents.store.base_agent_store import (
     BaseAgentStore,
+)
+from agentic_backend.core.agents.v2.catalog import (
+    definition_to_agent_tuning,
+    instantiate_definition_class,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,7 +59,7 @@ class AgentAlreadyExistsException(Exception):
 
 class AgentManager:
     """
-    Manages the full lifecycle of AI agents (leaders and experts).
+    Manages the full lifecycle of AI agents.
 
     The persistent store (Postgres) is the single source of truth — no in-memory
     cache is kept, making the manager safe for multi-worker / multi-replica deployments.
@@ -133,24 +140,9 @@ class AgentManager:
     async def update_agent(self, new_settings: AgentSettings) -> bool:
         """
         Updates an agent's settings and tuning in the persistent store.
-        Leaders: crew changes are logged for observability.
         """
         if self.use_static_config_only:
             raise AgentUpdatesDisabled()
-
-        if new_settings.type == "leader":
-            new_leader_settings = cast(Leader, new_settings)
-            old_leader_settings = cast(Leader, await self.store.get(new_settings.id))
-            if old_leader_settings:
-                old_crew = set(old_leader_settings.crew or [])
-                new_crew = set(new_leader_settings.crew or [])
-                if old_crew != new_crew:
-                    logger.info(
-                        "[AGENTS] leader=%s crew changed from %s to %s",
-                        new_settings.id,
-                        old_crew,
-                        new_crew,
-                    )
 
         agent_id = new_settings.id
         tunings = new_settings.tuning
@@ -214,19 +206,22 @@ class AgentManager:
         2. Persisted agents (from the database) override tunings for static agents.
         3. Dynamically created agents (persisted-only) are kept as-is in the database.
         """
-        # 1. Load static agent definitions from YAML (instantiates classes to get default tunings)
-        static_instances = self.loader.load_static()
+        # 1. Load static agent declarations from YAML and normalize them into
+        #    catalogue entries. This supports both legacy AgentFlow classes and
+        #    v2 pure definitions while keeping the store contract unchanged.
+        static_entries = self.loader.load_static()
 
         static_catalogue: Dict[str, Tuple[AgentSettings, AgentTuning]] = {}
-        for instance in static_instances:
-            agent_id = instance.get_id()
-            settings = instance.get_agent_settings()
-            tunings = instance.get_agent_tunings()
+        for entry in static_entries:
+            settings = entry.settings
+            tunings = entry.tuning
+            agent_id = settings.id
             static_catalogue[agent_id] = (settings, tunings)
             logger.info(
-                "[AGENTS] agent=%s loaded from YAML. Class: %s",
+                "[AGENTS] agent=%s loaded from YAML. class_path=%s definition_ref=%s",
                 agent_id,
                 settings.class_path,
+                settings.definition_ref,
             )
 
         # 2. Load persisted state directly from the store (no class instantiation needed)
@@ -285,9 +280,18 @@ class AgentManager:
             tuning = agent_cfg.tuning
             if not tuning:
                 try:
-                    if agent_cfg.class_path:
-                        cls = self.loader._import_agent_class(agent_cfg.class_path)
-                        tuning = getattr(cls, "tuning", None)
+                    if agent_cfg.class_path or agent_cfg.definition_ref:
+                        resolved = resolve_agent_reference(
+                            class_path=agent_cfg.class_path,
+                            definition_ref=agent_cfg.definition_ref,
+                        )
+                        if resolved.implementation_kind == AgentImplementationKind.FLOW:
+                            cls = self.loader._import_agent_class(resolved.class_path)
+                            tuning = getattr(cls, "tuning", None)
+                        else:
+                            tuning = definition_to_agent_tuning(
+                                instantiate_definition_class(resolved.cls)
+                            )
                         if tuning:
                             logger.info(
                                 "[AGENTS] Restore: using class default tuning for '%s'",

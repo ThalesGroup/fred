@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
     LogStorageConfig,
@@ -153,12 +153,19 @@ class BaseAgent(BaseModel):
         description="Owning team id when this is a team-owned agent.",
     )
     enabled: bool = True
-    class_path: Optional[str] = None  # None → dynamic/UI agent
+    class_path: Optional[str] = None  # Legacy resolver key (v1 and compat path)
+    definition_ref: Optional[str] = Field(
+        default=None,
+        description=(
+            "Stable v2 definition identifier (preferred for v2 agents). "
+            "Example: 'v2.react.basic'."
+        ),
+    )
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Optional arbitrary metadata for integrations (e.g., A2A proxy config).",
+        description="Optional arbitrary metadata for integrations.",
     )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
@@ -187,29 +194,14 @@ class BaseAgent(BaseModel):
 class Agent(BaseAgent):
     """
     Why this subclass:
-    - Regular agents don’t own crew. They can be *selected* into a leader’s crew.
+    - Single straightforward agent settings contract.
     """
 
     type: Literal["agent"] = "agent"
 
 
-# ---------------- Leader: declares its crew (and only here) ----------------
-class Leader(BaseAgent):
-    """
-    Why this subclass:
-    - Crew membership is defined *once*, at the leader level, to avoid drift.
-    - You can include by IDs and/or by tags; optional excludes too.
-    """
-
-    type: Literal["leader"] = "leader"
-    crew: List[str] = Field(
-        default_factory=list,
-        description="IDs of agents in this leader's crew (if any).",
-    )
-
-
-# ---------------- Discriminated union for IO (YAML ⇄ DB ⇄ API) ----------------
-AgentSettings = Annotated[Union[Agent, Leader], Field(discriminator="type")]
+# ---------------- Agent settings for IO (YAML ⇄ DB ⇄ API) ----------------
+AgentSettings = Agent
 
 
 class AIConfig(BaseModel):
@@ -226,6 +218,12 @@ class AIConfig(BaseModel):
         description=(
             "If true, only static agent configurations from YAML are used; "
             "persistent configurations are ignored."
+        ),
+    )
+    enable_v2_sql_checkpointer: bool = Field(
+        False,
+        description=(
+            "Enable durable SQL checkpointing for v2 runtimes. Disabled by default."
         ),
     )
     restore_max_exchanges: int = Field(
@@ -251,17 +249,45 @@ class AIConfig(BaseModel):
         50,
         description="Maximum size (in MB) for each attached file.",
     )
-    default_chat_model: ModelConfiguration = Field(
-        ...,
-        description="Default chat model configuration for all agents and services.",
+    default_chat_model: Optional[ModelConfiguration] = Field(
+        None,
+        description=(
+            "Default chat model configuration for all agents and services. "
+            "Required unless provided via models catalog override."
+        ),
     )
     default_language_model: Optional[ModelConfiguration] = Field(
         None,
         description="Default language model configuration for all agents and services (Optional).",
     )
+    react_profile_allowlist: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Internal allowlist of ReAct starting profile ids exposed to agent creation UX "
+            "and accepted by profile-based agent creation. This list is catalog-driven "
+            "(agents_catalog.react_profiles). Default is empty (no profile exposed)."
+        ),
+    )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
     )
+
+    @field_validator("react_profile_allowlist", mode="before")
+    @classmethod
+    def normalize_react_profile_allowlist(cls, value: Optional[List[str]]) -> List[str]:
+        if value is None:
+            return []
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            if not isinstance(raw, str):
+                continue
+            profile_id = raw.strip()
+            if not profile_id or profile_id in seen:
+                continue
+            seen.add(profile_id)
+            cleaned.append(profile_id)
+        return cleaned
 
 
 class FrontendFlags(BaseModel):
@@ -289,7 +315,6 @@ class Properties(BaseModel):
         default=None,
         description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
     )
-    showAgentRegisterA2A: bool = True
     showAgentRestoreFromConfiguration: bool = True
     showAgentDisableButton: bool = True
     showAgentCode: bool = True

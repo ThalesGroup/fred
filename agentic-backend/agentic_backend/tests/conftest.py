@@ -90,6 +90,7 @@ def minimal_generalist_config() -> Configuration:
         security=fake_security_config,
         ai=AIConfig(
             use_static_config_only=True,
+            enable_v2_sql_checkpointer=False,
             max_concurrent_agents=128,
             restore_max_exchanges=20,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
@@ -169,6 +170,12 @@ def client(app_context, monkeypatch) -> TestClient:
 
         async def list_agents(self, user, owner_filter=None, team_id=None):
             return list(app_context.configuration.ai.agents)
+
+        async def get_agent_by_id(self, user, agent_id):
+            for agent in app_context.configuration.ai.agents:
+                if agent.id == agent_id:
+                    return agent
+            return None
 
     monkeypatch.setattr(agent_controller, "AgentService", _FakeAgentService)
 

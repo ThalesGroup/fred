@@ -1,163 +1,284 @@
-# 🧠 Fred Agent Design Principles
+# Fred Agent Authoring Guide (v2-first)
 
-This document explains how to design and implement agents in the Fred platform using `AgentFlow`. It is intended for developers extending the Fred ecosystem with new domain-specific or tool-using agents.
+This document describes the authoring model Fred now wants to standardize.
 
-## ✨ Design Philosophy
+Short version:
 
-Fred agents are **LangGraph-based conversational experts** that follow a few core principles:
+- new agents SHOULD be written in the v2 model
+- `AgentFlow` is now legacy maintenance surface
+- Fred owns runtime lifecycle, execution, inspection, checkpointing, and MCP wiring
+- v2 still uses a warm per-`(session, agent)` in-memory cache
+- durable checkpoints complement that cache; they do not replace it
 
-- **Agents own their own model**: each agent manages its own `LLM` instance, configured based on its settings.
-- **Graph-driven**: agents are implemented as LangGraph `StateGraph`s, describing their reasoning and tool-use logic.
-- **Lifecycle-split**: agents should separate context binding, graph structure build, and runtime activation.
-- **Minimal boilerplate**: agent class declarations remain clean — `AgentFlow` takes care of lifecycle management, memory, and LangGraph compilation.
+The goal is not to expose LangGraph directly to every agent author.
+The goal is to expose a stable Fred SDK above the runtime engine.
 
----
+Useful reading order:
 
-## 🧩 Key Components in `AgentFlow`
+- current doc status map: [DOC_STATUS.md](/home/dimi/run/reference/fred/agentic-backend/docs/DOC_STATUS.md)
+- current feature surface: [FEATURE_MAP.md](/home/dimi/run/reference/fred/agentic-backend/docs/FEATURE_MAP.md)
+- graph runtime maturity and remaining LangGraph usage: [GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md](/home/dimi/run/reference/fred/agentic-backend/docs/GRAPH_RUNTIME_MATURITY_AND_LANGGRAPH_USAGE.md)
+- explicit v2 trade-offs against middleware/framework-native layering: [RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md](/home/dimi/run/reference/fred/agentic-backend/docs/RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md)
 
-The `AgentFlow` base class defines:
+## 1. Preferred Authoring Model
 
-| Attribute              | Purpose                                                             |
-| ---------------------- | ------------------------------------------------------------------- |
-| `name`, `role`, etc.   | Metadata for display and logging                                    |
-| `model`                | The language model used by the agent                                |
-| `toolkit`              | Optional LangChain tools (e.g., for querying CSVs, databases, etc.) |
-| `base_prompt`          | The initial `SystemMessage` given to the agent                      |
-| `graph`                | The LangGraph flow used to process user input                       |
-| `get_compiled_graph()` | Compiles and caches the flow for execution                          |
+Fred now has two authoring worlds:
 
-### Recommended lifecycle (new agents)
+- legacy: `AgentFlow`
+- current target: `AgentDefinition`
 
-`AgentFlow` now exposes a split lifecycle:
+For new work, prefer:
 
-- `bind_runtime_context(runtime_context)` — attach user/session context (no I/O)
-- `build_runtime_structure()` — build deterministic in-memory structures (graph topology)
-- `activate_runtime()` — async I/O for MCP, models, clients, etc.
-- `initialize_runtime(runtime_context)` — framework entrypoint that orchestrates the steps above
+- `ReActAgentDefinition` for most conversational or tool-using agents
+- `GraphAgentDefinition` for richer deterministic workflows with explicit state and branching
 
-For new agents, prefer overriding `build_runtime_structure()` and `activate_runtime()` instead of `async_init()`.
-Legacy `async_init()` overrides are still supported for compatibility, but are no longer the recommended pattern.
+Concrete examples already present in the repo:
 
----
+- `agentic_backend/agents/v2/production/basic_react/agent.py`
+- `agentic_backend/agents/v2/production/basic_react/profiles/rag_expert.py`
+- `agentic_backend/agents/v2/demos/postal_tracking/agent.py`
+- `agentic_backend/agents/v2/samples/tutorial_tools/agent.py`
 
-## 🧰 Toolkits and Tool Binding
+Folder intent in `agents/v2/`:
 
-Agents that use external tools (e.g., via MCP or LangChain integrations) should expose them via a `toolkit` object that extends `BaseToolkit`.
+- `samples/`: copy/paste-ready authoring starters (not catalog-wired by default)
+- `demos/`: executable demonstrations for runtime capabilities
+- `candidate/`: exploratory agents under active evaluation
+- `production/`: agents intended for real usage
 
-### ✅ Requirements for tool-using agents:
+## 2. What The Author Owns
 
-1.  **Build the graph structure in `build_runtime_structure()`** — no MCP/network calls in this step.
-2.  **Load tools in `activate_runtime()`** — typically from an external service like MCP.
-3.  **Bind the tools to the model** using:
+In v2, the author owns the pure declaration of the agent:
 
-        self.model = self.model.bind_tools(self.toolkit.get_tools())
+- metadata: `agent_id`, `role`, `description`, `tags`
+- editable fields
+- declared tool requirements
+- execution description:
+  - ReAct policy
+  - or graph topology + node handlers
 
-    This ensures the model can generate tool calls correctly during reasoning.
+The author does not own:
 
-4.  **Add a `ToolNode`** (or a stable tools-wrapper node) to the LangGraph using:
+- runtime activation
+- MCP session lifecycle
+- compiled graph caching
+- checkpoint strategy
+- session streaming protocol
+- inspection endpoint behavior
 
-    builder.add_node("tools", ToolNode(self.toolkit.get_tools()))
+That belongs to Fred runtime.
 
-    If your tool list is only known after MCP activation, build a stable `"tools"` node in
-    `build_runtime_structure()` and prepare its runtime executor during `activate_runtime()`.
+## 3. ReAct Agents
 
-5.  **Route via `tools_condition`** in your graph to allow conditional tool invocation:
+Use `ReActAgentDefinition` when the agent is fundamentally:
 
-    builder.add_conditional_edges("reasoner", tools_condition)
+- a prompt/policy
+- a set of tools
+- optional guardrails
+- optional approval policy
 
-### 🔥 Common Pitfall
+This is the default path for:
 
-If you **forget to bind the tools** to the model (`bind_tools(...)`), the agent will:
+- general assistants
+- RAG assistants
+- operational assistants
+- most tool supervisors
 
-- Receive the correct prompt and think it can use tools,
-- But **never actually call them** — leading to incomplete or incorrect answers.
+Examples:
 
-Always remember: **tool binding is not automatic**. It must be done explicitly during runtime activation (typically `activate_runtime()`).
+- `Basic ReAct V2`
+- `RAG Expert V2`
+- profile-based agents such as `custodian`, `sentinel`, `georges`, `log_genius`, `geo_demo`
 
-### Example (excerpt from `Tessa`):
+Profiles are only a convenient initialization layer.
+They are not a separate runtime model.
 
-```python
-def build_runtime_structure(self) -> None:
-    self.base_prompt = self._generate_prompt()
-    self._graph = self._build_graph()
+Observability note for ReAct in v2:
 
-async def activate_runtime(self) -> None:
-    self.model = get_default_chat_model()
-    self.mcp_client = await get_mcp_client_for_agent(self.agent_settings)
-    self.toolkit = TabularToolkit(self.mcp_client)
-    self.model = self.model.bind_tools(self.toolkit.get_tools())
-```
+- ReAct runtime instrumentation is shared and enforced centrally, not left to each agent author.
+- The runtime emits a standard model-call span (`v2.react.model`, `operation=model_call`) and shared metadata context for Langfuse filtering.
+- Compared to legacy v1-style agent-local runtime wiring, this reduces per-agent drift in tracing quality.
 
----
+## 4. Graph Agents
 
-## ✅ Example: `Georges`
+Use `GraphAgentDefinition` when the agent needs:
 
-This is the simplest kind of agent: no tools, just a reasoning loop.
+- typed workflow state
+- explicit deterministic branching
+- multiple business steps
+- richer HITL checkpoints
+- structured outputs such as `GeoPart` or `LinkPart`
 
-```python
-class Georges(AgentFlow):
-    """
-    Generalist Expert provides guidance on a wide range of topics
-    without deep specialization.
-    """
+The important boundary is:
 
-    # Class-level metadata
-    name: str | None = "Georges"
-    nickname: str | None = "Georges"
-    role: str | None = "Fallback Generalist Expert"
-    description: str | None = """Provides broad, high-level guidance when no specific expert is better suited.
-        Acts as a default agent to assist with general questions across all domains."""
-    icon: str = "generalist_agent"
-    categories: List[str] = ["General"]
-    tag: str = "generalist"
+- author describes graph structure and node behavior
+- Fred runtime executes it
 
-    def __init__(self, agent_settings: AgentSettings):
-        super().__init__(agent_settings = agent_settings)
+Authors should not directly manage LangGraph runtime objects in new code.
+LangGraph remains an implementation engine, not the author-facing SDK.
 
-    def build_runtime_structure(self) -> None:
-        self.base_prompt = self._generate_prompt()
-        self._graph = self._build_graph()
+## 5. Inspection, Not “Graph”
 
-    async def activate_runtime(self) -> None:
-        self.model = get_default_chat_model()
+The canonical safe introspection surface is now `inspect`.
 
-    def _generate_prompt(self) -> str:
-        today = datetime.now().strftime("%Y-%m-%d")
-        return "\n".join(
-            [
-                "You are a friendly generalist expert, skilled at providing guidance on a wide range of topics without deep specialization.",
-                "Your role is to respond with clarity, providing accurate and reliable information.",
-                "When appropriate, highlight elements that could be particularly relevant.",
-                f"The current date is {today}.",
-                "In case of graphical representation, render mermaid diagrams code.",
-            ]
-        )
+What inspection gives:
 
-    def _build_graph(self) -> StateGraph:
-        builder = StateGraph(MessagesState)
-        builder.add_node("expert", self.reasoner)
-        builder.add_edge(START, "expert")
-        builder.add_edge("expert", END)
-        return builder
+- metadata
+- fields
+- execution category
+- tool requirements
+- a safe preview artifact
 
-    async def reasoner(self, state: MessagesState):
-        messages = self.use_fred_prompts(state["messages"])
-        assert self.model is not None
-        response = await self.model.ainvoke(messages)
-        return {"messages": [response]}
-```
+What inspection must not do:
 
----
+- activate MCP
+- build remote clients
+- compile executable runtime state
 
-## 🧪 Testing & Reuse
+## 6. Runtime Cache And Durable Checkpoints
 
-- Runtime execution path: `await agent.initialize_runtime(runtime_context)` makes the agent **fully ready**.
-- Graph inspection path (UI graph view): `bind_runtime_context(...)` + `build_runtime_structure()` is enough for a non-activating structural graph.
-- Agents **can be reused across conversations** if desired, since their model and graph are pre-initialized.
+One important point is easy to miss:
 
----
+- v2 still has an in-memory warm agent cache
+- v2 also has durable checkpointing
 
-## 🪜 Next Steps
+These are not duplicates.
 
-- See `Tessa` for an example agent that activates tools in `activate_runtime()` and uses LangGraph `ToolNode`.
-- In the future, shared utilities for common node types, graph patterns, and memory behaviors will further reduce duplication.
+The warm cache is there so a hot conversation can keep reusing the same
+session-scoped runtime instance without rebuilding everything on every turn.
+
+The durable checkpointer is there so runtime continuity can survive things the
+warm cache cannot survive, such as:
+
+- backend restart
+- runtime rebuild
+- HITL pause/resume
+- future non-WebSocket execution adapters
+
+So the current v2 model is:
+
+- cache = performance and hot-session continuity
+- checkpointing = durable runtime continuity
+
+This is especially relevant for ReAct agents, where durable checkpointing may
+add some latency on the happy path even though a warm cached runtime already
+exists.
+
+For ReAct agents, preview is usually text.
+For true graph agents, preview may be Mermaid.
+
+## 6. MCP and Tools
+
+For v2 authors, MCP should appear as a platform capability, not as hand-managed client lifecycle.
+
+Current shapes:
+
+- declared tool refs through `tool_requirements`
+- runtime-provided MCP tools through Fred runtime/tool provider
+- built-in v2 tools such as:
+  - `knowledge.search`
+  - `logs.query`
+  - `geo.render_points`
+  - `traces.summarize_conversation`
+
+The important rule is:
+
+- declare what the agent needs
+- let Fred bind how the tools are actually provided
+
+More precisely:
+
+- agent definitions should declare a stable business capability such as
+  `knowledge.search`
+- agent definitions should not hard-code a specific MCP endpoint or server id
+  when Fred already exposes that capability through a first-class tool ref
+- MCP server ids and endpoint wiring are platform/infrastructure concerns, not
+  the primary authoring contract for product agents
+
+Example:
+
+- prefer `ToolRefRequirement(tool_ref="knowledge.search")`
+- do not make the agent definition depend directly on
+  `mcp-knowledge-flow-mcp-text` just to perform standard corpus retrieval
+
+Rule of thumb:
+
+- if Fred already exposes a business tool ref, use it
+- if a needed capability exists only behind raw MCP and this starts recurring
+  across agents, treat that as pressure to elevate a new Fred capability rather
+  than copying transport details into each agent
+
+Note:
+
+- a first-class Fred tool ref is not automatically MCP-backed
+- `traces.summarize_conversation` is implemented through Langfuse Public API
+  calls, not through MCP
+
+For a practical retest checklist of the current v2 world, see
+[FEATURE_MAP.md](./FEATURE_MAP.md).
+
+## 7. HITL and Structured UI Capabilities
+
+Two v2 capability families are important:
+
+- execution control:
+  - tool approval
+  - richer workflow HITL in graph runtimes
+- managed resources:
+  - fetch an admin-provided template or style guide through the v2 resource reader
+  - publish a generated file through the v2 artifact publisher
+- structured outputs:
+  - `LinkPart`
+  - `GeoPart`
+  - sources/citations
+
+These are platform capabilities.
+They should not be rebuilt ad hoc inside every agent.
+
+Important clarification:
+
+- in Fred v2, HITL is not limited to "choose one option among N"
+- HITL also covers pauses where the runtime expects a free-text human reply,
+  for example a clarification request in a workflow
+- the common platform contract is: the runtime pauses, emits `awaiting_human`,
+  persists a checkpoint, then resumes with an explicit human payload
+
+## 8. Migration Guidance
+
+When looking at an existing legacy agent, the usual decision tree is:
+
+1. Is it mainly prompt + tools + optional approval?
+   Then it is probably a `ReActAgentDefinition`.
+
+2. Is it a real multi-step business workflow with typed state?
+   Then it is probably a `GraphAgentDefinition`.
+
+3. Is it only a tutorial or prototype?
+   Then it probably should not survive as a product agent.
+
+## 9. Legacy Agents
+
+`AgentFlow` is still present because Fred still has legacy agents in production.
+That does not make it the target authoring model.
+
+Use `AgentFlow` only when:
+
+- maintaining a legacy agent that has not been ported yet
+- debugging historical behavior during migration
+
+Do not choose `AgentFlow` for new product work unless there is a very explicit platform reason.
+
+Legacy v1-oriented guides are grouped in:
+
+- `docs/deprecated/v1/`
+
+## 10. Related Docs
+
+- `docs/AGENT_SPECIFICATION.md`
+- `docs/GRAPH_RUNTIME_CONTRACT.md`
+- `docs/GRAPH_RUNTIME_CONTRACT.md` (see especially the section on
+  conversation history vs runtime checkpoints)
+- `docs/RUNTIME_VS_LANGCHAIN_MIDDLEWARE.md`
+- `docs/RUNTIME_ARCHITECTURE.md`
+- `docs/GENAI_SDK_SPEC.md`
+- `docs/GENAI_SDK_COMPATIBILITY_CHALLENGE.md`

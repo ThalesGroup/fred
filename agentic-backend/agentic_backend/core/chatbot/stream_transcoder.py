@@ -31,8 +31,12 @@ from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 
 from agentic_backend.common.rags_utils import ensure_ranks
-from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_factory import RuntimeAgentInstance
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.v2.checkpoints import (
+    AsyncCheckpointReader,
+    load_checkpoint,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -139,6 +143,24 @@ def _extract_fred_parts_from_tool_content(raw: Any) -> List[MessagePart]:
     if not candidates:
         return []
     return hydrate_fred_parts({"fred_parts": candidates})
+
+
+def _extract_fred_parts_from_tool_payload(
+    raw_content: Any,
+    *,
+    raw_metadata: Any,
+    additional_kwargs: Any,
+) -> List[MessagePart]:
+    parts = _extract_fred_parts_from_tool_content(raw_content)
+    if parts:
+        return parts
+    if isinstance(raw_metadata, dict):
+        parts = hydrate_fred_parts(raw_metadata)
+        if parts:
+            return parts
+    if isinstance(additional_kwargs, dict):
+        return hydrate_fred_parts(additional_kwargs)
+    return []
 
 
 def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
@@ -297,7 +319,7 @@ class StreamTranscoder:
         exchange_id: str,
         agent_id: str,
         interrupt_handler: Optional[InterruptHandler],
-        checkpointer: Optional[Any],
+        checkpointer: AsyncCheckpointReader | None,
     ) -> None:
         """
         Normalize LangGraph interrupt payload, enforce checkpoint presence,
@@ -389,19 +411,10 @@ class StreamTranscoder:
         if checkpoint_obj is None and checkpointer is not None:
             # Attempt to retrieve persisted checkpoint from the checkpointer (best-effort).
             try:
-                retrieved = None
-                if hasattr(checkpointer, "get"):
-                    retrieved = checkpointer.get(
-                        {"configurable": {"thread_id": session_id}}
-                    )
-                elif hasattr(checkpointer, "get_state"):
-                    retrieved = checkpointer.get_state(
-                        {"configurable": {"thread_id": session_id}}
-                    )
-                checkpoint_obj = (
-                    retrieved.get("checkpoint")
-                    if isinstance(retrieved, dict) and "checkpoint" in retrieved
-                    else retrieved
+                checkpoint_obj = await load_checkpoint(
+                    checkpointer,
+                    thread_id=session_id,
+                    checkpoint_id=checkpoint_id,
                 )
                 if checkpoint_id is None and isinstance(checkpoint_obj, dict):
                     checkpoint_id = checkpoint_obj.get("id") or checkpoint_obj.get(
@@ -474,7 +487,7 @@ class StreamTranscoder:
     async def stream_agent_response(
         self,
         *,
-        agent: AgentFlow,
+        agent: RuntimeAgentInstance,
         input_messages: List[AnyMessage],
         session_id: str,
         exchange_id: str,
@@ -521,9 +534,14 @@ class StreamTranscoder:
             "recursion_limit": 100,
         }
 
-        # When resuming, clean up the payload but DO NOT set checkpoint_id in config.
-        # We rely on thread_id to find the latest interrupted state.
+        # When resuming, preserve an explicit checkpoint_id in config when present.
+        # This keeps v2 runtimes transport-agnostic: WebSocket and Temporal can
+        # both resume a durable checkpoint explicitly instead of relying only on
+        # process-local state or "latest by thread_id" semantics.
         if resume_payload and isinstance(resume_payload, dict):
+            checkpoint_id = resume_payload.get("checkpoint_id")
+            if checkpoint_id is not None:
+                config["configurable"]["checkpoint_id"] = str(checkpoint_id)
             resume_payload.pop("checkpoint_id", None)
             resume_payload.pop("checkpoint", None)
 
@@ -685,7 +703,9 @@ class StreamTranscoder:
                         exchange_id=exchange_id,
                         agent_id=agent_id,
                         interrupt_handler=interrupt_handler,
-                        checkpointer=getattr(agent, "streaming_memory", None),
+                        checkpointer=cast(
+                            AsyncCheckpointReader | None, agent.streaming_memory
+                        ),
                     )
 
                 # `event` looks like: {'node_name': {'messages': [...]} } or {'end': None}
@@ -814,6 +834,11 @@ class StreamTranscoder:
                             )
                         raw_content = getattr(msg, "content", None)
                         new_hits = _extract_vector_search_hits(raw_content)
+                        if new_hits is None and sources_payload:
+                            # Some runtimes attach normalized sources directly
+                            # on the tool message metadata instead of leaving
+                            # them only in the rendered tool content.
+                            new_hits = sources_payload
                         if new_hits is not None:
                             if logger.isEnabledFor(logging.DEBUG):
                                 logger.debug(
@@ -829,8 +854,10 @@ class StreamTranscoder:
                                     call_id,
                                 )
 
-                        tool_fred_parts = _extract_fred_parts_from_tool_content(
-                            raw_content
+                        tool_fred_parts = _extract_fred_parts_from_tool_payload(
+                            raw_content,
+                            raw_metadata=raw_md,
+                            additional_kwargs=additional_kwargs,
                         )
                         if tool_fred_parts:
                             pending_fred_parts.extend(tool_fred_parts)
