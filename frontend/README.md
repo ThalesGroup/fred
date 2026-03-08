@@ -118,3 +118,9 @@ If you need to update one of them, just run one of the command while the corresp
   ```sh
   make update-knowledge-flow-api
   ```
+
+- Control Plane backend:
+
+  ```sh
+  make update-control-plane-api
+  ```

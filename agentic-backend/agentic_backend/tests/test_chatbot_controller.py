@@ -28,7 +28,7 @@ class TestChatbotController:
         "session_id": None,
         "user_id": "mock@user.com",
         "message": "Qui est shakespeare ?",
-        "agent_id": "Georges",
+        "agent_id": "basic.react.v2",
         "argument": "none",
     }
 
@@ -66,13 +66,17 @@ class TestChatbotController:
         assert payload["preview"]["kind"] == "text"
         assert "ReAct runtime" in payload["preview"]["content"]
 
-    def test_inspect_legacy_agent_is_rejected(self, client: TestClient) -> None:
+    def test_inspect_default_v2_agent_returns_structured_inspection(
+        self, client: TestClient
+    ) -> None:
         response = client.get(
-            "/agentic/v1/agents/Georges/inspect", headers=self.headers
+            "/agentic/v1/agents/basic.react.v2/inspect", headers=self.headers
         )
 
-        assert response.status_code == status.HTTP_409_CONFLICT
-        assert "only supported for v2" in response.json()["detail"]
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.json()
+        assert payload["agent_id"] == "basic.react.v2"
+        assert payload["execution_category"] == "react"
 
     def test_get_team_model_routing_config_requires_admin_role(
         self, client: TestClient

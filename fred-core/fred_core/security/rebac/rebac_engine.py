@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -14,6 +15,7 @@ from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.structure import KeycloakUser, M2MSecurity
 
 ORGANIZATION_ID = "fred"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -354,8 +356,19 @@ class RebacEngine(ABC):
             contextual_relations=contextual_relations,
             consistency_token=consistency_token,
         ):
+            logger.warning(
+                "ReBAC authorization denied: subject=%s:%s permission=%s resource=%s:%s",
+                subject.type.value,
+                subject.id,
+                permission.value,
+                resource.type.value,
+                resource.id,
+            )
             raise AuthorizationError(
-                subject.id, permission.value, resource.type, resource.id
+                subject.id,
+                permission.value,
+                resource.type,
+                f"Not authorized to {permission.value} {resource.type.value} {resource.id}",
             )
 
     async def check_user_permission_or_raise(

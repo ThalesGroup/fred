@@ -91,6 +91,13 @@ update-knowledge-flow-api: ## update the generated hooks used in UI based on kno
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
+.PHONY: update-control-plane-api
+update-control-plane-api: ## update the generated hooks used in UI based on control-plane backend openApi spec
+	@echo "🔧 Generating control-plane backend OpenAPI specification..."
+	cd ../control-plane-backend && make generate-openapi
+	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
+	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
+
 ##@ Clean
 
 .PHONY: clean

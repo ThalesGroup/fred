@@ -28,6 +28,7 @@ from fastapi import HTTPException, WebSocketDisconnect
 from fred_core import (
     Action,
     AuthorizationError,
+    BaseSessionStore,
     KeycloakUser,
     Resource,
     authorize,
@@ -95,7 +96,6 @@ from agentic_backend.core.session.session_cache import CachedSession, SessionCac
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
 PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
@@ -1091,6 +1091,7 @@ class SessionOrchestrator:
         user: KeycloakUser,
         agent_id: Optional[str] = None,
         title: Optional[str] = None,
+        team_id: Optional[str] = None,
     ) -> SessionSchema:
         """Explicitly create a new empty session (used by the UI before first upload/message)."""
         # Enforce max sessions per user if configured
@@ -1114,6 +1115,7 @@ class SessionOrchestrator:
         session = SessionSchema(
             id=secrets.token_urlsafe(8),
             user_id=user.uid,
+            team_id=team_id,
             agent_id=agent_id,
             title=title or "New conversation",
             updated_at=_utcnow_dt(),

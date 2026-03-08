@@ -14,116 +14,60 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    advisory_lock_key,
-    run_ddl_with_advisory_lock,
-)
-from sqlalchemy import JSON, Column, DateTime, MetaData, String, Table, func, select
+from fred_core import BaseSessionStore
+from fred_core.session.stores import BaseJsonSessionStore, PostgresJsonSessionStore
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from agentic_backend.core.chatbot.chat_schema import SessionSchema
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
-
-logger = logging.getLogger(__name__)
 
 
 class PostgresSessionStore(BaseSessionStore):
-    """
-    PostgreSQL-backed session store using JSONB.
-    """
+    """Agentic wrapper around the shared Postgres JSON session store."""
 
     def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "sessions_"):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
-
-        metadata = MetaData()
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("session_id", String, primary_key=True),
-            Column("user_id", String, index=True),
-            Column("agent_id", String, index=True),
-            Column("session_data", JSON),
-            Column("updated_at", DateTime(timezone=True), index=True),
-            keep_existing=True,
+        self._store: BaseJsonSessionStore = PostgresJsonSessionStore(
+            engine=engine,
+            table_name=table_name,
+            prefix=prefix,
         )
 
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-        import asyncio
-
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_create())
-        except RuntimeError:
-            asyncio.run(_create())
-        logger.info("[SESSION][PG][ASYNC] Table ready: %s", self.table_name)
-
     async def save(self, session: SessionSchema) -> None:
-        async with self.store.begin() as conn:
-            await self.save_with_conn(conn, session)
+        payload = session.model_dump(mode="json")
+        await self._store.save(
+            session_id=session.id,
+            user_id=session.user_id,
+            updated_at=session.updated_at,
+            payload=payload,
+            team_id=payload.get("team_id"),
+            agent_id=payload.get("agent_id", ""),
+        )
 
-    async def save_with_conn(self, conn, session: SessionSchema) -> None:
-        """
-        Same as save(), but reuses the provided AsyncConnection so callers can
-        bundle writes in a single transaction.
-        """
-        payload: Dict[str, Any] = session.model_dump(mode="json")
-        await self.store.upsert(
+    async def save_with_conn(self, conn: Any, session: SessionSchema) -> None:
+        payload = session.model_dump(mode="json")
+        await self._store.save_with_conn(
             conn,
-            self.table,
-            values={
-                "session_id": session.id,
-                "user_id": session.user_id,
-                "agent_id": payload.get("agent_id", ""),
-                "session_data": payload,
-                "updated_at": session.updated_at,
-            },
-            pk_cols=["session_id"],
+            session_id=session.id,
+            user_id=session.user_id,
+            updated_at=session.updated_at,
+            payload=payload,
+            team_id=payload.get("team_id"),
+            agent_id=payload.get("agent_id", ""),
         )
 
     async def get(self, session_id: str) -> Optional[SessionSchema]:
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table.c.session_data).where(
-                    self.table.c.session_id == session_id
-                )
-            )
-            row = result.fetchone()
-        if not row:
+        payload = await self._store.get_payload(session_id)
+        if payload is None:
             return None
-        return SessionSchema.model_validate(row[0])
+        return SessionSchema.model_validate(payload)
 
     async def delete(self, session_id: str) -> None:
-        async with self.store.begin() as conn:
-            await conn.execute(
-                self.table.delete().where(self.table.c.session_id == session_id)
-            )
+        await self._store.delete(session_id)
 
     async def get_for_user(self, user_id: str) -> List[SessionSchema]:
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table.c.session_data)
-                .where(self.table.c.user_id == user_id)
-                .order_by(self.table.c.updated_at.desc())
-            )
-            rows = result.fetchall()
-        return [SessionSchema.model_validate(r[0]) for r in rows]
+        payloads = await self._store.get_payloads_for_user(user_id)
+        return [SessionSchema.model_validate(payload) for payload in payloads]
 
     async def count_for_user(self, user_id: str) -> int:
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(func.count()).where(self.table.c.user_id == user_id)
-            )
-            return int(result.scalar_one())
+        return await self._store.count_for_user(user_id)

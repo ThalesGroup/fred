@@ -23,8 +23,12 @@ import asyncio
 import logging
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from knowledge_flow_backend.features.scheduler.worker import run_worker
-from knowledge_flow_backend.main import load_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,9 @@ async def main() -> None:
         level=getattr(logging, configuration.app.log_level.upper(), logging.INFO),
         format="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s] | %(message)s",
     )
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")

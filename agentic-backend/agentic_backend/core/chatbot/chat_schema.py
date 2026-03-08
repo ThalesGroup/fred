@@ -285,6 +285,7 @@ class ChatMessage(BaseModel):
 class SessionSchema(BaseModel):
     id: str
     user_id: str
+    team_id: str | None = None
     agent_id: str | None = None
     title: str
     updated_at: datetime

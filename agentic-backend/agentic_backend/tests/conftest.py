@@ -111,18 +111,11 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
-                    id="Georges",
-                    name="Georges",
-                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
+                    id="basic.react.v2",
+                    name="Basic ReAct V2",
+                    class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
                     enabled=True,
-                ),
-                # Include a basic flow named 'Fred' to satisfy tests expecting it
-                Agent(
-                    id="Fred",
-                    name="Fred",
-                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
-                    enabled=True,
-                ),
+                )
             ],
         ),
         mcp=McpConfiguration(servers=[]),

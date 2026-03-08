@@ -35,6 +35,7 @@ from typing import Any, Callable, Dict, Optional
 
 from fred_core import (
     BaseLogStore,
+    BaseSessionStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
@@ -92,7 +93,6 @@ from agentic_backend.core.monitoring.postgres_history_store import PostgresHisto
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )

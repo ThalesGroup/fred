@@ -9,7 +9,7 @@ import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
-import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
 import { capitalize } from "../utils/capitalize";
 
 export function TeamDetailsPage() {
@@ -17,10 +17,7 @@ export function TeamDetailsPage() {
   const { agentsNicknamePlural } = useFrontendProperties();
 
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: team, isLoading } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId },
-  );
+  const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId });
   // todo: handle error (404)
 
   if (teamId === undefined) {

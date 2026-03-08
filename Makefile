@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend
-TEST_DIRS := agentic-backend knowledge-flow-backend
+CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend control-plane-backend
+TEST_DIRS := agentic-backend knowledge-flow-backend control-plane-backend
 
 ##@ Code quality
 
