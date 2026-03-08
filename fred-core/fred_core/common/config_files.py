@@ -21,7 +21,17 @@ from dotenv import load_dotenv
 
 
 class ConfigFiles:
-    """Shared helper for ENV_FILE/CONFIG_FILE resolution and tracking across Fred backends."""
+    """Resolve and track startup config paths for Fred backends.
+
+    Why this exists:
+    - Every backend starts the same way: load environment variables, then load a
+      YAML configuration file.
+    - Developers and operators should see the exact files that were used.
+
+    Example:
+    - `ENV_FILE=./config/.env.prod`
+    - `CONFIG_FILE=./config/configuration_prod.yaml`
+    """
 
     def __init__(
         self,
@@ -33,6 +43,12 @@ class ConfigFiles:
         config_var_name: str = "CONFIG_FILE",
         log_prefix: str = "[CONFIG]",
     ) -> None:
+        """Create a resolver with Fred defaults.
+
+        Example:
+        - Keep defaults for regular startup.
+        - Override `default_config_file` in tests to point to a fixture.
+        """
         self._logger = logger
         self._default_env_file = default_env_file
         self._default_config_file = default_config_file
@@ -43,12 +59,35 @@ class ConfigFiles:
         self._loaded_config_file_path: str | None = None
 
     def get_loaded_env_file_path(self) -> str | None:
+        """Return the effective env file path used at runtime.
+
+        Example:
+        - Returns `./config/.env` when no override is provided.
+        - Returns `/etc/fred/agentic.env` in a production deployment override.
+        """
         return self._loaded_env_file_path
 
     def get_loaded_config_file_path(self) -> str | None:
+        """Return the effective YAML config file path used at runtime.
+
+        Example:
+        - `./config/configuration.yaml` in local mode.
+        - `./config/configuration_worker.yaml` for worker startup.
+        """
         return self._loaded_config_file_path
 
     def load_environment(self, dotenv_path: str | None = None) -> str:
+        """Load environment variables from the selected env file.
+
+        Selection order:
+        1. Explicit `dotenv_path` argument.
+        2. `ENV_FILE` environment variable.
+        3. Default `./config/.env`.
+
+        Example:
+        - Calling `load_environment()` with `ENV_FILE=./config/.env.prod`
+          loads production secrets and returns that path.
+        """
         env_path = dotenv_path or os.getenv(self._env_var_name, self._default_env_file)
         if load_dotenv(env_path):
             self._logger.info(
@@ -66,6 +105,16 @@ class ConfigFiles:
         return env_path
 
     def resolve_config_file_path(self, config_file: str | None = None) -> str:
+        """Resolve and validate the YAML configuration path.
+
+        Selection order:
+        1. Explicit `config_file` argument.
+        2. `CONFIG_FILE` environment variable.
+        3. Default `./config/configuration.yaml`.
+
+        Raises:
+        - `FileNotFoundError` if the resolved file does not exist.
+        """
         resolved = config_file or os.getenv(
             self._config_var_name, self._default_config_file
         )
@@ -74,6 +123,12 @@ class ConfigFiles:
         return resolved
 
     def mark_config_loaded(self, config_file: str) -> None:
+        """Record and log the configuration file effectively loaded.
+
+        Example:
+        - After parsing `configuration_prod.yaml`, call this method so startup
+          logs and diagnostics expose the exact profile in use.
+        """
         self._loaded_config_file_path = config_file
         self._logger.info(
             "%s Loaded configuration from: %s", self._log_prefix, config_file

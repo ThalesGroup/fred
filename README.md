@@ -551,10 +551,16 @@ Other infrastructure services remain accessible on their usual ports:
 
 ## Production mode
 
+> [!IMPORTANT]
+> **Access-control reminder (shared environments):**
+> Keycloak app roles and team ReBAC rights are different controls.
+> For the Fred access model and deployment bootstrap rules, see [`docs/REBAC.md`](./docs/REBAC.md).
+
 For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
 - [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
 - [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
+- [`docs/REBAC.md`](./docs/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 

@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import magic
 from fastapi import UploadFile
-from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, RebacDisabledResult, RebacEngine, RebacReference, Relation, RelationType, Resource, TeamPermission, create_keycloak_admin
+from fred_core import KeycloackDisabled, KeycloakUser, RebacDisabledResult, RebacEngine, RebacReference, Relation, RelationType, Resource, TeamPermission, create_keycloak_admin
 from keycloak import KeycloakAdmin
 from PIL import Image
 
@@ -50,7 +50,7 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
     root_groups = await _fetch_root_keycloak_groups(admin)
 
     # Filter groups with ReBAC
-    consistency_token = await _ensure_team_organization_relations(rebac, [g.id for g in root_groups])
+    consistency_token = await rebac.ensure_team_organization_relations([g.id for g in root_groups])
     authorized_teams_refs = await rebac.lookup_user_resources(user, TeamPermission.CAN_READ, consistency_token=consistency_token)
     if not isinstance(authorized_teams_refs, RebacDisabledResult):
         authorized_tags_ids = [t.id for t in authorized_teams_refs]
@@ -414,39 +414,6 @@ async def _enrich_groups_with_team_data(admin: KeycloakAdmin, rebac: RebacEngine
     return teams
 
 
-# todo: Remove when our API handle team creation/deletion and not Keycloak
-async def _ensure_team_organization_relations(rebac: RebacEngine, team_ids: list[TeamId]) -> str | None:
-    """Ensure all teams have organization relation tuples in OpenFGA. This tuples are needed for all rules
-    referencing orgnaization wide role (like org admin writes).
-
-    ## Why like this ?
-
-    As our teams are based on Keycloak, we can't always know when a new team is created and create the
-    team->organization tuple at the right time. It would be great to pass thses relations as contextual tuples
-    (like we do for user-(member)->team and user-(role)->organization tuples) but there is a limit of 100
-    contextual tuples by request. To be able to have more that 100 teams, we were forced to do it that way.
-
-    If in the future we don't rely on Keycloak for team creation, we can remove this.
-
-    Returns:
-        The consistency token from the write operation, to be used in subsequent reads.
-    """
-    if not team_ids:
-        return None
-
-    # Create relations for all teams - duplicates will be ignored by OpenFGA
-    relations_to_add = [
-        Relation(
-            subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-            relation=RelationType.ORGANIZATION,
-            resource=RebacReference(Resource.TEAM, team_id),
-        )
-        for team_id in team_ids
-    ]
-
-    return await rebac.add_relations(relations_to_add)
-
-
 async def _get_team_permissions_for_user(rebac: RebacEngine, user: KeycloakUser, team_id: TeamId, consistency_token: str | None = None) -> list[TeamPermission]:
     """Check all team permissions for a user efficiently.
 
@@ -600,10 +567,11 @@ async def _validate_team_and_check_permission(user: KeycloakUser, team_id: TeamI
         raise TeamNotFoundError(team_id)
 
     # Ensure team has organization relation for ReBAC
-    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
-
-    # Check user has the required permission
-    await asyncio.gather(*[rebac.check_user_permission_or_raise(user, perm, team_id, consistency_token=consistency_token) for perm in permissions])
+    consistency_token = await rebac.check_user_team_permissions_or_raise(
+        user=user,
+        team_id=team_id,
+        permissions=permissions,
+    )
 
     return admin, raw_group, consistency_token
 

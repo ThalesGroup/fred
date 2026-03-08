@@ -33,6 +33,9 @@ def load_environment(dotenv_path: str | None = None) -> str:
     Fred convention:
     - ENV file contains secrets and deployment-specific variables.
     - This function handles only that source.
+
+    Example:
+    - `ENV_FILE=./config/.env.prod` to inject production secrets at startup.
     """
     return _config_files.load_environment(dotenv_path)
 
@@ -43,6 +46,10 @@ def load_configuration() -> Configuration:
     Fred convention:
     - CONFIG_FILE points to the structured application config (models, stores, limits).
     - ENV_FILE is loaded first because YAML parsing may depend on env values.
+
+    Example:
+    - `CONFIG_FILE=./config/configuration_prod.yaml` loads production-like
+      storage/security/agent settings.
     """
     load_environment()
     config_file = _config_files.resolve_config_file_path()
@@ -57,6 +64,9 @@ def get_loaded_env_file_path() -> str | None:
 
     Kept separate from config path so logs/diagnostics can tell where secrets/env
     came from, independently from which YAML config profile was loaded.
+
+    Example:
+    - Env from `.env.shared`, config from `configuration_worker.yaml`.
     """
     return _config_files.get_loaded_env_file_path()
 
@@ -66,5 +76,9 @@ def get_loaded_config_file_path() -> str | None:
 
     This is separate from ENV_FILE on purpose: Fred allows same env file with
     different YAML profiles (dev/prod/worker), and diagnostics must show both.
+
+    Example:
+    - `.env.prod` + `configuration_prod.yaml` in API pod.
+    - `.env.prod` + `configuration_worker.yaml` in worker pod.
     """
     return _config_files.get_loaded_config_file_path()

@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fred_core import (
-    ORGANIZATION_ID,
     KeycloackDisabled,
     KeycloakUser,
     RebacDisabledResult,
@@ -70,8 +69,8 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
         return []
 
     root_groups = await _fetch_root_keycloak_groups(admin)
-    consistency_token = await _ensure_team_organization_relations(
-        rebac, [group.id for group in root_groups]
+    consistency_token = await rebac.ensure_team_organization_relations(
+        [group.id for group in root_groups]
     )
 
     authorized_teams_refs = await rebac.lookup_user_resources(
@@ -329,24 +328,6 @@ async def _enrich_groups_with_team_data(
     return teams
 
 
-async def _ensure_team_organization_relations(
-    rebac: RebacEngine,
-    team_ids: list[TeamId],
-) -> str | None:
-    if not team_ids:
-        return None
-
-    relations_to_add = [
-        Relation(
-            subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
-            relation=RelationType.ORGANIZATION,
-            resource=RebacReference(Resource.TEAM, team_id),
-        )
-        for team_id in team_ids
-    ]
-    return await rebac.add_relations(relations_to_add)
-
-
 async def _get_team_permissions_for_user(
     rebac: RebacEngine,
     user: KeycloakUser,
@@ -481,17 +462,10 @@ async def _validate_team_and_check_permission(
     if not isinstance(raw_group, dict):
         raise TeamNotFoundError(team_id)
 
-    consistency_token = await _ensure_team_organization_relations(rebac, [team_id])
-    await asyncio.gather(
-        *[
-            rebac.check_user_permission_or_raise(
-                user,
-                permission,
-                team_id,
-                consistency_token=consistency_token,
-            )
-            for permission in permissions
-        ]
+    consistency_token = await rebac.check_user_team_permissions_or_raise(
+        user=user,
+        team_id=team_id,
+        permissions=permissions,
     )
 
     return admin, raw_group, consistency_token

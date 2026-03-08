@@ -357,8 +357,10 @@ async def _authorize_team_model_routing_preview(
     rebac = get_rebac_engine()
     if rebac.enabled:
         try:
-            await rebac.check_user_permission_or_raise(
-                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            await rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
             )
         except AuthorizationError as exc:
             raise HTTPException(

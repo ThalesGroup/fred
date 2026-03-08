@@ -27,10 +27,27 @@ _config_files = ConfigFiles(logger=logging.getLogger(__name__))
 
 
 def load_environment(dotenv_path: str | None = None) -> str:
+    """Load environment variables for Knowledge Flow startup.
+
+    Example:
+    - Local run: loads `./config/.env`.
+    - CI/Prod run: set `ENV_FILE` and this function loads that file.
+    """
     return _config_files.load_environment(dotenv_path)
 
 
 def load_configuration() -> Configuration:
+    """Load Knowledge Flow YAML configuration using Fred startup conventions.
+
+    Startup order:
+    1. Load env vars from `ENV_FILE`.
+    2. Resolve config from `CONFIG_FILE`.
+    3. Parse YAML into the `Configuration` model.
+
+    Example:
+    - `CONFIG_FILE=./config/configuration_prod.yaml` loads production-like
+      storage/security settings.
+    """
     load_environment()
     config_file = _config_files.resolve_config_file_path()
     configuration: Configuration = parse_server_configuration(config_file)
@@ -39,8 +56,17 @@ def load_configuration() -> Configuration:
 
 
 def get_loaded_env_file_path() -> str | None:
+    """Return which env file was effectively used.
+
+    Useful in startup logs and support diagnostics.
+    """
     return _config_files.get_loaded_env_file_path()
 
 
 def get_loaded_config_file_path() -> str | None:
+    """Return which YAML config file was effectively used.
+
+    Keeping this separate from env path avoids confusion when one env file is
+    reused with multiple config profiles.
+    """
     return _config_files.get_loaded_config_file_path()
