@@ -17,6 +17,20 @@ Key point: always use `ENV_FILE` + `CONFIG_FILE` (same names in every backend).
 - YAML policy catalog loader + resolver (global default + team rules)
 - Temporal worker entrypoint to host lifecycle workflows
 
+## Temporary User Bootstrap APIs (Before Full Review)
+
+The following endpoints are temporary and are intended only to speed up
+integration and end-to-end testing until the final user/team administration flow
+is reviewed:
+
+- `POST /control-plane/v1/users`
+- `DELETE /control-plane/v1/users/{user_id}`
+
+Team role assignment remains on existing team membership endpoints:
+
+- `POST /control-plane/v1/teams/{team_id}/members` with `relation=member|manager|owner`
+- `PATCH /control-plane/v1/teams/{team_id}/members/{user_id}` to change role
+
 ## Local run
 
 ```bash

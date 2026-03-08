@@ -9,6 +9,7 @@ Thank you for your interest in contributing! This project is developed collabora
 - [🚀 How to Become a Contributor](#-how-to-become-a-contributor)
   - [Contributor License Agreements](#contributor-license-agreements)
 - [✅ Pull Request Checklist](#-pull-request-checklist)
+- [📜 Developer Contract](#-developer-contract)
 - [🚚 Release And Versioning](#-release-and-versioning)
 - [🧾 License](#-license)
 - [🐛 Issues Management](#-issues-management)
@@ -74,12 +75,25 @@ By contributing, you agree that your contributions may be used under the project
 Before submitting a pull request, please ensure:
 
 - [ ] Your code builds and runs locally using `make run`
-- [ ] You ran all tests with `make test`
+- [ ] You ran default tests with `make test`
+- [ ] You ran integration tests when your change depends on external services
 - [ ] Code follows the existing style and structure
 - [ ] You included relevant unit or integration tests for your changes
 - [ ] The PR includes a clear **description** and motivation
 
 A CI pipeline will automatically run all tests when you open or update a pull request. The internal maintainers will review only those MRs that pass all CI checks.
+
+## 📜 Developer Contract
+
+All contributors (human or AI assistant) must follow:
+
+- [`docs/DEVELOPER_CONTRACT.md`](./DEVELOPER_CONTRACT.md)
+
+This is the repository-wide contract for:
+
+- minimal-scope changes (no over-engineering),
+- mandatory quality/test commands,
+- and strict separation between offline default tests and integration tests.
 
 ## 🚚 Release And Versioning
 
@@ -228,10 +242,14 @@ Testing is mandatory for any non-trivial change. Both unit and integration tests
 
 ```bash
 make run       # start the app locally
-make test      # run all tests (unit + integration)
+make test      # run default/offline tests (no external services required)
+make test-integration  # run tests requiring external services
 ```
 
 Ensure tests pass **before** opening a pull request.
+
+Unit/default tests must not require running external services (Keycloak, Temporal, OpenFGA, MinIO, Postgres, etc.).  
+Any such dependency must be isolated in tests marked `@pytest.mark.integration`.
 
 ### 🧩 `conftest.py` and Configuration for Local Testing
 

@@ -36,7 +36,7 @@ def _default_security() -> SecurityConfiguration:
                 "enabled": False,
                 "realm_url": "http://localhost:8080/realms/app",
                 "client_id": "control-plane",
-                "secret_env_var": "KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET",  # nosec B105 - env var name, not a secret value
+                "secret_env_var": "KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET",  # nosec B105 # pragma: allowlist secret
             },
             "user": {
                 "enabled": False,

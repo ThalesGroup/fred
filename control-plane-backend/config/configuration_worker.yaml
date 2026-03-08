@@ -20,7 +20,7 @@ security:
     enabled: false
     realm_url: http://localhost:8080/realms/app
     client_id: control-plane
-    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET # pragma: allowlist secret
   user:
     enabled: false
     realm_url: http://localhost:8080/realms/app

@@ -30,6 +30,9 @@ from control_plane_backend.teams_controller import (
     register_exception_handlers as register_team_exception_handlers,
 )
 from control_plane_backend.teams_controller import router as teams_router
+from control_plane_backend.users_controller import (
+    register_exception_handlers as register_user_exception_handlers,
+)
 from control_plane_backend.users_controller import router as users_router
 
 logger = logging.getLogger(__name__)
@@ -177,6 +180,7 @@ def create_app() -> FastAPI:
     router.include_router(users_router)
     router.include_router(teams_router)
 
+    register_user_exception_handlers(app)
     register_team_exception_handlers(app)
     app.include_router(router)
     return app

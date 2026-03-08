@@ -646,6 +646,8 @@ Persistence options:
 
 - Developer and contributors guides
 
+  - [Developer Contract (humans + AI)](./docs/DEVELOPER_CONTRACT.md)
+  - [Platform Runtime Map (API apps + Temporal apps)](./docs/PLATFORM_RUNTIME_MAP.md)
   - [Developer Tools](./developer_tools/README.md)
   - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
   - [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)

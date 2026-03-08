@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
+from fred_core import TeamPermission
 from httpx import ASGITransport, AsyncClient
 
 from control_plane_backend.main import create_app
@@ -55,6 +56,43 @@ async def test_list_users_returns_empty_without_keycloak_m2m() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_user_requires_keycloak_m2m() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/users",
+            json={
+                "username": "test-user",
+                "email": "test-user@app.local",
+                "password": "Password123!",  # pragma: allowlist secret
+            },
+        )
+
+    assert resp.status_code == 503
+    assert (
+        resp.json()["detail"]
+        == "Keycloak M2M is disabled; cannot perform user operations."
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_user_requires_keycloak_m2m() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete("/control-plane/v1/users/user-001")
+
+    assert resp.status_code == 503
+    assert (
+        resp.json()["detail"]
+        == "Keycloak M2M is disabled; cannot perform user operations."
+    )
+
+
+@pytest.mark.asyncio
 async def test_list_teams_returns_empty_without_keycloak_m2m() -> None:
     app = create_app()
     async with AsyncClient(
@@ -82,6 +120,59 @@ async def test_teams_preflight_options_is_handled_by_cors() -> None:
 
     assert resp.status_code == 200
     assert resp.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("relation", "expected_permission"),
+    [
+        ("member", TeamPermission.CAN_ADMINISTER_MEMBERS),
+        ("manager", TeamPermission.CAN_ADMINISTER_MANAGERS),
+        ("owner", TeamPermission.CAN_ADMINISTER_OWNERS),
+    ],
+)
+async def test_add_team_member_checks_permission_for_target_relation(
+    monkeypatch: pytest.MonkeyPatch,
+    relation: str,
+    expected_permission: TeamPermission,
+) -> None:
+    class _FakeKeycloakAdmin:
+        async def a_group_user_add(self, _user_id: str, _group_id: str) -> None:
+            return None
+
+    captured_permissions: list[list[TeamPermission]] = []
+
+    async def _fake_validate_team_and_check_permission(
+        *_args,
+        **_kwargs,
+    ):
+        permissions = _args[3]
+        captured_permissions.append(permissions)
+        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, None
+
+    async def _fake_add_team_member_relation(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._add_team_member_relation",
+        _fake_add_team_member_relation,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/thales/members",
+            json={"user_id": "user-001", "relation": relation},
+        )
+
+    assert resp.status_code == 204
+    assert captured_permissions == [[expected_permission]]
 
 
 @pytest.mark.asyncio

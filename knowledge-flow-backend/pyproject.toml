@@ -102,6 +102,7 @@ asyncio_default_fixture_loop_scope = "function"
 cache_dir = "/tmp/.pytest"
 
 markers = [
+  "integration: mark integration tests",
   "content_storage_type(type): mark test to select a content store backend",
   "metadata_storage_type(type): mark test to select a metadata store backend",
   "vector_storage_type(type): mark test to select a vector store backend",

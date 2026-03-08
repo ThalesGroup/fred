@@ -155,11 +155,14 @@ async def add_team_member(
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
 
+    permission_to_check = _get_administer_permission_for_team_role_relation(
+        request.relation
+    )
     admin, _, _ = await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
-        [TeamPermission.CAN_ADMINISTER_MEMBERS],
+        [permission_to_check],
     )
     await _add_keycloak_user_to_group(admin, request.user_id, team_id)
     await _add_team_member_relation(rebac, team_id, request.user_id, request.relation)
