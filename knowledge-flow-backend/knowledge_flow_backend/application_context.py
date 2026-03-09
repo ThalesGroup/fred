@@ -90,7 +90,6 @@ from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store i
 from knowledge_flow_backend.core.stores.team_metadata.postgres_team_metadata_store import PostgresTeamMetadataStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
-from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
 from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.core.stores.vector.pgvector_store import PgVectorStoreAdapter
@@ -733,6 +732,18 @@ class ApplicationContext:
                 store.collection_name,
             )
         elif isinstance(store, ClickHouseVectorStorageConfig):
+            try:
+                from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
+            except ModuleNotFoundError as exc:
+                missing_dep = exc.name or "unknown"
+                if missing_dep == "clickhouse_connect" or missing_dep.startswith("clickhouse_connect."):
+                    raise ImportError(
+                        "ClickHouse vector store is configured but required dependency is missing: "
+                        f"'{missing_dep}'. Install ClickHouse dependency "
+                        "`clickhouse-connect` or switch `storage.vector_store.type` to a different backend."
+                    ) from exc
+                raise
+
             ch = get_configuration().storage.clickhouse
             if not ch:
                 raise ValueError("Missing ClickHouse configuration")

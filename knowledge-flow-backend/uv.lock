@@ -1,5 +1,5 @@
 version = 1
-revision = 1
+revision = 2
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -493,7 +493,26 @@ version = "8.1.8"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/d4/7ebdbd03970677812aac39c869717059dbb71a4cfc033ca6e5221787892c/click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2", size = 98188 },
+    { url = "https://files.pythonhosted.org/packages/7e/d4/7ebdbd03970677812aac39c869717059dbb71a4cfc033ca6e5221787892c/click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2", size = 98188, upload-time = "2024-12-21T18:38:41.666Z" },
+]
+
+[[package]]
+name = "clickhouse-connect"
+version = "0.13.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi", marker = "sys_platform == 'linux'" },
+    { name = "lz4", marker = "sys_platform == 'linux'" },
+    { name = "pytz", marker = "sys_platform == 'linux'" },
+    { name = "urllib3", marker = "sys_platform == 'linux'" },
+    { name = "zstandard", marker = "sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/a8/2d65fe529ba9ac54af5a43f2e255ae47a5701f29e0278a5d7fb694b183eb/clickhouse_connect-0.13.0.tar.gz", hash = "sha256:8832c907756b8564f3b9cdc1a41c22cddcb69801613eefd15b2a9eea2e40ed53", size = 113618, upload-time = "2026-02-26T22:00:09.224Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/2f/eb645b2ee134488db246d8e0ccb74ecbf179628c535f302dc298c9771991/clickhouse_connect-0.13.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a668810f0b670d7c284c119100af019a3e405cd3d61e08a4a2dff3ecea802c4d", size = 1133569, upload-time = "2026-02-26T21:59:06.696Z" },
+    { url = "https://files.pythonhosted.org/packages/32/34/1fd34b37207877b32b1ebe402c1723076833081356979119177b28784798/clickhouse_connect-0.13.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:7322aec94c8e337a6cb120c806fa13b8fd9b1286c89ed755b2cfa9937953f2ed", size = 1163168, upload-time = "2026-02-26T21:59:08.184Z" },
+    { url = "https://files.pythonhosted.org/packages/79/58/ea5866c3c026a3c288153bd52409297a7decfb8c11bba0f5e107215105f0/clickhouse_connect-0.13.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:d7756cac9afa4dde22549f271b3bbf6739f4f4a533e45f1ffc3faaaf87086371", size = 1114456, upload-time = "2026-02-26T21:59:09.533Z" },
+    { url = "https://files.pythonhosted.org/packages/19/f6/e184d7d231f97d2f8d1785b2975ba5cc1d6402ac516b7e3e80f9d79807b3/clickhouse_connect-0.13.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:f1ee372499dfa784653cba035df6a6b12ed67c74c8c42ace13c3af99db4491f0", size = 1166149, upload-time = "2026-02-26T21:59:10.812Z" },
 ]
 
 [[package]]
@@ -1577,6 +1596,7 @@ version = "1.3.0+prism.1.post"
 source = { editable = "." }
 dependencies = [
     { name = "chromadb", marker = "sys_platform == 'linux'" },
+    { name = "clickhouse-connect", marker = "sys_platform == 'linux'" },
     { name = "coloredlogs", marker = "sys_platform == 'linux'" },
     { name = "dateparser", marker = "sys_platform == 'linux'" },
     { name = "docling", marker = "sys_platform == 'linux'" },
@@ -1660,6 +1680,7 @@ requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = "==1.8.5" },
     { name = "black", marker = "extra == 'dev'", specifier = "==24.3.0" },
     { name = "chromadb", specifier = ">=0.5" },
+    { name = "clickhouse-connect", specifier = ">=0.8.0" },
     { name = "coloredlogs", specifier = "==15.0.1" },
     { name = "dateparser", specifier = ">=1.2.2" },
     { name = "docling", specifier = "==2.34.0" },
