@@ -737,7 +737,7 @@ class ApplicationContext:
             except ModuleNotFoundError as exc:
                 missing_dep = exc.name or "unknown"
                 if missing_dep == "clickhouse_connect" or missing_dep.startswith("clickhouse_connect."):
-                    raise RuntimeError(
+                    raise ImportError(
                         "ClickHouse vector store is configured but required dependency is missing: "
                         f"'{missing_dep}'. Install ClickHouse dependency "
                         "`clickhouse-connect` or switch `storage.vector_store.type` to a different backend."
