@@ -736,12 +736,11 @@ class ApplicationContext:
                 from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
             except ModuleNotFoundError as exc:
                 missing_dep = exc.name or "unknown"
-                if missing_dep in {"clickhouse_connect", "clickhouse_driver"}:
+                if missing_dep == "clickhouse_connect" or missing_dep.startswith("clickhouse_connect."):
                     raise RuntimeError(
                         "ClickHouse vector store is configured but required dependency is missing: "
-                        f"'{missing_dep}'. Install ClickHouse dependencies "
-                        "(e.g. `clickhouse-connect` and `clickhouse-driver`) or switch "
-                        "`storage.vector_store.type` to a different backend."
+                        f"'{missing_dep}'. Install ClickHouse dependency "
+                        "`clickhouse-connect` or switch `storage.vector_store.type` to a different backend."
                     ) from exc
                 raise
 
