@@ -201,12 +201,35 @@ sync-develop-prism:
         sleep 5
       done
       if [ "$HAS_CONFLICTS" = "true" ]; then
-        echo "❌ CONFLICT detected on MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+        echo ""
+        echo "============================================================"
+        echo "❌ CONFLICT detected on MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})"
+        echo "============================================================"
+        echo ""
+        # Fetch the list of conflicting files from the MR changes API
+        MR_CHANGES=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/changes")
+        CONFLICTING_FILES=$(echo "$MR_CHANGES" | jq -r '.changes[]? | select(.diff // "" | test("^<<<<<<< |^=======$|^>>>>>>> "; "m")) | .new_path')
+        if [ -z "$CONFLICTING_FILES" ]; then
+          # Fallback: if diff-based detection found nothing, list all changed files
+          CONFLICTING_FILES=$(echo "$MR_CHANGES" | jq -r '.changes[]? | .new_path')
+          echo "⚠️  Could not determine exact conflicting files from diffs."
+          echo "   Listing all changed files in this MR:"
+        else
+          CONFLICT_COUNT=$(echo "$CONFLICTING_FILES" | wc -l)
+          echo "📄 ${CONFLICT_COUNT} file(s) with conflicts:"
+        fi
+        echo ""
+        echo "$CONFLICTING_FILES" | while read -r file; do
+          echo "   • ${file}"
+        done
+        echo ""
         echo "Adding reviewers for notification..."
         curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
           "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}" \
           --form "reviewer_ids=${REVIEWER_IDS}"
-        echo "Please resolve the conflicts manually."
+        echo ""
+        echo "👉 Please resolve the conflicts manually and re-run the pipeline."
         exit 1
       fi
       echo "✅ No conflicts detected (merge_status=${MERGE_STATUS})."
