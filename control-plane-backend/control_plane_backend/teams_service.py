@@ -15,9 +15,11 @@ from fred_core import (
     RelationType,
     Resource,
     TeamPermission,
+    TeamId,
     create_keycloak_admin,
 )
 from keycloak import KeycloakAdmin
+from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 from pydantic import BaseModel, Field, ValidationError
 
 from control_plane_backend.application_context import ApplicationContext
@@ -28,7 +30,6 @@ from control_plane_backend.scheduler.policies.policy_models import (
     LifecycleTrigger,
     PolicyResolutionRequest,
 )
-from control_plane_backend.team_id import TeamId
 from control_plane_backend.teams_structures import (
     AddTeamMemberRequest,
     KeycloakGroupSummary,
@@ -36,6 +37,7 @@ from control_plane_backend.teams_structures import (
     RemoveTeamMemberResponse,
     Team,
     TeamMember,
+    TeamMembershipSyncError,
     TeamNotFoundError,
     TeamWithPermissions,
     UpdateTeamMemberRequest,
@@ -546,7 +548,15 @@ async def _add_keycloak_user_to_group(
     user_id: str,
     group_id: TeamId,
 ) -> None:
-    await admin.a_group_user_add(user_id, group_id)
+    try:
+        await admin.a_group_user_add(user_id, group_id)
+    except KeycloakPutError as exc:
+        raise _map_keycloak_membership_error(
+            exc=exc,
+            operation="add",
+            user_id=user_id,
+            group_id=group_id,
+        ) from exc
 
 
 async def _remove_keycloak_user_from_group(
@@ -554,4 +564,57 @@ async def _remove_keycloak_user_from_group(
     user_id: str,
     group_id: TeamId,
 ) -> None:
-    await admin.a_group_user_remove(user_id, group_id)
+    try:
+        await admin.a_group_user_remove(user_id, group_id)
+    except KeycloakDeleteError as exc:
+        raise _map_keycloak_membership_error(
+            exc=exc,
+            operation="remove",
+            user_id=user_id,
+            group_id=group_id,
+        ) from exc
+
+
+def _map_keycloak_membership_error(
+    *,
+    exc: KeycloakPutError | KeycloakDeleteError,
+    operation: str,
+    user_id: str,
+    group_id: TeamId,
+) -> TeamMembershipSyncError:
+    status_code = exc.response_code or 502
+
+    if status_code == 403:
+        return TeamMembershipSyncError(
+            status_code=403,
+            detail=(
+                "Control Plane is not allowed to manage team membership in Keycloak. "
+                "Ask platform admin to grant realm-management/manage-users "
+                "to the 'control-plane' client service account."
+            ),
+        )
+
+    if status_code == 404:
+        return TeamMembershipSyncError(
+            status_code=404,
+            detail=(
+                f"Cannot {operation} team membership: user '{user_id}' or team "
+                f"'{group_id}' does not exist in Keycloak."
+            ),
+        )
+
+    logger.warning(
+        "Keycloak membership %s failed for user=%s team=%s status=%s body=%r",
+        operation,
+        user_id,
+        group_id,
+        status_code,
+        exc.response_body,
+    )
+    return TeamMembershipSyncError(
+        status_code=502,
+        detail=(
+            "Keycloak rejected the team membership update. "
+            "Check control-plane service-account permissions and Keycloak logs."
+        ),
+    )

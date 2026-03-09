@@ -31,12 +31,41 @@ Team role assignment remains on existing team membership endpoints:
 - `POST /control-plane/v1/teams/{team_id}/members` with `relation=member|manager|owner`
 - `PATCH /control-plane/v1/teams/{team_id}/members/{user_id}` to change role
 
+Important for these team membership write operations:
+
+- Keycloak service account for client `control-plane` must have
+  `realm-management/manage-users`.
+- If missing, API now returns `403` with an explicit remediation message.
+
 ## Local run
 
 ```bash
 cd control-plane-backend
 make run
 ```
+
+## Dev: Create test user without manual bearer token
+
+When Control Plane API is running with user security enabled (`make run-prod`),
+you can create a user with one command (token fetched automatically):
+
+```bash
+cd control-plane-backend
+make create-test-user
+```
+
+By default, password values are resolved from `config/.env`:
+
+- `KEYCLOAK_DEV_PASSWORD` falls back to `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET`
+- `CP_NEW_USER_PASSWORD` falls back to `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET`
+
+Optional overrides (CLI):
+
+- `KEYCLOAK_DEV_USERNAME` (default: `alice`)
+- `CP_NEW_USER_USERNAME` (default: `test1`)
+- `CP_NEW_USER_EMAIL` (default: `test1@app.com`)
+- `KEYCLOAK_DEV_PASSWORD`
+- `CP_NEW_USER_PASSWORD`
 
 ## Local worker
 

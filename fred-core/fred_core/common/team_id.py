@@ -14,7 +14,5 @@
 
 from typing import NewType
 
-# TeamId is a distinct type from str for type-checking purposes.
-# This provides type safety without runtime overhead - the type checker
-# will catch incorrect usage, but at runtime this is still a plain string.
+# TeamId is a distinct type from str for static type checking.
 TeamId = NewType("TeamId", str)

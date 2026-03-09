@@ -14,11 +14,10 @@
 
 from datetime import datetime
 
+from fred_core import TeamId
 from sqlalchemy import Column, DateTime, String
 from sqlalchemy.sql import func
 from sqlmodel import Field, SQLModel
-
-from knowledge_flow_backend.features.teams.team_id import TeamId
 
 
 class TimestampMixin(SQLModel):

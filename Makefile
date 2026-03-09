@@ -1,5 +1,6 @@
 CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend control-plane-backend
 TEST_DIRS := agentic-backend knowledge-flow-backend control-plane-backend
+DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backend frontend
 
 ##@ Code quality
 
@@ -45,6 +46,16 @@ dev:  ## Start development environment in all submodules
 		$(MAKE) -C $$dir dev & \
 	done; \
 	wait
+
+##@ Docker
+
+.PHONY: docker-build
+docker-build: ## Build Docker images for agentic, knowledge-flow, control-plane, and frontend
+	@set -e; \
+	for dir in $(DOCKER_BUILD_DIRS); do \
+		echo "************ Building Docker image in $$dir ************"; \
+		$(MAKE) -C $$dir docker-build; \
+	done
 
 ##@ Release
 

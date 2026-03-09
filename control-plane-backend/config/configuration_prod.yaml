@@ -27,6 +27,11 @@ security:
     client_id: app
   authorized_origins:
     - http://localhost:5173
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://localhost:9080"
+
 
 storage:
   postgres:

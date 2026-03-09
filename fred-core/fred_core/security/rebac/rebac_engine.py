@@ -255,14 +255,14 @@ class RebacEngine(ABC):
     ) -> str | None:
         """Ensure each team is linked to the singleton organization.
 
-        The authorization model derives several team permissions from
-        organization-level roles (for example admins inheriting owner rights).
-        Those rules require the persistent relation:
+        Team checks in Fred always operate in a team context and require
+        deterministic organization/team graph edges for future policy evolution.
+        This helper maintains the persistent relation:
         ``organization:fred#organization@team:<team_id>``.
 
         Example:
-        - Before checking if Alice (global admin) can update team resources,
-          ensure `organization:fred -> team:<id>` exists.
+        - Before checking team permissions on `team:<id>`, ensure
+          `organization:fred -> team:<id>` exists.
 
         This helper is idempotent and returns the write consistency token when
         available.

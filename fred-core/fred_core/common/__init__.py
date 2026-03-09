@@ -13,5 +13,6 @@
 # limitations under the License.
 
 from fred_core.common.config_files import ConfigFiles
+from fred_core.common.team_id import TeamId
 
-__all__ = ["ConfigFiles"]
+__all__ = ["ConfigFiles", "TeamId"]

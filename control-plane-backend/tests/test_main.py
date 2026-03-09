@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 from fred_core import TeamPermission
 from httpx import ASGITransport, AsyncClient
+from keycloak.exceptions import KeycloakPutError
 
 from control_plane_backend.main import create_app
 
@@ -173,6 +174,44 @@ async def test_add_team_member_checks_permission_for_target_relation(
 
     assert resp.status_code == 204
     assert captured_permissions == [[expected_permission]]
+
+
+@pytest.mark.asyncio
+async def test_add_team_member_returns_clear_error_when_keycloak_forbids_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeKeycloakAdmin:
+        async def a_group_user_add(self, _user_id: str, _group_id: str) -> None:
+            raise KeycloakPutError(
+                error_message="HTTP 403 Forbidden",
+                response_code=403,
+                response_body=b'{"error":"HTTP 403 Forbidden"}',
+            )
+
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, None
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/thales/members",
+            json={"user_id": "user-001", "relation": "member"},
+        )
+
+    assert resp.status_code == 403
+    assert (
+        resp.json()["detail"]
+        == "Control Plane is not allowed to manage team membership in Keycloak. "
+        "Ask platform admin to grant realm-management/manage-users "
+        "to the 'control-plane' client service account."
+    )
 
 
 @pytest.mark.asyncio

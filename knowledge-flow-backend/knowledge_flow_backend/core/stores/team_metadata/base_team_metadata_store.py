@@ -18,7 +18,7 @@ from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures i
     TeamMetadata,
     TeamMetadataUpdate,
 )
-from knowledge_flow_backend.features.teams.team_id import TeamId
+from fred_core import TeamId
 
 
 class TeamMetadataNotFoundError(Exception):

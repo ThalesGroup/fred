@@ -14,6 +14,79 @@ include ../scripts/makefiles/help.mk
 ENV_FILE := $(ROOT_DIR)/config/.env
 export ENV_FILE
 
+##@ Dev Helpers
+
+CONTROL_PLANE_BASE_URL ?= http://localhost:8222/control-plane/v1
+KEYCLOAK_REALM_URL ?= http://localhost:8080/realms/app
+KEYCLOAK_APP_CLIENT_ID ?= app
+KEYCLOAK_DEV_USERNAME ?= alice
+KEYCLOAK_DEV_PASSWORD ?=
+CP_NEW_USER_USERNAME ?= test1
+CP_NEW_USER_EMAIL ?= test1@app.com
+CP_NEW_USER_PASSWORD ?=
+
+.PHONY: create-test-user
+create-test-user: dev ## Create a user in control-plane without manual bearer token copy/paste
+	@set -a; \
+	if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+	set +a; \
+	KEYCLOAK_DEV_PASSWORD_RESOLVED="$(KEYCLOAK_DEV_PASSWORD)"; \
+	if [ -z "$$KEYCLOAK_DEV_PASSWORD_RESOLVED" ]; then \
+		KEYCLOAK_DEV_PASSWORD_RESOLVED="$$KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET"; \
+	fi; \
+	CP_NEW_USER_PASSWORD_RESOLVED="$(CP_NEW_USER_PASSWORD)"; \
+	if [ -z "$$CP_NEW_USER_PASSWORD_RESOLVED" ]; then \
+		CP_NEW_USER_PASSWORD_RESOLVED="$$KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET"; \
+	fi; \
+	if [ -z "$$KEYCLOAK_DEV_PASSWORD_RESOLVED" ]; then \
+		echo "❌ Missing KEYCLOAK_DEV_PASSWORD (and no fallback found in $(ENV_FILE))"; \
+		echo "   Set KEYCLOAK_DEV_PASSWORD or KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET in $(ENV_FILE)."; \
+		exit 1; \
+	fi; \
+	if [ -z "$$CP_NEW_USER_PASSWORD_RESOLVED" ]; then \
+		echo "❌ Missing CP_NEW_USER_PASSWORD (and no fallback found in $(ENV_FILE))"; \
+		echo "   Set CP_NEW_USER_PASSWORD or KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET in $(ENV_FILE)."; \
+		exit 1; \
+	fi; \
+	TOKEN_RESPONSE=$$(curl -sS -X POST "$(KEYCLOAK_REALM_URL)/protocol/openid-connect/token" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		-d "grant_type=password" \
+		-d "client_id=$(KEYCLOAK_APP_CLIENT_ID)" \
+		-d "username=$(KEYCLOAK_DEV_USERNAME)" \
+		-d "password=$$KEYCLOAK_DEV_PASSWORD_RESOLVED" \
+	); \
+	TOKEN=$$(printf '%s' "$$TOKEN_RESPONSE" \
+		| sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+		| head -n 1); \
+	if [ -z "$$TOKEN" ]; then \
+		TOKEN_ERROR_CODE=$$(printf '%s' "$$TOKEN_RESPONSE" \
+			| sed -n 's/.*"error"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+			| head -n 1); \
+		TOKEN_ERROR_DESCRIPTION=$$(printf '%s' "$$TOKEN_RESPONSE" \
+			| sed -n 's/.*"error_description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+			| head -n 1); \
+		if [ -n "$$TOKEN_ERROR_CODE" ] || [ -n "$$TOKEN_ERROR_DESCRIPTION" ]; then \
+			TOKEN_ERROR="$$TOKEN_ERROR_CODE"; \
+			if [ -n "$$TOKEN_ERROR_DESCRIPTION" ]; then \
+				TOKEN_ERROR="$$TOKEN_ERROR: $$TOKEN_ERROR_DESCRIPTION"; \
+			fi; \
+		else \
+			TOKEN_ERROR=$$(printf '%s' "$$TOKEN_RESPONSE" | cut -c1-400); \
+		fi; \
+		echo "❌ Failed to obtain Keycloak access token."; \
+		echo "   realm_url=$(KEYCLOAK_REALM_URL)"; \
+		echo "   client_id=$(KEYCLOAK_APP_CLIENT_ID)"; \
+		echo "   username=$(KEYCLOAK_DEV_USERNAME)"; \
+		echo "   keycloak_error=$$TOKEN_ERROR"; \
+		exit 1; \
+	fi; \
+	echo "ℹ️  Creating user $(CP_NEW_USER_USERNAME) via control-plane..."; \
+	curl -sS -X POST "$(CONTROL_PLANE_BASE_URL)/users" \
+		-H "Authorization: Bearer $$TOKEN" \
+		-H "Content-Type: application/json" \
+		-d "{\"username\":\"$(CP_NEW_USER_USERNAME)\",\"email\":\"$(CP_NEW_USER_EMAIL)\",\"password\":\"$$CP_NEW_USER_PASSWORD_RESOLVED\",\"enabled\":true}" \
+		| $(UV) run python -m json.tool
+
 ##@ Run Worker
 
 .PHONY: run-worker

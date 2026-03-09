@@ -31,7 +31,7 @@ Concrete examples:
 1. **Identity source**: Keycloak manages users and teams (teams are Keycloak groups).
 2. **Global app roles (RBAC)**: `admin` / `editor` / `viewer` define application-wide capabilities.
 3. **Team/resource rights (ReBAC)**: `owner` / `manager` / `member` are relations in OpenFGA and control team-scoped operations.
-4. **Bridge object**: Fred uses one organization object (`organization:fred`) to connect global roles and team checks.
+4. **Bridge object**: Fred uses one organization object (`organization:fred`) for global role context, without implicit team privilege escalation.
 5. **Deployment rule**: post-install automation must create the required team relations; do not wait for manual UI actions.
 
 Enabling it allows to;
@@ -59,19 +59,19 @@ Keycloak options (see [KEYCLOAK.md](./KEYCLOAK.md) for more details):
 Fred uses a singleton organization node in ReBAC:
 
 - Object id: `organization:fred`
-- Purpose: bridge global Keycloak app roles (`admin`/`editor`/`viewer`) to team-level inheritance rules.
+- Purpose: hold global application role context (`admin`/`editor`/`viewer`) without automatically turning these roles into team owner/manager rights.
 
 How it works:
 
 1. At authorization time, the backend derives contextual relations from the user token (for example: user has `admin` role on organization).
 2. Team checks rely on persistent tuples linking teams to the organization:
    - `organization:fred#organization@team:<team_id>`
-3. ReBAC schema rules such as `owner: [user] or admin from organization` then apply.
+3. Team permissions still require explicit team relations (`owner`/`manager`/`member`) for the target team.
 
 Important consequence:
 
-- If the `organization -> team` tuple is missing, a user may have global `admin` and still be denied team operations.
-- This is why deployment must bootstrap these tuples during post-install.
+- A global `admin` user can still be denied team operations when they are not explicit `owner` or `manager` of that team.
+- Deployment must bootstrap team `owner`/`manager` relations during post-install.
 
 ## Configuration
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 
+from fred_core import TeamId
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlmodel import col, select
@@ -29,7 +30,6 @@ from knowledge_flow_backend.core.stores.team_metadata.team_metadata_structures i
     TeamMetadata,
     TeamMetadataUpdate,
 )
-from knowledge_flow_backend.features.teams.team_id import TeamId
 
 logger = logging.getLogger(__name__)
 

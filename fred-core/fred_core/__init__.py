@@ -15,6 +15,7 @@
 from fred_core.common.config_files import ConfigFiles
 from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.common.lru_cache import ThreadSafeLRUCache
+from fred_core.common.team_id import TeamId
 from fred_core.common.structures import (
     BaseModelWithId,
     DuckdbStoreConfig,
@@ -132,6 +133,7 @@ __all__ = [
     "InMemoryLogStorageConfig",
     "raise_internal_error",
     "ConfigFiles",
+    "TeamId",
     "get_current_user",
     "decode_jwt",
     "initialize_user_security",

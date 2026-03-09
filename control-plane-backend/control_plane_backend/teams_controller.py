@@ -2,9 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Path
 from fastapi.responses import JSONResponse
-from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, TeamId, get_current_user
 
-from control_plane_backend.team_id import TeamId
 from control_plane_backend.teams_service import (
     add_team_member as add_team_member_from_service,
 )
@@ -27,6 +26,7 @@ from control_plane_backend.teams_structures import (
     RemoveTeamMemberResponse,
     Team,
     TeamMember,
+    TeamMembershipSyncError,
     TeamNotFoundError,
     TeamWithPermissions,
     UpdateTeamMemberRequest,
@@ -53,6 +53,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: AuthorizationError,
     ) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(TeamMembershipSyncError)
+    async def team_membership_sync_error_handler(
+        _request,
+        exc: TeamMembershipSyncError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 
 @router.get(

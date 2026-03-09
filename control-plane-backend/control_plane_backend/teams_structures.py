@@ -4,10 +4,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from fred_core import RelationType, TeamPermission
+from fred_core import RelationType, TeamId, TeamPermission
 from pydantic import BaseModel, Field
 
-from control_plane_backend.team_id import TeamId
 from control_plane_backend.users_structures import UserSummary
 
 
@@ -24,6 +23,14 @@ class KeycloakM2MDisabledError(Exception):
 
     def __init__(self):
         super().__init__("Keycloak M2M is disabled; cannot perform team operations.")
+
+
+class TeamMembershipSyncError(Exception):
+    """Raised when Control Plane cannot synchronize a team membership in Keycloak."""
+
+    def __init__(self, status_code: int, detail: str):
+        self.status_code = status_code
+        super().__init__(detail)
 
 
 class KeycloakGroupSummary(BaseModel):
