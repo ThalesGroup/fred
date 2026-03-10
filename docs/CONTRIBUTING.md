@@ -9,6 +9,7 @@ Thank you for your interest in contributing! This project is developed collabora
 - [🚀 How to Become a Contributor](#-how-to-become-a-contributor)
   - [Contributor License Agreements](#contributor-license-agreements)
 - [✅ Pull Request Checklist](#-pull-request-checklist)
+- [🚚 Release And Versioning](#-release-and-versioning)
 - [🧾 License](#-license)
 - [🐛 Issues Management](#-issues-management)
 - [🎯 Coding Style](#-coding-style)
@@ -79,6 +80,19 @@ Before submitting a pull request, please ensure:
 - [ ] The PR includes a clear **description** and motivation
 
 A CI pipeline will automatically run all tests when you open or update a pull request. The internal maintainers will review only those MRs that pass all CI checks.
+
+## 🚚 Release And Versioning
+
+Release delivery and tag/versioning policy is documented in:
+
+- [`docs/VERSIONING.md`](./VERSIONING.md)
+
+This includes:
+
+- `develop -> integration` validation flow,
+- promotion to `main` for production,
+- `code/vX.Y.Z` and `chart/vA.B.C` tags,
+- semantic versioning policy (`major.minor.patch`).
 
 ---
 

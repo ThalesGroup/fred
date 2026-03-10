@@ -13,10 +13,12 @@
 # limitations under the License.
 
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -105,6 +107,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self,
         embedding_model: Embeddings,
         embedding_model_name: str,
+        kpi: BaseKPIWriter | None,
         host: str,
         index: str,
         username: str,
@@ -122,6 +125,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._verify_certs = verify_certs
         self._bulk_size = bulk_size
         self._embedding_model_name = embedding_model_name
+        self._kpi = kpi
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
 
@@ -129,6 +133,15 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             self.create_pipeline(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME, pipeline_config=HYBRID_SEARCH_PIPELINE_CONFIG)
 
         logger.info("[VECTOR][OPENSEARCH] initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
+
+    def _phase_timer(self, phase: str):
+        if self._kpi is None:
+            return nullcontext({})
+        return self._kpi.timer(
+            "app.phase_latency_ms",
+            dims={"phase": phase},
+            actor=KPIActor(type="system"),
+        )
 
     # ---------- lazy LangChain wrapper + raw client ----------
 
@@ -550,7 +563,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         logger.debug("[VECTOR][OPENSEARCH][ANN] computed filters=%s", filters or [])
 
         try:
-            vector = self._embedding_model.embed_query(query)
+            with self._phase_timer("vector_ann_embed_query"):
+                vector = self._embedding_model.embed_query(query)
             logger.debug("[VECTOR][OPENSEARCH][ANN] embedding_dim=%d", len(vector))
         except Exception as e:
             logger.exception("[VECTOR][OPENSEARCH] failed to compute embedding.")
@@ -571,7 +585,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         }
 
         try:
-            res = self._client.search(index=self._index, body=bool_knn_body)
+            with self._phase_timer("vector_ann_opensearch_query"):
+                res = self._client.search(index=self._index, body=bool_knn_body)
             hits_data = res.get("hits", {}).get("hits", [])
             logger.debug("[VECTOR][OPENSEARCH][ANN] search returned %d hits", len(hits_data))
             if hits_data:

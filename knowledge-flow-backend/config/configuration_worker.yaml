@@ -219,6 +219,13 @@ storage:
     secure: true
     verify_certs: false
     username: admin
+  # clickhouse:
+  #   host: localhost
+  #   port: 8123
+  #   database: fred
+  #   username: fred
+  #   secure: false
+  #   verify: true
 
   catalog_store:
     type: "postgres"
@@ -247,6 +254,9 @@ storage:
   vector_store:
     type: opensearch
     index: vector-index
+    # type: clickhouse
+    # table: fred_vectors
+    # bulk_size: 1000
     # Default bulk size for vector insertions is 500. Increase if you have
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.

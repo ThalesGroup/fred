@@ -22,9 +22,9 @@ app:
   metrics_address: "0.0.0.0"
   metrics_port: 9111
   # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 5
+  kpi_log_summary_interval_sec: 5.0
+  kpi_log_summary_top_n: 20
   max_ingestion_workers: 3
 
 processing:
@@ -330,6 +330,13 @@ storage:
     secure: true
     verify_certs: false
     username: admin
+  # clickhouse:
+  #   host: localhost
+  #   port: 8123
+  #   database: fred
+  #   username: fred
+  #   secure: false
+  #   verify: true
 
   catalog_store:
     type: "postgres"
@@ -359,6 +366,8 @@ storage:
   vector_store:
     type: opensearch
     index: vector-index
+    # type: clickhouse
+    # table: fred_vectors
     # Default bulk size for vector insertions is 500. Increase if you have
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.

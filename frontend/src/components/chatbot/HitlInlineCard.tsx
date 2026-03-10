@@ -7,7 +7,7 @@ import MarkdownRenderer from "../markdown/MarkdownRenderer";
 
 type Props = {
   event: AwaitingHumanEvent;
-  onSubmit?: (choiceId: string, freeText?: string) => void;
+  onSubmit?: (choiceId?: string, freeText?: string) => void;
   onCancel?: () => void;
 };
 
@@ -19,20 +19,29 @@ const fallbackChoices: HitlChoice[] = [
 export default function HitlInlineCard({ event, onSubmit, onCancel }: Props) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isFreeTextOnly = Boolean(event?.payload?.free_text) && !(event?.payload?.choices?.length ?? 0);
 
   const choices = useMemo<HitlChoice[]>(() => {
     const incoming = event?.payload?.choices;
     if (incoming && incoming.length) return incoming;
+    if (isFreeTextOnly) return [];
     return fallbackChoices;
-  }, [event]);
+  }, [event, isFreeTextOnly]);
 
   const defaultChoice = useMemo(() => choices.find((c) => c.default) || choices[0], [choices]);
   const [selected, setSelected] = useState<string>(defaultChoice?.id || "");
   const [freeText, setFreeText] = useState("");
 
-  const handleSubmit = (choiceId: string) => {
-    if (!choiceId || !onSubmit) return;
-    onSubmit(choiceId, event?.payload?.free_text ? freeText.trim() || undefined : undefined);
+  const handleSubmit = () => {
+    if (!onSubmit) return;
+    const trimmedFreeText = freeText.trim() || undefined;
+    if (isFreeTextOnly) {
+      if (!trimmedFreeText) return;
+      onSubmit(undefined, trimmedFreeText);
+      return;
+    }
+    if (!selected) return;
+    onSubmit(selected, event?.payload?.free_text ? trimmedFreeText : undefined);
   };
 
   const questionMd =
@@ -71,41 +80,40 @@ export default function HitlInlineCard({ event, onSubmit, onCancel }: Props) {
           <MarkdownRenderer content={questionMd} />
         </Box>
 
-        <Stack spacing={1}>
-          {choices.map((choice) => (
-            <Button
-              key={choice.id}
-              onClick={() => {
-                setSelected(choice.id);
-                handleSubmit(choice.id);
-              }}
-              variant={selected === choice.id ? "contained" : "outlined"}
-              color={selected === choice.id ? "primary" : "inherit"}
-              fullWidth={isMobile}
-              sx={{ justifyContent: "flex-start", textAlign: "left", gap: 1 }}
-            >
-              <Box>
-                <Typography variant="subtitle2" fontWeight={700}>
-                  {choice.label}
-                </Typography>
-                {choice.description ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {choice.description}
+        {choices.length ? (
+          <Stack spacing={1}>
+            {choices.map((choice) => (
+              <Button
+                key={choice.id}
+                onClick={() => setSelected(choice.id)}
+                variant={selected === choice.id ? "contained" : "outlined"}
+                color={selected === choice.id ? "primary" : "inherit"}
+                fullWidth={isMobile}
+                sx={{ justifyContent: "flex-start", textAlign: "left", gap: 1 }}
+              >
+                <Box>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    {choice.label}
                   </Typography>
-                ) : null}
-              </Box>
-            </Button>
-          ))}
-        </Stack>
+                  {choice.description ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {choice.description}
+                    </Typography>
+                  ) : null}
+                </Box>
+              </Button>
+            ))}
+          </Stack>
+        ) : null}
 
         {event?.payload?.free_text ? (
           <TextField
-            label="Notes (optional)"
+            label={isFreeTextOnly ? "Your response" : "Notes (optional)"}
             multiline
             minRows={3}
             value={freeText}
             onChange={(e) => setFreeText(e.target.value)}
-            placeholder="Add guidance or corrections..."
+            placeholder={isFreeTextOnly ? "Type your response here..." : "Add guidance or corrections..."}
           />
         ) : null}
 
@@ -118,11 +126,11 @@ export default function HitlInlineCard({ event, onSubmit, onCancel }: Props) {
           <Button
             variant="contained"
             startIcon={<TaskAltIcon />}
-            disabled={!selected}
-            onClick={() => handleSubmit(selected)}
+            disabled={isFreeTextOnly ? !freeText.trim() : !selected}
+            onClick={handleSubmit}
             fullWidth={isMobile}
           >
-            Send choice
+            {isFreeTextOnly ? "Send response" : "Send choice"}
           </Button>
         </Stack>
       </Stack>

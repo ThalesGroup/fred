@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fred_core.sql import (
     AsyncBaseSqlStore,
@@ -38,6 +38,10 @@ from agentic_backend.core.agents.store.base_agent_store import (
 logger = logging.getLogger(__name__)
 
 AgentSettingsAdapter = TypeAdapter(AgentSettings)
+
+
+def _is_legacy_leader_payload(payload_json: Any) -> bool:
+    return isinstance(payload_json, dict) and payload_json.get("type") == "leader"
 
 
 class PostgresAgentStore(BaseAgentStore):
@@ -131,6 +135,12 @@ class PostgresAgentStore(BaseAgentStore):
         for payload_json, agent_id in rows:
             if agent_id == self._seed_marker_id:
                 continue
+            if _is_legacy_leader_payload(payload_json):
+                logger.info(
+                    "[STORE][PG][AGENTS] Ignoring deprecated leader agent '%s'.",
+                    agent_id,
+                )
+                continue
             try:
                 out.append(AgentSettingsAdapter.validate_python(payload_json or {}))
             except Exception as e:
@@ -150,6 +160,12 @@ class PostgresAgentStore(BaseAgentStore):
             )
             row = result.fetchone()
         if not row:
+            return None
+        if _is_legacy_leader_payload(row[0]):
+            logger.info(
+                "[STORE][PG][AGENTS] Ignoring deprecated leader agent '%s'.",
+                agent_id,
+            )
             return None
         try:
             return AgentSettingsAdapter.validate_python(row[0] or {})

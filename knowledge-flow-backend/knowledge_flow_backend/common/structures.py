@@ -132,6 +132,19 @@ class LocalContentStorageConfig(BaseModel):
 ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
 
 
+class ClickHouseStoreConfig(BaseModel):
+    host: str = Field(default="localhost", description="ClickHouse host")
+    port: int = Field(default=8123, description="ClickHouse HTTP port")
+    database: str = Field(default="default", description="ClickHouse database")
+    username: str = Field(default="default", description="ClickHouse username")
+    password: Optional[str] = Field(
+        default_factory=lambda: os.getenv("CLICKHOUSE_PASSWORD"),
+        description="ClickHouse password (from CLICKHOUSE_PASSWORD env)",
+    )
+    secure: bool = Field(default=False, description="Use HTTPS for ClickHouse client")
+    verify: bool = Field(default=True, description="Verify TLS certificates for ClickHouse")
+
+
 ###########################################################
 #
 #  --- Vector storage configuration
@@ -179,6 +192,18 @@ class PgVectorStorageConfig(BaseModel):
     collection_name: str = Field("fred_chunks", description="Logical collection name")
 
 
+class ClickHouseVectorStorageConfig(BaseModel):
+    """
+    ClickHouse backend.
+    - Uses shared `storage.clickhouse` connection settings.
+    - Stores vectors in the configured table.
+    """
+
+    type: Literal["clickhouse"]
+    table: str = Field("fred_vectors", description="ClickHouse table name for chunks")
+    bulk_size: int = Field(default=1000, description="Number of rows per insert batch")
+
+
 VectorStorageConfig = Annotated[
     Union[
         InMemoryVectorStorage,
@@ -186,6 +211,7 @@ VectorStorageConfig = Annotated[
         ChromaVectorStorageConfig,
         WeaviateVectorStorage,
         PgVectorStorageConfig,
+        ClickHouseVectorStorageConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -493,6 +519,7 @@ DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Fiel
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
+    clickhouse: Optional[ClickHouseStoreConfig] = Field(default=None, description="Optional ClickHouse store")
     resource_store: StoreConfig
     tag_store: StoreConfig
     kpi_store: StoreConfig
