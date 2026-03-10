@@ -146,6 +146,7 @@ def create_app() -> FastAPI:
             configuration=configuration,
             manager=agent_manager,
             loader=agent_loader,
+            model_routing_bootstrap_provider=application_context.get_model_routing_bootstrap_config,
         )
         session_orchestrator = SessionOrchestrator(
             configuration=configuration,
@@ -206,6 +207,7 @@ def create_app() -> FastAPI:
         # Store state on app.state for access via dependency injection
         app.state.mcp_manager = mcp_manager
         app.state.agent_manager = agent_manager
+        app.state.agent_factory = agent_factory
         app.state.session_orchestrator = session_orchestrator
 
         try:

@@ -22,9 +22,9 @@ app:
   metrics_address: "0.0.0.0"
   metrics_port: 9111
   # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
-  kpi_process_metrics_interval_sec: 0
-  kpi_log_summary_interval_sec: 0.0
-  kpi_log_summary_top_n: 0
+  kpi_process_metrics_interval_sec: 5
+  kpi_log_summary_interval_sec: 5.0
+  kpi_log_summary_top_n: 20
   max_ingestion_workers: 3
 
 processing:

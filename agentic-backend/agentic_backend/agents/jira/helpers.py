@@ -1,6 +1,69 @@
 """Helper functions for Jira agent."""
 
+import logging
 import re
+from typing import Any, TypeVar
+
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+
+def check_batch_conflict(runtime: Any, tool_name: str) -> str | None:
+    """Check if *tool_name* was called in the same AI message as a conflicting tool.
+
+    Returns an error message string if there is a conflict, ``None`` otherwise.
+    Tools listed in ``batch_conflicts`` produce state that isn't visible to
+    sibling tool calls in the same LangGraph step, so we ask the LLM to retry
+    the dependent tool on the next turn.
+    """
+    batch_conflicts: dict[str, set[str]] = {
+        "generate_user_stories": {"generate_requirements"},
+        "generate_tests": {"generate_user_stories"},
+    }
+
+    conflicts = batch_conflicts.get(tool_name)
+    if not conflicts:
+        return None
+
+    messages = runtime.state.get("messages") or []
+    last_ai = next(
+        (m for m in reversed(messages) if getattr(m, "type", None) == "ai"),
+        None,
+    )
+    if last_ai is None:
+        return None
+
+    batch_tools = {tc.get("name") for tc in (getattr(last_ai, "tool_calls", []) or [])}
+    found = conflicts & batch_tools
+    if not found:
+        return None
+
+    logger.warning(
+        "[JiraAgent] Batch conflict: %s called alongside %s — deferring",
+        tool_name,
+        found,
+    )
+    return (
+        f"⚠️ {tool_name} a été appelé dans le même message que {', '.join(found)}. "
+        f"Les données produites par {', '.join(found)} ne sont pas encore disponibles. "
+        f"Appelle {tool_name}() seul dans ton prochain message."
+    )
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def ensure_pydantic_model(response: Any, model_class: type[T]) -> T:
+    """Return response as a Pydantic model instance.
+
+    LangChain's with_structured_output(method="json_schema") occasionally
+    returns a raw dict instead of the model instance. This helper normalises
+    the result so callers always get the expected type.
+    """
+    if isinstance(response, model_class):
+        return response
+    return model_class.model_validate(response)
 
 
 def get_max_id_number(items: list[dict], pattern: str) -> int:

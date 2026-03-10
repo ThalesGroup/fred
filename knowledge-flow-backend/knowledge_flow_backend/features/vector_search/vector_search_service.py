@@ -104,6 +104,22 @@ class VectorSearchService:
         groups = user.groups if user else None
         return KPIActor(type="system", groups=groups)
 
+    def _phase_timer(
+        self,
+        *,
+        phase: str,
+        user: Optional[KeycloakUser],
+        extra_dims: Optional[dict[str, Optional[str]]] = None,
+    ):
+        dims: dict[str, Optional[str]] = {"phase": phase}
+        if extra_dims:
+            dims.update(extra_dims)
+        return self.kpi.timer(
+            "app.phase_latency_ms",
+            dims=dims,
+            actor=self._kpi_actor(user=user),
+        )
+
     def _record_search_stats(
         self,
         *,
@@ -506,14 +522,22 @@ class VectorSearchService:
                 return []
 
             # Resolve the set of tag IDs the user is authorized to search in
-            authorized_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
+            with self._phase_timer(
+                phase="vector_search_authorize_tags",
+                user=user,
+            ):
+                authorized_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
             if document_library_tags_ids:
                 authorized_tag_ids = set(document_library_tags_ids) & authorized_tag_ids
 
             # Validate document_uids against ReBAC permissions
             authorized_document_uids: set[str] = set()
             if document_uids:
-                authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
+                with self._phase_timer(
+                    phase="vector_search_filter_document_uids",
+                    user=user,
+                ):
+                    authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
 
             # Search function dispatch
             policy_key = policy_name or SearchPolicyName.hybrid
@@ -540,13 +564,17 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                attachment_hits = await search_fn(
-                    question=question,
+                with self._phase_timer(
+                    phase="vector_search_scope_attachment",
                     user=user,
-                    k=top_k,
-                    library_tags_ids=None,
-                    metadata_terms_extra=attachment_metadata,
-                )
+                ):
+                    attachment_hits = await search_fn(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=None,
+                        metadata_terms_extra=attachment_metadata,
+                    )
 
             # Corpus/library query (scoped by authorized tags, excludes session vectors)
             if include_corpus_scope and not authorized_tag_ids:
@@ -564,20 +592,28 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                corpus_hits = await search_fn(
-                    question=question,
+                with self._phase_timer(
+                    phase="vector_search_scope_corpus",
                     user=user,
-                    k=top_k,
-                    library_tags_ids=list(authorized_tag_ids),
-                    metadata_terms_extra=corpus_metadata,
-                )
+                ):
+                    corpus_hits = await search_fn(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=list(authorized_tag_ids),
+                        metadata_terms_extra=corpus_metadata,
+                    )
 
-            merged = _merge_attachment_and_corpus_hits(
-                attachment_hits=attachment_hits,
-                corpus_hits=corpus_hits,
-                top_k=top_k,
-                attachment_quota=3,
-            )
+            with self._phase_timer(
+                phase="vector_search_merge_results",
+                user=user,
+            ):
+                merged = _merge_attachment_and_corpus_hits(
+                    attachment_hits=attachment_hits,
+                    corpus_hits=corpus_hits,
+                    top_k=top_k,
+                    attachment_quota=3,
+                )
             logger.info(
                 "[VECTOR][SEARCH] merged results attachment=%d corpus=%d forced_attachment=%d returned=%d",
                 len(attachment_hits),

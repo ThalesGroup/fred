@@ -2,30 +2,36 @@
 
 import { SvgIconTypeMap } from "@mui/material";
 import { OverridableComponent } from "@mui/material/OverridableComponent";
-import { Agent, Leader } from "../slices/agentic/agenticOpenApi";
+import { Agent } from "../slices/agentic/agenticOpenApi";
 
 // Import necessary Material UI Icons
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn"; // Report/Execution (Success)
 import AutoStoriesIcon from "@mui/icons-material/AutoStories"; // General (Secondary/Default)
 import DataObjectIcon from "@mui/icons-material/DataObject"; // Data (Info)
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile"; // Default for drafting (Warning)
-import StarIcon from "@mui/icons-material/Star"; // Leader/Star (Primary)
 
 // --- Type Definitions ---
 
-export type AnyAgent = ({ type: "agent" } & Agent) | ({ type: "leader" } & Leader);
+export type AnyAgent = Agent;
 
-export const isLeader = (a: AnyAgent): a is { type: "leader" } & Leader => a.type === "leader";
+export const isLikelyV2DefinitionAgent = (agent: AnyAgent): boolean => {
+  const classPath = agent.class_path?.trim();
+  if (!classPath) {
+    return false;
+  }
+
+  return classPath.endsWith("Definition") || classPath.includes(".v2.");
+};
 
 // Define the type for the MUI Icon component property
 type MuiIcon = OverridableComponent<SvgIconTypeMap<{}, "svg">>;
 
 // MODIFIED: Define custom functional color hints
-export type AgentColorHint = "leader" | "data" | "document" | "execution" | "general";
+export type AgentColorHint = "data" | "document" | "execution" | "general";
 
 interface AgentVisuals {
   Icon: MuiIcon;
-  /** Functional color hint: leader, data, document, execution, or general. */
+  /** Functional color hint: data, document, execution, or general. */
   colorHint: AgentColorHint; // Use the new type here
 }
 
@@ -33,21 +39,13 @@ interface AgentVisuals {
 
 /**
  * Determines the best icon and color hint for an agent based on its functional role.
- * @param agent The agent object (Leader or Agent).
+ * @param agent The agent object.
  * @returns An object containing the icon component and a functional color hint.
  */
 export const getAgentVisuals = (agent: AnyAgent): AgentVisuals => {
   const roleText = agent.tuning.role.toLowerCase();
 
-  // 1. Priority: Supervisor/Leader
-  if (isLeader(agent)) {
-    return {
-      Icon: StarIcon,
-      colorHint: "leader", // Custom hint
-    };
-  }
-
-  // 2. Data/Knowledge/Information
+  // 1. Data/Knowledge/Information
   if (
     roleText.includes("data") ||
     roleText.includes("information") ||
@@ -60,7 +58,7 @@ export const getAgentVisuals = (agent: AnyAgent): AgentVisuals => {
     };
   }
 
-  // 3. Execution/Report/Analysis/Tool (Grouped for 'execution')
+  // 2. Execution/Report/Analysis/Tool (Grouped for 'execution')
   if (
     roleText.includes("report") ||
     roleText.includes("summary") ||
@@ -74,7 +72,7 @@ export const getAgentVisuals = (agent: AnyAgent): AgentVisuals => {
     };
   }
 
-  // 4. Drafting/Content Creation
+  // 3. Drafting/Content Creation
   if (
     roleText.includes("document") ||
     roleText.includes("file") ||
@@ -88,7 +86,7 @@ export const getAgentVisuals = (agent: AnyAgent): AgentVisuals => {
     };
   }
 
-  // 5. Fallback for unclassified agents
+  // 4. Fallback for unclassified agents
   return {
     Icon: AutoStoriesIcon,
     colorHint: "general", // Custom hint

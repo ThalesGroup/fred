@@ -40,10 +40,22 @@ import {
   type ConversationOptionsController,
   type ConversationPrefs,
 } from "./ConversationOptionsController.tsx";
+import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { type UserInputContent } from "./user_input/UserInput.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
+
+type DebugGroup = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  entries: {
+    timestamp: string;
+    label: string;
+    payloadText: string;
+  }[];
+};
 
 type ChatBotViewProps = {
   chatSessionId?: string;
@@ -68,6 +80,7 @@ type ChatBotViewProps = {
   conversationPrefs: ConversationPrefs;
   currentAgent: AnyAgent;
   agents: AnyAgent[];
+  messageAgents?: AnyAgent[];
   messages: ChatMessage[];
   hiddenUserExchangeIds?: Set<string>;
   hitlEvent?: AwaitingHumanEvent | null;
@@ -82,7 +95,7 @@ type ChatBotViewProps = {
   };
   onSend: (content: UserInputContent) => void;
   onStop: () => void;
-  onRequestLogGenius?: () => void;
+  onRequestLogGenius?: (mode: LogGeniusMode) => void;
   onSelectAgent: (agent: AnyAgent) => Promise<void> | void;
   setSearchPolicy: (next: SetStateAction<SearchPolicyName>) => void;
   setSearchRagScope: (next: SearchRagScope) => void;
@@ -91,8 +104,10 @@ type ChatBotViewProps = {
     isAdmin: boolean;
     debugDrawerOpen: boolean;
     setDebugDrawerOpen: (open: boolean) => void;
+    debugGroups: DebugGroup[];
     debugHistoryText: string;
     onCopyDebugHistory: () => void;
+    onCopyDebugGroup: (groupId: string) => void;
     copyFeedback: string | null;
     hasDebugHistory: boolean;
   };
@@ -121,6 +136,7 @@ const ChatBotView = ({
   conversationPrefs,
   currentAgent,
   agents,
+  messageAgents,
   messages,
   hiddenUserExchangeIds,
   hitlEvent,
@@ -383,7 +399,7 @@ const ChatBotView = ({
                 >
                   <MessagesArea
                     messages={messages}
-                    agents={agents}
+                    agents={messageAgents ?? agents}
                     currentAgent={currentAgent}
                     isWaiting={waitResponse}
                     libraryNameById={libraryNameMap}
@@ -451,7 +467,7 @@ const ChatBotView = ({
               zIndex: 1500,
             }}
           >
-            <SimpleTooltip title="Show raw WS event history">
+            <SimpleTooltip title="Show sanitized WS debug history">
               <IconButton color="primary" size="medium" onClick={() => debugWidget.setDebugDrawerOpen(true)}>
                 <BugReportIcon />
               </IconButton>
@@ -473,13 +489,13 @@ const ChatBotView = ({
               }}
             >
               <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="h6">WS Event History</Typography>
+                <Typography variant="h6">WS Debug History</Typography>
                 <IconButton size="small" onClick={() => debugWidget.setDebugDrawerOpen(false)}>
                   <CloseIcon fontSize="small" />
                 </IconButton>
               </Stack>
               <Typography variant="body2" color="text.secondary" mt={1}>
-                Shows the raw JSON payload for each WebSocket event received in this session.
+                Shows a sanitized, developer-oriented summary of each WebSocket event received in this session.
               </Typography>
               <Divider sx={{ my: 1 }} />
               <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
@@ -490,7 +506,7 @@ const ChatBotView = ({
                   size="small"
                   disabled={!debugWidget.hasDebugHistory}
                 >
-                  Copy JSON
+                  Copy debug
                 </Button>
                 {debugWidget.copyFeedback && (
                   <Typography variant="caption" color="text.secondary">
@@ -498,22 +514,106 @@ const ChatBotView = ({
                   </Typography>
                 )}
               </Stack>
-              <TextField
-                value={debugWidget.debugHistoryText}
-                multiline
-                minRows={14}
-                variant="outlined"
-                fullWidth
-                margin="normal"
-                InputProps={{
-                  readOnly: true,
-                  sx: {
-                    fontFamily: "monospace",
-                    whiteSpace: "pre",
-                    fontSize: "0.75rem",
-                  },
+              <Box
+                sx={{
+                  mt: 2,
+                  overflowY: "auto",
+                  pr: 0.5,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1.5,
                 }}
-              />
+              >
+                {debugWidget.debugGroups.length === 0 ? (
+                  <TextField
+                    value={debugWidget.debugHistoryText}
+                    multiline
+                    minRows={10}
+                    variant="outlined"
+                    fullWidth
+                    InputProps={{
+                      readOnly: true,
+                      sx: {
+                        fontFamily: "monospace",
+                        whiteSpace: "pre",
+                        fontSize: "0.75rem",
+                      },
+                    }}
+                  />
+                ) : (
+                  debugWidget.debugGroups.map((group) => (
+                    <Box
+                      key={group.id}
+                      sx={{
+                        border: `1px solid ${theme.palette.divider}`,
+                        borderRadius: 1.5,
+                        overflow: "hidden",
+                        backgroundColor: theme.palette.background.paper,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          px: 1.5,
+                          py: 1,
+                          borderBottom: `1px solid ${theme.palette.divider}`,
+                          backgroundColor: theme.palette.action.hover,
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: 1,
+                        }}
+                      >
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography variant="subtitle2">{group.title}</Typography>
+                          {group.subtitle && (
+                            <Typography variant="caption" color="text.secondary">
+                              {group.subtitle}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="text"
+                          startIcon={<ContentCopyIcon />}
+                          onClick={() => debugWidget.onCopyDebugGroup(group.id)}
+                          sx={{ flexShrink: 0, minWidth: "auto" }}
+                        >
+                          Copy
+                        </Button>
+                      </Box>
+                      <Stack
+                        divider={<Divider flexItem />}
+                        sx={{
+                          maxHeight: 320,
+                          overflowY: "auto",
+                          overscrollBehavior: "contain",
+                        }}
+                      >
+                        {group.entries.map((entry, index) => (
+                          <Box key={`${group.id}-${index}`} sx={{ px: 1.5, py: 1 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              [{entry.timestamp}] {entry.label}
+                            </Typography>
+                            <Box
+                              component="pre"
+                              sx={{
+                                mt: 0.75,
+                                mb: 0,
+                                fontFamily: "monospace",
+                                fontSize: "0.75rem",
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {entry.payloadText}
+                            </Box>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Box>
+                  ))
+                )}
+              </Box>
             </Box>
           </Drawer>
         </>

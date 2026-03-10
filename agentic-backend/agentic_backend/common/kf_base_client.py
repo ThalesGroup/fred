@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Protocol
 
 import httpx
 from fred_core.kpi import KPIActor
@@ -28,7 +28,17 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from agentic_backend.core.agents.agent_flow import AgentFlow
+    from agentic_backend.common.structures import AgentSettings
+    from agentic_backend.core.agents.runtime_context import RuntimeContext
+
+
+class KnowledgeFlowAgentContext(Protocol):
+    runtime_context: "RuntimeContext"
+    agent_settings: "AgentSettings"
+
+    def refresh_user_access_token(self) -> str:
+        raise NotImplementedError()
+
 
 TokenRefreshCallback = Callable[[], str]
 
@@ -42,7 +52,7 @@ class KfBaseClient:
         self,
         allowed_methods: frozenset,
         *,
-        agent: Optional["AgentFlow"] = None,
+        agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
         refresh_user_access_token: Optional[Callable[[], str]] = None,
     ):
@@ -210,8 +220,11 @@ class KfBaseClient:
                 path,
             )
             if self._try_refresh_token():
+                # Drop the stale explicit token so _execute_authenticated_request
+                # falls back to _current_access_token() and picks up the refreshed one.
+                retry_kwargs = {k: v for k, v in kwargs.items() if k != "access_token"}
                 r = await self._execute_authenticated_request(
-                    method=method, path=path, **kwargs
+                    method=method, path=path, **retry_kwargs
                 )
 
             r.raise_for_status()

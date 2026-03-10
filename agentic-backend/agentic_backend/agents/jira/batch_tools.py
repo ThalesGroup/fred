@@ -1,14 +1,18 @@
 """Batch generation tools for Jira agent."""
 
+import asyncio
 import json
 import logging
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
-from agentic_backend.agents.jira.helpers import get_max_id_number
+from agentic_backend.agents.jira.helpers import (
+    check_batch_conflict,
+    ensure_pydantic_model,
+    get_max_id_number,
+)
 from agentic_backend.agents.jira.pydantic_models import (
     RequirementsList,
     TestsList,
@@ -24,18 +28,12 @@ logger = logging.getLogger(__name__)
 class BatchTools:
     """Batch generation tools for requirements, user stories, and tests."""
 
+    BATCH_SIZE = 10
+    MAX_CONCURRENT_BATCHES = 3
+
     def __init__(self, agent):
         """Initialize batch tools with reference to parent agent."""
         self.agent = agent
-
-    def _get_langfuse_handler(self):
-        """Get Langfuse handler from parent agent."""
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        """Build a RunnableConfig with Langfuse callback if enabled."""
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
 
     def get_requirements_tool(self):
         """Tool that generates requirements using a separate LLM call."""
@@ -58,18 +56,11 @@ class BatchTools:
             """
             # Validate context_summary has meaningful content
             if len(context_summary.strip()) < 200:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
-                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
-                                "(search_documents, get_document_content) pour extraire les informations "
-                                "du projet, puis fournir un résumé détaillé en paramètre.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                    "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                    "(search_documents, get_document_content) pour extraire les informations "
+                    "du projet, puis fournir un résumé détaillé en paramètre."
                 )
 
             requirements_prompt = """Tu es un Business Analyst expert. Génère une liste d'exigences formelles basée sur le contexte projet suivant.
@@ -98,9 +89,9 @@ Règles:
                 )
             ]
 
-            response = await model.ainvoke(messages, config=self._build_llm_config())
-            if not isinstance(response, RequirementsList):
-                response = RequirementsList.model_validate(response)
+            response = ensure_pydantic_model(
+                await model.ainvoke(messages), RequirementsList
+            )
             requirements = [r.model_dump() for r in response.items]
 
             return Command(
@@ -228,9 +219,9 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, UserStoryTitlesList):
-            response = UserStoryTitlesList.model_validate(response)
+        response = ensure_pydantic_model(
+            await model.ainvoke(messages), UserStoryTitlesList
+        )
         return [t.model_dump() for t in response.items]
 
     async def _generate_user_story_batch(
@@ -316,9 +307,7 @@ Exigences à respecter:
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, UserStoriesList):
-            response = UserStoriesList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), UserStoriesList)
         return [s.model_dump() for s in response.items]
 
     def get_user_stories_tool(self):
@@ -351,27 +340,26 @@ Exigences à respecter:
             Returns:
                 Message de confirmation avec le nombre total de stories générées
             """
-            batch_size = 10
+            batch_size = self.BATCH_SIZE
 
             # Validation
             if len(context_summary.strip()) < 200:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Le contexte fourni est trop court (minimum 200 caractères). "
-                                "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
-                                "(search_documents, get_document_content) pour extraire les informations "
-                                "du projet, puis fournir un résumé détaillé en paramètre.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "❌ Le contexte fourni est trop court (minimum 200 caractères). "
+                    "Tu dois d'abord faire une recherche documentaire avec les outils MCP "
+                    "(search_documents, get_document_content) pour extraire les informations "
+                    "du projet, puis fournir un résumé détaillé en paramètre."
                 )
 
             # Get existing data from state
             existing_stories = runtime.state.get("user_stories") or []
             requirements = runtime.state.get("requirements")
+
+            # If generate_requirements is in the same batch, its state update
+            # hasn't been applied yet — ask the LLM to retry on the next turn.
+            conflict = check_batch_conflict(runtime, "generate_user_stories")
+            if conflict:
+                return conflict
 
             # Generate titles
             pending_titles = await self._generate_user_story_titles(
@@ -379,36 +367,56 @@ Exigences à respecter:
             )
 
             # Batch processing setup
-            all_generated_stories = []
             total_to_generate = len(pending_titles)
-            batches_completed = 0
+            batches = [
+                pending_titles[i : i + batch_size]
+                for i in range(0, total_to_generate, batch_size)
+            ]
 
             logger.info(
-                f"[JiraAgent] Starting batch generation: {total_to_generate} user stories in batches of {batch_size}"
+                f"[JiraAgent] Starting batch generation: {total_to_generate} user stories in {len(batches)} parallel batches of {batch_size}"
             )
 
-            # Process batches
-            while pending_titles:
-                current_batch_size = min(batch_size, len(pending_titles))
-                titles_batch = pending_titles[:current_batch_size]
-                pending_titles = pending_titles[current_batch_size:]
+            # Process batches with bounded concurrency
+            semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_BATCHES)
 
-                new_stories = await self._generate_user_story_batch(
-                    titles_batch, context_summary, requirements
-                )
-                all_generated_stories.extend(new_stories)
-                batches_completed += 1
+            async def _run_us_batch(batch):
+                async with semaphore:
+                    return await self._generate_user_story_batch(
+                        batch, context_summary, requirements
+                    )
 
-                logger.info(
-                    f"[JiraAgent] Batch {batches_completed} complete: "
-                    f"{len(all_generated_stories)}/{total_to_generate} user stories generated"
+            batch_results = await asyncio.gather(
+                *[_run_us_batch(batch) for batch in batches],
+                return_exceptions=True,
+            )
+
+            all_generated_stories = []
+            failed_batches = 0
+            for i, result in enumerate(batch_results):
+                if isinstance(result, BaseException):
+                    failed_batches += 1
+                    logger.error(
+                        f"[JiraAgent] User story batch {i + 1} failed: {result}",
+                        exc_info=(type(result), result, result.__traceback__),
+                    )
+                else:
+                    all_generated_stories.extend(result)
+
+            if failed_batches:
+                logger.warning(
+                    f"[JiraAgent] {failed_batches}/{len(batches)} user story batches failed"
                 )
+
+            logger.info(
+                f"[JiraAgent] {len(all_generated_stories)}/{total_to_generate} user stories generated ({failed_batches} batch failures)"
+            )
 
             # Build success message and return
             stories_generated = len(all_generated_stories)
             total_stories = len(existing_stories) + stories_generated
             msg = (
-                f"✓ {stories_generated} User Stories générées en {batches_completed} lots. "
+                f"✓ {stories_generated} User Stories générées en {len(batches)} lots. "
                 f"Total: {total_stories} User Stories complètes! "
                 f"Appelle export_deliverables() pour exporter les livrables."
             )
@@ -504,9 +512,7 @@ Ni plus, ni moins. Exactement {quantity} éléments."""
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, TestTitlesList):
-            response = TestTitlesList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), TestTitlesList)
         return [t.model_dump() for t in response.items]
 
     async def _generate_test_batch(
@@ -578,9 +584,7 @@ Règles:
             )
         ]
 
-        response = await model.ainvoke(messages, config=self._build_llm_config())
-        if not isinstance(response, TestsList):
-            response = TestsList.model_validate(response)
+        response = ensure_pydantic_model(await model.ainvoke(messages), TestsList)
         return [t.model_dump() for t in response.items]
 
     def get_tests_tool(self):
@@ -610,24 +614,22 @@ Règles:
             Returns:
                 Message de confirmation avec le nombre total de tests générés
             """
-            batch_size = 10
+            batch_size = self.BATCH_SIZE
 
             # Get existing data from state
             existing_tests = runtime.state.get("tests") or []
             all_stories = runtime.state.get("user_stories") or []
 
-            # Validation
+            # If generate_user_stories is in the same batch, its state update
+            # hasn't been applied yet — defer to the next turn.
+            conflict = check_batch_conflict(runtime, "generate_tests")
+            if conflict:
+                return conflict
+
             if not all_stories:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucune User Story n'a été générée. "
-                                "Appelle d'abord generate_user_stories() pour créer les User Stories.",
-                                tool_call_id=runtime.tool_call_id,
-                            ),
-                        ],
-                    }
+                return (
+                    "❌ Aucune User Story n'a été générée. "
+                    "Appelle d'abord generate_user_stories() pour créer les User Stories."
                 )
 
             # Generate titles
@@ -637,36 +639,54 @@ Règles:
             stories_by_id = {s.get("id"): s for s in all_stories}
 
             # Batch processing setup
-            all_generated_tests = []
             total_to_generate = len(pending_titles)
-            batches_completed = 0
+            batches = [
+                pending_titles[i : i + batch_size]
+                for i in range(0, total_to_generate, batch_size)
+            ]
 
             logger.info(
-                f"[JiraAgent] Starting batch generation: {total_to_generate} tests in batches of {batch_size}"
+                f"[JiraAgent] Starting batch generation: {total_to_generate} tests in {len(batches)} parallel batches of {batch_size}"
             )
 
-            # Process batches
-            while pending_titles:
-                current_batch_size = min(batch_size, len(pending_titles))
-                titles_batch = pending_titles[:current_batch_size]
-                pending_titles = pending_titles[current_batch_size:]
+            # Process batches with bounded concurrency
+            semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_BATCHES)
 
-                new_tests = await self._generate_test_batch(
-                    titles_batch, stories_by_id, jdd
-                )
-                all_generated_tests.extend(new_tests)
-                batches_completed += 1
+            async def _run_test_batch(batch):
+                async with semaphore:
+                    return await self._generate_test_batch(batch, stories_by_id, jdd)
 
-                logger.info(
-                    f"[JiraAgent] Batch {batches_completed} complete: "
-                    f"{len(all_generated_tests)}/{total_to_generate} tests generated"
+            batch_results = await asyncio.gather(
+                *[_run_test_batch(batch) for batch in batches],
+                return_exceptions=True,
+            )
+
+            all_generated_tests = []
+            failed_batches = 0
+            for i, result in enumerate(batch_results):
+                if isinstance(result, BaseException):
+                    failed_batches += 1
+                    logger.error(
+                        f"[JiraAgent] Test batch {i + 1} failed: {result}",
+                        exc_info=(type(result), result, result.__traceback__),
+                    )
+                else:
+                    all_generated_tests.extend(result)
+
+            if failed_batches:
+                logger.warning(
+                    f"[JiraAgent] {failed_batches}/{len(batches)} test batches failed"
                 )
+
+            logger.info(
+                f"[JiraAgent] {len(all_generated_tests)}/{total_to_generate} tests generated ({failed_batches} batch failures)"
+            )
 
             # Build success message and return
             tests_generated = len(all_generated_tests)
             total_tests = len(existing_tests) + tests_generated
             msg = (
-                f"✓ {tests_generated} tests générés en {batches_completed} lots. "
+                f"✓ {tests_generated} tests générés en {len(batches)} lots. "
                 f"Total: {total_tests} tests complets! "
                 f"Appelle export_deliverables() pour exporter les livrables."
             )

@@ -106,7 +106,6 @@ export const AgentHub = () => {
               showRestoreButton={true}
               onRestore={handleRestore}
               isRestoring={isRestoring}
-              showA2ACard={true}
               // For now, all users can manager their personal agents
               canEdit={true}
               canCreate={true}

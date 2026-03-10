@@ -1,14 +1,15 @@
 """Project discovery tools for Jira agent."""
 
+import asyncio
 import json
 import logging
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from agentic_backend.agents.jira.helpers import ensure_pydantic_model
 from agentic_backend.application_context import get_default_chat_model
 
 logger = logging.getLogger(__name__)
@@ -78,13 +79,6 @@ class DiscoveryTools:
     def __init__(self, agent):
         self.agent = agent
 
-    def _get_langfuse_handler(self):
-        return self.agent._get_langfuse_handler()
-
-    def _build_llm_config(self) -> RunnableConfig:
-        handler = self._get_langfuse_handler()
-        return {"callbacks": [handler]} if handler else {}
-
     def _find_search_tool(self):
         """Find the MCP vector search tool by name."""
         tools = self.agent.mcp.get_tools()
@@ -106,56 +100,43 @@ class DiscoveryTools:
             """
             search_tool = self._find_search_tool()
             if not search_tool:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Outil de recherche documentaire introuvable. "
-                                "Vérifiez la connexion au serveur MCP.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
+                return (
+                    "❌ Outil de recherche documentaire introuvable. "
+                    "Vérifiez la connexion au serveur MCP."
                 )
 
-            # Run all predefined queries and collect results
-            all_chunks: list[dict] = []
-            seen = set()
-
-            for query in DISCOVERY_QUERIES:
+            # Run all predefined queries in parallel and collect results
+            async def _run_query(query: str) -> list[dict]:
                 try:
                     result = await search_tool.ainvoke(
                         {"question": query, "top_k": TOP_K_PER_QUERY}
                     )
-                    if not result:
-                        continue
-
-                    for hit in json.loads(result):
-                        key = (
-                            hit.get("uid", ""),
-                            hit.get("content", "")[:100],
-                        )
-                        if key not in seen:
-                            seen.add(key)
-                            all_chunks.append(hit)
+                    return json.loads(result) if result else []
                 except Exception:
                     logger.warning(
                         "[DiscoveryTools] Search failed for query: %s",
                         query,
                         exc_info=True,
                     )
+                    return []
+
+            query_results = await asyncio.gather(
+                *[_run_query(q) for q in DISCOVERY_QUERIES]
+            )
+
+            all_chunks: list[dict] = []
+            seen = set()
+            for hits in query_results:
+                for hit in hits:
+                    key = (hit.get("uid", ""), hit.get("content", "")[:100])
+                    if key not in seen:
+                        seen.add(key)
+                        all_chunks.append(hit)
 
             if not all_chunks:
-                return Command(
-                    update={
-                        "messages": [
-                            ToolMessage(
-                                "❌ Aucun document trouvé. Vérifiez qu'une bibliothèque "
-                                "documentaire contenant des documents projet est sélectionnée.",
-                                tool_call_id=runtime.tool_call_id,
-                            )
-                        ]
-                    }
+                return (
+                    "❌ Aucun document trouvé. Vérifiez qu'une bibliothèque "
+                    "documentaire contenant des documents projet est sélectionnée."
                 )
 
             # Sort by score (descending) and keep top chunks
@@ -174,12 +155,12 @@ class DiscoveryTools:
             model = get_default_chat_model().with_structured_output(
                 ProjectDiscovery, method="json_schema"
             )
-            result = await model.ainvoke(
-                [SystemMessage(content=DISCOVERY_PROMPT.format(chunks=chunks_text))],
-                config=self._build_llm_config(),
+            result = ensure_pydantic_model(
+                await model.ainvoke(
+                    [SystemMessage(content=DISCOVERY_PROMPT.format(chunks=chunks_text))]
+                ),
+                ProjectDiscovery,
             )
-            if not isinstance(result, ProjectDiscovery):
-                result = ProjectDiscovery.model_validate(result)
 
             # Format readable report
             report_lines = [
