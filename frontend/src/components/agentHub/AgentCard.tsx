@@ -18,13 +18,14 @@ import EditIcon from "@mui/icons-material/Edit";
 import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import { Box, Card, CardContent, IconButton, Stack, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, IconButton, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 // OpenAPI types
+import TryIcon from "@mui/icons-material/Try";
+import { Link } from "react-router-dom";
 import { AnyAgent, isLikelyV2DefinitionAgent } from "../../common/agent";
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
-
 type AgentCardProps = {
   agent: AnyAgent;
   onEdit?: (agent: AnyAgent) => void;
@@ -80,7 +81,7 @@ export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onIns
           }}
         >
           {/* Left: Agent Chip (includes name) */}
-          <Box sx={{ flexShrink: 0 }}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography
               variant="subtitle1"
               color="primary"
@@ -93,7 +94,11 @@ export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onIns
 
         {/* ROW 2: Agent Role (Moved here) */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body1" color="textPrimary" sx={{ lineHeight: 1.25 }}>
+          <Typography
+            variant="body1"
+            color="textPrimary"
+            sx={{ lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
             {agent.tuning.role}
           </Typography>
         </Box>
@@ -127,51 +132,62 @@ export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onIns
           {agent.tuning.description}
         </Typography>
         {/* Footer actions (unchanged) */}
-        <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
-          {onEdit && (
-            <IconButton
-              size="medium"
-              onClick={() => onEdit(agent)}
-              sx={{ color: "text.secondary" }}
-              aria-label="edit agent"
-            >
-              <EditIcon fontSize="medium" />
-            </IconButton>
-          )}
-          {showAgentCode && onInspectCode && (
-            <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Stack direction="row" gap={0.5}>
+            {onEdit && (
               <IconButton
                 size="medium"
-                // This calls the handler provided by the parent (AgentHub)
-                onClick={() => onInspectCode(agent)}
+                onClick={() => onEdit(agent)}
                 sx={{ color: "text.secondary" }}
-                aria-label="inspect agent source code"
+                aria-label="edit agent"
               >
-                <CodeIcon fontSize="medium" />
+                <EditIcon fontSize="medium" />
               </IconButton>
-            </SimpleTooltip>
-          )}
-          {showInspection && (
-            <IconButton
-              size="medium"
-              onClick={() => onInspectAgent?.(agent)}
-              sx={{ color: "text.secondary" }}
-              aria-label="inspect agent"
-            >
-              <ManageSearchIcon fontSize="medium" />
-            </IconButton>
-          )}
-          {showAgentDisableButton && onToggleEnabled && (
-            <IconButton
-              size="medium"
-              onClick={() => onToggleEnabled(agent)}
-              sx={{ color: "text.secondary" }} // Button color is neutral
-              aria-label={isEnabled ? "disable agent" : "enable agent"}
-            >
-              {isEnabled ? <VisibilityIcon fontSize="medium" /> : <VisibilityOffIcon fontSize="medium" />}
-            </IconButton>
-          )}
-        </Stack>
+            )}
+            {showAgentCode && onInspectCode && (
+              <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
+                <IconButton
+                  size="medium"
+                  // This calls the handler provided by the parent (AgentHub)
+                  onClick={() => onInspectCode(agent)}
+                  sx={{ color: "text.secondary" }}
+                  aria-label="inspect agent source code"
+                >
+                  <CodeIcon fontSize="medium" />
+                </IconButton>
+              </SimpleTooltip>
+            )}
+            {showInspection && (
+              <IconButton
+                size="medium"
+                onClick={() => onInspectAgent?.(agent)}
+                sx={{ color: "text.secondary" }}
+                aria-label="inspect agent"
+              >
+                <ManageSearchIcon fontSize="medium" />
+              </IconButton>
+            )}
+            {showAgentDisableButton && onToggleEnabled && (
+              <IconButton
+                size="medium"
+                onClick={() => onToggleEnabled(agent)}
+                sx={{ color: "text.secondary" }} // Button color is neutral
+                aria-label={isEnabled ? "disable agent" : "enable agent"}
+              >
+                {isEnabled ? <VisibilityIcon fontSize="medium" /> : <VisibilityOffIcon fontSize="medium" />}
+              </IconButton>
+            )}
+          </Stack>
+          <Button
+            size="medium"
+            variant="outlined"
+            startIcon={<TryIcon />}
+            component={Link}
+            to={`/new-chat/${agent.id}`}
+          >
+            Chat
+          </Button>
+        </Box>
       </CardContent>
     </Card>
   );
