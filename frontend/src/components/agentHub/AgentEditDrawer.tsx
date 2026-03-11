@@ -23,6 +23,7 @@ import {
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 
@@ -244,6 +245,11 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
             ) : (
               <TuningForm fields={fields} onChange={onChange} />
             )}
+
+            {/* Workspace Files */}
+            <Divider />
+            <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
+            {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
           </Stack>
         </Box>
 

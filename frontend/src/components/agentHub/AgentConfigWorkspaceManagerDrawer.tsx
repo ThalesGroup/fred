@@ -14,28 +14,26 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
-import FilePresentIcon from "@mui/icons-material/FilePresent"; // New icon for file list
+import FilePresentIcon from "@mui/icons-material/FilePresent";
 import UploadIcon from "@mui/icons-material/Upload";
 import {
   Box,
   Button,
   CircularProgress,
-  Drawer,
   IconButton,
   List,
   ListItem,
   ListItemText,
-  Paper, // New import
+  Paper,
   Typography,
   useTheme,
 } from "@mui/material";
-import React, { useEffect, useMemo, useState } from "react";
-import { useDropzone } from "react-dropzone"; // New import
+import React, { useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone";
 
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 
-// --- RTK Query Hooks & Types ---
 import {
   useDeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteMutation,
   useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery,
@@ -44,12 +42,9 @@ import {
 import { agentConfigPrefix, stripAgentConfigPrefix } from "../../slices/knowledgeFlow/storagePaths";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
-// -------------------------------
 
-interface AgentAssetManagerDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  agentId: string; // The ID of the agent whose assets we manage
+interface AgentPrivateResourcesManagerProps {
+  agentId: string;
 }
 
 type ListedConfigFile = {
@@ -58,7 +53,6 @@ type ListedConfigFile = {
   size: number | null;
 };
 
-// Helper to format file size
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
@@ -67,22 +61,16 @@ const formatFileSize = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawerProps> = ({
-  isOpen,
-  onClose,
-  agentId,
-}) => {
+export const AgentPrivateResourcesManager: React.FC<AgentPrivateResourcesManagerProps> = ({ agentId }) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const theme = useTheme();
 
-  // --- State for Upload Form (Modified) ---
-  const [filesToUpload, setFilesToUpload] = useState<File[]>([]); // List of files ready to upload
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
   const [isHighlighted, setIsHighlighted] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // Used while iterating through files
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- RTK Query Initialization ---
   const {
     data: listData,
     isLoading: isListLoading,
@@ -90,16 +78,14 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
     refetch: refetchAssets,
   } = useListAgentConfigFilesKnowledgeFlowV1StorageAgentConfigAgentIdGetQuery(
     { agentId },
-    { skip: !isOpen, refetchOnMountOrArgChange: true },
+    { refetchOnMountOrArgChange: true },
   );
 
   const [uploadAsset, { isLoading: isApiLoading }] =
     useUploadAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdUploadPostMutation();
 
   const [deleteAsset] = useDeleteAgentConfigFileKnowledgeFlowV1StorageAgentConfigAgentIdKeyDeleteMutation();
-  // The overall loading state combines the API mutation state and the local processing loop state
   const isUploading = isApiLoading || isProcessing;
-  // --------------------------------
 
   const assets: ListedConfigFile[] = useMemo(() => {
     if (!listData || !Array.isArray(listData)) return [];
@@ -109,20 +95,14 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
         const prefix = agentConfigPrefix(agentId);
         const normalizedPath = path.endsWith("/") ? path : `${path}/`;
 
-        // Keep only files that are within the agent-config prefix and are files (type != directory)
         let relativeKey = stripAgentConfigPrefix(path, agentId);
-        // Some backends already return keys with a leading "config/" segment; strip it once to avoid double prefixes.
         if (relativeKey.startsWith("config/")) {
           relativeKey = relativeKey.slice("config/".length);
         }
-        // Remove leading slashes to avoid creating nested folders on delete/upload.
         relativeKey = relativeKey.replace(/^\/+/, "");
         const isDirectory = (item.type || "").toLowerCase() === "directory";
         const isRootPlaceholder =
-          relativeKey === "" ||
-          relativeKey === "/" ||
-          normalizedPath === prefix || // e.g., "agents/{id}/config" without trailing slash
-          path === prefix;
+          relativeKey === "" || relativeKey === "/" || normalizedPath === prefix || path === prefix;
         if (isDirectory || isRootPlaceholder) return null;
         const name = relativeKey.split("/").filter(Boolean).pop() || relativeKey;
         return {
@@ -134,14 +114,11 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
       .filter((x): x is ListedConfigFile => !!x);
   }, [listData, agentId]);
 
-  // --- Dropzone Logic (Reused from DocumentUploadDrawer) ---
   const { getRootProps, getInputProps, open } = useDropzone({
     noKeyboard: true,
     onDrop: (acceptedFiles) => {
       setFilesToUpload((prevFiles) => {
-        // Use a Set for efficient uniqueness check (by name and size)
         const existingIdentifiers = new Set(prevFiles.map((f) => `${f.name}-${f.size}`));
-
         const newUniqueFiles = acceptedFiles.filter((f) => !existingIdentifiers.has(`${f.name}-${f.size}`));
 
         if (newUniqueFiles.length < acceptedFiles.length) {
@@ -154,8 +131,6 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
       });
       setIsHighlighted(false);
     },
-    // Prevent dropzone from opening file dialog on click by default
-    // We will control it via the button
     noClick: true,
   });
 
@@ -165,19 +140,17 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
 
   const handleUpload = async () => {
     if (!filesToUpload.length) return;
-    setIsProcessing(true); // Start processing loop
+    setIsProcessing(true);
 
     const filesToProcess = [...filesToUpload];
-    setFilesToUpload([]); // Clear queue immediately
+    setFilesToUpload([]);
 
     for (const file of filesToProcess) {
-      // ⚠️ Use file.name as the key to maintain consistency with agent tuning
       const keyToUse = file.name;
 
       const formData = new FormData();
       formData.append("file", file);
       formData.append("key", keyToUse);
-      // NOTE: ContentTypeOverride field is removed from UI and backend logic is relied upon
 
       try {
         await uploadAsset({
@@ -197,12 +170,10 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
           summary: t("assetManager.uploadFailedSummary") || "Upload Failed",
           detail: `Failed to upload ${file.name}: ${errMsg}`,
         });
-        // Important: Stop the loop on the first severe error or continue?
-        // Continuing allows partial success, which is often preferable.
       }
     }
 
-    setIsProcessing(false); // End processing loop
+    setIsProcessing(false);
     refetchAssets();
   };
 
@@ -229,42 +200,8 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
     });
   };
 
-  // Reset state on initial close
-  const handleClose = () => {
-    setFilesToUpload([]);
-    setIsProcessing(false);
-    onClose();
-  };
-
-  // Always refresh when the drawer is opened to keep it stateless/fresh.
-  useEffect(() => {
-    if (isOpen) {
-      refetchAssets();
-    }
-  }, [isOpen, refetchAssets]);
-
   return (
-    <Drawer
-      anchor="right"
-      open={isOpen}
-      onClose={handleClose}
-      slotProps={{
-        paper: {
-          sx: {
-            width: { xs: "100%", sm: 500 },
-            p: 3,
-          },
-        },
-      }}
-    >
-      <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="h5" fontWeight="bold">
-          {t("assetManager.title", { agentId })}
-        </Typography>
-        <IconButton onClick={handleClose}>
-          <CloseIcon />
-        </IconButton>
-      </Box>
+    <Box>
       <Typography variant="body2" color="text.secondary" gutterBottom>
         {t("assetManager.description")}
       </Typography>
@@ -284,7 +221,6 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
               assets.map((asset) => (
                 <ListItem
                   key={asset.key}
-                  // *** KEY CHANGE 1: Use flexbox for the entire ListItem ***
                   sx={{
                     py: 0.5,
                     px: 2,
@@ -293,34 +229,26 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
                     alignItems: "center",
                     borderBottom: `1px solid ${theme.palette.divider}`,
                   }}
-                  // *** KEY CHANGE 2: Removed secondaryAction prop ***
                 >
-                  {/* Name and Size container */}
                   <Box sx={{ flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
-                    {/* File Name */}
                     <Typography
                       variant="body2"
                       fontWeight="medium"
-                      component="span" // Ensure it renders inline
+                      component="span"
                       sx={{
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
-                        // Takes up max space but respects other items
                         flexShrink: 1,
                         mr: 2,
                       }}
                     >
                       {asset.file_name}
                     </Typography>
-
-                    {/* File Size */}
                     <Typography variant="caption" color="text.secondary" component="span" sx={{ flexShrink: 0 }}>
                       ({formatFileSize(asset.size)})
                     </Typography>
                   </Box>
-
-                  {/* *** KEY CHANGE 3: Delete Button as a direct child *** */}
                   <DeleteIconButton
                     aria-label="delete"
                     onClick={() => handleDelete(asset.key)}
@@ -401,12 +329,8 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
           </Box>
         )}
       </Paper>
-      {/* --- 3. Action Buttons --- */}
-      <Box sx={{ mt: 3, display: "flex", justifyContent: "space-between" }}>
-        <Button variant="outlined" onClick={handleClose} sx={{ borderRadius: "8px" }}>
-          {t("documentLibrary.cancel")}
-        </Button>
-
+      {/* --- 3. Upload Action --- */}
+      <Box sx={{ mt: 3, display: "flex", justifyContent: "flex-end" }}>
         <Button
           variant="contained"
           color="primary"
@@ -415,11 +339,9 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
           disabled={!filesToUpload.length || isUploading}
           sx={{ borderRadius: "8px" }}
         >
-          {isUploading
-            ? t("assetManager.uploading") // Using 'isUploading' which combines both states
-            : t("assetManager.uploadButton")}
+          {isUploading ? t("assetManager.uploading") : t("assetManager.uploadButton")}
         </Button>
       </Box>
-    </Drawer>
+    </Box>
   );
 };

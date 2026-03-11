@@ -29,7 +29,6 @@ import { useToast } from "../ToastProvider";
 
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { AgentCard } from "./AgentCard";
-import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentEditDrawer } from "./AgentEditDrawer";
 import { AgentInspectionModal } from "./AgentInspectionModal";
 import { CreateAgentModal } from "./CreateAgentModal";
@@ -80,8 +79,6 @@ export const AgentGridManager = ({
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [assetManagerOpen, setAssetManagerOpen] = useState(false);
-  const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
   const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
   const [agentForInspection, setAgentForInspection] = useState<AnyAgent | null>(null);
   const [codeDrawer, setCodeDrawer] = useState<{
@@ -143,16 +140,6 @@ export const AgentGridManager = ({
     if (onRefetchAgents) {
       await onRefetchAgents();
     }
-  };
-
-  const handleManageAssets = (agent: AnyAgent) => {
-    setAgentForAssetManagement(agent);
-    setAssetManagerOpen(true);
-  };
-
-  const handleCloseAssetManager = () => {
-    setAssetManagerOpen(false);
-    setAgentForAssetManagement(null);
   };
 
   const handleInspectAgent = (agent: AnyAgent) => {
@@ -217,7 +204,6 @@ export const AgentGridManager = ({
                           agent={agent}
                           onEdit={canEdit ? handleEdit : undefined}
                           onToggleEnabled={canEdit ? handleToggleEnabled : undefined}
-                          onManageAssets={canEdit ? handleManageAssets : undefined}
                           onInspectCode={handleInspectCode}
                           onInspectAgent={handleInspectAgent}
                         />
@@ -270,14 +256,6 @@ export const AgentGridManager = ({
         onSaved={handleRefetch}
         onDeleted={handleRefetch}
       />
-      {agentForAssetManagement && (
-        <AgentConfigWorkspaceManagerDrawer
-          isOpen={assetManagerOpen}
-          onClose={handleCloseAssetManager}
-          agentId={agentForAssetManagement.id}
-        />
-      )}
-
       {/* Code Inspector Drawer */}
       <Box
         component={Drawer}
