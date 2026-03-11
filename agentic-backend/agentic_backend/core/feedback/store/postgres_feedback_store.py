@@ -45,6 +45,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         self.table_name = self.store.prefixed(table_name)
         self._ddl_lock_id = advisory_lock_key(self.table_name)
+        self._create_task: asyncio.Task[None] | None = None
 
         metadata = MetaData()
         self.table = Table(
@@ -73,14 +74,14 @@ class PostgresFeedbackStore(BaseFeedbackStore):
             loop = asyncio.get_running_loop()
             self._create_task = loop.create_task(_create())
         except RuntimeError:
-            self._create_task = None
             asyncio.run(_create())
         logger.info("[FEEDBACK][PG][ASYNC] Table ready: %s", self.table_name)
 
     async def _ensure_table(self) -> None:
-        task = getattr(self, "_create_task", None)
-        if task is not None and not task.done():
-            await task
+        task = self._create_task
+        if task is None or task.done():
+            return
+        return await task
 
     async def list(self) -> List[FeedbackRecord]:
         await self._ensure_table()
