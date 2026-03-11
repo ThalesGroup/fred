@@ -90,7 +90,6 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
                 "definition side so the runtime can remain generic."
             ),
             required=True,
-            default=DEFAULT_SYSTEM_PROMPT,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
         # FieldSpec(
