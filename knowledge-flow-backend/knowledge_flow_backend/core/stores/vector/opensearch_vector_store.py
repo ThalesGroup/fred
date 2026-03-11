@@ -14,15 +14,17 @@
 
 import logging
 from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.store.opensearch_mapping_validator import MappingValidationError, validate_index_mapping
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from opensearchpy import NotFoundError, OpenSearchException, RequestError
+from opensearchpy import NotFoundError, OpenSearch, OpenSearchException, RequestError, RequestsHttpConnection
 
 from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
 
@@ -50,6 +52,96 @@ REQUIRED_METADATA_FIELDS: dict[str, Dict[str, str]] = {
     "session_id": {"type": "keyword"},
     "user_id": {"type": "keyword"},
     "scope": {"type": "keyword"},
+}
+
+SAFE_METADATA_MAPPING_UPDATES: dict[str, Dict[str, str]] = {
+    **REQUIRED_METADATA_FIELDS,
+    "retrievable": {"type": "boolean"},
+}
+
+VECTOR_METADATA_PROPERTIES: Dict[str, Any] = {
+    "document_uid": {"type": "keyword"},
+    "document_name": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    "title": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    "author": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    "created": {"type": "date"},
+    "modified": {"type": "date"},
+    "last_modified_by": {"type": "keyword"},
+    "repository": {"type": "keyword"},
+    "pull_location": {"type": "keyword"},
+    "repository_web": {"type": "keyword"},
+    "repo_ref": {"type": "keyword"},
+    "file_path": {"type": "keyword"},
+    "date_added_to_kb": {"type": "date"},
+    "type": {"type": "keyword"},
+    "mime_type": {"type": "keyword"},
+    "file_size_bytes": {"type": "long"},
+    "page_count": {"type": "long"},
+    "row_count": {"type": "long"},
+    "sha256": {"type": "keyword"},
+    "language": {"type": "keyword"},
+    "tag_ids": {"type": "keyword"},
+    "license": {"type": "keyword"},
+    "confidential": {"type": "boolean"},
+    "acl": {"type": "keyword"},
+    "chunk_index": {"type": "long"},
+    "chunk_uid": {"type": "keyword"},
+    "char_start": {"type": "long"},
+    "char_end": {"type": "long"},
+    "heading_slug": {"type": "keyword"},
+    "viewer_fragment": {"type": "keyword"},
+    "original_doc_length": {"type": "long"},
+    "section": {
+        "type": "text",
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+    },
+    **{field_name: {"type": field_mapping["type"]} for field_name, field_mapping in SAFE_METADATA_MAPPING_UPDATES.items()},
+}
+
+VECTOR_INDEX_MAPPING_TEMPLATE: Dict[str, Any] = {
+    "settings": {
+        "index": {
+            "knn": True,
+            "number_of_shards": 1,
+            "number_of_replicas": 1,
+            "knn.algo_param": {"ef_search": "512"},
+        }
+    },
+    "mappings": {
+        "dynamic": False,
+        "properties": {
+            "text": {
+                "type": "text",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 256},
+                },
+            },
+            "vector_field": {
+                "type": "knn_vector",
+                "dimension": 0,
+                "method": {
+                    "name": "hnsw",
+                    "engine": "lucene",
+                    "space_type": "cosinesimil",
+                    "parameters": {"ef_construction": 512, "m": 16},
+                },
+            },
+            "metadata": {
+                "type": "object",
+                "dynamic": False,
+                "properties": VECTOR_METADATA_PROPERTIES,
+            },
+        },
+    },
 }
 
 HYBRID_SEARCH_PIPELINE_NAME = "hybrid-search-pipeline"
@@ -91,6 +183,12 @@ def _is_false_value(value: object) -> bool:
     return value is False
 
 
+def build_vector_index_mapping(dim: int) -> Dict[str, Any]:
+    mapping = deepcopy(VECTOR_INDEX_MAPPING_TEMPLATE)
+    mapping["mappings"]["properties"]["vector_field"]["dimension"] = dim
+    return mapping
+
+
 T = TypeVar("T", bound=BaseVectorHit)
 
 
@@ -128,10 +226,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         self._kpi = kpi
         self._vs: OpenSearchVectorSearch | None = None
         self._expected_dim: int | None = None
+        self._ready = False
+        self.client = OpenSearch(
+            host,
+            http_auth=(username, password),
+            use_ssl=secure,
+            verify_certs=verify_certs,
+            connection_class=RequestsHttpConnection,
+            ssl_show_warn=False,
+        )
 
-        if not self.pipeline_exists(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME):
-            self.create_pipeline(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME, pipeline_config=HYBRID_SEARCH_PIPELINE_CONFIG)
-
+        self.ensure_ready()
         logger.info("[VECTOR][OPENSEARCH] initialized index=%r host=%r bulk=%s", self._index, self._host, self._bulk_size)
 
     def _phase_timer(self, phase: str):
@@ -158,14 +263,47 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 pool_maxsize=20,
                 bulk_size=self._bulk_size,
             )
-            self._expected_dim = self._get_embedding_dimension()
-            self._validate_index_compatibility(self._expected_dim)
         return self._vs
 
     @property
     def _client(self):
         # low-level OpenSearch client for BM25/phrase
-        return self._lc.client
+        return self.client
+
+    def ensure_ready(self) -> None:
+        if self._ready:
+            return
+
+        expected_dim = self._get_embedding_dimension()
+        self._expected_dim = expected_dim
+        expected_mapping = build_vector_index_mapping(expected_dim)
+
+        try:
+            if not self.pipeline_exists(pipeline_name=HYBRID_SEARCH_PIPELINE_NAME):
+                self.create_pipeline(
+                    pipeline_name=HYBRID_SEARCH_PIPELINE_NAME,
+                    pipeline_config=HYBRID_SEARCH_PIPELINE_CONFIG,
+                )
+
+            if not self._client.indices.exists(index=self._index):
+                self._client.indices.create(index=self._index, body=expected_mapping)
+                logger.info(
+                    "[VECTOR][OPENSEARCH] created index '%s' with dimension=%s",
+                    self._index,
+                    expected_dim,
+                )
+            else:
+                logger.info(
+                    "[VECTOR][OPENSEARCH] index '%s' already exists; validating mapping",
+                    self._index,
+                )
+                self._validate_index_compatibility(expected_dim)
+                validate_index_mapping(self._client, self._index, expected_mapping)
+        except OpenSearchException as e:
+            logger.error("[VECTOR][OPENSEARCH] ensure_ready failed for index '%s': %s", self._index, e)
+            raise
+
+        self._ready = True
 
     def validate_index_or_fail(self) -> None:
         """
@@ -173,13 +311,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """
         logger.info("[VECTOR][OPENSEARCH] validating vector index=%s", self._index)
         try:
-            if self._vs is None:
-                _ = self._lc  # triggers _validate_index_compatibility via lazy init
-                return
-
-            expected_dim = self._expected_dim or self._get_embedding_dimension()
-            self._validate_index_compatibility(expected_dim)
-        except ValueError as e:
+            self.ensure_ready()
+        except (MappingValidationError, OpenSearchException, ValueError) as e:
             logger.critical("[VECTOR][OPENSEARCH] index validation failed: %s", e)
             raise SystemExit(1) from e
 
@@ -195,7 +328,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             error occurs while checking.
         """
         try:
-            self._lc.client.search_pipeline.get(id=pipeline_name)
+            self._client.search_pipeline.get(id=pipeline_name)
             return True
         except NotFoundError:
             return False
@@ -221,7 +354,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         logger.info("[OPENSEARCH][PIPELINE] Creating pipeline '%s'", pipeline_name)
 
         try:
-            self._lc.client.search_pipeline.put(id=pipeline_name, body=pipeline_config)
+            self._client.search_pipeline.put(id=pipeline_name, body=pipeline_config)
             logger.info("[OPENSEARCH][PIPELINE] Successfully created pipeline '%s'", pipeline_name)
             return True
 
@@ -752,20 +885,20 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
     def _apply_metadata_mapping_updates(self, missing_fields: List[str]) -> bool:
         """
-        Try to add missing metadata keyword fields so the attachment/session filters continue to work.
+        Try to add missing metadata fields when they are safe to introduce on an existing index.
         """
-        payload = {"properties": {"metadata": {"properties": {field: {"type": REQUIRED_METADATA_FIELDS[field]["type"]} for field in missing_fields if field in REQUIRED_METADATA_FIELDS}}}}
+        payload = {"properties": {"metadata": {"properties": {field: deepcopy(SAFE_METADATA_MAPPING_UPDATES[field]) for field in missing_fields if field in SAFE_METADATA_MAPPING_UPDATES}}}}
         try:
             self._client.indices.put_mapping(index=self._index, body=payload)
             logger.info(
-                "[VECTOR][OPENSEARCH][MAPPING] added missing metadata fields %s to index %s",
+                "[VECTOR][OPENSEARCH][MAPPING] added safe metadata fields %s to index %s",
                 missing_fields,
                 self._index,
             )
             return True
         except Exception as exc:
             logger.error(
-                "[VECTOR][OPENSEARCH][MAPPING] failed to add metadata fields %s to index %s: %s",
+                "[VECTOR][OPENSEARCH][MAPPING] failed to add safe metadata fields %s to index %s: %s",
                 missing_fields,
                 self._index,
                 exc,
@@ -775,6 +908,32 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
     def _get_embedding_dimension(self) -> int:
         dummy_vector = self._embedding_model.embed_query("dummy")
         return len(dummy_vector)
+
+    def _expected_index_spec(self, expected_dim: int) -> ExpectedIndexSpec:
+        model_name = self._embedding_model_name or "unknown"
+        spec = MODEL_INDEX_SPECS.get(model_name)
+        if spec is None:
+            return ExpectedIndexSpec(
+                dim=expected_dim,
+                engine="lucene",
+                space_type="cosinesimil",
+                method_name="hnsw",
+            )
+
+        if spec.dim != expected_dim:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] runtime embedding dimension %s differs from catalog dimension %s for model %s; using runtime dimension",
+                expected_dim,
+                spec.dim,
+                model_name,
+            )
+
+        return ExpectedIndexSpec(
+            dim=expected_dim,
+            engine=spec.engine,
+            space_type=spec.space_type,
+            method_name=spec.method_name,
+        )
 
     def _validate_index_compatibility(self, expected_dim: int, allow_metadata_mapping_update: bool = True):
         """
@@ -795,11 +954,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         method_name = _norm_str(_safe_get(m, ["properties", "vector_field", "method", "name"]))
 
         model_name = self._embedding_model_name or "unknown"
-        spec = MODEL_INDEX_SPECS.get(model_name)
-
-        # If we don't know the model, fall back to the dimension we probed.
-        if spec is None:
-            spec = ExpectedIndexSpec(dim=expected_dim, engine="lucene", space_type="cosinesimil", method_name="hnsw")
+        spec = self._expected_index_spec(expected_dim)
 
         problems: list[str] = []
         warnings: list[str] = []
@@ -838,17 +993,17 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             logger.warning("Could not check index.knn setting: %s", e)
 
         metadata_props = _safe_get(m, ["properties", "metadata", "properties"], {}) or {}
-        missing_metadata_fields = [field for field in REQUIRED_METADATA_FIELDS if field not in metadata_props]
+        missing_metadata_fields = [field for field in SAFE_METADATA_MAPPING_UPDATES if field not in metadata_props]
         if missing_metadata_fields:
             logger.critical(
-                "[VECTOR][OPENSEARCH][MAPPING] index %s missing metadata keyword fields %s required for session/attachment filters",
+                "[VECTOR][OPENSEARCH][MAPPING] index %s missing safe metadata fields %s",
                 self._index,
                 missing_metadata_fields,
             )
             if allow_metadata_mapping_update and self._apply_metadata_mapping_updates(missing_metadata_fields):
                 self._validate_index_compatibility(expected_dim, allow_metadata_mapping_update=False)
                 return
-            problems.append(f"- Missing metadata fields {', '.join(missing_metadata_fields)}. These fields must be mapped as keywords for session-scoped searches.")
+            problems.append(f"- Missing metadata fields {', '.join(missing_metadata_fields)}. These fields must be mapped to keep vector metadata filters consistent.")
 
         try:
             tag_field = metadata_props.get("tag_ids")

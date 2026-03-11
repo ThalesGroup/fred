@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.basic_react import BasicReActDefinition
     from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
-    from .production.ppt_filler_react import PptFillerReActV2Definition
 
 __all__ = [
     "AegisGraphV2SkeletonDefinition",
@@ -22,7 +21,6 @@ __all__ = [
     "BasicReActDefinition",
     "BidMgrDefinition",
     "PostalTrackingDefinition",
-    "PptFillerReActV2Definition",
     "RagExpertV2Definition",
 ]
 
@@ -57,10 +55,6 @@ def __getattr__(name: str) -> object:
         from .demos.postal_tracking import Definition as PostalTrackingDefinition
 
         return PostalTrackingDefinition
-    if name == "PptFillerReActV2Definition":
-        from .production.ppt_filler_react import PptFillerReActV2Definition
-
-        return PptFillerReActV2Definition
     if name == "RagExpertV2Definition":
         from .production.basic_react.profiles.rag_expert_agent import (
             RagExpertV2Definition,
