@@ -135,7 +135,7 @@ class ContentService:
 
             if candidate_name == "table.csv":
                 csv_file_like = BytesIO(preview_bytes)
-                df = pd.read_csv(csv_file_like, nrows=100)
+                df = pd.read_csv(csv_file_like, nrows=200)
                 preview_str = df.to_markdown(index=False, tablefmt="github")
                 if preview_str is None or preview_str.strip() == "":
                     preview_str = "_(The CSV file is empty or has no data to display)_"
