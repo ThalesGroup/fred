@@ -4,9 +4,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
+from fred_core.sql import AsyncBaseSqlStore
 
 from agentic_backend.core.feedback.feedback_structures import FeedbackRecord
 from agentic_backend.core.feedback.store import (
@@ -122,6 +124,8 @@ def test_feedback_store_methods_wait_for_table_and_use_row_results():
     async def _run() -> None:
         feedback = _build_feedback()
         row = _FakeRow(**feedback.model_dump())
+        ensure_table = AsyncMock()
+        upsert = AsyncMock()
         conn = SimpleNamespace(
             execute=AsyncMock(
                 side_effect=[
@@ -139,8 +143,11 @@ def test_feedback_store_methods_wait_for_table_and_use_row_results():
 
         store = object.__new__(PostgresFeedbackStore)
         store.table = _build_feedback_table()
-        store.store = SimpleNamespace(begin=_begin, upsert=AsyncMock())
-        store._ensure_table = AsyncMock()
+        store.store = cast(
+            AsyncBaseSqlStore,
+            SimpleNamespace(begin=_begin, upsert=upsert),
+        )
+        store._ensure_table = ensure_table
 
         listed = await store.list()
         stored = await store.get(feedback.id)
@@ -152,10 +159,11 @@ def test_feedback_store_methods_wait_for_table_and_use_row_results():
         assert stored is not None
         assert stored.id == feedback.id
         assert missing is None
-        assert store._ensure_table.await_count == 5
+        assert ensure_table.await_count == 5
 
-        store.store.upsert.assert_awaited_once()
-        upsert_call = store.store.upsert.await_args
+        upsert.assert_awaited_once()
+        upsert_call = upsert.await_args
+        assert upsert_call is not None
         assert upsert_call.args[1] is store.table
         assert upsert_call.kwargs["values"]["created_at"] == feedback.created_at
         assert upsert_call.kwargs["pk_cols"] == ["id"]
