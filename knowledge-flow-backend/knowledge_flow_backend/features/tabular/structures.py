@@ -15,7 +15,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # -- Constants for consistent types --
 DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
@@ -33,14 +33,25 @@ class ListDatabasesResponse(BaseModel):
     tables: list[str]
 
 
+class TabularDatasetInfo(BaseModel):
+    document_uid: str
+    dataset_alias: str
+    display_name: str
+    db_name: str
+    row_count: Optional[int] = None
+
+
 class ListTablesResponse(BaseModel):
     db_name: str
     tables: list[str]
+    datasets: list[TabularDatasetInfo] = Field(default_factory=list)
 
 
 class GetSchemaResponse(BaseModel):
     db_name: str
     table_name: str
+    document_uid: Optional[str] = None
+    display_name: Optional[str] = None
     columns: List[TabularColumnSchema]
     row_count: Optional[int] = None
 
@@ -52,7 +63,7 @@ class RawSQLRequest(BaseModel):
 class RawSQLResponse(BaseModel):
     db_name: str
     sql_query: str
-    rows: Optional[List[dict]] = []
+    rows: Optional[List[dict]] = Field(default_factory=list)
     error: Optional[str] = None
 
 
@@ -60,7 +71,7 @@ class TabularDatasetMetadata(BaseModel):
     document_name: str
     title: str
     description: Optional[str] = ""
-    tags: List[str] = []
+    tags: List[str] = Field(default_factory=list)
     domain: Optional[str] = ""
     row_count: Optional[int] = None
 

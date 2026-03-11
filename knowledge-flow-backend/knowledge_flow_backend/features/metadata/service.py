@@ -34,8 +34,8 @@ from knowledge_flow_backend.common.structures import (
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
-from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
+from knowledge_flow_backend.features.tabular.registry_service import TabularRegistryService
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,11 @@ class MetadataService:
         self.vector_store = None
         self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
+        self.tabular_registry_service = TabularRegistryService(
+            registry_store=context.get_tabular_dataset_registry_store(),
+            stores_info=context.get_tabular_stores(),
+            metadata_store=self.metadata_store,
+        )
 
     async def filter_readable_document_uids(self, user: KeycloakUser, document_uids: list[str]) -> set[str]:
         """Return only the document UIDs the user is allowed to read (individual permission checks)."""
@@ -467,14 +472,15 @@ class MetadataService:
 
             # --- SQL table node (per-document) ------------------------------------
             if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and csv_store is not None:
-                table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
+                dataset = await self.tabular_registry_service.ensure_registered_for_metadata(metadata)
+                if dataset is None:
+                    continue
+                table_name = dataset.query_alias
                 row_count: int | None = None
 
-                if table_name in existing_tables:
+                if dataset.physical_table_name in existing_tables:
                     try:
-                        # Use a lightweight COUNT(*) query to avoid loading full tables.
-                        # table_name is sanitized via sanitize_sql_name, so this is safe from SQL injection.
-                        df = csv_store.execute_sql_query(f'SELECT COUNT(*) AS n FROM "{table_name}"')  # nosec B608
+                        df = csv_store.execute_sql_query(f'SELECT COUNT(*) AS n FROM "{dataset.physical_table_name}"')  # nosec B608
                         if not df.empty and "n" in df.columns:
                             row_count = int(df["n"].iloc[0])
                     except Exception as e:
@@ -619,14 +625,17 @@ class MetadataService:
                         logger.warning(f"Could not delete vector of'{metadata.document_name}': {e}")
 
                 if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
-                    if self.csv_input_store is None:
-                        self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
-                    table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
-                    try:
-                        self.csv_input_store.delete_table(table_name)
-                        logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
-                    except Exception as e:
-                        logger.warning(f"Could not delete SQL table '{table_name}': {e}")
+                    dataset = await self.tabular_registry_service.ensure_registered_for_metadata(metadata)
+                    if dataset is not None:
+                        try:
+                            await self.tabular_registry_service.drop_dataset_table_for_metadata(metadata)
+                            logger.info(
+                                "[TABULAR] Deleted SQL table '%s' linked to '%s'",
+                                dataset.query_alias,
+                                metadata.document_name,
+                            )
+                        except Exception as e:
+                            logger.warning(f"Could not delete SQL table '{dataset.query_alias}': {e}")
 
                 # Promote an alternate version (version=1) to base if present
                 if getattr(metadata.identity, "version", 0) == 0:

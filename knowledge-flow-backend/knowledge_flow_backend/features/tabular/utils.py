@@ -74,7 +74,11 @@ FORBIDDEN_KEYWORDS_READ = [
 
 FORBIDDEN_KEYWORDS_WRITE = [
     # DDL
+    "create",
+    "alter",
+    "drop",
     "truncate",
+    "rename",
     # Procedures / execution
     "call",
     "exec",

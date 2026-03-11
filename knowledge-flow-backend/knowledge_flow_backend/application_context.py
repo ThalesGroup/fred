@@ -84,6 +84,10 @@ from knowledge_flow_backend.core.stores.metadata.base_metadata_store import Base
 from knowledge_flow_backend.core.stores.metadata.postgres_metadata_store import PostgresMetadataStore
 from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
+from knowledge_flow_backend.core.stores.tabular_dataset_registry import (
+    BaseTabularDatasetRegistryStore,
+    PostgresTabularDatasetRegistryStore,
+)
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import BaseTeamMetadataStore
@@ -291,6 +295,7 @@ class ApplicationContext:
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
+    _tabular_dataset_registry_store_instance: Optional[BaseTabularDatasetRegistryStore] = None
     _tabular_stores: Optional[Dict[str, StoreInfo]] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
@@ -967,20 +972,43 @@ class ApplicationContext:
         self._tabular_stores = stores
         return stores
 
+    def get_tabular_dataset_registry_store(self) -> BaseTabularDatasetRegistryStore:
+        if self._tabular_dataset_registry_store_instance is not None:
+            return self._tabular_dataset_registry_store_instance
+
+        store_config = get_configuration().storage.tabular_dataset_registry_store
+        if isinstance(store_config, PostgresTableConfig):
+            self._tabular_dataset_registry_store_instance = PostgresTabularDatasetRegistryStore(
+                engine=self.get_pg_async_engine(),
+                table_name=store_config.table,
+                prefix=store_config.prefix or "",
+            )
+            return self._tabular_dataset_registry_store_instance
+
+        raise ValueError("Unsupported storage backend for tabular dataset registry")
+
+    def get_csv_input_store_info(self) -> tuple[str, SQLTableStore]:
+        """
+        Returns the database name and store used for CSV ingestion.
+        """
+        stores = self.get_tabular_stores()
+        config_map = get_configuration().storage.tabular_stores or {}
+        base_database_cfg = config_map.get("base_database")
+        if isinstance(base_database_cfg, SQLStorageConfig) and base_database_cfg.database in stores:
+            return base_database_cfg.database, stores[base_database_cfg.database].store
+
+        for db_name, store_info in stores.items():
+            if store_info.mode == "read_and_write":
+                return db_name, store_info.store
+        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
+
     def get_csv_input_store(self) -> SQLTableStore:
         """
         Returns the store named 'base_database' if it exists,
         otherwise returns the first store with mode 'read_and_write'.
         """
-        stores = self.get_tabular_stores()
-
-        if "base_database" in stores:
-            return stores["base_database"].store
-
-        for store_info in stores.values():
-            if store_info.mode == "read_and_write":
-                return store_info.store
-        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
+        _, store = self.get_csv_input_store_info()
+        return store
 
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
@@ -1259,6 +1287,8 @@ class ApplicationContext:
             _describe("tag_store", st.tag_store)
             _describe("kpi_store", st.kpi_store)
             _describe("metadata_store", st.metadata_store)
+            if st.tabular_dataset_registry_store is not None:
+                _describe("tabular_dataset_registry_store", st.tabular_dataset_registry_store)
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)
 

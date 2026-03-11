@@ -19,6 +19,7 @@ import tempfile
 
 from temporalio import activity, exceptions
 
+from knowledge_flow_backend.common.asyncio_loop_context import asyncio_loop_scope
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -65,14 +66,15 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
                     )
 
             # Proceed with the output processing
-            metadata = await asyncio.to_thread(
-                ingestion_service.process_output,
-                file.processed_by,
-                preview_file.name,
-                output_dir,
-                metadata,
-                file.profile,
-            )
+            with asyncio_loop_scope(asyncio.get_running_loop()):
+                metadata = await asyncio.to_thread(
+                    ingestion_service.process_output,
+                    file.processed_by,
+                    preview_file.name,
+                    output_dir,
+                    metadata,
+                    file.profile,
+                )
 
             # Save the updated metadata
             await ingestion_service.save_metadata(file.processed_by, metadata=metadata)

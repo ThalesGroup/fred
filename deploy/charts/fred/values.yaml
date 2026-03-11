@@ -845,6 +845,9 @@ applications:
         metadata_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
+        tabular_dataset_registry_store:
+          type: "postgres"
+          table: "tabular_dataset_registry"
         task_store:
           type: "postgres"
           table: workflow_tasks
@@ -1216,6 +1219,9 @@ applications:
         metadata_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
+        tabular_dataset_registry_store:
+          type: "postgres"
+          table: "tabular_dataset_registry"
 
         vector_store:
           type: in_memory

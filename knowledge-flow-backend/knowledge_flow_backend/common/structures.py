@@ -524,6 +524,9 @@ class StorageConfig(BaseModel):
     tag_store: StoreConfig
     kpi_store: StoreConfig
     metadata_store: StoreConfig
+    tabular_dataset_registry_store: StoreConfig = Field(
+        description="Store configuration for the tabular dataset registry.",
+    )
     task_store: Optional[StoreConfig] = Field(
         default=None,
         description="Task store backend (optional; scheduler may fall back to defaults).",

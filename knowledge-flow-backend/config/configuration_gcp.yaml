@@ -267,6 +267,9 @@ storage:
   metadata_store:
     type: "postgres"
     table: metadata
+  tabular_dataset_registry_store:
+    type: "postgres"
+    table: tabular_dataset_registry
   task_store:
     type: "postgres"
     table: workflow_tasks

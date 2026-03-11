@@ -22,6 +22,7 @@ from fred_core import (
     M2MSecurity,
     ModelConfiguration,
     OpenSearchStoreConfig,
+    PostgresTableConfig,
     PostgresStoreConfig,
     SecurityConfiguration,
     UserSecurity,
@@ -48,6 +49,12 @@ from knowledge_flow_backend.common.structures import (
 from knowledge_flow_backend.core.processors.output.vectorization_processor.embedder import Embedder
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import (
     BaseMetadataStore,
+)
+from knowledge_flow_backend.core.stores.tabular_dataset_registry.base_tabular_dataset_registry_store import (
+    BaseTabularDatasetRegistryStore,
+)
+from knowledge_flow_backend.core.stores.tabular_dataset_registry.structures import (
+    TabularDatasetRecord,
 )
 from knowledge_flow_backend.main import create_app
 
@@ -108,6 +115,33 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
 
     async def clear(self) -> None:
         self._items.clear()
+
+
+class _InMemoryTabularDatasetRegistryStore(BaseTabularDatasetRegistryStore):
+    def __init__(self) -> None:
+        self._items: dict[str, TabularDatasetRecord] = {}
+
+    async def get_by_document_uid(self, document_uid: str) -> TabularDatasetRecord | None:
+        return self._items.get(document_uid)
+
+    async def get_by_query_alias(self, query_alias: str) -> TabularDatasetRecord | None:
+        for dataset in self._items.values():
+            if dataset.query_alias == query_alias:
+                return dataset
+        return None
+
+    async def list_by_document_uids(self, document_uids: list[str]) -> list[TabularDatasetRecord]:
+        return [dataset for uid, dataset in self._items.items() if uid in document_uids]
+
+    async def list_all(self) -> list[TabularDatasetRecord]:
+        return list(self._items.values())
+
+    async def upsert(self, dataset: TabularDatasetRecord) -> TabularDatasetRecord:
+        self._items[dataset.document_uid] = dataset
+        return dataset
+
+    async def delete_by_document_uid(self, document_uid: str) -> None:
+        self._items.pop(document_uid, None)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -174,6 +208,7 @@ def app_context(monkeypatch, fake_embedder):
             tag_store=duckdb,
             kpi_store=duckdb,
             metadata_store=duckdb,
+            tabular_dataset_registry_store=PostgresTableConfig(type="postgres", table="tabular_dataset_registry"),
             catalog_store=duckdb,
             tabular_stores={"base_tabular_store": duckdb},
             vector_store=InMemoryVectorStorage(type="in_memory"),
@@ -267,6 +302,7 @@ def app_context(monkeypatch, fake_embedder):
 
     ctx = ApplicationContext(config)
     ctx._metadata_store_instance = _InMemoryTestMetadataStore()
+    ctx._tabular_dataset_registry_store_instance = _InMemoryTabularDatasetRegistryStore()
     return ctx
 
 

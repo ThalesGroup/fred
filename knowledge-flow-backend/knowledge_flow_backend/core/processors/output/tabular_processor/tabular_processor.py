@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import io
 import logging
 import re
+import asyncio
 
 import dateparser
 import pandas as pd
@@ -23,10 +23,15 @@ from langchain_core.documents import Document
 from pandas._libs.tslibs.nattype import NaTType
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.asyncio_loop_context import get_current_asyncio_loop
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import load_langchain_doc_from_metadata
+from knowledge_flow_backend.features.tabular.registry_service import (
+    TabularRegistryService,
+    build_physical_table_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +65,6 @@ _DATE_REGEX = re.compile(
     )""",
     re.IGNORECASE | re.VERBOSE,
 )
-
-
-def safe_table_name(name: str, max_len: int = 63) -> str:
-    name = sanitize_sql_name(name)
-    if len(name) <= max_len:
-        return name
-    # 🚀 FIX B324: Use MD5 for non-security purposes (name hashing)
-    try:
-        hash_suffix = hashlib.md5(name.encode(), usedforsecurity=False).hexdigest()[:8]
-    except TypeError:
-        raise RuntimeError("Python 3.9+ is required for secure MD5 hashing in this context")
-    return name[: max_len - 9] + "_" + hash_suffix
-
 
 def _looks_like_date(value: str) -> bool:
     """Check if the string matches a common date format (with separators or month names)."""
@@ -136,9 +128,47 @@ class TabularProcessor(BaseOutputProcessor):
     description = "Loads tabular outputs, cleans column names, detects dates, and saves tables to the SQL store."
 
     def __init__(self):
-        self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
+        context = ApplicationContext.get_instance()
+        self.csv_input_db_name, self.csv_input_store = context.get_csv_input_store_info()
+        self.registry_service = TabularRegistryService(
+            stores_info=context.get_tabular_stores(),
+            registry_store=context.get_tabular_dataset_registry_store(),
+            metadata_store=context.get_metadata_store(),
+        )
 
         logger.info("Initializing TabularPipeline")
+
+    def _schedule_registry_upsert(self, metadata: DocumentMetadata, row_count: int) -> None:
+        coro = self.registry_service.upsert_for_metadata(
+            metadata,
+            db_name=self.csv_input_db_name,
+            row_count=row_count,
+        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            owner_loop = get_current_asyncio_loop()
+            if owner_loop is not None and owner_loop.is_running() and not owner_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(coro, owner_loop).result()
+                return
+            asyncio.run(coro)
+            return
+
+        task = loop.create_task(coro)
+        task.add_done_callback(lambda completed: self._log_registry_failure(metadata.document_uid, completed))
+
+    @staticmethod
+    def _log_registry_failure(document_uid: str, task: asyncio.Task) -> None:
+        try:
+            exc = task.exception()
+        except asyncio.CancelledError:
+            return
+        if exc is not None:
+            logger.error(
+                "Failed to upsert tabular dataset registry for %s",
+                document_uid,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
 
     def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
         try:
@@ -150,7 +180,6 @@ class TabularProcessor(BaseOutputProcessor):
                 raise ValueError("Document is empty or not loaded correctly.")
 
             df = pd.read_csv(io.StringIO(document.page_content))
-            table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
             df.columns = [sanitize_sql_name(col) for col in df.columns]
 
             for col in df.select_dtypes(include=["object"]).columns:
@@ -165,9 +194,10 @@ class TabularProcessor(BaseOutputProcessor):
                 if self.csv_input_store is None:
                     raise RuntimeError("csv_input_store is not initialized")
 
-                table_name = safe_table_name(metadata.document_name.rsplit(".", 1)[0])
+                table_name = build_physical_table_name(metadata.document_uid)
                 result = self.csv_input_store.save_table(table_name, df)
                 logger.debug(f"Document added to Tabular Store: {result}")
+                self._schedule_registry_upsert(metadata, len(df.index))
             except Exception as e:
                 logger.exception("Failed to add documents to Tabular Storage")
                 raise TabularProcessingError("Failed to add documents to Tabular Storage") from e

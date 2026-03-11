@@ -1,10 +1,11 @@
 import logging
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fred_core import Action, KeycloakUser, OwnerFilter, Resource, authorize_or_raise, get_current_user
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import (
     GetSchemaResponse,
@@ -26,6 +27,13 @@ class TabularController:
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
+        def _raise_http_exception(exc: Exception) -> None:
+            if isinstance(exc, PermissionError):
+                raise HTTPException(status_code=403, detail=str(exc))
+            if isinstance(exc, (ValueError, MissingTeamIdError)):
+                raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=500, detail=str(exc))
+
         @router.get(
             "/tabular/databases",
             response_model=List[str],
@@ -33,13 +41,23 @@ class TabularController:
             summary="List available databases",
             operation_id="list_databases",
         )
-        async def list_databases(user: KeycloakUser = Depends(get_current_user)):
+        async def list_databases(
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
             try:
-                return self.service.list_databases(user)
+                return await self.service.list_databases(
+                    user,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception("Failed to list databases")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.get(
             "/tabular/databases/{db_name}/tables",
@@ -50,14 +68,23 @@ class TabularController:
         )
         async def list_tables(
             db_name: str = Path(..., description="Database name"),
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
-                return self.service.list_tables(user, db_name=db_name)
+                return await self.service.list_tables(
+                    user,
+                    db_name=db_name,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception(f"Failed to list tables for database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.get(
             "/tabular/databases/{db_name}/schemas",
@@ -68,14 +95,23 @@ class TabularController:
         )
         async def list_schemas(
             db_name: str = Path(..., description="Database name"),
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
-                return self.service.list_tables_with_schema(user, db_name=db_name)
+                return await self.service.list_tables_with_schema(
+                    user,
+                    db_name=db_name,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception(f"Failed to list schemas for database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.get(
             "/tabular/databases/{db_name}/tables/{table_name}/descibe_table",
@@ -87,14 +123,24 @@ class TabularController:
         async def describe_table(
             db_name: str = Path(..., description="Database name"),
             table_name: str = Path(..., description="Table name"),
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
-                return self.service.describe_table(user, db_name=db_name, table_name=table_name)
+                return await self.service.describe_table(
+                    user,
+                    db_name=db_name,
+                    table_name=table_name,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception(f"Failed to get schema for {table_name} in database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.get(
             "/tabular/context",
@@ -103,13 +149,23 @@ class TabularController:
             summary="Return all databases with their tables",
             operation_id="get_context",
         )
-        async def list_tabular_context(user: KeycloakUser = Depends(get_current_user)):
+        async def list_tabular_context(
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
             try:
-                return self.service.get_context(user)
+                return await self.service.get_context(
+                    user,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception("Failed to list databases and tables")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.post(
             "/tabular/databases/{db_name}/sql/read",
@@ -121,14 +177,24 @@ class TabularController:
         async def raw_sql_read(
             db_name: str = Path(..., description="Database name"),
             request: RawSQLRequest = Body(..., description="SQL query payload"),
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.TABLES)
             try:
-                return self.service.query_read(user, db_name=db_name, query=request.query)
+                return await self.service.query_read(
+                    user,
+                    db_name=db_name,
+                    query=request.query,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception(f"Read SQL query failed on database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.post(
             "/tabular/databases/{db_name}/sql/write",
@@ -140,17 +206,24 @@ class TabularController:
         async def raw_sql_write(
             db_name: str = Path(..., description="Database name"),
             request: RawSQLRequest = Body(..., description="SQL query payload"),
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.CREATE, Resource.TABLES)
             try:
-                return self.service.query_write(user, db_name=db_name, query=request.query)
-            except PermissionError as e:
-                logger.warning(f"Write attempt forbidden on database {db_name}: {e}")
-                raise HTTPException(status_code=403, detail=str(e))
+                return await self.service.query_write(
+                    user,
+                    db_name=db_name,
+                    query=request.query,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception(f"Write SQL query failed on database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
 
         @router.delete(
             "/tabular/databases/{db_name}/tables/{table_name}",
@@ -162,13 +235,21 @@ class TabularController:
         async def delete_table(
             db_name: str = Path(..., description="Database name"),
             table_name: str = Path(..., description="Table name"),
+            document_library_tags_ids: list[str] | None = Query(default=None, description="Optional library tag IDs to restrict visible tabular datasets."),
+            owner_filter: OwnerFilter | None = Query(default=None, description="Filter by ownership: 'personal' or 'team'."),
+            team_id: str | None = Query(default=None, description="Team ID, required when owner_filter is 'team'."),
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.DELETE, Resource.TABLES)
             try:
-                self.service.delete_table(user, db_name=db_name, table_name=table_name)
-            except PermissionError as e:
-                raise HTTPException(status_code=403, detail=str(e))
+                await self.service.delete_table(
+                    user,
+                    db_name=db_name,
+                    table_name=table_name,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
             except Exception as e:
                 logger.exception(f"Failed to delete table {table_name} in database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+                _raise_http_exception(e)
