@@ -78,10 +78,9 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         logger.info("[FEEDBACK][PG][ASYNC] Table ready: %s", self.table_name)
 
     async def _ensure_table(self) -> None:
-        task = self._create_task
-        if task is None or task.done():
-            return
-        await task
+        task = getattr(self, "_create_task", None)
+        if task is not None and not task.done():
+            await task
 
     async def list(self) -> List[FeedbackRecord]:
         await self._ensure_table()
