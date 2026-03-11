@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
+import { KeyCloakService } from "../../security/KeycloakService";
 import {
   FieldSpec,
   McpServerRef,
@@ -73,6 +74,9 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
     tags: [],
   });
   const [mcpServerRefs, setMcpServerRefs] = useState<McpServerRef[]>([]);
+
+  const userRoles = KeyCloakService.GetUserRoles();
+  const isAdmin = userRoles.includes("admin");
 
   // --- Effects ---
 
@@ -152,9 +156,7 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
       onClose();
     } catch (e: any) {
       showError({
-        summary: isCreateMode
-          ? t("agentEditDrawer.errors.createFailed")
-          : t("agentEditDrawer.errors.updateFailed"),
+        summary: isCreateMode ? t("agentEditDrawer.errors.createFailed") : t("agentEditDrawer.errors.updateFailed"),
         detail: e?.data?.detail || e?.message || String(e),
       });
     }
@@ -270,8 +272,8 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
                 <TuningForm fields={fields} onChange={onChange} />
               ))}
 
-            {/* Workspace Files (edit mode only) */}
-            {!isCreateMode && (
+            {/* Workspace Files (edit mode only. Only for admin for now to simplify. Should be moved to tools param that require files) */}
+            {isAdmin && !isCreateMode && (
               <>
                 <Divider />
                 <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
