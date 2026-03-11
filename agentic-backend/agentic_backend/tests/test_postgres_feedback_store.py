@@ -7,8 +7,8 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
 from fred_core.sql import AsyncBaseSqlStore
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
 
 from agentic_backend.core.feedback.feedback_structures import FeedbackRecord
 from agentic_backend.core.feedback.store import (
