@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import DeleteIcon from "@mui/icons-material/Delete";
-import { Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
+import { Autocomplete, Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
@@ -24,6 +24,8 @@ import {
   McpServerRef,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
+  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
+  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
@@ -75,8 +77,21 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
   });
   const [mcpServerRefs, setMcpServerRefs] = useState<McpServerRef[]>([]);
 
+  // Create-mode: class_path & profile selection (admin only for class_path)
+  const [classPath, setClassPath] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
+
   const userRoles = KeyCloakService.GetUserRoles();
   const isAdmin = userRoles.includes("admin");
+
+  const { data: reactProfiles = [] } = useListReactProfilesQuery(undefined, {
+    skip: !isCreateMode || !isAdmin,
+  });
+  const hasReactProfiles = reactProfiles.length > 0;
+
+  const { data: declaredClassPaths = [] } = useListDeclaredAgentClassPathsQuery(undefined, {
+    skip: !isCreateMode || !isAdmin,
+  });
 
   // --- Effects ---
 
@@ -107,6 +122,8 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
       setFields([]);
       setTopLevelTuning({ role: "", description: "", tags: [] });
       setMcpServerRefs([]);
+      setClassPath(null);
+      setProfileId(null);
     }
   }, [agent]);
 
@@ -136,7 +153,13 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
       // In create mode, create the agent first then update its tuning
       const targetAgent = isCreateMode
         ? await createAgent({
-            createAgentRequest: { name: trimmedName, type: "basic", team_id: teamId },
+            createAgentRequest: {
+              name: trimmedName,
+              type: "basic",
+              team_id: teamId,
+              class_path: classPath || undefined,
+              profile_id: profileId || undefined,
+            },
           }).unwrap()
         : agent;
 
@@ -220,6 +243,56 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
                 },
               }}
             />
+            {/* Profile selection (create mode only, when profiles are available) */}
+            {isCreateMode && isAdmin && hasReactProfiles && (
+              <Autocomplete
+                options={reactProfiles}
+                value={reactProfiles.find((p) => p.profile_id === profileId) ?? null}
+                isOptionEqualToValue={(option, value) => option.profile_id === value.profile_id}
+                getOptionLabel={(option) => option.title}
+                onChange={(_, value) => setProfileId(value?.profile_id ?? null)}
+                renderOption={(props, option) => (
+                  <li {...props} key={option.profile_id}>
+                    <Box>
+                      <Typography variant="body2">{option.title}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.description}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    size="small"
+                    label={t("agentHub.fields.profile")}
+                    helperText={
+                      reactProfiles.find((p) => p.profile_id === profileId)?.agent_description ??
+                      t("agentHub.fields.profileHelp")
+                    }
+                  />
+                )}
+              />
+            )}
+
+            {/* Class path selection (create mode only, admin only) */}
+            {isCreateMode && isAdmin && (
+              <Autocomplete
+                options={declaredClassPaths}
+                value={classPath}
+                onChange={(_, value) => setClassPath(value)}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    size="small"
+                    label={t("agentHub.fields.classPath")}
+                    placeholder="my_module.agents.MyCustomAgent"
+                    helperText={t("agentHub.fields.classPathHelp")}
+                  />
+                )}
+              />
+            )}
+
             {/* Tuning Core Fields */}
             <TextField
               label="Role"
