@@ -1,8 +1,5 @@
 global:
   kubeconfig: ""
-  create_index:
-    enabled: true
-    image: "alpine:3.22"
   persistence:
     enabled: false # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE
     dynamic: false # if true = let the PVCs create PVs if possible and do not create them manually
