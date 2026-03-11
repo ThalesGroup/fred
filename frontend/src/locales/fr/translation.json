@@ -381,16 +381,13 @@
   },
   "agentEditDrawer": {
     "nameLabel": "Nom",
-    "nameHelperText": "Le nom d'affichage de l'agent.",
-    "roleHelperText": "Le rôle obligatoire de l'agent pour la découverte (ex. 'Analyste Financier')",
-    "descriptionHelperText": "La description obligatoire de l'agent.",
-    "tagsHelperText": "Tags utilisés pour la catégorisation et le filtrage.",
     "noTunableFields": "Cet agent n'expose aucun champ réglable.",
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
-    "noMcpServers": "Aucun serveur MCP disponible pour le moment."
+    "noMcpServers": "Aucun serveur MCP disponible pour le moment.",
+    "headerTitle": "Édition d'un {{agentsNicknameSingular}}"
   },
   "agentHub": {
     "title": "Vos {{agentsNicknamePlural}}",

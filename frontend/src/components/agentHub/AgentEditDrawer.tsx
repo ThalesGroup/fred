@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
+import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import {
   FieldSpec,
   McpServerRef,
@@ -46,6 +47,7 @@ type Props = {
   onDeleted?: () => void;
 };
 export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDeleted }: Props) {
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -168,7 +170,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
       <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
         {/* Header - Remains mostly the same, shows name */}
         <Box sx={{ p: 2 }}>
-          <Typography variant="h6">{agent?.name ?? "—"}</Typography>
+          <Typography variant="h6">{t("agentEditDrawer.headerTitle", { agentsNicknameSingular })}</Typography>
         </Box>
         <Divider />
 
@@ -190,7 +192,6 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
                   }),
                 },
               }}
-              helperText={t("agentEditDrawer.nameHelperText")}
             />
             {/* Tuning Core Fields */}
             <TextField
@@ -207,7 +208,6 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
                   }),
                 },
               }}
-              helperText={t("agentEditDrawer.roleHelperText")}
             />
             <TextField
               label="Description"
@@ -225,12 +225,10 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
                   }),
                 },
               }}
-              helperText={t("agentEditDrawer.descriptionHelperText")}
             />
 
             {/* <TagsInput
               label={t("agentEditDrawer.tagsLabel")}
-              helperText={t("agentEditDrawer.tagsHelperText")}
               value={topLevelTuning.tags}
               onChange={(next) => onTopLevelChange("tags", next)}
             /> */}
