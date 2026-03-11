@@ -21,10 +21,10 @@ from typing import Type
 
 import pypdf
 from docling.backend.abstract_backend import AbstractDocumentBackend
-from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend
+from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
@@ -42,7 +42,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PDF documents to Markdown with optional image descriptions and table markers."
 
     _BACKEND_BY_NAME: dict[str, Type[AbstractDocumentBackend]] = {
-        "dlparse_v4": DoclingParseV4DocumentBackend,
+        "dlparse_v4": DoclingParseDocumentBackend,
         "pypdfium2": PyPdfiumDocumentBackend,
     }
 
@@ -133,6 +133,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             pipeline_options.generate_table_images = pdf_options.generate_table_images
             pipeline_options.do_table_structure = pdf_options.do_table_structure
             pipeline_options.do_ocr = pdf_options.do_ocr
+            if pdf_options.do_ocr:
+                pipeline_options.ocr_options = RapidOcrOptions()
             artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
             if artifacts_dir:
                 artifacts_path = Path(artifacts_dir).expanduser()
