@@ -67,20 +67,20 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
     """
 
     return (
-        FieldSpec(
-            key="react_profile_id",
-            type="select",
-            title="Starting profile",
-            description=(
-                "Choose a backend-defined starting profile. "
-                "A profile can prefill the prompt, MCP defaults, and safety policy.\n"
-                f"{profile_options_summary()}"
-            ),
-            required=True,
-            default=DEFAULT_REACT_PROFILE_ID,
-            enum=[profile.profile_id for profile in list_react_profiles()],
-            ui=UIHints(group="Profile"),
-        ),
+        # FieldSpec(
+        #     key="react_profile_id",
+        #     type="select",
+        #     title="Starting profile",
+        #     description=(
+        #         "Choose a backend-defined starting profile. "
+        #         "A profile can prefill the prompt, MCP defaults, and safety policy.\n"
+        #         f"{profile_options_summary()}"
+        #     ),
+        #     required=True,
+        #     default=DEFAULT_REACT_PROFILE_ID,
+        #     enum=[profile.profile_id for profile in list_react_profiles()],
+        #     ui=UIHints(group="Profile"),
+        # ),
         FieldSpec(
             key="system_prompt_template",
             type="prompt",
@@ -93,31 +93,31 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
             default=DEFAULT_SYSTEM_PROMPT,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
-        FieldSpec(
-            key="enable_tool_approval",
-            type="boolean",
-            title="Require approval for mutating tools",
-            description=(
-                "When enabled, the runtime pauses before tool calls that look "
-                "like state-changing actions."
-            ),
-            required=False,
-            default=False,
-            ui=UIHints(group="Safety"),
-        ),
-        FieldSpec(
-            key="approval_required_tools",
-            type="array",
-            item_type="string",
-            title="Always-approve tool names",
-            description=(
-                "Exact tool names that must always ask for human approval "
-                "before execution."
-            ),
-            required=False,
-            default=[],
-            ui=UIHints(group="Safety"),
-        ),
+        # FieldSpec(
+        #     key="enable_tool_approval",
+        #     type="boolean",
+        #     title="Require approval for mutating tools",
+        #     description=(
+        #         "When enabled, the runtime pauses before tool calls that look "
+        #         "like state-changing actions."
+        #     ),
+        #     required=False,
+        #     default=False,
+        #     ui=UIHints(group="Safety"),
+        # ),
+        # FieldSpec(
+        #     key="approval_required_tools",
+        #     type="array",
+        #     item_type="string",
+        #     title="Always-approve tool names",
+        #     description=(
+        #         "Exact tool names that must always ask for human approval "
+        #         "before execution."
+        #     ),
+        #     required=False,
+        #     default=[],
+        #     ui=UIHints(group="Safety"),
+        # ),
     )
 
 
