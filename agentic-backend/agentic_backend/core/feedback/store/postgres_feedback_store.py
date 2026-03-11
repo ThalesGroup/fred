@@ -81,7 +81,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         task = self._create_task
         if task is None or task.done():
             return
-        return await task
+        await task
 
     async def list(self) -> List[FeedbackRecord]:
         await self._ensure_table()
