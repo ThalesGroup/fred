@@ -90,7 +90,7 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
   const hasReactProfiles = reactProfiles.length > 0;
 
   const { data: declaredClassPaths = [] } = useListDeclaredAgentClassPathsQuery(undefined, {
-    skip: !isCreateMode || !isAdmin,
+    skip: !isAdmin,
   });
 
   // --- Effects ---
@@ -98,6 +98,7 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
   useEffect(() => {
     if (agent) {
       setAgentName(agent.name);
+      setClassPath(agent.class_path ?? null);
     }
     if (agent?.tuning) {
       // 1. Initialize dynamic fields (deep clone)
@@ -174,7 +175,7 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
         ...(isCreateMode ? {} : { fields }),
       };
 
-      await updateTuning({ ...targetAgent, name: trimmedName }, newTuning);
+      await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
       onSaved?.();
       onClose();
     } catch (e: any) {
@@ -275,8 +276,8 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
               />
             )}
 
-            {/* Class path selection (create mode only, admin only) */}
-            {isCreateMode && isAdmin && (
+            {/* Class path selection (admin only) */}
+            {isAdmin && (
               <Autocomplete
                 options={declaredClassPaths}
                 value={classPath}
