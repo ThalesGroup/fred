@@ -18,7 +18,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import { Box, Button, Card, CardContent, IconButton, Stack, Typography } from "@mui/material";
+import { Box, Button, Card, IconButton, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 // OpenAPI types
 import TryIcon from "@mui/icons-material/Try";
@@ -52,14 +52,20 @@ export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onIns
   return (
     <Card
       sx={{
-        pt: 2,
+        pt: 1.5,
+        pb: 2,
         px: 2,
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        gap: 2,
+        gap: 1.5,
         transition: "border-color 0.2s ease, transform 0.2s ease",
         userSelect: "none",
+        borderRadius: 4,
+        "@supports (corner-shape: squircle)": {
+          borderRadius: 6,
+          cornerShape: "squircle",
+        },
       }}
     >
       {/* Header */}
@@ -105,7 +111,7 @@ export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onIns
       </Box>
 
       {/* Body */}
-      <CardContent
+      <Box
         sx={{
           p: 0,
           display: "flex",
@@ -188,7 +194,7 @@ export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onIns
             Chat
           </Button>
         </Box>
-      </CardContent>
+      </Box>
     </Card>
   );
 };
