@@ -475,6 +475,8 @@ class AgentService:
                 resource_id=agent_id,
             )
 
+        return agent_settings
+
     async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id

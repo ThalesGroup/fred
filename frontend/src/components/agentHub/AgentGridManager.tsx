@@ -31,7 +31,6 @@ import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { AgentCard } from "./AgentCard";
 import { AgentEditDrawer } from "./AgentEditDrawer";
 import { AgentInspectionModal } from "./AgentInspectionModal";
-import { CreateAgentModal } from "./CreateAgentModal";
 
 interface AgentGridManagerProps {
   // Data
@@ -78,7 +77,6 @@ export const AgentGridManager = ({
   // State for drawers/modals
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
   const [agentForInspection, setAgentForInspection] = useState<AnyAgent | null>(null);
   const [codeDrawer, setCodeDrawer] = useState<{
@@ -90,12 +88,11 @@ export const AgentGridManager = ({
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
-  // Handlers for create modal
+  // Handler for create: open the edit drawer with no agent (create mode)
   const handleOpenCreateAgent = () => {
-    setCreateModalOpen(true);
+    setSelected(null);
+    setEditOpen(true);
   };
-
-  const handleCloseCreateAgent = () => setCreateModalOpen(false);
 
   // Code inspector handler
   const handleCloseCodeDrawer = () => {
@@ -231,18 +228,6 @@ export const AgentGridManager = ({
               </Box>
             )}
 
-            {/* Create modal */}
-            {createModalOpen && (
-              <CreateAgentModal
-                open={createModalOpen}
-                onClose={handleCloseCreateAgent}
-                onCreated={() => {
-                  handleCloseCreateAgent();
-                  handleRefetch();
-                }}
-                teamId={teamId}
-              />
-            )}
           </>
         )}
       </CardContent>
@@ -252,6 +237,7 @@ export const AgentGridManager = ({
         canDelete={canDelete}
         open={editOpen}
         agent={selected}
+        teamId={teamId}
         onClose={() => setEditOpen(false)}
         onSaved={handleRefetch}
         onDeleted={handleRefetch}

@@ -21,9 +21,11 @@ import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import {
   FieldSpec,
   McpServerRef,
+  useCreateAgentAgenticV1AgentsCreatePostMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { useToast } from "../ToastProvider";
 import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
@@ -39,18 +41,25 @@ type TopLevelTuningState = {
 
 type Props = {
   open: boolean;
+  /** Pass an agent to edit, or null to create a new one. */
   agent: AnyAgent | null;
   canDelete?: boolean;
+  /** Team ownership for the newly created agent (only used in create mode). */
+  teamId?: string;
 
   onClose: () => void;
   onSaved?: () => void;
   onDeleted?: () => void;
 };
-export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDeleted }: Props) {
+export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSaved, onDeleted }: Props) {
   const { agentsNicknameSingular } = useFrontendProperties();
+  const [createAgent] = useCreateAgentAgenticV1AgentsCreatePostMutation();
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
+  const { showError } = useToast();
+
+  const isCreateMode = agent === null;
 
   const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation();
   // State for agent name (top-level, outside tuning)
@@ -117,25 +126,38 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
   };
 
   const handleSave = async () => {
-    if (!agent) return;
+    const trimmedName = agentName.trim();
 
-    // 1. Construct the new AgentTuning object by merging all parts
-    const newTuning = {
-      // Retain other properties like mcp_servers
-      ...(agent.tuning || {}),
-      // Overwrite/set top-level fields
-      role: topLevelTuning.role,
-      description: topLevelTuning.description,
-      tags: topLevelTuning.tags,
-      // Overwrite/set dynamic fields
-      fields: fields,
-      mcp_servers: mcpServerRefs,
-    };
+    try {
+      // In create mode, create the agent first then update its tuning
+      const targetAgent = isCreateMode
+        ? await createAgent({
+            createAgentRequest: { name: trimmedName, type: "basic", team_id: teamId },
+          }).unwrap()
+        : agent;
 
-    const updatedAgent = { ...agent, name: agentName };
-    await updateTuning(updatedAgent, newTuning);
-    onSaved?.();
-    onClose();
+      // Merge form values on top of the target agent's tuning (preserves defaults from creation)
+      const newTuning = {
+        ...(targetAgent.tuning || {}),
+        role: topLevelTuning.role,
+        description: topLevelTuning.description,
+        tags: topLevelTuning.tags,
+        mcp_servers: mcpServerRefs,
+        // In create mode, keep the default fields from the created agent
+        ...(isCreateMode ? {} : { fields }),
+      };
+
+      await updateTuning({ ...targetAgent, name: trimmedName }, newTuning);
+      onSaved?.();
+      onClose();
+    } catch (e: any) {
+      showError({
+        summary: isCreateMode
+          ? t("agentEditDrawer.errors.createFailed")
+          : t("agentEditDrawer.errors.updateFailed"),
+        detail: e?.data?.detail || e?.message || String(e),
+      });
+    }
   };
 
   const handleDelete = () => {
@@ -157,8 +179,7 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
     });
   };
 
-  const isSaveDisabled =
-    isLoading || !agent || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description;
+  const isSaveDisabled = isLoading || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description;
 
   return (
     <Drawer
@@ -170,7 +191,11 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
       <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
         {/* Header - Remains mostly the same, shows name */}
         <Box sx={{ p: 2 }}>
-          <Typography variant="h6">{t("agentEditDrawer.headerTitle", { agentsNicknameSingular })}</Typography>
+          <Typography variant="h6">
+            {isCreateMode
+              ? t("agentEditDrawer.headerTitleCreate", { agentsNicknameSingular })
+              : t("agentEditDrawer.headerTitle", { agentsNicknameSingular })}
+          </Typography>
         </Box>
         <Divider />
 
@@ -235,19 +260,24 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
 
             <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
 
-            {/* Dynamic Fields */}
-            {fields.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {t("agentEditDrawer.noTunableFields")}
-              </Typography>
-            ) : (
-              <TuningForm fields={fields} onChange={onChange} />
-            )}
+            {/* Dynamic Fields (edit mode only) */}
+            {!isCreateMode &&
+              (fields.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {t("agentEditDrawer.noTunableFields")}
+                </Typography>
+              ) : (
+                <TuningForm fields={fields} onChange={onChange} />
+              ))}
 
-            {/* Workspace Files */}
-            <Divider />
-            <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
-            {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
+            {/* Workspace Files (edit mode only) */}
+            {!isCreateMode && (
+              <>
+                <Divider />
+                <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
+                {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
+              </>
+            )}
           </Stack>
         </Box>
 
@@ -265,22 +295,24 @@ export function AgentEditDrawer({ open, agent, canDelete, onClose, onSaved, onDe
           }}
         >
           <Stack direction="row" justifyContent="flex-start">
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={handleDelete}
-              disabled={!canDelete}
-            >
-              {t("common.delete")}
-            </Button>
+            {!isCreateMode && (
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={handleDelete}
+                disabled={!canDelete}
+              >
+                {t("common.delete")}
+              </Button>
+            )}
           </Stack>
           <Stack direction="row" gap={1} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>
               {t("dialogs.cancel")}
             </Button>
             <Button variant="contained" disabled={isSaveDisabled} onClick={handleSave}>
-              {t("common.save")}
+              {isCreateMode ? t("common.create") : t("common.save")}
             </Button>
           </Stack>
         </Box>

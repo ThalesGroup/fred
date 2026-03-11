@@ -386,7 +386,12 @@
     "tagsLabel": "Tags",
     "selectMcpServers": "Select MCP servers",
     "noMcpServers": "No MCP servers are currently available.",
-    "headerTitle": "{{agentsNicknameSingular}} edition"
+    "headerTitle": "{{agentsNicknameSingular}} edition",
+    "headerTitleCreate": "Create {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Failed to create agent",
+      "updateFailed": "Failed to update agent"
+    }
   },
   "agentHub": {
     "title": "Your {{agentsNicknamePlural}}",

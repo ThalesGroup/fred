@@ -210,14 +210,15 @@ async def list_agents(
 @router.post(
     "/agents/create",
     summary="Create a Dynamic Agent that can access tools",
+    response_model=AgentSettings,
 )
 async def create_agent(
     request: CreateAgentRequest,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
-):
+) -> AgentSettings:
     service = AgentService(agent_manager=agent_manager)
-    await service.create_agent(
+    return await service.create_agent(
         user,
         request.name,
         agent_type=request.type,

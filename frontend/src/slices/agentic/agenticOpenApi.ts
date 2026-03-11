@@ -334,7 +334,7 @@ export type ListAgentsAgenticV1AgentsGetApiArg = {
   ownerFilter?: OwnerFilter | null;
   teamId?: string | null;
 };
-export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
+export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ Agent;
 export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
   createAgentRequest: CreateAgentRequest;
 };
