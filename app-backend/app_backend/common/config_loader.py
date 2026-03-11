@@ -8,7 +8,7 @@ from fred_core import (
     parse_yaml_mapping_file,
 )
 
-from control_plane_backend.common.structures import Configuration
+from app_backend.common.structures import Configuration
 
 _CONFIG_FILES = ConfigFiles(logger=logging.getLogger(__name__))
 

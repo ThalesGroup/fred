@@ -1,0 +1,17 @@
+app:
+  name: "Fred Single Process Backend"
+  docs_enabled: false
+
+services:
+  control_plane:
+    enabled: true
+    path_prefix: "/control-plane/v1"
+    config_file: "../../control-plane-backend/config/configuration_prod.yaml"
+  agentic:
+    enabled: true
+    path_prefix: "/agentic/v1"
+    config_file: "../../agentic-backend/config/configuration_prod.yaml"
+  knowledge_flow:
+    enabled: true
+    path_prefix: "/knowledge-flow/v1"
+    config_file: "../../knowledge-flow-backend/config/configuration_prod.yaml"

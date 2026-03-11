@@ -16,69 +16,30 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import ConfigFiles
+from fred_core import ConfigFiles, load_configuration_with_config_files
 
 from agentic_backend.common.catalog_overrides import apply_external_catalog_overrides
 from agentic_backend.common.structures import Configuration
 from agentic_backend.common.utils import parse_server_configuration
 
-# Shared startup contract (Agentic / Knowledge Flow / Control Plane):
-# docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md
 _config_files = ConfigFiles(logger=logging.getLogger(__name__))
 
 
-def load_environment(dotenv_path: str | None = None) -> str:
-    """Load ENV_FILE into process env and remember the effective env file path.
-
-    Fred convention:
-    - ENV file contains secrets and deployment-specific variables.
-    - This function handles only that source.
-
-    Example:
-    - `ENV_FILE=./config/.env.prod` to inject production secrets at startup.
-    """
-    return _config_files.load_environment(dotenv_path)
+def _parse_configuration(config_file: str) -> Configuration:
+    configuration = parse_server_configuration(config_file)
+    return apply_external_catalog_overrides(configuration)
 
 
 def load_configuration() -> Configuration:
-    """Load backend YAML configuration and apply Agentic catalog overrides.
-
-    Fred convention:
-    - CONFIG_FILE points to the structured application config (models, stores, limits).
-    - ENV_FILE is loaded first because YAML parsing may depend on env values.
-
-    Example:
-    - `CONFIG_FILE=./config/configuration_prod.yaml` loads production-like
-      storage/security/agent settings.
-    """
-    load_environment()
-    config_file = _config_files.resolve_config_file_path()
-    configuration: Configuration = parse_server_configuration(config_file)
-    configuration = apply_external_catalog_overrides(configuration)
-    _config_files.mark_config_loaded(config_file)
-    return configuration
+    return load_configuration_with_config_files(
+        _config_files,
+        _parse_configuration,
+    )
 
 
 def get_loaded_env_file_path() -> str | None:
-    """Return the effective ENV_FILE path used at startup.
-
-    Kept separate from config path so logs/diagnostics can tell where secrets/env
-    came from, independently from which YAML config profile was loaded.
-
-    Example:
-    - Env from `.env.shared`, config from `configuration_worker.yaml`.
-    """
     return _config_files.get_loaded_env_file_path()
 
 
 def get_loaded_config_file_path() -> str | None:
-    """Return the effective CONFIG_FILE path used at startup.
-
-    This is separate from ENV_FILE on purpose: Fred allows same env file with
-    different YAML profiles (dev/prod/worker), and diagnostics must show both.
-
-    Example:
-    - `.env.prod` + `configuration_prod.yaml` in API pod.
-    - `.env.prod` + `configuration_worker.yaml` in worker pod.
-    """
     return _config_files.get_loaded_config_file_path()

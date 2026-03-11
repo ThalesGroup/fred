@@ -461,13 +461,38 @@ No matter which development environment you choose, both backends rely on two pa
 ### Start Fred components
 
 ```bash
+# single-process backend app (control-plane + agentic + knowledge-flow in one process)
+make run-app
+```
+
+```bash
+# previous behavior: same three APIs as separate backend processes
+make run-app-multi
+```
+
+Or run a single backend API from repository root:
+
+```bash
+make run-control-plane
+make run-agentic
+make run-knowledge-flow
+```
+
+Or run each component from its own folder:
+
+```bash
 # knowledge-flow backend
 cd knowledge-flow-backend && make run
 ```
 
 ```bash
 # agentic backend
-cd agentic_backend && make run
+cd agentic-backend && make run
+```
+
+```bash
+# control-plane backend
+cd control-plane-backend && make run
 ```
 
 ```bash

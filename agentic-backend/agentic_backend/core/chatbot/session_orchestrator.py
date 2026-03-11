@@ -959,6 +959,12 @@ class SessionOrchestrator:
             # Do not pass UI-only labels/context to the agent resume payload.
             if isinstance(resume_payload, dict):
                 _strip_hitl_resume_ui_meta(resume_payload)
+                # For v1 in-memory agents, forcing a specific checkpoint_id can
+                # miss the live interrupt cursor and restart from entrypoint.
+                # Keep explicit checkpoint addressing for v2 durable runtimes only.
+                if not isinstance(agent, V2SessionAgent):
+                    resume_payload.pop("checkpoint_id", None)
+                    resume_payload.pop("checkpoint", None)
 
             try:
                 with self.kpi.timer(

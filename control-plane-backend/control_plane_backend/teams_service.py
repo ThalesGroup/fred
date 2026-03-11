@@ -14,8 +14,8 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
-    TeamPermission,
     TeamId,
+    TeamPermission,
     create_keycloak_admin,
 )
 from keycloak import KeycloakAdmin

@@ -1,0 +1,64 @@
+[project]
+name = "app-backend"
+readme = "README.md"
+version = "0.1.0"
+description = "Single-process Fred backend that embeds control-plane, agentic and knowledge-flow."
+authors = [{ name = "Fred", email = "noreply@example.com" }]
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+  "fastapi==0.116.1",
+  "httpx>=0.28.1,<1.0.0",
+  "PyYAML==6.0.1",
+  "agentic-backend-app",
+  "knowledge-flow-backend",
+  "control-plane-backend",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.2,<9.0.0",
+  "pytest-cov>=6.2.1,<7.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app_backend*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+cache_dir = "/tmp/.pytest"
+markers = [
+  "integration: mark integration tests",
+]
+
+[tool.uv.sources]
+fred-core = { path = "../fred-core", editable = true }
+agentic-backend-app = { path = "../agentic-backend", editable = true }
+knowledge-flow-backend = { path = "../knowledge-flow-backend", editable = true }
+control-plane-backend = { path = "../control-plane-backend", editable = true }
+torch = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64'" }
+torchvision = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64'" }
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "ruff>=0.12.5",
+]
+
+[tool.uv]
+config-settings = { editable_mode = "compat" }
