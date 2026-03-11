@@ -1,12 +1,8 @@
 import asyncio
-from contextlib import AsyncExitStack
 
 from fastapi import APIRouter, FastAPI
-from fastapi.dependencies.utils import solve_dependencies
-from fastapi.routing import APIRoute
 from fred_core import KeycloakUser, get_current_user
-from starlette.requests import Request
-from starlette.responses import Response
+from httpx import ASGITransport, AsyncClient
 
 from agentic_backend.core.feedback import feedback_controller
 
@@ -37,13 +33,6 @@ def _build_app() -> FastAPI:
     return app
 
 
-def _get_post_feedback_route() -> APIRoute:
-    for route in feedback_controller.router.routes:
-        if isinstance(route, APIRoute) and route.endpoint.__name__ == "post_feedback":
-            return route
-    raise AssertionError("post_feedback route not found")
-
-
 def test_feedback_post_route_uses_async_dependency(monkeypatch):
     async def _run() -> None:
         sentinel_store = object()
@@ -60,46 +49,23 @@ def test_feedback_post_route_uses_async_dependency(monkeypatch):
         )
 
         app = _build_app()
-        route = _get_post_feedback_route()
-        request = Request(
-            {
-                "type": "http",
-                "http_version": "1.1",
-                "method": "POST",
-                "scheme": "http",
-                "path": "/agentic/v1/chatbot/feedback",
-                "raw_path": b"/agentic/v1/chatbot/feedback",
-                "query_string": b"",
-                "headers": [],
-                "client": ("testclient", 50000),
-                "server": ("testserver", 80),
-                "path_params": {},
-                "app": app,
-            }
-        )
 
-        async with AsyncExitStack() as stack:
-            solved = await solve_dependencies(
-                request=request,
-                dependant=route.dependant,
-                body={
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            response = await client.post(
+                "/agentic/v1/chatbot/feedback",
+                json={
                     "rating": 4,
                     "comment": "ok",
                     "message_id": "message-1",
                     "session_id": "session-1",
                     "agent_id": "agent-1",
                 },
-                response=Response(),
-                dependency_overrides_provider=app,
-                dependency_cache=None,
-                async_exit_stack=stack,
-                embed_body_fields=getattr(route, "_embed_body_fields", False),
             )
 
-            assert solved.errors == []
-            result = await route.endpoint(**solved.values)
-
-        assert result is None
+        assert response.status_code == 204
         assert _FakeFeedbackService.last_store is sentinel_store
         assert _FakeFeedbackService.last_feedback is not None
         assert _FakeFeedbackService.last_feedback.message_id == "message-1"

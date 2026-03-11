@@ -62,25 +62,30 @@ class PostgresFeedbackStore(BaseFeedbackStore):
             keep_existing=True,
         )
 
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
         try:
             loop = asyncio.get_running_loop()
-            self._create_task = loop.create_task(_create())
+            self._create_task = loop.create_task(self._create_table())
         except RuntimeError:
-            asyncio.run(_create())
+            logger.info(
+                "[FEEDBACK][PG][ASYNC] Table bootstrap deferred until first async use: %s",
+                self.table_name,
+            )
+
+    async def _create_table(self) -> None:
+        await run_ddl_with_advisory_lock(
+            engine=self.store.engine,
+            lock_key=self._ddl_lock_id,
+            ddl_sync_fn=self.table.metadata.create_all,
+            logger=logger,
+        )
         logger.info("[FEEDBACK][PG][ASYNC] Table ready: %s", self.table_name)
 
     async def _ensure_table(self) -> None:
-        task = getattr(self, "_create_task", None)
-        if task is not None and not task.done():
-            await task
+        task = self._create_task
+        if task is None:
+            task = asyncio.get_running_loop().create_task(self._create_table())
+            self._create_task = task
+        await task
 
     async def list(self) -> List[FeedbackRecord]:
         await self._ensure_table()
