@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Optional
 
@@ -68,22 +69,40 @@ class PostgresFeedbackStore(BaseFeedbackStore):
                 logger=logger,
             )
 
+        try:
+            loop = asyncio.get_running_loop()
+            self._create_task = loop.create_task(_create())
+        except RuntimeError:
+            self._create_task = None
+            asyncio.run(_create())
+        logger.info("[FEEDBACK][PG][ASYNC] Table ready: %s", self.table_name)
+
+    async def _ensure_table(self) -> None:
+        task = getattr(self, "_create_task", None)
+        if task is not None and not task.done():
+            await task
+
     async def list(self) -> List[FeedbackRecord]:
+        await self._ensure_table()
         async with self.store.begin() as conn:
-            rows = await conn.execute(
+            result = await conn.execute(
                 select(self.table).order_by(self.table.c.created_at.desc())
             )
+            rows = result.fetchall()
         return [self._row_to_record(row) for row in rows]
 
     async def get(self, feedback_id: str) -> Optional[FeedbackRecord]:
+        await self._ensure_table()
         async with self.store.begin() as conn:
-            row = await conn.execute(
+            result = await conn.execute(
                 select(self.table).where(self.table.c.id == feedback_id)
             )
+            row = result.fetchone()
         return self._row_to_record(row) if row else None
 
     async def save(self, feedback: FeedbackRecord) -> None:
-        values = FeedbackAdapter.dump_python(feedback, mode="json", exclude_none=True)
+        await self._ensure_table()
+        values = FeedbackAdapter.dump_python(feedback, mode="python", exclude_none=True)
         async with self.store.begin() as conn:
             await self.store.upsert(
                 conn,
@@ -94,6 +113,7 @@ class PostgresFeedbackStore(BaseFeedbackStore):
         logger.info("[FEEDBACK][PG] Saved feedback entry '%s'", feedback.id)
 
     async def delete(self, feedback_id: str) -> None:
+        await self._ensure_table()
         async with self.store.begin() as conn:
             result = await conn.execute(
                 self.table.delete().where(self.table.c.id == feedback_id)
