@@ -870,6 +870,8 @@
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document",
     "preview": "Preview",
+    "previewNotReadySummary": "Preview not ready",
+    "previewNotReadyDetail": "This document has not generated a preview yet. Run processing to create it.",
     "selected": "Selected",
     "clearSelection": "Clear selection",
     "bulkRemove": "Remove selected documents",
