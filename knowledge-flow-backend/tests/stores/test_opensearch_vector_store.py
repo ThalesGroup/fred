@@ -11,6 +11,8 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import OpenSearchVectorIndexConfig
 from knowledge_flow_backend.core.stores.vector import opensearch_vector_store as ovs
 
+TEST_OPENSEARCH_PASSWORD = "secret"  # pragma: allowlist secret
+
 
 class DummyEmbeddings(Embeddings):
     def __init__(self, size: int) -> None:
@@ -109,7 +111,7 @@ def test_opensearch_vector_store_creates_missing_index(monkeypatch):
         host="http://localhost:9200",
         index="fred-vectors",
         username="admin",
-        password="secret",
+        password=TEST_OPENSEARCH_PASSWORD,
     )
 
     assert store.index_name == "fred-vectors"
@@ -138,7 +140,7 @@ def test_opensearch_vector_store_validates_existing_index(monkeypatch):
         host="http://localhost:9200",
         index="fred-vectors",
         username="admin",
-        password="secret",
+        password=TEST_OPENSEARCH_PASSWORD,
     )
 
     assert fake_client.indices.create_calls == []
@@ -159,7 +161,7 @@ def test_opensearch_vector_store_rejects_incompatible_dimension(monkeypatch):
             host="http://localhost:9200",
             index="fred-vectors",
             username="admin",
-            password="secret",
+            password=TEST_OPENSEARCH_PASSWORD,
         )
 
 
@@ -173,7 +175,7 @@ def test_application_context_opensearch_factory_does_not_call_validate_index_or_
         type="opensearch",
         index="fred-vectors",
     )
-    ctx.configuration.storage.opensearch.password = "secret"
+    ctx.configuration.storage.opensearch.password = TEST_OPENSEARCH_PASSWORD
 
     created: list[dict] = []
 

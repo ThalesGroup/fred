@@ -33,6 +33,7 @@ processing:
     fast:
       use_gpu: false
       generate_summary: false
+      input_activity_timeout: 1h
       process_images: false
       pdf:
         backend: pypdfium2
@@ -62,6 +63,7 @@ processing:
     medium:
       use_gpu: false
       generate_summary: false
+      input_activity_timeout: 1h
       process_images: false
       pdf:
         backend: dlparse_v4
@@ -91,6 +93,7 @@ processing:
     rich:
       use_gpu: false
       generate_summary: false
+      input_activity_timeout: 1h
       process_images: true
       pdf:
         backend: dlparse_v4

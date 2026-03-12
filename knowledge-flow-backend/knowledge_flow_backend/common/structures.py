@@ -14,6 +14,7 @@
 
 
 import os
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
@@ -27,7 +28,7 @@ from fred_core import (
     StoreConfig,
 )
 from fred_core.common.structures import TemporalSchedulerConfig
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -49,6 +50,51 @@ class IngestionProcessingProfile(str, Enum):
     FAST = "fast"
     MEDIUM = "medium"
     RICH = "rich"
+
+
+_DURATION_PATTERN = re.compile(r"^(?P<value>\d+)\s*(?P<unit>[smhd]?)$")
+_DURATION_MULTIPLIER_SECONDS = {
+    "": 1,
+    "s": 1,
+    "m": 60,
+    "h": 3600,
+    "d": 86400,
+}
+
+
+def parse_duration_seconds(value: object, *, field_name: str) -> int:
+    """
+    Parse duration values expressed as:
+      - integer seconds (e.g. 3600)
+      - compact strings (e.g. "45s", "10m", "1h", "2d")
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive duration, got {value!r}")
+
+    if isinstance(value, (int, float)):
+        seconds = int(value)
+        if seconds <= 0:
+            raise ValueError(f"{field_name} must be > 0 seconds")
+        return seconds
+
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{field_name} must be an integer seconds value or a compact duration string like '1h'",
+        )
+
+    token = value.strip().lower()
+    match = _DURATION_PATTERN.fullmatch(token)
+    if not match:
+        raise ValueError(
+            f"{field_name}='{value}' is invalid. Use formats like '45s', '10m', '1h', '2d' or integer seconds.",
+        )
+
+    amount = int(match.group("value"))
+    unit = match.group("unit")
+    seconds = amount * _DURATION_MULTIPLIER_SECONDS[unit]
+    if seconds <= 0:
+        raise ValueError(f"{field_name} must be > 0 seconds")
+    return seconds
 
 
 class OutputProcessorResponse(BaseModel):
@@ -269,6 +315,10 @@ class ProcessingConfig(BaseModel):
             default=False,
             description="Enable/disable human-centric abstract and keyword generation for this profile.",
         )
+        input_activity_timeout: str = Field(
+            default="1h",
+            description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
+        )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
@@ -277,6 +327,32 @@ class ProcessingConfig(BaseModel):
             default_factory=list,
             description="Input processors selected for this profile (suffix-specific).",
         )
+
+        @field_validator("input_activity_timeout", mode="before")
+        @classmethod
+        def _normalize_input_activity_timeout(cls, value: object) -> str:
+            if value is None:
+                return "1h"
+            if isinstance(value, (int, float)):
+                seconds = parse_duration_seconds(
+                    value,
+                    field_name="processing.profiles.*.input_activity_timeout",
+                )
+                return f"{seconds}s"
+
+            normalized = str(value).strip().lower()
+            parse_duration_seconds(
+                normalized,
+                field_name="processing.profiles.*.input_activity_timeout",
+            )
+            return normalized
+
+        @property
+        def input_activity_timeout_seconds(self) -> int:
+            return parse_duration_seconds(
+                self.input_activity_timeout,
+                field_name="processing.profiles.*.input_activity_timeout",
+            )
 
     class ProfilesConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
