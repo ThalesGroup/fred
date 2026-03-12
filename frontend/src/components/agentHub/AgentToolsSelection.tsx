@@ -13,17 +13,10 @@ export interface AgentToolsSelectionProps {
 
 export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery(
-    undefined,
-    {
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: true,
-      refetchOnReconnect: true,
-    },
-  );
+  const { data: mcpServersData, isLoading: isLoadingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
   const refIds = new Set(mcpServerRefs.map((ref) => ref.id));
 
-  if (isFetchingMcpServers) {
+  if (isLoadingMcpServers) {
     return <div>Loading tools...</div>;
   }
 

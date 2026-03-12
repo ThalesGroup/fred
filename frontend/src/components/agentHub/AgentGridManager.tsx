@@ -29,7 +29,7 @@ import { useToast } from "../ToastProvider";
 
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { AgentCard } from "./AgentCard";
-import { AgentEditDrawer } from "./AgentEditDrawer";
+import { AgentCreateEditDrawer } from "./AgentCreateEditDrawer";
 import { AgentInspectionModal } from "./AgentInspectionModal";
 
 interface AgentGridManagerProps {
@@ -227,13 +227,12 @@ export const AgentGridManager = ({
                 </Typography>
               </Box>
             )}
-
           </>
         )}
       </CardContent>
 
       {/* Drawers / Modals */}
-      <AgentEditDrawer
+      <AgentCreateEditDrawer
         canDelete={canDelete}
         open={editOpen}
         agent={selected}
