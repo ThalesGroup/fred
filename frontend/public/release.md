@@ -28,7 +28,7 @@
   - Remove A2A proxy registration/card flow from backend and UI to simplify the runtime surface
   - Remove FastAPI /docs /redoc /openapi.json from production images (#1242)
   - improve opensearchops mcp endpoints for cluster debugging new routes better route description (#1239)
-  - Added configurable inactivity timeout to temporal ingestion activities (#1303)
+  - Added configurable start-to-close timeout for Temporal ingestion activities (#1303)
 
 - **Bug Fixes**
 
