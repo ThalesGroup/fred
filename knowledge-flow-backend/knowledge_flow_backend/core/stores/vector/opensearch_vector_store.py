@@ -376,6 +376,15 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         Returns the assigned ids.
         """
         try:
+            if not documents:
+                return []
+
+            if self._bulk_size <= 0:
+                raise ValueError("bulk_size must be a positive integer")
+
+            if ids is not None and len(ids) != len(documents):
+                raise ValueError("ids length must match documents length")
+
             # If ids are not provided, derive them from metadata[chunk_uid]
             if ids is None:
                 ids = []
@@ -385,7 +394,16 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         raise ValueError(f"Document missing {CHUNK_ID_FIELD} in metadata")
                     ids.append(cid)
 
-            assigned_ids = list(self._lc.add_documents(documents, ids=ids))
+            assigned_ids: List[str] = []
+            for start in range(0, len(documents), self._bulk_size):
+                end = start + self._bulk_size
+                batch_documents = documents[start:end]
+                batch_ids = ids[start:end]
+                assigned_ids.extend(list(self._lc.add_documents(batch_documents, ids=batch_ids)))
+
+            if len(assigned_ids) != len(documents):
+                raise RuntimeError("Vector store returned an unexpected number of assigned ids")
+
             model_name = self._embedding_model_name or "unknown"
             now_iso = datetime.now(timezone.utc).isoformat()
 

@@ -4,12 +4,15 @@ from copy import deepcopy
 
 import pytest
 from langchain_community.embeddings import FakeEmbeddings
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from knowledge_flow_backend import application_context as app_context_module
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import OpenSearchVectorIndexConfig
 from knowledge_flow_backend.core.stores.vector import opensearch_vector_store as ovs
+
+TEST_OPENSEARCH_PASSWORD = "secret"  # pragma: allowlist secret
 
 
 class DummyEmbeddings(Embeddings):
@@ -109,7 +112,7 @@ def test_opensearch_vector_store_creates_missing_index(monkeypatch):
         host="http://localhost:9200",
         index="fred-vectors",
         username="admin",
-        password="secret",
+        password=TEST_OPENSEARCH_PASSWORD,
     )
 
     assert store.index_name == "fred-vectors"
@@ -138,7 +141,7 @@ def test_opensearch_vector_store_validates_existing_index(monkeypatch):
         host="http://localhost:9200",
         index="fred-vectors",
         username="admin",
-        password="secret",
+        password=TEST_OPENSEARCH_PASSWORD,
     )
 
     assert fake_client.indices.create_calls == []
@@ -159,7 +162,7 @@ def test_opensearch_vector_store_rejects_incompatible_dimension(monkeypatch):
             host="http://localhost:9200",
             index="fred-vectors",
             username="admin",
-            password="secret",
+            password=TEST_OPENSEARCH_PASSWORD,
         )
 
 
@@ -173,7 +176,7 @@ def test_application_context_opensearch_factory_does_not_call_validate_index_or_
         type="opensearch",
         index="fred-vectors",
     )
-    ctx.configuration.storage.opensearch.password = "secret"
+    ctx.configuration.storage.opensearch.password = TEST_OPENSEARCH_PASSWORD
 
     created: list[dict] = []
 
@@ -192,3 +195,85 @@ def test_application_context_opensearch_factory_does_not_call_validate_index_or_
     assert isinstance(store, DummyStore)
     assert created
     assert created[0]["index"] == "fred-vectors"
+
+
+def test_opensearch_vector_store_add_documents_batches_by_bulk_size(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, bulk_size: int, **kwargs) -> None:
+            self.bulk_size = bulk_size
+            self.calls: list[tuple[int, list[str]]] = []
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            if len(documents) > self.bulk_size:
+                raise RuntimeError("batch exceeds bulk size")
+            self.calls.append((len(documents), list(ids)))
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=2,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(5)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(5)]
+    assert len(FakeVectorSearch.created) == 1
+    assert FakeVectorSearch.created[0].calls == [
+        (2, ["cid-0", "cid-1"]),
+        (2, ["cid-2", "cid-3"]),
+        (1, ["cid-4"]),
+    ]
+    assert all(d.metadata.get("embedding_model") == "custom-model" for d in docs)
+    assert all(d.metadata.get("vector_index") == "fred-vectors" for d in docs)
+    assert all("token_count" in d.metadata for d in docs)
+    assert all("ingested_at" in d.metadata for d in docs)
+
+
+def test_opensearch_vector_store_add_documents_rejects_mismatched_ids(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    class FakeVectorSearch:
+        def __init__(self, *args, **kwargs) -> None:
+            return None
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=2,
+    )
+
+    docs = [Document(page_content="chunk", metadata={ovs.CHUNK_ID_FIELD: "cid-1"})]
+
+    with pytest.raises(RuntimeError, match="Unexpected error during vector indexing"):
+        store.add_documents(docs, ids=["cid-1", "cid-2"])
