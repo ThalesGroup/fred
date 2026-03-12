@@ -223,8 +223,8 @@ class ProcessingConfig(BaseModel):
     class PdfPipelineConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
-        backend: Literal["dlparse_v4", "pypdfium2"] = Field(
-            default="dlparse_v4",
+        backend: Literal["dlparse_v4", "pypdfium2", "docling_parse"] = Field(
+            default="docling_parse",
             description="PDF backend for Docling conversion.",
         )
         images_scale: float = Field(default=2.0, gt=0.0, description="Docling PDF image scaling factor.")
