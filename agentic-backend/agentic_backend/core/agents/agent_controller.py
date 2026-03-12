@@ -44,7 +44,7 @@ from agentic_backend.core.agents.agent_service import (
     InvalidClassPathError,
     MissingTeamIdError,
 )
-from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
+from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.agents.v2.catalog import build_definition_from_settings
 from agentic_backend.core.agents.v2.inspection import inspect_agent
 from agentic_backend.core.agents.v2.models import AgentInspection
@@ -305,6 +305,20 @@ async def list_declared_agent_class_paths(
 ) -> list[str]:
     service = AgentService(agent_manager=agent_manager)
     return await service.list_declared_class_paths(user)
+
+
+@router.get(
+    "/agents/class-paths/tuning",
+    summary="Get the default tuning (including fields) for a given class path",
+    response_model=AgentTuning,
+)
+async def get_class_path_tuning(
+    class_path: Optional[str] = None,
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> AgentTuning:
+    service = AgentService(agent_manager=agent_manager)
+    return service.get_class_path_tuning(user, class_path)
 
 
 @router.put(

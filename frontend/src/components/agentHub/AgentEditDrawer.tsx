@@ -13,7 +13,7 @@
 // limitations under the License.
 import DeleteIcon from "@mui/icons-material/Delete";
 import { Autocomplete, Box, Button, Divider, Drawer, Stack, TextField, Typography } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
@@ -24,6 +24,7 @@ import {
   McpServerRef,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
+  useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
   useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
 } from "../../slices/agentic/agenticOpenApi";
@@ -93,6 +94,19 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
     skip: !isAdmin,
   });
 
+  const [fetchClassPathTuning] = useLazyGetClassPathTuningQuery();
+
+  const mergeFields = useCallback((newFields: FieldSpec[], currentFields: FieldSpec[]): FieldSpec[] => {
+    const currentByKey = new Map(currentFields.map((f) => [f.key, f]));
+    return newFields.map((newField) => {
+      const existing = currentByKey.get(newField.key);
+      if (existing) {
+        return { ...newField, default: existing.default };
+      }
+      return newField;
+    });
+  }, []);
+
   // --- Effects ---
 
   useEffect(() => {
@@ -127,6 +141,15 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
       setProfileId(null);
     }
   }, [agent]);
+
+  // Fetch default tuning when classPath changes
+  useEffect(() => {
+    fetchClassPathTuning({ classPath: classPath ?? undefined })
+      .unwrap()
+      .then((tuning) => {
+        setFields((prev) => mergeFields(tuning.fields ?? [], prev));
+      });
+  }, [classPath, fetchClassPathTuning, mergeFields]);
 
   // --- Handlers ---
 
@@ -171,8 +194,7 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
         description: topLevelTuning.description,
         tags: topLevelTuning.tags,
         mcp_servers: mcpServerRefs,
-        // In create mode, keep the default fields from the created agent
-        ...(isCreateMode ? {} : { fields }),
+        fields,
       };
 
       await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
@@ -336,15 +358,14 @@ export function AgentEditDrawer({ open, agent, canDelete, teamId, onClose, onSav
 
             <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
 
-            {/* Dynamic Fields (edit mode only) */}
-            {!isCreateMode &&
-              (fields.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {t("agentEditDrawer.noTunableFields")}
-                </Typography>
-              ) : (
-                <TuningForm fields={fields} onChange={onChange} />
-              ))}
+            {/* Dynamic Fields */}
+            {fields.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {t("agentEditDrawer.noTunableFields")}
+              </Typography>
+            ) : (
+              <TuningForm fields={fields} onChange={onChange} />
+            )}
 
             {/* Workspace Files (edit mode only. Only for admin for now to simplify. Should be moved to tools param that require files) */}
             {isAdmin && !isCreateMode && (

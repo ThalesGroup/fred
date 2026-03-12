@@ -37,6 +37,17 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/agents/class-paths` }),
     }),
+    getClassPathTuningAgenticV1AgentsClassPathsTuningGet: build.query<
+      GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiResponse,
+      GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/class-paths/tuning`,
+        params: {
+          class_path: queryArg.classPath,
+        },
+      }),
+    }),
     updateAgentAgenticV1AgentsUpdatePut: build.mutation<
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
@@ -349,6 +360,11 @@ export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg = {
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
   /** status 200 Successful Response */ string[];
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg = void;
+export type GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiResponse =
+  /** status 200 Successful Response */ AgentTuning;
+export type GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiArg = {
+  classPath?: string | null;
+};
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
   agentInput: Agent2;
@@ -1298,6 +1314,8 @@ export const {
   useLazyInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
+  useGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery,
+  useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,

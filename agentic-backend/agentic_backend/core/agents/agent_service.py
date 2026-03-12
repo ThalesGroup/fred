@@ -521,6 +521,23 @@ class AgentService:
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
 
+    @authorize(action=Action.CREATE, resource=Resource.AGENTS)
+    @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
+    def get_class_path_tuning(
+        self, user: KeycloakUser, class_path: str | None
+    ) -> AgentTuning:
+        """Return the default tuning for a given class_path (or the default BasicReAct if None)."""
+        if not class_path:
+            definition = instantiate_definition_class(BasicReActDefinition)
+            return definition_to_agent_tuning(definition)
+
+        resolved = resolve_agent_class(class_path)
+        if resolved.implementation_kind == AgentImplementationKind.FLOW:
+            return resolved.cls.tuning
+
+        definition = instantiate_definition_class(resolved.cls)
+        return definition_to_agent_tuning(definition)
+
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.DELETE, agent_id
