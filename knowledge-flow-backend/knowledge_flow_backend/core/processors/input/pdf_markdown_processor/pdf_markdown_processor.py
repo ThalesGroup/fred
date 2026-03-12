@@ -22,6 +22,7 @@ from typing import Type
 import pypdf
 from docling.backend.abstract_backend import AbstractDocumentBackend
 from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
+from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
@@ -42,8 +43,9 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PDF documents to Markdown with optional image descriptions and table markers."
 
     _BACKEND_BY_NAME: dict[str, Type[AbstractDocumentBackend]] = {
-        "dlparse_v4": DoclingParseDocumentBackend,
+        "dlparse_v4": DoclingParseV4DocumentBackend,
         "pypdfium2": PyPdfiumDocumentBackend,
+        "docling_parse": DoclingParseDocumentBackend,
     }
 
     def __init__(self):
