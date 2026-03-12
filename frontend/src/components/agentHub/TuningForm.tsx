@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Box, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
 import { PromptEditor } from "./PromptEditor";
 
@@ -21,6 +22,7 @@ type Props = {
 };
 
 export function TuningForm({ fields, onChange }: Props) {
+  const { t } = useTranslation();
   // optional grouping by ui.group
   const groups = groupBy(fields, (f) => f.ui?.group || "General");
 
@@ -29,12 +31,13 @@ export function TuningForm({ fields, onChange }: Props) {
       {Object.entries(groups).map(([groupName, groupFields]) => (
         <Box key={groupName} sx={{ mt: 0.5 }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            {groupName}
+            {t(groupName)}
           </Typography>
           <Stack spacing={1.5}>
             {groupFields.map((f) => {
               const idx = fields.indexOf(f);
-              const label = f.title || f.key;
+              const label = t(f.title || f.key);
+              const description = f.description ? t(f.description) : undefined;
               const val = f.default as any;
 
               if (f.type === "prompt") {
@@ -80,9 +83,9 @@ export function TuningForm({ fields, onChange }: Props) {
                       <Typography variant="body2" fontWeight={600}>
                         {label}
                       </Typography>
-                      {f.description && (
+                      {description && (
                         <Typography variant="caption" color="text.secondary">
-                          {f.description}
+                          {description}
                         </Typography>
                       )}
                     </Box>

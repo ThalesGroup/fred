@@ -378,6 +378,26 @@
     "confirmDeleteTitle": "Confirm deletion",
     "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
   },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Chat options"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "System prompt",
+        "description": "Core behavior instructions for the assistant. This stays on the definition side so the runtime can remain generic."
+      },
+      "chat_options_attach_files": {
+        "title": "Allow file attachments",
+        "description": "Show file upload/attachment controls for this agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Document libraries picker",
+        "description": "Let users select document libraries/knowledge sources for this agent."
+      }
+    }
+  },
   "agentEditDrawer": {
     "nameLabel": "Name",
     "noTunableFields": "This agent exposes no tunable fields.",

@@ -84,31 +84,28 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
         FieldSpec(
             key="prompts.system",
             type="prompt",
-            title="System prompt",
-            description=(
-                "Core behavior instructions for the assistant. This stays on the "
-                "definition side so the runtime can remain generic."
-            ),
+            title="agentTuning.fields.prompts_system.title",
+            description="agentTuning.fields.prompts_system.description",
             required=True,
-            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ui=UIHints(group="agentTuning.groups.prompts", multiline=True, markdown=True),
         ),
         FieldSpec(
             key="chat_options.attach_files",
             type="boolean",
-            title="Allow file attachments",
-            description="Show file upload/attachment controls for this agent.",
+            title="agentTuning.fields.chat_options_attach_files.title",
+            description="agentTuning.fields.chat_options_attach_files.description",
             required=False,
             default=False,
-            ui=UIHints(group="Chat options"),
+            ui=UIHints(group="agentTuning.groups.chatOptions"),
         ),
         FieldSpec(
             key="chat_options.libraries_selection",
             type="boolean",
-            title="Document libraries picker",
-            description="Let users select document libraries/knowledge sources for this agent.",
+            title="agentTuning.fields.chat_options_libraries_selection.title",
+            description="agentTuning.fields.chat_options_libraries_selection.description",
             required=False,
             default=False,
-            ui=UIHints(group="Chat options"),
+            ui=UIHints(group="agentTuning.groups.chatOptions"),
         ),
         # FieldSpec(
         #     key="enable_tool_approval",
