@@ -82,7 +82,7 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
         #     ui=UIHints(group="Profile"),
         # ),
         FieldSpec(
-            key="system_prompt_template",
+            key="prompts.system",
             type="prompt",
             title="System prompt",
             description=(
@@ -91,6 +91,24 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
             ),
             required=True,
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description="Show file upload/attachment controls for this agent.",
+            required=False,
+            default=False,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.libraries_selection",
+            type="boolean",
+            title="Document libraries picker",
+            description="Let users select document libraries/knowledge sources for this agent.",
+            required=False,
+            default=False,
+            ui=UIHints(group="Chat options"),
         ),
         # FieldSpec(
         #     key="enable_tool_approval",
