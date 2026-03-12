@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from typing import Any, Awaitable, Callable, TypeVar
 
 from temporalio import activity
@@ -42,14 +43,21 @@ async def await_with_heartbeat(
     activity.heartbeat(details)
     task = asyncio.ensure_future(awaitable)
 
-    while True:
-        try:
-            return await asyncio.wait_for(
-                asyncio.shield(task),
+    try:
+        while True:
+            done, _ = await asyncio.wait(
+                {task},
                 timeout=heartbeat_interval_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
             )
-        except asyncio.TimeoutError:
+            if task in done:
+                return await task
             activity.heartbeat(details)
+    finally:
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 async def to_thread_with_heartbeat(
