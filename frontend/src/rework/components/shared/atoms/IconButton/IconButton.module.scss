@@ -55,7 +55,7 @@
       }
     }
 
-    &.btn-text {
+    &.btn-icon {
       --btn-text-color: #{map-get($scheme, "main")};
 
       &:hover:not(:disabled) {

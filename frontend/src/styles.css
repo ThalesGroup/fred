@@ -12,7 +12,7 @@
 }
 
 .rbc-day-slot .rbc-events-container {
-  margin-right: 0px;
+  margin-right: 0;
 }
 
 .rbc-timeslot-group {
@@ -25,8 +25,6 @@
 
 * {
   box-sizing: border-box;
-  /*user-select: none;*/
-  corner-shape: squircle;
 }
 
 body {

@@ -25,7 +25,6 @@ export default function ChatList() {
         {t("rework.sidebar.chatList.title")}
         <div
           className={`${styles["chat-list-header-counter"]} ${sessions?.length >= maxChat ? styles["overflow"] : ""}`}
-          onClick={() => refetchSessions()}
         >
           <span className={styles["overflow-icon"]}>
             <Icon category={"outlined"} type={"Info"} />
@@ -35,9 +34,9 @@ export default function ChatList() {
       </div>
       <div className={styles["chat-list-items"]}>
         {sortedSessions?.map((session) => (
-          <ChatListItem key={session.id} chat={session} refetchSessions={refetchSessions} />
+          <ChatListItem key={session.id} chat={session} onDelete={refetchSessions} />
         ))}
-       </div>
+      </div>
     </div>
   );
 }

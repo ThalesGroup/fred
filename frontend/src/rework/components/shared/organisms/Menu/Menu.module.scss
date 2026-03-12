@@ -19,7 +19,7 @@
 
 .menu-empty {
   padding: var(--spacing-m);
-  color: var(--on-surface-variant);
+  color: var(--on-surface);
   text-align: center;
 
   @include typography("body", "large");

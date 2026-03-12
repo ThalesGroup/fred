@@ -25,7 +25,7 @@ export default function TeamSelectionNavbar() {
           selected={pathname.startsWith(`/teams`)}
         />
       </div>
-      <Separator margin={"8px"} />
+      <Separator margin={"var(--spacing-xs)"} />
       <div>
         {teams?.map((team) => {
           return (
@@ -34,7 +34,7 @@ export default function TeamSelectionNavbar() {
               redirection={"/team/" + team.id}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
-              imgUrl={"/public/images/default-team-banner.png"}
+              imgUrl={"/images/default-team-banner.png"}
             />
           );
         })}

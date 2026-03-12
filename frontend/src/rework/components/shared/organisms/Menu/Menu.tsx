@@ -7,8 +7,9 @@ interface MenuProps<T> {
   options: OptionModel<T>[];
   baseId: string;
   activeId?: string;
-  selectedId?: T | T[];
+  selectedId?: T;
   noOptionsMessage?: string;
+  onChange?: (selectedId: T) => void;
 }
 
 const MenuInternal = <T,>({
@@ -16,6 +17,7 @@ const MenuInternal = <T,>({
   baseId,
   activeId,
   selectedId,
+  onChange,
   noOptionsMessage = "Aucune option disponible",
 }: MenuProps<T>) => {
   const listRef = useRef<HTMLUListElement>(null);
@@ -34,7 +36,7 @@ const MenuInternal = <T,>({
 
   if (options.length === 0) {
     return (
-      <div className={styles["menu-empty"]} role="status">
+      <div className={`${styles["menu"]} ${styles["menu-empty"]}`} role="status">
         {noOptionsMessage}
       </div>
     );
@@ -48,26 +50,29 @@ const MenuInternal = <T,>({
       role="listbox"
       aria-activedescendant={activeId}
       tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
     >
       {options.map((option) => {
         const itemId = `${baseId}-opt-${option.value}`;
         const isFocused = activeId === itemId;
 
-        // On force le cast ou la vérification pour Includes si T est complexe
         const isSelected = Array.isArray(selectedId)
           ? (selectedId as any[]).includes(option.value)
           : selectedId === option.value;
 
         return (
           <MenuItem
-            key={String(option.value)}
+            key={option.key}
             id={itemId}
             label={option.label}
             icon={option.icon}
             disabled={option.disabled}
             selected={isSelected}
             focused={isFocused}
-            onClick={() => !option.disabled && option.onClick()}
+            onClick={() => {
+              if (option.disabled) return;
+              onChange(option.value);
+            }}
           />
         );
       })}

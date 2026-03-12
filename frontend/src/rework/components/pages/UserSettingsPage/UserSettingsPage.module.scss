@@ -1,0 +1,75 @@
+@use "src/index.scss" as *;
+
+.user-settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding-top: var(--spacing-m);
+  width: 680px;
+  height: 100%;
+}
+
+.user-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  height: fit-content;
+
+  :last-child {
+    margin-left: auto;
+  }
+}
+
+.user-settings-header-title {
+  @include typography("title", "medium");
+}
+
+.user-settings-description {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  border-radius: var(--spacing-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-m);
+}
+
+.user-settings-identity {
+  display: flex;
+  flex-direction: column;
+
+  @include typography("body", "medium");
+}
+
+.user-settings-identity-name {
+  color: var(--primary);
+  @include typography("body", "medium");
+}
+
+.user-settings-identity-fullname {
+  color: var(--on-surface);
+  @include typography("title", "medium");
+}
+
+.user-settings-identity-email {
+  color: var(--on-surface-retreat);
+  @include typography("body", "medium");
+}
+
+.user-settings-identity-role {
+  color: var(--on-surface-retreat);
+  @include typography("body", "medium");
+}
+
+.user-settings-application {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
+.user-settings-conversation {
+  border-radius: var(--spacing-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-m);
+  min-height: 15rem;
+}

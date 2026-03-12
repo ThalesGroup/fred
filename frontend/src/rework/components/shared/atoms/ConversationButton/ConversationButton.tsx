@@ -1,9 +1,8 @@
-import React, { ComponentPropsWithoutRef } from "react";
+import { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./ConversationButton.module.scss";
 
-interface ConversationButtonProps extends ComponentPropsWithoutRef<"button"> {
-  children: React.ReactNode;
+interface ConversationButtonProps extends PropsWithChildren<ComponentPropsWithoutRef<"button">> {
   icon?: IconProps;
 }
 

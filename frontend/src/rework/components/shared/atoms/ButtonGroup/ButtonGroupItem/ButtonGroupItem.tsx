@@ -1,6 +1,6 @@
 import styles from "./ButtonGroupItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import { ButtonSize, Type } from "@shared/utils/Type.ts";
+import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
 import { ComponentPropsWithoutRef } from "react";
 
 export interface ButtonGroupItemProps extends ComponentPropsWithoutRef<"button"> {
@@ -9,8 +9,8 @@ export interface ButtonGroupItemProps extends ComponentPropsWithoutRef<"button">
 }
 
 export interface ButtonGroupItemPrivateProps {
-  size: ButtonSize;
-  color: Type;
+  size: ComponentSize;
+  color: ColorTheme;
   selected: boolean;
 }
 
@@ -23,8 +23,8 @@ export default function ButtonGroupItem({
   ...props
 }: ButtonGroupItemProps & ButtonGroupItemPrivateProps) {
   return (
-    <button className={`${styles["button-group-item"]} ${styles[`btn-${color}`]} ${styles[`btn-${size}`]}`} {...props}>
-      <div className={`${styles["state-layer"]} ${selected ? styles["selected"] : ""}`}>
+    <button className={styles["button-group-item"]} data-color={color} data-size={size} {...props}>
+      <div className={`${styles["state-layer"]}`} data-selected={selected}>
         {icon && (
           <span className={styles.icon}>
             <Icon {...icon} />

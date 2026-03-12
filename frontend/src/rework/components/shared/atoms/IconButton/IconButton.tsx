@@ -1,12 +1,12 @@
 import styles from "./IconButton.module.scss";
-import { ButtonSize, IconButtonVariant, Type } from "../../utils/Type.ts";
+import { ComponentSize, IconButtonVariant, ColorTheme } from "../../utils/Type.ts";
 import { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
-interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
-  color: Type;
+export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
+  color: ColorTheme;
   variant: IconButtonVariant;
-  size: ButtonSize;
+  size: ComponentSize;
   icon: IconProps;
 }
 

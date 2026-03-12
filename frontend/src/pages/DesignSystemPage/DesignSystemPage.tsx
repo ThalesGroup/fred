@@ -3,14 +3,14 @@ import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import Breadcrumb from "@shared/atoms/Breadcrumb/Breadcrumb.tsx";
-import { Type } from "@shared/utils/Type.ts";
+import { ColorTheme } from "@shared/utils/Type.ts";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Menu from "@shared/organisms/Menu/Menu.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 
 export default function DesignSystemPage() {
-  const buttonColor: Type = "secondary";
+  const buttonColor: ColorTheme = "secondary";
 
   return (
     <div className={styles.grid}>

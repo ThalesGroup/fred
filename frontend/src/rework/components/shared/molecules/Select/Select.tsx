@@ -1,26 +1,32 @@
-import React, { useEffect, useId, useRef, useState } from "react";
 import styles from "./Select.module.scss";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { OptionModel } from "@models/Option.model.ts";
 import Menu from "@shared/organisms/Menu/Menu.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { ComponentSize } from "@shared/utils/Type.ts";
 
 interface SelectProps<T> {
   options: OptionModel<T>[];
   value?: T;
   onChange: (value: T) => void;
+  size: ComponentSize;
   placeholder?: string;
   label?: string;
   disabled?: boolean;
   error?: string;
+  compact?: boolean;
 }
 
 export default function Select<T>({
   options = [],
   value,
-  placeholder = "Sélectionner...",
+  placeholder,
   label,
   disabled = false,
   error,
+  onChange,
+  compact = false,
+  size,
 }: SelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -28,6 +34,7 @@ export default function Select<T>({
   const baseId = useId();
 
   const safeAnchorId = `--anchor-${baseId.replace(/:/g, "")}`;
+
   useEffect(() => {
     const popover = popoverRef.current;
     if (!popover) return;
@@ -70,8 +77,10 @@ export default function Select<T>({
       className={styles["select-container"]}
       ref={containerRef}
       data-disabled={disabled}
-      data-error={!!error}
+      data-error={error != undefined}
       data-state={isOpen ? "open" : "closed"}
+      data-compact={compact}
+      data-size={size}
     >
       {label && (
         <label className={styles["label"]} id={`${baseId}-label`} htmlFor={`${baseId}-trigger`}>
@@ -106,7 +115,15 @@ export default function Select<T>({
         className={styles["menu-popover"]}
         style={{ positionAnchor: safeAnchorId } as React.CSSProperties}
       >
-        <Menu options={options} baseId={baseId} selectedId={value} />
+        <Menu
+          options={options}
+          baseId={baseId}
+          selectedId={value}
+          onChange={(v) => {
+            toggleMenu();
+            onChange(v);
+          }}
+        />
       </div>
 
       <span className={styles["error-message"]} id={`${baseId}-error`}>

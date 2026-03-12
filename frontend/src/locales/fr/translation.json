@@ -1304,6 +1304,12 @@
     "defaultConfirmButtonLabel": "Confirmer"
   },
   "rework": {
+    "back": "Retour",
+    "teamRoles":{
+      "member": "Membre",
+      "manager": "Manager",
+      "owner": "Propriétaire"
+    },
     "sidebar": {
       "title": "FRED.AI",
       "team": {
@@ -1320,6 +1326,54 @@
       "newChat": "Nouvelle conversation",
       "chatList": {
         "title": "Conversations"
+      }
+    },
+    "userSettings": {
+      "disconnect": "Déconnexion",
+      "title": "Votre profil",
+      "app": {
+        "dark": "Sombre",
+        "system": "Système",
+        "light": "Clair",
+        "french": "Français",
+        "english": "Anglais"
+      },
+      "conversationProfile": {
+        "title": "Profil de conversation",
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos agents doivent s’adresser à vous."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Membres",
+        "settings": "Paramètres",
+        "leaveTeam": "Quitter l'équipe"
+      },
+      "members": {
+        "title": "Membres de l'équipe",
+        "addMember": {
+          "placeholder": "Inviter des utilisateurs"
+        },
+        "table": {
+          "deleteAction": "Supprimer",
+          "identifiant": "Identifiant",
+          "firstName": "Prénom",
+          "lastName": "Nom",
+          "role": "Rôle",
+          "actions": "Actions"
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Bannière de l'équipe",
+        "description": {
+          "label": "Description de l'équipe",
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+        },
+        "privateTeam": "Equipe privé",
+        "teamPrompt": {
+          "label": "Contexte de l'équipe (prompt)",
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
+        }
       }
     }
   }

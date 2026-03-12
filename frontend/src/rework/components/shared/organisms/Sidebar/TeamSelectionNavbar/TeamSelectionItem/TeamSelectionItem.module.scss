@@ -64,10 +64,10 @@
 .team-avatar {
   position: relative;
   opacity: 0;
+  filter: brightness(var(--brightness, 0.9)) saturate(var(--saturate, 0.9));
   width: 40px;
   height: 40px;
   object-fit: cover;
-  filter: brightness(var(--brightness, 0.9)) saturate(var(--saturate, 0.9));
 }
 
 .loaded .team-avatar {
@@ -87,8 +87,10 @@
   background-color: var(--surface-container-highest);
   padding: var(--spacing-2xs) var(--spacing-m);
   height: 2.5rem;
-  text-wrap: nowrap;
-  @include typography("title", "medium");
   pointer-events: none;
   color: var(--on-surface);
+  text-wrap: nowrap;
+  z-index: 1;
+
+  @include typography("title", "medium");
 }

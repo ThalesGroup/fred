@@ -11,10 +11,10 @@ import { useTranslation } from "react-i18next";
 
 interface ChatListItemProps {
   chat: SessionWithFiles;
-  refetchSessions: () => void;
+  onDelete: () => void;
 }
 
-export default function ChatListItem({ chat, refetchSessions }: ChatListItemProps) {
+export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
   const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   const { showError } = useToast();
@@ -30,7 +30,7 @@ export default function ChatListItem({ chat, refetchSessions }: ChatListItemProp
 
     try {
       await deleteSessionMutation({ sessionId: chat.id }).unwrap();
-      refetchSessions();
+      onDelete();
 
       if (isSelected) {
         navigate("/");

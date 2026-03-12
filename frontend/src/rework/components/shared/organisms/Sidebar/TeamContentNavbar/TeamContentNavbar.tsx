@@ -8,13 +8,16 @@ import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/Naviga
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
-import React from "react";
+import React, { useState } from "react";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
+import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 
 export default function TeamContentNavbar() {
+  const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
-  const { pathname } = useLocation();
   const navigate = useNavigate();
   const { teamId } = useParams<{ teamId: string }>();
+  const { pathname } = useLocation();
 
   const { data: team, isLoading } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery(
     { teamId: teamId || "" },
@@ -23,37 +26,42 @@ export default function TeamContentNavbar() {
 
   const teamsNavigationItems: NavigationMenuItemProps[] = [
     {
+      type: "link",
       label: t("rework.sidebar.menu.agents"),
       icon: { category: "outlined", type: "Person" },
-      selected: false,
-      link: `/team/${teamId}/agents`,
+      selected: pathname.startsWith(`/team/${teamId}/agents`),
+      linkProps: { to: `/team/${teamId}/agents` },
     },
     {
+      type: "link",
       label: t("rework.sidebar.menu.resources"),
       icon: { category: "outlined", type: "Folder" },
-      selected: false,
-      link: `/team/${teamId}/resources`,
+      selected: pathname.startsWith(`/team/${teamId}/resources`),
+      linkProps: { to: `/team/${teamId}/resources` },
     },
     {
+      type: "link",
       label: t("rework.sidebar.menu.apps"),
       icon: { category: "outlined", type: "Widgets" },
-      selected: false,
-      link: `/team/${teamId}/apps`,
+      selected: pathname.startsWith(`/team/${teamId}/apps`),
+      linkProps: { to: `/team/${teamId}/apps` },
     },
   ];
 
   const userNavigationItems: NavigationMenuItemProps[] = [
     {
+      type: "link",
       label: t("rework.sidebar.menu.agents"),
       icon: { category: "outlined", type: "Person" },
-      selected: false,
-      link: `/agents`,
+      selected: pathname.startsWith(`/team/${teamId}/agents`),
+      linkProps: { to: `/team/${teamId}/agents` },
     },
     {
+      type: "link",
       label: t("rework.sidebar.menu.resources"),
       icon: { category: "outlined", type: "Folder" },
-      selected: false,
-      link: `/knowledge`,
+      selected: pathname.startsWith(`/team/${teamId}/resources`),
+      linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
 
@@ -73,36 +81,48 @@ export default function TeamContentNavbar() {
   const bannerStyle = {
     "--banner-img": getTeam()?.banner_image_url
       ? `url(${getTeam().banner_image_url})`
-      : 'url("/public/images/default-team-banner.png")',
+      : 'url("/images/default-team-banner.png")',
   } as React.CSSProperties;
 
   return (
-    <div className={styles["team-content-navbar-container"]}>
-      <div className={styles["banner-container"]} style={bannerStyle}>
-        <div className={styles["team-name-container"]}>
-          <span className={styles["team-name"]}>
-            {isLoading ? "loading" : getTeam()?.name || t("rework.sidebar.team.userTeam")}
-          </span>
-          <span className={styles["user-settings-button-container"]}>
-            <IconButton
-              size={"small"}
-              color={"primary"}
-              variant={"icon"}
-              icon={{ category: "outlined", type: "Settings", filled: true }}
-            />
+    <>
+      <div className={styles["team-content-navbar-container"]}>
+        <div className={styles["banner-container"]} style={bannerStyle}>
+          <div className={styles["team-name-container"]}>
+            <span className={styles["team-name"]}>
+              {isLoading ? "loading" : getTeam()?.name || t("rework.sidebar.team.userTeam")}
+            </span>
+            <span className={styles["user-settings-button-container"]}>
+              <IconButton
+                size={"small"}
+                color={"on-surface"}
+                variant={"icon"}
+                icon={{ category: "outlined", type: "Settings", filled: true }}
+                onClick={() => {
+                  setIsTeamSettingsOpen(true);
+                }}
+              />
+            </span>
+          </div>
+          <span className={styles["conversation-button-container"]}>
+            <ConversationButton icon={{ category: "outlined", type: "Add" }} onClick={newChatHandler}>
+              {t("rework.sidebar.newChat")}
+            </ConversationButton>
           </span>
         </div>
-        <span className={styles["conversation-button-container"]}>
-          <ConversationButton icon={{ category: "outlined", type: "Add" }} onClick={newChatHandler}>
-            {t("rework.sidebar.newChat")}
-          </ConversationButton>
-        </span>
+        <div className={styles["navigation-container"]}>
+          <NavigationMenu items={isUserSpace ? userNavigationItems : teamsNavigationItems} />
+          <Separator margin={"var(--spacing-m)"} />
+          <ChatList />
+        </div>
       </div>
-      <div className={styles["navigation-container"]}>
-        <NavigationMenu items={isUserSpace ? userNavigationItems : teamsNavigationItems} />
-        <Separator margin={"16px"} />
-        <ChatList />
-      </div>
-    </div>
+      <FullPageModal
+        isOpen={isTeamSettingsOpen}
+        onClose={() => setIsTeamSettingsOpen(false)}
+        id={"user-settings-modal"}
+      >
+        <TeamSettingsPage modalInteraction={{ close: () => setIsTeamSettingsOpen(false) }} team={getTeam()} />
+      </FullPageModal>
+    </>
   );
 }

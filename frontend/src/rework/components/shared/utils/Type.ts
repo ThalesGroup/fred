@@ -1,6 +1,6 @@
-export type Type = "primary" | "secondary" | "tertiary" | "error" | "success" | "warning" | "info" | "on-surface";
+export type ColorTheme = "primary" | "secondary" | "tertiary" | "error" | "success" | "warning" | "info" | "on-surface";
 export type ButtonVariant = "filled" | "outlined" | "text";
-export type ButtonSize = "medium" | "small";
+export type ComponentSize = "medium" | "small";
 export type IconButtonVariant = "filled" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
 
@@ -17,7 +17,16 @@ export type MaterialIconType =
   | "Delete"
   | "Infos"
   | "Person"
-  | "arrow_drop_down";
+  | "arrow_drop_down"
+  | "arrow_back"
+  | "logout"
+  | "dark_mode"
+  | "light_mode"
+  | "desktop_windows"
+  | "search"
+  | "more_vert"
+  | "more_horiz";
+
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;
 

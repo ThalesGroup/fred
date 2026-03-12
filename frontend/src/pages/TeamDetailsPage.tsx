@@ -12,7 +12,7 @@ import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
 import { capitalize } from "../utils/capitalize";
 import { KnowledgeHub } from "./KnowledgeHub.tsx";
-import {AgentHub} from "./AgentHub.tsx";
+import { AgentHub } from "./AgentHub.tsx";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();

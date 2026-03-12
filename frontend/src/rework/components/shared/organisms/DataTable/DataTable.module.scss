@@ -1,0 +1,52 @@
+@use "src/index.scss" as *;
+
+.datatable-container {
+  display: grid;
+  grid-template-columns: var(--grid-layout);
+  grid-auto-rows: minmax(min-content, auto);
+  min-height: 0;
+  overflow: auto;
+  background-color: var(--datatable-background-color);
+  border-radius: var(--spacing-xs);
+  height: 100%;
+  align-content: start;
+}
+
+.datatable-row {
+  display: contents;
+
+  &:hover .datatable-cell {
+    background-color: var(--state-on-surface-hover);
+  }
+
+  .datatable-cell {
+    height: 3.75rem;
+  }
+}
+
+.datatable-cell {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--surface-container-highest);
+  padding: 0 var(--spacing-s);
+  height: 3.5rem;
+  min-width: 0;
+  color: var(--on-surface);
+
+  @include typography("body", "large");
+
+  .header-content {
+    overflow-x: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    color: var(--on-surface-retreat);
+    @include typography("label", "large");
+  }
+}
+
+.datatable-cell-header {
+  position: sticky;
+  top: 0;
+  background-color: var(--datatable-background-color);
+}

@@ -2,8 +2,15 @@
 
 .input {
   display: flex;
+  position: relative;
   flex-direction: column;
-  gap: var(--spacing-3xs);
+  gap: var(--spacing-2xs);
+
+  &:has(.icon) {
+    input {
+      padding-left: calc(var(--spacing-s) + 1.5rem + var(--spacing-xs));
+    }
+  }
 
   input {
     outline: 2px solid var(--input-outline, transparent);
@@ -12,6 +19,7 @@
     background-color: var(--surface-container-lowest);
     padding: 0 var(--spacing-xs) 0 var(--spacing-s);
     height: 3rem;
+    color: var(--on-surface-retreat);
 
     @include typography("body", "large");
   }
@@ -37,17 +45,19 @@
 }
 
 .label {
+  padding-left: var(--spacing-xs);
   color: var(--label-color, var(--on-surface-retreat));
 
   @include typography("label", "large");
 }
 
-.hint {
+.input[data-compact="false"].hint {
+  padding-left: var(--spacing-xs);
+  min-height: 1.25rem;
+  overflow: hidden;
   color: var(--on-surface-retreat);
   text-overflow: ellipsis;
-  overflow: hidden;
   white-space: nowrap;
-  min-height: 1.25rem;
   @include typography("body", "medium");
 }
 
@@ -59,10 +69,21 @@
   color: var(--error);
 }
 
-.disabled .label, .disabled .hint {
+.disabled .label,
+.disabled .hint {
   color: var(--on-surface-retreat);
 }
 
 .input:focus-within .label {
   --label-color: var(--on-surface);
+}
+
+.icon {
+  display: flex;
+  position: absolute;
+  align-items: center;
+  padding-left: var(--spacing-s);
+  height: 3rem;
+  font-size: 1.5rem;
+  color: var(--on-surface-retreat);
 }

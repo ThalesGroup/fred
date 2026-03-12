@@ -1,5 +1,6 @@
 /* React RRule Generator */
-@import "react-rrule-generator/build/styles.css";
+
+@import "react-rrule-generator/build/styles.css" layer(react-rrule);
 
 $color-schemes: (
   "primary": (
