@@ -184,7 +184,12 @@ export function AgentCreateEditForm({
     });
   };
 
-  const isSaveDisabled = isLoading || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description;
+  const hasEmptyRequiredFields = fields.some(
+    (f) => f.required && (f.default === undefined || f.default === null || f.default === ""),
+  );
+
+  const isSaveDisabled =
+    isLoading || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>

@@ -51,6 +51,7 @@ export function TuningForm({ fields, onChange }: Props) {
                     defaultValue={f.default as string}
                     onChange={(next) => onChange(idx, next)}
                     tokens={tokens}
+                    required={f.required}
                   />
                 );
               }
@@ -99,6 +100,7 @@ export function TuningForm({ fields, onChange }: Props) {
                     label={label}
                     value={val ?? ""}
                     onChange={(e) => onChange(idx, e.target.value)}
+                    required={f.required}
                   >
                     {f.enum!.map((opt) => (
                       <MenuItem key={opt} value={opt}>
@@ -121,6 +123,7 @@ export function TuningForm({ fields, onChange }: Props) {
                   multiline={!!f.ui?.multiline}
                   minRows={f.ui?.multiline ? Math.min(f.ui?.max_lines ?? 6, 10) : undefined}
                   placeholder={f.ui?.placeholder || ""}
+                  required={f.required}
                 />
               );
             })}

@@ -25,9 +25,10 @@ type Props = {
   defaultValue?: string;
   onChange: (next: string) => void;
   tokens?: string[]; // e.g. ["{objective}", "{step_number}", "{step}", "{options}"]
+  required?: boolean;
 };
 
-export function PromptEditor({ label, value, defaultValue = "", onChange, tokens = [] }: Props) {
+export function PromptEditor({ label, value, defaultValue = "", onChange, tokens = [], required }: Props) {
   const theme = useTheme();
 
   // keep a ref to monaco editor instance (optional, when Monaco is present)
@@ -65,7 +66,10 @@ export function PromptEditor({ label, value, defaultValue = "", onChange, tokens
     <Box sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1.5, overflow: "hidden" }}>
       {/* Header */}
       <Box sx={{ px: 1.25, py: 0.75, display: "flex", alignItems: "center", gap: 1, bgcolor: "action.hover" }}>
-        <Typography variant="subtitle2">{label}</Typography>
+        <Typography variant="subtitle2">
+          {label}
+          {required && <Typography component="span">{" *"}</Typography>}
+        </Typography>
         {hasChanged && (
           <Chip
             size="small"
