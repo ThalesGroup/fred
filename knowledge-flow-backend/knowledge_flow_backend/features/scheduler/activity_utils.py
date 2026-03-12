@@ -57,7 +57,8 @@ async def await_with_heartbeat(
         if not task.done():
             task.cancel()
             with suppress(asyncio.CancelledError):
-                await task
+                # Drain the inner task so cancellation/cleanup is fully observed.
+                _ = await task
 
 
 async def to_thread_with_heartbeat(
