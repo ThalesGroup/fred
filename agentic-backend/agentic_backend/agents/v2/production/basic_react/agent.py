@@ -24,7 +24,7 @@ from agentic_backend.core.agents.v2.prompt_resources import (
     load_packaged_markdown,
 )
 
-from .profile_registry import list_react_profiles, profile_options_summary
+from .profile_registry import list_react_profiles
 
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
