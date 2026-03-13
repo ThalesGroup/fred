@@ -1,0 +1,13 @@
+@use "src/index.scss" as *;
+
+.user-avatar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background-color: var(--surface-container);
+  @include typography("label", "large");
+  color: var(--on-surface-retreat);
+}

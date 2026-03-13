@@ -1,8 +1,5 @@
 global:
   kubeconfig: ""
-  create_index:
-    enabled: true
-    image: "alpine:3.22"
   persistence:
     enabled: false # if true = Enable the creation of PVC when duckdb is used - Recommended TRUE
     dynamic: false # if true = let the PVCs create PVs if possible and do not create them manually
@@ -685,7 +682,7 @@ applications:
             generate_summary: false
             process_images: false
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: false
               generate_page_images: false
@@ -714,7 +711,7 @@ applications:
             generate_summary: false
             process_images: true
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: true
               generate_page_images: true
@@ -1056,7 +1053,7 @@ applications:
             generate_summary: false
             process_images: false
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: false
               generate_page_images: false
@@ -1085,7 +1082,7 @@ applications:
             generate_summary: true
             process_images: true
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: true
               generate_page_images: true

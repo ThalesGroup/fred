@@ -18,8 +18,9 @@ export interface AgentToolsSelectionProps {
 
 export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery(undefined, {
+  const { data: mcpServersData, isFetching: isFetchingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery(
+    undefined,
+    {
       refetchOnMountOrArgChange: true,
       refetchOnFocus: true,
       refetchOnReconnect: true,

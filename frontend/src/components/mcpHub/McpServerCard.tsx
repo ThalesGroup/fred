@@ -31,14 +31,7 @@ export interface McpServerCardProps {
   onToggleEnabled?: (server: McpServerConfiguration) => void;
 }
 
-export function McpServerCard({
-  server,
-  onEdit,
-  onDelete,
-  canEdit,
-  canDelete,
-  onToggleEnabled,
-}: McpServerCardProps) {
+export function McpServerCard({ server, onEdit, onDelete, canEdit, canDelete, onToggleEnabled }: McpServerCardProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const transport = (server.transport || "streamable_http").toLowerCase();

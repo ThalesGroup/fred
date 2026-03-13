@@ -1,0 +1,8 @@
+/* Radius */
+:root {
+  --radius-xs: 4px;
+  --radius-s: 8px;
+  --radius-m: 16px;
+  --radius-l: 24px;
+  --radius-xl: 32px;
+}

@@ -217,8 +217,7 @@ export const McpHub = () => {
         },
       }).unwrap();
       showSuccess({
-        summary:
-          server.enabled === false ? t("mcpHub.toasts.enabled") : t("mcpHub.toasts.disabled"),
+        summary: server.enabled === false ? t("mcpHub.toasts.enabled") : t("mcpHub.toasts.disabled"),
       });
       refetch();
     } catch (error: any) {

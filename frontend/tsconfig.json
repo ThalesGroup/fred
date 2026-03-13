@@ -19,7 +19,17 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/rework/core/*"],
+      "@components/*": ["src/rework/components/*"],
+      "@shared/*": ["src/rework/components/shared/*"],
+      "@hooks/*": ["src/rework/core/hooks/*"],
+      "@models/*": ["src/rework/core/models/*"],
+      "@assets/*": ["src/assets/*"]
+    }
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

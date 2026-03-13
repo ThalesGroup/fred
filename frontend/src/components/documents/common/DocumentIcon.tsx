@@ -55,13 +55,7 @@ const ExtIcon: React.FC<ExtIconProps> = ({ ext, size = 20 }) => {
   if (ext && imgOk) {
     const src = `${baseUrl}images/filetypes/${ext}.svg`;
     return (
-      <img
-        src={src}
-        alt={ext}
-        style={style as React.CSSProperties}
-        onError={() => setImgOk(false)}
-        loading="lazy"
-      />
+      <img src={src} alt={ext} style={style as React.CSSProperties} onError={() => setImgOk(false)} loading="lazy" />
     );
   }
 

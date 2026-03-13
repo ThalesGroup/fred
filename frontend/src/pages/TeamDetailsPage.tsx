@@ -11,6 +11,8 @@ import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
 import { capitalize } from "../utils/capitalize";
+import { KnowledgeHub } from "./KnowledgeHub.tsx";
+import {AgentHub} from "./AgentHub.tsx";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
@@ -41,14 +43,22 @@ export function TeamDetailsPage() {
     {
       label: capitalize(agentsNicknamePlural || "..."),
       path: `/team/${teamId}/${agentsNicknamePlural}`,
-      component: <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />,
+      component:
+        teamId === "user" ? (
+          <AgentHub />
+        ) : (
+          <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />
+        ),
     },
     {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
-      component: (
-        <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
-      ),
+      component:
+        teamId === "user" ? (
+          <KnowledgeHub />
+        ) : (
+          <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
+        ),
     },
     {
       label: t("teamDetails.tabs.apps"),

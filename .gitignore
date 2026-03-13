@@ -4,6 +4,7 @@
 **/ignore_*
 /metrics/target
 .idea/
+*.iml
 .vscode/*
 !.vscode/launch.json
 !.vscode/extensions.json

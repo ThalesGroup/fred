@@ -48,7 +48,8 @@ async function pollUploadProcessProgress(
         const hasFailed = progress.documents_failed > 0;
         const hasSucceeded =
           progress.total_documents > 0 &&
-          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >= progress.total_documents;
+          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >=
+            progress.total_documents;
 
         if (hasSucceeded && hasFailed) {
           resolve();
