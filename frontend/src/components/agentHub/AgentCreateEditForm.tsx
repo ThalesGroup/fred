@@ -19,13 +19,13 @@ import { useAgentUpdater } from "../../hooks/useAgentUpdater";
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { KeyCloakService } from "../../security/KeycloakService";
 import {
-    FieldSpec,
-    McpServerRef,
-    useCreateAgentAgenticV1AgentsCreatePostMutation,
-    useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
-    useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
-    useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
-    useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
+  FieldSpec,
+  McpServerRef,
+  useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
+  useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
+  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
+  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
@@ -341,7 +341,6 @@ export function AgentCreateEditForm({
           p: 1.5,
           position: "sticky",
           bottom: 0,
-          bgcolor: "background.paper",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",

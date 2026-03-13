@@ -127,7 +127,7 @@ export function PromptEditor({ label, value, defaultValue = "", onChange, tokens
       )}
 
       {/* Editor */}
-      <Box sx={{ height: 240 }}>
+      <Box sx={{ height: 360 }}>
         <Editor
           onMount={onMount}
           height="100%"

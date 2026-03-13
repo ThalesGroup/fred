@@ -387,7 +387,7 @@
     "fields": {
       "prompts_system": {
         "title": "Prompt système",
-        "description": "Instructions de comportement principal pour l'assistant. Elles restent côté définition afin que le runtime puisse rester générique."
+        "description": "Instructions de comportement principal pour l'assistant."
       },
       "chat_options_attach_files": {
         "title": "Autoriser les pièces jointes",

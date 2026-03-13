@@ -386,7 +386,7 @@
     "fields": {
       "prompts_system": {
         "title": "System prompt",
-        "description": "Core behavior instructions for the assistant. This stays on the definition side so the runtime can remain generic."
+        "description": "Core behavior instructions for the assistant."
       },
       "chat_options_attach_files": {
         "title": "Allow file attachments",
