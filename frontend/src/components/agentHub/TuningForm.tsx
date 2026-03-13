@@ -11,9 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Box, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
+import { AgentOptionSelectionCard } from "./AgentToolsSelection";
 import { PromptEditor } from "./PromptEditor";
 
 type Props = {
@@ -61,35 +62,12 @@ export function TuningForm({ fields, onChange }: Props) {
 
               if (f.type === "boolean") {
                 return (
-                  <Stack
-                    key={f.key}
-                    direction="row"
-                    alignItems="center"
-                    spacing={1}
-                    sx={{
-                      px: 1,
-                      py: 0.5,
-                      borderRadius: 1,
-                      border: (theme) => `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <Switch
-                      size="small"
-                      checked={!!val}
-                      onChange={(e) => onChange(idx, e.target.checked)}
-                      inputProps={{ "aria-label": label }}
-                    />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {label}
-                      </Typography>
-                      {description && (
-                        <Typography variant="caption" color="text.secondary">
-                          {description}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Stack>
+                  <AgentOptionSelectionCard
+                    name={label}
+                    description={description}
+                    selected={!!val}
+                    onSelectedChange={(next) => onChange(idx, next)}
+                  />
                 );
               }
 
