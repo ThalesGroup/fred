@@ -355,7 +355,7 @@ export default function GraphHub() {
               <Typography variant="subtitle2">{t("graphHub.showGraphSection", "Show Graph")}</Typography>
               <FormControl size="small" fullWidth>
                 <InputLabel id="multi-tag-select-label">{t("graphHub.selectLibraries", "Libraries")}</InputLabel>
-                <Select
+                <Select<string[]>
                   labelId="multi-tag-select-label"
                   label={t("graphHub.selectLibraries", "Libraries")}
                   multiple

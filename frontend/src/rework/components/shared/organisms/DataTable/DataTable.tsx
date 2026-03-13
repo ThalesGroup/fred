@@ -27,7 +27,9 @@ export default function DataTable<T>({
   return (
     <div
       className={styles["datatable-container"]}
-      style={{ "--grid-layout": tableGridLayout, "--datatable-background-color": backgroundColor } as React.CSSProperties}
+      style={
+        { "--grid-layout": tableGridLayout, "--datatable-background-color": backgroundColor } as React.CSSProperties
+      }
     >
       {columns.map((column) => (
         <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>

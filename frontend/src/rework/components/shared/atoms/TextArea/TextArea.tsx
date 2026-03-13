@@ -1,7 +1,7 @@
-import { forwardRef, useId, useState, ChangeEvent, ComponentPropsWithoutRef, useEffect } from "react";
+import { ChangeEvent, ComponentPropsWithRef, useEffect, useId, useState } from "react";
 import styles from "./TextArea.module.scss";
 
-export interface TextAreaProps extends ComponentPropsWithoutRef<"textarea"> {
+export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   label: string;
   placeholder: string;
   explication?: string;
@@ -9,55 +9,60 @@ export interface TextAreaProps extends ComponentPropsWithoutRef<"textarea"> {
   maxLength?: number;
 }
 
-const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
-  ({ label, placeholder, explication, error, maxLength = 0, onChange, value, defaultValue, ...props }, ref) => {
-    const id = useId();
+export default function TextArea({
+  label,
+  placeholder,
+  explication,
+  error,
+  maxLength = 0,
+  onChange,
+  value,
+  defaultValue,
+  ref,
+  ...props
+}: TextAreaProps) {
+  const id = useId();
 
-    const initialValue = value ?? defaultValue ?? "";
-    const [characterCounter, setCharacterCounter] = useState(String(initialValue).length);
+  const initialValue = value ?? defaultValue ?? "";
+  const [characterCounter, setCharacterCounter] = useState(String(initialValue).length);
 
-    useEffect(() => {
-      const currentVal = value ?? defaultValue ?? "";
-      setCharacterCounter(String(currentVal).length);
-    }, [value, defaultValue]);
+  useEffect(() => {
+    const currentVal = value ?? defaultValue ?? "";
+    setCharacterCounter(String(currentVal).length);
+  }, [value, defaultValue]);
 
-    const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-      if (maxLength && e.target.value.length > maxLength) {
-        e.target.value = e.target.value.slice(0, maxLength);
-      }
+  const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    if (maxLength && e.target.value.length > maxLength) {
+      e.target.value = e.target.value.slice(0, maxLength);
+    }
 
-      setCharacterCounter(e.target.value.length);
+    setCharacterCounter(e.target.value.length);
 
-      if (onChange) onChange(e);
-    };
+    if (onChange) onChange(e);
+  };
 
-    return (
-      <div
-        className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
-      >
-        <label className={styles.label} htmlFor={id}>
-          {label}
-        </label>
+  return (
+    <div
+      className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
+    >
+      <label className={styles.label} htmlFor={id}>
+        {label}
+      </label>
 
-        <textarea
-          ref={ref}
-          id={id}
-          placeholder={placeholder}
-          onChange={handleChange}
-          maxLength={maxLength > 0 ? maxLength : undefined}
-          value={value}
-          defaultValue={defaultValue}
-          {...props}
-        />
+      <textarea
+        ref={ref}
+        id={id}
+        placeholder={placeholder}
+        onChange={handleChange}
+        maxLength={maxLength > 0 ? maxLength : undefined}
+        value={value}
+        defaultValue={defaultValue}
+        {...props}
+      />
 
-        <span className={styles.hint}>
-          {error || explication || (maxLength !== 0 && `${characterCounter} / ${maxLength}`) || null}
-        </span>
-      </div>
-    );
-  },
-);
-
-TextArea.displayName = "TextArea";
-
-export default TextArea;
+      <span className={styles.hint}>
+        {error || explication || (maxLength !== 0 && `${characterCounter} / ${maxLength}`) || null}
+      </span>
+    </div>
+  );
+}

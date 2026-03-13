@@ -126,11 +126,7 @@ export function DocumentRowCompact({
           </SimpleTooltip>
         ) : onPreview ? (
           <SimpleTooltip
-            title={
-              previewReady
-                ? t("documentLibrary.preview")
-                : t("documentLibrary.previewNotReadyDetail")
-            }
+            title={previewReady ? t("documentLibrary.preview") : t("documentLibrary.previewNotReadyDetail")}
           >
             <span>
               <IconButton

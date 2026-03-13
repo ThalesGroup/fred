@@ -33,9 +33,7 @@ export default function ChatList() {
         </div>
       </div>
       <div className={styles["chat-list-items"]}>
-        {sortedSessions?.map((session) => (
-          <ChatListItem key={session.id} chat={session} onDelete={refetchSessions} />
-        ))}
+        {sortedSessions?.map((session) => <ChatListItem key={session.id} chat={session} onDelete={refetchSessions} />)}
       </div>
     </div>
   );

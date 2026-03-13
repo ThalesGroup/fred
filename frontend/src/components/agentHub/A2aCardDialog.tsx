@@ -103,7 +103,7 @@ export const A2aCardDialog = ({ open, onClose, card }: Props) => {
               </Typography>
               <Grid container spacing={1.5}>
                 {skills.map((s, idx) => (
-                  <Grid item xs={12} sm={6} key={`${s.id || s.name || "skill"}-${idx}`}>
+                  <Grid size={{ xs: 12, sm: 6 }} key={`${s.id || s.name || "skill"}-${idx}`}>
                     <Stack
                       spacing={0.5}
                       sx={{ p: 1, border: (th) => `1px solid ${th.palette.divider}`, borderRadius: 1 }}

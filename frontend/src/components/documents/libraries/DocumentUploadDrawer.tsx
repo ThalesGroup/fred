@@ -60,9 +60,9 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const [processingProfile, setProcessingProfile] = useState<IngestionProcessingProfile>("fast");
   const [tempFiles, setTempFiles] = useState<File[]>([]);
   const [uploadProgressSteps, setUploadProgressSteps] = useState<ProgressStep[]>([]);
-  const [progressSummaryByFile, setProgressSummaryByFile] = useState<
-    Record<string, ProcessDocumentsProgressResponse>
-  >({});
+  const [progressSummaryByFile, setProgressSummaryByFile] = useState<Record<string, ProcessDocumentsProgressResponse>>(
+    {},
+  );
   const [documentUidByFile, setDocumentUidByFile] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isHighlighted, setIsHighlighted] = useState(false);

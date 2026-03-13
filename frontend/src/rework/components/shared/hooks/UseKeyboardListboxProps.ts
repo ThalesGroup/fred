@@ -14,7 +14,7 @@ export function useKeyboardListbox<T>({ items, onSelect, onClose }: UseKeyboardL
       if (items.length === 0) return;
 
       switch (e.key) {
-          case "ArrowDown":
+        case "ArrowDown":
           e.preventDefault();
           setActiveIndex((prev) => (prev < items.length - 1 ? prev + 1 : 0));
           break;

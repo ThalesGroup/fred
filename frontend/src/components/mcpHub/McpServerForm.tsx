@@ -92,10 +92,7 @@ export function McpServerForm({ open, initial, onCancel, onSubmit }: McpServerFo
   }, [initial, open]);
 
   const isStdio = useMemo(() => (draft.transport || "").toLowerCase() === "stdio", [draft.transport]);
-  const isInprocess = useMemo(
-    () => (draft.transport || "").toLowerCase() === "inprocess",
-    [draft.transport],
-  );
+  const isInprocess = useMemo(() => (draft.transport || "").toLowerCase() === "inprocess", [draft.transport]);
 
   const handleSubmit = () => {
     const transport = (draft.transport || "streamable_http").toLowerCase();

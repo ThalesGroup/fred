@@ -1312,7 +1312,7 @@
   },
   "rework": {
     "back": "Retour",
-    "teamRoles":{
+    "teamRoles": {
       "member": "Membre",
       "manager": "Manager",
       "owner": "Propriétaire"

@@ -1,6 +1,6 @@
 import { useEffect, ReactNode } from "react";
 import styles from "./FullPageModal.module.scss";
-import {Portal} from "@shared/utils/Portal.tsx";
+import { Portal } from "@shared/utils/Portal.tsx";
 
 interface FullPageModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface FullPageModalProps {
 }
 
 export interface ModalInteractionProps {
-    close: () => void;
+  close: () => void;
 }
 
 export const FullPageModal = ({ isOpen, onClose, children, id }: FullPageModalProps) => {

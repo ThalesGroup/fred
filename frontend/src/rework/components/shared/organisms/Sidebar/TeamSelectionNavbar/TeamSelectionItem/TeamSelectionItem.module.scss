@@ -81,6 +81,7 @@
   left: 100%;
   align-items: center;
   transform: translateY(50%);
+  z-index: 1;
   box-shadow: 0 0 4px rgba(0, 0, 0, 1);
   border: 1px solid var(--outline);
   border-radius: var(--spacing-xs);
@@ -90,7 +91,6 @@
   pointer-events: none;
   color: var(--on-surface);
   text-wrap: nowrap;
-  z-index: 1;
 
   @include typography("title", "medium");
 }

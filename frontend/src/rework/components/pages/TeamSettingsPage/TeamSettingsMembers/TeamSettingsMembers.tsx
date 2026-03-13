@@ -53,7 +53,7 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
   return (
     <div className={styles["team-settings-members-container"]}>
       <div className={styles["team-settings-members-header"]}>
-        <div className={styles["team-settings-members-header-title"]}>{t('rework.teamSettings.members.title')}</div>
+        <div className={styles["team-settings-members-header-title"]}>{t("rework.teamSettings.members.title")}</div>
         {can_administer_members && (
           <Autocomplete<UserSummary>
             textInput={{

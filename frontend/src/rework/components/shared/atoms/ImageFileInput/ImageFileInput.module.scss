@@ -24,10 +24,10 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    border-radius: var(--radius-s);
     width: var(--image-width);
     height: var(--image-height);
     overflow: hidden;
-    border-radius: var(--radius-s);
   }
 
   .image-file-input-image {

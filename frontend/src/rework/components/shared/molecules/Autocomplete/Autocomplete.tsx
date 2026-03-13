@@ -60,7 +60,7 @@ export default function Autocomplete<T>({ textInput, options, onSelect, onFieldV
   return (
     <div className={styles["autocomplete-container"]} style={{ anchorName: safeAnchorId } as React.CSSProperties}>
       <TextInput
-          compact={true}
+        compact={true}
         {...textInput}
         onFocus={() => {
           setIsOpen(true);

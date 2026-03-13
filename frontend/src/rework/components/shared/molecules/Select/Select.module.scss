@@ -30,6 +30,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-2xs);
   box-sizing: border-box;
   outline: 2px solid var(--select-outline, transparent);
   border: 1px solid var(--border-color, var(--outline-muted));
@@ -37,7 +38,6 @@
   background-color: var(--bg-color, var(--surface-container-lowest));
   padding: 0 8px 0 12px;
   height: var(--select-height);
-  gap: var(--spacing-2xs);
 }
 
 .select-container[data-size="small"] {

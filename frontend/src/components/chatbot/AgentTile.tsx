@@ -1,6 +1,5 @@
 import GroupsIcon from "@mui/icons-material/Groups";
-import { Box, styled, Typography, useTheme } from "@mui/material";
-import Paper from "@mui/material/Paper/Paper";
+import { Box, Paper, styled, Typography, useTheme } from "@mui/material";
 import { AnyAgent, getAgentVisuals } from "../../common/agent";
 import { THEME_COLOR_MAP } from "../../common/AgentChip";
 import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";

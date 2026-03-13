@@ -352,16 +352,16 @@ export default function DesignSystemPage() {
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
-        <TextArea placeholder={"Placeholder"}></TextArea>
+        <TextArea placeholder={"Placeholder"} label={"Label"}></TextArea>
       </div>
       <div className={styles.componentCard}>
-        <TextArea placeholder={"Placeholder"} disabled></TextArea>
+        <TextArea placeholder={"Placeholder"} label={"Label"} disabled></TextArea>
       </div>
       <div className={styles.componentCard}>
-        <TextArea placeholder={"Placeholder"} error={true}></TextArea>
+        <TextArea label={"Label"} placeholder={"Placeholder"} error={"Error message"}></TextArea>
       </div>
       <div className={styles.componentCard}>
-        <TextArea placeholder={"Placeholder"} error={true} disabled></TextArea>
+        <TextArea label={"Label"} placeholder={"Placeholder"} error={"Error message"} disabled></TextArea>
       </div>
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
@@ -424,17 +424,17 @@ export default function DesignSystemPage() {
               value: 1,
               label: "Button 1",
               icon: { category: "outlined", type: "Add" },
-              onClick: () => console.log("Button 1"),
+              key: "1",
             },
-            { value: 2, label: "Button 2", onClick: () => console.log("Button 1") },
-            { value: 3, label: "Button 3", onClick: () => console.log("Button 1") },
+            { value: 2, label: "Button 2", key: "2" },
+            { value: 3, label: "Button 3", key: "3" },
             {
               value: 4,
               label: "Button 4",
               icon: { category: "outlined", type: "Home" },
-              onClick: () => console.log("Button 1"),
+              key: "4",
             },
-            { value: 5, label: "Button 5", onClick: () => console.log("Button 1") },
+            { value: 5, label: "Button 5", key: "5" },
           ]}
           baseId={"test"}
         />
@@ -447,21 +447,22 @@ export default function DesignSystemPage() {
               value: 1,
               label: "Button 1",
               icon: { category: "outlined", type: "Add" },
-              onClick: () => console.log("Button 1"),
+              key: "1",
             },
-            { value: 2, label: "Button 2", onClick: () => console.log("Button 2") },
-            { value: 3, label: "Button 3", onClick: () => console.log("Button 3") },
+            { value: 2, label: "Button 2", key: "2" },
+            { value: 3, label: "Button 3", key: "3" },
             {
               value: 4,
               label: "Button 4",
               icon: { category: "outlined", type: "Home" },
-              onClick: () => console.log("Button 4"),
+              key: "4",
             },
-            { value: 5, label: "Button 5", onClick: () => console.log("Button 5") },
+            { value: 5, label: "Button 5", key: "5" },
           ]}
-          onChange={function (value: number): void {
+          onChange={function (_: number): void {
             throw new Error("Function not implemented.");
           }}
+          size={"small"}
         />
       </div>
       <div className={styles.componentCard}>
@@ -473,21 +474,22 @@ export default function DesignSystemPage() {
               value: 1,
               label: "Button 1",
               icon: { category: "outlined", type: "Add" },
-              onClick: () => console.log("Button 1"),
+              key: "1",
             },
-            { value: 2, label: "Button 2", onClick: () => console.log("Button 2") },
-            { value: 3, label: "Button 3", onClick: () => console.log("Button 3") },
+            { value: 2, label: "Button 2", key: "2" },
+            { value: 3, label: "Button 3", key: "3" },
             {
               value: 4,
               label: "Button 4",
               icon: { category: "outlined", type: "Home" },
-              onClick: () => console.log("Button 4"),
+              key: "4",
             },
-            { value: 5, label: "Button 5", onClick: () => console.log("Button 5") },
+            { value: 5, label: "Button 5", key: "5" },
           ]}
-          onChange={function (value: number): void {
+          onChange={function (_: number): void {
             throw new Error("Function not implemented.");
           }}
+          size={"small"}
         />
       </div>
       <div className={styles.componentCard}></div>

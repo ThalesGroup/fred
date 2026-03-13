@@ -23,6 +23,7 @@ import {
   DialogTitle,
   FormControl,
   FormLabel,
+  Grid,
   Paper,
   Radio,
   RadioGroup,
@@ -30,7 +31,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
 import React from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -151,12 +151,8 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       name: data.name.trim(),
       type: "basic",
       team_id: teamId,
-      class_path:
-        data.creation_mode === "class"
-          ? data.class_path?.trim() || undefined
-          : undefined,
-      profile_id:
-        data.creation_mode === "profile" ? data.profile_id?.trim() || undefined : undefined,
+      class_path: data.creation_mode === "class" ? data.class_path?.trim() || undefined : undefined,
+      profile_id: data.creation_mode === "profile" ? data.profile_id?.trim() || undefined : undefined,
     };
 
     try {
@@ -184,8 +180,8 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       <DialogContent dividers>
         {/* Note: The <form> element is required for handleSubmit, but we'll manually trigger it below */}
         <form onSubmit={handleSubmit(submit)}>
-          <Grid2 container spacing={2}>
-            <Grid2 size={12}>
+          <Grid container spacing={2}>
+            <Grid size={12}>
               <Controller
                 name="name"
                 control={control}
@@ -202,9 +198,9 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                   />
                 )}
               />
-            </Grid2>
+            </Grid>
 
-            <Grid2 size={12}>
+            <Grid size={12}>
               <FormControl component="fieldset" fullWidth>
                 <FormLabel component="legend">{t("agentHub.fields.creationMode")}</FormLabel>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
@@ -285,10 +281,10 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                   }}
                 />
               </FormControl>
-            </Grid2>
+            </Grid>
 
             {isProfileCreation && (
-              <Grid2 size={12}>
+              <Grid size={12}>
                 <Controller
                   name="profile_id"
                   control={control}
@@ -323,11 +319,11 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     />
                   )}
                 />
-              </Grid2>
+              </Grid>
             )}
 
             {isClassCreation && (
-              <Grid2 size={12}>
+              <Grid size={12}>
                 <Controller
                   name="class_path"
                   control={control}
@@ -353,10 +349,9 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     />
                   )}
                 />
-              </Grid2>
+              </Grid>
             )}
-
-          </Grid2>
+          </Grid>
         </form>
       </DialogContent>
 

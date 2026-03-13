@@ -15,7 +15,7 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PreviewIcon from "@mui/icons-material/Preview";
-import { Box, Button, Chip, Grid2, IconButton, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -198,10 +198,10 @@ export default function MessageCard({
 
   return (
     <>
-      <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
+      <Grid container marginBottom={1} sx={{ position: "relative" }}>
         {/* Assistant avatar on the left */}
         {side === "left" && agent && (
-          <Grid2 size="auto" paddingTop={2}>
+          <Grid size="auto" paddingTop={2}>
             <SimpleTooltip title={`${agent.id}: ${agent.tuning.role}`}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                 <AgentChipMini agent={agent} />
@@ -212,13 +212,13 @@ export default function MessageCard({
                 )}
               </Box>
             </SimpleTooltip>
-          </Grid2>
+          </Grid>
         )}
 
-        <Grid2 container size="grow" display="flex" justifyContent={side}>
+        <Grid container size="grow" display="flex" justifyContent={side}>
           {message && (
             <>
-              <Grid2>
+              <Grid>
                 <Box
                   sx={{
                     display: "flex",
@@ -270,11 +270,7 @@ export default function MessageCard({
                           size="small"
                           variant="outlined"
                           color="primary"
-                          label={
-                            extras?.hitl?.stage
-                              ? `Decision · ${String(extras.hitl.stage)}`
-                              : "HITL decision"
-                          }
+                          label={extras?.hitl?.stage ? `Decision · ${String(extras.hitl.stage)}` : "HITL decision"}
                         />
                       )}
                       {isCall && pending && (
@@ -455,19 +451,19 @@ export default function MessageCard({
                   )}
                   {/* 🌟 END LINKS 🌟 */}
                 </Box>
-              </Grid2>
+              </Grid>
 
               {geoPart && (
-                <Grid2 size={12} sx={{ width: "100%" }}>
+                <Grid size={12} sx={{ width: "100%" }}>
                   <Box px={0} pt={0.5} pb={1} sx={{ width: "100%" }}>
                     <GeoMapRenderer part={geoPart} />
                   </Box>
-                </Grid2>
+                </Grid>
               )}
 
               {/* Footer controls (assistant side) */}
               {side === "left" ? (
-                <Grid2 size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                <Grid size={12} display="flex" alignItems="center" gap={1} flexWrap="wrap">
                   {enableCopy && (
                     <IconButton
                       size="small"
@@ -516,13 +512,13 @@ export default function MessageCard({
                       color: theme.palette.text.primary,
                     }}
                   /> */}
-                </Grid2>
+                </Grid>
               ) : (
-                <Grid2 height="30px" />
+                <Grid height="30px" />
               )}
             </>
           )}
-        </Grid2>
+        </Grid>
         {isAssistant && (
           <Box sx={{ position: "absolute", right: 0, top: "0.8em", zIndex: 1 }}>
             <MessageRuntimeContextHeader
@@ -532,7 +528,7 @@ export default function MessageCard({
             />
           </Box>
         )}
-      </Grid2>
+      </Grid>
 
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} onSubmit={handleFeedbackSubmit} />
     </>
