@@ -57,7 +57,15 @@ export function DocumentRowCompact({
 
   const formatDate = (date?: string) => (date ? dayjs(date).format("DD/MM/YYYY") : "-");
   const isPdf = doc.identity.document_name.toLowerCase().endsWith(".pdf");
+  const previewReady = doc.processing?.stages?.preview === "done";
+  const canOpenPreview = previewReady && Boolean(onPreview);
   const version = extractDocumentVersion(doc);
+
+  const handlePreviewClick = () => {
+    if (previewReady) {
+      onPreview?.(doc);
+    }
+  };
 
   return (
     <Box
@@ -79,8 +87,8 @@ export function DocumentRowCompact({
         <Typography
           variant="body2"
           noWrap
-          sx={{ minWidth: 0, maxWidth: "100%", cursor: onPreview ? "pointer" : "default" }}
-          onClick={() => onPreview?.(doc)}
+          sx={{ minWidth: 0, maxWidth: "100%", cursor: canOpenPreview ? "pointer" : "default" }}
+          onClick={handlePreviewClick}
           title={doc.identity.document_name}
         >
           {doc.identity.document_name || doc.identity.document_uid}
@@ -106,7 +114,6 @@ export function DocumentRowCompact({
         )}
       </Box>
       <Box sx={{ justifySelf: "start" }}>
-        {/* 🆕 Condition to show PDF button instead of standard preview */}
         {onPdfPreview && isPdf ? (
           <SimpleTooltip title={t("documentLibrary.viewOriginalPdf", "View Original PDF")}>
             <IconButton
@@ -118,11 +125,23 @@ export function DocumentRowCompact({
             </IconButton>
           </SimpleTooltip>
         ) : onPreview ? (
-          // 👈 Show standard markdown preview button for non-PDF files
-          <SimpleTooltip title={t("documentLibrary.preview")}>
-            <IconButton size="small" onClick={() => onPreview(doc)} aria-label={t("documentLibrary.preview")}>
-              <VisibilityOutlinedIcon fontSize="inherit" />
-            </IconButton>
+          <SimpleTooltip
+            title={
+              previewReady
+                ? t("documentLibrary.preview")
+                : t("documentLibrary.previewNotReadyDetail")
+            }
+          >
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => onPreview(doc)}
+                aria-label={t("documentLibrary.preview")}
+                disabled={!previewReady}
+              >
+                <VisibilityOutlinedIcon fontSize="inherit" />
+              </IconButton>
+            </span>
           </SimpleTooltip>
         ) : null}
       </Box>{" "}

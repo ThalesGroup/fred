@@ -53,6 +53,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
+    ClickHouseVectorStorageConfig,
     Configuration,
     FileSystemPullSource,
     InMemoryVectorStorage,
@@ -690,6 +691,7 @@ class ApplicationContext:
             self._vector_store_instance = OpenSearchVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
+                kpi=self.get_kpi_writer(),
                 host=opensearch_config.host,
                 index=store.index,
                 username=opensearch_config.username,
@@ -698,7 +700,6 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
             )
-            self._vector_store_instance.validate_index_or_fail()
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
         #     if self._vector_store_instance is None:
@@ -728,6 +729,44 @@ class ApplicationContext:
             logger.info(
                 "[VECTOR][PGVECTOR] Using postgres collection=%s (default table)",
                 store.collection_name,
+            )
+        elif isinstance(store, ClickHouseVectorStorageConfig):
+            try:
+                from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
+            except ModuleNotFoundError as exc:
+                missing_dep = exc.name or "unknown"
+                if missing_dep == "clickhouse_connect" or missing_dep.startswith("clickhouse_connect."):
+                    raise ImportError(
+                        "ClickHouse vector store is configured but required dependency is missing: "
+                        f"'{missing_dep}'. Install ClickHouse dependency "
+                        "`clickhouse-connect` or switch `storage.vector_store.type` to a different backend."
+                    ) from exc
+                raise
+
+            ch = get_configuration().storage.clickhouse
+            if not ch:
+                raise ValueError("Missing ClickHouse configuration")
+            if not ch.password:
+                raise ValueError("Missing ClickHouse credentials: CLICKHOUSE_PASSWORD")
+            self._vector_store_instance = ClickHouseVectorStoreAdapter(
+                embedding_model=embedding_model,
+                embedding_model_name=embedding_model_name,
+                host=ch.host,
+                port=ch.port,
+                database=ch.database,
+                table=store.table,
+                username=ch.username,
+                password=ch.password,
+                secure=ch.secure,
+                verify=ch.verify,
+                bulk_size=store.bulk_size,
+            )
+            self._vector_store_instance.validate_index_or_fail()
+            logger.info(
+                "[VECTOR][CLICKHOUSE] Using host=%s database=%s table=%s",
+                ch.host,
+                ch.database,
+                store.table,
             )
         else:
             raise ValueError("Unsupported vector store backend")
@@ -1084,6 +1123,10 @@ class ApplicationContext:
         elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass
+        elif provider == ModelProvider.VERTEX_AI.value:
+            pass
+        elif provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
+            pass
         else:
             logger.error("     ❌ Unsupported embedding provider: %s", provider)
             raise ValueError(f"Unsupported embedding provider: {provider}")
@@ -1131,6 +1174,19 @@ class ApplicationContext:
                 logger.info("     ↳ Collection: %s", store.collection_name)
                 logger.info("     ↳ Username: %s", pg.username)
                 self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
+            elif isinstance(store, ClickHouseVectorStorageConfig):
+                ch = self.configuration.storage.clickhouse
+                if not ch:
+                    logger.error("     ❌ Missing ClickHouse configuration (required for ClickHouse-backed vector store)")
+                    raise RuntimeError("ClickHouse configuration is required for ClickHouse vector store")
+                _require_env("CLICKHOUSE_PASSWORD")
+                logger.info("     ↳ Backend: clickhouse")
+                logger.info("     ↳ Host: %s  Port: %s  DB: %s", ch.host, ch.port, ch.database)
+                logger.info("     ↳ Table: %s", store.table)
+                logger.info("     ↳ Secure (TLS): %s", ch.secure)
+                logger.info("     ↳ Verify Certs: %s", ch.verify)
+                logger.info("     ↳ Username: %s", ch.username)
+                self._log_sensitive("CLICKHOUSE_PASSWORD", os.getenv("CLICKHOUSE_PASSWORD"))
             elif isinstance(store, WeaviateVectorStorage):
                 _require_env("WEAVIATE_API_KEY")
                 logger.info(f"     ↳ Host: {store.host}")
@@ -1182,6 +1238,12 @@ class ApplicationContext:
                         "     • %-14s pgvector  collection=%s",
                         label,
                         store_cfg.collection_name,
+                    )
+                elif isinstance(store_cfg, ClickHouseVectorStorageConfig):
+                    logger.info(
+                        "     • %-14s ClickHouse table=%s",
+                        label,
+                        store_cfg.table,
                     )
                 elif isinstance(store_cfg, LogStoreConfig):
                     # No-op KPI / log-only store

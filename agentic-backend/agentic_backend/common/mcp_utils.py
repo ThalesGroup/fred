@@ -64,8 +64,8 @@ def _mask_auth_value(v: str | None) -> str:
     if not v:
         return "none"
     if v.lower().startswith("bearer "):
-        # Always mask the bulk of the token
-        return "present:Bearer " + v[7:15] + "…"
+        # Never leak token fragments in logs.
+        return "present:Bearer"
     return "present"
 
 

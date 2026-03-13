@@ -28,7 +28,10 @@ from langgraph.prebuilt import ToolNode
 from agentic_backend.application_context import get_mcp_configuration
 from agentic_backend.common.mcp_interceptors import ExpiredTokenRetryInterceptor
 from agentic_backend.common.mcp_toolkit import McpToolkit
-from agentic_backend.common.mcp_utils import get_connected_mcp_client_for_agent
+from agentic_backend.common.mcp_utils import (
+    MCPConnectionError,
+    get_connected_mcp_client_for_agent,
+)
 from agentic_backend.common.tool_node_utils import create_mcp_tool_node
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -38,10 +41,13 @@ from agentic_backend.core.tools.inprocess_toolkit_registry import (
 
 logger = logging.getLogger(__name__)
 
+MCP_CONNECT_MAX_ATTEMPTS = 3
+MCP_CONNECT_RETRY_BASE_DELAY_SECS = 0.5
+
 
 async def _close_mcp_client_quietly(client: Optional[MultiServerMCPClient]) -> None:
     if not client:
-        logger.warning("[MCP] close_quietly: No client instance provided.")
+        logger.debug("[MCP] close_quietly: No client instance provided.")
         return
 
     client_id = f"0x{id(client):x}"
@@ -136,23 +142,69 @@ class MCPRuntime:
         if self._lifecycle_task and not self._lifecycle_task.done():
             return
 
-        # 1) Prepare lifecycle signals
+        runtime_context: RuntimeContext = self.agent_instance.runtime_context
+        last_error: BaseException | None = None
+
+        for attempt in range(1, MCP_CONNECT_MAX_ATTEMPTS + 1):
+            self._prepare_lifecycle_attempt(runtime_context)
+            ready_event = self._ready_event
+            if ready_event is None:
+                raise RuntimeError("MCPRuntime lifecycle attempt was not prepared.")
+            await ready_event.wait()
+
+            if self._lifecycle_error is None:
+                return
+
+            last_error = self._lifecycle_error
+            await self._await_lifecycle_attempt_completion()
+
+            if (
+                attempt >= MCP_CONNECT_MAX_ATTEMPTS
+                or not self._is_retryable_connection_error(last_error)
+            ):
+                await self._aclose_inprocess_toolkits()
+                if last_error is not None:
+                    raise last_error
+                raise RuntimeError(
+                    "MCPRuntime lifecycle failed but no lifecycle error was set."
+                )
+
+            delay_secs = MCP_CONNECT_RETRY_BASE_DELAY_SECS * (2 ** (attempt - 1))
+            logger.warning(
+                "[MCP] agent=%s init attempt %d/%d failed with %s. Retrying in %.1fs.",
+                self.agent_instance.get_id(),
+                attempt,
+                MCP_CONNECT_MAX_ATTEMPTS,
+                last_error.__class__.__name__,
+                delay_secs,
+            )
+            await asyncio.sleep(delay_secs)
+
+        await self._aclose_inprocess_toolkits()
+        if last_error is not None:
+            raise last_error
+
+    def _prepare_lifecycle_attempt(self, runtime_context: RuntimeContext) -> None:
         self._stop_event = asyncio.Event()
         self._ready_event = asyncio.Event()
         self._lifecycle_error = None
-
-        # 2) Launch lifecycle task that opens and later closes in the same task
-        runtime_context: RuntimeContext = self.agent_instance.runtime_context
         self._lifecycle_task = asyncio.create_task(
             self._run_lifecycle(runtime_context),
             name=f"mcp[{self.agent_instance.get_id()}]",
         )
 
-        # 3) Wait until connected or error
-        await self._ready_event.wait()
-        if self._lifecycle_error:
-            await self._aclose_inprocess_toolkits()
-            raise self._lifecycle_error
+    async def _await_lifecycle_attempt_completion(self) -> None:
+        if self._lifecycle_task is not None:
+            try:
+                await asyncio.shield(self._lifecycle_task)
+            finally:
+                self._lifecycle_task = None
+        self._stop_event = None
+        self._ready_event = None
+
+    @staticmethod
+    def _is_retryable_connection_error(error: BaseException) -> bool:
+        return isinstance(error, MCPConnectionError)
 
     async def _run_lifecycle(self, runtime_context: RuntimeContext) -> None:
         """

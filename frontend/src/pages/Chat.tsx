@@ -22,6 +22,9 @@ import ChatBot from "../components/chatbot/ChatBot";
 import { useListAgentsAgenticV1AgentsGetQuery } from "../slices/agentic/agenticOpenApi";
 import { normalizeAgenticFlows } from "../utils/agenticFlows";
 
+const isInternalConversationAgent = (agent: AnyAgent) =>
+  agent.metadata?.internal_agent === true || agent.metadata?.deep_search_hidden_in_ui === true;
+
 export default function Chat() {
   const { sessionId, "agent-id": agentId } = useParams<{ sessionId?: string; "agent-id"?: string }>();
   const navigate = useNavigate();
@@ -42,8 +45,17 @@ export default function Chat() {
   );
 
   const agentsFromServer = useMemo<AnyAgent[]>(() => normalizeAgenticFlows(rawAgentsFromServer), [rawAgentsFromServer]);
-  const enabledAgents = (agentsFromServer ?? []).filter(
-    (a) => a.enabled === true && !a.metadata?.deep_search_hidden_in_ui,
+  const enabledAgents = useMemo(
+    () => (agentsFromServer ?? []).filter((agent) => agent.enabled === true),
+    [agentsFromServer],
+  );
+  const visibleAgents = useMemo(
+    () => enabledAgents.filter((agent) => !isInternalConversationAgent(agent)),
+    [enabledAgents],
+  );
+  const internalAgents = useMemo(
+    () => enabledAgents.filter((agent) => isInternalConversationAgent(agent)),
+    [enabledAgents],
   );
 
   // Base runtime context propagated to every message (language, etc.)
@@ -51,17 +63,17 @@ export default function Chat() {
 
   // Find the initial agent based on URL parameter (if present)
   const initialAgent = useMemo<AnyAgent | undefined>(() => {
-    if (!agentId || enabledAgents.length === 0) return undefined;
+    if (!agentId || visibleAgents.length === 0) return undefined;
 
     // Decode the URL-encoded agent name
     const decodedAgentId = decodeURIComponent(agentId);
 
-    const match = enabledAgents.find((a) => a.id === decodedAgentId);
+    const match = visibleAgents.find((a) => a.id === decodedAgentId);
     if (!match) {
-      console.warn(`[CHAT] Agent "${decodedAgentId}" not found in enabled agents. Defaulting to first agent.`);
+      console.warn(`[CHAT] Agent "${decodedAgentId}" not found in visible agents. Defaulting to first agent.`);
     }
     return match;
-  }, [agentId, enabledAgents]);
+  }, [agentId, visibleAgents]);
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
@@ -90,7 +102,7 @@ export default function Chat() {
     );
   }
 
-  if (enabledAgents.length === 0) {
+  if (visibleAgents.length === 0) {
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="h6">No assistants available</Typography>
@@ -105,7 +117,8 @@ export default function Chat() {
       <Grid2>
         <ChatBot
           chatSessionId={sessionId}
-          agents={enabledAgents}
+          agents={visibleAgents}
+          internalAgents={internalAgents}
           initialAgent={initialAgent}
           onNewSessionCreated={handleNewSessionCreated}
           runtimeContext={baseRuntimeContext}

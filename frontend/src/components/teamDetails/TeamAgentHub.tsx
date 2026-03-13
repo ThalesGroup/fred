@@ -26,7 +26,6 @@ export function TeamAgentHub({ teamId, canCreateAgents }: TeamAgentHubProps) {
       canDelete={canCreateAgents} // todo: remove this props and use permissions list returned with each agents
       onRefetchAgents={handleRefetch}
       showRestoreButton={false}
-      showA2ACard={false}
       emptyStateMessage={t("teamDetails.noAgents")}
     />
   );

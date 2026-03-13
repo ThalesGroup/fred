@@ -46,6 +46,7 @@ run-worker-docker: ## Run the worker in Docker
 .PHONY: docker-build
 docker-build: ## Build the Docker image
 	docker build \
+		--network=$(API_DOCKER_NETWORK) \
 		-f $(DOCKERFILE_PATH) \
 		-t $(IMAGE_FULL) \
 		$(DOCKER_CONTEXT)

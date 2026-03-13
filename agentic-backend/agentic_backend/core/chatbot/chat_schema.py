@@ -21,7 +21,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Uni
 
 from fred_core import VectorSearchHit
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import (
@@ -225,10 +225,18 @@ class ChatMetadata(BaseModel):
 
 
 class BaseWsInput(BaseModel):
-    agent_id: str
+    agent_id: str | None = None
+    internal_profile_id: str | None = None
+    internal_capability: str | None = None
     runtime_context: Optional[RuntimeContext] = None
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "BaseWsInput":
+        if not self.agent_id and not self.internal_profile_id:
+            raise ValueError("Either agent_id or internal_profile_id must be provided.")
+        return self
 
 
 class ChatAskInput(BaseWsInput):
@@ -369,6 +377,7 @@ def validate_hitl_payload(raw: Any) -> HitlPayload:
     Accepts extra keys but enforces minimal UX safety:
       - question or title must be present and non-empty
       - choices, if provided, must be non-empty with unique ids and max one default
+      - compatibility: `choices=[]` is normalized away for free-text-only payloads
     """
     payload = HitlPayload.model_validate(raw)
 
@@ -381,17 +390,23 @@ def validate_hitl_payload(raw: Any) -> HitlPayload:
     # choices validation
     if payload.choices is not None:
         if len(payload.choices) == 0:
-            raise ValueError("HITL payload 'choices' must be a non-empty list.")
-        ids = [c.id.strip() for c in payload.choices if isinstance(c.id, str)]
-        if any(not cid for cid in ids):
-            raise ValueError("HITL payload 'choices' entries must have a non-empty id.")
-        if len(ids) != len(set(ids)):
-            raise ValueError("HITL payload 'choices' ids must be unique.")
-        defaults = [c for c in payload.choices if c.default]
-        if len(defaults) > 1:
-            raise ValueError(
-                "HITL payload 'choices' cannot have more than one default choice."
-            )
+            if payload.free_text:
+                payload.choices = None
+            else:
+                raise ValueError("HITL payload 'choices' must be a non-empty list.")
+        else:
+            ids = [c.id.strip() for c in payload.choices if isinstance(c.id, str)]
+            if any(not cid for cid in ids):
+                raise ValueError(
+                    "HITL payload 'choices' entries must have a non-empty id."
+                )
+            if len(ids) != len(set(ids)):
+                raise ValueError("HITL payload 'choices' ids must be unique.")
+            defaults = [c for c in payload.choices if c.default]
+            if len(defaults) > 1:
+                raise ValueError(
+                    "HITL payload 'choices' cannot have more than one default choice."
+                )
 
     # metadata: best-effort check for JSON-serializable dict
     if payload.metadata is not None and not isinstance(payload.metadata, dict):

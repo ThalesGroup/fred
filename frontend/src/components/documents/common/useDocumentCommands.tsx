@@ -35,7 +35,7 @@ type DocumentRefreshers = {
 
 export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefreshers = {}) {
   const { t } = useTranslation();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
   const [] = useLazyGetTagKnowledgeFlowV1TagsTagIdGetQuery();
 
   const [updateTag] = useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation();
@@ -158,13 +158,22 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
   const preview = useCallback(
     (doc: DocumentMetadata) => {
       const name = doc.identity.title || doc.identity.document_name || doc.identity.document_uid;
+      const previewReady = doc.processing?.stages?.preview === "done";
+
+      if (!previewReady) {
+        showInfo?.({
+          summary: t("documentLibrary.previewNotReadySummary"),
+          detail: t("documentLibrary.previewNotReadyDetail"),
+        });
+        return;
+      }
 
       openMarkdownDocument({
         document_uid: doc.identity.document_uid,
         file_name: name,
       });
     },
-    [openMarkdownDocument],
+    [openMarkdownDocument, showInfo, t],
   );
   const previewPdf = useCallback(
     (doc: DocumentMetadata) => {

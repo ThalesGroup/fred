@@ -20,7 +20,7 @@ from typing import BinaryIO, Tuple
 import pandas as pd
 from fred_core import Action, KeycloakUser, Resource, authorize
 
-from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,19 @@ class ContentService:
         self.metadata_store = ApplicationContext.get_instance().get_metadata_store()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.config = ApplicationContext.get_instance().get_config()
+
+    @staticmethod
+    def _preview_status(metadata: DocumentMetadata) -> ProcessingStatus:
+        return metadata.processing.stages.get(ProcessingStage.PREVIEW_READY, ProcessingStatus.NOT_STARTED)
+
+    def _get_preview_bytes(self, document_uid: str, *candidate_names: str) -> tuple[str, bytes]:
+        for candidate_name in candidate_names:
+            try:
+                data = self.content_store.get_preview_bytes(f"{document_uid}/output/{candidate_name}")
+                return candidate_name, data
+            except FileNotFoundError:
+                continue
+        raise FileNotFoundError(f"No preview artifact found for document {document_uid}. Tried: {', '.join(candidate_names)}")
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_document_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata:
@@ -105,20 +118,35 @@ class ContentService:
         document_metadata = await self.get_document_metadata(user, document_uid)
         if not document_metadata:
             raise FileNotFoundError(f"No metadata found for document {document_uid}")
+        preview_status = self._preview_status(document_metadata)
+        if preview_status != ProcessingStatus.DONE:
+            raise FileNotFoundError(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.")
         mime_type = document_metadata.file.mime_type
         if mime_type == "text/csv":
-            csv_bytes = self.content_store.get_preview_bytes(f"{document_uid}/output/table.csv")
-            csv_file_like = BytesIO(csv_bytes)
-            df = pd.read_csv(csv_file_like, nrows=100)
-            preview_str = df.to_markdown(index=False, tablefmt="github")
-            if preview_str is None or preview_str.strip() == "":
-                preview_str = "_(The CSV file is empty or has no data to display)_"
-            return preview_str
-        else:
             try:
-                return self.content_store.get_preview_bytes(f"{document_uid}/output/output.md").decode("utf-8")
+                candidate_name, preview_bytes = self._get_preview_bytes(
+                    document_uid,
+                    "table.csv",
+                    "output.md",
+                    "output.txt",
+                )
             except FileNotFoundError:
-                raise ValueError(f"No preview found for document {document_uid} of type {mime_type} ")
+                raise FileNotFoundError(f"No preview found for document {document_uid} of type {mime_type}.")
+
+            if candidate_name == "table.csv":
+                csv_file_like = BytesIO(preview_bytes)
+                df = pd.read_csv(csv_file_like, nrows=200)
+                preview_str = df.to_markdown(index=False, tablefmt="github")
+                if preview_str is None or preview_str.strip() == "":
+                    preview_str = "_(The CSV file is empty or has no data to display)_"
+                return preview_str
+            return preview_bytes.decode("utf-8")
+
+        try:
+            _, preview_bytes = self._get_preview_bytes(document_uid, "output.md", "output.txt")
+            return preview_bytes.decode("utf-8")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"No preview found for document {document_uid} of type {mime_type}.")
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_file_metadata(self, user: KeycloakUser, document_uid: str) -> FileMetadata:

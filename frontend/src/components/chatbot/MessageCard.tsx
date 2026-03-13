@@ -89,9 +89,9 @@ export default function MessageCard({
       feedbackPayload: {
         rating,
         comment,
-        messageId: message.exchange_id,
-        sessionId: message.session_id,
-        agentName: agent.id ?? t("chat.common.unknown"),
+        message_id: message.exchange_id,
+        session_id: message.session_id,
+        agent_id: agent.id ?? t("chat.common.unknown"),
       },
     }).then((result) => {
       if (result.error) {

@@ -19,6 +19,7 @@ import os
 
 from dotenv import load_dotenv
 
+from agentic_backend.common.catalog_overrides import apply_external_catalog_overrides
 from agentic_backend.common.structures import Configuration
 from agentic_backend.common.utils import parse_server_configuration
 
@@ -47,6 +48,7 @@ def load_configuration() -> Configuration:
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Configuration file not found: {config_file}")
     configuration: Configuration = parse_server_configuration(config_file)
+    configuration = apply_external_catalog_overrides(configuration)
     logging.getLogger(__name__).info(
         "[CONFIG] Loaded configuration from: %s",
         config_file,

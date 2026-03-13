@@ -21,7 +21,7 @@ import re
 import secrets
 import time
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocketDisconnect
@@ -48,12 +48,22 @@ from langchain_core.messages import (
 
 from agentic_backend.application_context import get_default_model, pg_async_tx
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
+from agentic_backend.common.kf_workspace_client import (
+    KfWorkspaceClient,
+    UserStorageResourceInfo,
+)
 from agentic_backend.common.mcp_utils import MCPConnectionError
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.v2.checkpoints import (
+    AsyncCheckpointReader,
+    load_checkpoint,
+)
+from agentic_backend.core.agents.v2.models import ReActAgentDefinition
+from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
@@ -102,12 +112,36 @@ def _utcnow_dt() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _resolve_effective_agent_id(
+    agent_id: str | None, internal_profile_id: str | None
+) -> str:
+    if agent_id:
+        return agent_id
+    if internal_profile_id:
+        return f"internal.react_profile.{internal_profile_id}"
+    raise ValueError("Either agent_id or internal_profile_id must be provided.")
+
+
 _HITL_RESUME_UI_META_KEYS = {
     "_hitl_choice_label",
     "_hitl_title",
     "_hitl_stage",
     "_hitl_question",
 }
+
+
+def _workspace_file_keys_for_session_cleanup(
+    resources: List[UserStorageResourceInfo],
+) -> List[str]:
+    """
+    Return user-storage keys safe to delete for one session prefix cleanup.
+
+    Only file entries are kept. Directory-like entries are ignored to avoid
+    local-filesystem `unlink()` errors and parent/child delete races.
+    """
+    keys = [entry.path for entry in resources if entry.path and entry.is_file()]
+    # Preserve order and drop duplicates.
+    return list(dict.fromkeys(keys))
 
 
 def _stringify_hitl_value(value: Any) -> Optional[str]:
@@ -154,6 +188,7 @@ def _build_hitl_decision_message(
     checkpoint_id = _stringify_hitl_value(resume_payload.get("checkpoint_id"))
 
     decision_display = choice_label or choice_id or answer_value
+    has_explicit_choice = bool(choice_id or choice_label)
     if not decision_display and not note_text:
         return None
 
@@ -163,13 +198,14 @@ def _build_hitl_decision_message(
     if stage:
         context_bits.append(stage)
 
+    lead_label = "Decision" if has_explicit_choice else "Response"
     if context_bits:
         decision_line = (
-            f"Decision ({' / '.join(context_bits)}): "
+            f"{lead_label} ({' / '.join(context_bits)}): "
             f"{decision_display or 'Provided input'}"
         )
     else:
-        decision_line = f"Decision: {decision_display or 'Provided input'}"
+        decision_line = f"{lead_label}: {decision_display or 'Provided input'}"
 
     if choice_id and choice_label and choice_id != choice_label:
         decision_line += f" (`{choice_id}`)"
@@ -203,6 +239,16 @@ def _build_hitl_decision_message(
         parts=[TextPart(text="\n".join(lines))],
         metadata=ChatMetadata(agent_id=agent_id, extras={"hitl": hitl_meta}),
     )
+
+
+def _resume_checkpoint_id(resume_payload: Dict[str, Any] | None) -> str | None:
+    if not isinstance(resume_payload, dict):
+        return None
+    raw_checkpoint_id = resume_payload.get("checkpoint_id")
+    if raw_checkpoint_id is None:
+        return None
+    checkpoint_id = str(raw_checkpoint_id).strip()
+    return checkpoint_id or None
 
 
 def _strip_hitl_resume_ui_meta(resume_payload: Dict[str, Any]) -> None:
@@ -336,9 +382,11 @@ class SessionOrchestrator:
         session_callback: SessionCallbackType | None = None,
         session_id: str,
         message: str,
-        agent_id: str,
+        agent_id: str | None,
         runtime_context: RuntimeContext,
         client_exchange_id: Optional[str] = None,
+        internal_profile_id: str | None = None,
+        internal_capability: str | None = None,
     ) -> Tuple[SessionSchema, List[ChatMessage]]:
         """
         Entry point called by the WebSocket controller for a user question.
@@ -352,6 +400,7 @@ class SessionOrchestrator:
         # Check if user is authorized to talk in this session
         session_updated = False
         t_initial = time.monotonic()
+        effective_agent_id = _resolve_effective_agent_id(agent_id, internal_profile_id)
         session = await self._get_session(
             user_id=user.uid,
             session_id=session_id,
@@ -365,15 +414,17 @@ class SessionOrchestrator:
             "chat.user_message_total",
             1,
             dims={
-                "agent_id": agent_id,
+                "agent_id": effective_agent_id,
             },
             actor=actor,
         )
 
         # If this session was created with a placeholder title, refresh it now from the first prompt.
-        title_updated = await self._maybe_refresh_title_from_prompt(
-            session=session, prompt=message
-        )
+        title_updated = False
+        if not internal_profile_id:
+            title_updated = await self._maybe_refresh_title_from_prompt(
+                session=session, prompt=message
+            )
         if title_updated:
             # Save immediately so that concurrent REST calls (e.g. get_sessions) see the new title
             async with phase_timer(self.kpi, "session_write_title"):
@@ -388,22 +439,33 @@ class SessionOrchestrator:
 
         try:
             async with phase_timer(self.kpi, "agent_init"):
-                agent, is_cached = await self.agent_factory.create_and_init(
-                    user=user,
-                    agent_id=agent_id,
-                    runtime_context=runtime_context,
-                    session_id=session.id,
-                )
+                if internal_profile_id:
+                    (
+                        agent,
+                        is_cached,
+                    ) = await self.agent_factory.create_and_init_internal_profile(
+                        user=user,
+                        profile_id=internal_profile_id,
+                        runtime_context=runtime_context,
+                        session_id=session.id,
+                    )
+                else:
+                    agent, is_cached = await self.agent_factory.create_and_init(
+                        user=user,
+                        agent_id=effective_agent_id,
+                        runtime_context=runtime_context,
+                        session_id=session.id,
+                    )
         except MCPConnectionError as mcp_err:
             self.kpi.count(
                 "chat.exchange_error",
                 1,
-                dims={"agent_id": agent_id},
+                dims={"agent_id": effective_agent_id},
                 actor=actor,
             )
             logger.error(
                 "[SESSIONS] MCP init failed for agent=%s session=%s err=%s",
-                agent_id,
+                effective_agent_id,
                 session.id,
                 mcp_err,
             )
@@ -430,14 +492,14 @@ class SessionOrchestrator:
             self.kpi.count(
                 "agent.cache_hit",
                 1,
-                dims={"agent_id": agent_id},
+                dims={"agent_id": effective_agent_id},
                 actor=actor,
             )
         else:
             self.kpi.count(
                 "agent.cache_miss",
                 1,
-                dims={"agent_id": agent_id},
+                dims={"agent_id": effective_agent_id},
                 actor=actor,
             )
 
@@ -453,7 +515,7 @@ class SessionOrchestrator:
                         user=user,
                         session=session,
                     )
-                label = f"agent={agent_id} session={session.id}"
+                label = f"agent={effective_agent_id} session={session.id}"
                 log_agent_message_summary(lc_history, label=label)
 
             base_rank = await self._ensure_next_rank(session)
@@ -475,7 +537,14 @@ class SessionOrchestrator:
                 role=Role.user,
                 channel=Channel.final,
                 parts=[TextPart(text=message)],
-                metadata=ChatMetadata(),
+                metadata=ChatMetadata(
+                    agent_id=effective_agent_id,
+                    extras=(
+                        {"internal_capability": internal_capability}
+                        if internal_capability
+                        else {}
+                    ),
+                ),
             )
             all_msgs: List[ChatMessage] = [user_msg]
             await self._emit(callback, user_msg)
@@ -493,7 +562,7 @@ class SessionOrchestrator:
                         input_messages=input_messages,
                         session_id=session.id,
                         exchange_id=exchange_id,
-                        agent_id=agent_id,
+                        agent_id=effective_agent_id,
                         base_rank=next_rank_cursor,
                         start_seq=0,  # start at the next free rank
                         callback=callback,
@@ -508,14 +577,12 @@ class SessionOrchestrator:
                 self.kpi.count(
                     "chat.exchange_error",
                     1,
-                    dims={
-                        "agent_id": agent_id,
-                    },
+                    dims={"agent_id": effective_agent_id},
                     actor=PHASE_METRIC_ACTOR,
                 )
                 logger.error(
                     "Agent execution cancelled by client disconnect (agent=%s session=%s exchange=%s)",
-                    agent_id,
+                    effective_agent_id,
                     session.id,
                     exchange_id,
                 )
@@ -543,9 +610,7 @@ class SessionOrchestrator:
                 self.kpi.count(
                     "chat.exchange_error",
                     1,
-                    dims={
-                        "agent_id": agent_id,
-                    },
+                    dims={"agent_id": effective_agent_id},
                     actor=PHASE_METRIC_ACTOR,
                 )
                 raise
@@ -579,9 +644,7 @@ class SessionOrchestrator:
                 self.kpi.count(
                     "chat.exchange_error",
                     1,
-                    dims={
-                        "agent_id": agent_id,
-                    },
+                    dims={"agent_id": effective_agent_id},
                     actor=PHASE_METRIC_ACTOR,
                 )
             except Exception as e:
@@ -612,9 +675,7 @@ class SessionOrchestrator:
                 self.kpi.count(
                     "chat.exchange_error",
                     1,
-                    dims={
-                        "agent_id": agent_id,
-                    },
+                    dims={"agent_id": effective_agent_id},
                     actor=PHASE_METRIC_ACTOR,
                 )
             all_msgs.extend(agent_msgs)
@@ -676,13 +737,13 @@ class SessionOrchestrator:
             self.kpi.gauge(
                 "persist_pool_wait_ms",
                 pool_wait_ms,
-                dims={"phase": "persist", "agent": agent_id},
+                dims={"phase": "persist", "agent": effective_agent_id},
                 actor=actor,
             )
             self.kpi.gauge(
                 "persist_sql_ms",
                 sql_ms,
-                dims={"phase": "persist", "agent": agent_id},
+                dims={"phase": "persist", "agent": effective_agent_id},
                 actor=actor,
             )
             if logger.isEnabledFor(logging.DEBUG):
@@ -713,7 +774,7 @@ class SessionOrchestrator:
                 phase="stream_total",
                 start_ts=t_initial,
             )
-            self.agent_factory.release_agent(session.id, agent_id)
+            self.agent_factory.release_agent(session.id, effective_agent_id)
             stats = self.agent_factory.get_cache_stats()
             if stats:
                 self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
@@ -803,32 +864,24 @@ class SessionOrchestrator:
             is_cached,
             session.id,
         )
-        if not is_cached:
-            logger.warning(
-                "[SESSIONS] resume aborted: agent cache miss session=%s exchange=%s agent=%s",
-                session.id,
-                exchange_id,
-                actual_agent_id,
-            )
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "resume_unavailable",
-                    "message": "Cannot resume this exchange because the agent state is unavailable. Please restart the request.",
-                },
-            )
 
-        # Optional: fetch checkpoint from the agent's in-memory saver (best-effort) to observe state reuse.
-        checkpoint_obj: dict | None = None
+        # Best-effort: fetch the persisted checkpoint to observe state reuse.
+        checkpoint_obj: Any = None
+        checkpoint_id = _resume_checkpoint_id(resume_payload)
         try:
-            streaming_mem = getattr(agent, "streaming_memory", None)
-            if streaming_mem and hasattr(streaming_mem, "get"):
-                checkpoint_obj = streaming_mem.get(
-                    {"configurable": {"thread_id": session.id}}
-                )
-            elif streaming_mem and hasattr(streaming_mem, "get_state"):
-                checkpoint_obj = streaming_mem.get_state(
-                    {"configurable": {"thread_id": session.id}}
+            checkpoint_obj = await load_checkpoint(
+                cast(AsyncCheckpointReader | None, agent.streaming_memory),
+                thread_id=session.id,
+                checkpoint_id=checkpoint_id,
+            )
+            if (
+                checkpoint_obj is None
+                and isinstance(agent, V2SessionAgent)
+                and isinstance(agent.definition, ReActAgentDefinition)
+            ):
+                checkpoint_obj = await load_checkpoint(
+                    cast(AsyncCheckpointReader | None, agent.streaming_memory),
+                    thread_id=session.id,
                 )
             if checkpoint_obj:
                 logger.info(
@@ -852,6 +905,30 @@ class SessionOrchestrator:
                 actual_agent_id,
                 session.id,
                 cp_err,
+            )
+
+        durable_resume_ready = (
+            isinstance(agent, V2SessionAgent) and checkpoint_obj is not None
+        )
+        if not is_cached and not durable_resume_ready:
+            logger.warning(
+                "[SESSIONS] resume aborted: no recoverable runtime state session=%s exchange=%s agent=%s cached=%s checkpoint_id=%s v2=%s",
+                session.id,
+                exchange_id,
+                actual_agent_id,
+                is_cached,
+                checkpoint_id,
+                isinstance(agent, V2SessionAgent),
+            )
+            message = "Cannot resume this exchange because the agent state is unavailable. Please restart the request."
+            if isinstance(agent, V2SessionAgent):
+                message = "Cannot resume this exchange because the durable checkpoint is unavailable. Please restart the request."
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "resume_unavailable",
+                    "message": message,
+                },
             )
 
         try:
@@ -1256,6 +1333,43 @@ class SessionOrchestrator:
                         doc_uid,
                         exc_info=True,
                     )
+        # Workspace file cleanup (files are stored under {session_id}/ prefix)
+        if access_token:
+            try:
+                ws_client = KfWorkspaceClient(access_token=access_token)
+                blobs = await ws_client.list_user_blobs(prefix=f"{session_id}/")
+                blob_keys = _workspace_file_keys_for_session_cleanup(blobs)
+                skipped_non_files = sum(1 for entry in blobs if not entry.is_file())
+                if skipped_non_files:
+                    logger.debug(
+                        "[SESSIONS] Workspace cleanup skipped %s non-file entries under prefix %s/",
+                        skipped_non_files,
+                        session_id,
+                    )
+                if blob_keys:
+                    results = await asyncio.gather(
+                        *(ws_client.delete_user_blob(k) for k in blob_keys),
+                        return_exceptions=True,
+                    )
+                    for key, result in zip(blob_keys, results):
+                        if isinstance(result, Exception):
+                            logger.warning(
+                                "[SESSIONS] Failed to delete workspace file %s during session cleanup: %s",
+                                key,
+                                result,
+                            )
+                        else:
+                            logger.info(
+                                "[SESSIONS] Deleted workspace file %s (session cleanup)",
+                                key,
+                            )
+            except Exception:
+                logger.warning(
+                    "[SESSIONS] Failed to list workspace files for session %s during cleanup",
+                    session_id,
+                    exc_info=True,
+                )
+
         logger.info("[SESSIONS] Deleted session %s", session_id)
 
     # ---------------- File uploads (kept for backward compatibility) ----------------
@@ -1494,7 +1608,7 @@ class SessionOrchestrator:
             session = await self.session_store.get(session_id)
 
         if session is None:
-            # A2A proxy sessions are not persisted locally; allow access to avoid noisy warnings.
+            # Missing sessions are handled by the caller; avoid noisy warnings here.
             return False
 
         # For now, ignore action, only owners can access their sessions
@@ -1917,19 +2031,52 @@ class SessionOrchestrator:
         messages: List[ChatMessage],
     ) -> None:
         """
-        Attach the **raw RuntimeContext** to assistant/final messages.
-        This is the canonical, unmodified source of truth.
+        Attach a sanitized runtime-context snapshot to assistant/final messages.
+
+        Why this exists:
+        - the UI debug tools benefit from a compact runtime snapshot
+        - raw tokens and verbose attachment payloads must never be echoed back
+        - developers mostly need execution scope, not transport secrets
         """
         if runtime_context is None:
             return
+        debug_runtime_context = _sanitize_runtime_context_for_debug(runtime_context)
         for m in messages:
             if m.role == Role.assistant and m.channel == Channel.final:
                 md = m.metadata or ChatMetadata()
-                md.runtime_context = runtime_context
+                md.runtime_context = debug_runtime_context
                 m.metadata = md
 
 
 # ---------- pure helpers (kept local for discoverability) ----------
+
+
+def _sanitize_runtime_context_for_debug(
+    runtime_context: RuntimeContext,
+) -> RuntimeContext:
+    """
+    Build the runtime-context view that is safe to expose in debug payloads.
+
+    Keep only the fields that help understand agent scope and retrieval choices.
+    Deliberately omit:
+    - access/refresh tokens
+    - token expiry details
+    - user identifiers and group memberships
+    - attachment markdown content
+    """
+
+    return RuntimeContext(
+        language=runtime_context.language,
+        session_id=runtime_context.session_id,
+        selected_document_libraries_ids=runtime_context.selected_document_libraries_ids,
+        selected_document_uids=runtime_context.selected_document_uids,
+        selected_chat_context_ids=runtime_context.selected_chat_context_ids,
+        search_policy=runtime_context.search_policy,
+        search_rag_scope=runtime_context.search_rag_scope,
+        deep_search=runtime_context.deep_search,
+        include_session_scope=runtime_context.include_session_scope,
+        include_corpus_scope=runtime_context.include_corpus_scope,
+    )
 
 
 def _concat_text_parts(parts) -> str:
