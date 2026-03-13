@@ -1224,9 +1224,9 @@ export type FeedbackRecord = {
 export type FeedbackPayload = {
   rating: number;
   comment?: string | null;
-  messageId: string;
-  sessionId: string;
-  agentName: string;
+  message_id: string;
+  session_id: string;
+  agent_id: string;
 };
 export type LogEventDto = {
   ts: number;

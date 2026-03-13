@@ -31,7 +31,8 @@ dependencies = [
   "rich==14.0.0",
   "shortuuid==1.0.13",
   "openpyxl==3.1.5",
-  "docling==2.34.0",
+  # Docling >= 2.78 uses RapidOCR by default on Linux.
+  "docling==2.78.0",
   "hf-xet==1.1.1",
   "fastapi-mcp==0.4.0",
   "duckdb>=1.3.2",
