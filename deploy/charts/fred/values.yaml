@@ -646,10 +646,10 @@ applications:
         max_ingestion_workers: 3
 
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:
-            use_gpu: true
+            use_gpu: false
             generate_summary: false
             process_images: false
             pdf:
@@ -678,7 +678,7 @@ applications:
               - suffix: ".jsonl"
                 class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
           medium:
-            use_gpu: true
+            use_gpu: false
             generate_summary: false
             process_images: false
             pdf:
@@ -687,7 +687,7 @@ applications:
               generate_picture_images: false
               generate_page_images: false
               generate_table_images: false
-              do_table_structure: false
+              do_table_structure: true
               do_ocr: false
             input_processors:
               - suffix: ".pdf"
@@ -707,17 +707,19 @@ applications:
               - suffix: ".jsonl"
                 class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
           rich:
-            use_gpu: true
+            use_gpu: false
             generate_summary: false
             process_images: true
             pdf:
               backend: docling_parse
-              images_scale: 2.0
+              images_scale: 1.0
               generate_picture_images: true
-              generate_page_images: true
+              generate_page_images: false
               generate_table_images: false
               do_table_structure: true
               do_ocr: true
+              ocr_backend: openvino
+              force_full_page_ocr: true
             input_processors:
               - suffix: ".pdf"
                 class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -1017,10 +1019,10 @@ applications:
         kpi_log_summary_top_n: 0
 
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:
-            use_gpu: true
+            use_gpu: false
             generate_summary: false
             process_images: false
             pdf:
@@ -1049,7 +1051,7 @@ applications:
               - suffix: ".jsonl"
                 class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
           medium:
-            use_gpu: true
+            use_gpu: false
             generate_summary: false
             process_images: false
             pdf:
@@ -1058,7 +1060,7 @@ applications:
               generate_picture_images: false
               generate_page_images: false
               generate_table_images: false
-              do_table_structure: false
+              do_table_structure: true
               do_ocr: false
             input_processors:
               - suffix: ".pdf"
@@ -1078,17 +1080,19 @@ applications:
               - suffix: ".jsonl"
                 class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
           rich:
-            use_gpu: true
-            generate_summary: true
+            use_gpu: false
+            generate_summary: false
             process_images: true
             pdf:
               backend: docling_parse
-              images_scale: 2.0
+              images_scale: 1.0
               generate_picture_images: true
-              generate_page_images: true
+              generate_page_images: false
               generate_table_images: false
               do_table_structure: true
               do_ocr: true
+              ocr_backend: openvino
+              force_full_page_ocr: true
             input_processors:
               - suffix: ".pdf"
                 class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
