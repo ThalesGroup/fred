@@ -262,7 +262,9 @@ def test_model_routing_bootstrap_ignores_models_catalog_file(
     tmp_path, monkeypatch
 ) -> None:
     models_catalog = tmp_path / "models_catalog.yaml"
-    models_catalog.write_text("version: v1\nprofiles: []\nrules: []\n", encoding="utf-8")
+    models_catalog.write_text(
+        "version: v1\nprofiles: []\nrules: []\n", encoding="utf-8"
+    )
     monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(models_catalog))
 
     bootstrap = resolve_model_routing_bootstrap_config()
