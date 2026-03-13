@@ -376,7 +376,8 @@
     "deleteFailedSummary": "Deletion Failed",
     "unknownDeleteError": "An unknown error occurred during deletion.",
     "confirmDeleteTitle": "Confirm deletion",
-    "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
+    "confirmDeleteMessage": "Delete this asset? This action cannot be undone.",
+    "addMoreFiles": "Add more files"
   },
   "agentEditDrawer": {
     "nameLabel": "Name",

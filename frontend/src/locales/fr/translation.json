@@ -377,7 +377,8 @@
     "deleteFailedSummary": "Échec de la Suppression",
     "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
     "confirmDeleteTitle": "Confirmer la suppression",
-    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
+    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible.",
+    "addMoreFiles": "Ajouter plus de fichiers"
   },
   "agentEditDrawer": {
     "nameLabel": "Nom",
