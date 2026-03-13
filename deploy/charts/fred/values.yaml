@@ -291,7 +291,7 @@ applications:
         # This setting is used to limit the amount of historical context
         # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
         # or when an agent session is re-initialized for any reason.
-        agentic_restore_max_exchanges: 20
+        restore_max_exchanges: 20
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 1024

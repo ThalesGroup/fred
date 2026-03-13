@@ -198,7 +198,7 @@ applications:
 
       ai:
         use_static_config_only: false
-        agentic_restore_max_exchanges: 20
+        restore_max_exchanges: 20
         max_concurrent_agents: 1024
         max_concurrent_sessions_per_user: 999999
         max_attached_files_per_user: 20
