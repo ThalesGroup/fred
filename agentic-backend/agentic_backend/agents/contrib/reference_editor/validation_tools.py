@@ -19,7 +19,7 @@ import logging
 from langchain.tools import tool
 from pydantic import ValidationError
 
-from agentic_backend.agents.reference_editor.pydantic_models import (
+from agentic_backend.agents.contrib.reference_editor.pydantic_models import (
     Contexte,
     InformationsProjet,
     SyntheseProjet,

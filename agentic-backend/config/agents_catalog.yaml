@@ -57,3 +57,74 @@ agents:
     type: "agent"
     class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
     enabled: true
+
+  - id: "Kellia"
+    name: "Kellia"
+    type: "agent"
+    class_path: "agentic_backend.agents.contrib.ppt_filler.ppt_filler_agent.PptFillerAgent"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+      attach_files: true
+
+  - id: "Raph"
+    name: "Raph"
+    type: "agent"
+    class_path: "agentic_backend.agents.contrib.reference_editor.reference_editor.ReferenceEditor"
+    enabled: true
+
+  - id: "Jim"
+    name: "Jim"
+    type: "agent"
+    class_path: "agentic_backend.agents.contrib.jira.jira_agent.JiraAgent"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+      attach_files: true
+
+  - id: "Bid Mgr"
+    name: "Bid Mgr"
+    type: "agent"
+    class_path: "agentic_backend.agents.contrib.bid_mgr.bid_mgr.BidMgr"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+      attach_files: true
+
+  - id: "Chorus Coach"
+    name: "Chorus Coach"
+    type: "agent"
+    class_path: "agentic_backend.agents.contrib.chorus_coach.chorus_coach.ChorusCoach"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+
+  - id: "CoachDG"
+    name: "CoachDG"
+    type: "agent"
+    class_path: "agentic_backend.agents.coach_dg.coach_dg.CoachDG"
+    enabled: false
+
+  - id: "LogGenius"
+    name: "LogGenius"
+    type: "agent"
+    class_path: "agentic_backend.agents.log_genius.log_genius_expert.LogGenius"
+    enabled: true
+
+  - id: "BusinessAgent"
+    name: "BusinessAgent"
+    type: "agent"
+    class_path: "agentic_backend.academy.08_business_workflow.business_agent.BusinessAgent"
+    enabled: true
+
+  - id: "HITL"
+    name: "HITL"
+    type: "agent"
+    class_path: "agentic_backend.academy.10_human_in_the_loop.hitl_agent.HitlAgent"
+    enabled: true
+
+  - id: "ParcelOpsAgent"
+    name: "ParcelOpsAgent"
+    type: "agent"
+    class_path: "agentic_backend.agents.postal.tracking.TrackingAgent"
+    enabled: true

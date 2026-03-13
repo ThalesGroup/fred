@@ -11,14 +11,14 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
-from agentic_backend.agents.ppt_filler.pydantic_models import (
+from agentic_backend.agents.contrib.ppt_filler.pydantic_models import (
     CV,
     EnjeuxBesoins,
     PrestationFinanciere,
     SearchQueries,
     schema_without_max_length,
 )
-from agentic_backend.agents.ppt_filler.skill_mastery import (
+from agentic_backend.agents.contrib.ppt_filler.skill_mastery import (
     extract_mastery_from_image,
     inject_mastery_alt_text,
     is_raster_image,

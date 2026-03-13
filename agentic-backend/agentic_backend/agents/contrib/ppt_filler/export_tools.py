@@ -9,10 +9,10 @@ from pathlib import Path
 from langchain.tools import tool
 from pydantic import ValidationError
 
-from agentic_backend.agents.ppt_filler.powerpoint_template_util import (
+from agentic_backend.agents.contrib.ppt_filler.powerpoint_template_util import (
     fill_slide_from_structured_response,
 )
-from agentic_backend.agents.ppt_filler.pydantic_models import (
+from agentic_backend.agents.contrib.ppt_filler.pydantic_models import (
     CV,
     EnjeuxBesoins,
     PrestationFinanciere,

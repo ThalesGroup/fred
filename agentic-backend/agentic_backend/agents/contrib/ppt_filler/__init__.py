@@ -14,6 +14,6 @@
 
 """PPT Filler Agent for extracting data from documents and filling PowerPoint templates."""
 
-from agentic_backend.agents.ppt_filler.ppt_filler_agent import PptFillerAgent
+from agentic_backend.agents.contrib.ppt_filler.ppt_filler_agent import PptFillerAgent
 
 __all__ = ["PptFillerAgent"]

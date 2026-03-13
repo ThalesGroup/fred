@@ -22,11 +22,11 @@ from pathlib import Path
 from langchain.tools import tool
 from pydantic import ValidationError
 
-from agentic_backend.agents.reference_editor.powerpoint_template_util import (
+from agentic_backend.agents.contrib.reference_editor.powerpoint_template_util import (
     fill_slide_from_structured_response_async,
     fill_word_from_structured_response_async,
 )
-from agentic_backend.agents.reference_editor.pydantic_models import (
+from agentic_backend.agents.contrib.reference_editor.pydantic_models import (
     Contexte,
     InformationsProjet,
     SyntheseProjet,

@@ -6,13 +6,13 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.types import Command
 
-from agentic_backend.agents.jira.helpers import (
+from agentic_backend.agents.contrib.jira.helpers import (
     ensure_pydantic_model,
     get_next_requirement_id,
     get_next_test_id,
     get_next_user_story_id,
 )
-from agentic_backend.agents.jira.pydantic_models import (
+from agentic_backend.agents.contrib.jira.pydantic_models import (
     QuickRequirement,
     QuickTest,
     QuickUserStory,

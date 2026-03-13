@@ -23,7 +23,7 @@ from pptx import Presentation
 from pptx.util import Inches as PptxInches
 from pptx.util import Pt as PptxPt
 
-from agentic_backend.agents.reference_editor.image_search_util import (
+from agentic_backend.agents.contrib.reference_editor.image_search_util import (
     get_image_for_technology,
 )
 

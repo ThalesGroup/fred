@@ -4,13 +4,13 @@ import pytest
 from fred_core import OwnerFilter
 from pydantic import ValidationError
 
-from agentic_backend.agents.reference_editor.image_search_util import (
+from agentic_backend.agents.contrib.reference_editor.image_search_util import (
     search_image_by_name,
 )
-from agentic_backend.agents.reference_editor.pydantic_models import (
+from agentic_backend.agents.contrib.reference_editor.pydantic_models import (
     InformationsProjet,
 )
-from agentic_backend.agents.reference_editor.validation_tools import (
+from agentic_backend.agents.contrib.reference_editor.validation_tools import (
     _normalize_reference_payload_for_validation,
 )
 

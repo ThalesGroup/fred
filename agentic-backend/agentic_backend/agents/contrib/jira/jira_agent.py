@@ -8,12 +8,12 @@ from langchain.agents import AgentState, create_agent
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
-from agentic_backend.agents.jira.batch_tools import BatchTools
-from agentic_backend.agents.jira.discovery_tools import DiscoveryTools
-from agentic_backend.agents.jira.export_tools import ExportTools
-from agentic_backend.agents.jira.import_tools import ImportTools
-from agentic_backend.agents.jira.quality_tools import QualityTools
-from agentic_backend.agents.jira.single_item_tools import SingleItemTools
+from agentic_backend.agents.contrib.jira.batch_tools import BatchTools
+from agentic_backend.agents.contrib.jira.discovery_tools import DiscoveryTools
+from agentic_backend.agents.contrib.jira.export_tools import ExportTools
+from agentic_backend.agents.contrib.jira.import_tools import ImportTools
+from agentic_backend.agents.contrib.jira.quality_tools import QualityTools
+from agentic_backend.agents.contrib.jira.single_item_tools import SingleItemTools
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions

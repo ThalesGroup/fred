@@ -6,7 +6,7 @@ import math
 import pytest
 from PIL import Image
 
-from agentic_backend.agents.ppt_filler.skill_mastery import (
+from agentic_backend.agents.contrib.ppt_filler.skill_mastery import (
     count_donut_segments,
     count_filled_dots,
     extract_mastery_from_image,

@@ -14,6 +14,8 @@
 
 """Reference Editor Agent for generating reference PowerPoint and Word documents."""
 
-from agentic_backend.agents.reference_editor.reference_editor import ReferenceEditor
+from agentic_backend.agents.contrib.reference_editor.reference_editor import (
+    ReferenceEditor,
+)
 
 __all__ = ["ReferenceEditor"]

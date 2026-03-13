@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from docx import Document
 
-from agentic_backend.agents.reference_editor.powerpoint_template_util import (
+from agentic_backend.agents.contrib.reference_editor.powerpoint_template_util import (
     fill_word_from_structured_response,
 )
 

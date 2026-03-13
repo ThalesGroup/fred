@@ -8,7 +8,7 @@ from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from agentic_backend.agents.jira.helpers import ensure_pydantic_model
+from agentic_backend.agents.contrib.jira.helpers import ensure_pydantic_model
 from agentic_backend.application_context import get_default_chat_model
 
 # ---------------------------------------------------------------------------

@@ -6,8 +6,8 @@ from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
-from agentic_backend.agents.ppt_filler.export_tools import ExportTools
-from agentic_backend.agents.ppt_filler.extraction_tools import ExtractionTools
+from agentic_backend.agents.contrib.ppt_filler.export_tools import ExportTools
+from agentic_backend.agents.contrib.ppt_filler.extraction_tools import ExtractionTools
 from agentic_backend.application_context import get_default_chat_model
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentChatOptions
