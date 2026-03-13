@@ -521,8 +521,6 @@ class AgentService:
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
 
-    @authorize(action=Action.CREATE, resource=Resource.AGENTS)
-    @authorize(action=Action.UPDATE, resource=Resource.AGENTS)
     def get_class_path_tuning(
         self, user: KeycloakUser, class_path: str | None
     ) -> AgentTuning:
