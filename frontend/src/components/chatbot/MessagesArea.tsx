@@ -38,7 +38,7 @@ type Props = {
   chatContextNameById?: Record<string, string>;
   hiddenUserExchangeIds?: Set<string>;
   hitlEvent?: AwaitingHumanEvent | null;
-  onHitlSubmit?: (choiceId: string, freeText?: string) => void;
+  onHitlSubmit?: (choiceId?: string, freeText?: string) => void;
   onHitlCancel?: () => void;
 };
 
@@ -155,7 +155,9 @@ function Area({
 
       const visibleUserMessages = userMessages.filter((msg, idx) => {
         const hidePrimary = idx === 0 && hiddenUserExchangeIds?.has(msg.exchange_id);
-        return !hidePrimary;
+        const hideInternalCapability =
+          idx === 0 && typeof getExtras(msg)?.internal_capability === "string";
+        return !hidePrimary && !hideInternalCapability;
       });
       const primaryUserVisible = visibleUserMessages[0];
       const renderPrimaryUserBeforeTrace =
@@ -282,6 +284,9 @@ function Area({
     chatContextNameById,
     hiddenUserExchangeIds,
     isWaiting,
+    hitlEvent,
+    onHitlSubmit,
+    onHitlCancel,
   ]);
 
   return (

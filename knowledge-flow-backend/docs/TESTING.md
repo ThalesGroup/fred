@@ -49,7 +49,7 @@ To make PDF ingestion in medium/rich robust without Internet access:
 
 - unified runtime cache under `/app/.cache`
 - cross-encoder preloaded at image build time
-- required Docling artifacts preloaded: `layout` (medium/rich), `tableformer` (rich), `easyocr` (rich)
+- required Docling artifacts preloaded: `layout` (medium/rich), `tableformer` (rich), `rapidocr` (rich)
 - HF offline mode enabled through `HF_OFFLINE_STRICT` (default `1`)
 - runtime offline variables: `HF_HUB_OFFLINE`, `TRANSFORMERS_OFFLINE`
 

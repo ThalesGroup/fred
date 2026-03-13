@@ -69,6 +69,10 @@ from requests.auth import AuthBase
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from agentic_backend.common.catalog_overrides import (
+    ModelRoutingBootstrapConfig,
+    resolve_model_routing_bootstrap_config,
+)
 from agentic_backend.common.structures import (
     Configuration,
     McpConfiguration,
@@ -186,6 +190,19 @@ def pg_async_tx():
     return get_app_context().begin_pg_transaction()
 
 
+def get_pg_async_engine():
+    """
+    Expose Fred's shared async SQL engine.
+
+    Why this helper exists:
+    - v2 runtime infrastructure such as durable checkpointing should reuse the
+      same engine lifecycle as the rest of Fred's SQL-backed stores
+    - agent code should still stay unaware of SQL infrastructure details
+    """
+
+    return get_app_context().get_pg_async_engine()
+
+
 def get_rebac_engine() -> RebacEngine:
     """Expose the shared ReBAC engine instance."""
 
@@ -248,6 +265,13 @@ def get_default_chat_model() -> BaseChatModel:
         BaseChatModel: The global chat model.
     """
     return get_app_context().get_default_chat_model()
+
+
+def get_model_routing_bootstrap_config() -> ModelRoutingBootstrapConfig:
+    """
+    Retrieves centralized v2 model-routing bootstrap configuration.
+    """
+    return get_app_context().get_model_routing_bootstrap_config()
 
 
 # -------------------------------
@@ -431,6 +455,15 @@ class ApplicationContext:
                 type(self._default_model_instance).__name__,
             )
         return self._default_model_instance
+
+    def get_model_routing_bootstrap_config(self) -> ModelRoutingBootstrapConfig:
+        """
+        Resolve v2 model-routing bootstrap inputs from centralized config helpers.
+
+        This keeps env/path resolution out of runtime factory code so startup
+        wiring remains the single place where configuration sources are defined.
+        """
+        return resolve_model_routing_bootstrap_config(default_presets_enabled=False)
 
     def get_pg_async_engine(self):
         """

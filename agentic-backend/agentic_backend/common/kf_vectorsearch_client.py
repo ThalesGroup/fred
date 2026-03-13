@@ -20,8 +20,10 @@ from typing import Any, Dict, List, Optional, Sequence
 from fred_core import OwnerFilter, VectorSearchHit
 from pydantic import TypeAdapter
 
-from agentic_backend.common.kf_base_client import KfBaseClient
-from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.common.kf_base_client import (
+    KfBaseClient,
+    KnowledgeFlowAgentContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class VectorSearchClient(KfBaseClient):
     access_token for all requests. Inherits session and retry logic from KfBaseClient.
     """
 
-    def __init__(self, agent: AgentFlow):
+    def __init__(self, agent: KnowledgeFlowAgentContext):
         super().__init__(
             agent=agent,
             allowed_methods=frozenset({"POST"}),

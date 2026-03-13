@@ -37,6 +37,7 @@ def build_tool_loop(
     model,
     tools: List[BaseTool],
     system_builder: Callable[[MessagesState], str],
+    model_resolver: Optional[Callable[[MessagesState], Any]] = None,
     requires_hitl: Optional[Callable[[str], bool]] = None,
     hitl_callback: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
     post_response: Optional[Callable[[AIMessage, MessagesState], AIMessage]] = None,
@@ -64,7 +65,8 @@ def build_tool_loop(
     async def reasoner(state: MessagesState):
         sys_text = system_builder(state)
         msgs = [SystemMessage(content=sys_text)] + state["messages"]
-        response = await model.ainvoke(msgs)
+        current_model = model_resolver(state) if model_resolver is not None else model
+        response = await current_model.ainvoke(msgs)
 
         # Attach latest tool outputs if post_response not provided
         if post_response is None:

@@ -1,7 +1,7 @@
 [project]
 name = "knowledge-flow-backend"
 readme = "README.md"
-version = "0.1"
+version = "1.3.0-post"
 description = "Knowledge Flow Backend"
 authors = [{ name = "Fred", email = "noreply@example.com" }]
 requires-python = ">=3.12,<3.13"
@@ -25,13 +25,14 @@ dependencies = [
   "pypandoc-binary==1.15",
   "pypandoc==1.15",
   "pandas==2.2.3",
-  "pypdf==6.7.1",
+  "pypdf==6.7.5",
   "python-pptx==1.0.2",
   "google-cloud-storage==3.1.0",
   "rich==14.0.0",
   "shortuuid==1.0.13",
   "openpyxl==3.1.5",
-  "docling==2.34.0",
+  # Docling >= 2.78 uses RapidOCR by default on Linux.
+  "docling==2.78.0",
   "hf-xet==1.1.1",
   "fastapi-mcp==0.4.0",
   "duckdb>=1.3.2",
@@ -49,6 +50,8 @@ dependencies = [
   "matplotlib>=3.10.7",
   "scikit-learn>=1.7.2",
   "neo4j>=5.27.0",
+  # ClickHouse client
+  "clickhouse-connect>=0.8.0",
   # MarkItDown extras: ensure .docx support is available for the lite DOCX path
   # Note: keep python-docx pinned above; markitdown[docx] will ensure runtime deps
   "markitdown[all]>=0.1.3",

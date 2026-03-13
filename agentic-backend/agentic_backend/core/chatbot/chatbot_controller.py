@@ -34,9 +34,11 @@ from fastapi import (
 )
 from fred_core import (
     Action,
+    AuthorizationError,
     KeycloakUser,
     RBACProvider,
     Resource,
+    TeamPermission,
     UserSecurity,
     VectorSearchHit,
     authorize_or_raise,
@@ -51,6 +53,7 @@ from agentic_backend.application_context import (
     get_configuration,
     get_rebac_engine,
 )
+from agentic_backend.common.catalog_overrides import resolve_models_catalog_path
 from agentic_backend.common.structures import FrontendSettings
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.runtime_context import (
@@ -58,6 +61,8 @@ from agentic_backend.core.agents.runtime_context import (
     # get_deep_search_enabled,
     # get_rag_knowledge_scope,
 )
+from agentic_backend.core.agents.v2.model_routing.catalog import load_model_catalog
+from agentic_backend.core.agents.v2.model_routing.contracts import MatchValue
 from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_schema import (
     AwaitingHumanEvent,
@@ -222,6 +227,37 @@ class FrontendConfigDTO(BaseModel):
     is_rebac_enabled: bool
 
 
+class TeamModelRoutingProfileDTO(BaseModel):
+    profile_id: str
+    capability: str
+    provider: str
+    model_name: str
+    description: str | None = None
+    is_default: bool = False
+
+
+class TeamModelRoutingRuleDTO(BaseModel):
+    rule_id: str
+    capability: str
+    operation: str | list[str] | None = None
+    purpose: str | list[str] | None = None
+    agent_id: str | list[str] | None = None
+    user_id: str | list[str] | None = None
+    target_profile_id: str
+    target_model_name: str | None = None
+    scope: Literal["global", "team"]
+
+
+class TeamModelRoutingConfigDTO(BaseModel):
+    team_id: str
+    catalog_path: str
+    catalog_exists: bool
+    catalog_version: str | None = None
+    default_profile_by_capability: dict[str, str] = Field(default_factory=dict)
+    profiles: list[TeamModelRoutingProfileDTO] = Field(default_factory=list)
+    rules: list[TeamModelRoutingRuleDTO] = Field(default_factory=list)
+
+
 class CreateSessionPayload(BaseModel):
     agent_id: Optional[str] = None
     title: Optional[str] = None
@@ -300,6 +336,118 @@ def get_user_permissions(
     return rbac_provider.list_permissions_for_user(current_user)
 
 
+def _match_value_includes(expected: MatchValue | None, actual: str) -> bool:
+    if expected is None:
+        return True
+    if isinstance(expected, str):
+        return expected == actual
+    return actual in expected
+
+
+def _serialize_match_value(value: MatchValue | None) -> str | list[str] | None:
+    if value is None or isinstance(value, str):
+        return value
+    return list(value)
+
+
+async def _authorize_team_model_routing_preview(
+    user: KeycloakUser, team_id: str
+) -> None:
+    rebac = get_rebac_engine()
+    if rebac.enabled:
+        try:
+            await rebac.check_user_permission_or_raise(
+                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            )
+        except AuthorizationError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Not authorized to view model routing for team '{team_id}'.",
+            ) from exc
+        return
+
+    if "admin" not in (user.roles or []):
+        raise HTTPException(
+            status_code=403,
+            detail="Model routing preview requires admin privileges.",
+        )
+
+
+@router.get(
+    "/config/model-routing/teams/{team_id}",
+    summary="Get team model routing configuration (read-only preview)",
+    response_model=TeamModelRoutingConfigDTO,
+)
+async def get_team_model_routing_config(
+    team_id: str,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamModelRoutingConfigDTO:
+    await _authorize_team_model_routing_preview(user, team_id)
+
+    catalog_path = resolve_models_catalog_path()
+    if not catalog_path.exists():
+        return TeamModelRoutingConfigDTO(
+            team_id=team_id,
+            catalog_path=str(catalog_path),
+            catalog_exists=False,
+        )
+
+    catalog = load_model_catalog(catalog_path)
+    policy = catalog.to_policy()
+    profiles_by_id = {profile.profile_id: profile for profile in policy.profiles}
+    default_profile_by_capability = {
+        capability.value: profile_id
+        for capability, profile_id in policy.default_profile_by_capability.items()
+    }
+    default_profile_ids = set(default_profile_by_capability.values())
+
+    profiles = [
+        TeamModelRoutingProfileDTO(
+            profile_id=profile.profile_id,
+            capability=profile.capability.value,
+            provider=profile.model.provider or "unknown",
+            model_name=profile.model.name or "unknown",
+            description=profile.description,
+            is_default=profile.profile_id in default_profile_ids,
+        )
+        for profile in sorted(
+            policy.profiles,
+            key=lambda item: (item.capability.value, item.profile_id),
+        )
+    ]
+
+    rules: list[TeamModelRoutingRuleDTO] = []
+    for rule in policy.rules:
+        if not _match_value_includes(rule.match.team_id, team_id):
+            continue
+        target_model_name = profiles_by_id.get(rule.target_profile_id)
+        rules.append(
+            TeamModelRoutingRuleDTO(
+                rule_id=rule.rule_id,
+                capability=rule.capability.value,
+                operation=_serialize_match_value(rule.operation),
+                purpose=_serialize_match_value(rule.purpose),
+                agent_id=_serialize_match_value(rule.agent_id),
+                user_id=_serialize_match_value(rule.user_id),
+                target_profile_id=rule.target_profile_id,
+                target_model_name=(
+                    target_model_name.model.name if target_model_name else None
+                ),
+                scope="global" if rule.team_id is None else "team",
+            )
+        )
+
+    return TeamModelRoutingConfigDTO(
+        team_id=team_id,
+        catalog_path=str(catalog_path),
+        catalog_exists=True,
+        catalog_version=catalog.version,
+        default_profile_by_capability=default_profile_by_capability,
+        profiles=profiles,
+        rules=rules,
+    )
+
+
 def _update_tokens_from_request(
     user: KeycloakUser,
     token: str,
@@ -350,6 +498,23 @@ def _hydrate_runtime_context(
     ctx.user_id = user.uid
     ctx.user_groups = user.groups or None
     return ctx
+
+
+def _authorize_internal_profile_request(
+    user: KeycloakUser, profile_id: str | None
+) -> None:
+    if not profile_id:
+        return
+    if profile_id != "log_genius":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported internal profile '{profile_id}'.",
+        )
+    if "admin" not in (user.roles or []):
+        raise HTTPException(
+            status_code=403,
+            detail="This internal capability requires admin privileges.",
+        )
 
 
 @router.websocket("/chatbot/query/ws")
@@ -430,6 +595,7 @@ async def websocket_chatbot_question(
         2. Forwards StreamEvents via ws_callback
         3. Sends FinalEvent at the end
         """
+        _authorize_internal_profile_request(user, payload.internal_profile_id)
         session, final_messages = await session_orchestrator.chat_ask_websocket(
             user=user,
             callback=ws_callback,
@@ -439,6 +605,8 @@ async def websocket_chatbot_question(
             agent_id=payload.agent_id,
             runtime_context=runtime_context,
             client_exchange_id=payload.client_exchange_id,
+            internal_profile_id=payload.internal_profile_id,
+            internal_capability=payload.internal_capability,
         )
         if not await _safe_ws_send_text(
             websocket,

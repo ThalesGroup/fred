@@ -62,7 +62,7 @@ processing:
       generate_summary: false
       process_images: false
       pdf:
-        backend: dlparse_v4
+        backend: docling_parse
         images_scale: 2.0
         generate_picture_images: false
         generate_page_images: false
@@ -91,7 +91,7 @@ processing:
       generate_summary: false
       process_images: true
       pdf:
-        backend: dlparse_v4
+        backend: docling_parse
         images_scale: 2.0
         generate_picture_images: true
         generate_page_images: true
@@ -179,14 +179,6 @@ embedding_model:
   settings:
     base_url: http://localhost:11434
     max_retries: 0
-
-# Optional vision model. If absent and rich.process_images=true, the processor
-# logs a warning and continues without image descriptions.
-# vision_model:
-#   provider: ollama
-#   name: llava:7b
-#   settings:
-#     base_url: http://localhost:11434
 
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2

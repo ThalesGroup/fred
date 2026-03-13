@@ -1,16 +1,53 @@
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import React from "react";
 
+const exchangeKeyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;
+
+const stableConversationKeyOf = (m: ChatMessage) => `${exchangeKeyOf(m)}|${m.role}|${m.channel}`;
+
+const isOptimisticUserMessage = (m: ChatMessage) =>
+  m.role === "user" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
+
+const hasStreamingPartialFlag = (m: ChatMessage) =>
+  m.role === "assistant" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { streaming_partial?: unknown } | undefined)?.streaming_partial === true;
+
+const shouldClearStreamingPartials = (m: ChatMessage) =>
+  exchangeKeyOf(m) &&
+  (
+    m.channel === "tool_call" ||
+    m.channel === "tool_result" ||
+    (m.role === "assistant" && m.channel === "final" && !hasStreamingPartialFlag(m))
+  );
+
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
+  const exchangeKey = exchangeKeyOf(m);
+  const base = shouldClearStreamingPartials(m)
+    ? all.filter((x) => !(exchangeKeyOf(x) === exchangeKey && hasStreamingPartialFlag(x)))
+    : all;
   const k = keyOf(m);
-  const idx = all.findIndex((x) => keyOf(x) === k);
+  const stableConversationKey = stableConversationKeyOf(m);
+  const idx = base.findIndex((x) => {
+    if (keyOf(x) === k) return true;
+    if (
+      isOptimisticUserMessage(x) &&
+      m.role === "user" &&
+      m.channel === "final"
+    ) {
+      return stableConversationKeyOf(x) === stableConversationKey;
+    }
+    return false;
+  });
   if (idx >= 0) {
-    const updated = [...all];
+    const updated = [...base];
     updated[idx] = m; // overwrite (most recent wins)
     return sortMessages(updated);
   }
-  return sortMessages([...all, m]);
+  return sortMessages([...base, m]);
 };
 
 export const sortMessages = (arr: ChatMessage[]) =>
@@ -23,10 +60,11 @@ export const sortMessages = (arr: ChatMessage[]) =>
   });
 
 export const mergeAuthoritative = (existing: ChatMessage[], finals: ChatMessage[]) => {
-  // Build maps by key
-  const map = new Map(existing.map((m) => [keyOf(m), m]));
-  for (const f of finals) map.set(keyOf(f), f); // overwrite existing or insert new
-  return sortMessages([...map.values()]);
+  let merged = [...existing];
+  for (const msg of finals) {
+    merged = upsertOne(merged, msg);
+  }
+  return sortMessages(merged);
 };
 
 // Convert http(s) API base to ws(s) chat endpoint reliably

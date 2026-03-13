@@ -240,7 +240,7 @@ def get_shared_stack(
                 _SHARED_TUNING.timeout.write,
                 _SHARED_TUNING.timeout.pool,
             )
-            logger.warning(
+            logger.debug(
                 "[NET][TUNING] provider=%s applied_limits={max=%s keepalive=%s exp=%ss} "
                 "applied_timeout={connect=%ss read=%ss write=%ss pool=%ss} "
                 "from_settings=%s",
@@ -264,7 +264,7 @@ def get_shared_stack(
                     _SHARED_TUNING,
                 )
             else:
-                logger.warning(
+                logger.debug(
                     "[NET][TUNING] provider=%s reusing shared stack "
                     "limits(max=%s keepalive=%s exp=%ss) "
                     "timeout(connect=%ss read=%ss write=%ss pool=%ss)",

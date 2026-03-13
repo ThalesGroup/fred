@@ -14,13 +14,12 @@
 
 // utils/getUserAvatar.tsx
 import { Avatar, Badge, useTheme } from "@mui/material";
-import { red, blue, green, purple, orange, teal, yellow } from "@mui/material/colors";
+import { red, blue, green, purple, orange, teal } from "@mui/material/colors";
 import AppsIcon from "@mui/icons-material/Apps";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import SecurityIcon from "@mui/icons-material/Security";
-import StarIcon from "@mui/icons-material/Star";
 const colors = [red[800], blue[800], green[800], purple[800], orange[800]];
 export function getFactTypeIcon(factType: string, size: number = 12) {
   const theme = useTheme();
@@ -64,22 +63,13 @@ export const getAgentAvatar = (name: string, size: number = 28) => {
   const color = expertColors[name] || fallbackColor; // Use mapped color or fallback
   return <Avatar sx={{ bgcolor: color, width: size, height: size }}>{name?.toUpperCase().charAt(0)}</Avatar>;
 };
-export const getAgentBadge = (name: string, isLeader: boolean = false, size: number = 28) => {
-  const agentColor = isLeader ? teal[500] : green[500];
+export const getAgentBadge = (name: string, size: number = 28) => {
+  const agentColor = green[500];
 
   return (
     <Badge
       overlap="circular"
-      badgeContent={
-        isLeader ? (
-          <StarIcon
-            sx={{
-              color: yellow[800], // Star color
-              fontSize: size / 2, // Adjust size of the star
-            }}
-          />
-        ) : null
-      }
+      badgeContent={null}
       anchorOrigin={{ vertical: "top", horizontal: "right" }} // Position of the star
     >
       <Avatar sx={{ bgcolor: agentColor, width: size, height: size }}>{name?.toUpperCase().charAt(0)}</Avatar>

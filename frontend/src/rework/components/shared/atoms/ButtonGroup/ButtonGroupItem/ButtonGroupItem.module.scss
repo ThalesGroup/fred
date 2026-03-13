@@ -1,3 +1,4 @@
+@use "sass:map";
 @use "src/index.scss" as *;
 
 .button-group-item {
@@ -63,23 +64,23 @@
   @each $name, $scheme in $color-schemes {
     &[data-color="#{$name}"] {
       &:active .state-layer:not([data-selected="true"]) {
-        --item-background-color: #{map-get($scheme, "on-container-pressed")};
+        --item-background-color: #{map.get($scheme, "on-container-pressed")};
       }
 
       &:hover:not(:active) .state-layer:not([data-selected="true"]) {
-        --item-background-color: #{map-get($scheme, "on-container-hover")};
+        --item-background-color: #{map.get($scheme, "on-container-hover")};
       }
 
       [data-selected="true"] {
-        --item-background-color: #{map-get($scheme, "container")};
+        --item-background-color: #{map.get($scheme, "container")};
       }
 
       .label {
-        --label-color: #{map-get($scheme, "on-container")};
+        --label-color: #{map.get($scheme, "on-container")};
       }
 
       .icon {
-        --icon-color: #{map-get($scheme, "on-container")};
+        --icon-color: #{map.get($scheme, "on-container")};
       }
     }
   }

@@ -16,15 +16,34 @@ from __future__ import annotations
 
 import importlib
 import logging
+from dataclasses import dataclass
 from typing import List, Type
 
 from agentic_backend.common.structures import (
+    AgentSettings,
     Configuration,
 )
+from agentic_backend.core.agents.agent_class_resolver import (
+    AgentImplementationKind,
+    resolve_agent_reference,
+)
 from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
+from agentic_backend.core.agents.v2.catalog import (
+    apply_profile_defaults_to_settings,
+    build_definition_from_settings,
+    definition_to_agent_settings,
+    definition_to_agent_tuning,
+)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedAgentCatalogueEntry:
+    settings: AgentSettings
+    tuning: AgentTuning
 
 
 class AgentLoader:
@@ -45,40 +64,86 @@ class AgentLoader:
     # Public API
     # ---------------------------------------------------------------------
 
-    def load_static(self) -> List[AgentFlow]:
+    def load_static(self) -> List[LoadedAgentCatalogueEntry]:
         """
-        Build agents declared in configuration (enabled only), run `async_init()`,
-        and return `(instances, failed_map)`. `failed_map` contains AgentSettings
-        for static agents that failed to import/instantiate/init (so a retry loop
-        can attempt later).
+        Resolve static agent declarations into catalogue entries.
+
+        For legacy `AgentFlow`, the class instance remains the source of truth for
+        default settings and tuning.
+        For v2 definitions, we derive the current `AgentSettings` compatibility
+        view directly from the pure definition.
         """
-        instances: List[AgentFlow] = []
+        entries: List[LoadedAgentCatalogueEntry] = []
         for agent_cfg in self.config.ai.agents:
             if not agent_cfg.enabled:
                 continue
-            if not agent_cfg.class_path:
+            if not agent_cfg.class_path and not agent_cfg.definition_ref:
                 logger.warning(
-                    "No class_path for static agent '%s' — skipping.",
+                    "No class_path/definition_ref for static agent '%s' — skipping.",
                     agent_cfg.id,
                 )
                 continue
             try:
-                cls = self._import_agent_class(agent_cfg.class_path)
-                if not issubclass(cls, AgentFlow):
-                    logger.error(
-                        "Class '%s' is not AgentFlow for '%s'",
-                        agent_cfg.class_path,
-                        agent_cfg.id,
+                resolved = resolve_agent_reference(
+                    class_path=agent_cfg.class_path,
+                    definition_ref=agent_cfg.definition_ref,
+                )
+                if resolved.implementation_kind == AgentImplementationKind.FLOW:
+                    cls = self._import_agent_class(resolved.class_path)
+                    inst: AgentFlow = cls(agent_settings=agent_cfg)
+                    entries.append(
+                        LoadedAgentCatalogueEntry(
+                            settings=inst.get_agent_settings(),
+                            tuning=inst.get_agent_tunings(),
+                        )
                     )
                     continue
-                inst: AgentFlow = cls(agent_settings=agent_cfg)
-                instances.append(inst)
+
+                definition = build_definition_from_settings(
+                    definition_class=resolved.cls,
+                    settings=agent_cfg,
+                )
+                effective_settings = apply_profile_defaults_to_settings(
+                    definition=definition,
+                    settings=agent_cfg,
+                )
+                derived = definition_to_agent_settings(
+                    definition,
+                    class_path=(
+                        None
+                        if resolved.definition_ref is not None
+                        else resolved.class_path
+                    ),
+                    definition_ref=resolved.definition_ref,
+                    enabled=agent_cfg.enabled,
+                ).model_copy(
+                    update={
+                        "id": agent_cfg.id,
+                        "name": agent_cfg.name,
+                        "team_id": agent_cfg.team_id,
+                        "enabled": agent_cfg.enabled,
+                        "metadata": agent_cfg.metadata,
+                        "definition_ref": resolved.definition_ref,
+                        "chat_options": effective_settings.chat_options,
+                    }
+                )
+                effective_tuning = (
+                    effective_settings.tuning or definition_to_agent_tuning(definition)
+                )
+                entries.append(
+                    LoadedAgentCatalogueEntry(
+                        settings=derived.model_copy(
+                            update={"tuning": effective_tuning}
+                        ),
+                        tuning=effective_tuning,
+                    )
+                )
             except Exception as e:
                 logger.exception(
                     "❌ Failed to construct static agent '%s': %s", agent_cfg.id, e
                 )
 
-        return instances
+        return entries
 
     async def load_persisted(self) -> List[AgentFlow]:
         """
@@ -88,34 +153,45 @@ class AgentLoader:
         out: List[AgentFlow] = []
 
         for agent_settings in await self.store.load_all():
-            if not agent_settings.class_path:
+            if not agent_settings.class_path and not agent_settings.definition_ref:
                 logger.warning(
-                    "agent=%s No class_path found — deleting stale entry from store.",
+                    "agent=%s No class_path/definition_ref found — deleting stale entry from store.",
                     agent_settings.id,
                 )
                 try:
                     await self.store.delete(agent_settings.id)
                 except Exception:
                     logger.exception(
-                        "agent=%s Failed to delete stale entry without class_path",
+                        "agent=%s Failed to delete stale entry without class_path/definition_ref",
                         agent_settings.id,
                     )
                 continue
 
             try:
-                cls = self._import_agent_class(agent_settings.class_path)
+                resolved = resolve_agent_reference(
+                    class_path=agent_settings.class_path,
+                    definition_ref=agent_settings.definition_ref,
+                )
+                if resolved.implementation_kind != AgentImplementationKind.FLOW:
+                    logger.debug(
+                        "agent=%s persisted entry is v2 definition; AgentLoader.load_persisted() skips runtime instantiation.",
+                        agent_settings.id,
+                    )
+                    continue
+
+                cls = self._import_agent_class(resolved.class_path)
                 if not issubclass(cls, AgentFlow):
                     logger.error(
                         "agent=%s class=%s is not AgentFlow",
                         agent_settings.id,
-                        agent_settings.class_path,
+                        resolved.class_path,
                     )
                     continue
 
                 logger.debug(
                     "agent=%s class=%s loaded",
                     agent_settings.id,
-                    agent_settings.class_path,
+                    resolved.class_path,
                 )
                 inst: AgentFlow = cls(agent_settings=agent_settings)
                 out.append(inst)
@@ -154,6 +230,8 @@ class AgentLoader:
         """
         module_name, class_name = class_path.rsplit(".", 1)
         module = importlib.import_module(module_name)
-        if class_name == "Leader":
-            raise ImportError(f"Class '{class_name}' not found in '{module_name}'")
+        if class_name in {"Leader", "LeaderFlow"}:
+            raise ImportError(
+                f"Class '{class_name}' is deprecated and no longer supported."
+            )
         return getattr(module, class_name)
