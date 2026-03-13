@@ -25,7 +25,8 @@ type Props = {
 export function TuningForm({ fields, onChange }: Props) {
   const { t } = useTranslation();
   // optional grouping by ui.group
-  const groups = groupBy(fields, (f) => f.ui?.group || "General");
+  const filedsToShow = fields.filter((f) => !f.ui?.hide);
+  const groups = groupBy(filedsToShow, (f) => f.ui?.group || "General");
 
   return (
     <Stack spacing={2}>

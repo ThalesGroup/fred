@@ -538,6 +538,7 @@ export type UiHints = {
   markdown?: boolean;
   textarea?: boolean;
   group?: string | null;
+  hide?: boolean;
 };
 export type FieldSpec = {
   key: string;
