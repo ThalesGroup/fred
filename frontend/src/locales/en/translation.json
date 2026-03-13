@@ -353,7 +353,7 @@
     }
   },
   "assetManager": {
-    "title": "Manage Assets for {{agentId}}",
+    "title": "Manage Assets for {{agentName}}",
     "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
     "listTitle": "Current Assets",
     "noAssetsFound": "No assets found. Upload one below to get started.",
@@ -376,7 +376,8 @@
     "deleteFailedSummary": "Deletion Failed",
     "unknownDeleteError": "An unknown error occurred during deletion.",
     "confirmDeleteTitle": "Confirm deletion",
-    "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
+    "confirmDeleteMessage": "Delete this asset? This action cannot be undone.",
+    "addMoreFiles": "Add more files"
   },
   "agentEditDrawer": {
     "nameLabel": "Name",
