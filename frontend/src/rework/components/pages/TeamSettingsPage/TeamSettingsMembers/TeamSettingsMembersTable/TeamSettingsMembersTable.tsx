@@ -7,11 +7,11 @@ import { useTranslation } from "react-i18next";
 import {
   TeamMember,
   TeamWithPermissions,
-  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
-  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
+  useListTeamMembersQuery,
+  useRemoveTeamMemberMutation,
   UserTeamRelation,
-  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
-} from "../../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+  useUpdateTeamMemberMutation,
+} from "../../../../../../slices/controlPlane/controlPlaneApi.ts";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {
@@ -34,9 +34,9 @@ interface TeamSettingsMembersTableProps {
 export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTableProps) {
   const { t } = useTranslation();
 
-  const { data: teamMembers } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: team.id });
-  const [updateTeamMember] = useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation();
-  const [removeTeamMember] = useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation();
+  const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
+  const [updateTeamMember] = useUpdateTeamMemberMutation();
+  const [removeTeamMember] = useRemoveTeamMemberMutation();
 
   const can_administer_members = team.permissions?.includes("can_administer_members");
   const can_administer_managers = team.permissions?.includes("can_administer_managers");

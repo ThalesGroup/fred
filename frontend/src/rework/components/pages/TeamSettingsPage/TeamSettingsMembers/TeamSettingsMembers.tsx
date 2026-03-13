@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TeamWithPermissions,
-  useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
-  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
-  useListUsersKnowledgeFlowV1UsersGetQuery,
+  useAddTeamMemberMutation,
+  useListTeamMembersQuery,
+  useListUsersQuery,
   UserSummary,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+} from "../../../../../slices/controlPlane/controlPlaneApi.ts";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {
@@ -20,10 +20,9 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
 
   const can_administer_members = team.permissions?.includes("can_administer_members");
 
-  const { data: teamMembers } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: team.id });
-  const { data: allApplicationUsers } = useListUsersKnowledgeFlowV1UsersGetQuery();
-  const [addTeamMember, { isLoading: isAddingMember }] =
-    useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation();
+  const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
+  const { data: allApplicationUsers } = useListUsersQuery();
+  const [addTeamMember, { isLoading: isAddingMember }] = useAddTeamMemberMutation();
 
   const [addUserQuery, setAddUserQuery] = useState<string>("");
 

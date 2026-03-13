@@ -163,6 +163,93 @@
             "OAuth2PasswordBearer": []
           }
         ]
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Temporary bootstrap endpoint to create a user.",
+        "description": "Create a user in Keycloak for temporary bootstrap and testing flows.",
+        "operationId": "create_user_control_plane_v1_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/control-plane/v1/users/{user_id}": {
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Temporary bootstrap endpoint to delete a user.",
+        "description": "Delete a user in Keycloak for temporary bootstrap and testing flows.",
+        "operationId": "delete_user_control_plane_v1_users__user_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/control-plane/v1/teams": {
@@ -475,6 +562,60 @@
           "relation"
         ],
         "title": "AddTeamMemberRequest"
+      },
+      "CreateUserRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Username"
+          },
+          "email": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Password"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "password"
+        ],
+        "title": "CreateUserRequest",
+        "description": "Minimal payload to create a user for temporary bootstrap workflows."
       },
       "HTTPValidationError": {
         "properties": {
@@ -864,7 +1005,7 @@
           "can_administer_owners"
         ],
         "title": "TeamPermission",
-        "description": "Team permissions encoded in the graph."
+        "description": "Actions allowed at team scope.\n\nExample:\n- `can_update_resources`: create/update team libraries.\n- `can_administer_members`: add/remove team members."
       },
       "TeamWithPermissions": {
         "properties": {
@@ -997,7 +1138,8 @@
         "required": [
           "id"
         ],
-        "title": "UserSummary"
+        "title": "UserSummary",
+        "description": "Normalized user projection returned by Control Plane APIs."
       },
       "UserTeamRelation": {
         "type": "string",
