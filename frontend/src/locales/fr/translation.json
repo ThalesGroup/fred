@@ -354,7 +354,7 @@
     }
   },
   "assetManager": {
-    "title": "Gérer les ressources pour {{agentId}}",
+    "title": "Gérer les ressources pour {{agentName}}",
     "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
@@ -377,7 +377,8 @@
     "deleteFailedSummary": "Échec de la Suppression",
     "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
     "confirmDeleteTitle": "Confirmer la suppression",
-    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
+    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible.",
+    "addMoreFiles": "Ajouter plus de fichiers"
   },
   "agentEditDrawer": {
     "nameLabel": "Nom",
