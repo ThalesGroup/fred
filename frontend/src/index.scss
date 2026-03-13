@@ -1,5 +1,6 @@
 /* React RRule Generator */
-@import "react-rrule-generator/build/styles.css";
+@use "sass:map";
+@import "react-rrule-generator/build/styles.css" layer(react-rrule);
 
 $color-schemes: (
   "primary": (
@@ -11,6 +12,10 @@ $color-schemes: (
     "pressed": var(--state-on-primary-pressed),
     "focused": var(--state-on-primary-focused),
     "selected": var(--state-on-primary-selected),
+    "on-container-hover": var(--state-on-primary-container-hover),
+    "on-container-pressed": var(--state-on-primary-container-pressed),
+    "on-container-focused": var(--state-on-primary-container-focused),
+    "on-container-selected": var(--state-on-primary-container-selected),
   ),
   "secondary": (
     "main": var(--secondary),
@@ -21,6 +26,10 @@ $color-schemes: (
     "pressed": var(--state-on-secondary-pressed),
     "focused": var(--state-on-secondary-focused),
     "selected": var(--state-on-secondary-selected),
+    "on-container-hover": var(--state-on-secondary-container-hover),
+    "on-container-pressed": var(--state-on-secondary-container-pressed),
+    "on-container-focused": var(--state-on-secondary-container-focused),
+    "on-container-selected": var(--state-on-secondary-container-selected),
   ),
   "tertiary": (
     "main": var(--tertiary),
@@ -31,6 +40,10 @@ $color-schemes: (
     "pressed": var(--state-on-tertiary-pressed),
     "focused": var(--state-on-tertiary-focused),
     "selected": var(--state-on-tertiary-selected),
+    "on-container-hover": var(--state-on-tertiary-container-hover),
+    "on-container-pressed": var(--state-on-tertiary-container-pressed),
+    "on-container-focused": var(--state-on-tertiary-container-focused),
+    "on-container-selected": var(--state-on-tertiary-container-selected),
   ),
   "error": (
     "main": var(--error),
@@ -41,6 +54,10 @@ $color-schemes: (
     "pressed": var(--state-on-error-pressed),
     "focused": var(--state-on-error-focused),
     "selected": var(--state-on-error-selected),
+    "on-container-hover": var(--state-on-error-container-hover),
+    "on-container-pressed": var(--state-on-error-container-pressed),
+    "on-container-focused": var(--state-on-error-container-focused),
+    "on-container-selected": var(--state-on-error-container-selected),
   ),
   "success": (
     "main": var(--success),
@@ -51,6 +68,10 @@ $color-schemes: (
     "pressed": var(--state-on-success-pressed),
     "focused": var(--state-on-success-focused),
     "selected": var(--state-on-success-selected),
+    "on-container-hover": var(--state-on-success-container-hover),
+    "on-container-pressed": var(--state-on-success-container-pressed),
+    "on-container-focused": var(--state-on-success-container-focused),
+    "on-container-selected": var(--state-on-success-container-selected),
   ),
   "warning": (
     "main": var(--warning),
@@ -61,6 +82,10 @@ $color-schemes: (
     "pressed": var(--state-on-warning-pressed),
     "focused": var(--state-on-warning-focused),
     "selected": var(--state-on-warning-selected),
+    "on-container-hover": var(--state-on-warning-container-hover),
+    "on-container-pressed": var(--state-on-warning-container-pressed),
+    "on-container-focused": var(--state-on-warning-container-focused),
+    "on-container-selected": var(--state-on-warning-container-selected),
   ),
   "info": (
     "main": var(--info),
@@ -71,16 +96,34 @@ $color-schemes: (
     "pressed": var(--state-on-info-pressed),
     "focused": var(--state-on-info-focused),
     "selected": var(--state-on-info-selected),
+    "on-container-hover": var(--state-on-info-container-hover),
+    "on-container-pressed": var(--state-on-info-container-pressed),
+    "on-container-focused": var(--state-on-info-container-focused),
+    "on-container-selected": var(--state-on-info-container-selected),
+  ),
+  "on-surface": (
+    "main": var(--on-surface),
+    "on-main": var(--surface-main),
+    "container": var(--surface-container),
+    "on-container": var(--on-surface),
+    "hover": var(--state-on-surface-hover),
+    "pressed": var(--state-on-surface-pressed),
+    "focused": var(--state-on-surface-focused),
+    "selected": var(--state-on-surface-selected),
+    "on-container-hover": var(--state-on-surface-container-hover),
+    "on-container-pressed": var(--state-on-surface-container-pressed),
+    "on-container-focused": var(--state-on-surface-container-focused),
+    "on-container-selected": var(--state-on-surface-container-selected),
   ),
 );
 
 @mixin use-scheme($name) {
-  $scheme: map-get($color-schemes, $name);
+  $scheme: map.get($color-schemes, $name);
 
-  --current-bg: #{map-get($scheme, "main")};
-  --current-text: #{map-get($scheme, "on-main")};
-  --current-hover: #{map-get($scheme, "hover")};
-  --current-pressed: #{map-get($scheme, "pressed")};
+  --current-bg: #{map.get($scheme, "main")};
+  --current-text: #{map.get($scheme, "on-main")};
+  --current-hover: #{map.get($scheme, "hover")};
+  --current-pressed: #{map.get($scheme, "pressed")};
 }
 
 @mixin typography($style, $size, $emphasized: false) {

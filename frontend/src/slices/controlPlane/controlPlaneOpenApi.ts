@@ -44,6 +44,18 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/users` }),
     }),
+    createUserControlPlaneV1UsersPost: build.mutation<
+      CreateUserControlPlaneV1UsersPostApiResponse,
+      CreateUserControlPlaneV1UsersPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/users`, method: "POST", body: queryArg.createUserRequest }),
+    }),
+    deleteUserControlPlaneV1UsersUserIdDelete: build.mutation<
+      DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse,
+      DeleteUserControlPlaneV1UsersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}`, method: "DELETE" }),
+    }),
     listTeamsControlPlaneV1TeamsGet: build.query<
       ListTeamsControlPlaneV1TeamsGetApiResponse,
       ListTeamsControlPlaneV1TeamsGetApiArg
@@ -114,6 +126,14 @@ export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiArg = {
 };
 export type ListUsersControlPlaneV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersControlPlaneV1UsersGetApiArg = void;
+export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Successful Response */ UserSummary;
+export type CreateUserControlPlaneV1UsersPostApiArg = {
+  createUserRequest: CreateUserRequest;
+};
+export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
+export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
+  userId: string;
+};
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
@@ -200,6 +220,14 @@ export type UserSummary = {
   last_name?: string | null;
   username?: string | null;
 };
+export type CreateUserRequest = {
+  username: string;
+  email: string;
+  password: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  enabled?: boolean;
+};
 export type Team = {
   id: string;
   name: string;
@@ -264,6 +292,8 @@ export const {
   useTriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostMutation,
   useListUsersControlPlaneV1UsersGetQuery,
   useLazyListUsersControlPlaneV1UsersGetQuery,
+  useCreateUserControlPlaneV1UsersPostMutation,
+  useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useListTeamsControlPlaneV1TeamsGetQuery,
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,

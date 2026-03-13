@@ -25,7 +25,7 @@ export default function TeamSelectionNavbar() {
           selected={pathname.startsWith(`/teams`)}
         />
       </div>
-      <Separator margin={"8px"} />
+      <Separator margin={"var(--spacing-xs)"} />
       <div>
         {teams?.map((team) => {
           return (

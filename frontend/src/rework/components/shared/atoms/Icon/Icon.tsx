@@ -1,4 +1,4 @@
-import { IconCategory, IconType } from "@shared/utils/Types.ts";
+import { IconCategory, IconType } from "@shared/utils/Type.ts";
 import styles from "./Icon.module.scss";
 
 export interface IconProps {

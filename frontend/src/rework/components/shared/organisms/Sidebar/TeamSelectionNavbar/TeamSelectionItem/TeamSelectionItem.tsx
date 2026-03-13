@@ -2,10 +2,10 @@ import { useTranslation } from "react-i18next";
 import styles from "./TeamSelectionItem.module.scss";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, To } from "react-router-dom";
 
 interface TeamSelectionItemProps {
-  redirection: string;
+  redirection: To;
   teamName: string;
   selected: boolean;
   imgUrl?: string;

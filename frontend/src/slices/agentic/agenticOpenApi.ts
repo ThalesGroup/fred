@@ -950,6 +950,7 @@ export type StreamEvent = {
 export type SessionSchema = {
   id: string;
   user_id: string;
+  team_id?: string | null;
   agent_id?: string | null;
   title: string;
   updated_at: string;
@@ -983,6 +984,7 @@ export type AttachmentRef = {
 export type SessionWithFiles = {
   id: string;
   user_id: string;
+  team_id?: string | null;
   agent_id?: string | null;
   title: string;
   updated_at: string;
@@ -1146,6 +1148,7 @@ export type TeamModelRoutingConfigDto = {
 export type CreateSessionPayload = {
   agent_id?: string | null;
   title?: string | null;
+  team_id?: string | null;
 };
 export type ChatMessage2 = {
   session_id: string;

@@ -1,13 +1,14 @@
+@use "sass:map";
 @use "src/index.scss" as *;
 
 .btn {
-  margin: 0;
-  border-radius: var(--radius-s);
-  padding: 0;
   cursor: var(--btn-cursor, pointer);
+  margin: 0;
   outline: 2px solid var(--btn-outline, transparent);
   border: 1px solid var(--btn-border, transparent);
+  border-radius: var(--radius-s);
   background-color: var(--btn-background, transparent);
+  padding: 0;
   overflow: hidden;
 }
 
@@ -26,21 +27,21 @@
 @each $name, $scheme in $color-schemes {
   .btn-#{$name} {
     &.btn-filled {
-      --btn-background: #{map-get($scheme, "main")};
-      --btn-text-color: #{map-get($scheme, "on-main")};
+      --btn-background: #{map.get($scheme, "main")};
+      --btn-text-color: #{map.get($scheme, "on-main")};
 
       &:hover:not(:disabled) {
-        --btn-background-surface: #{map-get($scheme, "hover")};
+        --btn-background-surface: #{map.get($scheme, "hover")};
       }
 
       &:active:not(:disabled) {
-        --btn-background-surface: #{map-get($scheme, "pressed")};
+        --btn-background-surface: #{map.get($scheme, "pressed")};
       }
     }
 
     &.btn-outlined {
-      --btn-border: #{map-get($scheme, "main")};
-      --btn-text-color: #{map-get($scheme, "main")};
+      --btn-border: #{map.get($scheme, "main")};
+      --btn-text-color: #{map.get($scheme, "main")};
 
       &:hover:not(:disabled) {
         --btn-background-surface: var(--state-on-surface-hover);
@@ -52,7 +53,7 @@
     }
 
     &.btn-text {
-      --btn-text-color: #{map-get($scheme, "main")};
+      --btn-text-color: #{map.get($scheme, "main")};
 
       &:hover:not(:disabled) {
         --btn-background-surface: var(--state-on-surface-hover);

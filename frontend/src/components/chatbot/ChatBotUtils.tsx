@@ -17,11 +17,9 @@ const hasStreamingPartialFlag = (m: ChatMessage) =>
 
 const shouldClearStreamingPartials = (m: ChatMessage) =>
   exchangeKeyOf(m) &&
-  (
-    m.channel === "tool_call" ||
+  (m.channel === "tool_call" ||
     m.channel === "tool_result" ||
-    (m.role === "assistant" && m.channel === "final" && !hasStreamingPartialFlag(m))
-  );
+    (m.role === "assistant" && m.channel === "final" && !hasStreamingPartialFlag(m)));
 
 // Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
@@ -33,11 +31,7 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
   const stableConversationKey = stableConversationKeyOf(m);
   const idx = base.findIndex((x) => {
     if (keyOf(x) === k) return true;
-    if (
-      isOptimisticUserMessage(x) &&
-      m.role === "user" &&
-      m.channel === "final"
-    ) {
+    if (isOptimisticUserMessage(x) && m.role === "user" && m.channel === "final") {
       return stableConversationKeyOf(x) === stableConversationKey;
     }
     return false;

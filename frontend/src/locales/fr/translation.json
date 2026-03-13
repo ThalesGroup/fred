@@ -354,7 +354,7 @@
     }
   },
   "assetManager": {
-    "title": "Gérer les ressources pour {{agentId}}",
+    "title": "Gérer les ressources pour {{agentName}}",
     "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
@@ -377,7 +377,8 @@
     "deleteFailedSummary": "Échec de la Suppression",
     "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
     "confirmDeleteTitle": "Confirmer la suppression",
-    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
+    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible.",
+    "addMoreFiles": "Ajouter plus de fichiers"
   },
   "agentEditDrawer": {
     "nameLabel": "Nom",
@@ -1311,6 +1312,12 @@
     "defaultConfirmButtonLabel": "Confirmer"
   },
   "rework": {
+    "back": "Retour",
+    "teamRoles": {
+      "member": "Membre",
+      "manager": "Manager",
+      "owner": "Propriétaire"
+    },
     "sidebar": {
       "title": "FRED.AI",
       "team": {
@@ -1327,6 +1334,54 @@
       "newChat": "Nouvelle conversation",
       "chatList": {
         "title": "Conversations"
+      }
+    },
+    "userSettings": {
+      "disconnect": "Déconnexion",
+      "title": "Votre profil",
+      "app": {
+        "dark": "Sombre",
+        "system": "Système",
+        "light": "Clair",
+        "french": "Français",
+        "english": "Anglais"
+      },
+      "conversationProfile": {
+        "title": "Profil de conversation",
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos agents doivent s’adresser à vous."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Membres",
+        "settings": "Paramètres",
+        "leaveTeam": "Quitter l'équipe"
+      },
+      "members": {
+        "title": "Membres de l'équipe",
+        "addMember": {
+          "placeholder": "Inviter des utilisateurs"
+        },
+        "table": {
+          "deleteAction": "Supprimer",
+          "identifiant": "Identifiant",
+          "firstName": "Prénom",
+          "lastName": "Nom",
+          "role": "Rôle",
+          "actions": "Actions"
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Bannière de l'équipe",
+        "description": {
+          "label": "Description de l'équipe",
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+        },
+        "privateTeam": "Equipe privé",
+        "teamPrompt": {
+          "label": "Contexte de l'équipe (prompt)",
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
+        }
       }
     }
   }

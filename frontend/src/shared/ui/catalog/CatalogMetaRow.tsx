@@ -42,4 +42,3 @@ export const CatalogMetaRow = ({ label, value, dense = false }: CatalogMetaRowPr
     </Stack>
   );
 };
-

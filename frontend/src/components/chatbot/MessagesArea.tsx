@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Grid2 } from "@mui/material";
+import { Box, Grid } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import React, { memo, useMemo } from "react";
 import { AnyAgent } from "../../common/agent";
@@ -45,8 +45,8 @@ type Props = {
 function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
   const theme = useTheme();
   return (
-    <Grid2 container marginBottom={1} sx={{ position: "relative" }}>
-      <Grid2 size="auto" paddingTop={2}>
+    <Grid container marginBottom={1} sx={{ position: "relative" }}>
+      <Grid size="auto" paddingTop={2}>
         <SimpleTooltip title={`${agent.id}: ${agent.tuning.role}`}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
             <AgentChipMini agent={agent} />
@@ -55,8 +55,8 @@ function TypingIndicatorRow({ agent }: { agent: AnyAgent }) {
             </Box>
           </Box>
         </SimpleTooltip>
-      </Grid2>
-    </Grid2>
+      </Grid>
+    </Grid>
   );
 }
 
@@ -155,13 +155,11 @@ function Area({
 
       const visibleUserMessages = userMessages.filter((msg, idx) => {
         const hidePrimary = idx === 0 && hiddenUserExchangeIds?.has(msg.exchange_id);
-        const hideInternalCapability =
-          idx === 0 && typeof getExtras(msg)?.internal_capability === "string";
+        const hideInternalCapability = idx === 0 && typeof getExtras(msg)?.internal_capability === "string";
         return !hidePrimary && !hideInternalCapability;
       });
       const primaryUserVisible = visibleUserMessages[0];
-      const renderPrimaryUserBeforeTrace =
-        Boolean(primaryUserVisible) && userMessages[0] === primaryUserVisible;
+      const renderPrimaryUserBeforeTrace = Boolean(primaryUserVisible) && userMessages[0] === primaryUserVisible;
 
       if (renderPrimaryUserBeforeTrace && primaryUserVisible) {
         elements.push(

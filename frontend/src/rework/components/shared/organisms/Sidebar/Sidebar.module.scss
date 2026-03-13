@@ -2,7 +2,7 @@
   display: grid;
   position: relative;
   grid-template-rows: auto 64px;
-  grid-template-columns: 1fr 230px;
+  grid-template-columns: 1fr auto;
   background-color: var(--surface-container-low);
   height: 100%;
 }

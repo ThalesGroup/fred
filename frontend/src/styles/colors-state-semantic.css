@@ -7,6 +7,12 @@
   --state-on-surface-selected: color-mix(in srgb, var(--on-surface), transparent 84%);
   --state-on-surface-disabled: color-mix(in srgb, var(--on-surface), transparent 90%);
 
+  --state-surface-main-hover: color-mix(in srgb, var(--surface-main), transparent 92%);
+  --state-surface-main-pressed: color-mix(in srgb, var(--surface-main), transparent 88%);
+  --state-surface-main-focused: color-mix(in srgb, var(--surface-main), transparent 84%);
+  --state-surface-main-selected: color-mix(in srgb, var(--surface-main), transparent 84%);
+  --state-surface-main-disabled: color-mix(in srgb, var(--surface-main), transparent 90%);
+
   --state-on-primary-hover: color-mix(in srgb, var(--on-primary), transparent 92%);
   --state-on-primary-pressed: color-mix(in srgb, var(--on-primary), transparent 88%);
   --state-on-primary-focused: color-mix(in srgb, var(--on-primary), transparent 84%);

@@ -1,0 +1,84 @@
+@use "src/index.scss" as *;
+
+.trigger {
+  all: unset;
+}
+
+.select-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+
+  &:hover {
+    --border-color: var(--outline);
+  }
+
+  &[data-state="open"] {
+    --border-color: transparent;
+    --select-outline: var(--primary);
+    --label-color: var(--on-surface);
+  }
+
+  &[data-error="true"] {
+    --border-color: transparent;
+    --select-outline: var(--error);
+  }
+}
+
+.state-layer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  box-sizing: border-box;
+  outline: 2px solid var(--select-outline, transparent);
+  border: 1px solid var(--border-color, var(--outline-muted));
+  border-radius: var(--spacing-xs);
+  background-color: var(--bg-color, var(--surface-container-lowest));
+  padding: 0 8px 0 12px;
+  height: var(--select-height);
+}
+
+.select-container[data-size="small"] {
+  --select-height: 2.5rem;
+}
+
+.select-container[data-size="medium"] {
+  --select-height: 3rem;
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+.label {
+  padding-left: var(--spacing-xs);
+  color: var(--label-color, var(--on-surface-retreat));
+  @include typography("label", "large");
+}
+
+.value {
+  @include typography("body", "large");
+}
+
+.select-container[data-compact="false"] .error-message {
+  padding: 0 var(--spacing-xs);
+  height: 1rem;
+  color: var(--error);
+
+  @include typography("body", "small");
+}
+
+.menu-popover {
+  top: anchor(bottom);
+  left: anchor(left);
+  margin: var(--spacing-3xs) 0 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
+}
