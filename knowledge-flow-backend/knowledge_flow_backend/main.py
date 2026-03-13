@@ -117,8 +117,9 @@ def load_environment(dotenv_path: str = "./config/.env"):
 def load_configuration():
     load_environment()
     config_file = os.environ.get("CONFIG_FILE", "./config/configuration.yaml")
-    configuration: Configuration = parse_server_configuration(config_file)
-    logger.info("%s Loaded configuration from: %s", LOG_PREFIX, config_file)
+    override_file = os.environ.get("CONFIG_OVERRIDE_FILE")
+    configuration: Configuration = parse_server_configuration(config_file, override_file)
+    logger.info("%s Loaded configuration from base: %s, override: %s", LOG_PREFIX, config_file, override_file)
     return configuration
 
 

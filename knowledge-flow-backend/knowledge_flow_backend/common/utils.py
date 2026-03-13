@@ -27,22 +27,48 @@ from knowledge_flow_backend.common.structures import Configuration
 logger = logging.getLogger(__name__)
 
 
-def parse_server_configuration(configuration_path: str) -> Configuration:
+def deep_merge(dict1: dict, dict2: dict) -> dict:
+    """
+    Deep merges dict2 into dict1.
+    """
+    result = dict1.copy()
+    for key, value in dict2.items():
+        if isinstance(value, dict) and key in result and isinstance(result[key], dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def parse_server_configuration(configuration_path: str, override_path: Optional[str] = None) -> Configuration:
     """
     Parses the server configuration from a YAML file.
+    If an override_path is provided, it deep merges the override configuration
+    into the base configuration.
 
     Args:
-        configuration_path (str): The path to the configuration YAML file.
+        configuration_path (str): The path to the base configuration YAML file.
+        override_path (Optional[str]): The path to the override configuration YAML file.
 
     Returns:
-        Configuration: The parsed configuration object.
+        Configuration: The parsed and merged configuration object.
     """
     with open(configuration_path, "r") as f:
         try:
-            config: Dict = yaml.safe_load(f)
+            config: Dict = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
-            print(f"Error while parsing configuration file {configuration_path}: {e}")
+            print(f"Error while parsing base configuration file {configuration_path}: {e}")
             exit(1)
+
+    if override_path and __import__("os").path.exists(override_path):
+        with open(override_path, "r") as f:
+            try:
+                override_config: Dict = yaml.safe_load(f) or {}
+                config = deep_merge(config, override_config)
+            except yaml.YAMLError as e:
+                print(f"Error while parsing override configuration file {override_path}: {e}")
+                exit(1)
+
     return Configuration(**config)
 
 

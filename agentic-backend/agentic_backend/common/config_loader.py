@@ -45,13 +45,16 @@ def load_configuration() -> Configuration:
     load_environment()
     default_config_file = "./config/configuration.yaml"
     config_file = os.environ.get("CONFIG_FILE", default_config_file)
+    override_file = os.environ.get("CONFIG_OVERRIDE_FILE")
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    configuration: Configuration = parse_server_configuration(config_file)
+    
+    configuration: Configuration = parse_server_configuration(config_file, override_file)
     configuration = apply_external_catalog_overrides(configuration)
     logging.getLogger(__name__).info(
-        "[CONFIG] Loaded configuration from: %s",
+        "[CONFIG] Loaded configuration from base: %s, override: %s",
         config_file,
+        override_file,
     )
     global _last_config_file_path
     _last_config_file_path = config_file

@@ -1,0 +1,47 @@
+{{- define "common-library.configmap-catalogs" }}
+
+{{- if .app.configuration_type.backend }}
+
+{{- if .app.catalogs }}
+
+{{- if .app.catalogs.models_override }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .app.applicationName }}-model-catalog-override"
+  namespace: {{ .root.Release.Namespace }}
+data:
+  models_catalog_override.yaml: |
+{{ .app.catalogs.models_override | toYaml | indent 4 }}
+{{- end }}
+
+{{- if .app.catalogs.agents_override }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .app.applicationName }}-agents-catalog-override"
+  namespace: {{ .root.Release.Namespace }}
+data:
+  agents_catalog_override.yaml: |
+{{ .app.catalogs.agents_override | toYaml | indent 4 }}
+{{- end }}
+
+{{- if .app.catalogs.mcp_override }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .app.applicationName }}-mcp-catalog-override"
+  namespace: {{ .root.Release.Namespace }}
+data:
+  mcp_catalog_override.yaml: |
+{{ .app.catalogs.mcp_override | toYaml | indent 4 }}
+{{- end }}
+
+{{- end }}
+
+{{- end }}
+
+{{ end -}}

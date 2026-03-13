@@ -49,7 +49,9 @@ applications:
         - "asyncio"
     env:
       - name: CONFIG_FILE
-        value: "/app/config/configuration.yaml"
+        value: "/app/config/configuration_prod.yaml"
+      - name: CONFIG_OVERRIDE_FILE
+        value: "/app/config/override.yaml"
     # Optional catalogs (catalog-first configuration):
     # 1) Create a ConfigMap named `agentic-backend-model-catalog`
     #    with key `models_catalog.yaml`.
@@ -59,50 +61,55 @@ applications:
     #
     # Catalog precedence:
     # - if a catalog file exists, it is the source of truth
-    # - if missing, backend can still fallback to legacy `configuration.yaml` sections
+    # - if missing, backend can still fallback to legacy `configuration_prod.yaml` sections
     #   for backward compatibility
     # 3) Uncomment the entries below.
     extraEnvVars:
-      # - name: FRED_MODELS_CATALOG_FILE
-      #   value: "/app/config/models_catalog.yaml"
-      # - name: FRED_V2_MODELS_CATALOG_FILE  # backward-compatible alias
-      #   value: "/app/config/models_catalog.yaml"
-      # - name: FRED_MODELS_DEFAULT_CHAT_PROFILE_ID
-      #   value: "chat.ollama.mistral"
-      # - name: FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID
-      #   value: "language.ollama.mistral"
-      # - name: FRED_AGENTS_CATALOG_FILE
-      #   value: "/app/config/agents_catalog.yaml"
-      # - name: FRED_MCP_CATALOG_FILE
-      #   value: "/app/config/mcp_catalog.yaml"
+      - name: FRED_MODELS_CATALOG_FILE
+        value: "/app/config/models_catalog.yaml"
+      - name: FRED_MODELS_CATALOG_OVERRIDE_FILE
+        value: "/app/config/models_catalog_override.yaml"
+      - name: FRED_AGENTS_CATALOG_FILE
+        value: "/app/config/agents_catalog.yaml"
+      - name: FRED_AGENTS_CATALOG_OVERRIDE_FILE
+        value: "/app/config/agents_catalog_override.yaml"
+      - name: FRED_MCP_CATALOG_FILE
+        value: "/app/config/mcp_catalog.yaml"
+      - name: FRED_MCP_CATALOG_OVERRIDE_FILE
+        value: "/app/config/mcp_catalog_override.yaml"
     extraVolumeMounts:
-      # - name: agentic-backend-model-catalog-vol
-      #   mountPath: /app/config/models_catalog.yaml
-      #   subPath: models_catalog.yaml
-      #   readOnly: true
-      # - name: agentic-backend-catalogs-vol
-      #   mountPath: /app/config/agents_catalog.yaml
-      #   subPath: agents_catalog.yaml
-      #   readOnly: true
-      # - name: agentic-backend-catalogs-vol
-      #   mountPath: /app/config/mcp_catalog.yaml
-      #   subPath: mcp_catalog.yaml
-      #   readOnly: true
+      # models_catalog and agents_catalog base files are in the Docker image
+      - name: agentic-backend-model-catalog-override-vol
+        mountPath: /app/config/models_catalog_override.yaml
+        subPath: models_catalog_override.yaml
+        readOnly: true
+      - name: agentic-backend-agents-catalog-override-vol
+        mountPath: /app/config/agents_catalog_override.yaml
+        subPath: agents_catalog_override.yaml
+        readOnly: true
+      - name: agentic-backend-mcp-catalog-override-vol
+        mountPath: /app/config/mcp_catalog_override.yaml
+        subPath: mcp_catalog_override.yaml
+        readOnly: true
     extraVolumes:
-      # - name: agentic-backend-model-catalog-vol
-      #   configMap:
-      #     name: agentic-backend-model-catalog
-      #     items:
-      #       - key: models_catalog.yaml
-      #         path: models_catalog.yaml
-      # - name: agentic-backend-catalogs-vol
-      #   configMap:
-      #     name: agentic-backend-catalogs
-      #     items:
-      #       - key: agents_catalog.yaml
-      #         path: agents_catalog.yaml
-      #       - key: mcp_catalog.yaml
-      #         path: mcp_catalog.yaml
+      - name: agentic-backend-model-catalog-override-vol
+        configMap:
+          name: agentic-backend-model-catalog-override
+          items:
+            - key: models_catalog_override.yaml
+              path: models_catalog_override.yaml
+      - name: agentic-backend-agents-catalog-override-vol
+        configMap:
+          name: agentic-backend-agents-catalog-override
+          items:
+            - key: agents_catalog_override.yaml
+              path: agents_catalog_override.yaml
+      - name: agentic-backend-mcp-catalog-override-vol
+        configMap:
+          name: agentic-backend-mcp-catalog-override
+          items:
+            - key: mcp_catalog_override.yaml
+              path: mcp_catalog_override.yaml
     ports:
       - name: http
         containerPort: 8000
@@ -141,8 +148,8 @@ applications:
       hosts: []
     volumeMounts:
       - name: agentic-backend-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
+        mountPath: /app/config/override.yaml
+        subPath: override.yaml
       - name: agentic-backend-env-vol
         mountPath: /app/config/.env
         subPath: .env
@@ -337,32 +344,21 @@ applications:
         feedback_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/feedback.duckdb"
-
         agent_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/agent.duckdb"
-
         mcp_servers_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/mcp_servers.duckdb"
-
         session_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session.duckdb"
-
         history_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/history.duckdb"
-
         attachments_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session_attachments.duckdb"
-
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
-        log_store:
-          type: "in_memory"
 
     dotenv:
       AZURE_OPENAI_API_KEY: ""
@@ -496,7 +492,7 @@ applications:
   knowledge-flow-backend:
     enabled: true
     applicationName: knowledge-flow-backend
-    configurationFileName: configuration.yaml
+    configurationFileName: override.yaml
     deployment:
       enabled: true
     replicaCount: 1
@@ -528,7 +524,9 @@ applications:
       - name: LOG_LEVEL
         value: "INFO"
       - name: CONFIG_FILE
-        value: "/app/config/configuration.yaml"
+        value: "/app/config/configuration_prod.yaml"
+      - name: CONFIG_OVERRIDE_FILE
+        value: "/app/config/override.yaml"
     ports:
       - name: http
         containerPort: 8111
@@ -574,8 +572,8 @@ applications:
       hosts: []
     volumeMounts:
       - name: knowledge-flow-backend-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
+        mountPath: /app/config/override.yaml
+        subPath: override.yaml
       - name: knowledge-flow-backend-env-vol
         mountPath: /app/config/.env
         subPath: .env
@@ -831,11 +829,6 @@ applications:
         resource_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
-        log_store:
-          type: "in_memory"
         tag_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
@@ -846,7 +839,6 @@ applications:
           type: "postgres"
           table: workflow_tasks
           prefix: "sched_"
-
         vector_store:
           type: in_memory
         tabular_stores:
@@ -891,7 +883,7 @@ applications:
     # otherwise this deployment will not be created.
     enabled: false
     applicationName: knowledge-flow-worker
-    configurationFileName: configuration_worker.yaml
+    configurationFileName: override.yaml
     deployment:
       enabled: false
     replicaCount: 3 # 3 temporal workers
@@ -918,6 +910,8 @@ applications:
         value: "/app/config/.env"
       - name: CONFIG_FILE
         value: "/app/config/configuration_worker.yaml"
+      - name: CONFIG_OVERRIDE_FILE
+        value: "/app/config/override.yaml"
     ports:
       - name: worker
         containerPort: 8112
@@ -956,8 +950,8 @@ applications:
       hosts: []
     volumeMounts:
       - name: knowledge-flow-worker-vol
-        mountPath: /app/config/configuration_worker.yaml
-        subPath: configuration_worker.yaml
+        mountPath: /app/config/override.yaml
+        subPath: override.yaml
       - name: knowledge-flow-worker-env-vol
         mountPath: /app/config/.env
         subPath: .env
@@ -1202,11 +1196,6 @@ applications:
         resource_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
-        log_store:
-          type: "in_memory"
         tag_store:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
