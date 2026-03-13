@@ -87,7 +87,9 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
             title="agentTuning.fields.prompts_system.title",
             description="agentTuning.fields.prompts_system.description",
             required=True,
-            ui=UIHints(group="agentTuning.groups.prompts", multiline=True, markdown=True),
+            ui=UIHints(
+                group="agentTuning.groups.prompts", multiline=True, markdown=True
+            ),
         ),
         FieldSpec(
             key="chat_options.attach_files",
