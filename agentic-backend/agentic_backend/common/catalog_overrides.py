@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.common.structures import AgentSettings, Configuration
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
+from agentic_backend.core.agents.v2.model_routing.catalog import (
+    load_model_catalog,
+)
 from agentic_backend.core.agents.v2.model_routing.contracts import (
     ModelCapability,
     ModelRoutingPolicy,
@@ -115,7 +118,9 @@ def resolve_models_catalog_path() -> Path:
 
 
 def resolve_model_routing_bootstrap_config(
-    *, default_presets_enabled: bool = False
+    *,
+    default_presets_enabled: bool = False,
+    catalog_mode_enabled: bool = True,
 ) -> ModelRoutingBootstrapConfig:
     """
     Resolve startup inputs required to build routed chat-model factory.
@@ -127,8 +132,7 @@ def resolve_model_routing_bootstrap_config(
     catalog_path = resolve_models_catalog_path()
     return ModelRoutingBootstrapConfig(
         catalog_path=catalog_path,
-        # Catalog loading is globally disabled for now.
-        catalog_exists=False,
+        catalog_exists=catalog_mode_enabled and catalog_path.exists(),
         presets_enabled=_env_bool(
             MODEL_ROUTING_PRESETS_ENABLED_ENV, default_presets_enabled
         ),
@@ -182,19 +186,135 @@ def _validate_required_model_defaults(configuration: Configuration) -> None:
     )
 
 
+def _has_legacy_agents_in_config(configuration: Configuration) -> bool:
+    return "agents" in configuration.ai.model_fields_set
+
+
+def _has_legacy_mcp_in_config(configuration: Configuration) -> bool:
+    return "mcp" in configuration.model_fields_set
+
+
+def _has_legacy_models_in_config(configuration: Configuration) -> bool:
+    return (
+        "default_chat_model" in configuration.ai.model_fields_set
+        or "default_language_model" in configuration.ai.model_fields_set
+    )
+
+
 def apply_external_catalog_overrides(configuration: Configuration) -> Configuration:
     """
-    Keep runtime configuration YAML as the single source of truth.
+    Apply optional external catalogs over configuration YAML.
 
-    Catalog files (agents/MCP/models) are intentionally ignored.
+    Precedence rule:
+    - If catalog mode is disabled, keep configuration YAML only.
+    - If a legacy section is explicitly present in configuration YAML, keep it and
+      skip the corresponding catalog.
+    - Otherwise, if a catalog file exists, use it.
+    - If no catalog exists, keep current configuration values unchanged.
     """
 
     # ReAct profile visibility is catalog-driven.
     # Safe default is "none exposed" when no catalog/profile section is provided.
     configuration.ai.react_profile_allowlist = []
-    logger.warning(
-        "[CONFIG][CATALOG] Catalog loading is disabled. Using configuration YAML only."
+
+    if not configuration.ai.enable_catalog_mode:
+        logger.info(
+            "[CONFIG][CATALOG] Catalog mode disabled "
+            "(ai.enable_catalog_mode=false). Using configuration YAML only."
+        )
+        _validate_required_model_defaults(configuration)
+        return configuration
+
+    agents_catalog_path = _resolve_catalog_path(
+        AGENTS_CATALOG_ENV, AGENTS_CATALOG_DEFAULT_PATH
     )
+    if _has_legacy_agents_in_config(configuration):
+        logger.info(
+            "[CONFIG][CATALOG] Skipping agents catalog because 'ai.agents' is "
+            "defined in configuration YAML."
+        )
+    elif agents_catalog_path.exists():
+        agents_catalog = load_agents_catalog(agents_catalog_path)
+        configuration.ai.agents = [
+            agent.model_copy(deep=True) for agent in agents_catalog.agents
+        ]
+        allowlist: list[str] = []
+        seen: set[str] = set()
+        for item in agents_catalog.react_profiles or []:
+            if not item.enabled:
+                continue
+            profile_id = item.profile_id.strip()
+            if not profile_id or profile_id in seen:
+                continue
+            seen.add(profile_id)
+            allowlist.append(profile_id)
+        configuration.ai.react_profile_allowlist = allowlist
+        logger.info(
+            "[CONFIG][CATALOG] Applied react profile allowlist from %s (enabled_profiles=%d).",
+            agents_catalog_path,
+            len(allowlist),
+        )
+        logger.info(
+            "[CONFIG][CATALOG] Loaded agents catalog from %s (agents=%d).",
+            agents_catalog_path,
+            len(configuration.ai.agents),
+        )
+
+    mcp_catalog_path = _resolve_catalog_path(MCP_CATALOG_ENV, MCP_CATALOG_DEFAULT_PATH)
+    if _has_legacy_mcp_in_config(configuration):
+        logger.info(
+            "[CONFIG][CATALOG] Skipping MCP catalog because 'mcp' is defined in "
+            "configuration YAML."
+        )
+    elif mcp_catalog_path.exists():
+        mcp_catalog = load_mcp_catalog(mcp_catalog_path)
+        configuration.mcp.servers = [
+            server.model_copy(deep=True) for server in mcp_catalog.servers
+        ]
+        logger.info(
+            "[CONFIG][CATALOG] Loaded MCP catalog from %s (servers=%d).",
+            mcp_catalog_path,
+            len(configuration.mcp.servers),
+        )
+
+    models_catalog_path = resolve_models_catalog_path()
+    if _has_legacy_models_in_config(configuration):
+        logger.info(
+            "[CONFIG][CATALOG] Skipping models catalog because "
+            "'ai.default_chat_model' or 'ai.default_language_model' is defined in "
+            "configuration YAML."
+        )
+    elif models_catalog_path.exists():
+        policy = load_model_catalog(models_catalog_path).to_policy()
+        chat_override_profile = os.getenv(MODELS_DEFAULT_CHAT_PROFILE_ENV)
+        language_override_profile = os.getenv(MODELS_DEFAULT_LANGUAGE_PROFILE_ENV)
+        chat_default = _resolve_default_model_from_catalog(
+            policy=policy,
+            capability=ModelCapability.CHAT,
+            profile_override_id=chat_override_profile,
+        )
+        if chat_default is None:
+            raise ValueError(
+                "models catalog is missing a chat default. "
+                "Set 'default_profile_by_capability.chat'."
+            )
+        language_default = _resolve_default_model_from_catalog(
+            policy=policy,
+            capability=ModelCapability.LANGUAGE,
+            profile_override_id=language_override_profile,
+        )
+        configuration.ai.default_chat_model = chat_default[1]
+        configuration.ai.default_language_model = (
+            language_default[1]
+            if language_default is not None
+            else chat_default[1].model_copy(deep=True)
+        )
+        logger.info(
+            "[CONFIG][CATALOG] Loaded models catalog from %s (chat=%s, language=%s).",
+            models_catalog_path,
+            chat_default[0],
+            language_default[0] if language_default is not None else chat_default[0],
+        )
 
     _validate_required_model_defaults(configuration)
 

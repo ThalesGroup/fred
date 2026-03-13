@@ -68,6 +68,8 @@ ai:
   # their configuration without redeploying the application.
   # Developers: you may prefer to set this to true to trust only your static configuration
   use_static_config_only: false
+  # Legacy mode: keep configuration YAML as single source of truth.
+  enable_catalog_mode: false
 
   # Number of past exchanges to restore when initializing an agent session
   # This setting is used to limit the amount of historical context
@@ -113,7 +115,18 @@ ai:
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
-  agents: []
+  agents:
+    - id: "Archie"
+      name: "Archie"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.archie.Archie"
+      enabled: true
+      chat_model: {}
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
+        search_rag_scoping: true
+        attach_files: true
 
 mcp:
   servers:

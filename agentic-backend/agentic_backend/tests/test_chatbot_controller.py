@@ -85,7 +85,7 @@ class TestChatbotController:
         assert "admin privileges" in response.json()["detail"]
 
     def test_get_team_model_routing_config_returns_team_scoped_preview(
-        self, client: TestClient, monkeypatch, tmp_path
+        self, client: TestClient, monkeypatch, tmp_path, app_context
     ) -> None:
         catalog_file = tmp_path / "models_catalog.yaml"
         catalog_file.write_text(
@@ -127,6 +127,8 @@ rules:
             encoding="utf-8",
         )
         monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(catalog_file))
+        previous_catalog_mode = app_context.configuration.ai.enable_catalog_mode
+        app_context.configuration.ai.enable_catalog_mode = True
         cast(FastAPI, client.app).dependency_overrides[get_current_user] = lambda: (
             KeycloakUser(
                 uid="admin-1",
@@ -135,21 +137,26 @@ rules:
                 roles=["admin"],
             )
         )
+        try:
+            response = client.get(
+                "/agentic/v1/config/model-routing/teams/team-alpha",
+                headers=self.headers,
+            )
 
-        response = client.get(
-            "/agentic/v1/config/model-routing/teams/team-alpha", headers=self.headers
-        )
+            assert response.status_code == status.HTTP_200_OK
+            payload = response.json()
+            assert payload["team_id"] == "team-alpha"
+            assert payload["catalog_exists"] is True
+            assert (
+                payload["default_profile_by_capability"]["chat"] == "chat.openai.gpt5"
+            )
 
-        assert response.status_code == status.HTTP_200_OK
-        payload = response.json()
-        assert payload["team_id"] == "team-alpha"
-        assert payload["catalog_exists"] is True
-        assert payload["default_profile_by_capability"]["chat"] == "chat.openai.gpt5"
-
-        rule_ids = [rule["rule_id"] for rule in payload["rules"]]
-        assert rule_ids == [
-            "react.phase.routing.fast",
-            "react.phase.planning.team_alpha",
-        ]
-        assert payload["rules"][0]["scope"] == "global"
-        assert payload["rules"][1]["scope"] == "team"
+            rule_ids = [rule["rule_id"] for rule in payload["rules"]]
+            assert rule_ids == [
+                "react.phase.routing.fast",
+                "react.phase.planning.team_alpha",
+            ]
+            assert payload["rules"][0]["scope"] == "global"
+            assert payload["rules"][1]["scope"] == "team"
+        finally:
+            app_context.configuration.ai.enable_catalog_mode = previous_catalog_mode

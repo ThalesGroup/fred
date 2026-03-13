@@ -23,30 +23,15 @@ def main():
         if not app_dir.exists() or not (app_dir / "main.py").exists():
             raise FileNotFoundError(f"Could not find main.py in {backend_dir}")
         
-        if not config_dir.exists():
-            raise FileNotFoundError(f"Could not find config/ in {backend_dir}")
-
-        config_file_override = os.getenv("OPENAPI_CONFIG_FILE")
-        if config_file_override:
-            config_file = Path(config_file_override)
-        else:
-            openapi_config_file = config_dir / "configuration_openapi.yaml"
-            default_config_file = config_dir / "configuration.yaml"
-            config_file = (
-                openapi_config_file
-                if openapi_config_file.exists()
-                else default_config_file
-            )
-
-        if not config_file.exists():
-            raise FileNotFoundError(f"Could not find OpenAPI config file: {config_file}")
+        if not config_dir.exists() or not (config_dir / "configuration.yaml").exists():
+            raise FileNotFoundError(f"Could not find config/configuration.yaml in {backend_dir}")
         
         # Add the app directory to the Python path
         sys.path.insert(0, str(app_dir))
         
         # Set required environment variables
         os.environ.setdefault("ENV_FILE", str(config_dir / ".env"))
-        os.environ.setdefault("CONFIG_FILE", str(config_file))
+        os.environ.setdefault("CONFIG_FILE", str(config_dir / "configuration.yaml"))
         
         # Set dummy API key for static generation (prevents validation errors)
         os.environ.setdefault("OPENAI_API_KEY", "sk-dummy-key-for-static-generation")
