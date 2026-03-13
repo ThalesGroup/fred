@@ -50,6 +50,7 @@ interface AgentAssetManagerDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   agentId: string; // The ID of the agent whose assets we manage
+  agentName?: string;
 }
 
 type ListedConfigFile = {
@@ -71,11 +72,13 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
   isOpen,
   onClose,
   agentId,
+  agentName,
 }) => {
   const { t } = useTranslation();
   const { showInfo, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const theme = useTheme();
+  const displayAgentName = agentName || agentId;
 
   // --- State for Upload Form (Modified) ---
   const [filesToUpload, setFilesToUpload] = useState<File[]>([]); // List of files ready to upload
@@ -259,7 +262,7 @@ export const AgentConfigWorkspaceManagerDrawer: React.FC<AgentAssetManagerDrawer
     >
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Typography variant="h5" fontWeight="bold">
-          {t("assetManager.title", { agentId })}
+          {t("assetManager.title", { agentName: displayAgentName })}
         </Typography>
         <IconButton onClick={handleClose}>
           <CloseIcon />
