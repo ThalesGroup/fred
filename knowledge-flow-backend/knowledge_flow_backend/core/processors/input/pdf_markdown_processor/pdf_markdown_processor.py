@@ -137,6 +137,10 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             pipeline_options.do_ocr = pdf_options.do_ocr
             if pdf_options.do_ocr:
                 pipeline_options.ocr_options = RapidOcrOptions()
+                if pdf_options.ocr_backend is not None:
+                    pipeline_options.ocr_options.backend = pdf_options.ocr_backend
+                if pdf_options.force_full_page_ocr is not None:
+                    pipeline_options.ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
             artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
             if artifacts_dir:
                 artifacts_path = Path(artifacts_dir).expanduser()
@@ -152,10 +156,12 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 pipeline_options.force_backend_text = True  # Utilise directement le flux PDF
 
             logger.info(
-                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s",
+                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s",
                 active_profile.value,
                 pdf_options.backend,
                 process_images,
+                getattr(pipeline_options.ocr_options, "backend", None),
+                getattr(pipeline_options.ocr_options, "force_full_page_ocr", None),
             )
             converter = DocumentConverter(
                 format_options={
@@ -194,12 +200,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                         description = "Image description not available."
                     pictures_desc.append(description)
 
-            # Generate the markdown file with placeholders for images
-            doc.save_as_markdown(output_markdown_path, image_mode=ImageRefMode.PLACEHOLDER, image_placeholder="%%ANNOTATION%%")
-
-            # Replace placeholders with picture descriptions in the markdown file
-            with open(output_markdown_path, "r", encoding="utf-8") as f:
-                md_content = f.read()
+            md_content = doc.export_to_markdown(image_mode=ImageRefMode.PLACEHOLDER, image_placeholder="%%ANNOTATION%%")
 
             # Add comments to identify tables
             if doc.tables:
