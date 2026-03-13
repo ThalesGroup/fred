@@ -135,12 +135,14 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             pipeline_options.generate_table_images = pdf_options.generate_table_images
             pipeline_options.do_table_structure = pdf_options.do_table_structure
             pipeline_options.do_ocr = pdf_options.do_ocr
+            rapid_ocr_options: RapidOcrOptions | None = None
             if pdf_options.do_ocr:
-                pipeline_options.ocr_options = RapidOcrOptions()
+                rapid_ocr_options = RapidOcrOptions()
                 if pdf_options.ocr_backend is not None:
-                    pipeline_options.ocr_options.backend = pdf_options.ocr_backend
+                    rapid_ocr_options.backend = pdf_options.ocr_backend
                 if pdf_options.force_full_page_ocr is not None:
-                    pipeline_options.ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
+                    rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
+                pipeline_options.ocr_options = rapid_ocr_options
             artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
             if artifacts_dir:
                 artifacts_path = Path(artifacts_dir).expanduser()
@@ -160,8 +162,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 active_profile.value,
                 pdf_options.backend,
                 process_images,
-                getattr(pipeline_options.ocr_options, "backend", None),
-                getattr(pipeline_options.ocr_options, "force_full_page_ocr", None),
+                getattr(rapid_ocr_options, "backend", None),
+                getattr(rapid_ocr_options, "force_full_page_ocr", None),
             )
             converter = DocumentConverter(
                 format_options={
