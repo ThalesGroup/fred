@@ -14,7 +14,7 @@
 import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
-import { AgentOptionSelectionCard } from "./AgentToolsSelection";
+import { AgentOptionSelectionCard } from "./AgentOptionSelectionCard";
 import { PromptEditor } from "./PromptEditor";
 
 type Props = {

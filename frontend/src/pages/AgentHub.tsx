@@ -36,7 +36,6 @@ export const AgentHub = () => {
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
-  const [showElements, setShowElements] = useState(false);
 
   const [triggerGetFlows, { isLoading }] = useLazyListAgentsAgenticV1AgentsGetQuery();
   const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
@@ -51,7 +50,6 @@ export const AgentHub = () => {
   };
 
   useEffect(() => {
-    setShowElements(true);
     fetchAgents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
