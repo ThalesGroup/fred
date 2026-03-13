@@ -30,7 +30,7 @@ processing:
   default_profile: fast
   profiles:
     fast:
-      use_gpu: false
+      use_gpu: true
       generate_summary: false
       process_images: false
       pdf:
@@ -59,7 +59,7 @@ processing:
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
     medium:
-      use_gpu: false
+      use_gpu: true
       generate_summary: false
       process_images: false
       pdf:
@@ -88,7 +88,7 @@ processing:
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
     rich:
-      use_gpu: false
+      use_gpu: true
       generate_summary: false
       process_images: true
       pdf:
