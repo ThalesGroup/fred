@@ -73,7 +73,7 @@ ai:
   # This setting is used to limit the amount of historical context
   # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
   # or when an agent session is re-initialized for any reason.
-  agentic_restore_max_exchanges: 20
+  restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 1024
@@ -95,90 +95,25 @@ ai:
     connect: 20 # Time to wait for a connection in seconds
     read: 60 # Time to wait for a response in seconds (longer for large document processing)
 
-  default_chat_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
-    # provider: "azure-openai"
-    # name: "gpt-4o"
-    # settings:
-    #   azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-    #   azure_openai_api_version: "2024-06-01"
-    # provider: "azure-apim"
-    # name: "gpt-4o"
-    # settings:
-    #   azure_apim_base_url: "https://trustnest.azure-api.net"
-    #   azure_apim_resource_path: "/genai-aoai-inference/v2"
-    #   azure_openai_api_version: "2024-06-01"
-    #   azure_tenant_id: "your-tenant-id"
-    #   azure_ad_client_id: "your-client-id"
-    #   azure_ad_client_scope: "api://your-client-id/.default"
+  # Use mistral medium from TGS as LLM
+  default_chat_model: &tgs-mistral-medium
     provider: "openai"
-    name: "gpt-5.1"
+    name: "mistral"
     settings:
-      max_retries: 0
-      timeout:
-        connect: 10.0
-        read: 120.0
-        write: 30.0
-        pool: 5.0
-      http_client_limits:
-        max_connections: 500
-        max_keepalive_connections: 200
-        keepalive_expiry_seconds: 10
-      temperature: 0.0
-
-  # Default language model used for non-chat interactions. This one is optional
-  # and if not set, the default_chat_model will be used as fallback.
+      base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+      request_timeout: 300
+      stream_usage: false
   default_language_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
     provider: "openai"
-    name: "gpt-5.1"
+    name: "mistral"
     settings:
-      max_retries: 0
-      timeout:
-        connect: 10.0
-        read: 120.0
-        write: 30.0
-        pool: 5.0
-      http_client_limits:
-        max_connections: 500
-        max_keepalive_connections: 200
-        keepalive_expiry_seconds: 10
-      temperature: 0.0
+      base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+      request_timeout: 300
+      stream_usage: false
 
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
-  agents:
-    - id: "Georges"
-      name: "Georges"
-      type: "agent"
-      class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-      enabled: true
-      chat_options:
-        attach_files: false
-    - id: "Archie"
-      name: "Archie"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.archie.Archie"
-      enabled: true
-      chat_model: {}
-      chat_options:
-        search_policy_selection: true
-        libraries_selection: true
-        search_rag_scoping: true
-        attach_files: true
-    - id: "Rico"
-      name: "Rico"
-      type: "agent"
-      class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-      chat_options:
-        search_policy_selection: true
-        libraries_selection: true
-        search_rag_scoping: true
-        deep_search_delegate: false
-        attach_files: true
-        include_corpus_in_search: true # default value, set to false if you want to prevent the agent from searching in the corpus. Coupled with libraries_selection=false gives you an agent only capable of searching through attachments with a disabled widget for searching through the libraries.
+  agents: []
 
 mcp:
   servers:
