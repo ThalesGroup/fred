@@ -291,7 +291,7 @@ applications:
         # This setting is used to limit the amount of historical context
         # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
         # or when an agent session is re-initialized for any reason.
-        agentic_restore_max_exchanges: 20
+        restore_max_exchanges: 20
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 1024
@@ -682,7 +682,7 @@ applications:
             generate_summary: false
             process_images: false
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: false
               generate_page_images: false
@@ -711,7 +711,7 @@ applications:
             generate_summary: false
             process_images: true
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: true
               generate_page_images: true
@@ -1053,7 +1053,7 @@ applications:
             generate_summary: false
             process_images: false
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: false
               generate_page_images: false
@@ -1082,7 +1082,7 @@ applications:
             generate_summary: true
             process_images: true
             pdf:
-              backend: dlparse_v4
+              backend: docling_parse
               images_scale: 2.0
               generate_picture_images: true
               generate_page_images: true

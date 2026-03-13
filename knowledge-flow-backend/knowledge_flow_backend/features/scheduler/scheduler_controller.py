@@ -45,6 +45,7 @@ class SchedulerController:
         self.metadata_service = MetadataService()
         self.task_service = IngestionTaskService(
             scheduler_config=self.scheduler_config,
+            processing_config=app_config.processing,
             metadata_service=self.metadata_service,
             temporal_client_provider=temporal_client_provider,
             max_parallelism=app_config.app.max_ingestion_workers,

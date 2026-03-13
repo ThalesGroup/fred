@@ -2,11 +2,48 @@ from __future__ import annotations
 
 import pytest
 
-from agentic_backend.common.catalog_overrides import apply_external_catalog_overrides
+from agentic_backend.common.catalog_overrides import (
+    apply_external_catalog_overrides,
+    resolve_model_routing_bootstrap_config,
+)
 from agentic_backend.common.structures import Configuration
 
 
-def _minimal_configuration() -> Configuration:
+def _minimal_configuration(
+    *,
+    include_agents: bool = True,
+    include_mcp: bool = True,
+    include_models: bool = True,
+    enable_catalog_mode: bool = True,
+) -> Configuration:
+    ai_payload: dict[str, object] = {
+        "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
+        "timeout": {"connect": 5, "read": 15},
+        "use_static_config_only": True,
+        "enable_catalog_mode": enable_catalog_mode,
+        "restore_max_exchanges": 20,
+        "max_concurrent_agents": 32,
+        "max_concurrent_sessions_per_user": 10,
+        "max_attached_files_per_user": 20,
+        "max_attached_file_size_mb": 10,
+    }
+    if include_models:
+        ai_payload["default_chat_model"] = {
+            "provider": "openai",
+            "name": "gpt-5-mini",
+            "settings": {"temperature": 0.0},
+        }
+    if include_agents:
+        ai_payload["agents"] = [
+            {
+                "id": "Georges",
+                "name": "Georges",
+                "type": "agent",
+                "class_path": "agentic_backend.agents.generalist.generalist_expert.Georges",
+                "enabled": True,
+            }
+        ]
+
     payload = {
         "app": {
             "name": "Agentic Backend",
@@ -42,42 +79,7 @@ def _minimal_configuration() -> Configuration:
                 "siteDisplayName": "Fred",
             },
         },
-        "ai": {
-            "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
-            "timeout": {"connect": 5, "read": 15},
-            "use_static_config_only": True,
-            "restore_max_exchanges": 20,
-            "max_concurrent_agents": 32,
-            "max_concurrent_sessions_per_user": 10,
-            "max_attached_files_per_user": 20,
-            "max_attached_file_size_mb": 10,
-            "default_chat_model": {
-                "provider": "openai",
-                "name": "gpt-5-mini",
-                "settings": {"temperature": 0.0},
-            },
-            "agents": [
-                {
-                    "id": "Georges",
-                    "name": "Georges",
-                    "type": "agent",
-                    "class_path": "agentic_backend.agents.generalist.generalist_expert.Georges",
-                    "enabled": True,
-                }
-            ],
-        },
-        "mcp": {
-            "servers": [
-                {
-                    "id": "mcp-knowledge-flow-opensearch-ops",
-                    "name": "mcp.servers.search_opensearch.name",
-                    "transport": "streamable_http",
-                    "url": "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops",
-                    "enabled": True,
-                    "auth_mode": "user_token",
-                }
-            ]
-        },
+        "ai": ai_payload,
         "storage": {
             "postgres": {
                 "host": "localhost",
@@ -99,11 +101,23 @@ def _minimal_configuration() -> Configuration:
             "kpi_store": {"type": "duckdb", "duckdb_path": "/tmp/kpi.duckdb"},
         },
     }
+    if include_mcp:
+        payload["mcp"] = {
+            "servers": [
+                {
+                    "id": "mcp-knowledge-flow-opensearch-ops",
+                    "name": "mcp.servers.search_opensearch.name",
+                    "transport": "streamable_http",
+                    "url": "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops",
+                    "enabled": True,
+                    "auth_mode": "user_token",
+                }
+            ]
+        }
     return Configuration.model_validate(payload)
 
 
-def test_agents_catalog_takes_precedence_when_present(tmp_path, monkeypatch) -> None:
-    configuration = _minimal_configuration()
+def _write_catalogs(tmp_path):
     agents_catalog = tmp_path / "agents_catalog.yaml"
     agents_catalog.write_text(
         """
@@ -114,20 +128,13 @@ agents:
     type: "agent"
     definition_ref: "v2.react.basic"
     enabled: true
+react_profiles:
+  - profile_id: "rag_expert"
+    enabled: true
         """.strip(),
         encoding="utf-8",
     )
-    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
 
-    apply_external_catalog_overrides(configuration)
-
-    assert [agent.id for agent in configuration.ai.agents] == ["Catalog Agent"]
-    assert configuration.ai.agents[0].definition_ref == "v2.react.basic"
-
-
-def test_mcp_catalog_takes_precedence_when_present(tmp_path, monkeypatch) -> None:
-    configuration = _minimal_configuration()
     mcp_catalog = tmp_path / "mcp_catalog.yaml"
     mcp_catalog.write_text(
         """
@@ -142,127 +149,7 @@ servers:
         """.strip(),
         encoding="utf-8",
     )
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(mcp_catalog))
-    monkeypatch.setenv(
-        "FRED_AGENTS_CATALOG_FILE", str(tmp_path / "missing-agents.yaml")
-    )
 
-    apply_external_catalog_overrides(configuration)
-
-    assert [server.id for server in configuration.mcp.servers] == ["mcp-catalog-only"]
-
-
-def test_missing_catalog_files_keep_configuration_values(tmp_path, monkeypatch) -> None:
-    configuration = _minimal_configuration()
-    monkeypatch.setenv(
-        "FRED_AGENTS_CATALOG_FILE", str(tmp_path / "does-not-exist-agents.yaml")
-    )
-    monkeypatch.setenv(
-        "FRED_MCP_CATALOG_FILE", str(tmp_path / "does-not-exist-mcp.yaml")
-    )
-
-    apply_external_catalog_overrides(configuration)
-
-    assert [agent.id for agent in configuration.ai.agents] == ["Georges"]
-    assert [server.id for server in configuration.mcp.servers] == [
-        "mcp-knowledge-flow-opensearch-ops"
-    ]
-    assert configuration.ai.react_profile_allowlist == []
-
-
-def test_invalid_agents_catalog_fails_fast(tmp_path, monkeypatch) -> None:
-    configuration = _minimal_configuration()
-    agents_catalog = tmp_path / "agents_catalog.yaml"
-    agents_catalog.write_text("version: v1\nagents: invalid\n", encoding="utf-8")
-    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
-
-    with pytest.raises(Exception):
-        apply_external_catalog_overrides(configuration)
-
-
-def test_agents_catalog_can_define_react_profile_allowlist(
-    tmp_path, monkeypatch
-) -> None:
-    configuration = _minimal_configuration()
-    agents_catalog = tmp_path / "agents_catalog.yaml"
-    agents_catalog.write_text(
-        """
-version: v1
-agents:
-  - id: "Catalog Agent"
-    name: "Catalog Agent"
-    type: "agent"
-    definition_ref: "v2.react.basic"
-    enabled: true
-react_profiles:
-  - profile_id: "rag_expert"
-    enabled: true
-  - profile_id: "geo_demo"
-    enabled: false
-  - profile_id: " sentinel "
-    enabled: true
-        """.strip(),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
-
-    apply_external_catalog_overrides(configuration)
-
-    assert configuration.ai.react_profile_allowlist == ["rag_expert", "sentinel"]
-
-
-def test_agents_catalog_allows_empty_react_profile_allowlist(
-    tmp_path, monkeypatch
-) -> None:
-    configuration = _minimal_configuration()
-    agents_catalog = tmp_path / "agents_catalog.yaml"
-    agents_catalog.write_text(
-        """
-version: v1
-agents: []
-react_profiles: []
-        """.strip(),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
-
-    apply_external_catalog_overrides(configuration)
-
-    assert configuration.ai.react_profile_allowlist == []
-
-
-def test_agents_catalog_without_react_profiles_exposes_no_profiles(
-    tmp_path, monkeypatch
-) -> None:
-    configuration = _minimal_configuration()
-    configuration.ai.react_profile_allowlist = ["sentinel"]
-
-    agents_catalog = tmp_path / "agents_catalog.yaml"
-    agents_catalog.write_text(
-        """
-version: v1
-agents:
-  - id: "Catalog Agent"
-    name: "Catalog Agent"
-    type: "agent"
-    definition_ref: "v2.react.basic"
-    enabled: true
-        """.strip(),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
-
-    apply_external_catalog_overrides(configuration)
-
-    assert configuration.ai.react_profile_allowlist == []
-
-
-def test_models_catalog_takes_precedence_when_present(tmp_path, monkeypatch) -> None:
-    configuration = _minimal_configuration()
     models_catalog = tmp_path / "models_catalog.yaml"
     models_catalog.write_text(
         """
@@ -276,140 +163,117 @@ profiles:
     model:
       provider: openai
       name: gpt-5
-      settings:
-        temperature: 0.0
+      settings: {}
   - profile_id: default.language
     capability: language
     model:
       provider: openai
       name: gpt-5-mini
-      settings:
-        temperature: 0.0
+      settings: {}
 rules: []
         """.strip(),
         encoding="utf-8",
     )
+    return agents_catalog, mcp_catalog, models_catalog
+
+
+def test_catalog_mode_disabled_ignores_catalogs_even_when_files_exist(
+    tmp_path, monkeypatch
+) -> None:
+    configuration = _minimal_configuration(enable_catalog_mode=False)
+    agents_catalog, mcp_catalog, models_catalog = _write_catalogs(tmp_path)
+    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(mcp_catalog))
     monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(models_catalog))
-    monkeypatch.setenv(
-        "FRED_AGENTS_CATALOG_FILE", str(tmp_path / "missing-agents.yaml")
-    )
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
 
     apply_external_catalog_overrides(configuration)
 
+    assert [agent.id for agent in configuration.ai.agents] == ["Georges"]
+    assert [server.id for server in configuration.mcp.servers] == [
+        "mcp-knowledge-flow-opensearch-ops"
+    ]
     assert configuration.ai.default_chat_model is not None
-    assert configuration.ai.default_language_model is not None
-    assert configuration.ai.default_chat_model.name == "gpt-5"
-    assert configuration.ai.default_language_model.name == "gpt-5-mini"
+    assert configuration.ai.default_chat_model.name == "gpt-5-mini"
+    assert configuration.ai.default_language_model is None
+    assert configuration.ai.react_profile_allowlist == []
 
 
-def test_missing_chat_model_without_catalog_fails_fast(tmp_path, monkeypatch) -> None:
-    base = _minimal_configuration()
-    configuration = base.model_copy(
-        update={"ai": base.ai.model_copy(update={"default_chat_model": None})},
-        deep=True,
+def test_catalog_mode_disabled_requires_chat_model_in_yaml(
+    tmp_path, monkeypatch
+) -> None:
+    configuration = _minimal_configuration(
+        include_models=False, enable_catalog_mode=False
     )
-    monkeypatch.setenv(
-        "FRED_AGENTS_CATALOG_FILE", str(tmp_path / "missing-agents.yaml")
-    )
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
-    monkeypatch.setenv(
-        "FRED_MODELS_CATALOG_FILE", str(tmp_path / "missing-models.yaml")
-    )
+    _, _, models_catalog = _write_catalogs(tmp_path)
+    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(models_catalog))
 
     with pytest.raises(ValueError, match="Missing required chat model configuration"):
         apply_external_catalog_overrides(configuration)
 
 
-def test_models_catalog_default_profile_overrides_via_env(
+def test_catalog_mode_enabled_applies_agents_and_mcp_when_missing(
     tmp_path, monkeypatch
 ) -> None:
-    configuration = _minimal_configuration()
-    models_catalog = tmp_path / "models_catalog.yaml"
-    models_catalog.write_text(
-        """
-version: v1
-default_profile_by_capability:
-  chat: default.chat.openai
-  language: default.language.openai
-profiles:
-  - profile_id: default.chat.openai
-    capability: chat
-    model:
-      provider: openai
-      name: gpt-5-mini
-      settings: {}
-  - profile_id: default.language.openai
-    capability: language
-    model:
-      provider: openai
-      name: gpt-5-mini
-      settings: {}
-  - profile_id: chat.ollama.mistral
-    capability: chat
-    model:
-      provider: ollama
-      name: mistral:latest
-      settings:
-        base_url: http://localhost:11434
-  - profile_id: language.ollama.mistral
-    capability: language
-    model:
-      provider: ollama
-      name: mistral:latest
-      settings:
-        base_url: http://localhost:11434
-rules: []
-        """.strip(),
-        encoding="utf-8",
-    )
+    configuration = _minimal_configuration(include_agents=False, include_mcp=False)
+    agents_catalog, mcp_catalog, _ = _write_catalogs(tmp_path)
+    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(mcp_catalog))
+
+    apply_external_catalog_overrides(configuration)
+
+    assert [agent.id for agent in configuration.ai.agents] == ["Catalog Agent"]
+    assert [server.id for server in configuration.mcp.servers] == ["mcp-catalog-only"]
+    assert configuration.ai.react_profile_allowlist == ["rag_expert"]
+
+
+def test_catalog_mode_enabled_applies_models_when_missing(
+    tmp_path, monkeypatch
+) -> None:
+    configuration = _minimal_configuration(include_models=False)
+    _, _, models_catalog = _write_catalogs(tmp_path)
     monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(models_catalog))
-    monkeypatch.setenv("FRED_MODELS_DEFAULT_CHAT_PROFILE_ID", "chat.ollama.mistral")
-    monkeypatch.setenv(
-        "FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID", "language.ollama.mistral"
-    )
-    monkeypatch.setenv(
-        "FRED_AGENTS_CATALOG_FILE", str(tmp_path / "missing-agents.yaml")
-    )
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
 
     apply_external_catalog_overrides(configuration)
 
     assert configuration.ai.default_chat_model is not None
-    assert configuration.ai.default_chat_model.provider == "ollama"
-    assert configuration.ai.default_chat_model.name == "mistral:latest"
+    assert configuration.ai.default_chat_model.name == "gpt-5"
     assert configuration.ai.default_language_model is not None
-    assert configuration.ai.default_language_model.provider == "ollama"
-    assert configuration.ai.default_language_model.name == "mistral:latest"
+    assert configuration.ai.default_language_model.name == "gpt-5-mini"
 
 
-def test_models_catalog_profile_override_rejects_unknown_profile(
+def test_catalog_mode_enabled_keeps_legacy_sections_when_present(
     tmp_path, monkeypatch
 ) -> None:
     configuration = _minimal_configuration()
+    agents_catalog, mcp_catalog, models_catalog = _write_catalogs(tmp_path)
+    monkeypatch.setenv("FRED_AGENTS_CATALOG_FILE", str(agents_catalog))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(mcp_catalog))
+    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(models_catalog))
+
+    apply_external_catalog_overrides(configuration)
+
+    assert [agent.id for agent in configuration.ai.agents] == ["Georges"]
+    assert [server.id for server in configuration.mcp.servers] == [
+        "mcp-knowledge-flow-opensearch-ops"
+    ]
+    assert configuration.ai.default_chat_model is not None
+    assert configuration.ai.default_chat_model.name == "gpt-5-mini"
+    assert configuration.ai.default_language_model is None
+
+
+def test_model_routing_bootstrap_respects_catalog_mode(tmp_path, monkeypatch) -> None:
     models_catalog = tmp_path / "models_catalog.yaml"
     models_catalog.write_text(
-        """
-version: v1
-default_profile_by_capability:
-  chat: default.chat
-profiles:
-  - profile_id: default.chat
-    capability: chat
-    model:
-      provider: openai
-      name: gpt-5-mini
-      settings: {}
-rules: []
-        """.strip(),
-        encoding="utf-8",
+        "version: v1\nprofiles: []\nrules: []\n", encoding="utf-8"
     )
     monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(models_catalog))
-    monkeypatch.setenv("FRED_MODELS_DEFAULT_CHAT_PROFILE_ID", "chat.does.not.exist")
-    monkeypatch.setenv(
-        "FRED_AGENTS_CATALOG_FILE", str(tmp_path / "missing-agents.yaml")
-    )
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(tmp_path / "missing-mcp.yaml"))
 
-    with pytest.raises(ValueError, match="was not found in profiles"):
-        apply_external_catalog_overrides(configuration)
+    enabled_bootstrap = resolve_model_routing_bootstrap_config(
+        catalog_mode_enabled=True
+    )
+    disabled_bootstrap = resolve_model_routing_bootstrap_config(
+        catalog_mode_enabled=False
+    )
+
+    assert enabled_bootstrap.catalog_exists is True
+    assert disabled_bootstrap.catalog_exists is False

@@ -102,7 +102,7 @@ from sentence_transformers import CrossEncoder; \
 import os; \
 CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
 
-# Preload Docling artifacts (layout/table + EasyOCR) for offline-friendly runtime
+# Preload Docling artifacts (layout/table + RapidOCR) for offline-friendly runtime
 RUN python -c "\
 from pathlib import Path; \
 import os; \
@@ -112,7 +112,7 @@ output_dir=Path(os.environ['DOCLING_ARTIFACTS_PATH']), \
 progress=False, \
 with_layout=True, \
 with_tableformer=True, \
-with_easyocr=True, \
+with_rapidocr=True, \
 with_code_formula=False, \
 with_picture_classifier=False, \
 with_smolvlm=False, \

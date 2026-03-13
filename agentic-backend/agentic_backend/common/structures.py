@@ -220,6 +220,13 @@ class AIConfig(BaseModel):
             "persistent configurations are ignored."
         ),
     )
+    enable_catalog_mode: bool = Field(
+        False,
+        description=(
+            "If true, external catalogs (agents/mcp/models) may override missing "
+            "sections from configuration YAML."
+        ),
+    )
     enable_v2_sql_checkpointer: bool = Field(
         False,
         description=(

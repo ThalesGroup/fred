@@ -463,7 +463,10 @@ class ApplicationContext:
         This keeps env/path resolution out of runtime factory code so startup
         wiring remains the single place where configuration sources are defined.
         """
-        return resolve_model_routing_bootstrap_config(default_presets_enabled=False)
+        return resolve_model_routing_bootstrap_config(
+            default_presets_enabled=False,
+            catalog_mode_enabled=self.configuration.ai.enable_catalog_mode,
+        )
 
     def get_pg_async_engine(self):
         """
