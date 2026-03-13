@@ -1,0 +1,24 @@
+version: v1
+
+conversation_policies:
+  purge:
+    default:
+      mode: deferred_delete
+      retention: P7D
+      cancel_on_rejoin: true
+
+    rules:
+      - rule_id: purge.team.contractors
+        match:
+          team_id: contractors
+          trigger: member_removed
+        action:
+          retention: PT12H
+
+      - rule_id: purge.team.temp-lab
+        match:
+          team_id: temp-lab
+          trigger: member_removed
+        action:
+          mode: immediate_delete
+          retention: PT0S

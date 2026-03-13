@@ -35,6 +35,7 @@ from typing import Any, Callable, Dict, Optional
 
 from fred_core import (
     BaseLogStore,
+    BaseSessionStore,
     BearerAuth,
     ClientCredentialsProvider,
     DuckdbStoreConfig,
@@ -92,7 +93,6 @@ from agentic_backend.core.monitoring.postgres_history_store import PostgresHisto
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )
@@ -463,7 +463,10 @@ class ApplicationContext:
         This keeps env/path resolution out of runtime factory code so startup
         wiring remains the single place where configuration sources are defined.
         """
-        return resolve_model_routing_bootstrap_config(default_presets_enabled=False)
+        return resolve_model_routing_bootstrap_config(
+            default_presets_enabled=False,
+            catalog_mode_enabled=self.configuration.ai.enable_catalog_mode,
+        )
 
     def get_pg_async_engine(self):
         """

@@ -1,7 +1,7 @@
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../../../../../../slices/knowledgeFlow/knowledgeFlowApiEnhancements.ts";
+import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import ConversationButton from "@shared/atoms/ConversationButton/ConversationButton.tsx";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
@@ -19,7 +19,7 @@ export default function TeamContentNavbar() {
   const { teamId } = useParams<{ teamId: string }>();
   const { pathname } = useLocation();
 
-  const { data: team, isLoading } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery(
+  const { data: team, isLoading } = useGetTeamQuery(
     { teamId: teamId || "" },
     { skip: !teamId },
   );

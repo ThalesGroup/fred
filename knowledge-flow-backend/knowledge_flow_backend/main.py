@@ -25,7 +25,6 @@ import os
 from contextlib import asynccontextmanager, suppress
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
@@ -43,9 +42,13 @@ from sqlmodel import SQLModel
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
+from knowledge_flow_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
 from knowledge_flow_backend.common.structures import Configuration
-from knowledge_flow_backend.common.utils import parse_server_configuration
 from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
@@ -71,8 +74,6 @@ from knowledge_flow_backend.features.scheduler.scheduler_controller import Sched
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.tag_controller import TagController
-from knowledge_flow_backend.features.teams import teams_controller
-from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
@@ -107,21 +108,6 @@ def _env_bool(name: str, default: bool) -> bool:
     return default
 
 
-def load_environment(dotenv_path: str = "./config/.env"):
-    if load_dotenv(dotenv_path):
-        logger.info("%s Loaded environment variables from: %s", LOG_PREFIX, dotenv_path)
-    else:
-        logger.warning("%s No .env file found at: %s", LOG_PREFIX, dotenv_path)
-
-
-def load_configuration():
-    load_environment()
-    config_file = os.environ.get("CONFIG_FILE", "./config/configuration.yaml")
-    configuration: Configuration = parse_server_configuration(config_file)
-    logger.info("%s Loaded configuration from: %s", LOG_PREFIX, config_file)
-    return configuration
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -129,6 +115,9 @@ def load_configuration():
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
 
@@ -227,7 +216,6 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-    teams_controller.register_exception_handlers(app)
 
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
@@ -261,8 +249,6 @@ def create_app() -> FastAPI:
     McpFilesystemController(router)
     CorpusManagerController(router)
     router.include_router(logs_controller.router)
-    router.include_router(teams_controller.router)
-    router.include_router(users_controller.router)
     # Developer benchmarking tools (always mounted; auth-protected)
     BenchmarkController(router)
 

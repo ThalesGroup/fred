@@ -1,15 +1,15 @@
-import styles from "./TeamSettingsParameters.module.scss";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
-import { useTranslation } from "react-i18next";
+import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
+import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import React, { useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import {
+  TeamWithPermissions,
   useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
   useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation,
-} from "../../../../../slices/knowledgeFlow/knowledgeFlowApiEnhancements.ts";
-import { TeamWithPermissions } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import { useForm } from "react-hook-form";
-import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
+} from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import styles from "./TeamSettingsParameters.module.scss";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;

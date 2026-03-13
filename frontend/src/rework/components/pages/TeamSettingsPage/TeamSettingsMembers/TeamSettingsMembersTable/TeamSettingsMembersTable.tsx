@@ -1,19 +1,17 @@
+import { OptionModel } from "@models/Option.model.ts";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
 import DataTable, { DataTableColumn } from "@shared/organisms/DataTable/DataTable.tsx";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   TeamMember,
   TeamWithPermissions,
-  UserTeamRelation,
-} from "../../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
-import {
   useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
+  UserTeamRelation,
   useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
-} from "../../../../../../slices/knowledgeFlow/knowledgeFlowApiEnhancements.ts";
-import { useTranslation } from "react-i18next";
-import { OptionModel } from "@models/Option.model.ts";
-import Select from "@shared/molecules/Select/Select.tsx";
-import { useMemo } from "react";
+} from "../../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {

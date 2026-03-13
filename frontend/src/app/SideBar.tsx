@@ -43,7 +43,7 @@ import {
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useListAgentsAgenticV1AgentsGetQuery,
 } from "../slices/agentic/agenticOpenApi";
-import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { useListTeamsQuery } from "../slices/controlPlane/controlPlaneApi";
 import { ImageComponent } from "../utils/image";
 import { ApplicationContext } from "./ApplicationContextProvider";
 
@@ -263,7 +263,7 @@ export default function SideBar() {
   // List user teams
   // todo: handle loading
   // todo: handle error
-  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
+  const { data: teams } = useListTeamsQuery();
   const { data: sessions = [] } = useGetSessionsAgenticV1ChatbotSessionsGetQuery();
   const { data: activeSessionPrefs } = useGetSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesGetQuery(
     { sessionId: activeSessionId || "" },

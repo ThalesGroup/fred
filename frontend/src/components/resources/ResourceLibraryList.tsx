@@ -26,13 +26,13 @@ import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 import { usePermissions } from "../../security/usePermissions";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { buildTree, findNode, TagNode } from "../../shared/utils/tagTree";
+import { useListUsersQuery } from "../../slices/controlPlane/controlPlaneApi";
 import {
   Resource,
   ResourceKind,
   TagWithItemsId,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
   useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery,
-  useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { EmptyState } from "../EmptyState";
@@ -110,7 +110,7 @@ export default function ResourceLibraryList({ kind }: Props) {
   const canDeleteFolder = can("tag", "delete");
 
   // Users cache (for owner display)
-  const { data: users = [] } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  const { data: users = [] } = useListUsersQuery();
   const ownerNamesById = React.useMemo(() => {
     const m: Record<string, string> = {};
     users.forEach((u) => {

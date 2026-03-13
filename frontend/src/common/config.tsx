@@ -24,6 +24,7 @@ import type { FrontendConfigDto, FrontendFlags, Properties, UserSecurity } from 
 export interface AppConfig {
   backend_url_api: string; // Base URL of the Agentic backend
   backend_url_knowledge: string; // Base URL of the Knowledge Flow backend
+  backend_url_control_plane: string; // Base URL of the Control Plane backend
   websocket_url: string; // WebSocket server URL
   frontend_basename: string; // Base name used by the frontend
   feature_flags: Record<string, boolean>;
@@ -70,9 +71,12 @@ export const loadConfig = async () => {
   const base = (await res.json()) as {
     backend_url_api: string;
     backend_url_knowledge: string;
+    backend_url_control_plane?: string;
     websocket_url: string;
     frontend_basename: string;
   };
+
+  const backend_url_control_plane = base.backend_url_control_plane || "http://localhost:8222";
 
   // 2) Dynamic config (typed)
   const r = await fetch(`${base.backend_url_api}/agentic/v1/config/frontend_settings`);
@@ -89,6 +93,7 @@ export const loadConfig = async () => {
 
   config = {
     ...base,
+    backend_url_control_plane,
     feature_flags,
     properties,
     user_auth: settings.user_auth,

@@ -1,15 +1,15 @@
-import styles from "./TeamSettingsMembers.module.scss";
+import TeamSettingsMembersTable from "@components/pages/TeamSettingsPage/TeamSettingsMembers/TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
+import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowApiEnhancements.ts";
 import {
   TeamWithPermissions,
   useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
+  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
   useListUsersKnowledgeFlowV1UsersGetQuery,
   UserSummary,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
-import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
-import TeamSettingsMembersTable from "@components/pages/TeamSettingsPage/TeamSettingsMembers/TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
-import { useMemo, useState } from "react";
+import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {
   team: TeamWithPermissions;

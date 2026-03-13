@@ -1,14 +1,6 @@
 version: v1
 
 agents:
-  - id: "Georges"
-    name: "Georges"
-    type: "agent"
-    class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-    enabled: true
-    chat_options:
-      attach_files: false
-
   - id: "Rico"
     name: "Rico"
     type: "agent"
@@ -56,4 +48,22 @@ agents:
     name: "Tessa"
     type: "agent"
     class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+    enabled: true
+
+  - id: "BankTransferDemo"
+    name: "BankTransferDemo"
+    type: "agent"
+    class_path: "agentic_backend.banking.agent.BankTransferWorkflowAgent"
+    enabled: true
+
+react_profiles:
+  - profile_id: "base_assistant"
+    enabled: true
+  - profile_id: "custodian"
+    enabled: true
+  - profile_id: "rag_expert"
+    enabled: true
+  - profile_id: "sentinel"
+    enabled: true
+  - profile_id: "log_genius"
     enabled: true

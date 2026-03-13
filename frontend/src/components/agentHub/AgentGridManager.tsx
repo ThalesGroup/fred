@@ -274,6 +274,7 @@ export const AgentGridManager = ({
           isOpen={assetManagerOpen}
           onClose={handleCloseAssetManager}
           agentId={agentForAssetManagement.id}
+          agentName={agentForAssetManagement.name}
         />
       )}
 

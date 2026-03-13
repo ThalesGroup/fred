@@ -15,11 +15,9 @@ export default function Sidebar() {
         <TeamSelectionNavbar />
       </div>
       {!smallNavbar && <TeamContentNavbar />}
-      {!smallNavbar && (
-        <div className={styles["user-profile-container"]}>
-          <UserProfile />
-        </div>
-      )}
+      <div className={styles["user-profile-container"]}>
+        <UserProfile />
+      </div>
     </div>
   );
 }

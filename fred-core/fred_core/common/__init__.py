@@ -12,3 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fred_core.common.config_files import ConfigFiles
+from fred_core.common.team_id import TeamId
+
+__all__ = ["ConfigFiles", "TeamId"]

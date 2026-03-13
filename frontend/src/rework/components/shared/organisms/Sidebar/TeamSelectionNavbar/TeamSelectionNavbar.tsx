@@ -1,4 +1,4 @@
-import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../../../../../../slices/knowledgeFlow/knowledgeFlowApiEnhancements.ts";
+import { useListTeamsQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import TeamSelectionItem from "@shared/organisms/Sidebar/TeamSelectionNavbar/TeamSelectionItem/TeamSelectionItem.tsx";
 import styles from "./TeamSelectionNavbar.module.scss";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 
 export default function TeamSelectionNavbar() {
-  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
+  const { data: teams } = useListTeamsQuery();
   const { pathname } = useLocation();
   const { t } = useTranslation();
 

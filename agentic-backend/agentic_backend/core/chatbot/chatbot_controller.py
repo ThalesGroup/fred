@@ -261,6 +261,7 @@ class TeamModelRoutingConfigDTO(BaseModel):
 class CreateSessionPayload(BaseModel):
     agent_id: Optional[str] = None
     title: Optional[str] = None
+    team_id: Optional[str] = None
 
 
 def get_agent_manager(request: Request) -> AgentManager:
@@ -356,8 +357,10 @@ async def _authorize_team_model_routing_preview(
     rebac = get_rebac_engine()
     if rebac.enabled:
         try:
-            await rebac.check_user_permission_or_raise(
-                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            await rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
             )
         except AuthorizationError as exc:
             raise HTTPException(
@@ -385,6 +388,12 @@ async def get_team_model_routing_config(
     await _authorize_team_model_routing_preview(user, team_id)
 
     catalog_path = resolve_models_catalog_path()
+    if not get_configuration().ai.enable_catalog_mode:
+        return TeamModelRoutingConfigDTO(
+            team_id=team_id,
+            catalog_path=str(catalog_path),
+            catalog_exists=False,
+        )
     if not catalog_path.exists():
         return TeamModelRoutingConfigDTO(
             team_id=team_id,
@@ -872,13 +881,17 @@ async def create_session(
 ) -> SessionSchema:
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
-            "[CHATBOT] create_session start user=%s agent_id=%s title=%s",
+            "[CHATBOT] create_session start user=%s agent_id=%s title=%s team_id=%s",
             user.uid,
             payload.agent_id,
             payload.title,
+            payload.team_id,
         )
     return await session_orchestrator.create_empty_session(
-        user=user, agent_id=payload.agent_id, title=payload.title
+        user=user,
+        agent_id=payload.agent_id,
+        title=payload.title,
+        team_id=payload.team_id,
     )
 
 

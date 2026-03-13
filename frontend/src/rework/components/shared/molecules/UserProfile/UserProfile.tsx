@@ -8,7 +8,6 @@ import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPag
 
 export default function UserProfile() {
   const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
-
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
 
@@ -27,6 +26,7 @@ export default function UserProfile() {
             size={"medium"}
             icon={{ category: "outlined", type: "Settings", filled: true }}
             onClick={() => setIsUserSettingsOpen(true)}
+            aria-label="Open user settings"
           />
         </span>
       </div>

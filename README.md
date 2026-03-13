@@ -461,13 +461,38 @@ No matter which development environment you choose, both backends rely on two pa
 ### Start Fred components
 
 ```bash
+# single-process backend app (control-plane + agentic + knowledge-flow in one process)
+make run-app
+```
+
+```bash
+# previous behavior: same three APIs as separate backend processes
+make run-app-multi
+```
+
+Or run a single backend API from repository root:
+
+```bash
+make run-control-plane
+make run-agentic
+make run-knowledge-flow
+```
+
+Or run each component from its own folder:
+
+```bash
 # knowledge-flow backend
 cd knowledge-flow-backend && make run
 ```
 
 ```bash
 # agentic backend
-cd agentic_backend && make run
+cd agentic-backend && make run
+```
+
+```bash
+# control-plane backend
+cd control-plane-backend && make run
 ```
 
 ```bash
@@ -551,10 +576,16 @@ Other infrastructure services remain accessible on their usual ports:
 
 ## Production mode
 
+> [!IMPORTANT]
+> **Access-control reminder (shared environments):**
+> Keycloak app roles and team ReBAC rights are different controls.
+> For the Fred access model and deployment bootstrap rules, see [`docs/REBAC.md`](./docs/REBAC.md).
+
 For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
 - [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
 - [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
+- [`docs/REBAC.md`](./docs/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 
@@ -640,6 +671,8 @@ Persistence options:
 
 - Developer and contributors guides
 
+  - [Developer Contract (humans + AI)](./docs/DEVELOPER_CONTRACT.md)
+  - [Platform Runtime Map (API apps + Temporal apps)](./docs/PLATFORM_RUNTIME_MAP.md)
   - [Developer Tools](./developer_tools/README.md)
   - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
   - [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)

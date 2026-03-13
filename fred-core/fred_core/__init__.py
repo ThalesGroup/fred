@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fred_core.common.config_files import ConfigFiles
+from fred_core.common.config_loader import (
+    load_configuration_with_config_files,
+    parse_yaml_mapping_file,
+)
 from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.common.lru_cache import ThreadSafeLRUCache
 from fred_core.common.structures import (
@@ -28,6 +33,7 @@ from fred_core.common.structures import (
     StoreConfig,
     TemporalSchedulerConfig,
 )
+from fred_core.common.team_id import TeamId
 from fred_core.common.utils import raise_internal_error
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
@@ -106,6 +112,11 @@ from fred_core.security.structure import (
     SecurityConfiguration,
     UserSecurity,
 )
+from fred_core.session.stores import (
+    BaseJsonSessionStore,
+    BaseSessionStore,
+    PostgresJsonSessionStore,
+)
 from fred_core.store.opensearch_mapping_validator import validate_index_mapping
 from fred_core.store.sql_store import SQLTableStore
 from fred_core.store.structures import StoreInfo
@@ -125,6 +136,10 @@ __all__ = [
     "LogStorageConfig",
     "InMemoryLogStorageConfig",
     "raise_internal_error",
+    "ConfigFiles",
+    "load_configuration_with_config_files",
+    "parse_yaml_mapping_file",
+    "TeamId",
     "get_current_user",
     "decode_jwt",
     "initialize_user_security",
@@ -178,6 +193,9 @@ __all__ = [
     "SQLTableStore",
     "StoreInfo",
     "ModelProvider",
+    "BaseJsonSessionStore",
+    "BaseSessionStore",
+    "PostgresJsonSessionStore",
     "RebacReference",
     "Relation",
     "RelationType",

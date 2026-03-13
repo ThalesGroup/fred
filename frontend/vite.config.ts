@@ -29,6 +29,7 @@ export default defineConfig({
     proxy: {
       "/agentic": process.env.VITE_BACKEND_URL || "http://localhost:8000",
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
+      "/control-plane": process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
     },
   },
   resolve: {

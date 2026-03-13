@@ -127,7 +127,10 @@ $color-schemes: (
 }
 
 @mixin typography($style, $size, $emphasized: false) {
-  $suffix: if($emphasized, "-emphasized", "");
+  $suffix: "";
+  @if $emphasized {
+    $suffix: "-emphasized";
+  }
   $token-base: "--font-#{$style}-#{$size}#{$suffix}";
   font-weight: var(#{$token-base}-weight);
   font-size: var(#{$token-base}-size);
