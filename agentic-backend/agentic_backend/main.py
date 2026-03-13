@@ -28,11 +28,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from fred_core import initialize_user_security, log_setup, register_exception_handlers
 from fred_core.kpi import KPIActor, KPIWriter, emit_process_kpis, emit_sql_pool_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from agentic_backend.application_context import (
     ApplicationContext,
