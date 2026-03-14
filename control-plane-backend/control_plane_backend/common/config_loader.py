@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import (
+from fred_core.common import (
     ConfigFiles,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,

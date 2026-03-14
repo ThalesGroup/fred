@@ -5,9 +5,11 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union
 
 from fred_core import (
+    SecurityConfiguration,
+)
+from fred_core.common import (
     PostgresStoreConfig,
     PostgresTableConfig,
-    SecurityConfiguration,
     TemporalSchedulerConfig,
 )
 from pydantic import BaseModel, Field, model_validator
@@ -23,7 +25,7 @@ class AppConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: Literal["temporal"] = "temporal"
+    backend: Literal["temporal", "memory"] = "temporal"
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
@@ -114,7 +116,9 @@ class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig = Field(default_factory=_default_postgres_store)
     session_store: PostgresTableConfig = Field(default_factory=_default_session_store)
     purge_queue_table: str = "session_purge_queue"
-    content_storage: ContentStorageConfig = Field(default_factory=_default_content_storage)
+    content_storage: ContentStorageConfig = Field(
+        default_factory=_default_content_storage
+    )
 
 
 class Configuration(BaseModel):

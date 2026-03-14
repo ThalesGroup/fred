@@ -11,8 +11,8 @@ from fred_core import (
     rebac_factory,
 )
 from fred_core.scheduler import TemporalClientProvider
-from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
 from fred_core.sql import create_async_engine_from_config
+from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.common.config_loader import get_loaded_config_file_path
@@ -38,9 +38,7 @@ class ApplicationContext:
 
     def __init__(self, configuration: Configuration):
         self.configuration = configuration
-        self._temporal_client_provider = TemporalClientProvider(
-            configuration.scheduler.temporal
-        )
+        self._temporal_client_provider: TemporalClientProvider | None = None
         self._policy_catalog: ConversationPolicyCatalog | None = None
         self._policy_catalog_path = self._resolve_policy_catalog_path()
         self._pg_async_engine: AsyncEngine | None = None
@@ -83,7 +81,19 @@ class ApplicationContext:
             )
         return self._policy_catalog
 
+    def get_scheduler_backend(self) -> str:
+        return self.configuration.scheduler.backend
+
     def get_temporal_client_provider(self) -> TemporalClientProvider:
+        if self.configuration.scheduler.backend != "temporal":
+            raise ValueError(
+                "Temporal client requested but scheduler backend is "
+                f"{self.configuration.scheduler.backend}"
+            )
+        if self._temporal_client_provider is None:
+            self._temporal_client_provider = TemporalClientProvider(
+                self.configuration.scheduler.temporal
+            )
         return self._temporal_client_provider
 
     def get_pg_async_engine(self) -> AsyncEngine:

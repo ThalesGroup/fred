@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from fred_core.common.structures import PostgresStoreConfig
+from fred_core.common import PostgresStoreConfig
 from fred_core.session.stores import PostgresJsonSessionStore
 from fred_core.sql import create_async_engine_from_config
 

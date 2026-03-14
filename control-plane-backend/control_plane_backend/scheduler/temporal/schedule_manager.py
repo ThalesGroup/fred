@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from fred_core import TemporalSchedulerConfig
+from fred_core.common import TemporalSchedulerConfig
 from temporalio.client import (
     Client,
     Schedule,

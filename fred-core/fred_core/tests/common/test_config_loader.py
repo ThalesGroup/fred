@@ -18,8 +18,8 @@ import logging
 
 import pytest
 
-from fred_core.common.config_files import ConfigFiles
-from fred_core.common.config_loader import (
+from fred_core.common import (
+    ConfigFiles,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
 )

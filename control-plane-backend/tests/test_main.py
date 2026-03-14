@@ -4,7 +4,8 @@ from datetime import datetime
 from typing import Any, cast
 
 import pytest
-from fred_core import RelationType, TeamId, TeamPermission
+from fred_core import RelationType, TeamPermission
+from fred_core.common import TeamId
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
 
@@ -588,6 +589,168 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
 
 
 @pytest.mark.asyncio
+async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.scheduler.policies.policy_models import (
+        PolicyEvaluationResult,
+        PurgeMode,
+    )
+    from control_plane_backend.scheduler.temporal.structures import (
+        LifecycleManagerResult,
+    )
+
+    class _FakeKeycloakAdmin:
+        async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
+            return None
+
+    class _FakeRebac:
+        async def delete_relations(self, _relations) -> None:
+            return None
+
+    class _FakeSessionStore:
+        async def get_payloads_for_user(self, _user_id: str) -> list[dict]:
+            return [{"id": "s-1", "team_id": "temp-lab"}]
+
+    class _FakeQueueStore:
+        async def enqueue(
+            self,
+            *,
+            session_id: str,
+            team_id: str,
+            user_id: str,
+            due_at: datetime,
+        ) -> None:
+            _ = (session_id, team_id, user_id, due_at)
+
+    class _FakeAppContext:
+        def __init__(self) -> None:
+            scheduler = type("SchedulerCfg", (), {"enabled": True})()
+            self.configuration = type("Cfg", (), {"scheduler": scheduler})()
+            self._rebac = _FakeRebac()
+            self._session_store = _FakeSessionStore()
+            self._queue_store = _FakeQueueStore()
+
+        def get_rebac_engine(self):
+            return self._rebac
+
+        def get_session_store(self):
+            return self._session_store
+
+        def get_purge_queue_store(self):
+            return self._queue_store
+
+        def get_policy_catalog(self):
+            return object()
+
+        def get_scheduler_backend(self) -> str:
+            return "memory"
+
+    lifecycle_calls: list[int] = []
+
+    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+        from control_plane_backend.teams_structures import UserTeamRelation
+
+        return UserTeamRelation.MEMBER
+
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        return _FakeKeycloakAdmin(), {"id": "temp-lab", "name": "Temp Lab"}, None
+
+    async def _fake_run_lifecycle_manager_once_in_memory(_input_data):
+        lifecycle_calls.append(1)
+        return LifecycleManagerResult(scanned=1, deleted=1, dry_run_actions=0)
+
+    def _fake_evaluate_policy_for_request(*_args, **_kwargs):
+        return PolicyEvaluationResult(
+            mode=PurgeMode.IMMEDIATE_DELETE,
+            retention="PT0S",
+            retention_seconds=0,
+            cancel_on_rejoin=True,
+            matched_rule_id="purge.team.temp-lab",
+            matched_rule_specificity=2,
+        )
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service.ApplicationContext.get_instance",
+        lambda: _FakeAppContext(),
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_user_role_in_team",
+        _fake_get_user_role_in_team,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service.evaluate_policy_for_request",
+        _fake_evaluate_policy_for_request,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service.run_lifecycle_manager_once_in_memory",
+        _fake_run_lifecycle_manager_once_in_memory,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/temp-lab/members/user-002",
+        )
+
+    assert resp.status_code == 202
+    assert lifecycle_calls == [1]
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_run_once_executes_in_memory_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_core.common import parse_yaml_mapping_file
+
+    from control_plane_backend.common.structures import Configuration
+    from control_plane_backend.scheduler.temporal.structures import (
+        LifecycleManagerResult,
+    )
+
+    payload = parse_yaml_mapping_file("./config/configuration.yaml")
+    payload["scheduler"]["enabled"] = True
+    payload["scheduler"]["backend"] = "memory"
+    config = Configuration.model_validate(payload)
+
+    async def _fake_run_lifecycle_manager_once_in_memory(_input_data):
+        return LifecycleManagerResult(scanned=2, deleted=2, dry_run_actions=0)
+
+    monkeypatch.setattr(
+        "control_plane_backend.main.load_configuration",
+        lambda: config,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.main.run_lifecycle_manager_once_in_memory",
+        _fake_run_lifecycle_manager_once_in_memory,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/lifecycle/run-once",
+            json={"dry_run": False, "batch_size": 50},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "status": "completed",
+        "backend": "memory",
+        "workflow_id": None,
+        "run_id": None,
+        "result": {"scanned": 2, "deleted": 2, "dry_run_actions": 0},
+    }
+
+
+@pytest.mark.asyncio
 async def test_update_team_member_blocks_last_owner_demotion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -624,7 +787,10 @@ async def test_update_team_member_blocks_last_owner_demotion(
         )
 
     assert resp.status_code == 409
-    assert resp.json()["detail"] == "Operation denied: a team must keep at least one owner."
+    assert (
+        resp.json()["detail"]
+        == "Operation denied: a team must keep at least one owner."
+    )
 
 
 @pytest.mark.asyncio
@@ -661,4 +827,7 @@ async def test_remove_team_member_blocks_removing_last_owner(
         resp = await client.delete("/control-plane/v1/teams/thales/members/user-001")
 
     assert resp.status_code == 409
-    assert resp.json()["detail"] == "Operation denied: a team must keep at least one owner."
+    assert (
+        resp.json()["detail"]
+        == "Operation denied: a team must keep at least one owner."
+    )

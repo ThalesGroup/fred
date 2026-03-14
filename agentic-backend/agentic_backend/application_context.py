@@ -38,19 +38,21 @@ from fred_core import (
     BaseSessionStore,
     BearerAuth,
     ClientCredentialsProvider,
-    DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    LogStoreConfig,
     OpenFgaRebacConfig,
-    OpenSearchIndexConfig,
     OpenSearchLogStore,
-    PostgresTableConfig,
     RamLogStore,
     RebacEngine,
-    SQLStorageConfig,
     get_model,
     rebac_factory,
     split_realm_url,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
+    LogStoreConfig,
+    OpenSearchIndexConfig,
+    PostgresTableConfig,
+    SQLStorageConfig,
 )
 from fred_core.kpi import (
     BaseKPIStore,

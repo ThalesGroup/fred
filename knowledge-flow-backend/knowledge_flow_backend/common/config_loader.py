@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import ConfigFiles, load_configuration_with_config_files
+from fred_core.common import ConfigFiles, load_configuration_with_config_files
 
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.common.utils import parse_server_configuration

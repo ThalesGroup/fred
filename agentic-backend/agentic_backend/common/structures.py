@@ -17,10 +17,12 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
     TemporalSchedulerConfig,
 )

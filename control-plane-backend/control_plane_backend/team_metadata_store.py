@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from fred_core import TeamId
+from fred_core.common import TeamId
 from fred_core.sql import (
     AsyncBaseSqlStore,
     advisory_lock_key,

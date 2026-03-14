@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import BaseSessionStore, KeycloakUser, PostgresStoreConfig
+from fred_core import BaseSessionStore, KeycloakUser
+from fred_core.common import PostgresStoreConfig
 from fred_core.kpi import NoOpKPIWriter
 from fred_core.sql import create_async_engine_from_config
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel

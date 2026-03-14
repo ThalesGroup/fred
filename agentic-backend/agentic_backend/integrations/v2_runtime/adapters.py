@@ -35,10 +35,10 @@ from fred_core import (
     LogFilter,
     LogQuery,
     LogQueryResult,
-    OwnerFilter,
     get_keycloak_client_id,
     get_keycloak_url,
 )
+from fred_core.common import OwnerFilter
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 

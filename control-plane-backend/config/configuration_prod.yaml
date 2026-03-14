@@ -7,6 +7,8 @@ app:
 
 scheduler:
   enabled: true
+  # temporal: requires Temporal server + run-worker process
+  # memory: execute lifecycle pass in API process (no worker needed)
   backend: temporal
   temporal:
     host: temporal:7233

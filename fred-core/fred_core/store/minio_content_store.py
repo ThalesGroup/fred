@@ -63,7 +63,7 @@ class MinioContentStore:
     store = MinioContentStore(
         endpoint="localhost:9000",
         access_key="minio",
-        secret_key="minio123",
+        secret_key="<MINIO_SECRET_KEY>",
         bucket_name="fred-objects",
         secure=False,
     )

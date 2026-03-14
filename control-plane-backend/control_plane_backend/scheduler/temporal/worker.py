@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import TemporalSchedulerConfig
+from fred_core.common import TemporalSchedulerConfig
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker

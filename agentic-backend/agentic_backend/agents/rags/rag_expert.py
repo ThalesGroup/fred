@@ -27,7 +27,7 @@ from typing import (
     cast,
 )
 
-from fred_core import OwnerFilter
+from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import (
     AIMessage,

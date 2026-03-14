@@ -32,8 +32,8 @@ from fred_core import (
     get_current_user,
     initialize_user_security,
     log_setup,
-    register_exception_handlers,
 )
+from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
@@ -94,19 +94,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    logger.warning("%s Invalid boolean for %s=%r, defaulting to %s", LOG_PREFIX, name, raw, default)
-    return default
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -138,7 +125,7 @@ def create_app() -> FastAPI:
     )
     logger.info("%s create_app() called with base_url=%s", LOG_PREFIX, base_url)
     application_context._log_config_summary()
-    docs_enabled = _env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     logger.info("%s FastAPI docs/openapi endpoints enabled=%s", LOG_PREFIX, docs_enabled)
 
     @asynccontextmanager

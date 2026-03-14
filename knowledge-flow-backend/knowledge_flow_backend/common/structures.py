@@ -21,13 +21,15 @@ from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
-from fred_core.common.structures import TemporalSchedulerConfig
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 """

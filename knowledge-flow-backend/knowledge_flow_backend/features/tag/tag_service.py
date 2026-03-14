@@ -22,7 +22,6 @@ from uuid import uuid4
 from fred_core import (
     Action,
     KeycloakUser,
-    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -32,6 +31,7 @@ from fred_core import (
     TeamPermission,
     authorize,
 )
+from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError

@@ -16,7 +16,8 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user, raise_internal_error
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core.common import raise_internal_error
 from fred_core.scheduler import TemporalClientProvider
 
 from knowledge_flow_backend.application_context import ApplicationContext

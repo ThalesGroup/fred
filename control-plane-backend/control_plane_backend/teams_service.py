@@ -18,15 +18,16 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
-    TeamId,
     TeamPermission,
     create_keycloak_admin,
 )
+from fred_core.common import TeamId
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 from pydantic import BaseModel, Field, ValidationError
 
 from control_plane_backend.application_context import ApplicationContext
+from control_plane_backend.scheduler.memory import run_lifecycle_manager_once_in_memory
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
 )
@@ -34,6 +35,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     LifecycleTrigger,
     PolicyResolutionRequest,
 )
+from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.team_metadata_store import TeamMetadataPatch
 from control_plane_backend.teams_structures import (
     AddTeamMemberRequest,
@@ -43,12 +45,12 @@ from control_plane_backend.teams_structures import (
     RemoveTeamMemberResponse,
     Team,
     TeamMember,
-    TeamOwnerConstraintError,
     TeamMembershipSyncError,
     TeamNotFoundError,
+    TeamOwnerConstraintError,
     TeamWithPermissions,
-    UpdateTeamRequest,
     UpdateTeamMemberRequest,
+    UpdateTeamRequest,
     UserTeamRelation,
 )
 from control_plane_backend.users_service import get_users_by_ids
@@ -195,11 +197,11 @@ async def upload_team_banner(
         if not payload:
             raise BannerUploadError("Empty file upload is not allowed")
 
-        declared_content_type = (file.content_type or "application/octet-stream").lower()
+        declared_content_type = (
+            file.content_type or "application/octet-stream"
+        ).lower()
         if declared_content_type not in _ALLOWED_BANNER_MIME_TYPES:
-            raise BannerUploadError(
-                f"Invalid content type: {declared_content_type}"
-            )
+            raise BannerUploadError(f"Invalid content type: {declared_content_type}")
 
         detected_content_type = _detect_image_content_type(payload)
         if detected_content_type not in _ALLOWED_BANNER_MIME_TYPES:
@@ -357,6 +359,8 @@ async def remove_team_member(
         team_id,
         sessions_enqueued,
     )
+    if sessions_enqueued > 0:
+        await _run_lifecycle_if_in_memory_scheduler(app_context)
 
     return RemoveTeamMemberResponse(
         team_id=team_id,
@@ -366,6 +370,23 @@ async def remove_team_member(
         policy_mode=policy.mode.value,
         retention_seconds=policy.retention_seconds,
         matched_rule_id=policy.matched_rule_id,
+    )
+
+
+async def _run_lifecycle_if_in_memory_scheduler(
+    app_context: ApplicationContext,
+) -> None:
+    if not app_context.configuration.scheduler.enabled:
+        return
+    if app_context.get_scheduler_backend() != "memory":
+        return
+
+    result = await run_lifecycle_manager_once_in_memory(LifecycleManagerInput())
+    logger.info(
+        "[LIFECYCLE][IN_MEMORY] post-member-removal pass scanned=%s deleted=%s dry_run_actions=%s",
+        result.scanned,
+        result.deleted,
+        result.dry_run_actions,
     )
 
 
@@ -421,8 +442,8 @@ async def _enrich_groups_with_team_data(
     app_context = ApplicationContext.get_instance()
     content_store = app_context.get_content_store()
     team_ids: list[TeamId] = [group.id for group in groups]
-    team_metadata_by_id = await (
-        app_context.get_team_metadata_store().get_by_team_ids(team_ids)
+    team_metadata_by_id = await app_context.get_team_metadata_store().get_by_team_ids(
+        team_ids
     )
     owner_ids_list, member_ids_list = await asyncio.gather(
         asyncio.gather(
@@ -604,11 +625,7 @@ def _detect_image_content_type(payload: bytes) -> str | None:
         return "image/jpeg"
     if payload.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
-    if (
-        len(payload) >= 12
-        and payload[0:4] == b"RIFF"
-        and payload[8:12] == b"WEBP"
-    ):
+    if len(payload) >= 12 and payload[0:4] == b"RIFF" and payload[8:12] == b"WEBP":
         return "image/webp"
     return None
 

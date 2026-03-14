@@ -2,7 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, File, Path, UploadFile
 from fastapi.responses import JSONResponse
-from fred_core import AuthorizationError, KeycloakUser, TeamId, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core.common import TeamId
 
 from control_plane_backend.teams_service import (
     add_team_member as add_team_member_from_service,
@@ -17,12 +18,12 @@ from control_plane_backend.teams_service import list_teams as list_teams_from_se
 from control_plane_backend.teams_service import (
     remove_team_member as remove_team_member_from_service,
 )
-from control_plane_backend.teams_service import (
-    upload_team_banner as upload_team_banner_from_service,
-)
 from control_plane_backend.teams_service import update_team as update_team_from_service
 from control_plane_backend.teams_service import (
     update_team_member as update_team_member_from_service,
+)
+from control_plane_backend.teams_service import (
+    upload_team_banner as upload_team_banner_from_service,
 )
 from control_plane_backend.teams_structures import (
     AddTeamMemberRequest,
@@ -31,12 +32,12 @@ from control_plane_backend.teams_structures import (
     RemoveTeamMemberResponse,
     Team,
     TeamMember,
-    TeamOwnerConstraintError,
     TeamMembershipSyncError,
     TeamNotFoundError,
+    TeamOwnerConstraintError,
     TeamWithPermissions,
-    UpdateTeamRequest,
     UpdateTeamMemberRequest,
+    UpdateTeamRequest,
 )
 
 router = APIRouter(tags=["Teams"])

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup
+from fred_core.common import read_env_bool
 from fred_core.logs.null_log_store import NullLogStore
 from pydantic import BaseModel
 
@@ -18,6 +18,7 @@ from control_plane_backend.common.config_loader import (
     load_configuration,
 )
 from control_plane_backend.common.structures import AppState
+from control_plane_backend.scheduler.memory import run_lifecycle_manager_once_in_memory
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
 )
@@ -25,7 +26,10 @@ from control_plane_backend.scheduler.policies.policy_models import (
     PolicyEvaluationResult,
     PolicyResolutionRequest,
 )
-from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
+from control_plane_backend.scheduler.temporal.structures import (
+    LifecycleManagerInput,
+    LifecycleManagerResult,
+)
 from control_plane_backend.teams_controller import (
     register_exception_handlers as register_team_exception_handlers,
 )
@@ -57,22 +61,11 @@ class ReadyResponse(BaseModel):
 
 
 class WorkflowStartResponse(BaseModel):
-    status: Literal["queued"] = "queued"
-    workflow_id: str
-    run_id: str
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    logger.warning("Invalid boolean for %s=%r, defaulting to %s", name, raw, default)
-    return default
+    status: Literal["queued", "completed"] = "queued"
+    backend: Literal["temporal", "memory"]
+    workflow_id: str | None = None
+    run_id: str | None = None
+    result: LifecycleManagerResult | None = None
 
 
 def _norm_origin(origin: object) -> str:
@@ -90,7 +83,7 @@ def create_app() -> FastAPI:
     )
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
-    docs_enabled = _env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
@@ -159,6 +152,15 @@ def create_app() -> FastAPI:
                 detail="Scheduler is disabled. Enable configuration.scheduler.enabled.",
             )
 
+        backend = ctx.get_scheduler_backend()
+        if backend == "memory":
+            result = await run_lifecycle_manager_once_in_memory(payload)
+            return WorkflowStartResponse(
+                status="completed",
+                backend="memory",
+                result=result,
+            )
+
         provider = ctx.get_temporal_client_provider()
         client = await provider.get_client()
         workflow_id = (
@@ -175,7 +177,12 @@ def create_app() -> FastAPI:
                 status_code=500,
                 detail="Temporal returned no run_id for started workflow.",
             )
-        return WorkflowStartResponse(workflow_id=handle.id, run_id=handle.run_id)
+        return WorkflowStartResponse(
+            status="queued",
+            backend="temporal",
+            workflow_id=handle.id,
+            run_id=handle.run_id,
+        )
 
     router.include_router(users_router)
     router.include_router(teams_router)

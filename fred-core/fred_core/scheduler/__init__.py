@@ -15,4 +15,7 @@
 from fred_core.scheduler.scheduler_structures import SchedulerInputArgsV1
 from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 
-__all__ = ["TemporalClientProvider", "SchedulerInputArgsV1"]
+__all__ = [
+    "TemporalClientProvider",
+    "SchedulerInputArgsV1",
+]

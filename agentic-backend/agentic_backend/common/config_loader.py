@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import ConfigFiles, load_configuration_with_config_files
+from fred_core.common import ConfigFiles, load_configuration_with_config_files
 
 from agentic_backend.common.catalog_overrides import apply_external_catalog_overrides
 from agentic_backend.common.structures import Configuration

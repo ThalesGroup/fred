@@ -7,6 +7,7 @@ app:
 
 scheduler:
   enabled: true
+  # Worker process is only used when backend=temporal.
   backend: temporal
   temporal:
     host: localhost:7233

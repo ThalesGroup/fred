@@ -74,6 +74,11 @@ cd control-plane-backend
 make run-worker
 ```
 
+Scheduler backend note:
+
+- `scheduler.backend: temporal` => requires `make run-worker`.
+- `scheduler.backend: memory` => runs lifecycle purge in-process (no Temporal server/worker required).
+
 ## Generate OpenAPI
 
 ```bash

@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
-from fred_core import OwnerFilter
+from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
 from pydantic import TypeAdapter
 

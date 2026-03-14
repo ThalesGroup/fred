@@ -23,7 +23,6 @@ from fred_core import (
     AgentPermission,
     KeycloakUser,
     OrganizationPermission,
-    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -32,6 +31,7 @@ from fred_core import (
     TeamPermission,
     authorize,
 )
+from fred_core.common import OwnerFilter
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF

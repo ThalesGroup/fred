@@ -18,7 +18,7 @@ from typing import Callable, TypeVar
 
 import yaml
 
-from fred_core.common.config_files import ConfigFiles
+from .config_files import ConfigFiles
 
 TConfig = TypeVar("TConfig")
 

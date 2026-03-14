@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from fred_core import TemporalSchedulerConfig
+from fred_core.common import TemporalSchedulerConfig
 from temporalio.client import (
     Schedule,
     ScheduleActionStartWorkflow,

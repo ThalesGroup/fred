@@ -36,10 +36,10 @@ async def main() -> None:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
         return
 
-    if configuration.scheduler.backend.lower() != "temporal":
-        raise ValueError(
-            f"Scheduler backend '{configuration.scheduler.backend}' not supported; expected 'temporal'."
-        )
+    scheduler_backend = configuration.scheduler.backend
+    if scheduler_backend == "memory":
+        logger.info("Scheduler backend is 'memory'; no Temporal worker is required.")
+        return
 
     await run_worker(
         configuration.scheduler.temporal,

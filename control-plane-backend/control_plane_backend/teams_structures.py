@@ -4,7 +4,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from fred_core import RelationType, TeamId, TeamPermission
+from fred_core import RelationType, TeamPermission
+from fred_core.common import TeamId
 from pydantic import BaseModel, Field
 
 from control_plane_backend.users_structures import UserSummary

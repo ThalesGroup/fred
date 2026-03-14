@@ -23,8 +23,8 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser
-from fred_core.store import VectorSearchHit
 from fred_core.kpi import BaseKPIWriter
+from fred_core.store import VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
