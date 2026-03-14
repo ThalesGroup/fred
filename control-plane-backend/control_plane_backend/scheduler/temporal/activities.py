@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from temporalio import activity
 
 from control_plane_backend.scheduler.lifecycle_actions import (
@@ -13,14 +15,30 @@ from control_plane_backend.scheduler.temporal.structures import (
     ListConversationCandidatesInput,
 )
 
+logger = logging.getLogger(__name__)
 
-@activity.defn(name="list_conversation_candidates")
+LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME = "list_conversation_candidates"
+DELETE_CONVERSATION_ACTIVITY_NAME = "delete_conversation"
+
+
+def _activity_logger():
+    """
+    Temporal activities use `activity.logger`, but memory mode calls the same
+    activity functions directly outside Temporal context.
+    """
+    try:
+        return activity.logger
+    except RuntimeError:
+        return logger
+
+
+@activity.defn(name=LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME)
 async def list_conversation_candidates(
     input_data: ListConversationCandidatesInput,
 ) -> ConversationCandidateBatch:
     candidates = await list_due_conversation_candidates(limit=input_data.limit)
 
-    activity.logger.info(
+    _activity_logger().info(
         "[LIFECYCLE] list due candidates limit=%s returned=%s",
         input_data.limit,
         len(candidates.candidates),
@@ -28,10 +46,10 @@ async def list_conversation_candidates(
     return candidates
 
 
-@activity.defn(name="delete_conversation")
+@activity.defn(name=DELETE_CONVERSATION_ACTIVITY_NAME)
 async def delete_conversation(
     input_data: DeleteConversationInput,
 ) -> ConversationActionResult:
     session_id = input_data.event.conversation_id
-    activity.logger.info("[LIFECYCLE] delete conversation_id=%s", session_id)
+    _activity_logger().info("[LIFECYCLE] delete conversation_id=%s", session_id)
     return await delete_conversation_and_mark_done(event=input_data.event)

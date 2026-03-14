@@ -5,6 +5,11 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from control_plane_backend.scheduler.lifecycle_runner import run_lifecycle_manager_once
+from control_plane_backend.scheduler.temporal.activities import (
+    DELETE_CONVERSATION_ACTIVITY_NAME,
+    LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME,
+)
 from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
@@ -21,55 +26,32 @@ class LifecycleManagerWorkflow:
     async def run(self, input_data: LifecycleManagerInput) -> LifecycleManagerResult:
         retry_policy = RetryPolicy(maximum_attempts=3)
 
-        scanned = 0
-        deleted = 0
-        dry_run_actions = 0
+        async def _list_candidates(
+            list_input: ListConversationCandidatesInput,
+        ) -> ConversationCandidateBatch:
+            return await workflow.execute_activity(
+                LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME,
+                list_input,
+                result_type=ConversationCandidateBatch,
+                start_to_close_timeout=timedelta(minutes=1),
+                retry_policy=retry_policy,
+            )
 
-        batch = await workflow.execute_activity(
-            "list_conversation_candidates",
-            ListConversationCandidatesInput(limit=input_data.batch_size),
-            result_type=ConversationCandidateBatch,
-            start_to_close_timeout=timedelta(minutes=1),
-            retry_policy=retry_policy,
-        )
-
-        if not batch.candidates:
-            workflow.logger.info("[LIFECYCLE] no due candidates")
-            return LifecycleManagerResult()
-
-        workflow.logger.info(
-            "[LIFECYCLE] processing due candidates size=%s",
-            len(batch.candidates),
-        )
-
-        for event in batch.candidates:
-            scanned += 1
-            if input_data.dry_run:
-                dry_run_actions += 1
-                workflow.logger.info(
-                    "[LIFECYCLE][DRY_RUN] conversation_id=%s",
-                    event.conversation_id,
-                )
-                continue
-            deletion = await workflow.execute_activity(
-                "delete_conversation",
-                DeleteConversationInput(event=event),
+        async def _delete_conversation(
+            delete_input: DeleteConversationInput,
+        ) -> ConversationActionResult:
+            return await workflow.execute_activity(
+                DELETE_CONVERSATION_ACTIVITY_NAME,
+                delete_input,
                 result_type=ConversationActionResult,
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=retry_policy,
             )
-            if deletion.ok:
-                deleted += 1
 
-        workflow.logger.info(
-            "[LIFECYCLE] completed scanned=%s deleted=%s dry_run_actions=%s",
-            scanned,
-            deleted,
-            dry_run_actions,
-        )
-
-        return LifecycleManagerResult(
-            scanned=scanned,
-            deleted=deleted,
-            dry_run_actions=dry_run_actions,
+        return await run_lifecycle_manager_once(
+            input_data=input_data,
+            list_candidates=_list_candidates,
+            delete_conversation=_delete_conversation,
+            logger=workflow.logger,
+            log_prefix="[LIFECYCLE]",
         )
