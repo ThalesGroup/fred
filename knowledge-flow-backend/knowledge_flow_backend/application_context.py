@@ -44,6 +44,7 @@ from fred_core.common import (
     SQLStorageConfig,
 )
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
+from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import SQLTableStore, StoreInfo
 from langchain_core.embeddings import Embeddings
@@ -433,11 +434,11 @@ class ApplicationContext:
         """
         return self.configuration
 
-    def get_scheduler_backend(self) -> str:
+    def get_scheduler_backend(self) -> SchedulerBackend:
         scheduler_cfg = self.configuration.scheduler
         if not scheduler_cfg.enabled:
-            return "memory"
-        return scheduler_cfg.backend.lower()
+            return SchedulerBackend.MEMORY
+        return resolve_scheduler_backend(scheduler_cfg.backend)
 
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
         """

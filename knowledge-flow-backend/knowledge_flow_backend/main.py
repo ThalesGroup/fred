@@ -35,7 +35,7 @@ from fred_core import (
 )
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -266,14 +266,21 @@ def create_app() -> FastAPI:
     if configuration.scheduler.enabled:
         logger.info("%s Activating ingestion scheduler controller.", LOG_PREFIX)
         temporal_client_provider = None
+        scheduler_backend = application_context.get_scheduler_backend()
 
-        if configuration.scheduler.backend.lower() == "temporal":
+        if scheduler_backend == SchedulerBackend.TEMPORAL:
             temporal_cfg = configuration.scheduler.temporal
             if not temporal_cfg:
                 raise ValueError("Scheduler enabled with temporal backend but temporal configuration is missing!")
             if not temporal_cfg.task_queue:
                 raise ValueError("Scheduler enabled but Temporal task_queue is not set in configuration!")
             temporal_client_provider = TemporalClientProvider(temporal_cfg)
+        else:
+            logger.info(
+                "%s Standalone scheduler mode active (effective backend=%s).",
+                LOG_PREFIX,
+                scheduler_backend,
+            )
 
         SchedulerController(router, temporal_client_provider=temporal_client_provider)
     else:

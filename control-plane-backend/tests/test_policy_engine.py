@@ -21,7 +21,7 @@ def _catalog_path() -> Path:
     return (
         Path(__file__).resolve().parents[1]
         / "config"
-        / "conversation_policy_catalog.yaml"
+        / "conversation_policy_catalog_test.yaml"
     )
 
 
@@ -30,31 +30,31 @@ def test_policy_engine_resolves_team_override() -> None:
 
     resolved = evaluate_policy_for_request(
         PolicyResolutionRequest(
-            team_id="contractors",
+            team_id="swiftpost",
             trigger=LifecycleTrigger.MEMBER_REMOVED,
         ),
         catalog,
     )
 
-    assert resolved.retention == "PT12H"
-    assert resolved.retention_seconds == 12 * 3600
-    assert resolved.matched_rule_id == "purge.team.contractors"
+    assert resolved.retention == "PT60S"
+    assert resolved.retention_seconds == 60
+    assert resolved.matched_rule_id == "purge.team.swiftpost"
 
 
-def test_policy_engine_resolves_immediate_delete() -> None:
+def test_policy_engine_resolves_second_team_override() -> None:
     catalog = load_conversation_policy_catalog(_catalog_path())
 
     resolved = evaluate_policy_for_request(
         PolicyResolutionRequest(
-            team_id="temp-lab",
+            team_id="northbridge",
             trigger=LifecycleTrigger.MEMBER_REMOVED,
         ),
         catalog,
     )
 
-    assert resolved.mode == "immediate_delete"
-    assert resolved.retention == "PT0S"
-    assert resolved.retention_seconds == 0
+    assert resolved.mode == "deferred_delete"
+    assert resolved.retention == "PT120S"
+    assert resolved.retention_seconds == 120
 
 
 @pytest.mark.parametrize("duration", ["P7D", "PT12H", "PT0S", "P1DT2H30M"])

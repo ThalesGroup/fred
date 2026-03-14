@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fred_core import initialize_user_security, log_setup
 from fred_core.common import read_env_bool
 from fred_core.logs.null_log_store import NullLogStore
+from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
 from control_plane_backend.application_context import ApplicationContext
@@ -62,7 +63,7 @@ class ReadyResponse(BaseModel):
 
 class WorkflowStartResponse(BaseModel):
     status: Literal["queued", "completed"] = "queued"
-    backend: Literal["temporal", "memory"]
+    backend: SchedulerBackend
     workflow_id: str | None = None
     run_id: str | None = None
     result: LifecycleManagerResult | None = None
@@ -153,11 +154,11 @@ def create_app() -> FastAPI:
             )
 
         backend = ctx.get_scheduler_backend()
-        if backend == "memory":
+        if backend == SchedulerBackend.MEMORY:
             result = await run_lifecycle_manager_once_in_memory(payload)
             return WorkflowStartResponse(
                 status="completed",
-                backend="memory",
+                backend=SchedulerBackend.MEMORY,
                 result=result,
             )
 
@@ -179,7 +180,7 @@ def create_app() -> FastAPI:
             )
         return WorkflowStartResponse(
             status="queued",
-            backend="temporal",
+            backend=SchedulerBackend.TEMPORAL,
             workflow_id=handle.id,
             run_id=handle.run_id,
         )

@@ -16,7 +16,7 @@ from control_plane_backend.teams_structures import KeycloakGroupSummary, Team
 
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CONFIG_FILE", "./config/configuration.yaml")
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
 
 
 @pytest.mark.asyncio
@@ -39,13 +39,13 @@ async def test_resolve_purge_policy_team_override() -> None:
     ) as client:
         resp = await client.post(
             "/control-plane/v1/policies/purge/resolve",
-            json={"team_id": "contractors", "trigger": "member_removed"},
+            json={"team_id": "swiftpost", "trigger": "member_removed"},
         )
 
     assert resp.status_code == 200
     payload = resp.json()
-    assert payload["retention"] == "PT12H"
-    assert payload["matched_rule_id"] == "purge.team.contractors"
+    assert payload["retention"] == "PT60S"
+    assert payload["matched_rule_id"] == "purge.team.swiftpost"
 
 
 @pytest.mark.asyncio
@@ -499,7 +499,7 @@ async def test_delete_team_member_requires_keycloak_m2m() -> None:
 async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -> None:
     class _FakeKeycloakAdmin:
         async def a_get_group(self, _group_id: str) -> dict[str, str]:
-            return {"id": "contractors", "name": "Contractors"}
+            return {"id": "swiftpost", "name": "SwiftPost"}
 
         async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
             return None
@@ -514,9 +514,9 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
     class _FakeSessionStore:
         async def get_payloads_for_user(self, _user_id: str) -> list[dict]:
             return [
-                {"id": "s-1", "team_id": "contractors"},
-                {"id": "s-2", "team_id": "temp-lab"},
-                {"id": "s-3", "team_id": "contractors"},
+                {"id": "s-1", "team_id": "swiftpost"},
+                {"id": "s-2", "team_id": "northbridge"},
+                {"id": "s-3", "team_id": "swiftpost"},
             ]
 
     class _FakeQueueStore:
@@ -542,7 +542,7 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
         return UserTeamRelation.MEMBER
 
     async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
-        return _FakeKeycloakAdmin(), {"id": "contractors", "name": "Contractors"}, None
+        return _FakeKeycloakAdmin(), {"id": "swiftpost", "name": "SwiftPost"}, None
 
     monkeypatch.setattr(
         "control_plane_backend.teams_service._get_user_role_in_team",
@@ -570,18 +570,18 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.delete(
-            "/control-plane/v1/teams/contractors/members/user-002",
+            "/control-plane/v1/teams/swiftpost/members/user-002",
         )
 
     assert resp.status_code == 202
     payload = resp.json()
     assert payload["status"] == "accepted"
-    assert payload["team_id"] == "contractors"
+    assert payload["team_id"] == "swiftpost"
     assert payload["user_id"] == "user-002"
     assert payload["sessions_enqueued"] == 2
     assert payload["policy_mode"] == "deferred_delete"
-    assert payload["retention_seconds"] == 43200
-    assert payload["matched_rule_id"] == "purge.team.contractors"
+    assert payload["retention_seconds"] == 60
+    assert payload["matched_rule_id"] == "purge.team.swiftpost"
     assert len(fake_queue.enqueued) == 2
     assert fake_queue.enqueued[0][0] == "s-1"
     assert fake_queue.enqueued[1][0] == "s-3"
@@ -643,8 +643,10 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         def get_policy_catalog(self):
             return object()
 
-        def get_scheduler_backend(self) -> str:
-            return "memory"
+        def get_scheduler_backend(self):
+            from fred_core.scheduler import SchedulerBackend
+
+            return SchedulerBackend.MEMORY
 
     lifecycle_calls: list[int] = []
 

@@ -10,7 +10,11 @@ from fred_core import (
     RebacEngine,
     rebac_factory,
 )
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import (
+    SchedulerBackend,
+    TemporalClientProvider,
+    resolve_scheduler_backend,
+)
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -81,14 +85,17 @@ class ApplicationContext:
             )
         return self._policy_catalog
 
-    def get_scheduler_backend(self) -> str:
-        return self.configuration.scheduler.backend
+    def get_scheduler_backend(self) -> SchedulerBackend:
+        if not self.configuration.scheduler.enabled:
+            return SchedulerBackend.MEMORY
+        return resolve_scheduler_backend(self.configuration.scheduler.backend)
 
     def get_temporal_client_provider(self) -> TemporalClientProvider:
-        if self.configuration.scheduler.backend != "temporal":
+        scheduler_backend = self.get_scheduler_backend()
+        if scheduler_backend != SchedulerBackend.TEMPORAL:
             raise ValueError(
                 "Temporal client requested but scheduler backend is "
-                f"{self.configuration.scheduler.backend}"
+                f"{scheduler_backend}"
             )
         if self._temporal_client_provider is None:
             self._temporal_client_provider = TemporalClientProvider(

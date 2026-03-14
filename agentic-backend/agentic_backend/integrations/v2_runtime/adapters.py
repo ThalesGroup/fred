@@ -176,10 +176,14 @@ class LangfuseTracerAdapter(TracerPort):
         }
         if attributes:
             metadata.update(attributes)
-        span = self._client.start_span(
-            name=name,
-            trace_context={"trace_id": trace_id},
-            metadata=metadata,
+        span = cast(
+            "_LangfuseSpanLike",
+            self._client.start_observation(
+                name=name,
+                as_type="span",
+                trace_context={"trace_id": trace_id},
+                metadata=metadata,
+            ),
         )
         return LangfuseSpanAdapter(span)
 

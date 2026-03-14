@@ -21,6 +21,7 @@ from fred_core import (
     TeamPermission,
     create_keycloak_admin,
 )
+from fred_core.scheduler import SchedulerBackend
 from fred_core.common import TeamId
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
@@ -378,7 +379,7 @@ async def _run_lifecycle_if_in_memory_scheduler(
 ) -> None:
     if not app_context.configuration.scheduler.enabled:
         return
-    if app_context.get_scheduler_backend() != "memory":
+    if app_context.get_scheduler_backend() != SchedulerBackend.MEMORY:
         return
 
     result = await run_lifecycle_manager_once_in_memory(LifecycleManagerInput())

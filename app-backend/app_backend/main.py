@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket
 from httpx import ASGITransport, AsyncClient, Headers
 
 from app_backend.common.config_loader import (
@@ -193,6 +193,15 @@ async def _proxy_request(request: Request, backend: BackendRuntime) -> Response:
     return response
 
 
+async def _proxy_websocket(websocket: WebSocket, backend: BackendRuntime) -> None:
+    # WebSocket cannot go through httpx AsyncClient. We delegate the ASGI scope
+    # directly to the embedded backend app so agentic WS endpoints behave exactly
+    # as if they were exposed on their own port.
+    delegated_scope = dict(websocket.scope)
+    delegated_scope["app"] = backend.app
+    await backend.app(delegated_scope, websocket.receive, websocket.send)
+
+
 def create_app() -> FastAPI:
     # Load only app-backend config first; it decides which backend configs are used.
     configuration = load_configuration()
@@ -292,5 +301,14 @@ def create_app() -> FastAPI:
                 detail=f"Unknown route prefix. Available prefixes: {available_prefixes}",
             )
         return await _proxy_request(request, backend)
+
+    @app.websocket("/{path:path}")
+    async def proxy_websocket(websocket: WebSocket, path: str) -> None:
+        del path
+        backend = _find_backend(websocket.url.path, websocket.app.state.backends)
+        if backend is None:
+            await websocket.close(code=4404)
+            return
+        await _proxy_websocket(websocket, backend)
 
     return app

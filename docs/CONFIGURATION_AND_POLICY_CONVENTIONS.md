@@ -47,6 +47,9 @@ These names are fixed for all backends:
 
 Do not add service-specific aliases for config path loading.
 
+Complete env inventory and ownership rules are documented in:
+- [`docs/ENV_VARIABLES.md`](./ENV_VARIABLES.md)
+
 ## Expected Runtime Behavior
 
 - `make run` starts API using the same `ENV_FILE/CONFIG_FILE` contract.

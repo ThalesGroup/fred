@@ -17,7 +17,8 @@ import os
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, WebSocket
+from fastapi.testclient import TestClient
 from httpx import Headers
 from pydantic import ValidationError
 
@@ -154,3 +155,57 @@ def test_backend_config_scope_overrides_and_restores_config() -> None:
         assert os.environ["CONFIG_FILE"] == "/tmp/next.yaml"
 
     assert os.environ["CONFIG_FILE"] == "/tmp/previous.yaml"
+
+
+def test_create_app_proxies_websocket_to_embedded_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app_backend.main import create_app
+
+    config = Configuration(
+        services=ServicesConfig(
+            control_plane=EmbeddedServiceConfig(
+                enabled=False,
+                path_prefix="/control-plane/v1",
+                config_file="control_plane.yaml",
+            ),
+            agentic=EmbeddedServiceConfig(
+                enabled=True,
+                path_prefix="/agentic/v1",
+                config_file="agentic.yaml",
+            ),
+            knowledge_flow=EmbeddedServiceConfig(
+                enabled=False,
+                path_prefix="/knowledge-flow/v1",
+                config_file="knowledge_flow.yaml",
+            ),
+        )
+    )
+
+    def _create_fake_agentic_app() -> FastAPI:
+        app = FastAPI()
+        app.state.service_name = "agentic"
+
+        @app.websocket("/agentic/v1/ws-echo")
+        async def _ws_echo(websocket: WebSocket) -> None:
+            await websocket.accept()
+            payload = await websocket.receive_text()
+            await websocket.send_text(
+                f"service={websocket.app.state.service_name};payload={payload}"
+            )
+
+        return app
+
+    monkeypatch.setattr("app_backend.main.load_configuration", lambda: config)
+    monkeypatch.setattr("app_backend.main.get_loaded_config_file_path", lambda: None)
+    monkeypatch.setattr("app_backend.main.get_loaded_env_file_path", lambda: None)
+    monkeypatch.setattr(
+        "app_backend.main._load_backend_factories",
+        lambda: {"agentic": _create_fake_agentic_app},
+    )
+
+    app = create_app()
+    with TestClient(app) as client:
+        with client.websocket_connect("/agentic/v1/ws-echo") as websocket:
+            websocket.send_text("hello")
+            assert websocket.receive_text() == "service=agentic;payload=hello"

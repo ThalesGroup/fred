@@ -12,6 +12,7 @@ from fred_core.common import (
     PostgresTableConfig,
     TemporalSchedulerConfig,
 )
+from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -25,7 +26,7 @@ class AppConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: Literal["temporal", "memory"] = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 

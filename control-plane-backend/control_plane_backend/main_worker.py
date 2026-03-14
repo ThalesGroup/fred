@@ -5,6 +5,7 @@ import logging
 
 from fred_core import log_setup
 from fred_core.logs.null_log_store import NullLogStore
+from fred_core.scheduler import SchedulerBackend
 
 from control_plane_backend.application_context import ApplicationContext
 from control_plane_backend.common.config_loader import (
@@ -36,8 +37,8 @@ async def main() -> None:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
         return
 
-    scheduler_backend = configuration.scheduler.backend
-    if scheduler_backend == "memory":
+    scheduler_backend = ApplicationContext.get_instance().get_scheduler_backend()
+    if scheduler_backend == SchedulerBackend.MEMORY:
         logger.info("Scheduler backend is 'memory'; no Temporal worker is required.")
         return
 

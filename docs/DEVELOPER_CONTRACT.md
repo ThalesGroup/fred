@@ -19,13 +19,30 @@ Read these files in this order:
 - Keep changes minimal and direct.
   - Do not redesign unrelated parts.
   - Do not introduce abstractions without a clear immediate need.
+- Every new feature should reduce complexity, not increase it.
+  - Prefer deleting/replacing duplicated code over adding parallel logic.
+  - If code is added, remove obsolete code in the same change whenever possible.
 - Respect existing Fred conventions.
   - Same environment variable names and startup behavior across backends.
   - Same Make targets and expected developer workflow.
+- Keep code strongly typed end-to-end.
+  - Prefer explicit types (`Enum`/`Literal`/typed models) over magic strings.
+  - Shared runtime choices (like scheduler backends) must use one typed definition from `fred_core`, not duplicated string literals.
 - Keep unit tests infrastructure-free.
   - Unit/default tests must not require Docker or external services.
   - No dependency on running Keycloak, Temporal, OpenFGA, MinIO, Postgres, etc.
   - Tests needing external services must be marked `@pytest.mark.integration`.
+- Documentation style must be developer-operational and concrete.
+  - Every new or modified function must document:
+    - Why it exists.
+    - How to use it.
+  - Prefer short usage examples for shared helpers/public utility functions.
+  - Do not write conceptual or design-pattern prose that does not help direct usage.
+- Function shape must stay intentional.
+  - A function should be either:
+    - a clear business function, or
+    - a strictly necessary shared helper used to remove duplication.
+  - Avoid one-off helper layering that adds indirection without reuse.
 - Validate every change before proposing merge.
   - Run `make code-quality` in each modified Python project.
   - Run `make test` in each modified project.
@@ -58,4 +75,4 @@ When prompting an assistant, start with:
 
 Short prompt template:
 
-`Read docs/DEVELOPER_CONTRACT.md first. Then implement only the minimal required change, run make code-quality and make test in touched projects, and keep tests offline unless marked integration.`
+`Read docs/DEVELOPER_CONTRACT.md first. Keep changes minimal, keep default tests fully offline (no third-party services), document each changed function with why/how (example for shared helpers), and prefer shrinking/reusing code instead of growing it.`

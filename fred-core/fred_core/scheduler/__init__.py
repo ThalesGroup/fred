@@ -12,10 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from fred_core.scheduler.backend import (
+    FRED_STANDALONE_RUNTIME_ENV,
+    SchedulerBackend,
+    is_standalone_runtime_enabled,
+    resolve_scheduler_backend,
+)
 from fred_core.scheduler.scheduler_structures import SchedulerInputArgsV1
 from fred_core.scheduler.temporal_client_provider import TemporalClientProvider
 
 __all__ = [
+    "FRED_STANDALONE_RUNTIME_ENV",
+    "SchedulerBackend",
     "TemporalClientProvider",
     "SchedulerInputArgsV1",
+    "is_standalone_runtime_enabled",
+    "resolve_scheduler_backend",
 ]

@@ -30,6 +30,7 @@ from fred_core.common import (
     StoreConfig,
     TemporalSchedulerConfig,
 )
+from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 """
@@ -446,7 +447,7 @@ class MCPConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: str = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig
 
 

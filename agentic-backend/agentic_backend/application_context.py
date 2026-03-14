@@ -64,7 +64,7 @@ from fred_core.kpi import (
 )
 from fred_core.logs.log_structures import StdoutLogStorageConfig
 from fred_core.logs.null_log_store import NullLogStore
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.sql import create_async_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -670,7 +670,7 @@ class ApplicationContext:
             return self._temporal_provider
 
         cfg = get_configuration().scheduler
-        if cfg.backend.lower() != "temporal":
+        if cfg.backend != SchedulerBackend.TEMPORAL:
             raise RuntimeError(
                 f"Temporal client requested but scheduler backend is {cfg.backend}"
             )
