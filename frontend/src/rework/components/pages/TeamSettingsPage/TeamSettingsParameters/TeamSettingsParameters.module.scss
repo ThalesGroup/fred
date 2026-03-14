@@ -45,3 +45,16 @@
 
   @include typography("body", "large");
 }
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status-success {
+  color: var(--success);
+}
+
+.status-error {
+  color: var(--error);
+}

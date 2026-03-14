@@ -461,16 +461,31 @@ No matter which development environment you choose, both backends rely on two pa
 ### Start Fred components
 
 ```bash
-# single-process backend app (control-plane + agentic + knowledge-flow in one process)
+# standalone mode (single-process backend: control-plane + agentic + knowledge-flow)
 make run-app
 ```
 
 ```bash
-# previous behavior: same three APIs as separate backend processes
+# split APIs mode (agentic:8000, knowledge-flow:8111, control-plane:8222)
+make run-multi
+```
+
+```bash
+# default command (alias of `run-app`)
+make run
+```
+
+```bash
+# backward-compatible alias
 make run-app-multi
 ```
 
-Or run a single backend API from repository root:
+```bash
+# split APIs mode + all Temporal workers (requires Temporal running)
+make run-multi-workers
+```
+
+Run a single backend API from repository root:
 
 ```bash
 make run-control-plane

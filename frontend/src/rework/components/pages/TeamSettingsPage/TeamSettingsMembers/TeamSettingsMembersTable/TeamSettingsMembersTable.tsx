@@ -1,8 +1,24 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { OptionModel } from "@models/Option.model.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import DataTable, { DataTableColumn } from "@shared/organisms/DataTable/DataTable.tsx";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TeamMember,
@@ -33,6 +49,8 @@ interface TeamSettingsMembersTableProps {
 
 export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTableProps) {
   const { t } = useTranslation();
+  const { notifyApiError } = useApiErrorToast();
+  const { runMutationAction } = useMutationAction();
 
   const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
   const [updateTeamMember] = useUpdateTeamMemberMutation();
@@ -50,20 +68,62 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     return can_administer_members;
   }
 
-  const handleRoleChange = async (userId: string, newRelation: UserTeamRelation) => {
-    await updateTeamMember({
-      teamId: team.id,
-      userId,
-      updateTeamMemberRequest: { relation: newRelation },
-    });
-  };
+  const handleRoleChange = useCallback(
+    async (userId: string, newRelation: UserTeamRelation) => {
+      await runMutationAction({
+        action: () =>
+          updateTeamMember({
+            teamId: team.id,
+            userId,
+            updateTeamMemberRequest: { relation: newRelation },
+          }).unwrap(),
+        onError: (error) =>
+          notifyApiError(error, {
+            summary: t("rework.teamSettings.members.errors.updateRoleSummary", {
+              defaultValue: "Failed to update role",
+            }),
+            fallbackDetail: t("rework.teamSettings.members.errors.updateRoleDetail", {
+              defaultValue: "Could not update member role.",
+            }),
+            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {
+              defaultValue: "You are not allowed to change this role.",
+            }),
+            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {
+              defaultValue: "A team must keep at least one owner.",
+            }),
+          }),
+      });
+    },
+    [runMutationAction, updateTeamMember, team.id, notifyApiError, t],
+  );
 
-  const handleRemoveMember = async (userId: string) => {
-    await removeTeamMember({
-      teamId: team.id,
-      userId,
-    });
-  };
+  const handleRemoveMember = useCallback(
+    async (userId: string) => {
+      await runMutationAction({
+        action: () =>
+          removeTeamMember({
+            teamId: team.id,
+            userId,
+          }).unwrap(),
+        onError: (error) =>
+          notifyApiError(error, {
+            summary: t("rework.teamSettings.members.errors.removeMemberSummary", {
+              defaultValue: "Failed to remove member",
+            }),
+            fallbackDetail: t("rework.teamSettings.members.errors.removeMemberDetail", {
+              defaultValue: "Could not remove team member.",
+            }),
+            forbiddenDetail: t("rework.teamSettings.members.errors.forbiddenDetail", {
+              defaultValue: "You are not allowed to remove this member.",
+            }),
+            conflictDetail: t("rework.teamSettings.members.errors.lastOwnerDetail", {
+              defaultValue: "A team must keep at least one owner.",
+            }),
+          }),
+      });
+    },
+    [runMutationAction, removeTeamMember, team.id, notifyApiError, t],
+  );
 
   const sortedMembers = useMemo(() => {
     return (
@@ -156,9 +216,8 @@ export default function TeamSettingsMembersTable({ team }: TeamSettingsMembersTa
     can_administer_managers,
     can_administer_owners,
     can_administer_members,
-    team.id,
-    updateTeamMember,
-    removeTeamMember,
+    handleRoleChange,
+    handleRemoveMember,
   ]);
 
   return <DataTable columns={columns} data={sortedMembers} />;

@@ -36,14 +36,13 @@ from fred_core import (
     RamLogStore,
     RebacEngine,
     SQLStorageConfig,
-    SQLTableStore,
-    StoreInfo,
     get_embeddings,
     get_model,
     rebac_factory,
     split_realm_url,
 )
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
+from fred_core.store import SQLTableStore, StoreInfo
 from fred_core.sql import create_async_engine_from_config
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
@@ -86,8 +85,6 @@ from knowledge_flow_backend.core.stores.resources.base_resource_store import Bas
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
-from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import BaseTeamMetadataStore
-from knowledge_flow_backend.core.stores.team_metadata.postgres_team_metadata_store import PostgresTeamMetadataStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
@@ -285,7 +282,6 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectorStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _team_metadata_store_instance: Optional[BaseTeamMetadataStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _task_store_instance: Optional["BaseWorkflowTaskStore"] = None
     _log_store_instance: Optional[BaseLogStore] = None
@@ -914,16 +910,6 @@ class ApplicationContext:
             )
             return self._tag_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-
-    def get_team_metadata_store(self) -> BaseTeamMetadataStore:
-        """Get the team metadata store instance."""
-        # No choice, team store only support SQLAlchemy compatible db (Postgres, SQLite...)
-        if self._team_metadata_store_instance is not None:
-            return self._team_metadata_store_instance
-        self._team_metadata_store_instance = PostgresTeamMetadataStore(
-            engine=self.get_pg_async_engine(),
-        )
-        return self._team_metadata_store_instance
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:

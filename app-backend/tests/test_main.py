@@ -1,3 +1,19 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import os
 from pathlib import Path
 
 import pytest
@@ -13,6 +29,7 @@ from app_backend.common.structures import (
 from app_backend.main import (
     BackendRuntime,
     BackendSpec,
+    _backend_config_scope,
     _build_backend_specs,
     _copy_proxy_headers,
     _find_backend,
@@ -128,3 +145,12 @@ def test_configuration_rejects_duplicate_enabled_prefixes() -> None:
                 ),
             ),
         )
+
+
+def test_backend_config_scope_overrides_and_restores_config() -> None:
+    os.environ["CONFIG_FILE"] = "/tmp/previous.yaml"
+
+    with _backend_config_scope(Path("/tmp/next.yaml")):
+        assert os.environ["CONFIG_FILE"] == "/tmp/next.yaml"
+
+    assert os.environ["CONFIG_FILE"] == "/tmp/previous.yaml"

@@ -18,6 +18,14 @@ class TeamNotFoundError(Exception):
         super().__init__(f"Team with id '{team_id}' not found")
 
 
+class BannerUploadError(Exception):
+    """Raised when banner upload validation fails."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 class KeycloakM2MDisabledError(Exception):
     """Raised when Keycloak M2M client is disabled for team operations."""
 
@@ -30,6 +38,13 @@ class TeamMembershipSyncError(Exception):
 
     def __init__(self, status_code: int, detail: str):
         self.status_code = status_code
+        super().__init__(detail)
+
+
+class TeamOwnerConstraintError(Exception):
+    """Raised when an operation would leave a team with no owner."""
+
+    def __init__(self, detail: str):
         super().__init__(detail)
 
 
@@ -76,6 +91,12 @@ class AddTeamMemberRequest(BaseModel):
 
 class UpdateTeamMemberRequest(BaseModel):
     relation: UserTeamRelation
+
+
+class UpdateTeamRequest(BaseModel):
+    description: str | None = Field(default=None, max_length=180)
+    is_private: bool | None = None
+    banner_image_url: str | None = Field(default=None, max_length=300)
 
 
 class RemoveTeamMemberResponse(BaseModel):

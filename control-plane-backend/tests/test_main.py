@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, cast
 
 import pytest
-from fred_core import TeamPermission
+from fred_core import RelationType, TeamId, TeamPermission
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
 
 from control_plane_backend.main import create_app
+from control_plane_backend.team_metadata_store import TeamMetadata
+from control_plane_backend.teams_structures import KeycloakGroupSummary, Team
 
 
 @pytest.fixture(autouse=True)
@@ -177,6 +180,266 @@ async def test_add_team_member_checks_permission_for_target_relation(
 
 
 @pytest.mark.asyncio
+async def test_update_team_checks_can_update_info_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeMetadataStore:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        async def upsert(self, team_id: str, patch) -> TeamMetadata:
+            self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
+            return TeamMetadata(id=TeamId(team_id))
+
+    class _FakeKeycloakAdmin:
+        async def a_get_group_members(self, _team_id: str, _query: dict) -> list[dict]:
+            return []
+
+    fake_metadata_store = _FakeMetadataStore()
+    captured_permissions: list[list[TeamPermission]] = []
+
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        permissions = _args[3]
+        captured_permissions.append(permissions)
+        return _FakeKeycloakAdmin(), {"id": "thales", "name": "Thales"}, "token"
+
+    async def _fake_get_team_permissions_for_user(*_args, **_kwargs):
+        return [TeamPermission.CAN_UPDATE_INFO]
+
+    async def _fake_enrich_groups_with_team_data(*_args, **_kwargs):
+        return [Team(id=TeamId("thales"), name="Thales")]
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_team_permissions_for_user",
+        _fake_get_team_permissions_for_user,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._enrich_groups_with_team_data",
+        _fake_enrich_groups_with_team_data,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_team_metadata_store",
+        lambda _self: fake_metadata_store,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/thales",
+            json={
+                "description": "Updated description",
+                "is_private": False,
+                "banner_image_url": "https://example.test/banner.webp",
+            },
+        )
+
+    assert resp.status_code == 200
+    assert captured_permissions == [[TeamPermission.CAN_UPDATE_INFO]]
+    assert fake_metadata_store.calls == [
+        (
+            "thales",
+            {
+                "description": "Updated description",
+                "is_private": False,
+                "banner_image_url": "https://example.test/banner.webp",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_enrich_groups_uses_team_metadata_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.teams_service import _enrich_groups_with_team_data
+
+    class _FakeMetadataStore:
+        async def get_by_team_ids(
+            self, _team_ids: list[TeamId]
+        ) -> dict[TeamId, TeamMetadata]:
+            return {
+                TeamId("team-1"): TeamMetadata(
+                    id=TeamId("team-1"),
+                    description="desc",
+                    is_private=False,
+                    banner_object_storage_key="teams/team-1/banner-1.png",
+                )
+            }
+
+    class _FakeContentStore:
+        def get_presigned_url(self, key: str, expires=None) -> str:
+            _ = expires
+            assert key == "teams/team-1/banner-1.png"
+            return "https://example.test/banner.png"
+
+    class _FakeAdmin:
+        async def a_get_group_members(self, _group_id: str, _query: dict) -> list[dict]:
+            return [{"id": "user-1"}]
+
+    async def _fake_get_team_users_by_relation(*_args, **_kwargs):
+        return set()
+
+    async def _fake_get_users_by_ids(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_team_users_by_relation",
+        _fake_get_team_users_by_relation,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service.get_users_by_ids",
+        _fake_get_users_by_ids,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _FakeMetadataStore(),
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_content_store",
+        lambda _self: _FakeContentStore(),
+    )
+
+    app = create_app()
+    _ = app  # keep app/context alive for this test
+
+    teams = await _enrich_groups_with_team_data(
+        cast(Any, _FakeAdmin()),
+        rebac=cast(
+            Any, object()
+        ),  # unused due monkeypatching _get_team_users_by_relation
+        user=cast(Any, type("User", (), {"uid": "user-1"})()),
+        groups=[
+            KeycloakGroupSummary(id=TeamId("team-1"), name="Team 1", member_count=0)
+        ],
+    )
+
+    assert len(teams) == 1
+    assert teams[0].description == "desc"
+    assert teams[0].is_private is False
+    assert teams[0].banner_image_url == "https://example.test/banner.png"
+
+
+@pytest.mark.asyncio
+async def test_upload_team_banner_checks_can_update_info_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeContentStore:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, bytes, str]] = []
+
+        def put_object(self, key: str, stream, *, content_type: str) -> None:
+            self.calls.append((key, stream.read(), content_type))
+
+    class _FakeMetadataStore:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        async def upsert(self, team_id: str, patch) -> TeamMetadata:
+            self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
+            return TeamMetadata(id=TeamId(team_id))
+
+    fake_content_store = _FakeContentStore()
+    fake_metadata_store = _FakeMetadataStore()
+    captured_permissions: list[list[TeamPermission]] = []
+
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        permissions = _args[3]
+        captured_permissions.append(permissions)
+        return object(), {"id": "thales", "name": "Thales"}, None
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_content_store",
+        lambda _self: fake_content_store,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_team_metadata_store",
+        lambda _self: fake_metadata_store,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/thales/banner",
+            files={"file": ("banner.png", b"\x89PNG\r\n\x1a\nbanner", "image/png")},
+        )
+
+    assert resp.status_code == 204
+    assert captured_permissions == [[TeamPermission.CAN_UPDATE_INFO]]
+    assert len(fake_content_store.calls) == 1
+    object_key, uploaded_payload, uploaded_content_type = fake_content_store.calls[0]
+    assert object_key.startswith("teams/thales/banner-")
+    assert object_key.endswith(".png")
+    assert uploaded_content_type == "image/png"
+    assert uploaded_payload.startswith(b"\x89PNG\r\n\x1a\n")
+    assert fake_metadata_store.calls == [
+        ("thales", {"banner_object_storage_key": object_key})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_upload_team_banner_rejects_invalid_content_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        return object(), {"id": "thales", "name": "Thales"}, None
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/thales/banner",
+            files={"file": ("banner.txt", b"not-an-image", "text/plain")},
+        )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid content type: text/plain"
+
+
+@pytest.mark.asyncio
+async def test_upload_team_banner_rejects_file_too_large(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_validate_team_and_check_permission(*_args, **_kwargs):
+        return object(), {"id": "thales", "name": "Thales"}, None
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._validate_team_and_check_permission",
+        _fake_validate_team_and_check_permission,
+    )
+
+    app = create_app()
+    too_large_payload = b"\x89PNG\r\n\x1a\n" + b"a" * (5 * 1024 * 1024)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/thales/banner",
+            files={"file": ("banner.png", too_large_payload, "image/png")},
+        )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"].startswith("File too large:")
+
+
+@pytest.mark.asyncio
 async def test_add_team_member_returns_clear_error_when_keycloak_forbids_operation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -322,3 +585,80 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
     assert fake_queue.enqueued[0][0] == "s-1"
     assert fake_queue.enqueued[1][0] == "s-3"
     assert fake_rebac.delete_relations_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_update_team_member_blocks_last_owner_demotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.teams_structures import UserTeamRelation
+
+    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+        return UserTeamRelation.OWNER
+
+    async def _fake_get_team_users_by_relation(
+        _rebac,
+        _team_id: TeamId,
+        relation: RelationType,
+    ) -> set[str]:
+        if relation == RelationType.OWNER:
+            return {"user-001"}
+        return set()
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_user_role_in_team",
+        _fake_get_user_role_in_team,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_team_users_by_relation",
+        _fake_get_team_users_by_relation,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/thales/members/user-001",
+            json={"relation": "manager"},
+        )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Operation denied: a team must keep at least one owner."
+
+
+@pytest.mark.asyncio
+async def test_remove_team_member_blocks_removing_last_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.teams_structures import UserTeamRelation
+
+    async def _fake_get_user_role_in_team(*_args, **_kwargs):
+        return UserTeamRelation.OWNER
+
+    async def _fake_get_team_users_by_relation(
+        _rebac,
+        _team_id: TeamId,
+        relation: RelationType,
+    ) -> set[str]:
+        if relation == RelationType.OWNER:
+            return {"user-001"}
+        return set()
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_user_role_in_team",
+        _fake_get_user_role_in_team,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.teams_service._get_team_users_by_relation",
+        _fake_get_team_users_by_relation,
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete("/control-plane/v1/teams/thales/members/user-001")
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Operation denied: a team must keep at least one owner."

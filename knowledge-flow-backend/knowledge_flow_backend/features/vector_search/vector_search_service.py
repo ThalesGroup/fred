@@ -7,7 +7,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Protocol, Set, cast, runtime_checkable
 
-from fred_core import Action, KeycloakUser, OwnerFilter, Resource, VectorSearchHit, authorize
+from fred_core import Action, KeycloakUser, OwnerFilter, Resource, authorize
+from fred_core.store import VectorSearchHit
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from langchain_core.documents import Document
 

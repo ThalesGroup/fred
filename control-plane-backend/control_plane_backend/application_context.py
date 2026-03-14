@@ -11,11 +11,16 @@ from fred_core import (
     rebac_factory,
 )
 from fred_core.scheduler import TemporalClientProvider
+from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
 from fred_core.sql import create_async_engine_from_config
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.common.config_loader import get_loaded_config_file_path
-from control_plane_backend.common.structures import Configuration
+from control_plane_backend.common.structures import (
+    Configuration,
+    LocalContentStorageConfig,
+    MinioContentStorageConfig,
+)
 from control_plane_backend.purge_queue_store import PurgeQueueStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
@@ -23,6 +28,7 @@ from control_plane_backend.scheduler.policies.policy_loader import (
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
+from control_plane_backend.team_metadata_store import TeamMetadataStore
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,8 @@ class ApplicationContext:
         self._pg_async_engine: AsyncEngine | None = None
         self._session_store: BaseJsonSessionStore | None = None
         self._purge_queue_store: PurgeQueueStore | None = None
+        self._team_metadata_store: TeamMetadataStore | None = None
+        self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
         ApplicationContext._instance = self
 
@@ -102,6 +110,34 @@ class ApplicationContext:
                 table_name=self.configuration.storage.purge_queue_table,
             )
         return self._purge_queue_store
+
+    def get_team_metadata_store(self) -> TeamMetadataStore:
+        if self._team_metadata_store is None:
+            self._team_metadata_store = TeamMetadataStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._team_metadata_store
+
+    def get_content_store(self) -> ContentStore:
+        if self._content_store is None:
+            cfg = self.configuration.storage.content_storage
+            if isinstance(cfg, MinioContentStorageConfig):
+                self._content_store = MinioContentStore(
+                    endpoint=cfg.endpoint,
+                    access_key=cfg.access_key,
+                    secret_key=cfg.secret_key or "",
+                    bucket_name=f"{cfg.bucket_name}-objects",
+                    secure=cfg.secure,
+                    public_endpoint=cfg.public_endpoint,
+                    public_secure=cfg.public_secure,
+                )
+            elif isinstance(cfg, LocalContentStorageConfig):
+                self._content_store = LocalContentStore(root_path=cfg.root_path)
+            else:
+                raise ValueError(
+                    f"Unsupported content storage configuration: {type(cfg)}"
+                )
+        return self._content_store
 
     def get_rebac_engine(self) -> RebacEngine:
         if self._rebac_engine is None:

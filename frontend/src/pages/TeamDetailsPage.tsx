@@ -6,7 +6,6 @@ import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
-import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
@@ -31,12 +30,6 @@ export function TeamDetailsPage() {
     label: t("teamDetails.tabs.members"),
     path: `/team/${teamId}/members`,
     component: <TeamMembersPage teamId={teamId} permissions={team?.permissions} />,
-  };
-
-  const settingTab: TabConfig = {
-    label: t("teamDetails.tabs.settings"),
-    path: `/team/${teamId}/settings`,
-    component: <TeamSettingsPage team={team} />,
   };
 
   const tabs: TabConfig[] = [
@@ -66,7 +59,6 @@ export function TeamDetailsPage() {
       component: <TeamAppsPage />,
     },
     ...(team?.permissions?.includes("can_read_members") ? [memberTab] : []),
-    ...(team?.permissions?.includes("can_update_info") ? [settingTab] : []),
   ];
 
   return (

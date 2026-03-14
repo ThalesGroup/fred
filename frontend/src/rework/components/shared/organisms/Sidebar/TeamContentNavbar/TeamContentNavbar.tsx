@@ -19,10 +19,9 @@ export default function TeamContentNavbar() {
   const { teamId } = useParams<{ teamId: string }>();
   const { pathname } = useLocation();
 
-  const { data: team, isLoading } = useGetTeamQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId },
-  );
+  const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId });
+  const selectedTeam = teamId ? team : undefined;
+  const canOpenTeamSettings = Boolean(selectedTeam);
 
   const teamsNavigationItems: NavigationMenuItemProps[] = [
     {
@@ -71,16 +70,9 @@ export default function TeamContentNavbar() {
 
   const isUserSpace = !pathname.startsWith(`/team`);
 
-  const getTeam = () => {
-    if (teamId) {
-      return team;
-    } else {
-      return undefined;
-    }
-  };
   const bannerStyle = {
-    "--banner-img": getTeam()?.banner_image_url
-      ? `url(${getTeam().banner_image_url})`
+    "--banner-img": selectedTeam?.banner_image_url
+      ? `url(${selectedTeam.banner_image_url})`
       : 'url("/images/default-team-banner.png")',
   } as React.CSSProperties;
 
@@ -89,20 +81,20 @@ export default function TeamContentNavbar() {
       <div className={styles["team-content-navbar-container"]}>
         <div className={styles["banner-container"]} style={bannerStyle}>
           <div className={styles["team-name-container"]}>
-            <span className={styles["team-name"]}>
-              {isLoading ? "loading" : getTeam()?.name || t("rework.sidebar.team.userTeam")}
-            </span>
-            <span className={styles["user-settings-button-container"]}>
-              <IconButton
-                size={"small"}
-                color={"on-surface"}
-                variant={"icon"}
-                icon={{ category: "outlined", type: "Settings", filled: true }}
-                onClick={() => {
-                  setIsTeamSettingsOpen(true);
-                }}
-              />
-            </span>
+            <span className={styles["team-name"]}>{isLoading ? "loading" : selectedTeam?.name}</span>
+            {canOpenTeamSettings && (
+              <span className={styles["user-settings-button-container"]}>
+                <IconButton
+                  size={"small"}
+                  color={"on-surface"}
+                  variant={"icon"}
+                  icon={{ category: "outlined", type: "Settings", filled: true }}
+                  onClick={() => {
+                    setIsTeamSettingsOpen(true);
+                  }}
+                />
+              </span>
+            )}
           </div>
           <span className={styles["conversation-button-container"]}>
             <ConversationButton icon={{ category: "outlined", type: "Add" }} onClick={newChatHandler}>
@@ -117,11 +109,13 @@ export default function TeamContentNavbar() {
         </div>
       </div>
       <FullPageModal
-        isOpen={isTeamSettingsOpen}
+        isOpen={isTeamSettingsOpen && canOpenTeamSettings}
         onClose={() => setIsTeamSettingsOpen(false)}
         id={"user-settings-modal"}
       >
-        <TeamSettingsPage modalInteraction={{ close: () => setIsTeamSettingsOpen(false) }} team={getTeam()} />
+        {selectedTeam && (
+          <TeamSettingsPage modalInteraction={{ close: () => setIsTeamSettingsOpen(false) }} team={selectedTeam} />
+        )}
       </FullPageModal>
     </>
   );

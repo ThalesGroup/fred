@@ -15,7 +15,7 @@
 import logging
 from typing import Any, List, Optional, Sequence, cast
 
-from fred_core import VectorSearchHit
+from fred_core.store import VectorSearchHit
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph

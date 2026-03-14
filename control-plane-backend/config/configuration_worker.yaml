@@ -34,6 +34,9 @@ storage:
     type: postgres
     table: session
   purge_queue_table: session_purge_queue
+  content_storage:
+    type: local
+    root_path: "~/.fred/control-plane/content-storage"
 
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml

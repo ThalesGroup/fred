@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
+from fastapi import UploadFile
 from fred_core import (
     KeycloackDisabled,
     KeycloakUser,
@@ -30,16 +34,20 @@ from control_plane_backend.scheduler.policies.policy_models import (
     LifecycleTrigger,
     PolicyResolutionRequest,
 )
+from control_plane_backend.team_metadata_store import TeamMetadataPatch
 from control_plane_backend.teams_structures import (
     AddTeamMemberRequest,
+    BannerUploadError,
     KeycloakGroupSummary,
     KeycloakM2MDisabledError,
     RemoveTeamMemberResponse,
     Team,
     TeamMember,
+    TeamOwnerConstraintError,
     TeamMembershipSyncError,
     TeamNotFoundError,
     TeamWithPermissions,
+    UpdateTeamRequest,
     UpdateTeamMemberRequest,
     UserTeamRelation,
 )
@@ -50,6 +58,13 @@ logger = logging.getLogger(__name__)
 
 _GROUP_PAGE_SIZE = 200
 _MEMBER_PAGE_SIZE = 200
+_MAX_BANNER_FILE_SIZE_BYTES = 5 * 1024 * 1024
+_ALLOWED_BANNER_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_BANNER_EXTENSION_BY_MIME = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
 
 
 class _SessionPayload(BaseModel):
@@ -116,6 +131,104 @@ async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermiss
         consistency_token,
     )
     return TeamWithPermissions(**teams[0].model_dump(), permissions=permissions)
+
+
+async def update_team(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: UpdateTeamRequest,
+) -> TeamWithPermissions:
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+
+    admin, raw_group, consistency_token = await _validate_team_and_check_permission(
+        user,
+        team_id,
+        rebac,
+        [TeamPermission.CAN_UPDATE_INFO],
+    )
+
+    # PATCH with no fields is a no-op.
+    if request.model_fields_set:
+        patch = TeamMetadataPatch.model_validate(request.model_dump(exclude_unset=True))
+        await app_context.get_team_metadata_store().upsert(team_id, patch)
+
+    group_summary = KeycloakGroupSummary(
+        id=team_id,
+        name=raw_group.get("name"),
+        member_count=0,
+    )
+    teams = await _enrich_groups_with_team_data(admin, rebac, user, [group_summary])
+    if not teams:
+        raise TeamNotFoundError(team_id)
+
+    permissions = await _get_team_permissions_for_user(
+        rebac,
+        user,
+        team_id,
+        consistency_token,
+    )
+    return TeamWithPermissions(**teams[0].model_dump(), permissions=permissions)
+
+
+async def upload_team_banner(
+    user: KeycloakUser,
+    team_id: TeamId,
+    file: UploadFile,
+) -> None:
+    app_context = ApplicationContext.get_instance()
+    rebac = app_context.get_rebac_engine()
+
+    await _validate_team_and_check_permission(
+        user,
+        team_id,
+        rebac,
+        [TeamPermission.CAN_UPDATE_INFO],
+    )
+
+    try:
+        payload = await file.read(_MAX_BANNER_FILE_SIZE_BYTES + 1)
+        if len(payload) > _MAX_BANNER_FILE_SIZE_BYTES:
+            raise BannerUploadError(
+                f"File too large: {len(payload)} bytes (max: {_MAX_BANNER_FILE_SIZE_BYTES})"
+            )
+        if not payload:
+            raise BannerUploadError("Empty file upload is not allowed")
+
+        declared_content_type = (file.content_type or "application/octet-stream").lower()
+        if declared_content_type not in _ALLOWED_BANNER_MIME_TYPES:
+            raise BannerUploadError(
+                f"Invalid content type: {declared_content_type}"
+            )
+
+        detected_content_type = _detect_image_content_type(payload)
+        if detected_content_type not in _ALLOWED_BANNER_MIME_TYPES:
+            raise BannerUploadError(
+                f"File content doesn't match allowed image formats: {detected_content_type or 'unknown'}"
+            )
+        if detected_content_type != declared_content_type:
+            raise BannerUploadError(
+                f"File content doesn't match declared content type: {detected_content_type}"
+            )
+
+        file_ext = Path(file.filename or "").suffix.lower()
+        if not file_ext:
+            file_ext = _BANNER_EXTENSION_BY_MIME[detected_content_type]
+
+        object_storage_key = f"teams/{team_id}/banner-{uuid4().hex}{file_ext}"
+        app_context.get_content_store().put_object(
+            object_storage_key,
+            BytesIO(payload),
+            content_type=detected_content_type,
+        )
+
+        await app_context.get_team_metadata_store().upsert(
+            team_id,
+            TeamMetadataPatch(banner_object_storage_key=object_storage_key),
+        )
+        logger.info("Uploaded banner for team %s: %s", team_id, object_storage_key)
+    finally:
+        await file.close()
 
 
 async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMember]:
@@ -186,6 +299,13 @@ async def remove_team_member(
     rebac = app_context.get_rebac_engine()
 
     target_role = await _get_user_role_in_team(rebac, team_id, user_id)
+    await _ensure_team_keeps_at_least_one_owner(
+        rebac=rebac,
+        team_id=team_id,
+        user_id=user_id,
+        current_role=target_role,
+        wanted_role=None,
+    )
     permission_to_check = _get_administer_permission_for_team_role_relation(target_role)
 
     admin, _, _ = await _validate_team_and_check_permission(
@@ -260,6 +380,13 @@ async def update_team_member(
 
     target_current_role = await _get_user_role_in_team(rebac, team_id, user_id)
     target_wanted_role = request.relation
+    await _ensure_team_keeps_at_least_one_owner(
+        rebac=rebac,
+        team_id=team_id,
+        user_id=user_id,
+        current_role=target_current_role,
+        wanted_role=target_wanted_role,
+    )
     permissions_to_check = [
         _get_administer_permission_for_team_role_relation(target_current_role),
         _get_administer_permission_for_team_role_relation(target_wanted_role),
@@ -291,7 +418,12 @@ async def _enrich_groups_with_team_data(
     if not groups:
         return []
 
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
     team_ids: list[TeamId] = [group.id for group in groups]
+    team_metadata_by_id = await (
+        app_context.get_team_metadata_store().get_by_team_ids(team_ids)
+    )
     owner_ids_list, member_ids_list = await asyncio.gather(
         asyncio.gather(
             *[
@@ -316,6 +448,24 @@ async def _enrich_groups_with_team_data(
     teams: list[Team] = []
     for group_summary in groups:
         member_ids = team_member_ids_map.get(group_summary.id, set())
+        metadata = team_metadata_by_id.get(group_summary.id)
+        banner_image_url: str | None = None
+        if metadata and metadata.banner_object_storage_key:
+            if _is_absolute_url(metadata.banner_object_storage_key):
+                banner_image_url = metadata.banner_object_storage_key
+            else:
+                try:
+                    banner_image_url = content_store.get_presigned_url(
+                        metadata.banner_object_storage_key,
+                        expires=timedelta(hours=1),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to generate presigned URL for team %s banner: %s",
+                        group_summary.id,
+                        exc,
+                    )
+
         owners = [
             user_summaries.get(owner_id) or UserSummary(id=owner_id)
             for owner_id in team_owner_ids_map.get(group_summary.id, set())
@@ -327,6 +477,9 @@ async def _enrich_groups_with_team_data(
                 member_count=len(member_ids),
                 owners=owners,
                 is_member=user.uid in member_ids,
+                description=metadata.description if metadata else None,
+                is_private=metadata.is_private if metadata else True,
+                banner_image_url=banner_image_url,
             )
         )
 
@@ -446,6 +599,25 @@ def _sanitize_name(value: object, fallback: str) -> str:
     return name or fallback
 
 
+def _detect_image_content_type(payload: bytes) -> str | None:
+    if payload.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if (
+        len(payload) >= 12
+        and payload[0:4] == b"RIFF"
+        and payload[8:12] == b"WEBP"
+    ):
+        return "image/webp"
+    return None
+
+
+def _is_absolute_url(value: str) -> bool:
+    candidate = value.lower()
+    return candidate.startswith("http://") or candidate.startswith("https://")
+
+
 async def _validate_team_and_check_permission(
     user: KeycloakUser,
     team_id: TeamId,
@@ -541,6 +713,27 @@ async def _remove_all_team_member_relations(
             ),
         ]
     )
+
+
+async def _ensure_team_keeps_at_least_one_owner(
+    *,
+    rebac: RebacEngine,
+    team_id: TeamId,
+    user_id: str,
+    current_role: UserTeamRelation,
+    wanted_role: UserTeamRelation | None,
+) -> None:
+    is_owner_demotion_or_removal = current_role == UserTeamRelation.OWNER and (
+        wanted_role is None or wanted_role != UserTeamRelation.OWNER
+    )
+    if not is_owner_demotion_or_removal:
+        return
+
+    owner_ids = await _get_team_users_by_relation(rebac, team_id, RelationType.OWNER)
+    if user_id in owner_ids and len(owner_ids) <= 1:
+        raise TeamOwnerConstraintError(
+            "Operation denied: a team must keep at least one owner."
+        )
 
 
 async def _add_keycloak_user_to_group(

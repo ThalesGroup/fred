@@ -18,11 +18,13 @@ export default function TeamSelectionNavbar() {
           redirection={"agents"}
           teamName={t("rework.sidebar.team.userTeam")}
           selected={pathname.startsWith(`/agents`) || pathname.startsWith(`/knowledge`)}
+          iconType={"Person"}
         />
         <TeamSelectionItem
           redirection={"/teams"}
           teamName={t("rework.sidebar.team.allTeams")}
           selected={pathname.startsWith(`/teams`)}
+          iconType={"Groups"}
         />
       </div>
       <Separator margin={"var(--spacing-xs)"} />

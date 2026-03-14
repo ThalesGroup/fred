@@ -34,3 +34,14 @@ The app-backend configuration declares:
 - Keep only one env file (for example `app-backend/config/.env`) containing the union
   of variables required by control-plane, agentic, and knowledge-flow.
 - Keep three separate backend YAML files via each service `config_file`.
+- Embedded backends are forced to reuse this same `ENV_FILE`; their local
+  `agentic-backend/config/.env`, `knowledge-flow-backend/config/.env`, and
+  `control-plane-backend/config/.env` are not used by `app-backend`.
+
+## Quick Setup Checklist
+
+1. Copy `app-backend/config/.env.template` to `app-backend/config/.env`.
+2. Set `CONFIG_FILE` in that `.env`:
+   - `./config/configuration.yaml` for standalone/dev profile.
+   - `./config/configuration_prod.yaml` for local prod-like profile.
+3. Fill required secrets in the same `.env` (Keycloak, OpenFGA, OpenAI, Postgres, MinIO).

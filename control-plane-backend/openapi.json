@@ -327,6 +327,111 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Teams"
+        ],
+        "summary": "Update a specific team metadata",
+        "operationId": "update_team_control_plane_v1_teams__team_id__patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTeamRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamWithPermissions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/control-plane/v1/teams/{team_id}/banner": {
+      "post": {
+        "tags": [
+          "Teams"
+        ],
+        "summary": "Upload team banner image",
+        "operationId": "upload_team_banner_control_plane_v1_teams__team_id__banner_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_team_banner_control_plane_v1_teams__team_id__banner_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/control-plane/v1/teams/{team_id}/members": {
@@ -562,6 +667,21 @@
           "relation"
         ],
         "title": "AddTeamMemberRequest"
+      },
+      "Body_upload_team_banner_control_plane_v1_teams__team_id__banner_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Banner image file (max 5MB, JPEG/PNG/WebP)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_team_banner_control_plane_v1_teams__team_id__banner_post"
       },
       "CreateUserRequest": {
         "properties": {
@@ -1093,6 +1213,47 @@
           "relation"
         ],
         "title": "UpdateTeamMemberRequest"
+      },
+      "UpdateTeamRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 180
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Private"
+          },
+          "banner_image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Image Url"
+          }
+        },
+        "type": "object",
+        "title": "UpdateTeamRequest"
       },
       "UserSummary": {
         "properties": {

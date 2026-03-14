@@ -41,6 +41,12 @@ export interface TeamMember {
   user: UserSummary;
 }
 
+export interface UpdateTeamRequest {
+  description?: string | null;
+  is_private?: boolean | null;
+  banner_image_url?: string | null;
+}
+
 export interface RemoveTeamMemberResponse {
   status: "accepted";
   team_id: string;
@@ -81,6 +87,32 @@ export const controlPlaneApi = createApi({
     getTeam: build.query<TeamWithPermissions, { teamId: string }>({
       query: ({ teamId }) => ({ url: `/control-plane/v1/teams/${teamId}` }),
       providesTags: (_, __, arg) => [{ type: "ControlPlaneTeam", id: arg.teamId }],
+    }),
+    updateTeam: build.mutation<TeamWithPermissions, { teamId: string; updateTeamRequest: UpdateTeamRequest }>({
+      query: ({ teamId, updateTeamRequest }) => ({
+        url: `/control-plane/v1/teams/${teamId}`,
+        method: "PATCH",
+        body: updateTeamRequest,
+      }),
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
+    }),
+    uploadTeamBanner: build.mutation<void, { teamId: string; file: File }>({
+      query: ({ teamId, file }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: `/control-plane/v1/teams/${teamId}/banner`,
+          method: "POST",
+          body: formData,
+        };
+      },
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneTeam", id: arg.teamId },
+        { type: "ControlPlaneTeam", id: "LIST" },
+      ],
     }),
     listTeamMembers: build.query<TeamMember[], { teamId: string }>({
       query: ({ teamId }) => ({
@@ -147,6 +179,8 @@ export const {
   useListUsersQuery,
   useListTeamsQuery,
   useGetTeamQuery,
+  useUpdateTeamMutation,
+  useUploadTeamBannerMutation,
   useListTeamMembersQuery,
   useAddTeamMemberMutation,
   useUpdateTeamMemberMutation,

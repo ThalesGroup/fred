@@ -38,7 +38,6 @@ from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
-from sqlmodel import SQLModel
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -144,13 +143,6 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        # Initialize database tables
-        # todo: migration tool like Alembic instead of this
-        engine = application_context.get_async_sql_engine()
-        async with engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
-        logger.info("%s Database tables created/verified", LOG_PREFIX)
-
         async def periodic_reconciliation() -> None:
             while True:
                 try:

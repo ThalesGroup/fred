@@ -1311,6 +1311,11 @@
     "defaultConfirmButtonLabel": "Confirm"
   },
   "rework": {
+    "teamRoles": {
+      "member": "Member",
+      "manager": "Manager",
+      "owner": "Owner"
+    },
     "sidebar": {
       "title": "FRED.AI",
       "team": {
@@ -1363,6 +1368,14 @@
           "lastName": "Last name",
           "role": "Role",
           "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Failed to update role",
+          "updateRoleDetail": "Could not update member role.",
+          "removeMemberSummary": "Failed to remove member",
+          "removeMemberDetail": "Could not remove team member.",
+          "forbiddenDetail": "You are not allowed to perform this action.",
+          "lastOwnerDetail": "A team must keep at least one owner."
         }
       },
       "parameters": {

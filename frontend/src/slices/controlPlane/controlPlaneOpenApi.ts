@@ -68,6 +68,26 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}` }),
     }),
+    updateTeamControlPlaneV1TeamsTeamIdPatch: build.mutation<
+      UpdateTeamControlPlaneV1TeamsTeamIdPatchApiResponse,
+      UpdateTeamControlPlaneV1TeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.updateTeamRequest,
+      }),
+    }),
+    uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: build.mutation<
+      UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse,
+      UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/banner`,
+        method: "POST",
+        body: queryArg.bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost,
+      }),
+    }),
     listTeamMembersControlPlaneV1TeamsTeamIdMembersGet: build.query<
       ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiResponse,
       ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiArg
@@ -139,6 +159,17 @@ export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiArg = {
   teamId: string;
+};
+export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ TeamWithPermissions;
+export type UpdateTeamControlPlaneV1TeamsTeamIdPatchApiArg = {
+  teamId: string;
+  updateTeamRequest: UpdateTeamRequest;
+};
+export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiResponse = unknown;
+export type UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg = {
+  teamId: string;
+  bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost;
 };
 export type ListTeamMembersControlPlaneV1TeamsTeamIdMembersGetApiResponse =
   /** status 200 Successful Response */ TeamMember[];
@@ -258,6 +289,15 @@ export type TeamWithPermissions = {
   banner_image_url?: string | null;
   permissions?: TeamPermission[];
 };
+export type UpdateTeamRequest = {
+  description?: string | null;
+  is_private?: boolean | null;
+  banner_image_url?: string | null;
+};
+export type BodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost = {
+  /** Banner image file (max 5MB, JPEG/PNG/WebP) */
+  file: Blob;
+};
 export type UserTeamRelation = "owner" | "manager" | "member";
 export type TeamMember = {
   type?: "user";
@@ -298,6 +338,8 @@ export const {
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,
   useLazyGetTeamControlPlaneV1TeamsTeamIdGetQuery,
+  useUpdateTeamControlPlaneV1TeamsTeamIdPatchMutation,
+  useUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostMutation,
   useListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useLazyListTeamMembersControlPlaneV1TeamsTeamIdMembersGetQuery,
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,

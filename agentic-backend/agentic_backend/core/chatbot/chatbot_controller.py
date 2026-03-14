@@ -40,12 +40,12 @@ from fred_core import (
     Resource,
     TeamPermission,
     UserSecurity,
-    VectorSearchHit,
     authorize_or_raise,
     decode_jwt,
     get_current_user,
     oauth2_scheme,
 )
+from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from starlette.websockets import WebSocketState
 

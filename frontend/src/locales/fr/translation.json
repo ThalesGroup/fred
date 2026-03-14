@@ -1369,6 +1369,14 @@
           "lastName": "Nom",
           "role": "Rôle",
           "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Échec de la mise à jour du rôle",
+          "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
+          "removeMemberSummary": "Échec de la suppression du membre",
+          "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire."
         }
       },
       "parameters": {

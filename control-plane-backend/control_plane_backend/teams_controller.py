@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Path
+from fastapi import APIRouter, Depends, FastAPI, File, Path, UploadFile
 from fastapi.responses import JSONResponse
 from fred_core import AuthorizationError, KeycloakUser, TeamId, get_current_user
 
@@ -18,17 +18,24 @@ from control_plane_backend.teams_service import (
     remove_team_member as remove_team_member_from_service,
 )
 from control_plane_backend.teams_service import (
+    upload_team_banner as upload_team_banner_from_service,
+)
+from control_plane_backend.teams_service import update_team as update_team_from_service
+from control_plane_backend.teams_service import (
     update_team_member as update_team_member_from_service,
 )
 from control_plane_backend.teams_structures import (
     AddTeamMemberRequest,
+    BannerUploadError,
     KeycloakM2MDisabledError,
     RemoveTeamMemberResponse,
     Team,
     TeamMember,
+    TeamOwnerConstraintError,
     TeamMembershipSyncError,
     TeamNotFoundError,
     TeamWithPermissions,
+    UpdateTeamRequest,
     UpdateTeamMemberRequest,
 )
 
@@ -39,6 +46,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(TeamNotFoundError)
     async def team_not_found_handler(_request, exc: TeamNotFoundError) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(BannerUploadError)
+    async def banner_upload_error_handler(
+        _request,
+        exc: BannerUploadError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     @app.exception_handler(KeycloakM2MDisabledError)
     async def keycloak_disabled_handler(
@@ -60,6 +74,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: TeamMembershipSyncError,
     ) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+    @app.exception_handler(TeamOwnerConstraintError)
+    async def team_owner_constraint_error_handler(
+        _request,
+        exc: TeamOwnerConstraintError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @router.get(
@@ -83,6 +104,35 @@ async def get_team(
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
     return await get_team_by_id_from_service(user, team_id)
+
+
+@router.patch(
+    "/teams/{team_id}",
+    response_model=TeamWithPermissions,
+    response_model_exclude_none=True,
+    summary="Update a specific team metadata",
+)
+async def update_team(
+    team_id: Annotated[TeamId, Path()],
+    request: UpdateTeamRequest,
+    user: KeycloakUser = Depends(get_current_user),
+) -> TeamWithPermissions:
+    return await update_team_from_service(user, team_id, request)
+
+
+@router.post(
+    "/teams/{team_id}/banner",
+    status_code=204,
+    summary="Upload team banner image",
+)
+async def upload_team_banner(
+    team_id: Annotated[TeamId, Path()],
+    file: UploadFile = File(
+        ..., description="Banner image file (max 5MB, JPEG/PNG/WebP)"
+    ),
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await upload_team_banner_from_service(user, team_id, file)
 
 
 @router.get(

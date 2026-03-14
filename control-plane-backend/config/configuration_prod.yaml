@@ -43,6 +43,12 @@ storage:
     type: postgres
     table: session
   purge_queue_table: session_purge_queue
+  content_storage:
+    type: minio
+    endpoint: http://localhost:9000
+    access_key: "admin"
+    bucket_name: "control-plane-content"
+    secure: false
 
 policies:
   purge_catalog_path: ./conversation_policy_catalog.yaml

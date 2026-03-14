@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+import os
+from pathlib import Path
+from typing import Annotated, Literal, Optional, Union
 
 from fred_core import (
     PostgresStoreConfig,
@@ -8,7 +10,7 @@ from fred_core import (
     SecurityConfiguration,
     TemporalSchedulerConfig,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AppConfig(BaseModel):
@@ -59,10 +61,60 @@ def _default_session_store() -> PostgresTableConfig:
     return PostgresTableConfig(type="postgres", table="session")
 
 
+class MinioContentStorageConfig(BaseModel):
+    type: Literal["minio"]
+    endpoint: str = Field(default="http://localhost:9000", description="MinIO API URL")
+    access_key: str = Field(..., description="MinIO access key")
+    secret_key: str | None = Field(
+        default_factory=lambda: os.getenv("MINIO_SECRET_KEY"),
+        description="MinIO secret key (from MINIO_SECRET_KEY env by default)",
+    )
+    bucket_name: str = Field(
+        default="control-plane-content",
+        description="Content store bucket name (suffix '-objects' is used for banner objects)",
+    )
+    secure: bool = Field(default=False, description="Use TLS (https)")
+    public_endpoint: str | None = Field(
+        default=None,
+        description="Optional public endpoint used to generate browser-facing presigned URLs",
+    )
+    public_secure: bool | None = Field(
+        default=None,
+        description="Optional TLS override for public endpoint (auto-inferred when omitted)",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_if_missing(cls, values: dict[str, object]) -> dict[str, object]:
+        values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+        if not values.get("secret_key"):
+            raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+
+class LocalContentStorageConfig(BaseModel):
+    type: Literal["local"] = "local"
+    root_path: str = Field(
+        default=str(Path("~/.fred/control-plane/content-storage")),
+        description="Local storage directory",
+    )
+
+
+ContentStorageConfig = Annotated[
+    Union[LocalContentStorageConfig, MinioContentStorageConfig],
+    Field(discriminator="type"),
+]
+
+
+def _default_content_storage() -> LocalContentStorageConfig:
+    return LocalContentStorageConfig()
+
+
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig = Field(default_factory=_default_postgres_store)
     session_store: PostgresTableConfig = Field(default_factory=_default_session_store)
     purge_queue_table: str = "session_purge_queue"
+    content_storage: ContentStorageConfig = Field(default_factory=_default_content_storage)
 
 
 class Configuration(BaseModel):
