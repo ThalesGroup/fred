@@ -18,8 +18,6 @@ from enum import StrEnum
 
 from fred_core.common import read_env_bool
 
-FRED_STANDALONE_RUNTIME_ENV = "FRED_STANDALONE_RUNTIME"
-
 
 class SchedulerBackend(StrEnum):
     """
@@ -40,20 +38,6 @@ class SchedulerBackend(StrEnum):
 
     TEMPORAL = "temporal"
     MEMORY = "memory"
-
-
-def is_standalone_runtime_enabled() -> bool:
-    """
-    Return whether standalone runtime mode is enabled.
-
-    Why this exists:
-    - Local standalone runs should not require Temporal infrastructure.
-    - A single env switch must force in-process scheduling consistently.
-
-    How to use:
-    - Set `FRED_STANDALONE_RUNTIME=true` in `.env` for standalone runs.
-    """
-    return read_env_bool(FRED_STANDALONE_RUNTIME_ENV, default=False)
 
 
 def resolve_scheduler_backend(
@@ -85,8 +69,5 @@ def resolve_scheduler_backend(
             raise ValueError(
                 f"Unsupported scheduler backend '{configured_backend}'. Expected 'temporal' or 'memory'."
             ) from exc
-
-    if backend == SchedulerBackend.TEMPORAL and is_standalone_runtime_enabled():
-        return SchedulerBackend.MEMORY
 
     return backend

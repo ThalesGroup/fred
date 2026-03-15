@@ -65,34 +65,12 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 ##@ Run
 
 .PHONY: run
-run: FRONTEND_BACKEND_MODE ?= auto
-run: check-node node_modules ## Run frontend locally (auto mode; set FRONTEND_BACKEND_MODE=multi|standalone to force)
-	@mode="$(FRONTEND_BACKEND_MODE)"; \
-	if [ "$$mode" = "auto" ]; then \
-		if curl --silent --fail --max-time 1 http://localhost:8111/knowledge-flow/v1/healthz >/dev/null \
-			&& curl --silent --fail --max-time 1 http://localhost:8222/control-plane/v1/healthz >/dev/null; then \
-			mode="multi"; \
-		else \
-			mode="standalone"; \
-		fi; \
-	fi; \
-	echo "🚀 Frontend mode: $$mode"; \
-	if [ "$$mode" = "multi" ]; then \
-		VITE_BACKEND_URL=http://localhost:8000 \
-		VITE_BACKEND_URL_API=http://localhost:8000 \
-		VITE_BACKEND_URL_KNOWLEDGE=http://localhost:8111 \
-		VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:8222 \
-		npm run dev; \
-	elif [ "$$mode" = "standalone" ]; then \
-		VITE_BACKEND_URL=http://localhost:8000 \
-		VITE_BACKEND_URL_API=http://localhost:8000 \
-		VITE_BACKEND_URL_KNOWLEDGE=http://localhost:8000 \
-		VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:8000 \
-		npm run dev; \
-	else \
-		echo "❌ Invalid FRONTEND_BACKEND_MODE='$$mode'. Use auto, multi or standalone."; \
-		exit 2; \
-	fi
+run: check-node node_modules ## Run frontend locally with split backend ports (8000/8111/8222)
+	VITE_BACKEND_URL=http://localhost:8000 \
+	VITE_BACKEND_URL_API=http://localhost:8000 \
+	VITE_BACKEND_URL_KNOWLEDGE=http://localhost:8111 \
+	VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:8222 \
+	npm run dev
 
 run-only:
 	npm run dev

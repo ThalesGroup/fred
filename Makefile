@@ -40,42 +40,9 @@ test: ## Run non-integration test suites in backend submodules
 
 ##@ Run
 
-.PHONY: run
-run: run-app ## Default run: standalone mode (app-backend + frontend). Ensure app-backend/config/.env is set (especially CONFIG_FILE).
-
-.PHONY: run-app
-run-app: ## Run standalone mode: app-backend + frontend (all API prefixes on :8000). Uses app-backend/config/.env.
-	@set -e; \
-	trap 'echo "Stopping..."; kill 0' INT TERM; \
-	$(MAKE) -C app-backend run 2>&1 | sed 's/^/[APP] /' & \
-	$(MAKE) -C frontend run FRONTEND_BACKEND_MODE=standalone 2>&1 | sed 's/^/[FRONTEND] /' & \
-	wait
-
-.PHONY: run-multi
-run-multi: ## Run split API mode: agentic + knowledge-flow + control-plane + frontend
-	@set -e; \
-	trap 'echo "Stopping..."; kill 0' INT TERM; \
-	$(MAKE) -C agentic-backend run 2>&1 | sed 's/^/[AGENTIC] /' & \
-	$(MAKE) -C knowledge-flow-backend run 2>&1 | sed 's/^/[KNOWLEDGE] /' & \
-	$(MAKE) -C control-plane-backend run 2>&1 | sed 's/^/[CONTROL-PLANE] /' & \
-	$(MAKE) -C frontend run FRONTEND_BACKEND_MODE=multi 2>&1 | sed 's/^/[FRONTEND] /' & \
-	wait
-
-.PHONY: run-multi-workers
-run-multi-workers: ## Run split API mode + all Temporal workers + frontend (requires Temporal)
-	@set -e; \
-	trap 'echo "Stopping..."; kill 0' INT TERM; \
-	$(MAKE) -C agentic-backend run 2>&1 | sed 's/^/[AGENTIC] /' & \
-	$(MAKE) -C agentic-backend run-worker 2>&1 | sed 's/^/[AGENTIC-WORKER] /' & \
-	$(MAKE) -C knowledge-flow-backend run 2>&1 | sed 's/^/[KNOWLEDGE] /' & \
-	$(MAKE) -C knowledge-flow-backend run-worker 2>&1 | sed 's/^/[KNOWLEDGE-WORKER] /' & \
-	$(MAKE) -C control-plane-backend run 2>&1 | sed 's/^/[CONTROL-PLANE] /' & \
-	$(MAKE) -C control-plane-backend run-worker 2>&1 | sed 's/^/[CONTROL-PLANE-WORKER] /' & \
-	$(MAKE) -C frontend run FRONTEND_BACKEND_MODE=multi 2>&1 | sed 's/^/[FRONTEND] /' & \
-	wait
-
-.PHONY: run-app-multi
-run-app-multi: run-multi ## Backward-compatible alias for run-multi
+.PHONY: run-frontend
+run-frontend: ## Run frontend only
+	$(MAKE) -C frontend run
 
 .PHONY: run-agentic
 run-agentic: ## Run agentic backend API only

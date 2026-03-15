@@ -3,7 +3,6 @@
 {
   "include": [
     "agentic-backend/agentic_backend",
-    "app-backend/app_backend",
     "control-plane-backend/control_plane_backend",
     "knowledge-flow-backend/knowledge_flow_backend"
   ],
@@ -11,10 +10,6 @@
   "executionEnvironments": [
     {
       "root": "agentic-backend",
-      "typeCheckingMode": "basic"
-    },
-    {
-      "root": "app-backend",
       "typeCheckingMode": "basic"
     },
     {

@@ -230,7 +230,10 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
                     updated[existingIndex] = step;
                     return updated;
                   }
-                  return prev;
+                  // Fast in-memory processing can emit "success" before the first
+                  // delayed insert runs. In that case, upsert immediately instead
+                  // of dropping the newer status.
+                  return [...prev, step];
                 });
                 return;
               }

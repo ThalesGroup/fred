@@ -3,7 +3,7 @@
 This is the central inventory for environment variables in the active Fred codebase.
 
 Scope:
-- `agentic-backend`, `knowledge-flow-backend`, `control-plane-backend`, `app-backend`, `fred-core`, `frontend`
+- `agentic-backend`, `knowledge-flow-backend`, `control-plane-backend`, `fred-core`, `frontend`
 - excludes `ignored/`, virtual environments, and generated vendor folders
 
 Rule of thumb:
@@ -20,8 +20,7 @@ These are the variables that are already present in at least one backend `.env.t
 
 | Variable | In templates | Purpose |
 | --- | --- | --- |
-| `CONFIG_FILE` | agentic, knowledge-flow, control-plane, app-backend | Select YAML profile file at startup. |
-| `FRED_STANDALONE_RUNTIME` | agentic, knowledge-flow, control-plane, app-backend | Standalone override: force effective scheduler backend to `memory` when YAML says `temporal` (currently control-plane + knowledge-flow; agentic pending). |
+| `CONFIG_FILE` | agentic, knowledge-flow, control-plane | Select YAML profile file at startup. |
 
 Note:
 - `ENV_FILE` is part of the shared startup contract and set by Makefiles/launchers; it is not listed in all `.env.template` files.
@@ -30,10 +29,10 @@ Note:
 
 | Variable | In templates | Purpose |
 | --- | --- | --- |
-| `KEYCLOAK_AGENTIC_CLIENT_SECRET` | agentic, app-backend | Agentic M2M client secret (outbound calls / Keycloak admin). |
-| `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` | knowledge-flow, app-backend | Knowledge-flow M2M client secret. |
-| `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` | control-plane, app-backend | Control-plane M2M client secret. |
-| `OPENFGA_API_TOKEN` | agentic, knowledge-flow, control-plane, app-backend | Token for OpenFGA ReBAC API. |
+| `KEYCLOAK_AGENTIC_CLIENT_SECRET` | agentic | Agentic M2M client secret (outbound calls / Keycloak admin). |
+| `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` | knowledge-flow | Knowledge-flow M2M client secret. |
+| `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET` | control-plane | Control-plane M2M client secret. |
+| `OPENFGA_API_TOKEN` | agentic, knowledge-flow, control-plane | Token for OpenFGA ReBAC API. |
 
 ### 1.3 LLM Provider Secrets
 
@@ -48,36 +47,20 @@ Note:
 
 | Variable | In templates | Purpose |
 | --- | --- | --- |
-| `FRED_POSTGRES_PASSWORD` | agentic, knowledge-flow, app-backend | Main Postgres password. |
-| `TABULAR_POSTGRES_PASSWORD` | knowledge-flow, app-backend | Tabular store Postgres password. |
-| `OPENSEARCH_PASSWORD` | agentic, knowledge-flow, app-backend | OpenSearch authentication. |
-| `MINIO_SECRET_KEY` | knowledge-flow, control-plane, app-backend | MinIO secret for content storage backends when `type=minio`. |
+| `FRED_POSTGRES_PASSWORD` | agentic, knowledge-flow | Main Postgres password. |
+| `TABULAR_POSTGRES_PASSWORD` | knowledge-flow | Tabular store Postgres password. |
+| `OPENSEARCH_PASSWORD` | agentic, knowledge-flow | OpenSearch authentication. |
+| `MINIO_SECRET_KEY` | knowledge-flow, control-plane | MinIO secret for content storage backends when `type=minio`. |
 | `CLICKHOUSE_PASSWORD` | knowledge-flow | ClickHouse authentication. |
 
 ### 1.5 Observability / Tracing
 
 | Variable | In templates | Purpose |
 | --- | --- | --- |
-| `LANGFUSE_PUBLIC_KEY` | agentic, app-backend | Langfuse public key. |
-| `LANGFUSE_SECRET_KEY` | agentic, app-backend | Langfuse secret key. |
-| `LANGFUSE_HOST` | app-backend | Langfuse host URL used by current runtime code. |
+| `LANGFUSE_PUBLIC_KEY` | agentic | Langfuse public key. |
+| `LANGFUSE_SECRET_KEY` | agentic | Langfuse secret key. |
+| `LANGFUSE_HOST` | agentic | Langfuse host URL used by current runtime code. |
 | `LANGFUSE_BASE_URL` | agentic | Legacy naming in template; current runtime reads `LANGFUSE_HOST`. |
-
-### 1.6 App-Backend Catalog Path Overrides
-
-| Variable | In templates | Purpose |
-| --- | --- | --- |
-| `FRED_MODELS_CATALOG_FILE` | app-backend | Path override for models catalog. |
-| `FRED_AGENTS_CATALOG_FILE` | app-backend | Path override for agents catalog. |
-| `FRED_MCP_CATALOG_FILE` | app-backend | Path override for MCP catalog. |
-
-### 1.7 App-Backend Optional Graph
-
-| Variable | In templates | Purpose |
-| --- | --- | --- |
-| `NEO4J_URI` | app-backend | Neo4j endpoint URI. |
-| `NEO4J_USERNAME` | app-backend | Neo4j username. |
-| `NEO4J_PASSWORD` | app-backend | Neo4j password. |
 
 ## 2) Startup Configuration and Feature-Switch Variables
 
@@ -95,7 +78,6 @@ This chapter lists env vars that change startup behavior or enable/disable runti
 | Variable | Effect |
 | --- | --- |
 | `PRODUCTION_FASTAPI_DOCS_ENABLED` | Enables/disables `/docs`, `/redoc`, `/openapi.json` exposure in API apps. |
-| `FRED_STANDALONE_RUNTIME` | Forces effective scheduler backend from `temporal` to `memory` for standalone runtime mode. |
 
 ### 2.3 OIDC/JWT Strictness and Cache
 

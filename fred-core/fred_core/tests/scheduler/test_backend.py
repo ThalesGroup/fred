@@ -15,28 +15,8 @@
 import pytest
 
 from fred_core.scheduler import (
-    FRED_STANDALONE_RUNTIME_ENV,
-    SchedulerBackend,
-    is_standalone_runtime_enabled,
     resolve_scheduler_backend,
 )
-
-
-def test_resolve_scheduler_backend_without_override(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(FRED_STANDALONE_RUNTIME_ENV, raising=False)
-    assert resolve_scheduler_backend("temporal") == SchedulerBackend.TEMPORAL
-    assert resolve_scheduler_backend("memory") == SchedulerBackend.MEMORY
-
-
-def test_resolve_scheduler_backend_with_standalone_override(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(FRED_STANDALONE_RUNTIME_ENV, "true")
-    assert is_standalone_runtime_enabled() is True
-    assert resolve_scheduler_backend("temporal") == SchedulerBackend.MEMORY
-    assert resolve_scheduler_backend("memory") == SchedulerBackend.MEMORY
 
 
 def test_resolve_scheduler_backend_rejects_unsupported_backend() -> None:
