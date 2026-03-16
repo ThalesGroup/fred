@@ -21,8 +21,8 @@ from fred_core import (
     TeamPermission,
     create_keycloak_admin,
 )
-from fred_core.scheduler import SchedulerBackend
 from fred_core.common import TeamId
+from fred_core.scheduler import SchedulerBackend
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 from pydantic import BaseModel, Field, ValidationError

@@ -16,8 +16,6 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from fred_core.common import read_env_bool
-
 
 class SchedulerBackend(StrEnum):
     """

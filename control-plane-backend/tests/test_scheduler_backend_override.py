@@ -21,5 +21,3 @@ def _reset_application_context() -> Generator[None, None, None]:
     ApplicationContext._instance = None
     yield
     ApplicationContext._instance = None
-
-
