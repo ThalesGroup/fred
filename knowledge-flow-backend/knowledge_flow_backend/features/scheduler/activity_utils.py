@@ -43,8 +43,12 @@ async def await_with_heartbeat(
     task = asyncio.ensure_future(awaitable)
 
     try:
-        if should_heartbeat:
-            activity.heartbeat(details)
+        if not should_heartbeat:
+            # In non-Temporal/standalone execution, just await the task directly
+            # to avoid periodic wakeups.
+            return await task
+
+        activity.heartbeat(details)
 
         while True:
             done, _ = await asyncio.wait(
@@ -54,8 +58,7 @@ async def await_with_heartbeat(
             )
             if task in done:
                 return await task
-            if should_heartbeat:
-                activity.heartbeat(details)
+            activity.heartbeat(details)
     finally:
         if not task.done():
             task.cancel()
