@@ -57,6 +57,22 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     medium:
       use_gpu: false
       generate_summary: false
@@ -86,6 +102,22 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     rich:
       use_gpu: false
       generate_summary: false
@@ -115,6 +147,22 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 
 # Use a no-op output processor for markdown-quality profile tests.
 # This avoids embedding/vectorization calls so tests can focus only on
