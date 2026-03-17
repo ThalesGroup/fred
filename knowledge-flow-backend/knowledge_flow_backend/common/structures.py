@@ -432,6 +432,10 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
     )
+    prometheus_ops_enabled: bool = Field(
+        default=False,
+        description="Expose Prometheus operational endpoints and the corresponding MCP server.",
+    )
     neo4j_enabled: bool = Field(
         default=False,
         description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
@@ -472,6 +476,40 @@ class AppConfig(BaseModel):
         default=0,
         description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
     )
+
+
+class PrometheusConfig(BaseModel):
+    base_url: str = Field(
+        ...,
+        description="Base URL of a Prometheus-compatible HTTP API.",
+    )
+    verify_ssl: bool = Field(
+        default=True,
+        description="Verify upstream TLS certificates when querying Prometheus.",
+    )
+    timeout_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        description="HTTP timeout applied to Prometheus API calls.",
+    )
+    bearer_token: Optional[str] = Field(
+        default=None,
+        description="Optional bearer token loaded from PROMETHEUS_BEARER_TOKEN.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_token(cls, values: dict) -> dict:
+        values.setdefault("bearer_token", os.getenv("PROMETHEUS_BEARER_TOKEN"))
+        return values
+
+    @field_validator("base_url", mode="after")
+    @classmethod
+    def normalize_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            raise ValueError("prometheus.base_url must not be empty")
+        return normalized
 
 
 class PullProvider(str, Enum):
@@ -665,6 +703,10 @@ class WorkspaceLayoutConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
+    prometheus: Optional[PrometheusConfig] = Field(
+        default=None,
+        description="Optional Prometheus API configuration for cluster-wide metrics queries.",
+    )
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None

@@ -164,7 +164,7 @@ applications:
         kpi_log_summary_top_n: 0
 
       scheduler:
-        enabled: true
+        enabled: false
         backend: temporal
         temporal:
           host: "temporal:7233"
@@ -264,6 +264,11 @@ applications:
             type: "agent"
             class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
             enabled: true
+          - id: "Spot"
+            name: "Spot"
+            type: "agent"
+            class_path: "agentic_backend.agents.prometheus.prometheus_expert.Spot"
+            enabled: true
 
       mcp:
         servers:
@@ -286,6 +291,13 @@ applications:
             description: "mcp.servers.search_opensearch.description"
             transport: "streamable_http"
             url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-prometheus-ops"
+            name: "mcp.servers.prometheus.name"
+            description: "mcp.servers.prometheus.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-prometheus-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           - id: "mcp-knowledge-flow-fs"
@@ -684,7 +696,7 @@ applications:
           api_url: "http://openfga:9080"
 
       scheduler:
-        enabled: true
+        enabled: false
         backend: "temporal"
         temporal:
           host: "temporal:7233"
@@ -815,6 +827,11 @@ applications:
         log_store:
           type: "in_memory"
 
+      prometheus:
+        base_url: http://prometheus:9090
+        verify_ssl: false
+        timeout_seconds: 15.0
+
       mcp:
         reports_enabled: true
         kpi_enabled: true
@@ -824,6 +841,7 @@ applications:
         templates_enabled: true
         resources_enabled: true
         opensearch_ops_enabled: true
+        prometheus_ops_enabled: true
         neo4j_enabled: false
         filesystem_enabled: true
 
@@ -842,6 +860,7 @@ applications:
       MINIO_SECRET_KEY: "Azerty123_"
       OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
       OPENSEARCH_PASSWORD: "FredDemo_2026!"
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: "Azerty123_"
       FRED_POSTGRES_PASSWORD: "Azerty123_"
       TABULAR_POSTGRES_PASSWORD: "Azerty123_"

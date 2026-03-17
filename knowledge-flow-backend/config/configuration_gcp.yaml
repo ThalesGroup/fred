@@ -275,6 +275,11 @@ storage:
       path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
 
+# prometheus:
+#   base_url: http://prometheus:9090
+#   verify_ssl: false
+#   timeout_seconds: 15.0
+
 mcp:
   reports_enabled: true
   kpi_enabled: true
@@ -284,6 +289,7 @@ mcp:
   templates_enabled: true
   resources_enabled: true
   opensearch_ops_enabled: true
+  prometheus_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
 

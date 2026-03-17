@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from .demos.artifact_report import ArtifactReportDemoV2Definition
     from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.basic_react import BasicReActDefinition
+    from .production.basic_react.profiles.prometheus_expert_agent import (
+        PrometheusExpertV2Definition,
+    )
     from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
 
 __all__ = [
@@ -21,6 +24,7 @@ __all__ = [
     "BasicReActDefinition",
     "BidMgrDefinition",
     "PostalTrackingDefinition",
+    "PrometheusExpertV2Definition",
     "RagExpertV2Definition",
 ]
 
@@ -55,6 +59,12 @@ def __getattr__(name: str) -> object:
         from .demos.postal_tracking import Definition as PostalTrackingDefinition
 
         return PostalTrackingDefinition
+    if name == "PrometheusExpertV2Definition":
+        from .production.basic_react.profiles.prometheus_expert_agent import (
+            PrometheusExpertV2Definition,
+        )
+
+        return PrometheusExpertV2Definition
     if name == "RagExpertV2Definition":
         from .production.basic_react.profiles.rag_expert_agent import (
             RagExpertV2Definition,

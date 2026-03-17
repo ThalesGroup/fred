@@ -898,6 +898,10 @@ applications:
             database: "base_database"
             path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
             mode: "read_and_write"
+      # prometheus:
+      #   base_url: http://prometheus:9090
+      #   verify_ssl: false
+      #   timeout_seconds: 15.0
       mcp:
         reports_enabled: true
         kpi_enabled: true
@@ -908,6 +912,7 @@ applications:
         resources_enabled: true
         filesystem_enabled: false
         opensearch_ops_enabled: false
+        prometheus_ops_enabled: false
         neo4j_enabled: false
 
       filesystem:
@@ -923,6 +928,7 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""
@@ -1307,6 +1313,10 @@ applications:
             database: "base_database"
             path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
             mode: "read_and_write"
+      prometheus:
+        base_url: http://prometheus:9090
+        verify_ssl: false
+        timeout_seconds: 15.0
       mcp:
         reports_enabled: true
         kpi_enabled: true
@@ -1317,6 +1327,7 @@ applications:
         resources_enabled: true
         filesystem_enabled: false
         opensearch_ops_enabled: false
+        prometheus_ops_enabled: false
         neo4j_enabled: false
 
       filesystem:
@@ -1331,6 +1342,7 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""

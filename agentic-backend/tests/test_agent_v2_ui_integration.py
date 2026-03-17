@@ -15,6 +15,7 @@ from agentic_backend.agents.v2 import (
     ArtifactReportDemoV2Definition,
     BasicReActDefinition,
     PostalTrackingDefinition,
+    PrometheusExpertV2Definition,
     RagExpertV2Definition,
 )
 from agentic_backend.agents.v2.production.basic_react.profiles.custodian import (
@@ -22,6 +23,9 @@ from agentic_backend.agents.v2.production.basic_react.profiles.custodian import 
 )
 from agentic_backend.agents.v2.production.basic_react.profiles.log_genius import (
     LOG_GENIUS_PROFILE,
+)
+from agentic_backend.agents.v2.production.basic_react.profiles.prometheus import (
+    PROMETHEUS_PROFILE,
 )
 from agentic_backend.agents.v2.production.basic_react.profiles.rag_expert import (
     RAG_EXPERT_PROFILE,
@@ -87,6 +91,7 @@ from tests.test_tracking_graph_v2 import TrackingDemoToolProvider
 
 CUSTODIAN_PROFILE_ID = CUSTODIAN_PROFILE.profile_id
 LOG_GENIUS_PROFILE_ID = LOG_GENIUS_PROFILE.profile_id
+PROMETHEUS_PROFILE_ID = PROMETHEUS_PROFILE.profile_id
 RAG_EXPERT_PROFILE_ID = RAG_EXPERT_PROFILE.profile_id
 SENTINEL_PROFILE_ID = SENTINEL_PROFILE.profile_id
 
@@ -247,6 +252,20 @@ def test_resolve_agent_reference_accepts_v2_definition_ref() -> None:
     )
 
 
+def test_resolve_agent_reference_accepts_prometheus_definition_ref() -> None:
+    resolved = resolve_agent_reference(
+        class_path=None,
+        definition_ref="v2.react.prometheus_expert",
+    )
+
+    assert resolved.implementation_kind == AgentImplementationKind.V2_DEFINITION
+    assert resolved.definition_ref == "v2.react.prometheus_expert"
+    assert (
+        resolved.class_path
+        == "agentic_backend.agents.v2.production.basic_react.profiles.prometheus_expert_agent.PrometheusExpertV2Definition"
+    )
+
+
 def test_artifact_report_demo_declares_publish_capability() -> None:
     definition = ArtifactReportDemoV2Definition()
 
@@ -298,6 +317,25 @@ def test_build_definition_from_settings_applies_persisted_prompt_override() -> N
         definition.system_prompt_template
         == "You are the persisted RAG agent. Today is {today}."
     )
+
+
+def test_prometheus_expert_definition_declares_prometheus_mcp() -> None:
+    definition = PrometheusExpertV2Definition()
+    settings = definition_to_agent_settings(
+        definition,
+        class_path=None,
+        definition_ref="v2.react.prometheus_expert",
+    )
+    effective_settings = apply_profile_defaults_to_settings(
+        definition=definition,
+        settings=settings,
+    )
+
+    assert definition.react_profile_id == PROMETHEUS_PROFILE_ID
+    assert [server.id for server in effective_settings.tuning.mcp_servers] == [
+        "mcp-knowledge-flow-prometheus-ops",
+    ]
+    assert "PromQL investigation" in definition.system_prompt_template
 
 
 def test_basic_react_profile_field_lists_available_backend_profiles() -> None:
@@ -476,6 +514,47 @@ def test_build_definition_from_settings_applies_sentinel_profile_defaults() -> N
     assert effective_settings.tuning is not None
     assert [server.id for server in effective_settings.tuning.mcp_servers] == [
         "mcp-knowledge-flow-opensearch-ops",
+    ]
+
+
+def test_build_definition_from_settings_applies_prometheus_profile_defaults() -> None:
+    base_definition = BasicReActDefinition()
+    tuned_fields = []
+    for field in base_definition.fields:
+        if field.key == "react_profile_id":
+            tuned_fields.append(
+                field.model_copy(update={"default": PROMETHEUS_PROFILE_ID})
+            )
+        else:
+            tuned_fields.append(field.model_copy(deep=True))
+
+    settings = Agent(
+        id="prometheus-react-agent",
+        name="Prometheus",
+        class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
+        tuning=AgentTuning(
+            role=base_definition.role,
+            description=base_definition.description,
+            tags=list(base_definition.tags),
+            fields=tuned_fields,
+        ),
+    )
+
+    definition = build_definition_from_settings(
+        definition_class=BasicReActDefinition,
+        settings=settings,
+    )
+    effective_settings = apply_profile_defaults_to_settings(
+        definition=definition,
+        settings=settings,
+    )
+
+    assert definition.react_profile_id == PROMETHEUS_PROFILE_ID
+    assert definition.role == "prometheus_expert"
+    assert "cluster-wide monitoring and PromQL" in definition.system_prompt_template
+    assert effective_settings.tuning is not None
+    assert [server.id for server in effective_settings.tuning.mcp_servers] == [
+        "mcp-knowledge-flow-prometheus-ops",
     ]
 
 
