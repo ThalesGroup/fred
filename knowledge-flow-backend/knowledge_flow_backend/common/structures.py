@@ -289,6 +289,192 @@ class ProcessingConfig(BaseModel):
             description="Enable OCR in the standard Docling PDF pipeline.",
         )
 
+    class PptxPipelineConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        preset: Literal["loose", "balanced", "strict"] = Field(
+            default="balanced",
+            description=("High-level PPTX extraction preset. 'loose' captures more blocks, 'strict' reduces noisy matches, 'balanced' is default."),
+        )
+        header_detection_sensitivity: Optional[float] = Field(
+            default=None,
+            ge=0.0,
+            le=1.0,
+            description=("Optional generic tuning knob for header detection (0.0 conservative, 1.0 permissive). If unset, preset defaults are used."),
+        )
+        section_grouping_strictness: Optional[float] = Field(
+            default=None,
+            ge=0.0,
+            le=1.0,
+            description=("Optional generic tuning knob for section attachment (0.0 loose, 1.0 strict). If unset, preset defaults are used."),
+        )
+
+        title_top_ratio: float = Field(
+            default=0.30,
+            gt=0.0,
+            le=1.0,
+            description="Top-of-slide ratio used to pick title candidates.",
+        )
+        title_concise_max_chars: int = Field(
+            default=100,
+            ge=1,
+            description="Character length threshold for concise title preference.",
+        )
+        header_top_ratio: float = Field(
+            default=0.82,
+            gt=0.0,
+            le=1.0,
+            description="Max vertical ratio where section headers are considered.",
+        )
+        header_max_text_length: int = Field(
+            default=110,
+            ge=1,
+            description="Maximum section-header text length.",
+        )
+        header_min_word_count: int = Field(
+            default=2,
+            ge=1,
+            description="Minimum number of words to consider a section header.",
+        )
+        header_max_lines: int = Field(
+            default=3,
+            ge=1,
+            description="Maximum paragraph lines for a section header block.",
+        )
+        header_uppercase_ratio_threshold: float = Field(
+            default=0.70,
+            ge=0.0,
+            le=1.0,
+            description="Uppercase-ratio threshold for section header detection.",
+        )
+        header_min_font_delta_pt: float = Field(
+            default=1.5,
+            ge=0.0,
+            description="Min font-size delta (pt) above slide median for section headers.",
+        )
+        section_backward_tolerance_ratio: float = Field(
+            default=0.08,
+            ge=0.0,
+            le=1.0,
+            description="Allowed negative vertical overlap ratio when attaching content to a section.",
+        )
+        section_forward_tolerance_ratio: float = Field(
+            default=0.36,
+            ge=0.0,
+            le=1.0,
+            description="Max downward vertical gap ratio when attaching content to a section.",
+        )
+        section_score_threshold: float = Field(
+            default=2.2,
+            gt=0.0,
+            description="Maximum section assignment score accepted for grouping.",
+        )
+        section_nonoverlap_max_center_gap_ratio: float = Field(
+            default=0.28,
+            ge=0.0,
+            le=1.0,
+            description="Max center-gap ratio allowed when there is no horizontal overlap with a header.",
+        )
+        section_row_grouping_ratio: float = Field(
+            default=0.0,
+            ge=0.0,
+            le=1.0,
+            description=("Vertical tolerance ratio to group headers on the same visual row. Set to 0 to disable row clustering and keep simple top-then-left ordering."),
+        )
+        intro_top_ratio: float = Field(
+            default=0.35,
+            ge=0.0,
+            le=1.0,
+            description="Top ratio used to keep unassigned blocks in the intro region.",
+        )
+        detect_horizontal_label_row: bool = Field(
+            default=True,
+            description="Detect and render top horizontal short-label rows (e.g., process steps).",
+        )
+        horizontal_label_top_band_ratio: float = Field(
+            default=0.45,
+            ge=0.0,
+            le=1.0,
+            description="Top band ratio where horizontal labels are searched.",
+        )
+        horizontal_label_row_y_tolerance_ratio: float = Field(
+            default=0.03,
+            ge=0.0,
+            le=1.0,
+            description="Vertical tolerance ratio to cluster labels on the same row.",
+        )
+        horizontal_label_min_span_ratio: float = Field(
+            default=0.40,
+            ge=0.0,
+            le=1.0,
+            description="Minimum horizontal span ratio for a detected label row.",
+        )
+        horizontal_label_min_labels: int = Field(
+            default=3,
+            ge=1,
+            description="Minimum number of labels required to render a horizontal label row.",
+        )
+        short_label_max_words: int = Field(
+            default=2,
+            ge=1,
+            description="Maximum word count for a short label candidate.",
+        )
+        short_label_max_chars: int = Field(
+            default=24,
+            ge=1,
+            description="Maximum character count for a short label candidate.",
+        )
+        callout_max_words: int = Field(
+            default=6,
+            ge=1,
+            description="Maximum word count for orphan callouts rendered as highlights.",
+        )
+
+        @staticmethod
+        def _clamp01(value: float) -> float:
+            return max(0.0, min(1.0, float(value)))
+
+        @staticmethod
+        def _lerp(low: float, high: float, ratio: float) -> float:
+            r = ProcessingConfig.PptxPipelineConfig._clamp01(ratio)
+            return low + ((high - low) * r)
+
+        def with_high_level_tuning(self) -> "ProcessingConfig.PptxPipelineConfig":
+            tuned = self.model_copy(deep=True)
+
+            # Preset baseline values for generic usage.
+            if tuned.preset == "loose":
+                tuned.header_uppercase_ratio_threshold = 0.62
+                tuned.header_min_font_delta_pt = 1.0
+                tuned.section_forward_tolerance_ratio = 0.45
+                tuned.section_score_threshold = 2.6
+                tuned.section_nonoverlap_max_center_gap_ratio = 0.33
+            elif tuned.preset == "strict":
+                tuned.header_uppercase_ratio_threshold = 0.80
+                tuned.header_min_font_delta_pt = 2.1
+                tuned.section_forward_tolerance_ratio = 0.28
+                tuned.section_score_threshold = 1.8
+                tuned.section_nonoverlap_max_center_gap_ratio = 0.22
+
+            # Optional generic knob: higher value => more permissive header detection.
+            if tuned.header_detection_sensitivity is not None:
+                s = self._clamp01(tuned.header_detection_sensitivity)
+                tuned.header_uppercase_ratio_threshold = self._lerp(0.90, 0.55, s)
+                tuned.header_min_font_delta_pt = self._lerp(2.5, 0.8, s)
+                tuned.header_max_text_length = int(round(self._lerp(75, 140, s)))
+                tuned.header_top_ratio = self._lerp(0.70, 0.90, s)
+
+            # Optional generic knob: higher value => stricter section grouping.
+            if tuned.section_grouping_strictness is not None:
+                g = self._clamp01(tuned.section_grouping_strictness)
+                tuned.section_backward_tolerance_ratio = self._lerp(0.12, 0.04, g)
+                tuned.section_forward_tolerance_ratio = self._lerp(0.50, 0.20, g)
+                tuned.section_score_threshold = self._lerp(2.8, 1.6, g)
+                tuned.section_nonoverlap_max_center_gap_ratio = self._lerp(0.38, 0.18, g)
+                tuned.section_row_grouping_ratio = self._lerp(0.06, 0.025, g)
+
+            return tuned
+
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
@@ -322,6 +508,10 @@ class ProcessingConfig(BaseModel):
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
+        )
+        pptx: Optional["ProcessingConfig.PptxPipelineConfig"] = Field(
+            default=None,
+            description=("Optional PPTX processing options for this profile. If unset for medium/rich, the fast profile PPTX options are used."),
         )
         input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
             default_factory=list,
@@ -385,6 +575,23 @@ class ProcessingConfig(BaseModel):
         if profile == IngestionProcessingProfile.RICH:
             return self.profiles.rich
         return self.profiles.medium
+
+    def get_effective_pptx_config(
+        self,
+        profile: IngestionProcessingProfile | str | None,
+    ) -> "ProcessingConfig.PptxPipelineConfig":
+        active_profile = self.normalize_profile(profile)
+        default_pptx = ProcessingConfig.PptxPipelineConfig()
+        fast_base = self.profiles.fast.pptx.model_copy(deep=True) if self.profiles.fast.pptx else default_pptx.model_copy(deep=True)
+        fast_pptx = fast_base.with_high_level_tuning()
+
+        if active_profile == IngestionProcessingProfile.FAST:
+            return fast_pptx
+
+        profile_cfg = self.get_profile_config(active_profile)
+        if profile_cfg.pptx is None:
+            return fast_pptx
+        return profile_cfg.pptx.model_copy(deep=True).with_high_level_tuning()
 
     def is_gpu_enabled_any_profile(self) -> bool:
         return any(self.get_profile_config(profile).use_gpu for profile in IngestionProcessingProfile)

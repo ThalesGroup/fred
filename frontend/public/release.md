@@ -18,6 +18,8 @@
 
 - **Improvements**
 
+  - New pptx fast processor (#1332)
+  - update langgraph to 1.0.10rc1 to and dompurify to 3.3.3 (#1332)
   - Move default v2 agent prompts to packaged Markdown resources
   - Move ReAct profile selection to agent creation so admins choose a starting profile or custom class up front
   - Replace the experimental graph endpoint with a dedicated v2 inspection endpoint and model

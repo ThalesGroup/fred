@@ -15,7 +15,7 @@ dependencies = [
   "pandas>=2.2.2,<3.0.0",
   "kubernetes==30.1.0",
   "langchain>=1.2.7",
-  "langgraph>=1.0.7",
+  "langgraph>=1.0.10rc1",
   "langchain-community>=0.4.1",
   "langchain-mcp-adapters>=0.2.1",
   "langfuse>=3.0.0",
