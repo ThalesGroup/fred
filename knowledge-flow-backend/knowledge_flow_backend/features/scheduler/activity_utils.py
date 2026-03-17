@@ -39,11 +39,17 @@ async def await_with_heartbeat(
     """
     _validate_heartbeat_interval(heartbeat_interval_seconds)
     details = heartbeat_details or {}
-
-    activity.heartbeat(details)
+    should_heartbeat = activity.in_activity()
     task = asyncio.ensure_future(awaitable)
 
     try:
+        if not should_heartbeat:
+            # In non-Temporal/standalone execution, just await the task directly
+            # to avoid periodic wakeups.
+            return await task
+
+        activity.heartbeat(details)
+
         while True:
             done, _ = await asyncio.wait(
                 {task},
