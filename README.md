@@ -470,7 +470,7 @@ cd knowledge-flow-backend && make run
 
 ```bash
 # agentic backend
-cd agentic_backend && make run
+cd agentic-backend && make run
 ```
 
 ```bash
