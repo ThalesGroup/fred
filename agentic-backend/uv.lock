@@ -70,7 +70,7 @@ requires-dist = [
     { name = "langchain-community", specifier = ">=0.4.1" },
     { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
     { name = "langfuse", specifier = ">=3.0.0" },
-    { name = "langgraph", specifier = ">=1.0.10rc1" },
+    { name = "langgraph", specifier = ">=1.0.10" },
     { name = "lxml", specifier = ">=5.3.0" },
     { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },
     { name = "opensearch-py", specifier = ">=2.8.0,<3.0.0" },
