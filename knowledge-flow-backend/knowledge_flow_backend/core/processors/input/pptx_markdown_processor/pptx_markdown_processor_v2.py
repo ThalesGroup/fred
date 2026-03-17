@@ -371,6 +371,7 @@ def _render_section_items(blocks: list[_SlideTextBlock]) -> list[str]:
     # Heuristic: long/sentence-like blocks stay as paragraphs; short ones become bullets.
     lines: list[str] = []
     for block in blocks:
+        # If the shape already contains explicit markdown bullets, preserve them line by line.
         if any(part.lstrip().startswith("- ") for part in block.lines):
             for part in block.lines:
                 if part.lstrip().startswith("- "):
@@ -379,15 +380,27 @@ def _render_section_items(blocks: list[_SlideTextBlock]) -> list[str]:
                     lines.append(f"- {_normalize_space(part)}")
             continue
 
-        content = _normalize_space(" ".join(block.lines))
-        if not content:
+        # Normalize each original line separately so we can preserve line/paragraph boundaries.
+        normalized_lines = []
+        for part in block.lines:
+            normalized = _normalize_space(part)
+            if normalized:
+                normalized_lines.append(normalized)
+
+        if not normalized_lines:
             continue
 
-        looks_like_sentence = len(content) > 120 or any(token in content for token in (". ", "? ", "! ", "; ", ": "))
+        # Use a space-joined version for sentence detection, but keep newlines in the output text.
+        content = " ".join(normalized_lines)
+        paragraph_text = "\n".join(normalized_lines)
+
+        looks_like_sentence = len(content) > 120 or any(
+            token in content for token in (". ", "? ", "! ", "; ", ": ")
+        )
         if looks_like_sentence:
-            lines.append(content)
+            lines.append(paragraph_text)
         else:
-            lines.append(f"- {content}")
+            lines.append(f"- {paragraph_text}")
     return lines
 
 
