@@ -29,6 +29,7 @@ from knowledge_flow_backend.features.kpi.prometheus_structures import (
 )
 
 DEFAULT_DISCOVERY_WINDOW = timedelta(hours=6)
+HTTPXQueryParams = tuple[tuple[str, str], ...]
 
 
 class PrometheusAPIError(Exception):
@@ -94,7 +95,7 @@ class PrometheusOpsService:
         params: list[tuple[str, str]] = [("limit", str(limit))]
         if metric:
             params.append(("metric", metric.strip()))
-        return await self._request("GET", "api/v1/metadata", params=params)
+        return await self._request("GET", "api/v1/metadata", params=tuple(params))
 
     async def labels(self) -> dict[str, Any]:
         return await self._request("GET", "api/v1/labels")
@@ -114,7 +115,7 @@ class PrometheusOpsService:
         return await self._request(
             "GET",
             f"api/v1/label/{label_name}/values",
-            params=params,
+            params=tuple(params),
         )
 
     async def targets(self) -> dict[str, Any]:
@@ -125,7 +126,7 @@ class PrometheusOpsService:
         method: str,
         path: str,
         *,
-        params: list[tuple[str, str]] | None = None,
+        params: HTTPXQueryParams | None = None,
         data: list[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
         headers = {"Accept": "application/json"}
@@ -251,9 +252,7 @@ class PrometheusOpsService:
         except ValueError:
             pass
         try:
-            return self._normalize_datetime(
-                datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-            )
+            return self._normalize_datetime(datetime.fromisoformat(normalized.replace("Z", "+00:00")))
         except ValueError:
             return None
 

@@ -41,9 +41,7 @@ async def test_instant_query_serializes_body_and_auth_header() -> None:
         transport=httpx.MockTransport(handler),
     )
 
-    payload = await service.instant_query(
-        PrometheusQueryRequest(query="up", time=1710000000, timeout="5s")
-    )
+    payload = await service.instant_query(PrometheusQueryRequest(query="up", time=1710000000, timeout="5s"))
 
     assert captured["path"] == "/api/v1/query"
     assert captured["authorization"] == "Bearer secret-token"

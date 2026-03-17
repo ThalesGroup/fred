@@ -4,11 +4,11 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core import Action, Resource
 
+from knowledge_flow_backend import main as main_module
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import PrometheusConfig
 from knowledge_flow_backend.features.kpi import prometheus_controller as prom_controller_module
 from knowledge_flow_backend.features.kpi.prometheus_controller import PrometheusOpsController
-from knowledge_flow_backend import main as main_module
 from knowledge_flow_backend.main import create_app
 
 
@@ -153,9 +153,6 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
 
     app = create_app()
 
-    assert any(
-        route.path.startswith(f"{config.app.base_url}/mcp-prometheus-ops")
-        for route in app.routes
-    )
+    assert any(route.path.startswith(f"{config.app.base_url}/mcp-prometheus-ops") for route in app.routes)
 
     ApplicationContext.reset_instance()

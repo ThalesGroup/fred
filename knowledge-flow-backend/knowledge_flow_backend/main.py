@@ -382,10 +382,7 @@ def create_app() -> FastAPI:
         mcp_prometheus_ops = FastApiMCP(
             app,
             name="Knowledge Flow Prometheus Ops MCP",
-            description=(
-                "Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, "
-                "PromQL queries, and metric discovery across namespaces and pods."
-            ),
+            description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
             include_tags=["Prometheus"],
             describe_all_responses=True,
             describe_full_response_schema=True,

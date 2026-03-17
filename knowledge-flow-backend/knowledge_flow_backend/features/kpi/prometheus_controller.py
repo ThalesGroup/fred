@@ -40,9 +40,7 @@ class PrometheusOpsController:
     def __init__(self, router: APIRouter):
         config = get_app_context().configuration.prometheus
         if config is None:
-            raise ValueError(
-                "Prometheus MCP is enabled but no Prometheus configuration is defined."
-            )
+            raise ValueError("Prometheus MCP is enabled but no Prometheus configuration is defined.")
         self.service = PrometheusOpsService(config)
         self._register_routes(router)
 
