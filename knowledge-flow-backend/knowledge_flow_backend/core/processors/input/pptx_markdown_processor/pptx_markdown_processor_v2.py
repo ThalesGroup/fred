@@ -80,6 +80,16 @@ def _extract_shape_lines(shape) -> list[str]:
     if text_frame is None:
         return []
 
+    # Detect whether this text frame represents a list structure. In python-pptx,
+    # para.level == 0 is used both for non-bulleted paragraphs and top-level
+    # bullet paragraphs. If any paragraph has level > 0, we treat the whole
+    # text frame as a list so that top-level items are preserved as list items
+    # instead of being flattened into plain text.
+    para_levels = [
+        int(getattr(p, "level", 0) or 0) for p in getattr(text_frame, "paragraphs", [])
+    ]
+    has_any_level_gt0 = any(lvl > 0 for lvl in para_levels)
+
     lines: list[str] = []
     for para in text_frame.paragraphs:
         text = _normalize_space(str(getattr(para, "text", "") or ""))
@@ -90,6 +100,10 @@ def _extract_shape_lines(shape) -> list[str]:
         # This prevents flattening real bullet structures.
         if level > 0:
             lines.append(f"{'  ' * (level - 1)}- {text}")
+        elif has_any_level_gt0:
+            # Treat level-0 paragraphs as top-level list items when the text
+            # frame contains nested levels, so list structure is retained.
+            lines.append(f"- {text}")
         else:
             lines.append(text)
     return lines
