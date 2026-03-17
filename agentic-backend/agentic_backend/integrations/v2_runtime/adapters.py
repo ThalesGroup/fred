@@ -145,6 +145,26 @@ class LangfuseTracerAdapter(TracerPort):
     def __init__(self, client: Langfuse):
         self._client = client
 
+    def _start_langfuse_span(
+        self,
+        *,
+        name: str,
+        trace_id: str,
+        metadata: Mapping[str, object],
+    ) -> "_LangfuseSpanLike":
+        """
+        Langfuse v4 span creation.
+        """
+        return cast(
+            "_LangfuseSpanLike",
+            self._client.start_observation(
+                name=name,
+                as_type="span",
+                trace_context={"trace_id": trace_id},
+                metadata=dict(metadata),
+            ),
+        )
+
     def start_span(
         self,
         *,
@@ -176,9 +196,9 @@ class LangfuseTracerAdapter(TracerPort):
         }
         if attributes:
             metadata.update(attributes)
-        span = self._client.start_span(
+        span = self._start_langfuse_span(
             name=name,
-            trace_context={"trace_id": trace_id},
+            trace_id=trace_id,
             metadata=metadata,
         )
         return LangfuseSpanAdapter(span)
