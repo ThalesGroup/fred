@@ -120,6 +120,7 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 | SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
 | Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html)                              | For DOCX document ingestion                                                                 |
 | LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | For PPTX conversion into PDF                                                                |
+| libmagic     | Identifies file types by content | Install via system package manager (e.g., `apt install libmagic1`, `brew install libmagic`)         | To check file type                                                                          |
 
   <details>
     <summary>Dependency details</summary>
@@ -139,6 +140,7 @@ graph TD
         Python["Python 3.12.8"]
         SQLite["SQLite"]
         Pandoc["Pandoc"]
+        libmagic["libmagic"]
         Pyenv["Pyenv (Python installer)"]
         Node["Node 22.13.0"]
         NVM["nvm (Node installer)"]
@@ -158,6 +160,7 @@ graph TD
     Knowledge -->|depends on| Venv
     Knowledge -->|depends on| Pandoc
     Knowledge -->|depends on| SQLite
+    Knowledge -->|depends on| libmagic
 
     Frontend -->|depends on| Node
 
@@ -467,7 +470,7 @@ cd knowledge-flow-backend && make run
 
 ```bash
 # agentic backend
-cd agentic_backend && make run
+cd agentic-backend && make run
 ```
 
 ```bash
