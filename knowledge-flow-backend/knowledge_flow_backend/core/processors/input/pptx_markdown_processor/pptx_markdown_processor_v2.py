@@ -85,9 +85,7 @@ def _extract_shape_lines(shape) -> list[str]:
     # bullet paragraphs. If any paragraph has level > 0, we treat the whole
     # text frame as a list so that top-level items are preserved as list items
     # instead of being flattened into plain text.
-    para_levels = [
-        int(getattr(p, "level", 0) or 0) for p in getattr(text_frame, "paragraphs", [])
-    ]
+    para_levels = [int(getattr(p, "level", 0) or 0) for p in getattr(text_frame, "paragraphs", [])]
     has_any_level_gt0 = any(lvl > 0 for lvl in para_levels)
 
     lines: list[str] = []
@@ -394,9 +392,7 @@ def _render_section_items(blocks: list[_SlideTextBlock]) -> list[str]:
         content = " ".join(normalized_lines)
         paragraph_text = "\n".join(normalized_lines)
 
-        looks_like_sentence = len(content) > 120 or any(
-            token in content for token in (". ", "? ", "! ", "; ", ": ")
-        )
+        looks_like_sentence = len(content) > 120 or any(token in content for token in (". ", "? ", "! ", "; ", ": "))
         if looks_like_sentence:
             lines.append(paragraph_text)
         else:
