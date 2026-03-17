@@ -38,6 +38,7 @@ from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
@@ -185,6 +186,10 @@ def create_app() -> FastAPI:
         openapi_url=f"{configuration.app.base_url}/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
+
+    # Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) so that
+    # request.base_url uses https:// when behind a TLS-terminating ingress.
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")  # type: ignore[arg-type]
 
     if configuration.app.metrics_enabled:
         Instrumentator().instrument(app)
