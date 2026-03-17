@@ -18,8 +18,8 @@
 
 - **Improvements**
 
-  - New pptx fast processor (#1332)
-  - update langgraph to 1.0.10rc1 to and dompurify to 3.3.3 (#1332)
+  - New PPTX fast processor (#1332)
+  - Update LangGraph to 1.1.2 and DOMPurify to 3.3.3 (#1332)
   - Move default v2 agent prompts to packaged Markdown resources
   - Move ReAct profile selection to agent creation so admins choose a starting profile or custom class up front
   - Replace the experimental graph endpoint with a dedicated v2 inspection endpoint and model
@@ -29,7 +29,7 @@
   - Document Helm wiring for optional catalog mounts and env overrides
   - Remove A2A proxy registration/card flow from backend and UI to simplify the runtime surface
   - Remove FastAPI /docs /redoc /openapi.json from production images (#1242)
-  - improve opensearchops mcp endpoints for cluster debugging new routes better route description (#1239)
+  - Improve OpenSearchOps MCP endpoints for cluster debugging with new routes and better route descriptions (#1239)
   - Added configurable start-to-close timeout for Temporal ingestion activities (#1303)
 
 - **Bug Fixes**
