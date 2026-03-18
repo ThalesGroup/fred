@@ -1,126 +1,116 @@
-import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
-import Switch from "@shared/atoms/Switch/Switch.tsx";
+import styles from "./TeamSettingsParameters.module.scss";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
-import Button from "@shared/atoms/Button/Button.tsx";
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Switch from "@shared/atoms/Switch/Switch.tsx";
+import React, { useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
 import {
   TeamWithPermissions,
   useUpdateTeamMutation,
   useUploadTeamBannerMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApi.ts";
-import styles from "./TeamSettingsParameters.module.scss";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
 }
 
+interface TeamSettingsParametersForm {
+  description: string;
+  isPrivate: boolean;
+}
+
+const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_BANNER_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
   const { t } = useTranslation();
-  const [updateTeam, { isLoading, isSuccess, isError }] = useUpdateTeamMutation();
-  const [uploadTeamBanner, { isLoading: isUploadingBanner }] = useUploadTeamBannerMutation();
-  const [description, setDescription] = useState(team.description || "");
-  const [isPrivate, setIsPrivate] = useState(team.is_private || false);
-  const [bannerUploadError, setBannerUploadError] = useState<string | null>(null);
-  const [bannerUploadSuccess, setBannerUploadSuccess] = useState(false);
+  const [updateTeam] = useUpdateTeamMutation();
+  const [uploadBanner] = useUploadTeamBannerMutation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { register, getValues, watch, reset } = useForm<TeamSettingsParametersForm>({
+    defaultValues: {
+      description: team.description || "",
+      isPrivate: team.is_private || false,
+    },
+  });
 
   useEffect(() => {
-    setDescription(team.description || "");
-    setIsPrivate(team.is_private || false);
-  }, [team.id, team.description, team.is_private]);
+    reset({
+      description: team.description || "",
+      isPrivate: team.is_private || false,
+    });
+  }, [team.description, reset]);
 
-  const canUpdateInfo = team.permissions?.includes("can_update_info");
+  const handleSaveDescription = () => {
+    const newDescription = getValues().description;
+    if (newDescription === team.description) {
+      return;
+    }
+    updateTeam({
+      teamId: team.id,
+      updateTeamRequest: { description: newDescription },
+    });
+  };
+  const descriptionValue = watch("description");
 
-  const hasChanges = useMemo(() => {
-    return description !== (team.description || "") || isPrivate !== (team.is_private || false);
-  }, [description, isPrivate, team.description, team.is_private]);
-
-  const handleDescriptionChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setDescription(event.target.value);
+  const handleSaveIsPrivate = () => {
+    const newPrivate = getValues().isPrivate;
+    if (newPrivate === team.is_private) {
+      return;
+    }
+    updateTeam({
+      teamId: team.id,
+      updateTeamRequest: {
+        is_private: newPrivate,
+      },
+    });
   };
 
-  const handleBannerFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+    if (!file || !team?.id) return;
 
-    setBannerUploadError(null);
-    setBannerUploadSuccess(false);
-
+    // Client-side validation
     if (!ALLOWED_TYPES.includes(file.type)) {
-      setBannerUploadError(t("teamSettingsPage.teamBanner.invalidType"));
+      console.error("Invalid file type:", file.type);
       return;
     }
 
-    if (file.size > MAX_BANNER_FILE_SIZE_BYTES) {
-      setBannerUploadError(t("teamSettingsPage.teamBanner.tooLarge"));
+    if (file.size > MAX_BANNER_SIZE) {
+      console.error("File size exceeds limit:", file.size);
       return;
     }
 
     try {
-      await uploadTeamBanner({
+      await uploadBanner({
         teamId: team.id,
         file,
       }).unwrap();
-      setBannerUploadSuccess(true);
-    } catch (error) {
-      const detail =
-        typeof error === "object" &&
-        error !== null &&
-        "data" in error &&
-        typeof (error as { data?: { detail?: unknown } }).data?.detail === "string"
-          ? (error as { data?: { detail?: string } }).data?.detail
-          : null;
-      setBannerUploadError(
-        detail || t("teamSettingsPage.teamBanner.uploadError"),
-      );
-    }
-  };
 
-  const handleSave = async () => {
-    if (!hasChanges || isLoading) return;
-    try {
-      await updateTeam({
-        teamId: team.id,
-        updateTeamRequest: {
-          description,
-          is_private: isPrivate,
-        },
-      }).unwrap();
-    } catch {
-      // Error state is exposed via `isError`.
+      console.log("Banner uploaded successfully");
+      // RTK Query will automatically invalidate and refetch team data
+    } catch (error) {
+      console.error("Banner upload error:", error);
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   return (
     <div className={styles["team-settings-parameters-container"]}>
-      <div className={styles["form-section"]}>
-        {isError && (
-          <span className={styles["status-error"]}>
-            {t("teamSettingsPage.saveError", { defaultValue: "Failed to save team settings." })}
-          </span>
-        )}
-        {isSuccess && !isError && (
-          <span className={styles["status-success"]}>{t("teamSettingsPage.saveSuccess", { defaultValue: "Team settings saved." })}</span>
-        )}
-      </div>
       <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
         <div className={styles["team-banner"]}>
           <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
-          {bannerUploadError && <span className={styles["status-error"]}>{bannerUploadError}</span>}
-          {bannerUploadSuccess && !bannerUploadError && (
-            <span className={styles["status-success"]}>{t("teamSettingsPage.teamBanner.uploadSuccess")}</span>
-          )}
           <ImageFileInput
+            ref={fileInputRef}
             imageUrl={team.banner_image_url ? team.banner_image_url : "/images/default-team-banner.png"}
-            alt={t("teamSettingsPage.teamBanner.alt")}
+            alt={""}
             height={"80px"}
             accept={ALLOWED_TYPES.join(",")}
-            disabled={!canUpdateInfo || isUploadingBanner}
-            onChange={handleBannerFileChange}
+            onChange={handleBannerUpload}
           />
         </div>
       </div>
@@ -129,13 +119,13 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           label={t("rework.teamSettings.parameters.description.label")}
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}
           maxLength={180}
-          value={description}
-          onChange={handleDescriptionChange}
+          value={descriptionValue}
+          {...register("description", { onBlur: handleSaveDescription })}
         />
       </div>
       <div className={`${styles["form-section"]} ${styles["private-state"]}`}>
         {t("rework.teamSettings.parameters.privateTeam")}
-        <Switch checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} />
+        <Switch {...register("isPrivate", { onChange: handleSaveIsPrivate })} />
       </div>
       <div className={styles["form-section"]}>
         <TextArea
@@ -144,11 +134,6 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           placeholder={t("rework.teamSettings.parameters.teamPrompt.placeholder")}
           disabled={true}
         />
-      </div>
-      <div className={`${styles["form-section"]} ${styles["actions"]}`}>
-        <Button color="primary" variant="filled" size="medium" onClick={handleSave} disabled={!hasChanges || isLoading}>
-          {isLoading ? t("teamSettingsPage.saving", { defaultValue: "Saving..." }) : t("teamSettingsPage.save", { defaultValue: "Save" })}
-        </Button>
       </div>
     </div>
   );

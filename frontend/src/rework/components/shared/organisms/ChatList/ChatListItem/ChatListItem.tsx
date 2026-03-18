@@ -8,6 +8,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "../../../../../../components/ToastProvider.tsx";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import React from "react";
 
 interface ChatListItemProps {
   chat: SessionWithFiles;
@@ -43,7 +44,7 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
 
   return (
     <Link to={`/chat/${chat.id}`}>
-      <div className={styles["chat-item-container"]}>
+      <div className={styles["chat-item-container"]} title={chat.title}>
         <div className={styles["chat-description"]}>
           <div className={styles["title"]}>{chat.title}</div>
           <div className={styles["metadata"]}>

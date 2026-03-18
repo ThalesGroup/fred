@@ -252,6 +252,36 @@
         }
       }
     },
+    "/control-plane/v1/user": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Temporary bouchon endpoint to get a user.",
+        "operationId": "get_user_details_control_plane_v1_user_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Get User Details Control Plane V1 User Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/control-plane/v1/teams": {
       "get": {
         "tags": [
@@ -786,6 +816,27 @@
         "type": "object",
         "title": "LifecycleManagerInput"
       },
+      "LifecycleManagerResult": {
+        "properties": {
+          "scanned": {
+            "type": "integer",
+            "title": "Scanned",
+            "default": 0
+          },
+          "deleted": {
+            "type": "integer",
+            "title": "Deleted",
+            "default": 0
+          },
+          "dry_run_actions": {
+            "type": "integer",
+            "title": "Dry Run Actions",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "LifecycleManagerResult"
+      },
       "LifecycleTrigger": {
         "type": "string",
         "enum": [
@@ -1021,6 +1072,15 @@
           "retention_seconds"
         ],
         "title": "RemoveTeamMemberResponse"
+      },
+      "SchedulerBackend": {
+        "type": "string",
+        "enum": [
+          "temporal",
+          "memory"
+        ],
+        "title": "SchedulerBackend",
+        "description": "Allowed scheduler backend values across Fred backends.\n\nWhy this exists:\n- Avoid raw string literals (`\"temporal\"`, `\"memory\"`) spread in business code.\n- Keep one typed source of truth used by configuration parsing and runtime checks.\n\nHow to use:\n```python\nfrom fred_core.scheduler import SchedulerBackend\n\nif backend == SchedulerBackend.MEMORY:\n    ...\n```"
       },
       "Team": {
         "properties": {
@@ -1348,23 +1408,52 @@
         "properties": {
           "status": {
             "type": "string",
-            "const": "queued",
+            "enum": [
+              "queued",
+              "completed"
+            ],
             "title": "Status",
             "default": "queued"
           },
+          "backend": {
+            "$ref": "#/components/schemas/SchedulerBackend"
+          },
           "workflow_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Workflow Id"
           },
           "run_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Run Id"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LifecycleManagerResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
-          "workflow_id",
-          "run_id"
+          "backend"
         ],
         "title": "WorkflowStartResponse"
       }

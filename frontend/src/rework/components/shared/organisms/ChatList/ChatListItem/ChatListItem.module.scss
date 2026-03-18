@@ -23,7 +23,7 @@
 }
 
 .title,
-.date {
+.agent-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -45,6 +45,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .icon {
@@ -70,8 +71,9 @@
   align-items: center;
   gap: var(--spacing-xs);
   height: 100%;
-  @include typography("body", "small", true);
   color: var(--on-surface-retreat);
+
+  @include typography("body", "small", true);
 }
 
 .date {

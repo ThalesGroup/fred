@@ -1311,6 +1311,7 @@
     "defaultConfirmButtonLabel": "Confirm"
   },
   "rework": {
+    "back": "Back",
     "teamRoles": {
       "member": "Member",
       "manager": "Manager",
@@ -1322,7 +1323,7 @@
         "avatarAlt": "Team {{teamName}}",
         "bannerAlt": "Team's banner",
         "userTeam": "Personal space",
-        "allTeams": "All teams"
+        "allTeams": "Marketplace"
       },
       "menu": {
         "agents": "Agents",

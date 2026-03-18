@@ -1,16 +1,15 @@
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSelectionItem.module.scss";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { useState } from "react";
 import { Link, To } from "react-router-dom";
-import { IconType } from "@shared/utils/Type.ts";
 
 interface TeamSelectionItemProps {
   redirection: To;
   teamName: string;
   selected: boolean;
   imgUrl?: string;
-  iconType?: IconType;
+  icon?: IconProps;
 }
 
 export default function TeamSelectionItem({
@@ -18,7 +17,7 @@ export default function TeamSelectionItem({
   teamName,
   selected,
   imgUrl,
-  iconType = "Groups",
+  icon = { category: "outlined", type: "group", filled: true },
 }: TeamSelectionItemProps) {
   const { t } = useTranslation();
   const [isLoaded, setIsLoaded] = useState(false);
@@ -29,7 +28,7 @@ export default function TeamSelectionItem({
       <Link to={redirection}>
         <div className={styles["state-layer"]}>
           <span className={styles.icon}>
-            <Icon category={"outlined"} type={iconType} filled={true} />
+            <Icon {...icon} />
           </span>
           <img
             className={styles["team-avatar"]}

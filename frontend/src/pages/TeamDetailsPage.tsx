@@ -18,7 +18,7 @@ export function TeamDetailsPage() {
   const { agentsNicknamePlural } = useFrontendProperties();
 
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId });
+    const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
   // todo: handle error (404)
 
   if (teamId === undefined) {
@@ -104,7 +104,6 @@ export function TeamDetailsPage() {
       {/* Tabs */}
       <NavigationTabs
         tabs={tabs}
-        tabsContainerSx={{ px: 2, pb: 1 }}
         contentContainerSx={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", minHeight: 0 }}
         isLoading={isLoading}
       />

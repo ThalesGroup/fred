@@ -18,8 +18,16 @@
 
     @include typography("body", "large");
 
+    &::placeholder {
+      color: var(--on-surface-retreat);
+    }
+
     &:disabled {
       background-color: var(--state-surface-main-disabled);
+
+      &::placeholder {
+        color: var(--state-on-surface-disabled);
+      }
     }
   }
 

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { createBrowserRouter, Navigate, RouteObject } from "react-router-dom";
-import { LayoutWithSidebar } from "../app/LayoutWithSidebar";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import { AgentHub } from "../pages/AgentHub";
@@ -34,8 +33,6 @@ import React, { lazy, Suspense } from "react";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 
 const basename = getConfig().frontend_basename;
-
-const RootLayout = ({ children }: React.PropsWithChildren<{}>) => <LayoutWithSidebar>{children}</LayoutWithSidebar>;
 
 // Lazy loaded monitoring pages
 const Kpis = lazy(() => import("../pages/Kpis").then((module) => ({ default: module.Kpis })));
@@ -188,6 +185,10 @@ export const routes: RouteObject[] = [
         path: "tools",
         element: <McpHub />,
       },
+      {
+        path: "*",
+        element: <PageError />,
+      },
     ].filter(Boolean),
   },
   {
@@ -197,14 +198,6 @@ export const routes: RouteObject[] = [
   {
     path: "coming-soon",
     element: <ComingSoon />,
-  },
-  {
-    path: "*",
-    element: (
-      <RootLayout>
-        <PageError />
-      </RootLayout>
-    ),
   },
 ];
 
