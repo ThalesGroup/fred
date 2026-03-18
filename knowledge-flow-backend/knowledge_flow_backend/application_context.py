@@ -1006,7 +1006,16 @@ class ApplicationContext:
         Factory method to create a text splitter instance based on configuration.
         Currently returns RecursiveSplitter.
         """
-        return SemanticSplitter()
+        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+
+        profile = get_current_processing_profile()
+        profile_cfg = self.configuration.processing.get_profile_config(profile)
+        splitter_cfg = profile_cfg.text_splitter
+        return SemanticSplitter(
+            chunk_size=splitter_cfg.chunk_size,
+            chunk_overlap=splitter_cfg.chunk_overlap,
+            preserve_tables=splitter_cfg.preserve_tables,
+        )
 
     def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
         source_config = self.configuration.document_sources.get(source_tag)
