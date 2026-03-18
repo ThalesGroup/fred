@@ -5,8 +5,7 @@ import json
 import logging
 
 from langchain.tools import ToolRuntime, tool
-from langchain_core.messages import SystemMessage, ToolMessage
-from langgraph.types import Command
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
 from agentic_backend.agents.contrib.jira.helpers import ensure_pydantic_model
@@ -123,6 +122,10 @@ class DiscoveryTools:
             query_results = await asyncio.gather(
                 *[_run_query(q) for q in DISCOVERY_QUERIES]
             )
+            logger.info(
+                "[DiscoveryTools] queries done: %s",
+                {q: len(r) for q, r in zip(DISCOVERY_QUERIES, query_results)},
+            )
 
             all_chunks: list[dict] = []
             seen = set()
@@ -151,16 +154,34 @@ class DiscoveryTools:
                 formatted_chunks.append(f"### Extrait {i} (source: {title})\n{content}")
             chunks_text = "\n\n".join(formatted_chunks)
 
+            logger.info(
+                "[DiscoveryTools] chunks_text length=%d, num_chunks=%d",
+                len(chunks_text),
+                len(top_chunks),
+            )
+
             # Call LLM to produce structured summary
             model = get_default_chat_model().with_structured_output(
                 ProjectDiscovery, method="json_schema"
             )
-            result = ensure_pydantic_model(
-                await model.ainvoke(
-                    [SystemMessage(content=DISCOVERY_PROMPT.format(chunks=chunks_text))]
-                ),
-                ProjectDiscovery,
+            prompt_content = DISCOVERY_PROMPT.format(chunks=chunks_text)
+            logger.info(
+                "[DiscoveryTools] prompt length=%d chars, calling LLM...",
+                len(prompt_content),
             )
+            try:
+                raw_result = await model.ainvoke(
+                    [SystemMessage(content=prompt_content)]
+                )
+                logger.info(
+                    "[DiscoveryTools] LLM returned type=%s value=%s",
+                    type(raw_result).__name__,
+                    str(raw_result)[:500],
+                )
+            except Exception:
+                logger.exception("[DiscoveryTools] LLM call failed")
+                raise
+            result = ensure_pydantic_model(raw_result, ProjectDiscovery)
 
             # Format readable report
             report_lines = [
@@ -184,15 +205,6 @@ class DiscoveryTools:
             ]
             report = "\n".join(report_lines)
 
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            report,
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
-            )
+            return report
 
         return discover_project

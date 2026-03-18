@@ -4,8 +4,7 @@ import json
 from typing import Literal
 
 from langchain.tools import ToolRuntime, tool
-from langchain_core.messages import SystemMessage, ToolMessage
-from langgraph.types import Command
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
 from agentic_backend.agents.contrib.jira.helpers import ensure_pydantic_model
@@ -260,16 +259,7 @@ class QualityTools:
                 recommendations=result.recommendations,
             )
 
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            report,
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
-            )
+            return report
 
         return assess_user_story
 
@@ -354,15 +344,6 @@ class QualityTools:
                 recommendations=result.recommendations,
             )
 
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            report,
-                            tool_call_id=runtime.tool_call_id,
-                        )
-                    ]
-                }
-            )
+            return report
 
         return assess_test
