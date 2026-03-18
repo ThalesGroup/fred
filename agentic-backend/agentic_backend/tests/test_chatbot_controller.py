@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from fred_core import KeycloakUser, get_current_user
 
 from agentic_backend.common.structures import Agent
+from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec
 
 
 class TestChatbotController:
@@ -50,6 +51,19 @@ class TestChatbotController:
             name="Basic ReAct V2 Inspect",
             class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
             enabled=True,
+            tuning=AgentTuning(
+                role="assistant",
+                description="A basic ReAct agent for testing",
+                # BasicReActDefinition has no default prompt, so we have to define one
+                fields=[
+                    FieldSpec(
+                        key="prompts.system",
+                        type="prompt",
+                        title="System Prompt",
+                        default="You are a helpful assistant.",
+                    )
+                ],
+            ),
         )
         app_context.configuration.ai.agents.append(v2_agent)
         try:

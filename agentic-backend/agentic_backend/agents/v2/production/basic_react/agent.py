@@ -26,18 +26,6 @@ from agentic_backend.core.agents.v2.prompt_resources import (
 
 from .profile_registry import list_react_profiles, profile_options_summary
 
-DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
-    package="agentic_backend",
-    path_parts=(
-        "agents",
-        "v2",
-        "production",
-        "basic_react",
-        "prompts",
-        "basic_react_system_prompt.md",
-    ),
-)
-
 
 def _default_react_profile_id() -> str:
     profiles = list_react_profiles()
@@ -163,8 +151,8 @@ class BasicReActDefinition(ReActAgentDefinition):
     # Main business instruction for the agent.
     # A developer edits this when they want to change the answer style or core
     # user-facing behavior.
-    system_prompt_template: str = Field(
-        default=DEFAULT_SYSTEM_PROMPT,
+    system_prompt_template: str | None = Field(
+        None,
         min_length=1,
     )
     # Author-owned: optional human approval for sensitive tool calls.
