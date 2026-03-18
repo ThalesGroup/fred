@@ -68,7 +68,7 @@ export default function TeamContentNavbar() {
     navigate(`/new-chat`);
   };
 
-  const isUserSpace = !pathname.startsWith(`/team`);
+  const isUserSpace = pathname.startsWith(`/team/user`);
 
   const bannerStyle = {
     "--banner-img": selectedTeam?.banner_image_url
