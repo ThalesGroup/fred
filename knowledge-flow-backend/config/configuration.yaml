@@ -197,13 +197,15 @@ document_sources:
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
 embedding_model:
-  provider: openai
-  name: text-embedding-3-large
+  provider: ollama
+  name: nomic-embed-text
   settings:
+    base_url: "http://localhost:11434"
+    temperature: 0
     max_retries: 0
     timeout:
       connect: 10.0
-      read: 120.0
+      read: 30.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
@@ -212,24 +214,27 @@ embedding_model:
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 chat_model:
-  provider: openai # openai | azure | azure-apim | ollama | vertex-ai | vertex-ai-model-garden
-  name: "gpt-4o-mini"
+  provider: ollama
+  name: "gpt-oss:120b-cloud"
   settings:
+    base_url: "http://localhost:11434"
     temperature: 0
-    max_retries: 0
+    max_retries: 2
     timeout:
       connect: 10.0
-      read: 120.0
+      read: 60.0
     http_client_limits:
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
 vision_model:
-  provider: openai
-  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  provider: ollama
+  name: "gemma3:27b-cloud"
   settings:
-    max_retries: 0
+    base_url: "http://localhost:11434"
+    temperature: 0
+    max_retries: 2
     timeout:
       connect: 10.0
       read: 120.0
@@ -237,7 +242,6 @@ vision_model:
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
-    temperature: 0 # optional
 
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
