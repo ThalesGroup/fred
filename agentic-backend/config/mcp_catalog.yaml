@@ -125,3 +125,12 @@ servers:
     url: "http://localhost:9797/mcp"
     sse_read_timeout: 2000
     auth_mode: "no_token"
+
+  - id: "mcp-knowledge-flow-prometheus-ops"
+    name: "mcp.servers.prometheus.name"
+    description: "mcp.servers.prometheus.description"
+    transport: "streamable_http"
+    url: "http://localhost:8111/knowledge-flow/v1/mcp-prometheus-ops"
+    sse_read_timeout: 2000
+    enabled: true
+    auth_mode: "user_token"
