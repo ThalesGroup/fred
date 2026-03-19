@@ -211,17 +211,25 @@ def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideCo
                 continue
 
             for line in lines:
-                stripped = line.strip()
-                if not stripped:
+                # Preserve leading indentation from _text_frame_lines() while
+                # using a stripped version only for classification.
+                content = line.strip()
+                if not content:
                     continue
 
-                if _is_visual_list_item(stripped, result.title, result.subtitle):
-                    if stripped.startswith("- "):
-                        result.bullets.append(stripped)
+                indent_len = len(line) - len(line.lstrip(" "))
+                indent = line[:indent_len]
+
+                if _is_visual_list_item(content, result.title, result.subtitle):
+                    if content.startswith("- "):
+                        # Keep any existing bullet marker but preserve indentation.
+                        result.bullets.append(f"{indent}{content}")
                     else:
-                        result.bullets.append(f"- {stripped}")
+                        # Add a bullet marker while preserving indentation.
+                        result.bullets.append(f"{indent}- {content}")
                 else:
-                    result.raw_text_blocks.append(stripped)
+                    # Preserve indentation for non-list text; only trim trailing whitespace.
+                    result.raw_text_blocks.append(line.rstrip())
             continue
 
         text_value = _clean_text(getattr(shape, "text", "") or "")
