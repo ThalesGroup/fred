@@ -18,6 +18,7 @@ RUN apt-get update && \
     jq \
     less \
     libffi-dev \
+    libmagic-dev \
     libpq-dev \
     libsqlite3-dev \
     libssl-dev \
