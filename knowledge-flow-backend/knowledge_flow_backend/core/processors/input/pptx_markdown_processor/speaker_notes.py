@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def extract_speaker_notes(slide) -> Optional[str]:
@@ -31,5 +34,9 @@ def extract_speaker_notes(slide) -> Optional[str]:
 
         content = "\n\n".join(texts).strip()
         return content or None
+    except (AttributeError, TypeError) as exc:
+        logger.debug("Failed to extract speaker notes due to expected error: %s", exc)
+        return None
     except Exception:
+        logger.debug("Unexpected error while extracting speaker notes", exc_info=True)
         return None
