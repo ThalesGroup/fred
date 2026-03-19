@@ -81,6 +81,7 @@ def _table_to_markdown(table: Any) -> str:
 
     return "\n".join(lines).strip()
 
+
 def _extract_shape_text_lines(shape: Any) -> List[str]:
     has_text_frame = bool(getattr(shape, "has_text_frame", False))
     text_frame = getattr(shape, "text_frame", None)
@@ -89,6 +90,7 @@ def _extract_shape_text_lines(shape: Any) -> List[str]:
 
     text_value = _clean_text(getattr(shape, "text", "") or "")
     return [text_value] if text_value else []
+
 
 def _is_title_candidate(lines: List[str]) -> bool:
     if len(lines) != 1:
@@ -108,6 +110,7 @@ def _is_title_candidate(lines: List[str]) -> bool:
         return False
 
     return True
+
 
 def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str]) -> bool:
     text = line.strip()
@@ -140,13 +143,13 @@ def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str
     return False
 
 
-
 def _find_fallback_title(slide: Any) -> Optional[str]:
     for shape in sort_shapes_reading_order(getattr(slide, "shapes", [])):
         lines = _extract_shape_text_lines(shape)
         if _is_title_candidate(lines):
             return lines[0].strip()
     return None
+
 
 def _is_subtitle_candidate(lines: List[str], title: Optional[str], subtitle: Optional[str]) -> bool:
     if title is None or subtitle is not None:
@@ -182,7 +185,6 @@ def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideCo
 
     if not result.title:
         result.title = _find_fallback_title(slide)
-
 
     for shape in sort_shapes_reading_order(getattr(slide, "shapes", [])):
         if title_shape is not None and shape is title_shape:
@@ -240,6 +242,5 @@ def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideCo
                 result.bullets.append(f"- {text_value}")
             else:
                 result.raw_text_blocks.append(text_value)
-
 
     return result

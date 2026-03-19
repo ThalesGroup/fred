@@ -26,7 +26,6 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.slide_
     format_slide_markdown,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
