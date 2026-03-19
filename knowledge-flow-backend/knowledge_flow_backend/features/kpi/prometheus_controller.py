@@ -44,6 +44,69 @@ class PrometheusOpsController:
         self.service = PrometheusOpsService(config)
         self._register_routes(router)
 
+    def _truncate(self, value: Any, limit: int = 240) -> str:
+        text = str(value)
+        if len(text) <= limit:
+            return text
+        return text[: limit - 3] + "..."
+
+    def _user_ref(self, user: KeycloakUser) -> str:
+        return str(
+            getattr(user, "preferred_username", None)
+            or getattr(user, "email", None)
+            or getattr(user, "sub", None)
+            or "unknown"
+        )
+
+    def _summarize_response(self, payload: dict[str, Any]) -> str:
+        status = payload.get("status", "unknown")
+        data = payload.get("data")
+        parts = [f"status={status}"]
+        if isinstance(data, list):
+            parts.append(f"data_count={len(data)}")
+        elif isinstance(data, dict):
+            result_type = data.get("resultType")
+            if isinstance(result_type, str):
+                parts.append(f"result_type={result_type}")
+            result = data.get("result")
+            if isinstance(result, list):
+                parts.append(f"result_count={len(result)}")
+            active_targets = data.get("activeTargets")
+            if isinstance(active_targets, list):
+                parts.append(f"active_targets={len(active_targets)}")
+        warnings = payload.get("warnings")
+        if isinstance(warnings, list) and warnings:
+            parts.append(f"warnings={len(warnings)}")
+        return " ".join(parts)
+
+    def _log_request(
+        self,
+        endpoint: str,
+        user: KeycloakUser,
+        **details: Any,
+    ) -> None:
+        rendered = ", ".join(
+            f"{key}={self._truncate(value, 120)}"
+            for key, value in details.items()
+        ) or "no_args"
+        logger.info(
+            "[PROM-CTRL] request endpoint=%s user=%s %s",
+            endpoint,
+            self._user_ref(user),
+            rendered,
+        )
+
+    def _log_success(
+        self,
+        endpoint: str,
+        payload: dict[str, Any],
+    ) -> None:
+        logger.info(
+            "[PROM-CTRL] success endpoint=%s %s",
+            endpoint,
+            self._summarize_response(payload),
+        )
+
     def _register_routes(self, router: APIRouter) -> None:
         @router.post(
             "/prometheus/query",
@@ -58,7 +121,16 @@ class PrometheusOpsController:
         ):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.instant_query(body)
+                self._log_request(
+                    "prometheus_query",
+                    user,
+                    query=body.query,
+                    time=body.time,
+                    timeout=body.timeout,
+                )
+                payload = await self.service.instant_query(body)
+                self._log_success("prometheus_query", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 
@@ -75,7 +147,18 @@ class PrometheusOpsController:
         ):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.range_query(body)
+                self._log_request(
+                    "prometheus_query_range",
+                    user,
+                    query=body.query,
+                    start=body.start,
+                    end=body.end,
+                    step=body.step,
+                    timeout=body.timeout,
+                )
+                payload = await self.service.range_query(body)
+                self._log_success("prometheus_query_range", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 
@@ -92,7 +175,84 @@ class PrometheusOpsController:
         ):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.series(body)
+                self._log_request(
+                    "prometheus_series",
+                    user,
+                    matchers=body.matchers,
+                    start=body.start,
+                    end=body.end,
+                )
+                payload = await self.service.series(body)
+                self._log_success("prometheus_series", payload)
+                return payload
+            except Exception as exc:
+                raise self._handle_error(exc)
+
+        @router.get(
+            "/prometheus/metrics",
+            tags=["Prometheus"],
+            response_model=dict[str, Any],
+            operation_id="prometheus_metrics",
+            summary="List available Prometheus metric names",
+        )
+        async def metrics(
+            limit: int = Query(
+                500,
+                ge=1,
+                le=5000,
+                description="Maximum number of metric names to return.",
+            ),
+            search: str | None = Query(
+                None,
+                description="Optional case-insensitive substring filter applied to metric names.",
+            ),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.READ, Resource.METRICS)
+            try:
+                self._log_request(
+                    "prometheus_metrics",
+                    user,
+                    limit=limit,
+                    search=search,
+                )
+                payload = await self.service.metrics(limit=limit, search=search)
+                self._log_success("prometheus_metrics", payload)
+                return payload
+            except Exception as exc:
+                raise self._handle_error(exc)
+
+        @router.get(
+            "/prometheus/metrics_catalog",
+            tags=["Prometheus"],
+            response_model=dict[str, Any],
+            operation_id="prometheus_metrics_catalog",
+            summary="List metric names with compact metadata",
+        )
+        async def metrics_catalog(
+            limit: int = Query(
+                50,
+                ge=1,
+                le=200,
+                description="Maximum number of catalog entries to return.",
+            ),
+            search: str | None = Query(
+                None,
+                description="Optional case-insensitive substring filter applied to metric names.",
+            ),
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.READ, Resource.METRICS)
+            try:
+                self._log_request(
+                    "prometheus_metrics_catalog",
+                    user,
+                    limit=limit,
+                    search=search,
+                )
+                payload = await self.service.metrics_catalog(limit=limit, search=search)
+                self._log_success("prometheus_metrics_catalog", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 
@@ -118,7 +278,15 @@ class PrometheusOpsController:
         ):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.metadata(metric=metric, limit=limit)
+                self._log_request(
+                    "prometheus_metadata",
+                    user,
+                    metric=metric,
+                    limit=limit,
+                )
+                payload = await self.service.metadata(metric=metric, limit=limit)
+                self._log_success("prometheus_metadata", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 
@@ -132,7 +300,10 @@ class PrometheusOpsController:
         async def labels(user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.labels()
+                self._log_request("prometheus_labels", user)
+                payload = await self.service.labels()
+                self._log_success("prometheus_labels", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 
@@ -162,12 +333,22 @@ class PrometheusOpsController:
         ):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.label_values(
+                self._log_request(
+                    "prometheus_label_values",
+                    user,
+                    label_name=label_name,
+                    start=start,
+                    end=end,
+                    matchers=matchers,
+                )
+                payload = await self.service.label_values(
                     label_name,
                     start=start,
                     end=end,
                     matchers=matchers,
                 )
+                self._log_success("prometheus_label_values", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 
@@ -181,7 +362,10 @@ class PrometheusOpsController:
         async def targets(user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.READ, Resource.METRICS)
             try:
-                return await self.service.targets()
+                self._log_request("prometheus_targets", user)
+                payload = await self.service.targets()
+                self._log_success("prometheus_targets", payload)
+                return payload
             except Exception as exc:
                 raise self._handle_error(exc)
 

@@ -114,6 +114,79 @@ def test_prometheus_label_values_forwards_matchers(
     }
 
 
+def test_prometheus_metrics_forwards_limit_and_search(
+    app_context: ApplicationContext,
+    monkeypatch,
+) -> None:
+    app_context.configuration.prometheus = PrometheusConfig(
+        base_url="http://prometheus:9090",
+        verify_ssl=False,
+        timeout_seconds=10.0,
+    )
+    observed: dict[str, object] = {}
+
+    async def fake_metrics(self, *, limit, search):
+        observed["limit"] = limit
+        observed["search"] = search
+        return {"status": "success", "data": ["process_start_time_seconds"]}
+
+    monkeypatch.setattr(
+        prom_controller_module.PrometheusOpsService,
+        "metrics",
+        fake_metrics,
+    )
+
+    with _build_prometheus_app() as client:
+        response = client.get(
+            "/prometheus/metrics",
+            params={"limit": 25, "search": "time"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == ["process_start_time_seconds"]
+    assert observed == {"limit": 25, "search": "time"}
+
+
+def test_prometheus_metrics_catalog_forwards_limit_and_search(
+    app_context: ApplicationContext,
+    monkeypatch,
+) -> None:
+    app_context.configuration.prometheus = PrometheusConfig(
+        base_url="http://prometheus:9090",
+        verify_ssl=False,
+        timeout_seconds=10.0,
+    )
+    observed: dict[str, object] = {}
+
+    async def fake_metrics_catalog(self, *, limit, search):
+        observed["limit"] = limit
+        observed["search"] = search
+        return {
+            "status": "success",
+            "data": [
+                {"name": "process_start_time_seconds", "type": "gauge"},
+            ],
+        }
+
+    monkeypatch.setattr(
+        prom_controller_module.PrometheusOpsService,
+        "metrics_catalog",
+        fake_metrics_catalog,
+    )
+
+    with _build_prometheus_app() as client:
+        response = client.get(
+            "/prometheus/metrics_catalog",
+            params={"limit": 10, "search": "time"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == [
+        {"name": "process_start_time_seconds", "type": "gauge"},
+    ]
+    assert observed == {"limit": 10, "search": "time"}
+
+
 def test_create_app_mounts_prometheus_mcp_when_enabled(
     app_context: ApplicationContext,
     monkeypatch,
@@ -127,6 +200,7 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
     config.mcp = config.mcp.model_copy(update={"prometheus_ops_enabled": True})
 
     monkeypatch.setattr("knowledge_flow_backend.main.load_configuration", lambda: config)
+    monkeypatch.setattr(main_module, "start_http_server", lambda *args, **kwargs: None)
     for attr_name in [
         "MonitoringController",
         "MetadataController",

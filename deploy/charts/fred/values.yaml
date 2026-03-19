@@ -902,6 +902,7 @@ applications:
       #   base_url: http://prometheus:9090
       #   verify_ssl: false
       #   timeout_seconds: 15.0
+      #   username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
       mcp:
         reports_enabled: true
         kpi_enabled: true
@@ -928,6 +929,7 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
@@ -1317,6 +1319,7 @@ applications:
         base_url: http://prometheus:9090
         verify_ssl: false
         timeout_seconds: 15.0
+        # username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
       mcp:
         reports_enabled: true
         kpi_enabled: true
@@ -1342,6 +1345,7 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""

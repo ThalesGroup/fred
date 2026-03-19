@@ -831,6 +831,7 @@ applications:
         base_url: http://prometheus:9090
         verify_ssl: false
         timeout_seconds: 15.0
+        # username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
 
       mcp:
         reports_enabled: true
@@ -860,6 +861,7 @@ applications:
       MINIO_SECRET_KEY: "Azerty123_"
       OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
       OPENSEARCH_PASSWORD: "FredDemo_2026!"
+      PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: "Azerty123_"
       FRED_POSTGRES_PASSWORD: "Azerty123_"

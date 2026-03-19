@@ -496,11 +496,20 @@ class PrometheusConfig(BaseModel):
         default=None,
         description="Optional bearer token loaded from PROMETHEUS_BEARER_TOKEN.",
     )
+    username: Optional[str] = Field(
+        default="admin",
+        description="Basic-auth username configured directly in prometheus.username. Defaults to 'admin'.",
+    )
+    password: Optional[str] = Field(
+        default=None,
+        description="Optional basic-auth password loaded from PROMETHEUS_PASSWORD.",
+    )
 
     @model_validator(mode="before")
     @classmethod
-    def load_env_token(cls, values: dict) -> dict:
+    def load_env_credentials(cls, values: dict) -> dict:
         values.setdefault("bearer_token", os.getenv("PROMETHEUS_BEARER_TOKEN"))
+        values.setdefault("password", os.getenv("PROMETHEUS_PASSWORD"))
         return values
 
     @field_validator("base_url", mode="after")
@@ -510,6 +519,14 @@ class PrometheusConfig(BaseModel):
         if not normalized:
             raise ValueError("prometheus.base_url must not be empty")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_basic_auth_pair(self) -> "PrometheusConfig":
+        if self.password and not self.username:
+            raise ValueError(
+                "prometheus.username must not be empty when prometheus.password is set",
+            )
+        return self
 
 
 class PullProvider(str, Enum):
