@@ -17,24 +17,6 @@
   color: var(--on-surface-retreat);
 }
 
-.chat-list-header-counter {
-  @include typography("label", "medium");
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  color: var(--on-surface-muted);
-
-  &.overflow {
-    color: var(--warning);
-  }
-}
-
-.overflow-icon {
-  display: flex;
-  align-items: center;
-  font-size: 1rem;
-}
-
 .chat-list-items {
   display: flex;
   flex-direction: column;

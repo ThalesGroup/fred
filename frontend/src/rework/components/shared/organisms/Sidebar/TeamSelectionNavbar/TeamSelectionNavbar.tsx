@@ -4,9 +4,11 @@ import styles from "./TeamSelectionNavbar.module.scss";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 export default function TeamSelectionNavbar() {
   const { data: teams } = useListTeamsQuery();
+  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const { pathname } = useLocation();
   const { t } = useTranslation();
 
@@ -15,16 +17,16 @@ export default function TeamSelectionNavbar() {
       <div>
         <span className={styles.title}>{t("rework.sidebar.title")}</span>
         <TeamSelectionItem
-          redirection={"agents"}
+          redirection={"/team/" + userDetails?.personalTeamId}
           teamName={t("rework.sidebar.team.userTeam")}
-          selected={pathname.startsWith(`/agents`) || pathname.startsWith(`/knowledge`)}
-          iconType={"Person"}
+          selected={pathname.startsWith(`/team/user`)}
+          icon={{ category: "outlined", type: "Person", filled: true }}
         />
         <TeamSelectionItem
           redirection={"/teams"}
           teamName={t("rework.sidebar.team.allTeams")}
           selected={pathname.startsWith(`/teams`)}
-          iconType={"Groups"}
+          icon={{ category: "outlined", type: "storefront", filled: false }}
         />
       </div>
       <Separator margin={"var(--spacing-xs)"} />

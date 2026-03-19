@@ -25,7 +25,8 @@ export type MaterialIconType =
   | "desktop_windows"
   | "search"
   | "more_vert"
-  | "more_horiz";
+  | "more_horiz"
+  | "storefront";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

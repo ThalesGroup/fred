@@ -14,10 +14,14 @@ export default function Sidebar() {
       <div className={styles["team-selection-container"]}>
         <TeamSelectionNavbar />
       </div>
-      {!smallNavbar && <TeamContentNavbar />}
-      <div className={styles["user-profile-container"]}>
-        <UserProfile />
-      </div>
+      {!smallNavbar && (
+        <>
+          <TeamContentNavbar />
+          <div className={styles["user-profile-container"]}>
+            <UserProfile />
+          </div>
+        </>
+      )}
     </div>
   );
 }

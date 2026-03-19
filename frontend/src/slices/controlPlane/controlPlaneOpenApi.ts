@@ -56,6 +56,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}`, method: "DELETE" }),
     }),
+    getUserDetailsControlPlaneV1UserGet: build.query<
+      GetUserDetailsControlPlaneV1UserGetApiResponse,
+      GetUserDetailsControlPlaneV1UserGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/user` }),
+    }),
     listTeamsControlPlaneV1TeamsGet: build.query<
       ListTeamsControlPlaneV1TeamsGetApiResponse,
       ListTeamsControlPlaneV1TeamsGetApiArg
@@ -154,6 +160,10 @@ export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
 };
+export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ {
+  [key: string]: string;
+};
+export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
@@ -236,10 +246,18 @@ export type PolicyResolutionRequest = {
   team_id?: string | null;
   trigger?: LifecycleTrigger;
 };
+export type SchedulerBackend = "temporal" | "memory";
+export type LifecycleManagerResult = {
+  scanned?: number;
+  deleted?: number;
+  dry_run_actions?: number;
+};
 export type WorkflowStartResponse = {
-  status?: "queued";
-  workflow_id: string;
-  run_id: string;
+  status?: "queued" | "completed";
+  backend: SchedulerBackend;
+  workflow_id?: string | null;
+  run_id?: string | null;
+  result?: LifecycleManagerResult | null;
 };
 export type LifecycleManagerInput = {
   dry_run?: boolean;
@@ -334,6 +352,8 @@ export const {
   useLazyListUsersControlPlaneV1UsersGetQuery,
   useCreateUserControlPlaneV1UsersPostMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
+  useGetUserDetailsControlPlaneV1UserGetQuery,
+  useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useListTeamsControlPlaneV1TeamsGetQuery,
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,

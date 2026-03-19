@@ -84,3 +84,12 @@ async def delete_user(
 ) -> None:
     """Delete a user in Keycloak for temporary bootstrap and testing flows."""
     await delete_user_from_service(user, user_id)
+
+@router.get(
+    "/user",
+    summary="Temporary bouchon endpoint to get a user.",
+)
+async def get_user_details(
+        user: KeycloakUser = Depends(get_current_user),
+) -> dict[str, str]:
+    return {"personalTeamId": "user"}

@@ -19,9 +19,9 @@ export default function TeamContentNavbar() {
   const { teamId } = useParams<{ teamId: string }>();
   const { pathname } = useLocation();
 
-  const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId });
+  const { data: team } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
   const selectedTeam = teamId ? team : undefined;
-  const canOpenTeamSettings = Boolean(selectedTeam);
+  const canOpenTeamSettings = selectedTeam?.permissions?.includes("can_administer_owners") || false;
 
   const teamsNavigationItems: NavigationMenuItemProps[] = [
     {
@@ -68,7 +68,7 @@ export default function TeamContentNavbar() {
     navigate(`/new-chat`);
   };
 
-  const isUserSpace = !pathname.startsWith(`/team`);
+  const isUserSpace = pathname.startsWith(`/team/user`);
 
   const bannerStyle = {
     "--banner-img": selectedTeam?.banner_image_url
@@ -81,7 +81,7 @@ export default function TeamContentNavbar() {
       <div className={styles["team-content-navbar-container"]}>
         <div className={styles["banner-container"]} style={bannerStyle}>
           <div className={styles["team-name-container"]}>
-            <span className={styles["team-name"]}>{isLoading ? "loading" : selectedTeam?.name}</span>
+            <span className={styles["team-name"]}>{teamId == "user" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}</span>
             {canOpenTeamSettings && (
               <span className={styles["user-settings-button-container"]}>
                 <IconButton
