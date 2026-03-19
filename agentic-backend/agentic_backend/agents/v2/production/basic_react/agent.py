@@ -149,7 +149,7 @@ class BasicReActDefinition(ReActAgentDefinition):
     # A developer edits this when they want to change the answer style or core
     # user-facing behavior.
     system_prompt_template: str | None = Field(
-        None,
+        default=None,
         min_length=1,
     )
     # Author-owned: optional human approval for sensitive tool calls.
