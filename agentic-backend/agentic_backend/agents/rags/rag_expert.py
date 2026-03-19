@@ -387,10 +387,7 @@ class Rico(AgentFlow):
         return fr if language.startswith("fr") else en
 
     async def _corpus_research_step(self, state: RicoGraphState):
-        messages = cast(Sequence[AnyMessage], state.get("messages") or [])
-        question = cast(
-            Optional[str], state.get("question")
-        ) or self._latest_user_question(messages)
+        question = self._current_question(state)
         runtime_context = self.get_runtime_context()
         if get_rag_knowledge_scope(runtime_context) == "general_only":
             return {
@@ -533,6 +530,17 @@ class Rico(AgentFlow):
             )
         return last.content
 
+    def _current_question(self, state: RicoGraphState) -> str:
+        messages = cast(Sequence[AnyMessage], state.get("messages") or [])
+        if self._last_human_index(messages) is not None:
+            return self._latest_user_question(messages)
+
+        question = cast(Optional[str], state.get("question"))
+        if isinstance(question, str) and question:
+            return question
+
+        raise TypeError("No user question found in state.")
+
     def _history_before_current_question(
         self,
         messages: Sequence[AnyMessage],
@@ -643,9 +651,7 @@ class Rico(AgentFlow):
             )
 
         state_messages = cast(Sequence[AnyMessage], state.get("messages") or [])
-        question = cast(
-            Optional[str], state.get("question")
-        ) or self._latest_user_question(state_messages)
+        question = self._current_question(state)
         runtime_context = self.get_runtime_context()
         doc_tag_ids = cast(List[str], state.get("retrieval_doc_tag_ids") or [])
         document_uids = cast(List[str], state.get("retrieval_document_uids") or [])

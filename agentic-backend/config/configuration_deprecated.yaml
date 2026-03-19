@@ -11,16 +11,20 @@
 # limitations under the License.
 
 app:
-  name: "Agentic Worker"
-  base_url: "/agentic-worker/v1"
-  address: "0.0.0.0"
-  port: 8001
+  name: "Agentic Backend"
+  base_url: "/agentic/v1"
+  address: "127.0.0.1"
+  port: 8000
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: false
+  metrics_enabled: true
   metrics_address: "0.0.0.0"
   metrics_port: 9005 # (not 9000 to avoid conflict with Minio)
+  # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
 
 scheduler:
   enabled: true
@@ -35,6 +39,7 @@ security:
     enabled: true
     client_id: "agentic"
     realm_url: "http://app-keycloak:8080/realms/app"
+    secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (env var name only)
   user:
     enabled: true
     client_id: "app"
@@ -56,18 +61,15 @@ frontend_settings:
   properties:
     logoName: "fred"
     siteDisplayName: "Fred"
+
 ai:
   # In production  activate the configuration persistence mechanism
   # that allow users to create/update agents at runtime and change
   # their configuration without redeploying the application.
   # Developers: you may prefer to set this to true to trust only your static configuration
-  use_static_config_only: true
-  # Enable catalog mode for modern deployments.
-  enable_catalog_mode: true
-
-  # Enable durable SQL checkpointer for v2 runtimes.
-  # Disabled by default.
-  enable_v2_sql_checkpointer: false
+  use_static_config_only: false
+  # Legacy mode: keep configuration YAML as single source of truth.
+  enable_catalog_mode: false
 
   # Number of past exchanges to restore when initializing an agent session
   # This setting is used to limit the amount of historical context
@@ -76,10 +78,10 @@ ai:
   restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
-  max_concurrent_agents: 128
+  max_concurrent_agents: 1024
 
   # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
-  max_concurrent_sessions_per_user: 10
+  max_concurrent_sessions_per_user: 999999
 
   # Maximum number of files a user can attach across all sessions
   max_attached_files_per_user: 20
@@ -87,20 +89,59 @@ ai:
   # Maximum size (in MB) for each attached file
   max_attached_file_size_mb: 50
 
-  # Knowledge Flow service URL. Used by agents to access tools and knowledge bases.
+  # Base URL for the Knowledge Flow service
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
-  # Timeout settings for the client
+
+  # Timeout settings for the client (used for Knowledge Flow calls, including PDF/text extraction).
   timeout:
-    connect: 5 # Time to wait for a connection in seconds
-    read: 15 # Time to wait for a response in seconds
-  # Model defaults are now loaded from config/models_catalog.yaml
-  # (or from FRED_MODELS_CATALOG_FILE / FRED_V2_MODELS_CATALOG_FILE).
+    connect: 20 # Time to wait for a connection in seconds
+    read: 60 # Time to wait for a response in seconds (longer for large document processing)
+
+  # Use mistral medium from TGS as LLM
+  default_chat_model: &tgs-mistral-medium
+    provider: "openai"
+    name: "mistral"
+    settings:
+      base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+      request_timeout: 300
+      stream_usage: false
+  default_language_model:
+    provider: "openai"
+    name: "mistral"
+    settings:
+      base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+      request_timeout: 300
+      stream_usage: false
+
   recursion:
     recursion_limit: 40 # Number or max recursion use by the agents while using the chat_model
-  # Agent declarations are loaded from config/agents_catalog.yaml
-  # (or from FRED_AGENTS_CATALOG_FILE).
+  agents:
+    - id: "Archie"
+      name: "Archie"
+      type: "agent"
+      class_path: "agentic_backend.agents.rags.archie.Archie"
+      enabled: true
+      chat_model: {}
+      chat_options:
+        search_policy_selection: true
+        libraries_selection: true
+        search_rag_scoping: true
+        attach_files: true
+
+mcp:
+  servers:
+    - id: "mcp-knowledge-flow-mcp-text"
+      name: "mcp.servers.search_documents.name"
+      description: "mcp.servers.search_documents.description"
+      transport: "streamable_http"
+      url: "http://fake:8111/knowledge-flow/v1/mcp-text"
+      sse_read_timeout: 2000
+      auth_mode: "user_token"
 
 storage:
+  sqlite:
+    path: "./fred_data.db"
+
   postgres:
     host: localhost
     port: 5432

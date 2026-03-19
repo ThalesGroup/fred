@@ -385,6 +385,12 @@ async def get_team_model_routing_config(
     await _authorize_team_model_routing_preview(user, team_id)
 
     catalog_path = resolve_models_catalog_path()
+    if not get_configuration().ai.enable_catalog_mode:
+        return TeamModelRoutingConfigDTO(
+            team_id=team_id,
+            catalog_path=str(catalog_path),
+            catalog_exists=False,
+        )
     if not catalog_path.exists():
         return TeamModelRoutingConfigDTO(
             team_id=team_id,

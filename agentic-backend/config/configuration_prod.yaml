@@ -68,6 +68,8 @@ ai:
   # their configuration without redeploying the application.
   # Developers: you may prefer to set this to true to trust only your static configuration
   use_static_config_only: false
+  # Enable catalog mode for modern deployments.
+  enable_catalog_mode: true
 
   # Enable durable SQL checkpointer for v2 runtimes.
   # Disabled by default.
@@ -77,7 +79,7 @@ ai:
   # This setting is used to limit the amount of historical context
   # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
   # or when an agent session is re-initialized for any reason.
-  agentic_restore_max_exchanges: 20
+  restore_max_exchanges: 20
 
   # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
   max_concurrent_agents: 1024

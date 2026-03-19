@@ -66,6 +66,7 @@ export const AgentPrivateResourcesManager: React.FC<AgentPrivateResourcesManager
   const { showInfo, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const theme = useTheme();
+  const displayAgentName = agentName || agentId;
 
   const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
   const [isHighlighted, setIsHighlighted] = useState(false);
