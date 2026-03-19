@@ -64,6 +64,7 @@ from agentic_backend.core.agents.v2.builtin_tools import (
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_LOGS_QUERY,
+    TOOL_REF_SESSION_PREFERENCES_UPDATE,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from agentic_backend.core.agents.v2.context import (
@@ -352,6 +353,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             TOOL_REF_LOGS_QUERY: self._invoke_logs_query,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
             TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
+            TOOL_REF_SESSION_PREFERENCES_UPDATE: self._invoke_session_preferences_update,
         }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
@@ -431,6 +433,35 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                 ),
             ),
             sources=tuple(hits),
+        )
+
+    async def _invoke_session_preferences_update(
+        self, request: ToolInvocationRequest
+    ) -> ToolInvocationResult:
+        payload = request.payload
+        session_id = payload.get("session_id") or self._binding.runtime_context.session_id
+        if not session_id:
+            raise RuntimeError("session.preferences.update requires a session_id")
+        preferences = payload.get("preferences")
+        if not isinstance(preferences, dict):
+            preferences = {}
+        session_store = get_app_context().get_session_store()
+        session = await session_store.get(str(session_id))
+        if session is None:
+            raise RuntimeError(f"Session {session_id} not found for preferences update.")
+        session.preferences = preferences
+        await session_store.save(session)
+        return ToolInvocationResult(
+            tool_ref=request.tool_ref,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.JSON,
+                    data={
+                        "session_id": session_id,
+                        "preferences": preferences,
+                    },
+                ),
+            ),
         )
 
     async def _invoke_logs_query(

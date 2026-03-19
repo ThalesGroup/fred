@@ -40,6 +40,7 @@ TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
 TOOL_REF_ARTIFACTS_PUBLISH_TEXT = "artifacts.publish_text"
 TOOL_REF_RESOURCES_FETCH_TEXT = "resources.fetch_text"
+TOOL_REF_SESSION_PREFERENCES_UPDATE = "session.preferences.update"
 
 
 class BuiltinToolBackend(str, Enum):
@@ -212,6 +213,17 @@ class ResourceFetchTextToolArgs(BaseModel):
     )
 
 
+class SessionPreferencesUpdateArgs(BaseModel):
+    preferences: dict = Field(
+        default_factory=dict,
+        description="Preferences payload to store for the current session.",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Optional session id override (defaults to current session).",
+    )
+
+
 @dataclass(frozen=True)
 class BuiltinToolSpec:
     tool_ref: str
@@ -264,6 +276,12 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         args_schema=ResourceFetchTextToolArgs,
         backend=BuiltinToolBackend.RESOURCE_READER,
         default_description="Fetch a Fred-managed text template or support resource.",
+    ),
+    TOOL_REF_SESSION_PREFERENCES_UPDATE: BuiltinToolSpec(
+        tool_ref=TOOL_REF_SESSION_PREFERENCES_UPDATE,
+        args_schema=SessionPreferencesUpdateArgs,
+        backend=BuiltinToolBackend.TOOL_INVOKER,
+        default_description="Update stored chat session preferences.",
     ),
 }
 

@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
     from .candidate.bid_mgr import Definition as BidMgrDefinition
+    from .candidate.DVARiskValidatorAssistant import (
+        DVARiskValidatorGraph,
+        DVARiskValidatorQA,
+    )
     from .demos.artifact_report import ArtifactReportDemoV2Definition
     from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.basic_react import BasicReActDefinition
@@ -20,6 +24,8 @@ __all__ = [
     "ArtifactReportDemoV2Definition",
     "BasicReActDefinition",
     "BidMgrDefinition",
+    "DVARiskValidatorGraph",
+    "DVARiskValidatorQA",
     "PostalTrackingDefinition",
     "RagExpertV2Definition",
 ]
@@ -51,6 +57,14 @@ def __getattr__(name: str) -> object:
         from .candidate.bid_mgr import Definition as BidMgrDefinition
 
         return BidMgrDefinition
+    if name == "DVARiskValidatorGraph":
+        from .candidate.DVARiskValidatorAssistant import DVARiskValidatorGraph
+
+        return DVARiskValidatorGraph
+    if name == "DVARiskValidatorQA":
+        from .candidate.DVARiskValidatorAssistant import DVARiskValidatorQA
+
+        return DVARiskValidatorQA
     if name == "PostalTrackingDefinition":
         from .demos.postal_tracking import Definition as PostalTrackingDefinition
 

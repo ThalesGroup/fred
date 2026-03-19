@@ -35,6 +35,8 @@ BID_MGR_DEFINITION_REF = "v2.proto.bid_mgr"
 PPT_FILLER_REACT_DEFINITION_REF = "v2.react.ppt_filler"
 ARTIFACT_REPORT_DEFINITION_REF = "v2.demo.artifact_report"
 AEGIS_GRAPH_SKELETON_DEFINITION_REF = "v2.graph.aegis_skeleton"
+DVA_RISK_VALIDATOR_GRAPH_DEFINITION_REF = "v2.graph.dva_risk_validator"
+DVA_RISK_VALIDATOR_QA_DEFINITION_REF = "v2.react.dva_risk_validator_qa"
 
 _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
     {
@@ -54,6 +56,12 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
         ),
         AEGIS_GRAPH_SKELETON_DEFINITION_REF: (
             "agentic_backend.agents.v2.candidate.aegis_graph_skeleton.AegisGraphV2SkeletonDefinition"
+        ),
+        DVA_RISK_VALIDATOR_GRAPH_DEFINITION_REF: (
+            "agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.graph.DVARiskValidatorGraph"
+        ),
+        DVA_RISK_VALIDATOR_QA_DEFINITION_REF: (
+            "agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.qa.DVARiskValidatorQA"
         ),
     }
 )
