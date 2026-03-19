@@ -25,7 +25,7 @@ DISCOVERY_QUERIES = [
 ]
 
 SEARCH_TOOL_NAME = "search_documents_using_vectorization"
-TOP_K_PER_QUERY = 10
+TOP_K_PER_QUERY = 5
 MAX_UNIQUE_CHUNKS = 30
 
 
