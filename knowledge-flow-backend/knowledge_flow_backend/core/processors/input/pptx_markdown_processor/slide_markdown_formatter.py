@@ -10,8 +10,10 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.native
 def format_slide_markdown(content: NativeSlideContent) -> str:
     lines: List[str] = []
 
-    title = content.title or f"Slide {content.slide_number}"
-    lines.append(f"## Slide {content.slide_number}: {title}")
+    if content.title:
+        lines.append(f"## Slide {content.slide_number}: {content.title}")
+    else:
+        lines.append(f"## Slide {content.slide_number}")
     lines.append("")
 
     if content.subtitle:
