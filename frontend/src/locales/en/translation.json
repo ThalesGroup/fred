@@ -353,7 +353,6 @@
     }
   },
   "assetManager": {
-    "title": "Manage Assets for {{agentName}}",
     "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
     "listTitle": "Current Assets",
     "noAssetsFound": "No assets found. Upload one below to get started.",
@@ -379,18 +378,40 @@
     "confirmDeleteMessage": "Delete this asset? This action cannot be undone.",
     "addMoreFiles": "Add more files"
   },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Chat options"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "System prompt",
+        "description": "Core behavior instructions for the assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Allow file attachments",
+        "description": "Show file upload/attachment controls for this agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Document libraries picker",
+        "description": "Let users select document libraries/knowledge sources for this agent."
+      }
+    }
+  },
   "agentEditDrawer": {
     "nameLabel": "Name",
-    "nameHelperText": "The display name of the agent.",
-    "roleHelperText": "The agent's mandatory role for discovery (e.g., 'Financial Analyst')",
-    "descriptionHelperText": "The agent's mandatory description.",
-    "tagsHelperText": "Tags used for categorization and filtering.",
     "noTunableFields": "This agent exposes no tunable fields.",
     "coreFields": "Core Fields",
     "tunableFields": "Tunable Fields",
     "tagsLabel": "Tags",
     "selectMcpServers": "Select MCP servers",
-    "noMcpServers": "No MCP servers are currently available."
+    "noMcpServers": "No MCP servers are currently available.",
+    "headerTitle": "{{agentsNicknameSingular}} edition",
+    "headerTitleCreate": "Create {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Failed to create agent",
+      "updateFailed": "Failed to update agent"
+    }
   },
   "agentHub": {
     "title": "Your {{agentsNicknamePlural}}",

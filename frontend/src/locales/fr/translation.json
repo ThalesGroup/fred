@@ -354,7 +354,6 @@
     }
   },
   "assetManager": {
-    "title": "Gérer les ressources pour {{agentName}}",
     "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
@@ -380,18 +379,40 @@
     "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible.",
     "addMoreFiles": "Ajouter plus de fichiers"
   },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Options de chat"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "Prompt système",
+        "description": "Instructions de comportement principal pour l'assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Autoriser les pièces jointes",
+        "description": "Afficher les contrôles de téléversement/pièces jointes pour cet agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Sélecteur de bibliothèques de documents",
+        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent."
+      }
+    }
+  },
   "agentEditDrawer": {
     "nameLabel": "Nom",
-    "nameHelperText": "Le nom d'affichage de l'agent.",
-    "roleHelperText": "Le rôle obligatoire de l'agent pour la découverte (ex. 'Analyste Financier')",
-    "descriptionHelperText": "La description obligatoire de l'agent.",
-    "tagsHelperText": "Tags utilisés pour la catégorisation et le filtrage.",
     "noTunableFields": "Cet agent n'expose aucun champ réglable.",
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
-    "noMcpServers": "Aucun serveur MCP disponible pour le moment."
+    "noMcpServers": "Aucun serveur MCP disponible pour le moment.",
+    "headerTitle": "Édition d'un {{agentsNicknameSingular}}",
+    "headerTitleCreate": "Créer un {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Échec de la création de l'agent",
+      "updateFailed": "Échec de la mise à jour de l'agent"
+    }
   },
   "agentHub": {
     "title": "Vos {{agentsNicknamePlural}}",

@@ -187,7 +187,9 @@ def _build_runtime(
     checkpointer: FredSqlCheckpointer,
     session_id: str,
 ) -> ReActRuntime:
-    definition = BasicReActDefinition(enable_tool_approval=True)
+    definition = BasicReActDefinition(
+        enable_tool_approval=True, system_prompt_template="Be a good agent"
+    )
     runtime = ReActRuntime(
         definition=definition,
         services=RuntimeServices(

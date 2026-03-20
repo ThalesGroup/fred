@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade } from "@mui/material";
+import { Box } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -36,7 +36,6 @@ export const AgentHub = () => {
   const { showError, showSuccess } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const [agents, setAgents] = useState<AnyAgent[]>([]);
-  const [showElements, setShowElements] = useState(false);
 
   const [triggerGetFlows, { isLoading }] = useLazyListAgentsAgenticV1AgentsGetQuery();
   const [restoreAgents, { isLoading: isRestoring }] = useRestoreAgentsAgenticV1AgentsRestorePostMutation();
@@ -51,7 +50,6 @@ export const AgentHub = () => {
   };
 
   useEffect(() => {
-    setShowElements(true);
     fetchAgents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -97,22 +95,20 @@ export const AgentHub = () => {
           pb: { xs: 4, md: 6 },
         }}
       >
-        <Fade in={showElements} timeout={1100}>
-          <Box>
-            <AgentGridManager
-              agents={agents}
-              isLoading={isLoading}
-              onRefetchAgents={fetchAgents}
-              showRestoreButton={true}
-              onRestore={handleRestore}
-              isRestoring={isRestoring}
-              // For now, all users can manager their personal agents
-              canEdit={true}
-              canCreate={true}
-              canDelete={true}
-            />
-          </Box>
-        </Fade>
+        <Box>
+          <AgentGridManager
+            agents={agents}
+            isLoading={isLoading}
+            onRefetchAgents={fetchAgents}
+            showRestoreButton={true}
+            onRestore={handleRestore}
+            isRestoring={isRestoring}
+            // For now, all users can manager their personal agents
+            canEdit={true}
+            canCreate={true}
+            canDelete={true}
+          />
+        </Box>
       </Box>
     </>
   );
