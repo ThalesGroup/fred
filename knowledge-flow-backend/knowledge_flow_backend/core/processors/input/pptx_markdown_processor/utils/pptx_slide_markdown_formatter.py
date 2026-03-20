@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import List
 
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_native_slide_extractor import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
     NativeSlideContent,
 )
 

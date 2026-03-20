@@ -19,10 +19,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_shape_ordering import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_shape_ordering import (
     sort_shapes_reading_order,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_speaker_notes import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_speaker_notes import (
     extract_speaker_notes,
 )
 
