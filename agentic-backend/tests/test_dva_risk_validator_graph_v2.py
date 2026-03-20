@@ -8,6 +8,12 @@ from fred_core import VectorSearchHit
 from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.graph import (
     DVARiskValidatorGraph,
 )
+from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.models import (
+    RiskAssessment,
+)
+from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.rendering import (
+    render_report,
+)
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
     AwaitingHumanRuntimeEvent,
@@ -22,15 +28,12 @@ from agentic_backend.core.agents.v2 import (
     inspect_agent,
 )
 from agentic_backend.core.agents.v2.catalog import definition_to_agent_settings
-from agentic_backend.core.agents.v2.context import ToolContentBlock, ToolContentKind
-from agentic_backend.core.agents.v2.context import ArtifactScope
+from agentic_backend.core.agents.v2.context import (
+    ArtifactScope,
+    ToolContentBlock,
+    ToolContentKind,
+)
 from agentic_backend.core.agents.v2.runtime import RuntimeEventKind
-from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.models import (
-    RiskAssessment,
-)
-from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.rendering import (
-    render_report,
-)
 
 
 def _binding(session_id: str) -> BoundRuntimeContext:

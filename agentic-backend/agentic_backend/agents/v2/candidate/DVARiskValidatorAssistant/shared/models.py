@@ -70,10 +70,7 @@ class RiskIndex(StrictModel):
     @classmethod
     def build_timestamp(cls) -> str:
         return (
-            datetime.now(UTC)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "Z")
+            datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         )
 
     def as_json(self) -> dict[str, Any]:

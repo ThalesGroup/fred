@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Iterable
 
@@ -34,6 +35,8 @@ from ..shared.language import bilingual_queries, detect_language
 from ..shared.models import CitationRecord, RiskAssessment, RiskIndex, RiskTreatment
 from ..shared.rendering import render_report
 from ..shared.retrieval import extract_hits, hits_to_dicts, hits_to_prompt_context
+
+logger = logging.getLogger(__name__)
 
 RISK_TABLE_QUERIES_EN = (
     "risk table",
@@ -804,6 +807,7 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
                 "session.preferences.update", {"preferences": prefs}
             )
         except Exception:
+            logger.error("Failed to persist session preferences", exc_info=True)
             pass
         return GraphNodeResult(state_update={"persisted_preferences": prefs})
 
