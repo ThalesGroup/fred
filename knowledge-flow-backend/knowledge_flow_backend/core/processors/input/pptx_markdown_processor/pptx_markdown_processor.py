@@ -26,16 +26,15 @@ from typing import Any
 from pptx import Presentation
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
+    detect_repeated_noise_texts,
+)
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
     extract_native_slide_content,
 )
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import (
     format_slide_markdown,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
-    detect_repeated_noise_texts,
-)
-
 
 logger = logging.getLogger(__name__)
 
