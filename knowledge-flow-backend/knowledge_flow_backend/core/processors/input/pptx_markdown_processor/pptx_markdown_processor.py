@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Main PPTX Markdown processor.
+
+This processor orchestrates PPTX-specific helper modules for native slide extraction,
+formatting, speaker notes, and deck-level cleanup. The split keeps the native
+extraction reusable for future multimodal PPTX processing.
+"""
 import logging
 from pathlib import Path
 from typing import Any
@@ -19,15 +25,18 @@ from typing import Any
 from pptx import Presentation
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.native_slide_extractor import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_native_slide_extractor import (
     extract_native_slide_content,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.slide_markdown_formatter import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_slide_markdown_formatter import (
     format_slide_markdown,
 )
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_deck_noise import (
+    detect_repeated_noise_texts,
+)
+
 
 logger = logging.getLogger(__name__)
-
 
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PPTX slide decks into Markdown sections, slide by slide."
@@ -61,8 +70,14 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             presentation = Presentation(str(file_path))
             slide_markdowns = []
 
+            repeated_noise_texts = detect_repeated_noise_texts(presentation.slides)
+
             for slide_number, slide in enumerate(presentation.slides, start=1):
-                native_content = extract_native_slide_content(slide, slide_number)
+                native_content = extract_native_slide_content(
+                    slide,
+                    slide_number,
+                    repeated_noise_texts=repeated_noise_texts,
+                )
                 slide_md = format_slide_markdown(native_content)
                 if slide_md:
                     slide_markdowns.append(slide_md)

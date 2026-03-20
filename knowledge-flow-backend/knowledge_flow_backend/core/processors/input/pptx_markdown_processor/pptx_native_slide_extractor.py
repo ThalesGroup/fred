@@ -1,12 +1,27 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Extracts structured content from PPTX slides."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.shape_ordering import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_shape_ordering import (
     sort_shapes_reading_order,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.speaker_notes import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_speaker_notes import (
     extract_speaker_notes,
 )
 
@@ -111,6 +126,17 @@ def _is_title_candidate(lines: List[str]) -> bool:
 
     return True
 
+def _is_page_number_candidate(text: str) -> bool:
+    value = text.strip()
+    if not value:
+        return False
+    return value.isdigit() and 1 <= len(value) <= 3
+
+def _is_repeated_noise(text: str, repeated_noise_texts: Optional[set[str]]) -> bool:
+    if not repeated_noise_texts:
+        return False
+    return text.strip() in repeated_noise_texts
+ 
 
 def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str]) -> bool:
     text = line.strip()
@@ -125,18 +151,25 @@ def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str
     if text.startswith("- "):
         return True
 
+    if text.endswith(("?", ".", ":")):
+        return False
+    if "," in text:
+        return False
+
+    first_word = text.split()[0].lower() if text.split() else ""
+    if first_word in {"what", "why", "how", "when", "where", "who", "in", "once"}:
+        return False
+
+
     word_count = len(text.split())
     char_count = len(text)
 
-    # Reject very short visual fragments or decorative labels
     if char_count <= 3:
         return False
 
-    # Reject most all-caps fragments that look like infographic labels
     if text.isupper() and word_count <= 5:
         return False
-
-    # Good candidates: short business items, domain names, action labels
+    
     if 1 <= word_count <= 6 and char_count <= 60:
         return True
 
@@ -163,14 +196,17 @@ def _is_subtitle_candidate(lines: List[str], title: Optional[str], subtitle: Opt
 
     word_count = len(line.split())
 
-    # Avoid promoting a single short action word as subtitle
     if word_count == 1:
         return False
 
     return len(line) <= 120
 
 
-def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideContent:
+def extract_native_slide_content(
+    slide: Any,
+    slide_number: int,
+    repeated_noise_texts: Optional[set[str]] = None,
+) -> NativeSlideContent:
     result = NativeSlideContent(slide_number=slide_number)
     result.notes = extract_speaker_notes(slide)
 
@@ -194,12 +230,18 @@ def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideCo
             continue
 
         has_table = bool(getattr(shape, "has_table", False))
-        table = getattr(shape, "table", None)
-        if has_table and table is not None:
-            table_md = _table_to_markdown(table)
-            if table_md:
-                result.tables.append(table_md)
-            continue
+        if has_table:
+            try:
+                table = shape.table
+            except Exception:
+                table = None
+
+            if table is not None:
+                table_md = _table_to_markdown(table)
+                if table_md:
+                    result.tables.append(table_md)
+                continue
+
 
         has_text_frame = bool(getattr(shape, "has_text_frame", False))
         text_frame = getattr(shape, "text_frame", None)
@@ -209,14 +251,21 @@ def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideCo
                 continue
 
             if _is_subtitle_candidate(lines, result.title, result.subtitle):
-                result.subtitle = lines[0].strip()
+                subtitle_candidate = lines[0].strip()
+                if _is_page_number_candidate(subtitle_candidate):
+                    continue
+                if _is_repeated_noise(subtitle_candidate, repeated_noise_texts):
+                    continue
+                result.subtitle = subtitle_candidate
                 continue
 
             for line in lines:
-                # Preserve leading indentation from _text_frame_lines() while
-                # using a stripped version only for classification.
                 content = line.strip()
                 if not content:
+                    continue
+                if _is_page_number_candidate(content):
+                    continue
+                if _is_repeated_noise(content, repeated_noise_texts):
                     continue
 
                 indent_len = len(line) - len(line.lstrip(" "))
@@ -224,18 +273,19 @@ def extract_native_slide_content(slide: Any, slide_number: int) -> NativeSlideCo
 
                 if _is_visual_list_item(content, result.title, result.subtitle):
                     if content.startswith("- "):
-                        # Keep any existing bullet marker but preserve indentation.
                         result.bullets.append(f"{indent}{content}")
                     else:
-                        # Add a bullet marker while preserving indentation.
                         result.bullets.append(f"{indent}- {content}")
                 else:
-                    # Preserve indentation for non-list text; only trim trailing whitespace.
                     result.raw_text_blocks.append(line.rstrip())
             continue
 
         text_value = _clean_text(getattr(shape, "text", "") or "")
         if text_value:
+            if _is_page_number_candidate(text_value):
+                continue
+            if _is_repeated_noise(text_value, repeated_noise_texts):
+                continue
             if result.title and result.subtitle is None and len(text_value) <= 120:
                 result.subtitle = text_value
             elif _is_visual_list_item(text_value, result.title, result.subtitle):
