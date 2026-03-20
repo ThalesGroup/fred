@@ -15,7 +15,6 @@
 
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Type
 
@@ -37,6 +36,32 @@ from knowledge_flow_backend.core.processors.input.common.base_input_processor im
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
 
 logger = logging.getLogger(__name__)
+
+
+def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> str:
+    """
+    Why:
+        Wrap exported Markdown tables with stable markers for downstream chunking
+        without letting replacement logic reinterpret table text.
+
+    How:
+        Pass the full Markdown content and the ordered table Markdown exports.
+        The first literal match of each table is wrapped with TABLE_START/TABLE_END
+        markers and the updated Markdown string is returned.
+    """
+    for table_id, table_md in enumerate(tables_markdown):
+        if not table_md:
+            logger.warning("[PROCESSOR][PDF] Table export to markdown returned empty despite table having rows : ID %s", table_id)
+            continue
+
+        annotated_table = f"""<!-- TABLE_START:id={table_id} -->\n{table_md}\n<!-- TABLE_END -->"""
+        if table_md not in md_content:
+            logger.warning("[PROCESSOR][PDF] Table %s not found in Markdown content.", table_id)
+            continue
+
+        md_content = md_content.replace(table_md, annotated_table, 1)
+
+    return md_content
 
 
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
@@ -121,6 +146,16 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return {"document_name": file_path.name, "error": str(e)}
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Why:
+            Convert an input PDF into the normalized Markdown artifact used by the
+            ingestion pipeline, including table and image annotations needed later.
+
+        How:
+            Call with the source PDF path, a writable output directory, and the
+            current document UID. The method writes `output.md` inside `output_dir`
+            and returns paths for the generated artifacts.
+        """
         output_markdown_path = output_dir / "output.md"
         try:
             active_profile, process_images, pdf_options = self._resolve_effective_options()
@@ -203,17 +238,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
 
             # Add comments to identify tables
             if doc.tables:
-                for i, table in enumerate(doc.tables):
-                    table_id = i
-                    table_md = table.export_to_markdown(doc=doc).strip()
-                    if not table_md:
-                        logger.warning(f"[PROCESSOR][PDF] Table export to markdown returned empty despite table having rows : ID {table_id}")
-                    else:
-                        annotated_table = f"""<!-- TABLE_START:id={table_id} -->\n{table_md}\n<!-- TABLE_END -->"""
-                        pattern = re.escape(table_md)
-                        md_content, count = re.subn(pattern, annotated_table, md_content, count=1)
-                        if count == 0:
-                            logger.warning(f"[PROCESSOR][PDF] Table {table_id} not found in Markdown content.")
+                table_markdown = [table.export_to_markdown(doc=doc).strip() for table in doc.tables]
+                md_content = _annotate_markdown_tables(md_content, table_markdown)
 
             for desc in pictures_desc:
                 md_content = md_content.replace("%%ANNOTATION%%", desc, 1)

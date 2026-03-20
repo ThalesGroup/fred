@@ -298,6 +298,49 @@ x-kf-filesystem: &kf-filesystem
   # bucket_name: filesystem
   # secure: false
 
+# ── Shared control-plane configuration (backend + worker) ────────────────────
+
+x-cp-security: &cp-security
+  m2m:
+    enabled: true
+    client_id: "control-plane"
+    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+  user:
+    enabled: true
+    client_id: "app"
+    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+  authorized_origins:
+    - "http://{YOUR-URL}:80"
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://openfga:8080"
+
+x-cp-scheduler: &cp-scheduler
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "control-plane-lifecycle"
+    workflow_id_prefix: "control-plane"
+    connect_timeout_seconds: 5
+
+x-cp-storage: &cp-storage
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: fred
+  session_store:
+    type: postgres
+    table: session
+  purge_queue_table: session_purge_queue
+  content_storage:
+    type: local
+    root_path: /home/fred-user/.fred/control-plane/content-storage
+
 # ════════════════════════════════════════════════════════════════════
 # ── 2. Global settings ──────────────────────────────────────────────
 global:
@@ -1381,7 +1424,7 @@ applications:
       filesystem:      *kf-filesystem
 
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
-    dotenv:                   
+    dotenv:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
@@ -1389,3 +1432,314 @@ applications:
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""
+
+  # ── 3.5 Control Plane Backend ─────────────────────────────────────
+  control-plane-backend:
+    enabled: true
+    applicationName: control-plane-backend
+    deployment:
+      enabled: true
+    replicaCount: 1
+    statefulset:
+      enabled: false
+    job:
+      enabled: false
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/control-plane-backend
+      tag: ""
+      pullPolicy: IfNotPresent
+    command:
+      enabled: true
+      data:
+        - "uvicorn"
+        - "control_plane_backend.main:create_app"
+        - "--factory"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8222"
+        - "--loop"
+        - "asyncio"
+    env:
+      - name: CONFIG_FILE
+        value: "/app/config/configuration.yaml"
+    ports:
+      - name: http
+        containerPort: 8222
+      - name: metrics
+        containerPort: 9222
+    service:
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      ports:
+        - name: http
+          port: 8222
+          targetPort: 8222
+    metricsService:
+      enabled: false
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9222
+      targetPort: 9222
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
+    ingress:
+      enabled: false
+      className: ""
+      hosts: []
+    volumeMounts:
+      - name: control-plane-backend-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: control-plane-backend-catalog-vol
+        mountPath: /app/config/conversation_policy_catalog.yaml
+        subPath: conversation_policy_catalog.yaml
+      - name: control-plane-backend-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: control-plane-backend-vol
+        configMap:
+          name: control-plane-backend-back
+      - name: control-plane-backend-catalog-vol
+        configMap:
+          name: control-plane-backend-catalog
+      - name: control-plane-backend-env-vol
+        secret:
+          secretName: control-plane-backend-env
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: true
+        data:
+          failureThreshold: 10
+          httpGet:
+            path: /control-plane/v1/healthz
+            port: 8222
+          periodSeconds: 10
+      readinessProbe:
+        enabled: true
+        data:
+          failureThreshold: 10
+          httpGet:
+            path: /control-plane/v1/ready
+            port: 8222
+          periodSeconds: 10
+      startupProbe:
+        enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    serviceAccount:
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions: {}
+    kubeconfig:
+      enabled: false
+    configuration_type:
+      backend: true
+      frontend: false
+    configurationFileName: "configuration.yaml"
+    # ── Application configuration (rendered as ConfigMap) ───────────────
+    configuration:
+      app:
+        name: "Control Plane Backend"
+        base_url: "/control-plane/v1"
+        address: "127.0.0.1"
+        port: 8222
+        log_level: "info"
+
+      security:  *cp-security
+      scheduler: *cp-scheduler
+      storage:   *cp-storage
+
+      policies:
+        purge_catalog_path: /app/config/conversation_policy_catalog.yaml
+
+    # ── Conversation policy catalog (rendered as ConfigMap via configmap-catalog) ──
+    conversation_policy_catalog:
+      version: v1
+      conversation_policies:
+        purge:
+          default:
+            mode: deferred_delete
+            retention: PT30S
+            cancel_on_rejoin: true
+          rules:
+            - rule_id: purge.team.swiftpost
+              match:
+                team_id: swiftpost
+                trigger: member_removed
+              action:
+                retention: PT60S
+            - rule_id: purge.team.northbridge
+              match:
+                team_id: northbridge
+                trigger: member_removed
+              action:
+                retention: PT120S
+
+    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
+    dotenv:
+      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
+      OPENFGA_API_TOKEN: ""
+      MINIO_SECRET_KEY: ""
+      FRED_POSTGRES_PASSWORD: ""
+
+  # ── 3.6 Control Plane Worker ──────────────────────────────────────
+  control-plane-worker:
+    enabled: false
+    applicationName: control-plane-worker
+    deployment:
+      enabled: false
+    replicaCount: 1
+    statefulset:
+      enabled: false
+    job:
+      enabled: false
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    image:
+      repository: ghcr.io/thalesgroup/fred-agent/control-plane-backend
+      tag: ""
+      pullPolicy: IfNotPresent
+    command:
+      enabled: true
+      data:
+        - "python"
+        - "-m"
+        - "control_plane_backend.main_worker"
+    env:
+      - name: CONFIG_FILE
+        value: "/app/config/configuration.yaml"
+    ports:
+      - name: worker
+        containerPort: 8223
+    service:
+      enabled: false
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      ports:
+        - name: worker
+          port: 8223
+          targetPort: 8223
+          protocol: TCP
+    metricsService:
+      enabled: false
+      annotations: {}
+      extraLabels: {}
+      type: ClusterIP
+      port: 9222
+      targetPort: 9222
+      serviceMonitor:
+        enabled: false
+        annotations: {}
+        labels: {}
+        interval: 30s
+        scrapeTimeout: 10s
+        path: /metrics
+        scheme: http
+        honorLabels: false
+        relabelings: []
+        metricRelabelings: []
+        namespaceSelector: {}
+    ingress:
+      enabled: false
+      className: ""
+      hosts: []
+    volumeMounts:
+      - name: control-plane-worker-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: control-plane-worker-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: control-plane-worker-vol
+        configMap:
+          name: control-plane-worker-back
+      - name: control-plane-worker-env-vol
+        secret:
+          secretName: control-plane-backend-env
+    probes:
+      lifecycle:
+        enabled: false
+      livenessProbe:
+        enabled: false
+        data: {}
+      readinessProbe:
+        enabled: false
+        data: {}
+      startupProbe:
+        enabled: false
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - "ALL"
+      runAsUser: 1000
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    serviceAccount:
+      annotations: {}
+      labels: {}
+      automountServiceAccountToken: true
+      rbac:
+        enabled: true
+        permissions: {}
+    kubeconfig:
+      enabled: false
+    configuration_type:
+      backend: true
+      frontend: false
+    configurationFileName: "configuration.yaml"
+    # ── Application configuration (rendered as ConfigMap) ───────────────
+    configuration:
+      app:
+        name: "Control Plane Backend"
+        base_url: "/control-plane/v1"
+        address: "127.0.0.1"
+        port: 8223
+        log_level: "info"
+
+      security:  *cp-security
+      scheduler: *cp-scheduler
+      storage:   *cp-storage
+
+      policies:
+        purge_catalog_path: /app/config/conversation_policy_catalog.yaml
+
+    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
+    dotenv:
+      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: ""
+      OPENFGA_API_TOKEN: ""
+      MINIO_SECRET_KEY: ""
+      FRED_POSTGRES_PASSWORD: ""
