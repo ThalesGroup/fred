@@ -49,6 +49,7 @@ from agentic_backend.core.agents.v2.catalog import (
     instantiate_definition_class,
 )
 from agentic_backend.core.agents.v2.context import BoundRuntimeContext
+from agentic_backend.core.agents.v2.deep_runtime import DeepAgentRuntime
 from agentic_backend.core.agents.v2.graph_runtime import GraphRuntime
 from agentic_backend.core.agents.v2.model_routing import (
     ModelRoutingResolver,
@@ -57,6 +58,7 @@ from agentic_backend.core.agents.v2.model_routing import (
 )
 from agentic_backend.core.agents.v2.models import (
     AgentDefinition,
+    DeepAgentDefinition,
     GraphAgentDefinition,
     ReActAgentDefinition,
 )
@@ -457,7 +459,12 @@ class AgentFactory(BaseAgentFactory):
             kpi=get_kpi_writer(),
             checkpointer=checkpointer,
         )
-        if isinstance(definition, ReActAgentDefinition):
+        if isinstance(definition, DeepAgentDefinition):
+            runtime = DeepAgentRuntime(
+                definition=definition,
+                services=services,
+            )
+        elif isinstance(definition, ReActAgentDefinition):
             runtime = ReActRuntime(
                 definition=definition,
                 services=services,

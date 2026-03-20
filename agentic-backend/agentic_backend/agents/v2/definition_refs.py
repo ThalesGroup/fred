@@ -29,6 +29,8 @@ from types import MappingProxyType
 
 # Canonical v2 references
 BASIC_REACT_DEFINITION_REF = "v2.react.basic"
+BASIC_DEEP_DEFINITION_REF = "v2.deep.basic"
+CORPUS_INVESTIGATOR_DEEP_DEFINITION_REF = "v2.deep.corpus_investigator"
 RAG_EXPERT_DEFINITION_REF = "v2.react.rag_expert"
 POSTAL_TRACKING_DEFINITION_REF = "v2.demo.postal_tracking"
 BID_MGR_DEFINITION_REF = "v2.proto.bid_mgr"
@@ -40,6 +42,12 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
     {
         BASIC_REACT_DEFINITION_REF: (
             "agentic_backend.agents.v2.production.basic_react.BasicReActDefinition"
+        ),
+        BASIC_DEEP_DEFINITION_REF: (
+            "agentic_backend.agents.v2.production.basic_deep.BasicDeepAgentDefinition"
+        ),
+        CORPUS_INVESTIGATOR_DEEP_DEFINITION_REF: (
+            "agentic_backend.agents.v2.production.basic_deep.CorpusInvestigatorDeepV2Definition"
         ),
         RAG_EXPERT_DEFINITION_REF: (
             "agentic_backend.agents.v2.production.basic_react.profiles.rag_expert_agent.RagExpertV2Definition"

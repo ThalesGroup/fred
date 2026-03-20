@@ -11,12 +11,20 @@ if TYPE_CHECKING:
     from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
     from .candidate.bid_mgr import Definition as BidMgrDefinition
     from .demos.artifact_report import ArtifactReportDemoV2Definition
+
+    # from .demos.postal_tracking import Definition as PostalTrackingDefinition
+    from .production.basic_deep import (
+        BasicDeepAgentDefinition,
+        CorpusInvestigatorDeepV2Definition,
+    )
     from .production.basic_react import BasicReActDefinition
     from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
 
 __all__ = [
     "AegisGraphV2SkeletonDefinition",
     "ArtifactReportDemoV2Definition",
+    "BasicDeepAgentDefinition",
+    "CorpusInvestigatorDeepV2Definition",
     "BasicReActDefinition",
     "BidMgrDefinition",
     "RagExpertV2Definition",
@@ -41,6 +49,14 @@ def __getattr__(name: str) -> object:
         from .demos.artifact_report import ArtifactReportDemoV2Definition
 
         return ArtifactReportDemoV2Definition
+    if name == "BasicDeepAgentDefinition":
+        from .production.basic_deep import BasicDeepAgentDefinition
+
+        return BasicDeepAgentDefinition
+    if name == "CorpusInvestigatorDeepV2Definition":
+        from .production.basic_deep import CorpusInvestigatorDeepV2Definition
+
+        return CorpusInvestigatorDeepV2Definition
     if name == "BasicReActDefinition":
         from .production.basic_react import BasicReActDefinition
 

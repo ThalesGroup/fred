@@ -628,6 +628,16 @@ class ReActAgentDefinition(AgentDefinition, ABC):
         return AgentPreview(kind=PreviewKind.TEXT, content=summary)
 
 
+class DeepAgentDefinition(ReActAgentDefinition, ABC):
+    """
+    Authoring contract for deep-agent style assistants.
+
+    Runtime intent:
+    - keep the same message/tool contract as ReAct
+    - allow a dedicated deep runtime implementation
+    """
+
+
 class ProxyAgentDefinition(AgentDefinition, ABC):
     """Authoring contract for agents delegated to an external runtime endpoint."""
 

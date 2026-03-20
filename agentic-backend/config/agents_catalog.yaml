@@ -50,6 +50,11 @@ agents:
     class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
     enabled: true
 
+  - id: "Corpus Investigator Deep"
+    name: "Corpus Investigator Deep"
+    type: "agent"
+    definition_ref: "v2.deep.corpus_investigator"
+
   - id: "BankTransferDemo"
     name: "BankTransferDemo"
     type: "agent"
