@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from fred_core import VectorSearchHit
 
 from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.graph import (
     DVARiskValidatorGraph,
@@ -30,7 +31,6 @@ from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.models
 from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.rendering import (
     render_report,
 )
-from knowledge_flow_backend.core.models import VectorSearchHit
 
 
 def _binding(session_id: str) -> BoundRuntimeContext:
