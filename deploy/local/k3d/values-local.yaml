@@ -204,6 +204,38 @@ x-kf-storage: &kf-storage
       path: null
       username: "tabular"
 
+x-cp-scheduler: &cp-scheduler
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "temporal:7233"
+    namespace: "default"
+    task_queue: "control-plane-lifecycle"
+    workflow_id_prefix: "control-plane"
+    connect_timeout_seconds: 5
+
+x-cp-storage: &cp-storage
+  postgres:
+    host: postgres
+    port: 5432
+    database: fred
+    username: fred
+    pool_size: 2
+    max_overflow: 0
+    pool_timeout: 30
+    pool_recycle: 1800
+    pool_pre_ping: true
+  session_store:
+    type: postgres
+    table: session
+  purge_queue_table: session_purge_queue
+  content_storage:
+    type: minio
+    endpoint: http://minio:9000
+    access_key: "admin"
+    bucket_name: "control-plane-content"
+    secure: false
+
 global:
   kubeconfig: ""
   create_index:
@@ -400,6 +432,11 @@ applications:
               service:
                 name: keycloak
                 port: 8080
+            - path: /control-plane
+              pathType: Prefix
+              service:
+                name: control-plane-backend
+                port: 8222
       tls: []
     configuration:
       config_json:
@@ -456,4 +493,34 @@ applications:
       storage:            *kf-storage
       filesystem:         *kf-filesystem
     dotenv: *kf-dotenv
-      
+
+  # ===========================================================================
+  # CONTROL PLANE BACKEND
+  # ===========================================================================
+  control-plane-backend:
+    image:
+      tag: "0.1"
+    configuration:
+      security:  *kf-security
+      scheduler: *cp-scheduler
+      storage:   *cp-storage
+    dotenv: &cp-dotenv
+      <<: *common-dotenv
+      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_"
+      MINIO_SECRET_KEY: "Azerty123_"
+
+  # ===========================================================================
+  # CONTROL PLANE WORKER
+  # ===========================================================================
+  control-plane-worker:
+    enabled: true
+    deployment:
+      enabled: true
+    image:
+      tag: "0.1"
+    configuration:
+      security:  *kf-security
+      scheduler: *cp-scheduler
+      storage:   *cp-storage
+    dotenv: *cp-dotenv
+
