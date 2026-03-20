@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         ToolInvocationResult,
         UiPart,
     )
+    from .deep_runtime import DeepAgentRuntime
     from .graph_runtime import (
         GraphExecutionOutput,
         GraphNodeContext,
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
         AgentDefinition,
         AgentInspection,
         AgentPreview,
+        DeepAgentDefinition,
         ExecutionCategory,
         GraphAgentDefinition,
         GraphConditionalDefinition,
@@ -119,6 +121,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AgentDefinition",
+    "DeepAgentDefinition",
     "AgentInspection",
     "AgentPreview",
     "AgentRuntime",
@@ -148,6 +151,7 @@ __all__ = [
     "GraphNodeResult",
     "GraphRouteDefinition",
     "GraphRuntime",
+    "DeepAgentRuntime",
     "GuardrailDefinition",
     "HumanChoiceOption",
     "HumanInputRequest",
@@ -256,9 +260,16 @@ _EXPORTS.update(
 )
 _EXPORTS.update(
     _module_exports(
+        module="deep_runtime",
+        names=("DeepAgentRuntime",),
+    )
+)
+_EXPORTS.update(
+    _module_exports(
         module="models",
         names=(
             "AgentDefinition",
+            "DeepAgentDefinition",
             "AgentInspection",
             "AgentPreview",
             "ExecutionCategory",

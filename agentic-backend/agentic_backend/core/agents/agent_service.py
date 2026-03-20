@@ -34,7 +34,10 @@ from fred_core import (
 )
 
 from agentic_backend.agents.v2 import BasicReActDefinition
-from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
+from agentic_backend.agents.v2.definition_refs import (
+    BASIC_REACT_DEFINITION_REF,
+    all_v2_definition_refs,
+)
 from agentic_backend.application_context import get_agent_store, get_rebac_engine
 from agentic_backend.common.structures import (
     Agent,
@@ -282,6 +285,21 @@ class AgentService:
             if agent_cfg.class_path and agent_cfg.class_path.strip()
         }
         return sorted(class_paths)
+
+    async def list_declared_definition_refs(self, user: KeycloakUser) -> List[str]:
+        """
+        Return known v2 definition refs available for agent creation.
+
+        Why:
+        - UI can provide a controlled definition_ref picker (instead of free text).
+        - Permissions stay aligned with advanced agent target edition.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+        return list(all_v2_definition_refs())
 
     async def get_agent_by_id(
         self, user: KeycloakUser, agent_id: str

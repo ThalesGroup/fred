@@ -306,6 +306,19 @@ async def list_declared_agent_class_paths(
     return await service.list_declared_class_paths(user)
 
 
+@router.get(
+    "/agents/definition-refs",
+    summary="List available v2 definition refs",
+    response_model=list[str],
+)
+async def list_declared_agent_definition_refs(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> list[str]:
+    service = AgentService(agent_manager=agent_manager)
+    return await service.list_declared_definition_refs(user)
+
+
 @router.put(
     "/agents/update",
     summary="Update an agent. Only the tuning part is updatable",
