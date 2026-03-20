@@ -8,12 +8,12 @@ requires-python = ">=3.12,<3.13"
 
 dependencies = [
   "fastapi==0.116.1",
-  "langchain>=1.2.7",
+  "langchain>=1.2.12",
   "langchain-community>=0.4.1",
-  "langchain-text-splitters>=1.1.0",
-  "langchain-postgres>=0.0.16",
+  "langchain-text-splitters>=1.1.1",
+  "langchain-postgres>=0.0.17",
   "uvicorn[standard]==0.34.0",
-  "openai>=1.104.2,<2.0.0",
+  "openai>=1.104.2,<2.29.0",
   "coloredlogs==15.0.1",
   "PyYAML==6.0.1",
   "pydantic>=2.5.2,<3.0.0",
@@ -102,6 +102,7 @@ asyncio_default_fixture_loop_scope = "function"
 cache_dir = "/tmp/.pytest"
 
 markers = [
+  "integration: mark integration tests",
   "content_storage_type(type): mark test to select a content store backend",
   "metadata_storage_type(type): mark test to select a metadata store backend",
   "vector_storage_type(type): mark test to select a vector store backend",

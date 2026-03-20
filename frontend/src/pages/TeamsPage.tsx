@@ -1,11 +1,11 @@
 import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { TeamCard } from "../components/teams/TeamCard";
-import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { useListTeamsQuery } from "../slices/controlPlane/controlPlaneApi";
 
 export function TeamsPage() {
   const { t } = useTranslation();
-  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery();
+  const { data: teams } = useListTeamsQuery();
 
   const yourTeams = teams && teams.filter((t) => t.is_member);
   const otherTeams = teams && teams.filter((t) => !t.is_member);

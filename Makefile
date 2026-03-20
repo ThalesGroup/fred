@@ -1,5 +1,6 @@
-CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend
-TEST_DIRS := agentic-backend knowledge-flow-backend
+CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend control-plane-backend
+TEST_DIRS := agentic-backend knowledge-flow-backend control-plane-backend
+DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backend frontend
 
 ##@ Code quality
 
@@ -37,6 +38,24 @@ test: ## Run non-integration test suites in backend submodules
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir test; \
 	done
 
+##@ Run
+
+.PHONY: run-frontend
+run-frontend: ## Run frontend only
+	$(MAKE) -C frontend run
+
+.PHONY: run-agentic
+run-agentic: ## Run agentic backend API only
+	$(MAKE) -C agentic-backend run
+
+.PHONY: run-knowledge-flow
+run-knowledge-flow: ## Run knowledge-flow backend API only
+	$(MAKE) -C knowledge-flow-backend run
+
+.PHONY: run-control-plane
+run-control-plane: ## Run control-plane backend API only
+	$(MAKE) -C control-plane-backend run
+
 .PHONY: dev
 dev:  ## Start development environment in all submodules
 	@set -e; \
@@ -45,6 +64,16 @@ dev:  ## Start development environment in all submodules
 		$(MAKE) -C $$dir dev & \
 	done; \
 	wait
+
+##@ Docker
+
+.PHONY: docker-build
+docker-build: ## Build Docker images for agentic, knowledge-flow, control-plane, and frontend
+	@set -e; \
+	for dir in $(DOCKER_BUILD_DIRS); do \
+		echo "************ Building Docker image in $$dir ************"; \
+		$(MAKE) -C $$dir docker-build; \
+	done
 
 ##@ Release
 
@@ -91,20 +120,26 @@ FRONTEND_IMAGE ?= ghcr.io/thalesgroup/fred-agent/frontend:0.1
 ##@ k3d Deployment
 
 .PHONY: k3d-build
-k3d-build: ## Build Docker images for all services
-	@echo "🔨 Building agentic-backend..."
+k3d-build: ## Build Docker images for all services (in parallel)
+	@echo "🔨 Building all images in parallel..."
+	@$(MAKE) -j3 build-agentic build-kf build-frontend
+
+.PHONY: build-agentic
+build-agentic:
 	$(MAKE) -C agentic-backend docker-build
-	@echo "🔨 Building knowledge-flow-backend..."
+
+.PHONY: build-kf
+build-kf:
 	$(MAKE) -C knowledge-flow-backend docker-build
-	@echo "🔨 Building frontend..."
+
+.PHONY: build-frontend
+build-frontend:
 	$(MAKE) -C frontend docker-build
 
 .PHONY: k3d-import
 k3d-import: ## Import Docker images into k3d cluster
 	@echo "📦 Importing images into k3d cluster '$(K3D_CLUSTER)'..."
-	k3d image import $(AGENTIC_IMAGE) -c $(K3D_CLUSTER)
-	k3d image import $(KF_IMAGE) -c $(K3D_CLUSTER)
-	k3d image import $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
+	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
 
 .PHONY: k3d-deploy
 k3d-deploy: k3d-build k3d-import k3d-deploy-only ## Build, import, and deploy all services to k3d
@@ -115,8 +150,31 @@ k3d-deploy-only: ## Deploy/upgrade Helm chart (images must already be in k3d)
 	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
 		--namespace $(K3D_NAMESPACE) \
 		--create-namespace \
-		-f $(HELM_VALUES) \
-		--wait --timeout 5m
+		-f $(HELM_VALUES)
+	@echo "🔄 Forcing pods to restart to pick up newest local images..."
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend
+
+# --- Selective Turbo Deploy Targets ---
+
+.PHONY: k3d-turbo-backend
+k3d-turbo-backend: build-agentic ## Turbo: build, import and roll agentic-backend ONLY
+	k3d image import $(AGENTIC_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend
+
+.PHONY: k3d-turbo-kf
+k3d-turbo-kf: build-kf ## Turbo: build, import and roll knowledge-flow-backend ONLY
+	k3d image import $(KF_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) knowledge-flow-backend
+
+.PHONY: k3d-turbo-frontend
+k3d-turbo-frontend: build-frontend ## Turbo: build, import and roll frontend ONLY
+	k3d image import $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) frontend
+
+.PHONY: k3d-turbo-all
+k3d-turbo-all: k3d-build ## Turbo: build and import all images, then roll all deployments
+	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend
 
 .PHONY: k3d-undeploy
 k3d-undeploy: ## Uninstall the Helm release

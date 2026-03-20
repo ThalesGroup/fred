@@ -1,0 +1,171 @@
+:root {
+  --font-family: "Geist";
+
+  /* Headline Large Emphasized */
+  --font-headline-large-emphasized-family: var(--font-family);
+  --font-headline-large-emphasized-weight: 600;
+  --font-headline-large-emphasized-size: 2rem;
+  --font-headline-large-emphasized-line-height: 125%;
+  --font-headline-large-emphasized-letter-spacing: 0;
+
+  /* Headline Large */
+  --font-headline-large-family: var(--font-family);
+  --font-headline-large-weight: 400;
+  --font-headline-large-size: 2rem;
+  --font-headline-large-line-height: 125%;
+  --font-headline-large-letter-spacing: 0;
+
+  /* Headline Medium Emphasized */
+  --font-headline-medium-emphasized-family: var(--font-family);
+  --font-headline-medium-emphasized-weight: 600;
+  --font-headline-medium-emphasized-size: 1.75rem;
+  --font-headline-medium-emphasized-line-height: 128.57%;
+  --font-headline-medium-emphasized-letter-spacing: 0;
+
+  /* Headline Medium */
+  --font-headline-medium-family: var(--font-family);
+  --font-headline-medium-weight: 400;
+  --font-headline-medium-size: 1.75rem;
+  --font-headline-medium-line-height: 128.57%;
+  --font-headline-medium-letter-spacing: 0;
+
+  /* Headline Small Emphasized */
+  --font-headline-small-emphasized-family: var(--font-family);
+  --font-headline-small-emphasized-weight: 500;
+  --font-headline-small-emphasized-size: 1.5rem;
+  --font-headline-small-emphasized-line-height: 133.33%;
+  --font-headline-small-emphasized-letter-spacing: 0;
+
+  /* Headline Small */
+  --font-headline-small-family: var(--font-family);
+  --font-headline-small-weight: 400;
+  --font-headline-small-size: 1.5rem;
+  --font-headline-small-line-height: 133.33%;
+  --font-headline-small-letter-spacing: 0;
+
+  /* Title Large Emphasized */
+  --font-title-large-emphasized-family: var(--font-family);
+  --font-title-large-emphasized-weight: 500;
+  --font-title-large-emphasized-size: 1.375rem;
+  --font-title-large-emphasized-line-height: 127.27%;
+  --font-title-large-emphasized-letter-spacing: 0;
+
+  /* Title Large */
+  --font-title-large-family: var(--font-family);
+  --font-title-large-weight: 400;
+  --font-title-large-size: 1.375rem;
+  --font-title-large-line-height: 127.27%;
+  --font-title-large-letter-spacing: 0;
+
+  /* Title Medium Emphasized */
+  --font-title-medium-emphasized-family: var(--font-family);
+  --font-title-medium-emphasized-weight: 600;
+  --font-title-medium-emphasized-size: 1rem;
+  --font-title-medium-emphasized-line-height: 150%;
+  --font-title-medium-emphasized-letter-spacing: 0.2px;
+
+  /* Title Medium */
+  --font-title-medium-family: var(--font-family);
+  --font-title-medium-weight: 500;
+  --font-title-medium-size: 1rem;
+  --font-title-medium-line-height: 150%;
+  --font-title-medium-letter-spacing: 0.2px;
+
+  /* Title Small Emphasized */
+  --font-title-small-emphasized-family: var(--font-family);
+  --font-title-small-emphasized-weight: 600;
+  --font-title-small-emphasized-size: 0.875rem;
+  --font-title-small-emphasized-line-height: 142.86%;
+  --font-title-small-emphasized-letter-spacing: 0.1px;
+
+  /* Title Small */
+  --font-title-small-family: var(--font-family);
+  --font-title-small-weight: 500;
+  --font-title-small-size: 0.875rem;
+  --font-title-small-line-height: 142.86%;
+  --font-title-small-letter-spacing: 0.1px;
+
+  /* Body Large Emphasized */
+  --font-body-large-emphasized-family: var(--font-family);
+  --font-body-large-emphasized-weight: 500;
+  --font-body-large-emphasized-size: 1rem;
+  --font-body-large-emphasized-line-height: 150%;
+  --font-body-large-emphasized-letter-spacing: 0.5px;
+
+  /* Body Large */
+  --font-body-large-family: var(--font-family);
+  --font-body-large-weight: 400;
+  --font-body-large-size: 1rem;
+  --font-body-large-line-height: 150%;
+  --font-body-large-letter-spacing: 0.5px;
+
+  /* Body Medium Emphasized */
+  --font-body-medium-emphasized-family: var(--font-family);
+  --font-body-medium-emphasized-weight: 500;
+  --font-body-medium-emphasized-size: 0.875rem;
+  --font-body-medium-emphasized-line-height: 142.86%;
+  --font-body-medium-emphasized-letter-spacing: 0.25px;
+
+  /* Body Medium */
+  --font-body-medium-family: var(--font-family);
+  --font-body-medium-weight: 400;
+  --font-body-medium-size: 0.875rem;
+  --font-body-medium-line-height: 142.86%;
+  --font-body-medium-letter-spacing: 0.25px;
+
+  /* Body Small Emphasized */
+  --font-body-small-emphasized-family: var(--font-family);
+  --font-body-small-emphasized-weight: 500;
+  --font-body-small-emphasized-size: 0.75rem;
+  --font-body-small-emphasized-line-height: 133.33%;
+  --font-body-small-emphasized-letter-spacing: 0.4px;
+
+  /* Body Small */
+  --font-body-small-family: var(--font-family);
+  --font-body-small-weight: 400;
+  --font-body-small-size: 0.75rem;
+  --font-body-small-line-height: 133.33%;
+  --font-body-small-letter-spacing: 0.4px;
+
+  /* Label Large Emphasized */
+  --font-label-large-emphasized-family: var(--font-family);
+  --font-label-large-emphasized-weight: 600;
+  --font-label-large-emphasized-size: 0.875rem;
+  --font-label-large-emphasized-line-height: 142.86%;
+  --font-label-large-emphasized-letter-spacing: 0.1px;
+
+  /* Label Large */
+  --font-label-large-family: var(--font-family);
+  --font-label-large-weight: 500;
+  --font-label-large-size: 0.875rem;
+  --font-label-large-line-height: 142.86%;
+  --font-label-large-letter-spacing: 0.1px;
+
+  /* Label Medium Emphasized */
+  --font-label-medium-emphasized-family: var(--font-family);
+  --font-label-medium-emphasized-weight: 600;
+  --font-label-medium-emphasized-size: 0.75rem;
+  --font-label-medium-emphasized-line-height: 133.33%;
+  --font-label-medium-emphasized-letter-spacing: 0.5px;
+
+  /* Label Medium */
+  --font-label-medium-family: var(--font-family);
+  --font-label-medium-weight: 500;
+  --font-label-medium-size: 0.75rem;
+  --font-label-medium-line-height: 133.33%;
+  --font-label-medium-letter-spacing: 0.5px;
+
+  /* Label Small Emphasized */
+  --font-label-small-emphasized-family: var(--font-family);
+  --font-label-small-emphasized-weight: 600;
+  --font-label-small-emphasized-size: 0.6875rem;
+  --font-label-small-emphasized-line-height: 145.45%;
+  --font-label-small-emphasized-letter-spacing: 0.5px;
+
+  /* Label Small */
+  --font-label-small-family: var(--font-family);
+  --font-label-small-weight: 500;
+  --font-label-small-size: 0.6875rem;
+  --font-label-small-line-height: 145.45%;
+  --font-label-small-letter-spacing: 0.5px;
+}

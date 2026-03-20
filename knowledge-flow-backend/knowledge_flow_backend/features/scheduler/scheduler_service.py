@@ -18,7 +18,11 @@ from typing import Optional, Sequence
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import (
+    SchedulerBackend,
+    TemporalClientProvider,
+    resolve_scheduler_backend,
+)
 
 from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -58,10 +62,10 @@ class IngestionTaskService:
         self._task_queue: Optional[str] = None
         self._max_parallelism = max(1, int(max_parallelism))
 
-        backend = scheduler_config.backend.lower()
-        if backend == "memory":
+        backend = resolve_scheduler_backend(scheduler_config.backend)
+        if backend == SchedulerBackend.MEMORY:
             self._scheduler = InMemoryScheduler(self._metadata_service)
-        elif backend == "temporal":
+        elif backend == SchedulerBackend.TEMPORAL:
             # Reuse the shared Temporal client provider if provided (preferred),
             # otherwise create a local one from configuration.
             self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)

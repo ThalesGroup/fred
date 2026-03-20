@@ -23,11 +23,7 @@ import { DocumentDataRowsProps, LimitOption, VectorSortMode } from "./DocumentDa
 import { useVectorDocumentViewer } from "./DocumentDataDrawer.tsx";
 import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip.tsx";
 
-
-
-export const DocumentDataVectorList = (
-  { rows, search }: DocumentDataRowsProps,
-) => {
+export const DocumentDataVectorList = ({ rows, search }: DocumentDataRowsProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const { openVectorDocument } = useVectorDocumentViewer();
@@ -77,9 +73,7 @@ export const DocumentDataVectorList = (
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1.5, py: 0.5 }}>
         <Stack direction="row" alignItems="center" spacing={0.5}>
           <ScatterPlotIcon fontSize="small" color="primary" />
-          <Typography variant="subtitle2">
-            {t("dataHub.vectorTableTitle", "Documents with vectors")}
-          </Typography>
+          <Typography variant="subtitle2">{t("dataHub.vectorTableTitle", "Documents with vectors")}</Typography>
         </Stack>
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
@@ -135,9 +129,7 @@ export const DocumentDataVectorList = (
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="caption">{t("dataHub.documentColumn", "Document")}</Typography>
             </Box>
-            <Box
-              sx={{ width: 120, textAlign: "right", display: "flex", justifyContent: "flex-end", gap: 0.5 }}
-            >
+            <Box sx={{ width: 120, textAlign: "right", display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
               <Typography variant="caption">{t("dataHub.vectorsColumn", "Vectors")}</Typography>
               <ScatterPlotIcon fontSize="inherit" color="primary" />
             </Box>
@@ -189,14 +181,7 @@ export const DocumentDataVectorList = (
                       sx={{ ml: 0.5 }}
                     />
                   )}
-                  {embeddingModel && (
-                    <Chip
-                      size="small"
-                      label={embeddingModel}
-                      variant="outlined"
-                      sx={{ ml: 0.5 }}
-                    />
-                  )}
+                  {embeddingModel && <Chip size="small" label={embeddingModel} variant="outlined" sx={{ ml: 0.5 }} />}
                 </Box>
                 <Box
                   sx={{
@@ -217,4 +202,4 @@ export const DocumentDataVectorList = (
       )}
     </Box>
   );
-}
+};

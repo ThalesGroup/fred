@@ -25,6 +25,14 @@ This will:
 - Use default in-memory and local storage components
 - Let you interact with agents right away — no external dependencies required
 
+## Configuration Contract (All Fred Backends)
+
+Agentic follows the same startup configuration contract as Knowledge Flow and Control Plane.
+
+Read: [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+
+Key point: always use `ENV_FILE` + `CONFIG_FILE` (same names in every backend).
+
 ## 🧰 Temporal Worker (Long Jobs)
 
 For long-running or isolated agent tasks, start the Temporal worker as a separate process:

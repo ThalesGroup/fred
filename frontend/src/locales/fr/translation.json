@@ -1310,5 +1310,87 @@
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Annuler",
     "defaultConfirmButtonLabel": "Confirmer"
+  },
+  "rework": {
+    "back": "Retour",
+    "teamRoles": {
+      "member": "Membre",
+      "manager": "Manager",
+      "owner": "Propriétaire"
+    },
+    "sidebar": {
+      "title": "FRED.AI",
+      "team": {
+        "avatarAlt": "Équipe {{teamName}}",
+        "bannerAlt": "Bannière de l'équipe",
+        "userTeam": "Espace personel",
+        "allTeams": "Marketplace"
+      },
+      "menu": {
+        "agents": "Agents",
+        "resources": "Ressources",
+        "apps": "Apps"
+      },
+      "newChat": "Nouvelle conversation",
+      "chatList": {
+        "title": "Conversations"
+      }
+    },
+    "userSettings": {
+      "disconnect": "Déconnexion",
+      "title": "Votre profil",
+      "app": {
+        "dark": "Sombre",
+        "system": "Système",
+        "light": "Clair",
+        "french": "Français",
+        "english": "Anglais"
+      },
+      "conversationProfile": {
+        "title": "Profil de conversation",
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos agents doivent s’adresser à vous."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Membres",
+        "settings": "Paramètres",
+        "leaveTeam": "Quitter l'équipe"
+      },
+      "members": {
+        "title": "Membres de l'équipe",
+        "addMember": {
+          "placeholder": "Inviter des utilisateurs"
+        },
+        "table": {
+          "deleteAction": "Supprimer",
+          "identifiant": "Identifiant",
+          "firstName": "Prénom",
+          "lastName": "Nom",
+          "role": "Rôle",
+          "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Échec de la mise à jour du rôle",
+          "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
+          "removeMemberSummary": "Échec de la suppression du membre",
+          "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire."
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Bannière de l'équipe",
+        "description": {
+          "label": "Description de l'équipe",
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+        },
+        "privateTeam": "Equipe privé",
+        "teamPrompt": {
+          "label": "Contexte de l'équipe (prompt)",
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
+        }
+      }
+    }
   }
 }

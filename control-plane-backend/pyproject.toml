@@ -1,0 +1,53 @@
+[project]
+name = "control-plane-backend"
+readme = "README.md"
+version = "0.1.0"
+description = "Minimal control-plane backend for team lifecycle and policy resolution"
+authors = [{ name = "Fred", email = "noreply@example.com" }]
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+  "fastapi==0.116.1",
+  "python-multipart>=0.0.20,<1.0.0",
+  "uvicorn[standard]>=0.30.6,<0.35.0",
+  "PyYAML==6.0.1",
+  "python-dotenv>=1.0.1,<2.0.0",
+  "pydantic>=2.10.0,<3.0.0",
+  "temporalio>=1.11.1,<2.0.0",
+  "fred-core",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.5,<9.0.0",
+  "pytest-cov>=6.1.1,<7.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["control_plane_backend*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+cache_dir = "/tmp/.pytest"
+markers = [
+  "integration: mark integration tests",
+]
+
+[tool.uv.sources]
+fred-core = { path = "../fred-core", editable = true }
+
+[dependency-groups]
+dev = [
+  "bandit>=1.8.6",
+  "basedpyright==1.31.0",
+  "detect-secrets>=1.5.0",
+  "ruff>=0.12.5",
+]
+
+[tool.uv]
+config-settings = { editable_mode = "compat" }

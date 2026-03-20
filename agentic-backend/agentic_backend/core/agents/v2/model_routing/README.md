@@ -37,7 +37,7 @@ If no rule matches, `default_profile_by_capability[capability]` is used.
 ## Example policy
 
 ```python
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from agentic_backend.core.agents.v2.model_routing import (
     ModelCapability,
     ModelProfile,

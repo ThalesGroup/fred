@@ -41,6 +41,7 @@ pip-wheel-metadata/
 # Local development related files
 **/target/
 **/configuration.yaml
+**/configuration_*.yaml
 
 # Byte-compiled files
 __pycache__/

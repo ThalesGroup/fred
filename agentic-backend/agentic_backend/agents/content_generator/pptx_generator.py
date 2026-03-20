@@ -21,7 +21,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fred_core import OwnerFilter, VectorSearchHit
+from fred_core.common import OwnerFilter
+from fred_core.store import VectorSearchHit
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers.json import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate

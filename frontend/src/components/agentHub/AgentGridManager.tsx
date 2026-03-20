@@ -16,8 +16,7 @@ import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { Box, Button, CardContent, Drawer, Fade, IconButton, Typography, useTheme } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
+import { Box, Button, CardContent, Drawer, Fade, Grid, IconButton, Typography, useTheme } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -208,9 +207,9 @@ export const AgentGridManager = ({
 
             {/* Grid */}
             {agents.length > 0 ? (
-              <Grid2 container spacing={2}>
+              <Grid container spacing={2}>
                 {agents.map((agent) => (
-                  <Grid2 key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
+                  <Grid key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                     <Fade in timeout={500}>
                       <Box sx={{ width: "100%" }}>
                         <AgentCard
@@ -223,9 +222,9 @@ export const AgentGridManager = ({
                         />
                       </Box>
                     </Fade>
-                  </Grid2>
+                  </Grid>
                 ))}
-              </Grid2>
+              </Grid>
             ) : (
               <Box
                 display="flex"

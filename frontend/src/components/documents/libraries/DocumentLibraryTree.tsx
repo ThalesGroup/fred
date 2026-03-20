@@ -344,21 +344,21 @@ export function DocumentLibraryTree({
                   </SimpleTooltip>
                 )}
                 {feature_flags.is_rebac_enabled && tagHasPermission(folderTag, "share") && (
-                    <SimpleTooltip
-                      title={t("documentLibraryTree.shareFolder")}
-                      // ATTENTION enterTouchDelay={10}
+                  <SimpleTooltip
+                    title={t("documentLibraryTree.shareFolder")}
+                    // ATTENTION enterTouchDelay={10}
+                  >
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (folderTag) setShareTarget(c);
+                      }}
                     >
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (folderTag) setShareTarget(c);
-                        }}
-                      >
-                        <PersonAddAltIcon fontSize="small" />
-                      </IconButton>
-                    </SimpleTooltip>
-                  )}
+                      <PersonAddAltIcon fontSize="small" />
+                    </IconButton>
+                  </SimpleTooltip>
+                )}
                 <SimpleTooltip
                   title={
                     canBeDeleted ? t("documentLibraryTree.deleteFolder") : t("documentLibraryTree.deleteFolderDisabled")

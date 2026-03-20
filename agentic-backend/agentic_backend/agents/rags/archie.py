@@ -16,7 +16,8 @@
 import logging
 from typing import List, Tuple
 
-from fred_core import OwnerFilter, VectorSearchHit
+from fred_core.common import OwnerFilter
+from fred_core.store import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
