@@ -22,7 +22,7 @@
     "@reduxjs/toolkit": "^2.1.0",
     "@types/lodash": "^4.14.202",
     "bootstrap": "^5.3.3",
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.3.3",
     "echarts": "^5.5.1",
     "echarts-for-react": "^3.0.2",
     "eslint": "^10.0.1",
