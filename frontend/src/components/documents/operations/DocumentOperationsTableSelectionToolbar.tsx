@@ -15,10 +15,7 @@
 import { Box, Button, Typography } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  DocumentMetadata,
-  ProcessDocumentsProgressResponse,
-} from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { DocumentMetadata, ProcessDocumentsProgressResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 export interface CustomBulkAction {
   icon: React.ReactElement;

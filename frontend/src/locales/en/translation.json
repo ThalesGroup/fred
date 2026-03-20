@@ -353,7 +353,6 @@
     }
   },
   "assetManager": {
-    "title": "Manage Assets for {{agentName}}",
     "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
     "listTitle": "Current Assets",
     "noAssetsFound": "No assets found. Upload one below to get started.",
@@ -379,18 +378,40 @@
     "confirmDeleteMessage": "Delete this asset? This action cannot be undone.",
     "addMoreFiles": "Add more files"
   },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Chat options"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "System prompt",
+        "description": "Core behavior instructions for the assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Allow file attachments",
+        "description": "Show file upload/attachment controls for this agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Document libraries picker",
+        "description": "Let users select document libraries/knowledge sources for this agent."
+      }
+    }
+  },
   "agentEditDrawer": {
     "nameLabel": "Name",
-    "nameHelperText": "The display name of the agent.",
-    "roleHelperText": "The agent's mandatory role for discovery (e.g., 'Financial Analyst')",
-    "descriptionHelperText": "The agent's mandatory description.",
-    "tagsHelperText": "Tags used for categorization and filtering.",
     "noTunableFields": "This agent exposes no tunable fields.",
     "coreFields": "Core Fields",
     "tunableFields": "Tunable Fields",
     "tagsLabel": "Tags",
     "selectMcpServers": "Select MCP servers",
-    "noMcpServers": "No MCP servers are currently available."
+    "noMcpServers": "No MCP servers are currently available.",
+    "headerTitle": "{{agentsNicknameSingular}} edition",
+    "headerTitleCreate": "Create {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Failed to create agent",
+      "updateFailed": "Failed to update agent"
+    }
   },
   "agentHub": {
     "title": "Your {{agentsNicknamePlural}}",
@@ -1309,5 +1330,88 @@
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Cancel",
     "defaultConfirmButtonLabel": "Confirm"
+  },
+  "rework": {
+    "back": "Back",
+    "teamRoles": {
+      "member": "Member",
+      "manager": "Manager",
+      "owner": "Owner"
+    },
+    "sidebar": {
+      "title": "FRED.AI",
+      "team": {
+        "avatarAlt": "Team {{teamName}}",
+        "bannerAlt": "Team's banner",
+        "userTeam": "Personal space",
+        "allTeams": "Marketplace"
+      },
+      "menu": {
+        "agents": "Agents",
+        "resources": "Resources",
+        "apps": "Apps"
+      },
+      "newChat": "New chat",
+      "chatList": {
+        "title": "Chat"
+      }
+    },
+    "userSettings": {
+      "back": "Back",
+      "disconnect": "Disconnect",
+      "title": "Your profile",
+      "app": {
+        "dark": "Dark",
+        "system": "System",
+        "light": "Light",
+        "french": "French",
+        "english": "English"
+      },
+      "conversationProfile": {
+        "title": "Conversation profile",
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your agents."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Members",
+        "settings": "Settings",
+        "leaveTeam": "Leave team"
+      },
+      "members": {
+        "title": "Team members",
+        "addMember": {
+          "placeholder": "Invite users"
+        },
+        "table": {
+          "deleteAction": "Delete",
+          "identifiant": "Identifiant",
+          "firstName": "First name",
+          "lastName": "Last name",
+          "role": "Role",
+          "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Failed to update role",
+          "updateRoleDetail": "Could not update member role.",
+          "removeMemberSummary": "Failed to remove member",
+          "removeMemberDetail": "Could not remove team member.",
+          "forbiddenDetail": "You are not allowed to perform this action.",
+          "lastOwnerDetail": "A team must keep at least one owner."
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Team banner",
+        "description": {
+          "label": "Team description",
+          "placeholder": "Help other users understand your team's role."
+        },
+        "privateTeam": "Private team",
+        "teamPrompt": {
+          "label": "Team context (prompt)",
+          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
+        }
+      }
+    }
   }
 }

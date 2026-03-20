@@ -100,19 +100,7 @@
           }
         },
         "organization": { "this": {} },
-        "owner": {
-          "union": {
-            "child": [
-              { "this": {} },
-              {
-                "tupleToUserset": {
-                  "computedUserset": { "relation": "admin" },
-                  "tupleset": { "relation": "organization" }
-                }
-              }
-            ]
-          }
-        },
+        "owner": { "this": {} },
         "public": { "this": {} }
       },
       "type": "team"

@@ -63,7 +63,9 @@ export const DocumentTableRowActionsMenu: React.FC<DocumentTableRowActionsMenuPr
               setAnchorEl(null);
             }}
           >
-            <ListItemIcon>{React.cloneElement(action.icon, { fontSize: "small" })}</ListItemIcon>
+            <ListItemIcon>
+              {React.cloneElement(action.icon as React.ReactElement<{ fontSize?: string }>, { fontSize: "small" })}
+            </ListItemIcon>
             <ListItemText primary={action.name} />
           </MenuItem>
         ))}

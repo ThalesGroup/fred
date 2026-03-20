@@ -129,7 +129,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
           onChange={(e) => setName(e.target.value)}
           required
           autoFocus
-          inputProps={{ pattern: "^[^/]+$", title: "Name cannot contain '/'" }}
+          inputProps={{ pattern: "^[^\\/]+$", title: "Name cannot contain '/'" }}
         />
 
         <TextField

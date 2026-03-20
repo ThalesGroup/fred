@@ -23,7 +23,6 @@ from fred_core import (
     AgentPermission,
     KeycloakUser,
     OrganizationPermission,
-    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -32,6 +31,7 @@ from fred_core import (
     TeamPermission,
     authorize,
 )
+from fred_core.common import OwnerFilter
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
@@ -311,8 +311,10 @@ class AgentService:
         """
         # If team_id is provided, check user has permission to manage team agents
         if team_id:
-            await self.rebac.check_user_permission_or_raise(
-                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            await self.rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
             )
 
         # If class_path/definition_ref is provided, validate and resolve target class
@@ -475,6 +477,8 @@ class AgentService:
                 resource_id=agent_id,
             )
 
+        return agent_settings
+
     async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
@@ -518,6 +522,21 @@ class AgentService:
                 _validate_class_path(agent_settings.class_path)
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
+
+    def get_class_path_tuning(
+        self, user: KeycloakUser, class_path: str | None
+    ) -> AgentTuning:
+        """Return the default tuning for a given class_path (or the default BasicReAct if None)."""
+        if not class_path:
+            definition = instantiate_definition_class(BasicReActDefinition)
+            return definition_to_agent_tuning(definition)
+
+        resolved = resolve_agent_class(class_path)
+        if resolved.implementation_kind == AgentImplementationKind.FLOW:
+            return resolved.cls.tuning
+
+        definition = instantiate_definition_class(resolved.cls)
+        return definition_to_agent_tuning(definition)
 
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
         await self.rebac.check_user_permission_or_raise(

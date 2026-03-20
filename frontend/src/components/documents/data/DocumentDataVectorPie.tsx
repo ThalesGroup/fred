@@ -18,15 +18,13 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
 import { distributionColors, DocumentDataPieProps } from "./DocumentDataCommon.tsx";
 
-export const DocumentDataVectorPie = (
-  { slices }: DocumentDataPieProps,
-) => {
+export const DocumentDataVectorPie = ({ slices }: DocumentDataPieProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
 
   const showVectorLegend = slices.length > 0 && slices.length <= 15;
 
-  const dc = distributionColors(theme)
+  const dc = distributionColors(theme);
 
   return (
     <Box
@@ -43,9 +41,7 @@ export const DocumentDataVectorPie = (
       }}
     >
       <Box flex={1} minWidth={0}>
-        <Typography variant="subtitle2">
-          {t("dataHub.vectorDistributionTitle", "Vectors per document")}
-        </Typography>
+        <Typography variant="subtitle2">{t("dataHub.vectorDistributionTitle", "Vectors per document")}</Typography>
         <Typography variant="caption" color="text.secondary">
           {t("dataHub.vectorDistributionSubtitle", {
             count: slices.length,
@@ -80,23 +76,9 @@ export const DocumentDataVectorPie = (
       <Box width={120} height={80} flexShrink={0}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie
-              data={slices}
-              dataKey="value"
-              nameKey="label"
-              innerRadius={22}
-              outerRadius={34}
-              paddingAngle={1}
-            >
+            <Pie data={slices} dataKey="value" nameKey="label" innerRadius={22} outerRadius={34} paddingAngle={1}>
               {slices.map((entry, idx) => (
-                <Cell
-                  key={entry.key}
-                  fill={
-                    entry.key === "empty"
-                      ? theme.palette.grey[300]
-                      : dc[idx % dc.length]
-                  }
-                />
+                <Cell key={entry.key} fill={entry.key === "empty" ? theme.palette.grey[300] : dc[idx % dc.length]} />
               ))}
             </Pie>
           </PieChart>
@@ -104,4 +86,4 @@ export const DocumentDataVectorPie = (
       </Box>
     </Box>
   );
-}
+};

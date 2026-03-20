@@ -1,0 +1,33 @@
+// src/assets/styles/abstracts/_mixins.scss
+
+@mixin reset-button {
+  // 1. Structure & Layout
+  display: inline-flex;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  vertical-align: middle;
+  appearance: none;
+
+  cursor: pointer;
+  margin: 0;
+  border: none;
+
+  background: transparent;
+  padding: 0;
+  color: inherit;
+
+  font: inherit;
+  line-height: normal;
+  user-select: none;
+  text-align: inherit;
+  text-decoration: none;
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}

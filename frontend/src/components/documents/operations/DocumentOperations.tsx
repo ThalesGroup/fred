@@ -18,7 +18,7 @@ import {
   Checkbox,
   Container,
   FormControl,
-  Grid2,
+  Grid,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -182,12 +182,12 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
     <Container maxWidth="xl">
       {/* Filter Section */}
       <Paper elevation={2} sx={{ p: 3, borderRadius: 4, border: `1px solid ${theme.palette.divider}`, mb: 3 }}>
-        <Grid2 container spacing={2} alignItems="center">
-          <Grid2 size={{ xs: 12, md: 12 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid size={{ xs: 12, md: 12 }}>
             {/* Top Filters */}
-            <Grid2 container spacing={2} sx={{ mb: 2 }}>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
               {/* Library filter */}
-              <Grid2 size={{ xs: 4 }}>
+              <Grid size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Library</InputLabel>
                   <Select
@@ -205,10 +205,10 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                     ))}
                   </Select>
                 </FormControl>
-              </Grid2>
+              </Grid>
 
               {/* Stages filter */}
-              <Grid2 size={{ xs: 4 }}>
+              <Grid size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Stages (done)</InputLabel>
                   <Select
@@ -226,10 +226,10 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                     ))}
                   </Select>
                 </FormControl>
-              </Grid2>
+              </Grid>
 
               {/* Searchable filter */}
-              <Grid2 size={{ xs: 4 }}>
+              <Grid size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Searchable</InputLabel>
                   <Select
@@ -242,12 +242,12 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                     <MenuItem value="false">Only Excluded</MenuItem>
                   </Select>
                 </FormControl>
-              </Grid2>
-            </Grid2>
+              </Grid>
+            </Grid>
 
             {/* Search + Sources inline */}
-            <Grid2 container spacing={2}>
-              <Grid2 size={{ xs: 12, md: 8 }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, md: 8 }}>
                 <TextField
                   fullWidth
                   placeholder={t("documentLibrary.searchPlaceholder")}
@@ -277,8 +277,8 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                   }}
                   size="small"
                 />
-              </Grid2>
-            </Grid2>
+              </Grid>
+            </Grid>
 
             <Box display="flex" justifyContent="flex-end" mt={2} gap={1}>
               {(selectedDocuments.length > 0 || isProcessingDocuments) && (
@@ -300,8 +300,8 @@ export const DocumentOperations = ({}: DocumentsViewProps) => {
                 {isProcessingLibrary ? "Processing library..." : "Process library"}
               </Button>
             </Box>
-          </Grid2>
-        </Grid2>
+          </Grid>
+        </Grid>
       </Paper>
 
       {/* Documents Section */}

@@ -16,8 +16,7 @@ import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { Box, Button, CardContent, Drawer, Fade, IconButton, Typography, useTheme } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
+import { Box, Button, CardContent, Drawer, Fade, Grid, IconButton, Typography, useTheme } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -29,10 +28,8 @@ import { useToast } from "../ToastProvider";
 
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { AgentCard } from "./AgentCard";
-import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
-import { AgentEditDrawer } from "./AgentEditDrawer";
+import { AgentCreateEditDrawer } from "./AgentCreateEditDrawer";
 import { AgentInspectionModal } from "./AgentInspectionModal";
-import { CreateAgentModal } from "./CreateAgentModal";
 
 interface AgentGridManagerProps {
   // Data
@@ -79,9 +76,6 @@ export const AgentGridManager = ({
   // State for drawers/modals
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [assetManagerOpen, setAssetManagerOpen] = useState(false);
-  const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
   const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
   const [agentForInspection, setAgentForInspection] = useState<AnyAgent | null>(null);
   const [codeDrawer, setCodeDrawer] = useState<{
@@ -93,12 +87,11 @@ export const AgentGridManager = ({
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
-  // Handlers for create modal
+  // Handler for create: open the edit drawer with no agent (create mode)
   const handleOpenCreateAgent = () => {
-    setCreateModalOpen(true);
+    setSelected(null);
+    setEditOpen(true);
   };
-
-  const handleCloseCreateAgent = () => setCreateModalOpen(false);
 
   // Code inspector handler
   const handleCloseCodeDrawer = () => {
@@ -143,16 +136,6 @@ export const AgentGridManager = ({
     if (onRefetchAgents) {
       await onRefetchAgents();
     }
-  };
-
-  const handleManageAssets = (agent: AnyAgent) => {
-    setAgentForAssetManagement(agent);
-    setAssetManagerOpen(true);
-  };
-
-  const handleCloseAssetManager = () => {
-    setAssetManagerOpen(false);
-    setAgentForAssetManagement(null);
   };
 
   const handleInspectAgent = (agent: AnyAgent) => {
@@ -208,24 +191,23 @@ export const AgentGridManager = ({
 
             {/* Grid */}
             {agents.length > 0 ? (
-              <Grid2 container spacing={2}>
+              <Grid container spacing={2}>
                 {agents.map((agent) => (
-                  <Grid2 key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
+                  <Grid key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                     <Fade in timeout={500}>
                       <Box sx={{ width: "100%" }}>
                         <AgentCard
                           agent={agent}
                           onEdit={canEdit ? handleEdit : undefined}
                           onToggleEnabled={canEdit ? handleToggleEnabled : undefined}
-                          onManageAssets={canEdit ? handleManageAssets : undefined}
                           onInspectCode={handleInspectCode}
                           onInspectAgent={handleInspectAgent}
                         />
                       </Box>
                     </Fade>
-                  </Grid2>
+                  </Grid>
                 ))}
-              </Grid2>
+              </Grid>
             ) : (
               <Box
                 display="flex"
@@ -244,41 +226,20 @@ export const AgentGridManager = ({
                 </Typography>
               </Box>
             )}
-
-            {/* Create modal */}
-            {createModalOpen && (
-              <CreateAgentModal
-                open={createModalOpen}
-                onClose={handleCloseCreateAgent}
-                onCreated={() => {
-                  handleCloseCreateAgent();
-                  handleRefetch();
-                }}
-                teamId={teamId}
-              />
-            )}
           </>
         )}
       </CardContent>
 
       {/* Drawers / Modals */}
-      <AgentEditDrawer
+      <AgentCreateEditDrawer
         canDelete={canDelete}
         open={editOpen}
         agent={selected}
+        teamId={teamId}
         onClose={() => setEditOpen(false)}
         onSaved={handleRefetch}
         onDeleted={handleRefetch}
       />
-      {agentForAssetManagement && (
-        <AgentConfigWorkspaceManagerDrawer
-          isOpen={assetManagerOpen}
-          onClose={handleCloseAssetManager}
-          agentId={agentForAssetManagement.id}
-          agentName={agentForAssetManagement.name}
-        />
-      )}
-
       {/* Code Inspector Drawer */}
       <Box
         component={Drawer}

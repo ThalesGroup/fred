@@ -18,7 +18,7 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 from uuid import uuid4
 
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from temporalio import activity
 from temporalio.client import WorkflowHandle
 from temporalio.common import WorkflowIDReusePolicy
@@ -51,7 +51,7 @@ class TemporalAgentInvoker:
         default_heartbeat_interval: float = 25.0,
     ) -> None:
         cfg = get_configuration().scheduler
-        if cfg.backend != "temporal":
+        if cfg.backend != SchedulerBackend.TEMPORAL:
             raise RuntimeError(
                 f"TemporalAgentInvoker requires Temporal backend; current={cfg.backend}"
             )

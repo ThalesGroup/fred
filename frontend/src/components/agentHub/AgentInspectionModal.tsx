@@ -33,15 +33,7 @@ const EXECUTION_LABEL: Record<string, string> = {
   proxy: "Proxy runtime",
 };
 
-const Section = ({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) => (
+const Section = ({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) => (
   <Stack
     spacing={1.25}
     sx={{
@@ -95,9 +87,7 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
         sx: {
           backgroundImage: "none",
           bgcolor: (theme) =>
-            theme.palette.mode === "dark"
-              ? alpha(theme.palette.common.black, 0.72)
-              : theme.palette.background.paper,
+            theme.palette.mode === "dark" ? alpha(theme.palette.common.black, 0.72) : theme.palette.background.paper,
           border: (theme) =>
             theme.palette.mode === "dark"
               ? `1px solid ${alpha(theme.palette.common.white, 0.16)}`
@@ -150,7 +140,10 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
                   {inspection.description}
                 </Typography>
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Chip size="small" label={EXECUTION_LABEL[inspection.execution_category] ?? inspection.execution_category} />
+                  <Chip
+                    size="small"
+                    label={EXECUTION_LABEL[inspection.execution_category] ?? inspection.execution_category}
+                  />
                   {tags.map((tag) => (
                     <Chip key={tag} size="small" variant="outlined" label={tag} />
                   ))}
@@ -159,14 +152,17 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
             </Section>
 
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <Section icon={<SettingsSuggestIcon fontSize="small" color="primary" />} title="Tuning surface">
                   {fields.length === 0 ? (
                     <EmptyState text="No exposed tuning fields." />
                   ) : (
                     <Stack spacing={1}>
                       {fields.map((field) => (
-                        <Box key={field.key} sx={{ pb: 1, borderBottom: (theme) => `1px dashed ${theme.palette.divider}` }}>
+                        <Box
+                          key={field.key}
+                          sx={{ pb: 1, borderBottom: (theme) => `1px dashed ${theme.palette.divider}` }}
+                        >
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
                             {field.title || field.key}
                           </Typography>
@@ -180,8 +176,11 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
                 </Section>
               </Grid>
 
-              <Grid item xs={12} md={6}>
-                <Section icon={<PrecisionManufacturingIcon fontSize="small" color="primary" />} title="Declared capabilities">
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Section
+                  icon={<PrecisionManufacturingIcon fontSize="small" color="primary" />}
+                  title="Declared capabilities"
+                >
                   {tools.length === 0 && defaultMcpServers.length === 0 ? (
                     <EmptyState text="No declared tools or default MCP servers." />
                   ) : (
@@ -208,7 +207,9 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
 
                       {defaultMcpServers.length > 0 && (
                         <>
-                          {tools.length > 0 && <Box sx={{ borderTop: (theme) => `1px solid ${theme.palette.divider}` }} />}
+                          {tools.length > 0 && (
+                            <Box sx={{ borderTop: (theme) => `1px solid ${theme.palette.divider}` }} />
+                          )}
                           <Stack spacing={1}>
                             <Typography variant="caption" color="text.secondary">
                               Default MCP servers
@@ -232,7 +233,6 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
                   )}
                 </Section>
               </Grid>
-
             </Grid>
           </Stack>
         )}

@@ -354,8 +354,7 @@ const summarizeChatMessageForDebug = (message: unknown): Record<string, unknown>
   }
 
   if (text) {
-    summary.text =
-      extras.streaming_partial === true ? ellipsizeDebug(text, DEBUG_TEXT_PREVIEW_MAX) : text;
+    summary.text = extras.streaming_partial === true ? ellipsizeDebug(text, DEBUG_TEXT_PREVIEW_MAX) : text;
   }
 
   return stripNullish(summary) as Record<string, unknown>;
@@ -440,12 +439,7 @@ const getDebugCollapseKey = (payload: unknown): string | undefined => {
     return undefined;
   }
 
-  return [
-    "stream-partial",
-    payload.message.session_id,
-    payload.message.exchange_id,
-    payload.message.rank,
-  ].join(":");
+  return ["stream-partial", payload.message.session_id, payload.message.exchange_id, payload.message.rank].join(":");
 };
 
 const getExchangeIdFromDebugPayload = (payload: unknown): string | undefined => {
@@ -550,8 +544,7 @@ const getDebugLabel = (payload: unknown): string => {
     return `tool_call ${toolName}`;
   }
   if (isRecord(message.tool_result)) {
-    const toolName =
-      typeof message.tool_result.tool_name === "string" ? message.tool_result.tool_name : "tool_result";
+    const toolName = typeof message.tool_result.tool_name === "string" ? message.tool_result.tool_name : "tool_result";
     return `tool_result ${toolName}`;
   }
 
@@ -638,7 +631,12 @@ const buildDebugGroups = (debugEvents: DebugEventEntry[]): DebugEventGroup[] => 
     if (isRecord(payload) && payload.type === "final" && Array.isArray(payload.messages)) {
       const enrichedMessages = payload.messages.map((message) => {
         if (!isRecord(message)) return message;
-        if (typeof message.role === "string" && message.role === "user" && typeof message.text === "string" && exchangeId) {
+        if (
+          typeof message.role === "string" &&
+          message.role === "user" &&
+          typeof message.text === "string" &&
+          exchangeId
+        ) {
           const preview = ellipsizeDebug(message.text.replace(/\s+/g, " ").trim(), 120);
           if (!promptPreviewByExchange.has(exchangeId)) {
             promptPreviewByExchange.set(exchangeId, preview);
@@ -971,7 +969,9 @@ const ChatBot = ({
 
   const formatDebugGroupText = useCallback((group: DebugEventGroup): string => {
     const header = group.subtitle ? `${group.title} - ${group.subtitle}` : group.title;
-    const entries = group.entries.map((entry) => `[${entry.timestamp}] ${entry.label}\n${entry.payloadText}`).join("\n\n");
+    const entries = group.entries
+      .map((entry) => `[${entry.timestamp}] ${entry.label}\n${entry.payloadText}`)
+      .join("\n\n");
     return `${header}\n${"=".repeat(header.length)}\n${entries}`;
   }, []);
 
@@ -1041,12 +1041,11 @@ const ChatBot = ({
     refetchOnReconnect: false,
   });
   const attachmentSessionId = effectiveSessionId;
-  const waitResponseForCurrentSession =
-    !waitResponse
-      ? false
-      : !effectiveSessionId
-        ? waitResponse
-        : waitingSessionIdRef.current === effectiveSessionId;
+  const waitResponseForCurrentSession = !waitResponse
+    ? false
+    : !effectiveSessionId
+      ? waitResponse
+      : waitingSessionIdRef.current === effectiveSessionId;
   useEffect(() => {
     if (attachmentSessionId) {
       refetchSessions();
@@ -1287,7 +1286,9 @@ const ChatBot = ({
 
             case "error": {
               const errorSessionId =
-                typeof (response as any)?.session_id === "string" ? ((response as any).session_id as string) : undefined;
+                typeof (response as any)?.session_id === "string"
+                  ? ((response as any).session_id as string)
+                  : undefined;
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
               endWaiting({
@@ -1690,7 +1691,7 @@ const ChatBot = ({
     const eventBase: ChatAskInput = {
       type: "ask",
       message: input,
-      agent_id: options?.internalProfileId ? undefined : (agent ? agent.id : currentAgent.id),
+      agent_id: options?.internalProfileId ? undefined : agent ? agent.id : currentAgent.id,
       internal_profile_id: options?.internalProfileId,
       internal_capability: options?.internalCapability,
       // Use the already-resolved sid (may come from ensureSessionId()) to avoid any drift
@@ -1782,38 +1783,38 @@ const ChatBot = ({
     [beginWaiting, chatSessionId, currentAgent, pendingHitl, setupWebSocket, showError],
   );
 
-  const handleRequestLogGenius = useCallback((mode: LogGeniusMode = "logs") => {
-    const prompt =
-      mode === "performance"
-        ? t(
-            "chatbot.logGenius.performancePrompt",
-            "Analyze this conversation performance from Langfuse traces and summarize bottlenecks, slow nodes/tools, and concrete actions.",
-          )
-        : t(
-            "chatbot.logGenius.prompt",
-            "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
-          );
-    const traceThought =
-      mode === "performance"
-        ? t(
-            "chatbot.logGenius.performanceTrace",
-            "Diagnosing conversation performance (trace timings and bottlenecks).",
-          )
-        : t(
-            "chatbot.logGenius.trace",
-            "Diagnosing the current conversation and runtime context.",
-          );
-    const context = buildLogGeniusContext(messagesRef.current);
-    const fullPrompt = context
-      ? `${prompt}\n\nRecent conversation context (last ${LOG_GENIUS_CONTEXT_TURNS} turns, including tool calls):\n${context}`
-      : prompt;
-    queryChatBot(fullPrompt, internalLogGeniusAgent, buildRuntimeContext(), {
-      suppressUserMessage: true,
-      traceThought,
-      internalProfileId: "log_genius",
-      internalCapability: "log_genius",
-    });
-  }, [buildRuntimeContext, internalLogGeniusAgent, queryChatBot, t]);
+  const handleRequestLogGenius = useCallback(
+    (mode: LogGeniusMode = "logs") => {
+      const prompt =
+        mode === "performance"
+          ? t(
+              "chatbot.logGenius.performancePrompt",
+              "Analyze this conversation performance from Langfuse traces and summarize bottlenecks, slow nodes/tools, and concrete actions.",
+            )
+          : t(
+              "chatbot.logGenius.prompt",
+              "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
+            );
+      const traceThought =
+        mode === "performance"
+          ? t(
+              "chatbot.logGenius.performanceTrace",
+              "Diagnosing conversation performance (trace timings and bottlenecks).",
+            )
+          : t("chatbot.logGenius.trace", "Diagnosing the current conversation and runtime context.");
+      const context = buildLogGeniusContext(messagesRef.current);
+      const fullPrompt = context
+        ? `${prompt}\n\nRecent conversation context (last ${LOG_GENIUS_CONTEXT_TURNS} turns, including tool calls):\n${context}`
+        : prompt;
+      queryChatBot(fullPrompt, internalLogGeniusAgent, buildRuntimeContext(), {
+        suppressUserMessage: true,
+        traceThought,
+        internalProfileId: "log_genius",
+        internalCapability: "log_genius",
+      });
+    },
+    [buildRuntimeContext, internalLogGeniusAgent, queryChatBot, t],
+  );
 
   const loadError = (isHistoryError && historyError) || (isPrefsError && prefsError);
   const hasLoadError = Boolean(loadError);
@@ -1827,10 +1828,15 @@ const ChatBot = ({
       !loadState.historyReady ||
       !loadState.prefsReady ||
       Boolean(loadError));
-  const showWelcome = isNewConversation && !isSessionLoadBlocked && !waitResponseForCurrentSession && messages.length === 0;
+  const showWelcome =
+    isNewConversation && !isSessionLoadBlocked && !waitResponseForCurrentSession && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
   const showHistoryLoading =
-    !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponseForCurrentSession && !isClientCreatedSession;
+    !!chatSessionId &&
+    isHistoryFetching &&
+    messages.length === 0 &&
+    !waitResponseForCurrentSession &&
+    !isClientCreatedSession;
   const debugWidgetProps = {
     isAdmin,
     debugDrawerOpen,

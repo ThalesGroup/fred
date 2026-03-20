@@ -6,7 +6,7 @@ This lets teams start with model routing without changing YAML structure first.
 
 from __future__ import annotations
 
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from pydantic import Field
 
 from agentic_backend.common.structures import AIConfig

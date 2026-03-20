@@ -120,6 +120,7 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 | SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
 | Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html)                              | For DOCX document ingestion                                                                 |
 | LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | For PPTX conversion into PDF                                                                |
+| libmagic     | Identifies file types by content | Install via system package manager (e.g., `apt install libmagic1`, `brew install libmagic`)         | To check file type                                                                          |
 
   <details>
     <summary>Dependency details</summary>
@@ -139,6 +140,7 @@ graph TD
         Python["Python 3.12.8"]
         SQLite["SQLite"]
         Pandoc["Pandoc"]
+        libmagic["libmagic"]
         Pyenv["Pyenv (Python installer)"]
         Node["Node 22.13.0"]
         NVM["nvm (Node installer)"]
@@ -158,6 +160,7 @@ graph TD
     Knowledge -->|depends on| Venv
     Knowledge -->|depends on| Pandoc
     Knowledge -->|depends on| SQLite
+    Knowledge -->|depends on| libmagic
 
     Frontend -->|depends on| Node
 
@@ -461,13 +464,53 @@ No matter which development environment you choose, both backends rely on two pa
 ### Start Fred components
 
 ```bash
+# standalone mode (single-process backend: control-plane + agentic + knowledge-flow)
+make run-app
+```
+
+```bash
+# split APIs mode (agentic:8000, knowledge-flow:8111, control-plane:8222)
+make run-multi
+```
+
+```bash
+# default command (alias of `run-app`)
+make run
+```
+
+```bash
+# backward-compatible alias
+make run-app-multi
+```
+
+```bash
+# split APIs mode + all Temporal workers (requires Temporal running)
+make run-multi-workers
+```
+
+Run a single backend API from repository root:
+
+```bash
+make run-control-plane
+make run-agentic
+make run-knowledge-flow
+```
+
+Or run each component from its own folder:
+
+```bash
 # knowledge-flow backend
 cd knowledge-flow-backend && make run
 ```
 
 ```bash
 # agentic backend
-cd agentic_backend && make run
+cd agentic-backend && make run
+```
+
+```bash
+# control-plane backend
+cd control-plane-backend && make run
 ```
 
 ```bash
@@ -551,10 +594,16 @@ Other infrastructure services remain accessible on their usual ports:
 
 ## Production mode
 
+> [!IMPORTANT]
+> **Access-control reminder (shared environments):**
+> Keycloak app roles and team ReBAC rights are different controls.
+> For the Fred access model and deployment bootstrap rules, see [`docs/REBAC.md`](./docs/REBAC.md).
+
 For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
 - [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
 - [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
+- [`docs/REBAC.md`](./docs/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 
@@ -640,6 +689,8 @@ Persistence options:
 
 - Developer and contributors guides
 
+  - [Developer Contract (humans + AI)](./docs/DEVELOPER_CONTRACT.md)
+  - [Platform Runtime Map (API apps + Temporal apps)](./docs/PLATFORM_RUNTIME_MAP.md)
   - [Developer Tools](./developer_tools/README.md)
   - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
   - [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)

@@ -50,15 +50,17 @@ def _build_ws_tolerant_pattern(needle: str) -> str:
 
 
 class SemanticSplitter(BaseTextSplitter):
-    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 150):
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 150, preserve_tables: bool = True):
         """
         Initializes the SemanticSplitter with specified chunk size and overlap.
         Args:
             chunk_size (int, optional): The maximum number of characters in each chunk. Defaults to 1500.
             chunk_overlap (int, optional): The number of overlapping characters between consecutive chunks. Defaults to 150.
+            preserve_tables (bool, optional): If true, keep annotated markdown tables intact. Defaults to True.
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.preserve_tables = preserve_tables
 
     def _extract_and_replace_tables(self, text: str) -> Tuple[str, dict]:
         """
@@ -229,10 +231,13 @@ class SemanticSplitter(BaseTextSplitter):
 
             for table_id in placeholders:
                 table_md = table_map[table_id]
-                if len(table_md) <= self.chunk_size:
+                if self.preserve_tables:
                     final_chunks.append(Document(page_content=table_md, metadata={"is_table": True, "table_id": table_id, "table_chunk_id": 0}))
                 else:
-                    final_chunks.extend(self._split_large_table(table_md, table_id))
+                    if len(table_md) <= self.chunk_size:
+                        final_chunks.append(Document(page_content=table_md, metadata={"is_table": True, "table_id": table_id, "table_chunk_id": 0}))
+                    else:
+                        final_chunks.extend(self._split_large_table(table_md, table_id))
 
         return final_chunks
 

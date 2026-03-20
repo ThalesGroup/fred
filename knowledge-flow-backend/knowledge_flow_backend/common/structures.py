@@ -21,13 +21,16 @@ from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
-from fred_core.common.structures import TemporalSchedulerConfig
+from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 """
@@ -266,6 +269,24 @@ VectorStorageConfig = Annotated[
 class ProcessingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    class TextSplitterConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        chunk_size: int = Field(
+            default=1500,
+            ge=1,
+            description="Maximum number of characters per chunk for text splitting.",
+        )
+        chunk_overlap: int = Field(
+            default=150,
+            ge=0,
+            description="Number of overlapping characters between consecutive chunks.",
+        )
+        preserve_tables: bool = Field(
+            default=True,
+            description="If true, keep annotated markdown tables intact (do not split by size).",
+        )
+
     class PdfPipelineConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
@@ -322,6 +343,10 @@ class ProcessingConfig(BaseModel):
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
+        )
+        text_splitter: "ProcessingConfig.TextSplitterConfig" = Field(
+            default_factory=lambda: ProcessingConfig.TextSplitterConfig(),
+            description="Text splitter configuration for vectorization and summarization.",
         )
         input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
             default_factory=list,
@@ -444,7 +469,7 @@ class MCPConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: str = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig
 
 

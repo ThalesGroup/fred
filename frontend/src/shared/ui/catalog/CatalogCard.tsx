@@ -9,13 +9,7 @@ export interface CatalogCardProps extends Omit<CardProps, "children"> {
   disabledTone?: boolean;
 }
 
-export const CatalogCard = ({
-  children,
-  selected = false,
-  disabledTone = false,
-  sx,
-  ...props
-}: CatalogCardProps) => {
+export const CatalogCard = ({ children, selected = false, disabledTone = false, sx, ...props }: CatalogCardProps) => {
   const theme = useTheme();
 
   return (
@@ -44,4 +38,3 @@ export const CatalogCard = ({
     </Card>
   );
 };
-

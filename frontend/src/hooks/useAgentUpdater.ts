@@ -41,10 +41,7 @@ export function useAgentUpdater() {
     }
   };
 
-  const updateTuning = async (
-    agent: AnyAgent,
-    newTuning: NonNullable<AnyAgent["tuning"]>,
-  ) => {
+  const updateTuning = async (agent: AnyAgent, newTuning: NonNullable<AnyAgent["tuning"]>) => {
     const payload: Agent2 = { ...agent, tuning: newTuning };
 
     try {

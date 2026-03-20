@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Callable, Iterable, Optional, cast
 
 import pytest
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from fred_core.kpi import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import Dims, KPIActor, MetricType
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
