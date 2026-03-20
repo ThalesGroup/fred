@@ -26,7 +26,7 @@ from langchain_openai import (
 )
 from pydantic import BaseModel
 
-from fred_core.common.structures import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
 

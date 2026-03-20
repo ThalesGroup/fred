@@ -1309,5 +1309,88 @@
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Cancel",
     "defaultConfirmButtonLabel": "Confirm"
+  },
+  "rework": {
+    "back": "Back",
+    "teamRoles": {
+      "member": "Member",
+      "manager": "Manager",
+      "owner": "Owner"
+    },
+    "sidebar": {
+      "title": "FRED.AI",
+      "team": {
+        "avatarAlt": "Team {{teamName}}",
+        "bannerAlt": "Team's banner",
+        "userTeam": "Personal space",
+        "allTeams": "Marketplace"
+      },
+      "menu": {
+        "agents": "Agents",
+        "resources": "Resources",
+        "apps": "Apps"
+      },
+      "newChat": "New chat",
+      "chatList": {
+        "title": "Chat"
+      }
+    },
+    "userSettings": {
+      "back": "Back",
+      "disconnect": "Disconnect",
+      "title": "Your profile",
+      "app": {
+        "dark": "Dark",
+        "system": "System",
+        "light": "Light",
+        "french": "French",
+        "english": "English"
+      },
+      "conversationProfile": {
+        "title": "Conversation profile",
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your agents."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Members",
+        "settings": "Settings",
+        "leaveTeam": "Leave team"
+      },
+      "members": {
+        "title": "Team members",
+        "addMember": {
+          "placeholder": "Invite users"
+        },
+        "table": {
+          "deleteAction": "Delete",
+          "identifiant": "Identifiant",
+          "firstName": "First name",
+          "lastName": "Last name",
+          "role": "Role",
+          "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Failed to update role",
+          "updateRoleDetail": "Could not update member role.",
+          "removeMemberSummary": "Failed to remove member",
+          "removeMemberDetail": "Could not remove team member.",
+          "forbiddenDetail": "You are not allowed to perform this action.",
+          "lastOwnerDetail": "A team must keep at least one owner."
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Team banner",
+        "description": {
+          "label": "Team description",
+          "placeholder": "Help other users understand your team's role."
+        },
+        "privateTeam": "Private team",
+        "teamPrompt": {
+          "label": "Team context (prompt)",
+          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
+        }
+      }
+    }
   }
 }

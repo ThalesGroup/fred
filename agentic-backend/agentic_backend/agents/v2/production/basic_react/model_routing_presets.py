@@ -7,7 +7,7 @@ Business/profile-specific routing rules live here (agent layer), while
 
 from __future__ import annotations
 
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from pydantic import Field
 
 from agentic_backend.common.structures import AIConfig

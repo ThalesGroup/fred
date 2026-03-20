@@ -17,7 +17,7 @@ export const buildChunkToDocMap = (
   points: Array<
     | { chunk_uid?: string | number | null; document_uid?: string | number | null }
     | { metadata?: { chunk_uid?: string | number | null; document_uid?: string | number | null } | null }
-  >
+  >,
 ): Record<string, string> => {
   return (points ?? []).reduce<Record<string, string>>((acc, p: any) => {
     const cid = p?.chunk_uid ?? p?.metadata?.chunk_uid;
@@ -34,7 +34,7 @@ export const filterDeletableIds = (selectedIds: string[] | undefined, idToDocMap
 export const removePointsByChunkIds = (
   // Accept both flat points and GraphPoints with metadata
   points: Array<any>,
-  successfulIds: Set<string>
+  successfulIds: Set<string>,
 ) =>
   points.filter((p: any) => {
     const cid = p?.chunk_uid ?? p?.metadata?.chunk_uid;

@@ -23,6 +23,7 @@ import asyncio
 import logging
 
 from fred_core import log_setup
+from fred_core.scheduler import SchedulerBackend
 
 from agentic_backend.application_context import ApplicationContext, get_app_context
 from agentic_backend.common.config_loader import (
@@ -52,7 +53,7 @@ async def main() -> None:
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
         return
-    if configuration.scheduler.backend.lower() != "temporal":
+    if configuration.scheduler.backend != SchedulerBackend.TEMPORAL:
         raise ValueError(
             f"Scheduler backend '{configuration.scheduler.backend}' not supported; expected 'temporal'."
         )

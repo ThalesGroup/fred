@@ -133,6 +133,7 @@ function FredUiContent() {
     document.title = displayName;
     const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
     faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   }, [baseUrl, displayName, favicon, faviconDark, darkMode]);
 
   useEffect(() => {

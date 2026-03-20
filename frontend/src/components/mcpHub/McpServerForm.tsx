@@ -1,6 +1,18 @@
 // Copyright Thales 2025
 
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+} from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClientAuthMode, McpServerConfiguration } from "../../slices/agentic/agenticOpenApi";
@@ -80,10 +92,7 @@ export function McpServerForm({ open, initial, onCancel, onSubmit }: McpServerFo
   }, [initial, open]);
 
   const isStdio = useMemo(() => (draft.transport || "").toLowerCase() === "stdio", [draft.transport]);
-  const isInprocess = useMemo(
-    () => (draft.transport || "").toLowerCase() === "inprocess",
-    [draft.transport],
-  );
+  const isInprocess = useMemo(() => (draft.transport || "").toLowerCase() === "inprocess", [draft.transport]);
 
   const handleSubmit = () => {
     const transport = (draft.transport || "streamable_http").toLowerCase();

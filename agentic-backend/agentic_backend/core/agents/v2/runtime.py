@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Generic, Literal, TypeAlias, TypeVar
 
-from fred_core import VectorSearchHit
 from fred_core.kpi import BaseKPIWriter
+from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer

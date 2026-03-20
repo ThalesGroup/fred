@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated
 
-from fred_core import VectorSearchHit
+from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.core.agents.runtime_context import RuntimeContext

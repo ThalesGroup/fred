@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
-from fred_core import ModelConfiguration, PostgresStoreConfig, VectorSearchHit
+from fred_core.common import ModelConfiguration, PostgresStoreConfig
 from fred_core.sql import create_async_engine_from_config
+from fred_core.store import VectorSearchHit
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolMessage

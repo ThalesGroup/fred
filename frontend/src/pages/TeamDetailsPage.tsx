@@ -6,21 +6,19 @@ import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
-import { TeamSettingsPage } from "../components/teamDetails/TeamSettingsPage";
 import { TeamAvatar } from "../components/teams/TeamVisuals";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
-import { useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery } from "../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
 import { capitalize } from "../utils/capitalize";
+import { KnowledgeHub } from "./KnowledgeHub.tsx";
+import { AgentHub } from "./AgentHub.tsx";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
   const { agentsNicknamePlural } = useFrontendProperties();
 
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: team, isLoading } = useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId },
-  );
+    const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
   // todo: handle error (404)
 
   if (teamId === undefined) {
@@ -34,24 +32,26 @@ export function TeamDetailsPage() {
     component: <TeamMembersPage teamId={teamId} permissions={team?.permissions} />,
   };
 
-  const settingTab: TabConfig = {
-    label: t("teamDetails.tabs.settings"),
-    path: `/team/${teamId}/settings`,
-    component: <TeamSettingsPage team={team} />,
-  };
-
   const tabs: TabConfig[] = [
     {
       label: capitalize(agentsNicknamePlural || "..."),
       path: `/team/${teamId}/${agentsNicknamePlural}`,
-      component: <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />,
+      component:
+        teamId === "user" ? (
+          <AgentHub />
+        ) : (
+          <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />
+        ),
     },
     {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
-      component: (
-        <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
-      ),
+      component:
+        teamId === "user" ? (
+          <KnowledgeHub />
+        ) : (
+          <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
+        ),
     },
     {
       label: t("teamDetails.tabs.apps"),
@@ -59,7 +59,6 @@ export function TeamDetailsPage() {
       component: <TeamAppsPage />,
     },
     ...(team?.permissions?.includes("can_read_members") ? [memberTab] : []),
-    ...(team?.permissions?.includes("can_update_info") ? [settingTab] : []),
   ];
 
   return (
@@ -105,7 +104,6 @@ export function TeamDetailsPage() {
       {/* Tabs */}
       <NavigationTabs
         tabs={tabs}
-        tabsContainerSx={{ px: 2, pb: 1 }}
         contentContainerSx={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", minHeight: 0 }}
         isLoading={isLoading}
       />

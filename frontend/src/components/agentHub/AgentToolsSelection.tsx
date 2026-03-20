@@ -18,12 +18,14 @@ export interface AgentToolsSelectionProps {
 
 export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
-  const { data: mcpServersData, isFetching: isFetchingMcpServers } =
-    useListMcpServersAgenticV1AgentsMcpServersGetQuery(undefined, {
+  const { data: mcpServersData, isFetching: isFetchingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery(
+    undefined,
+    {
       refetchOnMountOrArgChange: true,
       refetchOnFocus: true,
       refetchOnReconnect: true,
-    });
+    },
+  );
   const refIds = new Set(mcpServerRefs.map((ref) => ref.id));
 
   if (isFetchingMcpServers) {
@@ -81,9 +83,10 @@ export function AgentToolSelectionCard({ conf, selected, onSelectedChange }: Age
   const isInprocess = transport === "inprocess";
   const isStdio = transport === "stdio";
   const sourceKind = isInprocess ? "local" : "mcp";
-  const sourceLabel = sourceKind === "local"
-    ? t("agentHub.fields.mcp_server.source_local", "Local")
-    : t("agentHub.fields.mcp_server.source_mcp", "MCP");
+  const sourceLabel =
+    sourceKind === "local"
+      ? t("agentHub.fields.mcp_server.source_local", "Local")
+      : t("agentHub.fields.mcp_server.source_mcp", "MCP");
   const transportLabel = isInprocess
     ? t("agentHub.fields.mcp_server.transport_inprocess", "Local capability (inprocess)")
     : isStdio

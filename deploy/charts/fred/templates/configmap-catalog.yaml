@@ -1,0 +1,30 @@
+{{- define "common-library.configmap-catalog" }}
+
+{{- if or .app.agents_catalog .app.models_catalog .app.mcp_catalog }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .app.applicationName }}-catalog"
+  namespace: {{ .root.Release.Namespace }}
+data:
+
+{{- if .app.agents_catalog }}
+  agents_catalog.yaml: |
+{{ .app.agents_catalog | toYaml | indent 4 }}
+{{- end }}
+
+{{- if .app.models_catalog }}
+  models_catalog.yaml: |
+{{ .app.models_catalog | toYaml | indent 4 }}
+{{- end }}
+
+{{- if .app.mcp_catalog }}
+  mcp_catalog.yaml: |
+{{ .app.mcp_catalog | toYaml | indent 4 }}
+{{- end }}
+
+{{- end }}
+
+{{ end -}}

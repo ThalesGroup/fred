@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from fred_core.common import read_env_bool
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.common.structures import AgentSettings, Configuration
@@ -66,24 +67,6 @@ def _resolve_catalog_path(env_var: str, default_path: str) -> Path:
     return Path(os.getenv(env_var, default_path))
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    logger.warning(
-        "[CONFIG][CATALOG] Invalid boolean for %s=%r, defaulting to %s",
-        name,
-        raw,
-        default,
-    )
-    return default
-
-
 @dataclass(frozen=True, slots=True)
 class ModelRoutingBootstrapConfig:
     """
@@ -133,7 +116,7 @@ def resolve_model_routing_bootstrap_config(
     return ModelRoutingBootstrapConfig(
         catalog_path=catalog_path,
         catalog_exists=catalog_mode_enabled and catalog_path.exists(),
-        presets_enabled=_env_bool(
+        presets_enabled=read_env_bool(
             MODEL_ROUTING_PRESETS_ENABLED_ENV, default_presets_enabled
         ),
     )

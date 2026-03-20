@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = control_plane_backend
+
+[report]
+show_missing = True
+skip_covered = False

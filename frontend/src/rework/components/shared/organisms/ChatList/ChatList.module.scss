@@ -1,0 +1,25 @@
+@use "src/index.scss" as *;
+
+.chat-list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: hidden;
+}
+
+.chat-list-header {
+  display: flex;
+  @include typography("body", "small");
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-m);
+  height: 2rem;
+  color: var(--on-surface-retreat);
+}
+
+.chat-list-items {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--spacing-xs) var(--spacing-xs);
+  overflow-y: auto;
+}
