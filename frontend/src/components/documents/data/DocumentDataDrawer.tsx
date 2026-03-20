@@ -16,16 +16,10 @@ import React, { useEffect, useMemo, useRef, useLayoutEffect, useState } from "re
 import {
   ProcessingGraphNode,
   useDocumentChunksKnowledgeFlowV1DocumentsDocumentUidChunksGetQuery,
-  useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery
+  useDocumentVectorsKnowledgeFlowV1DocumentsDocumentUidVectorsGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { useDrawer } from "../../DrawerProvider.tsx";
-import {
-  Box,
-  CircularProgress,
-  Divider,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box, CircularProgress, Divider, Stack, Typography } from "@mui/material";
 import ChunksAccordion from "./ChunksAccordion.tsx";
 
 /**
@@ -153,12 +147,12 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
 
   const vectors = useMemo(() => {
     if (!vectorsData) return [];
-    return Array.isArray(vectorsData) ? vectorsData : (vectorsData as any)?.items ?? [];
+    return Array.isArray(vectorsData) ? vectorsData : ((vectorsData as any)?.items ?? []);
   }, [vectorsData]);
 
   const chunks = useMemo(() => {
     if (!chunksData) return [];
-    return Array.isArray(chunksData) ? chunksData : (chunksData as any)?.items ?? [];
+    return Array.isArray(chunksData) ? chunksData : ((chunksData as any)?.items ?? []);
   }, [chunksData]);
 
   const formatError = (err: unknown): string => {
@@ -167,8 +161,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
     if (err && typeof err === "object" && "status" in err) {
       const anyErr = err as any;
       const detail = anyErr?.data?.detail ?? anyErr?.data;
-      const detailStr =
-        detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
+      const detailStr = detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail);
       return `Error ${anyErr.status}${detailStr ? `: ${detailStr}` : ""}`;
     }
     if (err instanceof Error) return err.message;
@@ -179,15 +172,12 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
   const loading = vectorsLoading || chunksLoading;
 
   return (
-    <Box sx={{ width: 520, maxWidth: '100vw' }}>
+    <Box sx={{ width: 520, maxWidth: "100vw" }}>
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography variant="h6" noWrap>{title}</Typography>
-        <AutoFitOneLine
-          text={`ID: ${backendDocId}`}
-          colorVariant="secondary"
-          maxFontSize={14}
-          minFontSize={10}
-        />
+        <Typography variant="h6" noWrap>
+          {title}
+        </Typography>
+        <AutoFitOneLine text={`ID: ${backendDocId}`} colorVariant="secondary" maxFontSize={14} minFontSize={10} />
       </Box>
       <Divider />
       <Box sx={{ p: 2 }}>
@@ -209,9 +199,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
             No data available for this document.
           </Typography>
         )}
-        {!loading && !error && (
-          <ChunksAccordion vectors={vectors} chunks={chunks} />
-        )}
+        {!loading && !error && <ChunksAccordion vectors={vectors} chunks={chunks} />}
       </Box>
     </Box>
   );

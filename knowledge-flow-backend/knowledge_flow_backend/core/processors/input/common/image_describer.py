@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from fred_core import get_model
-from fred_core.common.structures import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 

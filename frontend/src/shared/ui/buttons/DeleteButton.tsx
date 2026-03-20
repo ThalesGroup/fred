@@ -22,17 +22,8 @@ type DeleteButtonProps = Omit<ButtonProps, "startIcon" | "color"> & {
 };
 
 // Use for labeled delete actions (e.g., "Clear", "Remove all").
-export const DeleteButton = ({
-  color = "error",
-  iconSize = "small",
-  children,
-  ...props
-}: DeleteButtonProps) => (
-  <Button
-    color={color}
-    startIcon={<DeleteIcon fontSize={iconSize === "inherit" ? "inherit" : iconSize} />}
-    {...props}
-  >
+export const DeleteButton = ({ color = "error", iconSize = "small", children, ...props }: DeleteButtonProps) => (
+  <Button color={color} startIcon={<DeleteIcon fontSize={iconSize === "inherit" ? "inherit" : iconSize} />} {...props}>
     {children}
   </Button>
 );

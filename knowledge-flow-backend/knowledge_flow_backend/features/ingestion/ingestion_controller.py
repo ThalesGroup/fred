@@ -28,6 +28,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.responses import Response, StreamingResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi import KPIActor, KPIWriter
+from fred_core.scheduler import SchedulerBackend
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
@@ -190,9 +191,9 @@ class IngestionController:
             preloaded_files.append((filename, input_temp_file))
         return preloaded_files
 
-    def _scheduler_backend(self) -> str:
+    def _scheduler_backend(self) -> SchedulerBackend:
         if self.scheduler_task_service is None:
-            return "memory"
+            return SchedulerBackend.MEMORY
         return ApplicationContext.get_instance().get_scheduler_backend()
 
     @staticmethod
@@ -249,19 +250,19 @@ class IngestionController:
         if self.scheduler_task_service is None:
             ids = self.vector_store.add_documents(docs)
             chunks = len(ids) if isinstance(ids, (list, tuple, set)) else len(docs)
-            return "memory", chunks
+            return SchedulerBackend.MEMORY.value, chunks
 
         result = await self.scheduler_task_service.store_fast_vectors(payload=payload)
         chunks = int((result or {}).get("chunks", len(docs)))
-        return self._scheduler_backend(), chunks
+        return self._scheduler_backend().value, chunks
 
     async def _delete_fast_vectors(self, *, document_uid: str) -> str:
         if self.scheduler_task_service is None:
             self.vector_store.delete_vectors_for_document(document_uid=document_uid)
-            return "memory"
+            return SchedulerBackend.MEMORY.value
 
         await self.scheduler_task_service.delete_fast_vectors(payload={"document_uid": document_uid})
-        return self._scheduler_backend()
+        return self._scheduler_backend().value
 
     async def _stream_upload_process(
         self,
@@ -393,7 +394,7 @@ class IngestionController:
                 # For streaming responses, FastAPI BackgroundTasks run only after
                 # the stream completes; this would prevent live progress updates
                 # with the in-memory scheduler.
-                if self._scheduler_backend() == "memory":
+                if self._scheduler_backend() == SchedulerBackend.MEMORY:
                     scheduler_background_tasks = None
                 _, handle = await scheduler_task_service.submit_documents(
                     user=user,

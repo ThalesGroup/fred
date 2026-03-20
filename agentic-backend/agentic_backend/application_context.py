@@ -35,21 +35,24 @@ from typing import Any, Callable, Dict, Optional
 
 from fred_core import (
     BaseLogStore,
+    BaseSessionStore,
     BearerAuth,
     ClientCredentialsProvider,
-    DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    LogStoreConfig,
     OpenFgaRebacConfig,
-    OpenSearchIndexConfig,
     OpenSearchLogStore,
-    PostgresTableConfig,
     RamLogStore,
     RebacEngine,
-    SQLStorageConfig,
     get_model,
     rebac_factory,
     split_realm_url,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
+    LogStoreConfig,
+    OpenSearchIndexConfig,
+    PostgresTableConfig,
+    SQLStorageConfig,
 )
 from fred_core.kpi import (
     BaseKPIStore,
@@ -61,7 +64,7 @@ from fred_core.kpi import (
 )
 from fred_core.logs.log_structures import StdoutLogStorageConfig
 from fred_core.logs.null_log_store import NullLogStore
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.sql import create_async_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -92,7 +95,6 @@ from agentic_backend.core.monitoring.postgres_history_store import PostgresHisto
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )
@@ -668,7 +670,7 @@ class ApplicationContext:
             return self._temporal_provider
 
         cfg = get_configuration().scheduler
-        if cfg.backend.lower() != "temporal":
+        if cfg.backend != SchedulerBackend.TEMPORAL:
             raise RuntimeError(
                 f"Temporal client requested but scheduler backend is {cfg.backend}"
             )

@@ -17,8 +17,9 @@ from typing import List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from fred_core import KeycloakUser, VectorSearchHit, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi import phase_timer
+from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import get_kpi_writer

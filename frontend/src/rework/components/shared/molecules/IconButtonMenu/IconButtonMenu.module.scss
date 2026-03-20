@@ -1,0 +1,10 @@
+.menu-popover {
+  top: anchor(bottom);
+  right: anchor(right);
+  left: auto;
+  margin: var(--spacing-3xs) 0 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
+}

@@ -1,3 +1,1 @@
-from .agent import Definition
-
-__all__ = ["Definition"]
+__all__: list[str] = []

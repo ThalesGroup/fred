@@ -11,6 +11,7 @@ import {
   Chip,
   Fade,
   FormControl,
+  Grid,
   InputAdornment,
   InputLabel,
   MenuItem,
@@ -20,7 +21,6 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TopBar } from "../common/TopBar";
@@ -39,8 +39,7 @@ import {
 } from "../slices/agentic/agenticOpenApi";
 import { LoadingSpinner } from "../utils/loadingSpinner";
 
-const normalizeTransport = (server: McpServerConfiguration) =>
-  (server.transport || "streamable_http").toLowerCase();
+const normalizeTransport = (server: McpServerConfiguration) => (server.transport || "streamable_http").toLowerCase();
 
 const sourceKindForServer = (server: McpServerConfiguration) =>
   normalizeTransport(server) === "inprocess" ? "local" : "mcp";
@@ -134,10 +133,7 @@ export const McpHub = () => {
   }, [sortedServers, searchQuery, sourceFilter, transportFilter, statusFilter, t]);
 
   const hasActiveFilters =
-    searchQuery.trim().length > 0 ||
-    sourceFilter !== "all" ||
-    transportFilter !== "all" ||
-    statusFilter !== "all";
+    searchQuery.trim().length > 0 || sourceFilter !== "all" || transportFilter !== "all" || statusFilter !== "all";
 
   useEffect(() => {
     setShowElements(true);
@@ -217,8 +213,7 @@ export const McpHub = () => {
         },
       }).unwrap();
       showSuccess({
-        summary:
-          server.enabled === false ? t("mcpHub.toasts.enabled") : t("mcpHub.toasts.disabled"),
+        summary: server.enabled === false ? t("mcpHub.toasts.enabled") : t("mcpHub.toasts.disabled"),
       });
       refetch();
     } catch (error: any) {
@@ -374,9 +369,7 @@ export const McpHub = () => {
 
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ flex: 1 }}>
                     <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
-                      <InputLabel id="mcp-source-filter-label">
-                        {t("mcpHub.filters.source", "Source")}
-                      </InputLabel>
+                      <InputLabel id="mcp-source-filter-label">{t("mcpHub.filters.source", "Source")}</InputLabel>
                       <Select
                         labelId="mcp-source-filter-label"
                         label={t("mcpHub.filters.source", "Source")}
@@ -409,16 +402,12 @@ export const McpHub = () => {
                     </FormControl>
 
                     <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
-                      <InputLabel id="mcp-status-filter-label">
-                        {t("mcpHub.filters.status", "Status")}
-                      </InputLabel>
+                      <InputLabel id="mcp-status-filter-label">{t("mcpHub.filters.status", "Status")}</InputLabel>
                       <Select
                         labelId="mcp-status-filter-label"
                         label={t("mcpHub.filters.status", "Status")}
                         value={statusFilter}
-                        onChange={(e) =>
-                          setStatusFilter(e.target.value as "all" | "enabled" | "disabled")
-                        }
+                        onChange={(e) => setStatusFilter(e.target.value as "all" | "enabled" | "disabled")}
                       >
                         <MenuItem value="all">{t("mcpHub.filters.all", "All")}</MenuItem>
                         <MenuItem value="enabled">{t("mcpHub.filters.enabled", "Enabled")}</MenuItem>
@@ -489,27 +478,20 @@ export const McpHub = () => {
                     textAlign: "center",
                   }}
                 >
-                  <Typography variant="subtitle1">{t("mcpHub.noResultsTitle", "No connector matches your search")}</Typography>
+                  <Typography variant="subtitle1">
+                    {t("mcpHub.noResultsTitle", "No connector matches your search")}
+                  </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                     {t("mcpHub.noResultsHint", "Try removing filters or broadening the search.")}
                   </Typography>
-                  <Button
-                    sx={{ mt: 2 }}
-                    variant="outlined"
-                    onClick={resetFilters}
-                    disabled={!hasActiveFilters}
-                  >
+                  <Button sx={{ mt: 2 }} variant="outlined" onClick={resetFilters} disabled={!hasActiveFilters}>
                     {t("mcpHub.clearFilters", "Reset")}
                   </Button>
                 </Box>
               ) : (
-                <Grid2 container spacing={2}>
+                <Grid container spacing={2}>
                   {filteredServers.map((server) => (
-                    <Grid2
-                      key={server.id}
-                      size={{ xs: 12, sm: 12, md: 6, lg: 6 }}
-                      display="flex"
-                    >
+                    <Grid key={server.id} size={{ xs: 12, sm: 12, md: 6, lg: 6 }} display="flex">
                       <Fade in timeout={500}>
                         <Box sx={{ width: "100%" }}>
                           <McpServerCard
@@ -522,9 +504,9 @@ export const McpHub = () => {
                           />
                         </Box>
                       </Fade>
-                    </Grid2>
+                    </Grid>
                   ))}
-                </Grid2>
+                </Grid>
               )}
             </CardContent>
           </Card>

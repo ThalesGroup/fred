@@ -1,0 +1,87 @@
+@use "src/index.scss" as *;
+
+.chat-item-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border-radius: var(--spacing-xs);
+  padding: var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-xs);
+
+  &:hover {
+    --display-action: block;
+    background-color: var(--state-on-surface-hover);
+  }
+}
+
+.chat-description {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+  padding: 2px 0;
+  min-width: 0;
+}
+
+.title,
+.agent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  @include typography("body", "medium");
+  color: var(--on-surface);
+}
+
+.metadata {
+  @include typography("label", "small");
+  display: flex;
+  gap: var(--spacing-2xs);
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  corner-shape: round;
+  background-color: var(--secondary);
+  width: 0.75rem;
+  height: 0.75rem;
+  color: var(--surface-container-lowest);
+  font-size: 0.625rem;
+}
+
+.agent-name {
+  color: var(--secondary);
+}
+
+.separator {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 100%;
+  color: var(--on-surface-retreat);
+
+  @include typography("body", "small", true);
+}
+
+.date {
+  @include typography("label", "small");
+  color: var(--on-surface-muted);
+}
+
+.chat-actions {
+  display: var(--display-action, none);
+  color: var(--error);
+}

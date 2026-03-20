@@ -408,7 +408,7 @@ async def test_team_hierarchy_and_permissions(
     - Team owner can update team info
     - Team manager can update members
     - Team members inherit permissions from team roles on tags and agents
-    - Organization admins inherit team ownership
+    - Global organization roles do not bypass team ownership/management checks
     """
     # Create entities
     organization = _make_reference(Resource.ORGANIZATION, prefix="organization")
@@ -526,31 +526,31 @@ async def test_team_hierarchy_and_permissions(
     ), "Team member should not be able to update tag"
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Organization admin
+    # Organization admin (safe mode)
 
-    # Test organization admin can edit team info
-    assert await rebac_engine.has_permission(
+    # Test organization admin cannot edit team info without explicit team role
+    assert not await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_UPDATE_INFO,
         team,
         consistency_token=token,
-    ), "Organization admin should be able to update team info"
+    ), "Organization admin should not bypass explicit owner/manager team roles"
 
-    # Test organization admin edit members
-    assert await rebac_engine.has_permission(
+    # Test organization admin cannot edit members without explicit team role
+    assert not await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
-    ), "Organization admin should be able to update team members"
+    ), "Organization admin should not administer team members without team role"
 
-    # Test organization admin can edit owner member
-    assert await rebac_engine.has_permission(
+    # Test organization admin cannot edit owners without explicit team role
+    assert not await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_ADMINISTER_OWNERS,
         team,
         consistency_token=token,
-    ), "Organization admin should be able to administer owner team members"
+    ), "Organization admin should not administer team owners without team role"
 
 
 @pytest.mark.integration
@@ -797,7 +797,7 @@ async def test_team_filtering_by_visibility(
     This test validates:
     - Strangers can only see public teams
     - Users can see public teams + all teams they belong to (regardless of role)
-    - Organization admins can see all teams (public and private)
+    - Global organization roles do not bypass team visibility
     """
     # Create users
     stranger = _make_reference(Resource.USER, prefix="stranger")
@@ -882,7 +882,7 @@ async def test_team_filtering_by_visibility(
                 relation=RelationType.MEMBER,
                 resource=private_team_member,
             ),
-            # Other private team - only accessible by organization admin and its owner
+            # Other private team - only accessible by its owner
             Relation(
                 subject=_make_reference(Resource.USER, prefix="someone-else"),
                 relation=RelationType.OWNER,
@@ -939,7 +939,7 @@ async def test_team_filtering_by_visibility(
     )
 
     # ~~~~~~~~~~~~~~~~~~~~
-    # Organization admin sees ALL teams (public and private)
+    # Organization admin sees only public teams without explicit team relation
 
     admin_teams = await rebac_engine.lookup_resources(
         subject=organization_admin,
@@ -954,11 +954,7 @@ async def test_team_filtering_by_visibility(
     assert admin_team_ids == {
         public_team_1.id,
         public_team_2.id,
-        private_team_owned.id,
-        private_team_managed.id,
-        private_team_member.id,
-        other_private_team.id,
     }, (
-        f"Organization admin should see all teams (public and private), "
-        f"got: {admin_team_ids}"
+        "Organization admin should not see private teams without explicit team "
+        f"relation, got: {admin_team_ids}"
     )

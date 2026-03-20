@@ -21,7 +21,8 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from fred_core import KeycloakUser, OwnerFilter, get_current_user
+from fred_core import KeycloakUser, get_current_user
+from fred_core.common import OwnerFilter
 from pydantic import BaseModel
 
 from agentic_backend.common.error import MCPClientConnectionException
@@ -44,7 +45,7 @@ from agentic_backend.core.agents.agent_service import (
     InvalidClassPathError,
     MissingTeamIdError,
 )
-from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
+from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.agents.v2.catalog import build_definition_from_settings
 from agentic_backend.core.agents.v2.inspection import inspect_agent
 from agentic_backend.core.agents.v2.models import AgentInspection
@@ -210,14 +211,15 @@ async def list_agents(
 @router.post(
     "/agents/create",
     summary="Create a Dynamic Agent that can access tools",
+    response_model=AgentSettings,
 )
 async def create_agent(
     request: CreateAgentRequest,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
-):
+) -> AgentSettings:
     service = AgentService(agent_manager=agent_manager)
-    await service.create_agent(
+    return await service.create_agent(
         user,
         request.name,
         agent_type=request.type,
@@ -307,16 +309,17 @@ async def list_declared_agent_class_paths(
 
 
 @router.get(
-    "/agents/definition-refs",
-    summary="List available v2 definition refs",
-    response_model=list[str],
+    "/agents/class-paths/tuning",
+    summary="Get the default tuning (including fields) for a given class path",
+    response_model=AgentTuning,
 )
-async def list_declared_agent_definition_refs(
+async def get_class_path_tuning(
+    class_path: Optional[str] = None,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
-) -> list[str]:
+) -> AgentTuning:
     service = AgentService(agent_manager=agent_manager)
-    return await service.list_declared_definition_refs(user)
+    return service.get_class_path_tuning(user, class_path)
 
 
 @router.put(

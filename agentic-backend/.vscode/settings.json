@@ -12,4 +12,10 @@
     "editor.codeActionsOnSave": {
         "source.organizeImports": "always"
     },
+    "python.testing.pytestArgs": [
+        "agentic_backend",
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
 }

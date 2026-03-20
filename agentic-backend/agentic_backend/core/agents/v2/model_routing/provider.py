@@ -10,7 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Protocol
 
-from fred_core import ModelConfiguration, get_embeddings, get_model
+from fred_core import get_embeddings, get_model
+from fred_core.common import ModelConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from ..context import BoundRuntimeContext

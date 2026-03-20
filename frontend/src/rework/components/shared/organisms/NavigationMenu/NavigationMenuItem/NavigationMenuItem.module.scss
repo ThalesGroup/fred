@@ -1,0 +1,37 @@
+@use "src/index.scss" as *;
+@use "src/styles/reset" as *;
+
+.navigation-menu-item {
+  @include reset-button();
+
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border-radius: var(--spacing-xs);
+  padding: 0 var(--spacing-xs);
+  @include typography("label", "large");
+  height: 2rem;
+  color: var(--on-surface-retreat);
+
+  &:hover {
+    background-color: var(--state-on-surface-hover);
+  }
+
+  &[data-selected="true"] {
+    background-color: var(--state-secondary-selected);
+    color: var(--on-surface);
+
+    .icon {
+      color: var(--secondary);
+    }
+  }
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+}

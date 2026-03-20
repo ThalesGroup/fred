@@ -16,7 +16,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from fred_core import BaseModelWithId
+from fred_core.common import BaseModelWithId
 from pydantic import BaseModel, Field
 
 

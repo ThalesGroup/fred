@@ -12,23 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.common.fastapi_handlers import register_exception_handlers
-from fred_core.common.lru_cache import ThreadSafeLRUCache
-from fred_core.common.structures import (
-    BaseModelWithId,
-    DuckdbStoreConfig,
-    LogStoreConfig,
-    ModelConfiguration,
-    OpenSearchIndexConfig,
-    OpenSearchStoreConfig,
-    OwnerFilter,
-    PostgresStoreConfig,
-    PostgresTableConfig,
-    SQLStorageConfig,
-    StoreConfig,
-    TemporalSchedulerConfig,
-)
-from fred_core.common.utils import raise_internal_error
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.filesystem.minio_filesystem import MinioFilesystem
 from fred_core.filesystem.structures import (
@@ -106,10 +89,11 @@ from fred_core.security.structure import (
     SecurityConfiguration,
     UserSecurity,
 )
-from fred_core.store.opensearch_mapping_validator import validate_index_mapping
-from fred_core.store.sql_store import SQLTableStore
-from fred_core.store.structures import StoreInfo
-from fred_core.store.vector_search import VectorSearchHit
+from fred_core.session.stores import (
+    BaseJsonSessionStore,
+    BaseSessionStore,
+    PostgresJsonSessionStore,
+)
 
 __all__ = [
     "BaseLogStore",
@@ -124,7 +108,6 @@ __all__ = [
     "log_setup",
     "LogStorageConfig",
     "InMemoryLogStorageConfig",
-    "raise_internal_error",
     "get_current_user",
     "decode_jwt",
     "initialize_user_security",
@@ -148,36 +131,20 @@ __all__ = [
     "authorize_or_raise",
     "authorize",
     "oauth2_scheme",
-    "register_exception_handlers",
-    "BaseModelWithId",
-    "OwnerFilter",
-    "OpenSearchStoreConfig",
-    "OpenSearchIndexConfig",
-    "DuckdbStoreConfig",
-    "PostgresStoreConfig",
-    "PostgresTableConfig",
-    "SQLStorageConfig",
-    "StoreConfig",
-    "ThreadSafeLRUCache",
-    "VectorSearchHit",
     "ClientCredentialsProvider",
     "BearerAuth",
-    "LogStoreConfig",
     "M2MAuthConfig",
     "M2MTokenProvider",
     "M2MBearerAuth",
     "make_m2m_asgi_client",
     "split_realm_url",
-    "validate_index_mapping",
     "get_model",
     "get_structured_chain",
     "get_embeddings",
-    "ModelConfiguration",
-    "TemporalSchedulerConfig",
-    "SQLStorageConfig",
-    "SQLTableStore",
-    "StoreInfo",
     "ModelProvider",
+    "BaseJsonSessionStore",
+    "BaseSessionStore",
+    "PostgresJsonSessionStore",
     "RebacReference",
     "Relation",
     "RelationType",

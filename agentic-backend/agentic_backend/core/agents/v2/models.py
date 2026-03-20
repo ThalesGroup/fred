@@ -412,7 +412,7 @@ class ReActPolicy(FrozenModel):
     - "Operations copilot": tools + explicit approval on risky actions
     """
 
-    system_prompt_template: str = Field(
+    system_prompt_template: str | None = Field(
         ...,
         min_length=1,
         description=(

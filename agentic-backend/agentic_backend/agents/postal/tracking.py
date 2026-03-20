@@ -8,6 +8,7 @@ import uuid
 from datetime import date, timedelta
 from typing import Annotated, Any, Dict, List, Optional, Sequence, Type, TypedDict, cast
 
+from fred_core.common import coerce_bool
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, StateGraph
@@ -474,6 +475,22 @@ class TrackingAgent(AgentFlow):
             return json.dumps(value, ensure_ascii=False, indent=2)
         except Exception:
             return str(value)
+
+    async def _ainvoke_internal_non_stream(self, prompt: str) -> Optional[str]:
+        if not self.model:
+            return None
+        invoke_model: Any = self.model
+        bind = getattr(self.model, "bind", None)
+        if callable(bind):
+            try:
+                invoke_model = bind(stream=False)
+            except Exception:
+                logger.debug(
+                    "[ParcelOpsAgent] model.bind(stream=False) not available; using default model invocation"
+                )
+        resp = await invoke_model.ainvoke([HumanMessage(content=prompt)])
+        text = self._message_content_to_text(getattr(resp, "content", ""))
+        return text or None
 
     @staticmethod
     def _normalize_tool_output(raw: Any) -> Any:
@@ -1029,8 +1046,7 @@ class TrackingAgent(AgentFlow):
             data_json=self._json_str(payload),
         )
         try:
-            resp = await self.model.ainvoke([HumanMessage(content=prompt)])
-            text = self._message_content_to_text(getattr(resp, "content", ""))
+            text = await self._ainvoke_internal_non_stream(prompt)
             if text:
                 return text
         except Exception as exc:
@@ -1110,8 +1126,7 @@ class TrackingAgent(AgentFlow):
             data_json=self._json_str(payload),
         )
         try:
-            resp = await self.model.ainvoke([HumanMessage(content=prompt)])
-            text = self._message_content_to_text(getattr(resp, "content", ""))
+            text = await self._ainvoke_internal_non_stream(prompt)
             if text:
                 return text
         except Exception as exc:
@@ -1174,8 +1189,7 @@ class TrackingAgent(AgentFlow):
             data_json=self._json_str(payload),
         )
         try:
-            resp = await self.model.ainvoke([HumanMessage(content=prompt)])
-            text = self._message_content_to_text(getattr(resp, "content", ""))
+            text = await self._ainvoke_internal_non_stream(prompt)
             if text:
                 return text
         except Exception as exc:
@@ -1473,13 +1487,7 @@ class TrackingAgent(AgentFlow):
     # -----------------------------
     @staticmethod
     def _coerce_bool(value: Any, default: bool = False) -> bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)):
-            return value != 0
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on", "y"}
-        return default
+        return coerce_bool(value, default=default)
 
     @staticmethod
     def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -1615,7 +1623,20 @@ class TrackingAgent(AgentFlow):
             has_explicit_tracking_id=has_explicit_tracking_id,
         )
         try:
-            resp = await self.model.ainvoke([HumanMessage(content=prompt)])
+            # Intent routing is an internal control step (JSON-only contract) and should
+            # not surface token-by-token partial text in the user stream.
+            # Prefer a non-streaming invocation when the model supports binding kwargs.
+            invoke_model: Any = self.model
+            bind = getattr(self.model, "bind", None)
+            if callable(bind):
+                try:
+                    invoke_model = bind(stream=False)
+                except Exception:
+                    logger.debug(
+                        "[ParcelOpsAgent] model.bind(stream=False) not available for intent router; using default model invocation"
+                    )
+
+            resp = await invoke_model.ainvoke([HumanMessage(content=prompt)])
             text = self._message_content_to_text(getattr(resp, "content", ""))
             parsed = self._parse_json_object_from_text(text) or {}
             if not parsed:
