@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from control_plane_backend.application_context import ApplicationContext
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationLifecycleEvent,
     LifecycleTrigger,
@@ -19,6 +18,8 @@ async def list_due_conversation_candidates(*, limit: int) -> ConversationCandida
     """
     List due conversation purge candidates from the purge queue.
     """
+    from control_plane_backend.application_context import ApplicationContext
+
     ctx = ApplicationContext.get_instance()
     queue_store = ctx.get_purge_queue_store()
     due_items = await queue_store.list_due(limit=limit)
@@ -42,6 +43,8 @@ async def delete_conversation_and_mark_done(
     """
     Delete one conversation session and mark its purge queue entry as done.
     """
+    from control_plane_backend.application_context import ApplicationContext
+
     ctx = ApplicationContext.get_instance()
     session_store = ctx.get_session_store()
     queue_store = ctx.get_purge_queue_store()
