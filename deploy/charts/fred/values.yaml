@@ -1,3 +1,305 @@
+# ════════════════════════════════════════════════════════════════════
+#  Fred Helm Chart — Default Values
+#
+#  QUICK-START: the ~15 values to customize for a new deployment:
+#    1. Domain      : replace "{YOUR-URL}" with your hostname
+#    2. API Keys    : applications.*.dotenv.OPENAI_API_KEY (or AZURE_OPENAI_API_KEY)
+#    3. Auth        : applications.*.configuration.security.*.realm_url (Keycloak URL)
+#    4. Temporal    : applications.knowledge-flow-backend.configuration.scheduler.temporal.host
+#    5. Storage     : switch DuckDB stores to postgres/opensearch for production
+#
+#  DISABLE A COMPONENT  : applications.<name>.enabled: false
+#  OVERRIDE VALUES      : helm install fred ./charts/fred -f my-overrides.yaml
+#  MINIMAL EXAMPLE      : see deploy/charts/fred/custom-values-example.yaml
+#
+#  SECTIONS:
+#    1. YAML Anchors   — shared blocks (eliminates duplication)
+#    2. Global         — persistence, whitelist
+#    3. Agentic Backend
+#    4. Frontend
+#    5. Knowledge Flow Backend
+#    6. Knowledge Flow Worker
+# ════════════════════════════════════════════════════════════════════
+
+# ── 1. YAML Anchors (shared data — not used directly by Helm) ──────────────────────
+#
+# These blocks are referenced via YAML aliases (*anchor-name) in the sections below.
+# Modifying them here automatically propagates changes to all applications.
+# Note: Helm resolves these anchors transparently before rendering templates.
+
+# ── Input processors for document ingestion ─────────────────────────────────────────
+#
+# fast   : uses LitePdfMarkdownProcessor (pypdfium2, faster)
+# medium / rich : use PdfMarkdownProcessor (docling, better quality)
+
+x-fast-input-processors: &fast-input-processors
+  - suffix: ".pdf"
+    class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+  - suffix: ".docx"
+    class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+  - suffix: ".pptx"
+    class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+  - suffix: ".csv"
+    class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+  - suffix: ".txt"
+    class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+  - suffix: ".md"
+    class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+  - suffix: ".jsonl"
+    class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+  - suffix: ".png"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".jpg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".jpeg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".gif"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".bmp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".svg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".webp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".ico"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+
+x-rich-input-processors: &rich-input-processors
+  - suffix: ".pdf"
+    class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+  - suffix: ".docx"
+    class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+  - suffix: ".pptx"
+    class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+  - suffix: ".csv"
+    class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+  - suffix: ".txt"
+    class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+  - suffix: ".md"
+    class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+  - suffix: ".jsonl"
+    class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+  - suffix: ".png"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".jpg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".jpeg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".gif"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".bmp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".svg"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".webp"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+  - suffix: ".ico"
+    class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+
+# ── Ingestion profiles ──────────────────────────────────────────────────────────────
+#   fast   : pypdfium2, no OCR    — ideal for text PDFs, fastest
+#   medium : docling, no OCR      — good quality, recommended default profile
+#   rich   : docling + OCR + images  — best quality, slowest
+
+x-profile-fast: &profile-fast
+  use_gpu: true
+  generate_summary: false
+  process_images: false
+  pdf:
+    backend: pypdfium2
+    images_scale: 1.0
+    generate_picture_images: false
+    generate_page_images: false
+    generate_table_images: false
+    do_table_structure: false
+    do_ocr: false
+  input_processors: *fast-input-processors
+
+x-profile-medium: &profile-medium
+  use_gpu: true
+  generate_summary: false
+  process_images: false
+  pdf:
+    backend: docling_parse
+    images_scale: 2.0
+    generate_picture_images: false
+    generate_page_images: false
+    generate_table_images: false
+    do_table_structure: false
+    do_ocr: false
+  input_processors: *rich-input-processors
+
+x-profile-rich-backend: &profile-rich-backend
+  use_gpu: true
+  generate_summary: false
+  process_images: true
+  pdf:
+    backend: docling_parse
+    images_scale: 2.0
+    generate_picture_images: true
+    generate_page_images: true
+    generate_table_images: false
+    do_table_structure: true
+    do_ocr: true
+  input_processors: *rich-input-processors
+
+# Rich profile for the Temporal worker: same as backend but generate_summary: true
+x-profile-rich-worker: &profile-rich-worker
+  <<: *profile-rich-backend
+  generate_summary: true
+
+# ── Shared knowledge-flow configuration (backend + worker) ──────────────────────────
+
+x-kf-security: &kf-security
+  m2m:
+    enabled: true
+    client_id: "knowledge-flow"
+    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+    secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
+  user:
+    enabled: true
+    client_id: "app"
+    realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
+  authorized_origins:
+    - "http://{YOUR-URL}:80"
+  rebac:
+    enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
+    type: openfga
+    api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
+    # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
+    # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
+    # sync_schema_on_init: true         # Pushes the default Fred authorization model
+    # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
+    # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
+    # timeout_millisec: 2000            # Optional request timeout
+    # headers:
+    #   X-Custom-Header: "value"
+
+x-kf-scheduler: &kf-scheduler
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_id_prefix: "pipeline"
+    connect_timeout_seconds: 5
+
+x-kf-content-storage: &kf-content-storage
+  type: local
+  root_path: /home/fred-user/.fred/knowledge-flow/content-storage
+  # type: minio
+  # endpoint: http://minio:9000
+  # access_key: admin
+  # bucket_name: app-bucket
+  # secure: false
+  # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
+  # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
+
+x-kf-document-sources: &kf-document-sources
+  fred:
+    type: push
+    description: "Documents manually uploaded by users"
+  local:
+    type: pull
+    provider: local_path
+    base_path: ~/Documents/Fred
+    description: "Personal local documents available for pull-mode ingestion"
+
+x-kf-embedding-model: &kf-embedding-model
+  provider: openai           # CUSTOMIZE: openai | azure | ollama
+  name: text-embedding-3-large  
+  settings: {}
+  type: "openai"
+
+x-kf-chat-model: &kf-chat-model
+  provider: openai           # CUSTOMIZE: openai | azure | ollama
+  name: gpt-4o-mini          # CUSTOMIZE: azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
+  settings: {}
+  # openai: nothing else required (keys in .env)
+  # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
+  # ollama: { base_url: "http://localhost:11434" }
+
+x-kf-vision-model: &kf-vision-model
+  provider: openai           # CUSTOMIZE
+  name: gpt-4o-mini          # CUSTOMIZE: or gpt-4o if you want higher fidelity
+  settings:
+    temperature: 0           # optional
+    max_retries: 2           # optional
+
+x-kf-crossencoder-model: &kf-crossencoder-model
+  name: cross-encoder/ms-marco-MiniLM-L-12-v2
+  settings:
+    online: false
+    local_path: /home/fred-user/.cache/huggingface/hub
+
+x-kf-storage: &kf-storage
+  postgres:                  
+    host: localhost
+    port: 5432
+    database: fred
+    username: admin
+  opensearch:                
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  catalog_store:
+    type: "duckdb"
+    duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
+  prompt_store:
+    type: "duckdb"
+    duckdb_path: "/home/fred-user/.fred/knowledge-flow/prompt.duckdb"
+  resource_store:
+    type: "duckdb"
+    duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
+  kpi_store:
+    type: "log"
+    level: "DEBUG"
+  log_store:
+    type: "in_memory"
+  tag_store:
+    type: "duckdb"
+    duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
+  metadata_store:
+    type: "duckdb"
+    duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
+  task_store:
+    type: "postgres"
+    table: workflow_tasks
+    prefix: "sched_"
+  vector_store:
+    type: in_memory
+  tabular_stores:
+    base_database: # Minimal configuration to enable CSV document ingestion
+      type: "sql"
+      driver: "duckdb"
+      database: "base_database"
+      path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
+      mode: "read_and_write"
+
+x-kf-mcp: &kf-mcp
+  reports_enabled: true
+  kpi_enabled: true
+  tabular_enabled: true
+  statistic_enabled: true
+  text_enabled: true
+  templates_enabled: true
+  resources_enabled: true
+  filesystem_enabled: false
+  opensearch_ops_enabled: false
+  neo4j_enabled: false
+
+x-kf-filesystem: &kf-filesystem
+  type: local
+  # type: minio
+  # endpoint: http://localhost:9000
+  # access_key: admin
+  # bucket_name: filesystem
+  # secure: false
+
+# ════════════════════════════════════════════════════════════════════
+# ── 2. Global settings ──────────────────────────────────────────────
 global:
   kubeconfig: ""
   persistence:
@@ -15,7 +317,9 @@ global:
     mountPath: /fred-core/fred_core/security/whitelist_access_control/users.txt
     subPath: users.txt
 
+# ── 3. Applications ──────────────────────────────────────────────────
 applications:
+  # ── 3.1 Agentic Backend ────────────────────────────────────────────
   agentic-backend:
     enabled: true
     applicationName: agentic-backend
@@ -31,7 +335,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: ""
+      tag: ""                    
       pullPolicy: IfNotPresent
     command:
       enabled: true
@@ -43,66 +347,22 @@ applications:
         - "0.0.0.0"
         - "--port"
         - "8000"
-        - "--log-level"
-        - "info"
         - "--loop"
         - "asyncio"
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
-    # Optional catalogs (catalog-first configuration):
-    # 1) Create a ConfigMap named `agentic-backend-model-catalog`
-    #    with key `models_catalog.yaml`.
-    # 2) Create a ConfigMap named `agentic-backend-catalogs` with keys:
-    #    - `agents_catalog.yaml`
-    #    - `mcp_catalog.yaml`
-    #
-    # Catalog precedence:
-    # - if a catalog file exists, it is the source of truth
-    # - if missing, backend can still fallback to legacy `configuration.yaml` sections
-    #   for backward compatibility
-    # 3) Uncomment the entries below.
-    extraEnvVars:
-      # - name: FRED_MODELS_CATALOG_FILE
-      #   value: "/app/config/models_catalog.yaml"
-      # - name: FRED_V2_MODELS_CATALOG_FILE  # backward-compatible alias
-      #   value: "/app/config/models_catalog.yaml"
+      - name: FRED_AGENTS_CATALOG_FILE
+        value: "/app/config/agents_catalog.yaml"
+      - name: FRED_MODELS_CATALOG_FILE
+        value: "/app/config/models_catalog.yaml"
+      - name: FRED_MCP_CATALOG_FILE
+        value: "/app/config/mcp_catalog.yaml"
+      # Optional: override the default chat/language profile used by the agents
       # - name: FRED_MODELS_DEFAULT_CHAT_PROFILE_ID
-      #   value: "chat.ollama.mistral"
+      #   value: "chat.openai.gpt41mini"
       # - name: FRED_MODELS_DEFAULT_LANGUAGE_PROFILE_ID
-      #   value: "language.ollama.mistral"
-      # - name: FRED_AGENTS_CATALOG_FILE
-      #   value: "/app/config/agents_catalog.yaml"
-      # - name: FRED_MCP_CATALOG_FILE
-      #   value: "/app/config/mcp_catalog.yaml"
-    extraVolumeMounts:
-      # - name: agentic-backend-model-catalog-vol
-      #   mountPath: /app/config/models_catalog.yaml
-      #   subPath: models_catalog.yaml
-      #   readOnly: true
-      # - name: agentic-backend-catalogs-vol
-      #   mountPath: /app/config/agents_catalog.yaml
-      #   subPath: agents_catalog.yaml
-      #   readOnly: true
-      # - name: agentic-backend-catalogs-vol
-      #   mountPath: /app/config/mcp_catalog.yaml
-      #   subPath: mcp_catalog.yaml
-      #   readOnly: true
-    extraVolumes:
-      # - name: agentic-backend-model-catalog-vol
-      #   configMap:
-      #     name: agentic-backend-model-catalog
-      #     items:
-      #       - key: models_catalog.yaml
-      #         path: models_catalog.yaml
-      # - name: agentic-backend-catalogs-vol
-      #   configMap:
-      #     name: agentic-backend-catalogs
-      #     items:
-      #       - key: agents_catalog.yaml
-      #         path: agents_catalog.yaml
-      #       - key: mcp_catalog.yaml
-      #         path: mcp_catalog.yaml
+      #   value: "language.openai.gpt41mini"
     ports:
       - name: http
         containerPort: 8000
@@ -143,6 +403,15 @@ applications:
       - name: agentic-backend-vol
         mountPath: /app/config/configuration.yaml
         subPath: configuration.yaml
+      - name: agentic-backend-catalog-vol
+        mountPath: /app/config/agents_catalog.yaml
+        subPath: agents_catalog.yaml
+      - name: agentic-backend-catalog-vol
+        mountPath: /app/config/models_catalog.yaml
+        subPath: models_catalog.yaml
+      - name: agentic-backend-catalog-vol
+        mountPath: /app/config/mcp_catalog.yaml
+        subPath: mcp_catalog.yaml
       - name: agentic-backend-env-vol
         mountPath: /app/config/.env
         subPath: .env
@@ -153,6 +422,9 @@ applications:
       - name: agentic-backend-vol
         configMap:
           name: agentic-backend-back
+      - name: agentic-backend-catalog-vol
+        configMap:
+          name: agentic-backend-catalog
       - name: agentic-backend-env-vol
         secret:
           secretName: agentic-backend-env
@@ -214,6 +486,7 @@ applications:
     configuration_type:
       backend: true
       frontend: false
+    # ── Application configuration (rendered as ConfigMap) ───────────────
     configuration:
       app:
         name: "Agentic Backend"
@@ -234,16 +507,16 @@ applications:
         m2m:
           enabled: true
           client_id: "agentic"
-          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+          realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
           secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
+          realm_url: "http://{YOUR-URL}/{YOUR-REALM/app"
         authorized_origins:
-          - "http://fred.dev.fred.thalesgroup.com:80"
+          - "http://{YOUR-URL}:80"
         rebac:
-          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
+          enabled: true                    # Set false to bypass ReBAC (warning: all private resources will become public)
           type: openfga
           api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
           # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
@@ -253,8 +526,8 @@ applications:
           # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
           # timeout_millisec: 2000            # Optional request timeout
           # headers:
-          #   # Optional static headers sent to OpenFGA
           #   X-Custom-Header: "value"
+
       frontend_settings:
         feature_flags:
           # If true activate the backend and frontend modules in charge of K8
@@ -271,7 +544,6 @@ applications:
         # - "temporal": use Temporal Cloud/self-hosted to run agent tasks asynchronously.
         backend: "temporal"
         temporal:
-          # Temporal frontend endpoint and namespace used by the agentic worker.
           host: "temporal.default.svc.cluster.local:7233"
           namespace: "default"
           task_queue: "agents"
@@ -279,11 +551,14 @@ applications:
           connect_timeout_seconds: 5
         # Optional progress query name and memo/search attributes can be added here if your
         # cluster uses custom Temporal conventions.
+
       ai:
         # In production  activate the configuration persistence mechanism
         # that allow users to create/update agents at runtime and change
         # their configuration without redeploying the application.
         use_static_config_only: false
+        # Enable catalog mode for modern deployments.
+        enable_catalog_mode: true
         # Enable durable SQL checkpointer for v2 runtimes.
         # Disabled by default.
         enable_v2_sql_checkpointer: false
@@ -323,13 +598,15 @@ applications:
 
       # MCP servers are now loaded from `mcp_catalog.yaml`
       # (image default path or mounted file via `FRED_MCP_CATALOG_FILE`).
+
+      # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
       storage:
-        postgres:
+        postgres:              
           host: localhost
           port: 5432
           database: fred
           username: admin
-        opensearch:
+        opensearch:            
           host: https://localhost:9200
           secure: true
           verify_certs: false
@@ -358,13 +635,18 @@ applications:
           type: "duckdb"
           duckdb_path: "/home/fred-user/.fred/agentic/session_attachments.duckdb"
 
+        task_store:
+          type: "duckdb"
+          duckdb_path: "/home/fred-user/.fred/agentic/task.duckdb"
+
         kpi_store:
           type: "log"
           level: "DEBUG"
         log_store:
           type: "in_memory"
 
-    dotenv:
+    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
+    dotenv:                   
       AZURE_OPENAI_API_KEY: ""
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
@@ -376,6 +658,280 @@ applications:
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
 
+    # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
+    # These files override the versions embedded in the Docker image.
+    # Mounted at /app/config/{agents,models,mcp}_catalog.yaml via the same
+    # volume as configuration.yaml (agentic-backend-back ConfigMap).
+
+    # ── agents_catalog.yaml — agent definitions ──────────────────────────────
+    agents_catalog:
+      version: v1
+      agents:
+        - id: "Georges"
+          name: "Georges"
+          type: "agent"
+          class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+          enabled: true
+          chat_options:
+            attach_files: false
+
+        - id: "Rico"
+          name: "Rico"
+          type: "agent"
+          class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+          enabled: true
+          chat_options:
+            search_policy_selection: true
+            libraries_selection: true
+            search_rag_scoping: true
+            deep_search_delegate: false
+            attach_files: true
+            include_corpus_in_search: true
+
+        - id: "Tessa"
+          name: "Tessa"
+          type: "agent"
+          class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+          enabled: true
+
+    # ── models_catalog.yaml — LLM profiles ───────────────────────────────────
+    # CUSTOMIZE: update default_profile_by_capability to select default models.
+    models_catalog:
+      version: v1
+      common_model_settings:
+        max_retries: 0
+        timeout:
+          connect: 10.0
+          read: 120.0
+          write: 30.0
+          pool: 5.0
+        http_client_limits:
+          max_connections: 500
+          max_keepalive_connections: 200
+          keepalive_expiry_seconds: 10
+        temperature: 0.0
+      default_profile_by_capability:
+        chat: default.chat.openai.prod
+        language: default.language.openai.prod
+      profiles:
+        - profile_id: default.chat.openai.prod
+          capability: chat
+          description: "Default balanced chat model for production conversations."
+          model:
+            provider: openai
+            name: gpt-5.1
+            settings: {}
+        - profile_id: default.language.openai.prod
+          capability: language
+          description: "Default balanced language model for structured text tasks."
+          model:
+            provider: openai
+            name: gpt-5.1
+            settings: {}
+        - profile_id: default.chat.local
+          capability: chat
+          description: "Local default chat profile with retries and shorter timeout."
+          model:
+            provider: openai
+            name: gpt-5.1
+            settings:
+              max_retries: 2
+              request_timeout: 90
+              temperature: 0.0
+        - profile_id: default.language.local
+          capability: language
+          description: "Local default language profile with retries and shorter timeout."
+          model:
+            provider: openai
+            name: gpt-5.1
+            settings:
+              max_retries: 2
+              request_timeout: 90
+              temperature: 0.0
+        - profile_id: chat.openai.gpt52
+          capability: chat
+          description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
+          model:
+            provider: openai
+            name: gpt-5.2
+            settings: {}
+        - profile_id: language.openai.gpt52
+          capability: language
+          description: "Highest-quality GPT-5.2 profile for demanding language workloads."
+          model:
+            provider: openai
+            name: gpt-5.2
+            settings: {}
+        - profile_id: chat.openai.gpt5
+          capability: chat
+          description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
+          model:
+            provider: openai
+            name: gpt-5
+            settings: {}
+        - profile_id: language.openai.gpt5
+          capability: language
+          description: "General-purpose GPT-5 language profile with strong overall quality."
+          model:
+            provider: openai
+            name: gpt-5
+            settings: {}
+        - profile_id: chat.openai.gpt5mini
+          capability: chat
+          description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
+          model:
+            provider: openai
+            name: gpt-5-mini
+            settings: {}
+        - profile_id: language.openai.gpt5mini
+          capability: language
+          description: "Faster and lower-cost GPT-5 Mini profile for lightweight language tasks."
+          model:
+            provider: openai
+            name: gpt-5-mini
+            settings: {}
+        - profile_id: chat.openai.gpt5nano
+          capability: chat
+          description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
+          model:
+            provider: openai
+            name: gpt-5-nano
+            settings: {}
+        - profile_id: language.openai.gpt5nano
+          capability: language
+          description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple language tasks."
+          model:
+            provider: openai
+            name: gpt-5-nano
+            settings: {}
+        - profile_id: chat.openai.gpt41
+          capability: chat
+          description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
+          model:
+            provider: openai
+            name: gpt-4.1
+            settings: {}
+        - profile_id: language.openai.gpt41
+          capability: language
+          description: "Reliable GPT-4.1 language profile for stable text generation."
+          model:
+            provider: openai
+            name: gpt-4.1
+            settings: {}
+        - profile_id: chat.openai.gpt41mini
+          capability: chat
+          description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
+          model:
+            provider: openai
+            name: gpt-4.1-mini
+            settings: {}
+        - profile_id: language.openai.gpt41mini
+          capability: language
+          description: "Cost-efficient GPT-4.1 Mini profile for lightweight language work."
+          model:
+            provider: openai
+            name: gpt-4.1-mini
+            settings: {}
+        - profile_id: chat.azure_apim.gpt4o
+          capability: chat
+          description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
+          model:
+            provider: azure-apim
+            name: gpt-4o
+            settings:
+              azure_apim_base_url: "https://trustnest.azure-api.net"
+              azure_apim_resource_path: "/genai-aoai-inference/v2"
+              azure_openai_api_version: "2024-06-01"
+              azure_tenant_id: "${AZURE_TENANT_ID}"
+              azure_ad_client_id: "${AZURE_AD_CLIENT_ID}"
+              azure_ad_client_scope: "${AZURE_AD_CLIENT_SCOPE}"
+        - profile_id: chat.ollama.mistral
+          capability: chat
+          description: "Local Ollama Mistral profile for private/offline chat experimentation."
+          model:
+            provider: ollama
+            name: "mistral:latest"
+            settings:
+              base_url: "http://host.docker.internal:11434"
+        - profile_id: language.ollama.mistral
+          capability: language
+          description: "Local Ollama Mistral profile for private/offline language tasks."
+          model:
+            provider: ollama
+            name: "mistral:latest"
+            settings:
+              base_url: "http://host.docker.internal:11434"
+      rules: []
+
+    # ── mcp_catalog.yaml — MCP server endpoints ───────────────────────────────
+    # URLs use Kubernetes service names. Override in your values file if needed.
+    # CUSTOMIZE: enable/disable servers, adjust URLs for your cluster topology.
+    mcp_catalog:
+      version: v1
+      servers:
+        - id: "mcp-knowledge-flow-mcp-text"
+          name: "mcp.servers.search_documents.name"
+          description: "mcp.servers.search_documents.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-text"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+        - id: "mcp-knowledge-flow-mcp-tabular"
+          name: "mcp.servers.tabular.name"
+          description: "mcp.servers.tabular.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-tabular"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+        - id: "mcp-knowledge-flow-opensearch-ops"
+          name: "mcp.servers.search_opensearch.name"
+          description: "mcp.servers.search_opensearch.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+        - id: "mcp-knowledge-flow-fs"
+          name: "mcp.servers.filesystem.name"
+          description: "mcp.servers.filesystem.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-fs"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+        - id: "mcp-knowledge-flow-corpus"
+          name: "mcp.servers.corpus.name"
+          description: "mcp.servers.corpus.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-corpus"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+        - id: "mcp-knowledge-flow-statistics"
+          name: "mcp-knowledge-flow-statistics"
+          description: "mcp.servers.statistics.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-statistics"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+        - id: "mcp-web-github-readonly"
+          name: "mcp.servers.web_github_readonly.name"
+          description: "mcp.servers.web_github_readonly.description"
+          enabled: true
+          transport: "inprocess"
+          provider: "web_github_readonly"
+          auth_mode: "no_token"
+
+  # ── 3.2 Frontend ───────────────────────────────────────────────────
   frontend:
     enabled: true
     applicationName: frontend
@@ -399,7 +955,7 @@ applications:
       - name: VITE_ALLOWED_HOSTS
         value: "fred.dev"
       - name: VITE_BACKEND_URL_KNOWLEDGE
-        value: "http://knowledge-flow-backend.dev.fred.thalesgroup.com"
+        value: "{YOUR-KF-URL}"
       - name: VITE_USE_AUTH
         value: "true"
     ports:
@@ -417,7 +973,7 @@ applications:
       enabled: true
       className: "nginx"
       hosts:
-        - host: fred.dev.fred.thalesgroup.com
+        - host: {YOUR-URL}
           paths:
             - path: /
               pathType: Prefix
@@ -437,7 +993,7 @@ applications:
       tls:
         - secretName: frontend-crt
           hosts:
-            - fred.dev.fred.thalesgroup.com
+            - {YOUR-URL}
     volumeMounts:
       - name: frontend-config-vol
         mountPath: /usr/share/nginx/html/config.json
@@ -488,11 +1044,12 @@ applications:
       backend: false
     configuration:
       config_json:
-        backend_url_api: "http://fred.dev.fred.thalesgroup.com"
-        backend_url_knowledge: "https://fred.dev.fred.thalesgroup.com"
-        websocket_url: "ws://fred.dev.fred.thalesgroup.com/fred/chatbot/query"
+        backend_url_api: "http://{YOUR-URL}"          
+        backend_url_knowledge: "https://{YOUR-URL}"   
+        websocket_url: "ws://{YOUR-URL}/fred/chatbot/query"  
         frontend_basename : "/"
 
+  # ── 3.3 Knowledge Flow Backend ─────────────────────────────────────
   knowledge-flow-backend:
     enabled: true
     applicationName: knowledge-flow-backend
@@ -509,7 +1066,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: ""
+      tag: ""                 
     command:
       enabled: true
       data:
@@ -520,13 +1077,9 @@ applications:
         - "0.0.0.0"
         - "--port"
         - "8111"
-        - "--log-level"
-        - "info"
         - "--loop"
         - "asyncio"
     env:
-      - name: LOG_LEVEL
-        value: "INFO"
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
     ports:
@@ -628,6 +1181,7 @@ applications:
     configuration_type:
       backend: true
       frontend: false
+    # ── Application configuration (rendered as ConfigMap) ───────────────
     configuration:
       app:
         name: "Knowledge Flow Backend"
@@ -645,280 +1199,28 @@ applications:
         kpi_log_summary_top_n: 0
         max_ingestion_workers: 3
 
+      # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
       processing:
         default_profile: medium
         profiles:
-          fast:
-            use_gpu: true
-            generate_summary: false
-            process_images: false
-            pdf:
-              backend: pypdfium2
-              images_scale: 1.0
-              generate_picture_images: false
-              generate_page_images: false
-              generate_table_images: false
-              do_table_structure: false
-              do_ocr: false
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-          medium:
-            use_gpu: true
-            generate_summary: false
-            process_images: false
-            pdf:
-              backend: docling_parse
-              images_scale: 2.0
-              generate_picture_images: false
-              generate_page_images: false
-              generate_table_images: false
-              do_table_structure: false
-              do_ocr: false
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-          rich:
-            use_gpu: true
-            generate_summary: false
-            process_images: true
-            pdf:
-              backend: docling_parse
-              images_scale: 2.0
-              generate_picture_images: true
-              generate_page_images: true
-              generate_table_images: false
-              do_table_structure: true
-              do_ocr: true
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-      security:
-        m2m:
-          enabled: true
-          client_id: "knowledge-flow"
-          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-          secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
-        user:
-          enabled: true
-          client_id: "app"
-          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-        authorized_origins:
-          - "http://fred.dev.fred.thalesgroup.com:80"
-        rebac:
-          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
-          type: openfga
-          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
-          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
-          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
-          # sync_schema_on_init: true         # Pushes the default Fred authorization model
-          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
-          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-          # timeout_millisec: 2000            # Optional request timeout
-          # headers:
-          #   # Optional static headers sent to OpenFGA
-          #   X-Custom-Header: "value"
-      scheduler:
-        enabled: true
-        backend: "temporal"
-        temporal:
-          host: "localhost:7233"
-          namespace: "default"
-          task_queue: "ingestion"
-          workflow_id_prefix: "pipeline"
-          connect_timeout_seconds: 5
-      content_storage:
-        type: local
-        root_path: /home/fred-user/.fred/knowledge-flow/content-storage
-        # type: minio
-        # endpoint: http://minio:9000
-        # access_key: admin
-        # bucket_name: app-bucket
-        # secure: false
-        # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
-        # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
-      document_sources:
-        fred:
-          type: push
-          description: "Documents manually uploaded by users"
-        local:
-          type: pull
-          provider: local_path
-          base_path: ~/Documents/Fred
-          description: "Personal local documents available for pull-mode ingestion"
-      embedding_model:
-        provider: openai
-        name: text-embedding-3-large
-        settings: {}
-        type: "openai"
-      chat_model:
-        provider: openai # openai | azure | ollama
-        name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-        settings: {}
-          # openai: nothing else required (keys in .env)
-          # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
-          # ollama: { base_url: "http://localhost:11434"
-      vision_model:
-        provider: openai
-        name: gpt-4o-mini # or gpt-4o if you want higher fidelity
-        settings:
-          temperature: 0 # optional
-          max_retries: 2 # optional
-      crossencoder_model:
-        name: cross-encoder/ms-marco-MiniLM-L-12-v2
-        settings:
-          online: false
-          local_path: /home/fred-user/.cache/huggingface/hub
-      storage:
-        postgres:
-          host: localhost
-          port: 5432
-          database: fred
-          username: admin
-        opensearch:
-          host: https://localhost:9200
-          secure: true
-          verify_certs: false
-          username: admin
-        catalog_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
-        prompt_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/prompt.duckdb"
-        resource_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
-        log_store:
-          type: "in_memory"
-        tag_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
-        metadata_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
-        task_store:
-          type: "postgres"
-          table: workflow_tasks
-          prefix: "sched_"
+          fast:   *profile-fast
+          medium: *profile-medium
+          rich:   *profile-rich-backend
 
-        vector_store:
-          type: in_memory
-        tabular_stores:
-          base_database: # Minimal configuration to enable CSV document ingestion
-            type: "sql"
-            driver: "duckdb"
-            database: "base_database"
-            path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
-            mode: "read_and_write"
-      mcp:
-        reports_enabled: true
-        kpi_enabled: true
-        tabular_enabled: true
-        statistic_enabled: true
-        text_enabled: true
-        templates_enabled: true
-        resources_enabled: true
-        filesystem_enabled: false
-        opensearch_ops_enabled: false
-        neo4j_enabled: false
+      security:        *kf-security
+      scheduler:       *kf-scheduler
+      content_storage: *kf-content-storage
+      document_sources: *kf-document-sources
+      embedding_model: *kf-embedding-model
+      chat_model:      *kf-chat-model
+      vision_model:    *kf-vision-model
+      crossencoder_model: *kf-crossencoder-model
+      storage:         *kf-storage
+      mcp:             *kf-mcp
+      filesystem:      *kf-filesystem
 
-      filesystem:
-        type: local
-        # type: minio
-        # endpoint: http://localhost:9000
-        # access_key: admin
-        # bucket_name: filesystem
-        # secure: false
-
-    dotenv:
+    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
+    dotenv:                  
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
@@ -927,13 +1229,14 @@ applications:
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""
 
+  # ── 3.4 Knowledge Flow Worker (Temporal) ───────────────────────────
+  # Toggle Temporal worker pod deployment.
+  # Note: You need to have set knowledge-flow-backend.configuration.scheduler.enabled = true
+  # otherwise this deployment will not be created.
   knowledge-flow-worker:
-    # Toggle Temporal worker pod deployment.
-    # Note: You need to have set knowledge-flow-backend.configuration.scheduler.enabled = true
-    # otherwise this deployment will not be created.
     enabled: false
     applicationName: knowledge-flow-worker
-    configurationFileName: configuration_worker.yaml
+    configurationFileName: configuration.yaml
     deployment:
       enabled: false
     replicaCount: 3 # 3 temporal workers
@@ -946,7 +1249,7 @@ applications:
       maxUnavailable: 0
     image:
       repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
-      tag: ""
+      tag: ""                 
     command:
       enabled: true
       data:
@@ -954,12 +1257,8 @@ applications:
         - "-m"
         - "knowledge_flow_backend.main_worker"
     env:
-      - name: LOG_LEVEL
-        value: "INFO"
-      - name: ENV_FILE
-        value: "/app/config/.env"
       - name: CONFIG_FILE
-        value: "/app/config/configuration_worker.yaml"
+        value: "/app/config/configuration.yaml"
     ports:
       - name: worker
         containerPort: 8112
@@ -998,8 +1297,8 @@ applications:
       hosts: []
     volumeMounts:
       - name: knowledge-flow-worker-vol
-        mountPath: /app/config/configuration_worker.yaml
-        subPath: configuration_worker.yaml
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
       - name: knowledge-flow-worker-env-vol
         mountPath: /app/config/.env
         subPath: .env
@@ -1042,6 +1341,9 @@ applications:
     configuration_type:
       backend: true
       frontend: false
+    # ── Application configuration (rendered as ConfigMap) ───────────────
+    # Most sections are shared with knowledge-flow-backend via YAML anchors.
+    # Only app (port 8112, metrics disabled) and processing.rich.generate_summary differ.
     configuration:
       app:
         name: "Knowledge Flow Backend"
@@ -1058,275 +1360,28 @@ applications:
         kpi_log_summary_interval_sec: 0.0
         kpi_log_summary_top_n: 0
 
+      # ── rich.generate_summary=true for the worker (generates summaries at ingestion) ──
       processing:
         default_profile: medium
         profiles:
-          fast:
-            use_gpu: true
-            generate_summary: false
-            process_images: false
-            pdf:
-              backend: pypdfium2
-              images_scale: 1.0
-              generate_picture_images: false
-              generate_page_images: false
-              generate_table_images: false
-              do_table_structure: false
-              do_ocr: false
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-          medium:
-            use_gpu: true
-            generate_summary: false
-            process_images: false
-            pdf:
-              backend: docling_parse
-              images_scale: 2.0
-              generate_picture_images: false
-              generate_page_images: false
-              generate_table_images: false
-              do_table_structure: false
-              do_ocr: false
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-          rich:
-            use_gpu: true
-            generate_summary: true
-            process_images: true
-            pdf:
-              backend: docling_parse
-              images_scale: 2.0
-              generate_picture_images: true
-              generate_page_images: true
-              generate_table_images: false
-              do_table_structure: true
-              do_ocr: true
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-      security:
-        m2m:
-          enabled: true
-          client_id: "knowledge-flow"
-          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-          secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
-        user:
-          enabled: true
-          client_id: "app"
-          realm_url: "http://idp.dev.fred.thalesgroup.com/realms/app"
-        authorized_origins:
-          - "http://fred.dev.fred.thalesgroup.com:80"
-        rebac:
-          enabled: false                    # Set false to bypass ReBAC (warning: all private resources will become public)
-          type: openfga
-          api_url: "http://openfga:8080"    # OpenFGA HTTP endpoint
-          # store_name: "fred"                # OpenFGA store name. Reuse the same store across services
-          # create_store_if_needed: true      # Automates store bootstrap (disable if pre-provisioned)
-          # sync_schema_on_init: true         # Pushes the default Fred authorization model
-          # authorization_model_id: null      # Authorization model id to use in case `sync_schema_on_init: false`
-          # token_env_var: "OPENFGA_API_TOKEN" # Env var holding the bearer token
-          # timeout_millisec: 2000            # Optional request timeout
-          # headers:
-          #   # Optional static headers sent to OpenFGA
-          #   X-Custom-Header: "value"
-      scheduler:
-        enabled: true
-        backend: "temporal"
-        temporal:
-          host: "localhost:7233"
-          namespace: "default"
-          task_queue: "ingestion"
-          workflow_id_prefix: "pipeline"
-          connect_timeout_seconds: 5
-      content_storage:
-        type: local
-        root_path: /home/fred-user/.fred/knowledge-flow/content-storage
-        # type: minio
-        # endpoint: http://minio:9000
-        # access_key: admin
-        # bucket_name: app-bucket
-        # secure: false
-        # public_endpoint: https://minio.example.com  # Public URL for browser-facing presigned URLs
-        # public_secure: true  # Optional, inferred from public_endpoint scheme if omitted
-      document_sources:
-        fred:
-          type: push
-          description: "Documents manually uploaded by users"
-        local:
-          type: pull
-          provider: local_path
-          base_path: ~/Documents/Fred
-          description: "Personal local documents available for pull-mode ingestion"
-      embedding_model:
-        provider: openai
-        name: text-embedding-3-large
-        settings: {}
-        type: "openai"
-      chat_model:
-        provider: openai # openai | azure | ollama
-        name: gpt-4o-mini # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-        settings: {}
-          # openai: nothing else required (keys in .env)
-          # azure: { endpoint: "...", api_version: "2024-08-01-preview" }
-          # ollama: { base_url: "http://localhost:11434"
-      vision_model:
-        provider: openai
-        name: gpt-4o-mini # or gpt-4o if you want higher fidelity
-        settings:
-          temperature: 0 # optional
-          max_retries: 2 # optional
-      crossencoder_model:
-        name: cross-encoder/ms-marco-MiniLM-L-12-v2
-        settings:
-          online: false
-          local_path: /home/fred-user/.cache/huggingface/hub
-      storage:
-        postgres:
-          host: localhost
-          port: 5432
-          database: fred
-          username: admin
-        opensearch:
-          host: https://localhost:9200
-          secure: true
-          verify_certs: false
-          username: admin
-        catalog_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/catalog.duckdb"
-        prompt_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/prompt.duckdb"
-        resource_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
-        log_store:
-          type: "in_memory"
-        tag_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/tag.duckdb"
-        metadata_store:
-          type: "duckdb"
-          duckdb_path: "/home/fred-user/.fred/knowledge-flow/metadata.duckdb"
+          fast:   *profile-fast
+          medium: *profile-medium
+          rich:   *profile-rich-worker
 
-        vector_store:
-          type: in_memory
-        tabular_stores:
-          base_database: # Minimal configuration to enable CSV document ingestion
-            type: "sql"
-            driver: "duckdb"
-            database: "base_database"
-            path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
-            mode: "read_and_write"
-      mcp:
-        reports_enabled: true
-        kpi_enabled: true
-        tabular_enabled: true
-        statistic_enabled: true
-        text_enabled: true
-        templates_enabled: true
-        resources_enabled: true
-        filesystem_enabled: false
-        opensearch_ops_enabled: false
-        neo4j_enabled: false
+      security:        *kf-security
+      scheduler:       *kf-scheduler
+      content_storage: *kf-content-storage
+      document_sources: *kf-document-sources
+      embedding_model: *kf-embedding-model
+      chat_model:      *kf-chat-model
+      vision_model:    *kf-vision-model
+      crossencoder_model: *kf-crossencoder-model
+      storage:         *kf-storage
+      mcp:             *kf-mcp
+      filesystem:      *kf-filesystem
 
-      filesystem:
-        type: local
-        # type: minio
-        # endpoint: http://localhost:9000
-        # access_key: admin
-        # bucket_name: filesystem
-        # secure: false
-    dotenv:
+    # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
+    dotenv:                   
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""

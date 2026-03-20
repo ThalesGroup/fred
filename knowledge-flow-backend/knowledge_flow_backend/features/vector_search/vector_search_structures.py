@@ -15,7 +15,8 @@
 from enum import Enum
 from typing import List, Optional
 
-from fred_core import OwnerFilter, VectorSearchHit
+from fred_core.common import OwnerFilter
+from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
 
 

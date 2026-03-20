@@ -23,7 +23,6 @@ from fred_core import (
     AgentPermission,
     KeycloakUser,
     OrganizationPermission,
-    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -32,6 +31,7 @@ from fred_core import (
     TeamPermission,
     authorize,
 )
+from fred_core.common import OwnerFilter
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
@@ -311,8 +311,10 @@ class AgentService:
         """
         # If team_id is provided, check user has permission to manage team agents
         if team_id:
-            await self.rebac.check_user_permission_or_raise(
-                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            await self.rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
             )
 
         # If class_path/definition_ref is provided, validate and resolve target class

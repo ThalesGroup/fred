@@ -57,10 +57,7 @@ const RebacBackfill = () => {
         <CardHeader
           avatar={<ShieldIcon color="primary" />}
           title={t("rebac.backfill.title", "ReBAC Backfill")}
-          subheader={t(
-            "rebac.backfill.subtitle",
-            "Rebuild owner and tag-to-document relations after enabling ReBAC.",
-          )}
+          subheader={t("rebac.backfill.subtitle", "Rebuild owner and tag-to-document relations after enabling ReBAC.")}
         />
         <CardContent>
           <Stack spacing={3}>
@@ -92,10 +89,7 @@ const RebacBackfill = () => {
                     )}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
                       <Stat label={t("rebac.backfill.stats.tags", "Tags processed")} value={result.tags_seen} />
-                      <Stat
-                        label={t("rebac.backfill.stats.docs", "Documents scanned")}
-                        value={result.documents_seen}
-                      />
+                      <Stat label={t("rebac.backfill.stats.docs", "Documents scanned")} value={result.documents_seen} />
                       <Stat
                         label={t("rebac.backfill.stats.ownerRelations", "Owner relations created")}
                         value={result.tag_owner_relations_created}

@@ -16,7 +16,8 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user, raise_internal_error
+from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core.common import raise_internal_error
 from fred_core.scheduler import TemporalClientProvider
 
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -40,8 +41,10 @@ class SchedulerController:
     """
 
     def __init__(self, router: APIRouter, temporal_client_provider: Optional[TemporalClientProvider] = None):
-        app_config = ApplicationContext.get_instance().get_config()
+        app_context = ApplicationContext.get_instance()
+        app_config = app_context.get_config()
         self.scheduler_config = app_config.scheduler
+        self.effective_scheduler_backend = app_context.get_scheduler_backend()
         self.metadata_service = MetadataService()
         self.task_service = IngestionTaskService(
             scheduler_config=self.scheduler_config,
@@ -68,7 +71,11 @@ class SchedulerController:
         ):
             authorize_or_raise(user, Action.PROCESS, Resource.DOCUMENTS)
 
-            logger.info("Processing %d file(s) via scheduler backend=%s", len(req.files), self.scheduler_config.backend)
+            logger.info(
+                "Processing %d file(s) via scheduler backend=%s",
+                len(req.files),
+                self.effective_scheduler_backend,
+            )
 
             try:
                 definition, handle = await self.task_service.submit_documents(

@@ -15,6 +15,14 @@
 import { StrictMode } from "react";
 import { Provider } from "react-redux";
 import "./styles.css";
+import "./styles/color-ramps.css";
+import "./styles/colors-semantic-dark.css";
+import "./styles/colors-state-semantic.css";
+import "./styles/colors-semantic-light.css";
+import "./styles/radius.css";
+import "./styles/spacings.css";
+import "./styles/typography.css";
+import "./styles/utils.css";
 import "./index.scss";
 import { createRoot } from "react-dom/client";
 import FredUi from "./app/App.tsx";
@@ -38,7 +46,7 @@ const startApp = async () => {
     await loadConfig(); // <-- await config loading FIRST
     console.info("Configuration loaded successfully");
     KeyCloakService.CallLogin(() => {
-      const root = createRoot(document.getElementById('root'));
+      const root = createRoot(document.getElementById("root"));
       root.render(
         <StrictMode>
           <Provider store={store}>

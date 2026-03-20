@@ -22,9 +22,7 @@ import { DocumentDataRowsProps, LimitOption, RowSortMode } from "./DocumentDataC
 import { getDocumentIcon } from "../common/DocumentIcon.tsx";
 import { DocumentVersionChip, extractDocumentVersion } from "../common/DocumentVersionChip.tsx";
 
-export const DocumentDataTableList = (
-  { rows, search }: DocumentDataRowsProps,
-) => {
+export const DocumentDataTableList = ({ rows, search }: DocumentDataRowsProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -94,9 +92,7 @@ export const DocumentDataTableList = (
               labelId="datahub-row-limit-label"
               label={t("dataHub.limitLabel", "Show")}
               value={rowLimit}
-              onChange={(e) =>
-                setRowLimit(e.target.value === "all" ? "all" : (Number(e.target.value) as LimitOption))
-              }
+              onChange={(e) => setRowLimit(e.target.value === "all" ? "all" : (Number(e.target.value) as LimitOption))}
             >
               <MenuItem value={10}>10</MenuItem>
               <MenuItem value={20}>20</MenuItem>
@@ -128,9 +124,7 @@ export const DocumentDataTableList = (
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="caption">{t("dataHub.documentColumn", "Document")}</Typography>
             </Box>
-            <Box
-              sx={{ width: 120, textAlign: "right", display: "flex", justifyContent: "flex-end", gap: 0.5 }}
-            >
+            <Box sx={{ width: 120, textAlign: "right", display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
               <Typography variant="caption">{t("dataHub.rowsColumn", "Rows")}</Typography>
               <TableChartIcon fontSize="inherit" color="secondary" />
             </Box>
@@ -186,4 +180,4 @@ export const DocumentDataTableList = (
       )}
     </Box>
   );
-}
+};

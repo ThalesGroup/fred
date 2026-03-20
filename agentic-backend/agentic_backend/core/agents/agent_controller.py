@@ -21,7 +21,8 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from fred_core import KeycloakUser, OwnerFilter, get_current_user
+from fred_core import KeycloakUser, get_current_user
+from fred_core.common import OwnerFilter
 from pydantic import BaseModel
 
 from agentic_backend.common.error import MCPClientConnectionException

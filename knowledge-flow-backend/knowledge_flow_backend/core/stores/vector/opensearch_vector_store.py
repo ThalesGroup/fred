@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
-from fred_core.store.opensearch_mapping_validator import MappingValidationError, validate_index_mapping
+from fred_core.store import MappingValidationError, validate_index_mapping
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings

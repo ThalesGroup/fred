@@ -25,17 +25,15 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
-  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
-  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
-} from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
-import {
   TeamPermission,
-  useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
-  useListUsersKnowledgeFlowV1UsersGetQuery,
+  useAddTeamMemberMutation,
+  useListTeamMembersQuery,
+  useListUsersQuery,
+  useRemoveTeamMemberMutation,
+  useUpdateTeamMemberMutation,
   UserSummary,
   UserTeamRelation,
-} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+} from "../../slices/controlPlane/controlPlaneApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
@@ -60,17 +58,16 @@ export function TeamMembersPage({ teamId, permissions }: TeamMembersPageProps) {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [inputValue, setInputValue] = useState("");
 
-  const { data: members } = useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery({ teamId: teamId });
+  const { data: members } = useListTeamMembersQuery({ teamId: teamId });
   // todo: handle loading
   // todo: handle error
   // todo: handle empty state
 
-  const [updateTeamMember] = useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation();
-  const [removeTeamMember] = useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation();
-  const [addTeamMember, { isLoading: isAddingMember }] =
-    useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation();
+  const [updateTeamMember] = useUpdateTeamMemberMutation();
+  const [removeTeamMember] = useRemoveTeamMemberMutation();
+  const [addTeamMember, { isLoading: isAddingMember }] = useAddTeamMemberMutation();
 
-  const { data: users } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  const { data: users } = useListUsersQuery();
 
   const membersId = members?.map((m) => m.user.id);
   const usersNotInTeam = membersId && users?.filter((u) => !membersId.includes(u.id));

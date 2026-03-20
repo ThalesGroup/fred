@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 
-from fred_core.common.structures import ModelConfiguration
+from fred_core.common import ModelConfiguration
 
 logger = logging.getLogger(__name__)
 

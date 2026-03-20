@@ -1,9 +1,8 @@
 import GroupsIcon from "@mui/icons-material/Groups";
-import { Box, styled, Typography, useTheme } from "@mui/material";
-import Paper from "@mui/material/Paper/Paper";
+import { Box, Paper, styled, Typography, useTheme } from "@mui/material";
 import { AnyAgent, getAgentVisuals } from "../../common/agent";
 import { THEME_COLOR_MAP } from "../../common/AgentChip";
-import { useListTeamsKnowledgeFlowV1TeamsGetQuery } from "../../slices/knowledgeFlow/knowledgeFlowApiEnhancements";
+import { useListTeamsQuery } from "../../slices/controlPlane/controlPlaneApi";
 import InvisibleLink from "../InvisibleLink";
 
 const HoverBox = styled(Box)<{ agentColor: string }>(({ theme, agentColor }) => ({
@@ -25,7 +24,7 @@ export function AgentTile({ agent }: AgentTileProps) {
   const theme = useTheme();
   const agentColor = THEME_COLOR_MAP(theme)[colorHint];
 
-  const { data: teams } = useListTeamsKnowledgeFlowV1TeamsGetQuery(); // (If multiples tiles are displayed, Redux RTK query should cache the teams, so this should not cause multiple requests)
+  const { data: teams } = useListTeamsQuery(); // (If multiples tiles are displayed, Redux RTK query should cache the teams, so this should not cause multiple requests)
   const teamName = agent.team_id ? teams?.find((t) => t.id === agent.team_id)?.name : undefined;
 
   return (

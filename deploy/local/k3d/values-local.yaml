@@ -1,14 +1,29 @@
 # =============================================================================
 # values-local.yaml — k3d local development overrides
 # =============================================================================
+#
+# This file overrides the defaults from deploy/charts/fred/values.yaml
+# for a local k3d deployment. It contains the full configuration specific
+# to local dev: locally-built images, k3d service names, test secrets, etc.
+#
+# Relationship with other values files:
+#   - values.yaml          : default values (production-oriented)
+#   - values-local.yaml    : overrides for k3d local dev (this file)
+#   - values-gcp.yaml      : overrides for GCP
+#
+# Note: YAML anchors defined in values.yaml are NOT available in this file
+# (each values file is parsed independently by Helm).
+# Lists (e.g. input_processors) are fully replaced during merge — partial
+# list overrides are not possible in Helm.
+#
 # Usage (from repo root):
-#   make k3d-deploy          # build + import + helm install (all-in-one)
+#   make k3d-deploy          # build + import images + helm install (all-in-one)
 #   make k3d-deploy-only     # helm install only (images already in k3d)
 #
 # Manual usage:
 #   helm upgrade --install fred-app deploy/charts/fred \
 #     --namespace fred \
-#     -f deploy/contrib/helmfile/values/values-local.yaml \
+#     -f deploy/local/k3d/values-local.yaml \
 #     --wait --timeout 5m
 #
 # Prerequisites:
@@ -21,6 +36,173 @@
 #        k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1 -c fred
 #        k3d image import ghcr.io/thalesgroup/fred-agent/frontend:0.1 -c fred
 # =============================================================================
+
+# ── Shared anchors (reused by knowledge-flow-backend and worker) ────────────
+
+x-kf-security: &kf-security
+  m2m:
+    realm_url: "http://keycloak:8080/realms/app"
+  user:
+    realm_url: "http://keycloak:8080/realms/app"
+  authorized_origins:
+    - "http://localhost:8088"
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://openfga:9080"
+
+x-kf-scheduler: &kf-scheduler
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "temporal:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_id_prefix: "pipeline"
+    connect_timeout_seconds: 5
+
+x-kf-content-storage: &kf-content-storage
+  type: minio
+  endpoint: http://minio:9000
+  access_key: "admin"
+  bucket_name: "app-content"
+  secure: false
+
+x-common-dotenv: &common-dotenv
+  FRED_POSTGRES_PASSWORD: "Azerty123_"
+  OPENSEARCH_PASSWORD: "FredOpensearch123!!"
+  OPENFGA_API_TOKEN: "Azerty123_"
+  AZURE_AD_CLIENT_SECRET: ""
+  AZURE_APIM_SUBSCRIPTION_KEY: ""
+
+x-kf-filesystem: &kf-filesystem
+  type: minio
+  endpoint: http://minio:9000
+  access_key: "admin"
+  bucket_name: "filesystem"
+  secure: false
+
+x-azure-apim-settings: &azure-apim-settings
+  azure_apim_base_url: ""
+  azure_openai_api_version: ""
+  azure_tenant_id: ""
+  azure_ad_client_id: ""
+  azure_ad_client_scope: ""
+
+x-kf-embedding-model: &kf-embedding-model
+  provider: azure-apim
+  name: text-embedding-3-large
+  settings:
+    <<: *azure-apim-settings
+    azure_apim_resource_path: ""
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+x-kf-chat-model: &kf-chat-model
+  provider: azure-apim
+  name: gpt-4o
+  settings:
+    <<: *azure-apim-settings
+    azure_apim_resource_path: ""
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+x-kf-vision-model: &kf-vision-model
+  provider: azure-apim
+  name: gpt-4o
+  settings:
+    <<: *azure-apim-settings
+    azure_apim_resource_path: ""
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+x-kf-crossencoder-model: &kf-crossencoder-model
+  settings:
+    online: true
+    local_path: ~/.cache/huggingface/hub
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+x-kf-storage: &kf-storage
+  postgres:
+    host: postgres
+    port: 5432
+    database: fred
+    username: fred
+    pool_size: 2
+    max_overflow: 0
+    pool_timeout: 30
+    pool_recycle: 1800
+    pool_pre_ping: true
+  opensearch:
+    host: https://opensearch:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  catalog_store:
+    type: "postgres"
+    table: catalog
+  prompt_store:
+    type: "postgres"
+    table: prompt
+  resource_store:
+    type: "postgres"
+    table: resource
+  tag_store:
+    type: "postgres"
+    table: tag
+  metadata_store:
+    type: "postgres"
+    table: metadata
+  task_store:
+    type: "postgres"
+    table: workflow_tasks
+    prefix: "sched_"
+  vector_store:
+    type: opensearch
+    index: vector-index
+    bulk_size: 1000
+  kpi_store:
+    type: "log"
+    level: "DEBUG"
+  log_store:
+    type: "in_memory"
+  tabular_stores:
+    base_database:
+      type: "sql"
+      mode: "read_and_write"
+      driver: "postgresql+psycopg2"
+      host: "postgres"
+      port: 5432
+      database: "data"
+      path: null
+      username: "tabular"
 
 global:
   kubeconfig: ""
@@ -35,151 +217,23 @@ applications:
   # AGENTIC BACKEND
   # ===========================================================================
   agentic-backend:
-    enabled: true
-    applicationName: agentic-backend
-    deployment:
-      enabled: true
-    replicaCount: 1
-    statefulset:
-      enabled: false
-    job:
-      enabled: false
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
     image:
-      repository: ghcr.io/thalesgroup/fred-agent/agentic-backend
-      tag: "0.1"
-      pullPolicy: Never
-    command:
-      enabled: true
-      data:
-        - "uvicorn"
-        - "agentic_backend.main:create_app"
-        - "--factory"
-        - "--host"
-        - "0.0.0.0"
-        - "--port"
-        - "8000"
-        - "--log-level"
-        - "info"
-        - "--loop"
-        - "asyncio"
-    env:
-      - name: CONFIG_FILE
-        value: "/app/config/configuration.yaml"
-    ports:
-      - name: http
-        containerPort: 8000
-      - name: metrics
-        containerPort: 9005
-    service:
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      ports:
-        - name: http
-          port: 80
-          targetPort: 8000
-    metricsService:
-      enabled: false
-    ingress:
-      enabled: false
-    volumeMounts:
-      - name: agentic-backend-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
-      - name: agentic-backend-env-vol
-        mountPath: /app/config/.env
-        subPath: .env
-    volumes:
-      - name: agentic-backend-vol
-        configMap:
-          name: agentic-backend-back
-      - name: agentic-backend-env-vol
-        secret:
-          secretName: agentic-backend-env
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: true
-        data:
-          httpGet:
-            path: /agentic/v1/healthz
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 15
-          failureThreshold: 10
-      readinessProbe:
-        enabled: true
-        data:
-          httpGet:
-            path: /agentic/v1/ready
-            port: 8000
-          initialDelaySeconds: 15
-          periodSeconds: 10
-          failureThreshold: 10
-      startupProbe:
-        enabled: false
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - "ALL"
-      runAsUser: 1000
-      runAsNonRoot: true
-      seccompProfile:
-        type: RuntimeDefault
-    serviceAccount:
-      annotations: {}
-      labels: {}
-      automountServiceAccountToken: true
-      rbac:
-        enabled: true
-        permissions: {}
-    kubeconfig:
-      enabled: false
-    configuration_type:
-      backend: true
-      frontend: false
-
+        tag: "0.1" 
     # -------------------------------------------------------------------------
     # Agentic Backend — Application Configuration
     # -------------------------------------------------------------------------
     configuration:
       app:
-        name: "Agentic Backend"
-        base_url: "/agentic/v1"
-        address: "127.0.0.1"
-        port: 8000
-        log_level: "info"
-        reload: false
-        reload_dir: "."
-        metrics_enabled: true
-        metrics_address: "0.0.0.0"
-        metrics_port: 9005
-        kpi_process_metrics_interval_sec: 0
-        kpi_log_summary_interval_sec: 0.0
-        kpi_log_summary_top_n: 0
-
+        log_level: "warning"
       scheduler:
         enabled: true
-        backend: temporal
         temporal:
           host: "temporal:7233"
-          namespace: "default"
-          task_queue: "agents"
 
       security:
         m2m:
-          enabled: true
-          client_id: "agentic"
           realm_url: "http://keycloak:8080/realms/app"
-          secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
-          enabled: true
-          client_id: "app"
           realm_url: "http://keycloak:8080/realms/app"
         authorized_origins:
           - "http://localhost:8088"
@@ -188,122 +242,11 @@ applications:
           type: openfga
           api_url: "http://openfga:9080"
 
-      frontend_settings:
-        feature_flags:
-          enableK8Features: false
-          enableElecWarfare: false
-        properties:
-          logoName: "fred"
-          siteDisplayName: "Fred"
-
       ai:
-        use_static_config_only: false
-        restore_max_exchanges: 20
-        max_concurrent_agents: 1024
-        max_concurrent_sessions_per_user: 999999
-        max_attached_files_per_user: 20
-        max_attached_file_size_mb: 50
         knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
         timeout:
           connect: 20
           read: 60
-        default_chat_model:
-          provider: "openai"
-          name: "gpt-4o-mini"
-          settings:
-            max_retries: 0
-            timeout:
-              connect: 10.0
-              read: 30.0
-              write: 30.0
-              pool: 5.0
-            http_client_limits:
-              max_connections: 500
-              max_keepalive_connections: 200
-              keepalive_expiry_seconds: 10
-            temperature: 0.0
-        default_language_model:
-          provider: "openai"
-          name: "gpt-4o-mini"
-          settings:
-            max_retries: 0
-            timeout:
-              connect: 10.0
-              read: 30.0
-              write: 30.0
-              pool: 5.0
-            http_client_limits:
-              max_connections: 500
-              max_keepalive_connections: 200
-              keepalive_expiry_seconds: 10
-            temperature: 0.0
-        recursion:
-          recursion_limit: 40
-        agents:
-          - id: "Georges"
-            name: "Georges"
-            type: "agent"
-            class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-            enabled: true
-            chat_options:
-              attach_files: false
-          - id: "Rico"
-            name: "Rico"
-            type: "agent"
-            class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-            enabled: true
-            chat_options:
-              search_policy_selection: true
-              libraries_selection: true
-              search_rag_scoping: true
-              deep_search_delegate: false
-              attach_files: true
-              include_corpus_in_search: true
-          - id: "Tessa"
-            name: "Tessa"
-            type: "agent"
-            class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-            enabled: true
-
-      mcp:
-        servers:
-          - id: "mcp-knowledge-flow-mcp-text"
-            name: "mcp.servers.search_documents.name"
-            description: "mcp.servers.search_documents.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-text"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-mcp-tabular"
-            name: "mcp.servers.tabular.name"
-            description: "mcp.servers.tabular.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-tabular"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-opensearch-ops"
-            name: "mcp.servers.search_opensearch.name"
-            description: "mcp.servers.search_opensearch.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-fs"
-            name: "mcp.servers.filesystem.name"
-            description: "mcp.servers.filesystem.description"
-            enabled: true
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-fs"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-corpus"
-            name: "mcp.servers.corpus.name"
-            description: "mcp.servers.corpus.description"
-            enabled: true
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-corpus"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
 
       storage:
         postgres:
@@ -313,9 +256,6 @@ applications:
           username: fred
         opensearch:
           host: https://opensearch:9200
-          secure: true
-          verify_certs: false
-          username: admin
         feedback_store:
           type: "postgres"
           table: feedbacks
@@ -347,52 +287,88 @@ applications:
     # Agentic Backend — Secrets (.env)
     # -------------------------------------------------------------------------
     dotenv:
+      <<: *common-dotenv
       KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_"
-      OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
-      FRED_POSTGRES_PASSWORD: "Azerty123_"
-      OPENSEARCH_PASSWORD: "FredDemo_2026!"
-      OPENFGA_API_TOKEN: "Azerty123_"
+
+    # -------------------------------------------------------------------------
+    # Agentic Backend — Agent catalog (overrides default: only Georges)
+    # -------------------------------------------------------------------------
+    agents_catalog:
+      version: v1
+      agents:
+        - id: "Georges"
+          name: "Georges"
+          type: "agent"
+          class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+          enabled: true
+          chat_options:
+            attach_files: false
+
+    # -------------------------------------------------------------------------
+    # Agentic Backend — Models catalog (overrides default: only default profile)
+    # -------------------------------------------------------------------------
+    models_catalog:
+      version: v1
+      common_model_settings:
+        max_retries: 0
+        timeout:
+          connect: 10.0
+          read: 120.0
+          write: 30.0
+          pool: 5.0
+        http_client_limits:
+          max_connections: 500
+          max_keepalive_connections: 200
+          keepalive_expiry_seconds: 10
+        temperature: 0.0
+      default_profile_by_capability:
+        chat: chat.azure_apim.gpt4o
+        language: language.azure_apim.gpt4o
+      profiles:
+        - profile_id: chat.azure_apim.gpt4o
+          capability: chat
+          description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
+          model:
+            provider: azure-apim
+            name: gpt-4o
+            settings:
+              <<: *azure-apim-settings
+              azure_apim_resource_path: ""
+        - profile_id: language.azure_apim.gpt4o
+          capability: language
+          description: "GPT-4o served via Azure APIM endpoint for language tasks."
+          model:
+            provider: azure-apim
+            name: gpt-4o
+            settings:
+              <<: *azure-apim-settings
+              azure_apim_resource_path: ""
+      rules: []
+
+    # -------------------------------------------------------------------------
+    # Agentic Backend — MCP catalog (overrides default: only text search)
+    # -------------------------------------------------------------------------
+    mcp_catalog:
+      version: v1
+      servers:
+        - id: "mcp-knowledge-flow-mcp-text"
+          name: "mcp.servers.search_documents.name"
+          description: "mcp.servers.search_documents.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
 
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
   frontend:
-    enabled: true
-    applicationName: frontend
-    deployment:
-      enabled: true
-    replicaCount: 1
-    statefulset:
-      enabled: false
-    job:
-      enabled: false
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
     image:
-      repository: ghcr.io/thalesgroup/fred-agent/frontend
       tag: "0.1"
-      pullPolicy: Never
-    command:
-      enabled: false
     env:
-      - name: VITE_ALLOWED_HOSTS
-        value: "all"
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "http://localhost:8088"
-      - name: VITE_USE_AUTH
-        value: "true"
-    ports:
-      - name: http
-        containerPort: 8080
-    service:
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      ports:
-        - name: http
-          port: 80
-          targetPort: 8080
     ingress:
       enabled: true
       className: "traefik"
@@ -413,7 +389,7 @@ applications:
               pathType: Prefix
               service:
                 name: knowledge-flow-backend
-                port: 8111
+                port: 8000
             - path: /realms
               pathType: Prefix
               service:
@@ -424,57 +400,7 @@ applications:
               service:
                 name: keycloak
                 port: 8080
-    volumeMounts:
-      - name: frontend-config-vol
-        mountPath: /usr/share/nginx/html/config.json
-        subPath: config.json
-    volumes:
-      - name: frontend-config-vol
-        configMap:
-          name: frontend-front
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: true
-        data:
-          httpGet:
-            path: /healthz.html
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          failureThreshold: 5
-      readinessProbe:
-        enabled: true
-        data:
-          httpGet:
-            path: /ready.html
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          failureThreshold: 5
-      startupProbe:
-        enabled: false
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - "ALL"
-      runAsNonRoot: true
-      seccompProfile:
-        type: RuntimeDefault
-    serviceAccount:
-      annotations: {}
-      labels: {}
-      automountServiceAccountToken: true
-      rbac:
-        enabled: true
-        permissions: {}
-    kubeconfig:
-      enabled: false
-    configuration_type:
-      frontend: true
-      backend: false
+      tls: []
     configuration:
       config_json:
         backend_url_api: "http://localhost:8088"
@@ -486,415 +412,48 @@ applications:
   # KNOWLEDGE FLOW BACKEND
   # ===========================================================================
   knowledge-flow-backend:
-    enabled: true
-    applicationName: knowledge-flow-backend
-    configurationFileName: configuration.yaml
-    deployment:
-      enabled: true
-    replicaCount: 1
-    statefulset:
-      enabled: false
-    job:
-      enabled: false
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
     image:
-      repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
       tag: "0.1"
-      pullPolicy: Never
-    command:
-      enabled: true
-      data:
-        - "uvicorn"
-        - "knowledge_flow_backend.main:create_app"
-        - "--factory"
-        - "--host"
-        - "0.0.0.0"
-        - "--port"
-        - "8111"
-        - "--log-level"
-        - "info"
-        - "--loop"
-        - "asyncio"
-    env:
-      - name: LOG_LEVEL
-        value: "INFO"
-      - name: CONFIG_FILE
-        value: "/app/config/configuration.yaml"
-    ports:
-      - name: http
-        containerPort: 8111
-      - name: metrics
-        containerPort: 9111
-    service:
-      annotations: {}
-      extraLabels: {}
-      type: ClusterIP
-      ports:
-        - name: "http"
-          port: 8111
-          targetPort: 8111
-          protocol: TCP
-    metricsService:
-      enabled: false
-    ingress:
-      enabled: false
-    volumeMounts:
-      - name: knowledge-flow-backend-vol
-        mountPath: /app/config/configuration.yaml
-        subPath: configuration.yaml
-      - name: knowledge-flow-backend-env-vol
-        mountPath: /app/config/.env
-        subPath: .env
-    volumes:
-      - name: knowledge-flow-backend-vol
-        configMap:
-          name: knowledge-flow-backend-back
-      - name: knowledge-flow-backend-env-vol
-        secret:
-          secretName: knowledge-flow-backend-env
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: true
-        data:
-          failureThreshold: 10
-          httpGet:
-            path: /knowledge-flow/v1/healthz
-            port: 8111
-          initialDelaySeconds: 30
-          periodSeconds: 15
-      readinessProbe:
-        enabled: true
-        data:
-          failureThreshold: 10
-          httpGet:
-            path: /knowledge-flow/v1/ready
-            port: 8111
-          initialDelaySeconds: 15
-          periodSeconds: 10
-      startupProbe:
-        enabled: false
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop:
-          - "ALL"
-      runAsUser: 1000
-      runAsNonRoot: true
-      seccompProfile:
-        type: RuntimeDefault
-    serviceAccount:
-      annotations: {}
-      labels: {}
-      automountServiceAccountToken: true
-      rbac:
-        enabled: true
-        permissions: {}
-    kubeconfig:
-      enabled: false
-    configuration_type:
-      backend: true
-      frontend: false
-
     # -------------------------------------------------------------------------
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
     configuration:
-      app:
-        name: "Knowledge Flow Backend"
-        base_url: "/knowledge-flow/v1"
-        address: "127.0.0.1"
-        port: 8111
-        log_level: "info"
-        reload: false
-        reload_dir: "."
-        metrics_enabled: true
-        metrics_address: "0.0.0.0"
-        metrics_port: 9111
-        kpi_process_metrics_interval_sec: 0
-        kpi_log_summary_interval_sec: 0.0
-        kpi_log_summary_top_n: 0
-        max_ingestion_workers: 3
+      security:        *kf-security
+      scheduler:       *kf-scheduler
+      content_storage: *kf-content-storage
 
-      processing:
-        default_profile: fast
-        profiles:
-          fast:
-            use_gpu: false
-            generate_summary: false
-            process_images: false
-            pdf:
-              backend: pypdfium2
-              images_scale: 1.0
-              generate_picture_images: false
-              generate_page_images: false
-              generate_table_images: false
-              do_table_structure: false
-              do_ocr: false
-            input_processors:
-              - suffix: ".pdf"
-                class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
-              - suffix: ".docx"
-                class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-              - suffix: ".pptx"
-                class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-              - suffix: ".csv"
-                class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-              - suffix: ".txt"
-                class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-              - suffix: ".md"
-                class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-              - suffix: ".jsonl"
-                class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-              - suffix: ".png"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".jpeg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".gif"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".bmp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".svg"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".webp"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-              - suffix: ".ico"
-                class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+      embedding_model:    *kf-embedding-model
+      chat_model:         *kf-chat-model
+      vision_model:       *kf-vision-model
+      crossencoder_model: *kf-crossencoder-model
 
-      security:
-        m2m:
-          enabled: true
-          client_id: "knowledge-flow"
-          realm_url: "http://keycloak:8080/realms/app"
-          secret_env_var: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
-        user:
-          enabled: true
-          client_id: "app"
-          realm_url: "http://keycloak:8080/realms/app"
-        authorized_origins:
-          - "http://localhost:8088"
-        rebac:
-          enabled: true
-          type: openfga
-          api_url: "http://openfga:9080"
+      storage:         *kf-storage
+      filesystem:      *kf-filesystem
 
-      scheduler:
-        enabled: true
-        backend: "temporal"
-        temporal:
-          host: "temporal:7233"
-          namespace: "default"
-          task_queue: "ingestion"
-          workflow_id_prefix: "pipeline"
-          connect_timeout_seconds: 5
-
-      content_storage:
-        type: minio
-        endpoint: http://minio:9000
-        access_key: "admin"
-        bucket_name: "app-content"
-        secure: false
-
-      document_sources:
-        fred:
-          type: push
-          description: "Documents manually uploaded by users"
-
-      embedding_model:
-        provider: openai
-        name: text-embedding-3-large
-        settings:
-          max_retries: 0
-          timeout:
-            connect: 10.0
-            read: 30.0
-          http_client_limits:
-            max_connections: 500
-            max_keepalive_connections: 0
-            keepalive_expiry_seconds: 10
-
-      chat_model:
-        provider: openai
-        name: gpt-4o-mini
-        settings:
-          temperature: 0
-          max_retries: 0
-          timeout:
-            connect: 10.0
-            read: 30.0
-          http_client_limits:
-            max_connections: 500
-            max_keepalive_connections: 0
-            keepalive_expiry_seconds: 10
-
-      vision_model:
-        provider: openai
-        name: gpt-4o-mini
-        settings:
-          max_retries: 0
-          timeout:
-            connect: 10.0
-            read: 30.0
-          http_client_limits:
-            max_connections: 500
-            max_keepalive_connections: 0
-            keepalive_expiry_seconds: 10
-          temperature: 0
-
-      crossencoder_model:
-        name: cross-encoder/ms-marco-MiniLM-L-12-v2
-        settings:
-          online: true
-          local_path: ~/.cache/huggingface/hub
-          max_retries: 0
-          timeout:
-            connect: 10.0
-            read: 30.0
-          http_client_limits:
-            max_connections: 500
-            max_keepalive_connections: 0
-            keepalive_expiry_seconds: 10
-
-      storage:
-        tabular_stores:
-          base_database:
-            type: "sql"
-            mode: "read_and_write"
-            driver: "postgresql+psycopg2"
-            host: "postgres"
-            port: 5432
-            database: "data"
-            path: null
-            username: "tabular"
-        postgres:
-          host: postgres
-          port: 5432
-          database: fred
-          username: fred
-          pool_size: 2
-          max_overflow: 0
-          pool_timeout: 30
-          pool_recycle: 1800
-          pool_pre_ping: true
-        opensearch:
-          host: https://opensearch:9200
-          secure: true
-          verify_certs: false
-          username: admin
-        catalog_store:
-          type: "postgres"
-          table: catalog
-        prompt_store:
-          type: "postgres"
-          table: prompt
-        resource_store:
-          type: "postgres"
-          table: resource
-        tag_store:
-          type: "postgres"
-          table: tag
-        metadata_store:
-          type: "postgres"
-          table: metadata
-        task_store:
-          type: "postgres"
-          table: workflow_tasks
-          prefix: "sched_"
-        vector_store:
-          type: opensearch
-          index: vector-index
-          bulk_size: 1000
-        kpi_store:
-          type: "log"
-          level: "DEBUG"
-        log_store:
-          type: "in_memory"
-
-      mcp:
-        reports_enabled: true
-        kpi_enabled: true
-        tabular_enabled: true
-        statistic_enabled: true
-        text_enabled: true
-        templates_enabled: true
-        resources_enabled: true
-        opensearch_ops_enabled: true
-        neo4j_enabled: false
-        filesystem_enabled: true
-
-      filesystem:
-        type: minio
-        endpoint: http://minio:9000
-        access_key: admin
-        bucket_name: filesystem
-        secure: false
-
-    # -------------------------------------------------------------------------
-    # Knowledge Flow Backend — Secrets (.env)
-    # -------------------------------------------------------------------------
-    dotenv:
+    dotenv: &kf-dotenv
+      <<: *common-dotenv
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_"
       MINIO_SECRET_KEY: "Azerty123_"
-      OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
-      OPENSEARCH_PASSWORD: "FredDemo_2026!"
-      OPENFGA_API_TOKEN: "Azerty123_"
-      FRED_POSTGRES_PASSWORD: "Azerty123_"
       TABULAR_POSTGRES_PASSWORD: "Azerty123_"
 
   # ===========================================================================
   # KNOWLEDGE FLOW WORKER — disabled for now
   # ===========================================================================
   knowledge-flow-worker:
-    enabled: false
-    applicationName: knowledge-flow-worker
+    enabled: true
     deployment:
-      enabled: false
-    statefulset:
-      enabled: false
-    job:
-      enabled: false
+      enabled: true
     image:
-      repository: ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend
       tag: "0.1"
-    command:
-      enabled: false
-    ports: []
-    service:
-      enabled: false
-      ports: []
-    metricsService:
-      enabled: false
-    ingress:
-      enabled: false
-    volumeMounts: []
-    volumes: []
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: false
-        data: {}
-      readinessProbe:
-        enabled: false
-        data: {}
-      startupProbe:
-        enabled: false
-    securityContext: {}
-    serviceAccount:
-      annotations: {}
-      labels: {}
-      automountServiceAccountToken: false
-      rbac:
-        enabled: false
-        permissions: {}
-    kubeconfig:
-      enabled: false
-    configuration_type:
-      backend: false
-      frontend: false
-    configuration: {}
+    configuration:
+      security:           *kf-security
+      scheduler:          *kf-scheduler
+      content_storage:    *kf-content-storage
+      embedding_model:    *kf-embedding-model
+      chat_model:         *kf-chat-model
+      vision_model:       *kf-vision-model
+      crossencoder_model: *kf-crossencoder-model
+      storage:            *kf-storage
+      filesystem:         *kf-filesystem
+    dotenv: *kf-dotenv
+      

@@ -21,7 +21,7 @@ import {
   CircularProgress,
   Divider,
   Drawer,
-  Grid2,
+  Grid,
   IconButton,
   Stack,
   TextField,
@@ -434,11 +434,11 @@ const ChatBotView = ({
                   pl: { xs: 0, md: chatContentLeftPadding },
                 }}
               >
-                <Grid2 container width="100%" alignContent="center">
+                <Grid container width="100%" alignContent="center">
                   <UserInput {...userInputProps} />
-                </Grid2>
+                </Grid>
 
-                <Grid2 container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
+                <Grid container width="100%" display="flex" justifyContent="flex-end" marginTop={0.5}>
                   <SimpleTooltip
                     title={t("chatbot.tooltip.tokenUsage", {
                       input: inputTokenCounts,
@@ -451,7 +451,7 @@ const ChatBotView = ({
                       })}
                     </Typography>
                   </SimpleTooltip>
-                </Grid2>
+                </Grid>
               </Box>
             </Box>
           </>

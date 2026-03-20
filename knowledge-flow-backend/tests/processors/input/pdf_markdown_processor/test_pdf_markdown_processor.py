@@ -42,6 +42,7 @@ def sample_pdf_file():
     return Path(__file__).parent / "assets" / "sample.pdf"
 
 
+@pytest.mark.integration
 def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_file):
     output_dir = Path("/tmp/knowledge_flow/test/output")
     output_dir.mkdir(exist_ok=True, parents=True)

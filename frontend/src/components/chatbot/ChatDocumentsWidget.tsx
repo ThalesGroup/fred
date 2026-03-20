@@ -29,7 +29,10 @@ import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton";
 import { FloatingPanel } from "../../shared/ui/surfaces/FloatingPanel";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
-import { DocumentMetadata, useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  DocumentMetadata,
+  useBrowseDocumentsKnowledgeFlowV1DocumentsBrowsePostMutation,
+} from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { matchesDocByName } from "../documents/libraries/documentHelper";
 import ChatWidgetList from "./ChatWidgetList";
 import ChatWidgetShell from "./ChatWidgetShell";
@@ -146,9 +149,7 @@ const ChatDocumentsWidget = ({
   const items = selectedItems.map((item) => ({
     id: item.id,
     label: item.label,
-    secondaryAction: (
-      <DeleteIconButton size="small" onClick={() => toggleDocument(item.id)} disabled={disabled} />
-    ),
+    secondaryAction: <DeleteIconButton size="small" onClick={() => toggleDocument(item.id)} disabled={disabled} />,
   }));
 
   const handleClickAway = () => {
@@ -174,7 +175,9 @@ const ChatDocumentsWidget = ({
           "Restrict retrieval to specific documents for this conversation.",
         )}
         tooltipDisabledReason={
-          disabled ? t("chatbot.documents.tooltip.disabled", "This agent does not support document scoping.") : undefined
+          disabled
+            ? t("chatbot.documents.tooltip.disabled", "This agent does not support document scoping.")
+            : undefined
         }
         actionLabel={t("chatbot.addDocuments", "Add documents")}
         onAction={(event) => {
@@ -188,14 +191,8 @@ const ChatDocumentsWidget = ({
           <SimpleTooltip
             title={
               includeInSearch
-                ? t(
-                    "chatbot.documents.includeTooltipOn",
-                    "Document scoping is enabled for this conversation.",
-                  )
-                : t(
-                    "chatbot.documents.includeTooltipOff",
-                    "Document scoping is disabled for this conversation.",
-                  )
+                ? t("chatbot.documents.includeTooltipOn", "Document scoping is enabled for this conversation.")
+                : t("chatbot.documents.includeTooltipOff", "Document scoping is disabled for this conversation.")
             }
             placement="left"
           >

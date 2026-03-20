@@ -1,0 +1,77 @@
+.switch-container {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.native-input {
+  position: absolute;
+  margin: -1px;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border-width: 0;
+  white-space: nowrap;
+
+  &:focus-visible + .switch {
+    outline: 2px solid var(--primary, #007bff);
+    outline-offset: 2px;
+  }
+
+  &:disabled + .switch {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:checked + .switch {
+    --switch-border-color: var(--primary);
+    --switch-background-color: var(--primary);
+
+    .switch-handle {
+      --switch-handle-background-color: var(--on-primary);
+      left: calc(0px - var(--switch-padding));
+      transform: translateY(-50%) translateX(100%);
+    }
+
+    .state-layer:hover {
+      --switch-state-layer-background-color: var(--state-on-primary-hover);
+    }
+  }
+
+  &:not(:checked) + .switch {
+    .state-layer:hover {
+      --switch-state-layer-background-color: var(--state-on-surface-hover);
+    }
+  }
+}
+
+.switch {
+  position: relative;
+  cursor: pointer;
+  border: 1px solid var(--switch-border-color, var(--outline-retreat));
+  border-radius: var(--radius-2xl);
+  background-color: var(--switch-background-color, var(--surface-container-hight));
+  width: 52px;
+  height: 2rem;
+  --switch-padding: var(--spacing-2xs);
+  overflow: hidden;
+}
+
+.state-layer {
+  background-color: var(--switch-state-layer-background-color);
+  width: 100%;
+  height: 100%;
+}
+
+.switch-handle {
+  position: absolute;
+  top: 50%;
+  left: var(--switch-padding);
+  transform: translateY(-50%);
+  transition: transform 0.2s;
+  border-radius: var(--radius-2xl);
+  background-color: var(--switch-handle-background-color, var(--on-surface-retreat));
+  width: 1.5rem;
+  height: 1.5rem;
+}

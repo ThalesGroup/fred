@@ -22,13 +22,13 @@ Entrypoint for the Agentic Backend App.
 import asyncio
 import contextlib
 import logging
-import os
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_user_security, log_setup, register_exception_handlers
+from fred_core import initialize_user_security, log_setup
+from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.kpi import KPIActor, KPIWriter, emit_process_kpis, emit_sql_pool_kpis
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -89,21 +89,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    logger.warning(
-        "[MAIN] Invalid boolean for %s=%r, defaulting to %s", name, raw, default
-    )
-    return default
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -124,7 +109,7 @@ def create_app() -> FastAPI:
     )
     logger.info(f"[MAIN] create_app() called with .env={env_file} config={config_file}")
     application_context._log_config_summary()
-    docs_enabled = _env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     logger.info("[MAIN] FastAPI docs/openapi endpoints enabled=%s", docs_enabled)
 
     # The correct and final code to use

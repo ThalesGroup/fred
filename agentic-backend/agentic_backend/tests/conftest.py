@@ -18,14 +18,17 @@ import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core import (
-    DuckdbStoreConfig,
     KeycloakUser,
     M2MSecurity,
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
     SecurityConfiguration,
     UserSecurity,
     get_current_user,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
+    ModelConfiguration,
+    OpenSearchStoreConfig,
+    PostgresStoreConfig,
 )
 from pydantic import AnyHttpUrl, AnyUrl
 
@@ -41,7 +44,6 @@ from agentic_backend.common.structures import (
     FrontendFlags,
     FrontendSettings,
     McpConfiguration,
-    ModelConfiguration,
     Properties,
     StorageConfig,
     TimeoutSettings,
@@ -112,18 +114,11 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
-                    id="Georges",
-                    name="Georges",
-                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
+                    id="basic.react.v2",
+                    name="Basic ReAct V2",
+                    class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
                     enabled=True,
-                ),
-                # Include a basic flow named 'Fred' to satisfy tests expecting it
-                Agent(
-                    id="Fred",
-                    name="Fred",
-                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
-                    enabled=True,
-                ),
+                )
             ],
         ),
         mcp=McpConfiguration(servers=[]),
