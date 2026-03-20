@@ -30,6 +30,7 @@ from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.models
 from agentic_backend.agents.v2.candidate.DVARiskValidatorAssistant.shared.rendering import (
     render_report,
 )
+from knowledge_flow_backend.core.models import VectorSearchHit
 
 
 def _binding(session_id: str) -> BoundRuntimeContext:
@@ -159,10 +160,6 @@ async def test_table_extraction_trims_to_max_count() -> None:
     result = await definition.extract_source_risks(state, FakeContext())
     risks = result.state_update["risks"]
     assert len(risks) == 2
-
-
-
-
 
 
 @pytest.mark.asyncio

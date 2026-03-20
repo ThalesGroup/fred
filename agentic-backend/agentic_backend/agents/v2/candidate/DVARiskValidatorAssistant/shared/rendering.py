@@ -47,9 +47,7 @@ def render_report(
                 f"- {risk.risk_id} — {risk.title}: {section_text.strip()}{_citations_inline(risk.coverage.citations)}"
             )
         else:
-            lines.append(
-                f"- {risk.risk_id} — {risk.title}: NO EVIDENCE FOUND"
-            )
+            lines.append(f"- {risk.risk_id} — {risk.title}: NO EVIDENCE FOUND")
     lines.append("")
 
     lines.append("Treatment Validation Summary")
@@ -57,9 +55,7 @@ def render_report(
     lines.append(
         "| Risk ID | Risk title | Source or inferred | Inferred priority | Treatment status | Blocker status | Evidence status |"
     )
-    lines.append(
-        "| --- | --- | --- | --- | --- | --- | --- |"
-    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
     for risk in risks:
         source_label = "Source" if risk.source == "source" else "Inferred"
         blocker_label = "Yes" if risk.blocker else "No"
@@ -80,7 +76,9 @@ def render_report(
     lines.append("")
     for risk in risks:
         lines.append(f"### {risk.risk_id} — {risk.title}")
-        lines.append(f"- **Type:** {'Source' if risk.source == 'source' else 'Inferred'}")
+        lines.append(
+            f"- **Type:** {'Source' if risk.source == 'source' else 'Inferred'}"
+        )
         lines.append(f"- **Priority:** {risk.inferred_priority} *(inferred)*")
         if risk.coverage.citations:
             section = risk.coverage.section or ""
@@ -102,7 +100,9 @@ def render_report(
         if risk.treatment.actions:
             lines.append("- **Actions/Mitigations (DVA):**")
             for action in risk.treatment.actions:
-                lines.append(f"  - {action}{_citations_inline(risk.coverage.citations)}")
+                lines.append(
+                    f"  - {action}{_citations_inline(risk.coverage.citations)}"
+                )
         else:
             lines.append("- **Actions/Mitigations (DVA):**")
             lines.append("  - NO EVIDENCE FOUND")

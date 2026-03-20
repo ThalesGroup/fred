@@ -141,9 +141,7 @@ class DVARiskValidatorState(BaseModel):
 class DVARiskValidatorGraph(GraphAgentDefinition):
     agent_id: str = "dva.risk_validator.graph.v2"
     role: str = "DVA Risk Validator (Graph)"
-    description: str = (
-        "Validates that DVA risks are treated, traceable, and evidenced with explicit recommendations."
-    )
+    description: str = "Validates that DVA risks are treated, traceable, and evidenced with explicit recommendations."
     tags: tuple[str, ...] = ("dva", "risk", "validator", "graph", "v2")
 
     risk_table_prompt_template: str = Field(
@@ -333,16 +331,35 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
                 ),
             ),
             edges=(
-                GraphEdgeDefinition(source="route_or_start", target="ask_max_risk_count"),
-                GraphEdgeDefinition(source="ask_max_risk_count", target="locate_risk_table"),
-                GraphEdgeDefinition(source="extract_source_risks", target="enrich_to_requested_count"),
-                GraphEdgeDefinition(source="enrich_to_requested_count", target="retrieve_coverage_evidence"),
-                GraphEdgeDefinition(source="retrieve_coverage_evidence", target="validate_treatment"),
-                GraphEdgeDefinition(source="validate_treatment", target="recommend_strategy"),
-                GraphEdgeDefinition(source="recommend_strategy", target="recommend_actions_mitigations"),
-                GraphEdgeDefinition(source="recommend_actions_mitigations", target="build_report"),
+                GraphEdgeDefinition(
+                    source="route_or_start", target="ask_max_risk_count"
+                ),
+                GraphEdgeDefinition(
+                    source="ask_max_risk_count", target="locate_risk_table"
+                ),
+                GraphEdgeDefinition(
+                    source="extract_source_risks", target="enrich_to_requested_count"
+                ),
+                GraphEdgeDefinition(
+                    source="enrich_to_requested_count",
+                    target="retrieve_coverage_evidence",
+                ),
+                GraphEdgeDefinition(
+                    source="retrieve_coverage_evidence", target="validate_treatment"
+                ),
+                GraphEdgeDefinition(
+                    source="validate_treatment", target="recommend_strategy"
+                ),
+                GraphEdgeDefinition(
+                    source="recommend_strategy", target="recommend_actions_mitigations"
+                ),
+                GraphEdgeDefinition(
+                    source="recommend_actions_mitigations", target="build_report"
+                ),
                 GraphEdgeDefinition(source="build_report", target="publish_outputs"),
-                GraphEdgeDefinition(source="publish_outputs", target="persist_session_scope"),
+                GraphEdgeDefinition(
+                    source="publish_outputs", target="persist_session_scope"
+                ),
                 GraphEdgeDefinition(source="persist_session_scope", target="finalize"),
             ),
             conditionals=(
@@ -433,12 +450,13 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
     ) -> GraphNodeResult:
         del context
         graph_state = DVARiskValidatorState.model_validate(state)
-        return GraphNodeResult(state_update={"latest_user_text": graph_state.latest_user_text})
+        return GraphNodeResult(
+            state_update={"latest_user_text": graph_state.latest_user_text}
+        )
 
     async def ask_max_risk_count(
         self, state: BaseModel, context: GraphNodeContext
     ) -> GraphNodeResult:
-        graph_state = DVARiskValidatorState.model_validate(state)
         question = "Indique le nombre maximum de risques a analyser (max 30)."
         while True:
             decision = await context.request_human_input(
@@ -452,9 +470,7 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
             answer = self._extract_free_text(decision)
             max_count = self._coerce_int(answer)
             if max_count is None or max_count <= 0:
-                question = (
-                    "Merci d'indiquer un nombre entier positif (max 30)."
-                )
+                question = "Merci d'indiquer un nombre entier positif (max 30)."
                 continue
             if max_count > 30:
                 question = (
@@ -496,7 +512,6 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
     async def ask_risk_section(
         self, state: BaseModel, context: GraphNodeContext
     ) -> GraphNodeResult:
-        graph_state = DVARiskValidatorState.model_validate(state)
         decision = await context.request_human_input(
             HumanInputRequest(
                 stage="dva_risk_section",
@@ -626,7 +641,9 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
             start_index=len(graph_state.risks) + 1,
             existing_ids=[r.risk_id for r in graph_state.risks],
         )
-        return GraphNodeResult(state_update={"risks": graph_state.risks + inferred_risks})
+        return GraphNodeResult(
+            state_update={"risks": graph_state.risks + inferred_risks}
+        )
 
     async def retrieve_coverage_evidence(
         self, state: BaseModel, context: GraphNodeContext
@@ -645,7 +662,9 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
         graph_state = DVARiskValidatorState.model_validate(state)
         updated: list[RiskAssessment] = []
         for risk in graph_state.risks:
-            hits = self._hits_from_state(graph_state.risk_evidence.get(risk.risk_id, []))
+            hits = self._hits_from_state(
+                graph_state.risk_evidence.get(risk.risk_id, [])
+            )
             row_text = graph_state.risk_table_rows.get(risk.risk_id, "").strip()
             if hits:
                 prompt_context = hits_to_prompt_context(hits)
@@ -724,7 +743,9 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
         citations, index_map = build_citation_index(all_hits)
         updated: list[RiskAssessment] = []
         for risk in graph_state.risks:
-            hits = self._hits_from_state(graph_state.risk_evidence.get(risk.risk_id, []))
+            hits = self._hits_from_state(
+                graph_state.risk_evidence.get(risk.risk_id, [])
+            )
             assessment = risk.model_copy(deep=True)
             assessment.coverage.citations = citations_for_hits(hits, index_map)
             if not assessment.coverage.section and hits:
@@ -756,7 +777,9 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
                 title="DVA risk validation report",
                 content_type="text/markdown; charset=utf-8",
             )
-            risk_index = self._build_risk_index(graph_state, context.binding.runtime_context)
+            risk_index = self._build_risk_index(
+                graph_state, context.binding.runtime_context
+            )
             index_artifact = await context.publish_text(
                 file_name="risk_index.json",
                 text=json.dumps(risk_index.as_json(), ensure_ascii=False, indent=2),
@@ -777,7 +800,9 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
             graph_state.published_index,
         )
         try:
-            await context.invoke_tool("session.preferences.update", {"preferences": prefs})
+            await context.invoke_tool(
+                "session.preferences.update", {"preferences": prefs}
+            )
         except Exception:
             pass
         return GraphNodeResult(state_update={"persisted_preferences": prefs})
@@ -810,7 +835,10 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
         )
 
     async def _run_queries(
-        self, context: GraphNodeContext, queries: Iterable[str], top_k: int | None = None
+        self,
+        context: GraphNodeContext,
+        queries: Iterable[str],
+        top_k: int | None = None,
     ) -> list[Any]:
         hits: list[Any] = []
         if context.services.tool_invoker is None:
@@ -931,9 +959,7 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
                     "row_text": row.strip(),
                     "row_context": f"{header_line}\n{row.strip()}",
                 }
-                record.update(
-                    self._parse_table_fields_from_row(header_cells, cells)
-                )
+                record.update(self._parse_table_fields_from_row(header_cells, cells))
                 extracted.append(record)
         return extracted
 
@@ -965,7 +991,11 @@ class DVARiskValidatorGraph(GraphAgentDefinition):
         lowered = title.lower().strip()
         if lowered in {"risk title", "risque", "risques", "impact", "mitigation"}:
             return True
-        if lowered.startswith("[") or lowered.startswith(">") or lowered.startswith("*"):
+        if (
+            lowered.startswith("[")
+            or lowered.startswith(">")
+            or lowered.startswith("*")
+        ):
             return True
         if "risk title" in lowered:
             return True

@@ -65,6 +65,10 @@ def bilingual_queries(
     """
     Return queries ordered with primary language first, then the fallback language.
     """
-    primary = [q for q in (english_queries if primary_language == "en" else french_queries)]
-    fallback = [q for q in (french_queries if primary_language == "en" else english_queries)]
+    primary = [
+        q for q in (english_queries if primary_language == "en" else french_queries)
+    ]
+    fallback = [
+        q for q in (french_queries if primary_language == "en" else english_queries)
+    ]
     return [q for q in primary + fallback if q]

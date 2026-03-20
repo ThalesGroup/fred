@@ -439,7 +439,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         self, request: ToolInvocationRequest
     ) -> ToolInvocationResult:
         payload = request.payload
-        session_id = payload.get("session_id") or self._binding.runtime_context.session_id
+        session_id = (
+            payload.get("session_id") or self._binding.runtime_context.session_id
+        )
         if not session_id:
             raise RuntimeError("session.preferences.update requires a session_id")
         preferences = payload.get("preferences")
@@ -448,7 +450,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
         session_store = get_app_context().get_session_store()
         session = await session_store.get(str(session_id))
         if session is None:
-            raise RuntimeError(f"Session {session_id} not found for preferences update.")
+            raise RuntimeError(
+                f"Session {session_id} not found for preferences update."
+            )
         session.preferences = preferences
         await session_store.save(session)
         return ToolInvocationResult(

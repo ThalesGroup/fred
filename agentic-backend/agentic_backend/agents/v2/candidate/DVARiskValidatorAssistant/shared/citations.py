@@ -19,7 +19,9 @@ def _citation_key(hit: VectorSearchHit) -> str:
     )
 
 
-def build_citation_index(hits: Iterable[VectorSearchHit]) -> tuple[list[CitationRecord], dict[str, int]]:
+def build_citation_index(
+    hits: Iterable[VectorSearchHit],
+) -> tuple[list[CitationRecord], dict[str, int]]:
     records: list[CitationRecord] = []
     index_map: dict[str, int] = {}
     for hit in hits:
