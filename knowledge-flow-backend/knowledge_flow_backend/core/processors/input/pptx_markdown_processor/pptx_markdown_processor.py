@@ -18,6 +18,7 @@ This processor orchestrates PPTX-specific helper modules for native slide extrac
 formatting, speaker notes, and deck-level cleanup. The split keeps the native
 extraction reusable for future multimodal PPTX processing.
 """
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_d
 
 
 logger = logging.getLogger(__name__)
+
 
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PPTX slide decks into Markdown sections, slide by slide."

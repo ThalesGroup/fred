@@ -13,18 +13,21 @@
 # limitations under the License.
 
 """Extracts speaker notes from PPTX slides."""
+
 from __future__ import annotations
 
 import logging
 from typing import Optional
 
 logger = logging.getLogger(__name__)
- 
+
+
 def _is_page_number_candidate(text: str) -> bool:
     value = text.strip()
     if not value:
         return False
     return value.isdigit() and 1 <= len(value) <= 3
+
 
 def _is_notes_body_shape(shape) -> bool:
     """
@@ -63,7 +66,6 @@ def extract_speaker_notes(slide) -> Optional[str]:
             if not getattr(shape, "has_text_frame", False):
                 continue
 
-
             text_frame = getattr(shape, "text_frame", None)
             if text_frame is None:
                 continue
@@ -74,7 +76,6 @@ def extract_speaker_notes(slide) -> Optional[str]:
             if _is_page_number_candidate(text):
                 continue
             texts.append(text)
-
 
         if not texts:
             return None

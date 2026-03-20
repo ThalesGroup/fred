@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Detects repeated deck-level text noise such as headers and footers."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -81,14 +82,9 @@ def detect_repeated_noise_texts(slides: Iterable[Any], repetition_ratio: float =
 
                 seen_in_slide.add(text)
 
-
         for text in seen_in_slide:
             counter[text] += 1
 
-    repeated_noise = {
-        text
-        for text, count in counter.items()
-        if count >= min_occurrences
-    }
+    repeated_noise = {text for text, count in counter.items() if count >= min_occurrences}
 
     return repeated_noise

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Formats extracted PPTX slide content as Markdown."""
+
 from __future__ import annotations
 
 from typing import List

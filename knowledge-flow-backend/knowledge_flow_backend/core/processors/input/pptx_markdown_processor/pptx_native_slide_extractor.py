@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Extracts structured content from PPTX slides."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -126,17 +127,19 @@ def _is_title_candidate(lines: List[str]) -> bool:
 
     return True
 
+
 def _is_page_number_candidate(text: str) -> bool:
     value = text.strip()
     if not value:
         return False
     return value.isdigit() and 1 <= len(value) <= 3
 
+
 def _is_repeated_noise(text: str, repeated_noise_texts: Optional[set[str]]) -> bool:
     if not repeated_noise_texts:
         return False
     return text.strip() in repeated_noise_texts
- 
+
 
 def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str]) -> bool:
     text = line.strip()
@@ -160,7 +163,6 @@ def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str
     if first_word in {"what", "why", "how", "when", "where", "who", "in", "once"}:
         return False
 
-
     word_count = len(text.split())
     char_count = len(text)
 
@@ -169,7 +171,7 @@ def _is_visual_list_item(line: str, title: Optional[str], subtitle: Optional[str
 
     if text.isupper() and word_count <= 5:
         return False
-    
+
     if 1 <= word_count <= 6 and char_count <= 60:
         return True
 
@@ -241,7 +243,6 @@ def extract_native_slide_content(
                 if table_md:
                     result.tables.append(table_md)
                 continue
-
 
         has_text_frame = bool(getattr(shape, "has_text_frame", False))
         text_frame = getattr(shape, "text_frame", None)

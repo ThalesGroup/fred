@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Sorts PPTX shapes in visual reading order."""
+
 from __future__ import annotations
 
 from typing import Any, Iterable, List, Tuple
