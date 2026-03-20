@@ -16,8 +16,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page } from "react-pdf";
-import "react-pdf/dist/esm/Page/AnnotationLayer.css";
-import "react-pdf/dist/esm/Page/TextLayer.css";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 import { getConfig } from "./config";
 import { useAuthToken } from "../security/AuthContext";
 

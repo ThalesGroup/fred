@@ -22,9 +22,15 @@ Start with:
 import asyncio
 import logging
 
+from fred_core.scheduler import SchedulerBackend
+
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from knowledge_flow_backend.features.scheduler.worker import run_worker
-from knowledge_flow_backend.main import load_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +38,26 @@ logger = logging.getLogger(__name__)
 async def main() -> None:
     configuration = load_configuration()
     ApplicationContext(configuration)
+    app_context = ApplicationContext.get_instance()
     # Keep worker logging local-only: Temporal workflow sandbox must not trigger
     # external log sinks (OpenSearch/HTTP imports) from workflow threads.
     logging.basicConfig(
         level=getattr(logging, configuration.app.log_level.upper(), logging.INFO),
         format="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s] | %(message)s",
     )
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
     if not configuration.scheduler.enabled:
         logger.warning("Scheduler disabled via configuration.scheduler.enabled=false")
         return
-    if configuration.scheduler.backend.lower() != "temporal":
-        raise ValueError(f"Scheduler backend '{configuration.scheduler.backend}' not supported; expected 'temporal'.")
+    scheduler_backend = app_context.get_scheduler_backend()
+    if scheduler_backend == SchedulerBackend.MEMORY:
+        logger.info("Scheduler backend is 'memory'; no Temporal worker is required.")
+        return
+    if scheduler_backend != SchedulerBackend.TEMPORAL:
+        raise ValueError(f"Scheduler backend '{scheduler_backend}' not supported; expected 'temporal'.")
 
     await run_worker(configuration.scheduler.temporal)
 

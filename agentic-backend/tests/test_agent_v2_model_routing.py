@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from pydantic import ValidationError
 
 from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (

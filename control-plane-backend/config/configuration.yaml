@@ -1,0 +1,45 @@
+app:
+  name: Control Plane Backend
+  base_url: /control-plane/v1
+  address: 127.0.0.1
+  port: 8222
+  log_level: info
+
+scheduler:
+  enabled: false
+  # temporal: requires Temporal server + run-worker process
+  # memory: execute lifecycle pass in API process (no worker needed)
+  backend: temporal
+  temporal:
+    host: localhost:7233
+    namespace: default
+    task_queue: control-plane-lifecycle
+    workflow_id_prefix: control-plane
+    connect_timeout_seconds: 5
+
+security:
+  m2m:
+    enabled: false
+    realm_url: http://localhost:8080/realms/app
+    client_id: control-plane
+    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET # pragma: allowlist secret
+  user:
+    enabled: false
+    realm_url: http://localhost:8080/realms/app
+    client_id: app
+  authorized_origins:
+    - http://localhost:5173
+
+storage:
+  postgres:
+    sqlite_path: "~/.fred/control-plane/control_plane.sqlite3"
+  session_store:
+    type: postgres
+    table: session
+  purge_queue_table: session_purge_queue
+  content_storage:
+    type: local
+    root_path: "~/.fred/control-plane/content-storage"
+
+policies:
+  purge_catalog_path: ./conversation_policy_catalog.yaml

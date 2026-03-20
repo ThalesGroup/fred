@@ -3,10 +3,8 @@ import { alpha, IconButton, List, Typography, useTheme } from "@mui/material";
 import * as React from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery,
-  useListUsersKnowledgeFlowV1UsersGetQuery,
-} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListUsersQuery } from "../../../../slices/controlPlane/controlPlaneApi";
+import { useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../../ToastProvider";
 import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";
 import { UserListItem } from "./UserListItem";
@@ -32,11 +30,7 @@ export function DocumentLibraryShareUsersList({
   const overlayColor = theme.palette.mode === "light" ? alpha("#000", 0.1) : alpha("#fff", 0.1);
 
   // Get list of all users
-  const {
-    data: users = [],
-    isLoading: isLoadingUsers,
-    error: errorFetchingUsers,
-  } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  const { data: users = [], isLoading: isLoadingUsers, error: errorFetchingUsers } = useListUsersQuery();
   // Get list of members of the tag
   const {
     data: members,

@@ -18,13 +18,15 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from fred_core import (
-    DuckdbStoreConfig,
     M2MSecurity,
+    SecurityConfiguration,
+    UserSecurity,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
-    UserSecurity,
 )
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl

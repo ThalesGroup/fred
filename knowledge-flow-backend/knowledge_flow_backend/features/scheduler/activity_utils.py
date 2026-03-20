@@ -24,8 +24,31 @@ T = TypeVar("T")
 
 
 def _validate_heartbeat_interval(heartbeat_interval_seconds: float) -> None:
+    """
+    Why:
+    Reject invalid heartbeat cadence early to avoid silent busy-loops.
+
+    How:
+    Raise ValueError when the interval is non-positive.
+    """
     if heartbeat_interval_seconds <= 0:
         raise ValueError("heartbeat_interval_seconds must be greater than zero")
+
+
+def _heartbeat_if_in_activity(details: dict[str, Any]) -> None:
+    """
+    Why:
+    Keep heartbeat helpers usable in standalone/in-memory execution paths that
+    do not run inside a Temporal activity context.
+
+    How:
+    Call Temporal heartbeat only when an activity context is active.
+
+    Example:
+    _heartbeat_if_in_activity({"stage": "push_input_process", "document_uid": "doc-123"})
+    """
+    if activity.in_activity():
+        activity.heartbeat(details)
 
 
 async def await_with_heartbeat(
@@ -35,7 +58,19 @@ async def await_with_heartbeat(
     heartbeat_interval_seconds: float = 20.0,
 ) -> T:
     """
-    Await a long-running operation while emitting periodic Temporal heartbeats.
+    Why:
+    Provide one await helper for long-running operations that should heartbeat in
+    Temporal workers, while still being safe in standalone in-memory execution.
+
+    How:
+    Poll the awaitable with a timeout and emit periodic heartbeats only when
+    running in a Temporal activity context.
+
+    Example:
+    result = await await_with_heartbeat(
+        some_async_call(),
+        heartbeat_details={"stage": "restore", "document_uid": "doc-123"},
+    )
     """
     _validate_heartbeat_interval(heartbeat_interval_seconds)
     details = heartbeat_details or {}
@@ -58,7 +93,7 @@ async def await_with_heartbeat(
             )
             if task in done:
                 return await task
-            activity.heartbeat(details)
+            _heartbeat_if_in_activity(details)
     finally:
         if not task.done():
             task.cancel()
@@ -75,7 +110,22 @@ async def to_thread_with_heartbeat(
     **kwargs: Any,
 ) -> T:
     """
-    Run blocking work in a thread while emitting periodic Temporal heartbeats.
+    Why:
+    Expose a single helper for blocking functions that should run off the event
+    loop and still report progress in Temporal workers.
+
+    How:
+    Execute the callable with asyncio.to_thread, then delegate heartbeat logic to
+    await_with_heartbeat.
+
+    Example:
+    await to_thread_with_heartbeat(
+        ingestion_service.save_output,
+        user,
+        metadata,
+        output_dir,
+        heartbeat_details={"stage": "save_output", "document_uid": "doc-123"},
+    )
     """
     return await await_with_heartbeat(
         asyncio.to_thread(func, *args, **kwargs),

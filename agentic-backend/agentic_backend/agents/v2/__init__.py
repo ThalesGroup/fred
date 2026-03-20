@@ -15,7 +15,6 @@ if TYPE_CHECKING:
         DVARiskValidatorQA,
     )
     from .demos.artifact_report import ArtifactReportDemoV2Definition
-    from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.basic_react import BasicReActDefinition
     from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
 
@@ -57,6 +56,7 @@ def __getattr__(name: str) -> object:
         from .candidate.bid_mgr import Definition as BidMgrDefinition
 
         return BidMgrDefinition
+<<<<<<< HEAD
     if name == "DVARiskValidatorGraph":
         from .candidate.DVARiskValidatorAssistant import DVARiskValidatorGraph
 
@@ -69,6 +69,8 @@ def __getattr__(name: str) -> object:
         from .demos.postal_tracking import Definition as PostalTrackingDefinition
 
         return PostalTrackingDefinition
+=======
+>>>>>>> develop
     if name == "RagExpertV2Definition":
         from .production.basic_react.profiles.rag_expert_agent import (
             RagExpertV2Definition,

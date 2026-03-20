@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.sql import ClauseElement
 
-from fred_core.common.structures import PostgresStoreConfig
+from fred_core.common import PostgresStoreConfig
 
 logger = logging.getLogger(__name__)
 

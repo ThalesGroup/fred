@@ -9,6 +9,13 @@ It is intended for:
 
 For day-to-day **developer onboarding**, refer to the main [`README.md`](../README.md).
 
+> [!IMPORTANT]
+> **Mandatory access bootstrap after fresh install:**
+> Keycloak app roles do not replace team-level ReBAC rights.
+> Your deployment process must include a **post-install automated bootstrap** that assigns at least one `owner` or `manager` per team in ReBAC/OpenFGA.
+> This must not rely on manual first-use actions in the UI.
+> For the complete Fred access model and terminology, see [REBAC.md](./REBAC.md).
+
 ---
 
 # 1. Scope

@@ -15,7 +15,7 @@ import logging
 
 # Preload pydantic_core to avoid late imports inside the Temporal workflow sandbox.
 import pydantic_core  # noqa: F401
-from fred_core import TemporalSchedulerConfig
+from fred_core.common import TemporalSchedulerConfig
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker

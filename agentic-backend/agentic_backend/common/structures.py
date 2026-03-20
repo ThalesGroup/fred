@@ -17,13 +17,16 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
     TemporalSchedulerConfig,
 )
+from fred_core.scheduler import SchedulerBackend
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
 
@@ -360,7 +363,7 @@ class AppConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: str = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 

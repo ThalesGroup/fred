@@ -31,6 +31,7 @@ It is meant to be simplified after the UI fully migrates to v2 definitions and n
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, TypeVar
 
@@ -46,9 +47,11 @@ from .react_profiles import (
     PROFILE_MANAGED_MODEL_FIELDS,
     ReActProfile,
     get_react_profile,
+    list_react_profiles,
 )
 
 DefinitionT = TypeVar("DefinitionT", bound=AgentDefinition)
+logger = logging.getLogger(__name__)
 
 
 def definition_to_agent_tuning(definition: AgentDefinition) -> AgentTuning:
@@ -145,6 +148,11 @@ def build_definition_from_settings(
             if field_name in PROFILE_MANAGED_MODEL_FIELDS:
                 base_value = getattr(base_definition, field_name, None)
                 profile_value = getattr(profiled_definition, field_name, None)
+                if field_name == "react_profile_id" and not _is_known_react_profile_id(
+                    value
+                ):
+                    updates[field_name] = profile_value
+                    continue
                 updates[field_name] = _profiled_field_value(
                     current_value=value,
                     base_value=base_value,
@@ -316,7 +324,7 @@ def _selected_react_profile(definition: AgentDefinition) -> ReActProfile | None:
     raw_profile_id = getattr(definition, "react_profile_id", None)
     if not isinstance(raw_profile_id, str) or not raw_profile_id.strip():
         return None
-    return get_react_profile(raw_profile_id)
+    return _resolve_react_profile(raw_profile_id)
 
 
 def _apply_profile_to_definition(
@@ -328,9 +336,17 @@ def _apply_profile_to_definition(
     if not isinstance(profile_id, str) or not profile_id.strip():
         profile = _selected_react_profile(definition)
         if profile is None:
-            return definition
+            profile = _fallback_react_profile()
+            if profile is None:
+                return definition
     else:
-        profile = get_react_profile(profile_id)
+        profile = _resolve_react_profile(profile_id)
+        if profile is None:
+            profile = _selected_react_profile(definition)
+            if profile is None:
+                profile = _fallback_react_profile()
+                if profile is None:
+                    return definition
 
     updates: dict[str, Any] = {
         "react_profile_id": profile.profile_id,
@@ -349,6 +365,37 @@ def _apply_profile_to_definition(
         if key in definition.__class__.model_fields
     }
     return definition.model_copy(update=supported_updates)
+
+
+def _resolve_react_profile(profile_id: str) -> ReActProfile | None:
+    try:
+        return get_react_profile(profile_id)
+    except ValueError:
+        logger.warning(
+            "[V2_CATALOG] Unknown ReAct profile '%s'. Falling back to a known profile.",
+            profile_id,
+        )
+        return None
+
+
+def _is_known_react_profile_id(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        get_react_profile(value.strip())
+    except ValueError:
+        return False
+    return True
+
+
+def _fallback_react_profile() -> ReActProfile | None:
+    profiles = list_react_profiles()
+    if not profiles:
+        return None
+    for profile in profiles:
+        if profile.profile_id == "base_assistant":
+            return profile
+    return profiles[0]
 
 
 def _profiled_identity_value(

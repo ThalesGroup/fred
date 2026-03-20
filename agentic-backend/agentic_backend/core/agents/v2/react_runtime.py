@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Protocol, cast
 
-from fred_core import VectorSearchHit
+from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -867,7 +867,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
 
         bound_tools = self._build_tools(binding)
         system_prompt = _render_prompt_template(
-            policy.system_prompt_template,
+            policy.system_prompt_template or "",
             binding=binding,
             agent_id=self.definition.agent_id,
         )

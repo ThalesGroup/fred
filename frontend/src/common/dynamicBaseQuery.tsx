@@ -10,7 +10,7 @@ import { getConfig } from "./config";
 import { KeyCloakService } from "../security/KeycloakService";
 
 interface DynamicBaseQueryOptions {
-  backend: "api" | "knowledge";
+  backend: "api" | "knowledge" | "controlPlane";
 }
 
 export const createDynamicBaseQuery = (
@@ -18,6 +18,9 @@ export const createDynamicBaseQuery = (
 ): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> => {
   // We resolve the baseUrl lazily (at call time), just like your original code.
   const pickBaseUrl = () => {
+    if (options.backend === "controlPlane") {
+      return import.meta.env.VITE_BACKEND_URL_CONTROL_PLANE || getConfig().backend_url_control_plane;
+    }
     if (options.backend === "knowledge") {
       return import.meta.env.VITE_BACKEND_URL_KNOWLEDGE || getConfig().backend_url_knowledge;
     }

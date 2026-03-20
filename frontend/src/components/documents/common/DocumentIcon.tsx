@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // utils/DocumentIcon.tsx
-import React, { useMemo, useState } from "react";
+import React, { ReactElement, useMemo, useState } from "react";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { ExcelIcon, PdfIcon, WordIcon, PowerPointIcon, MarkdownIcon, TextIcon } from "../../../utils/icons";
 
@@ -55,20 +55,14 @@ const ExtIcon: React.FC<ExtIconProps> = ({ ext, size = 20 }) => {
   if (ext && imgOk) {
     const src = `${baseUrl}images/filetypes/${ext}.svg`;
     return (
-      <img
-        src={src}
-        alt={ext}
-        style={style as React.CSSProperties}
-        onError={() => setImgOk(false)}
-        loading="lazy"
-      />
+      <img src={src} alt={ext} style={style as React.CSSProperties} onError={() => setImgOk(false)} loading="lazy" />
     );
   }
 
   return builtIn ?? <InsertDriveFileIcon style={style} />;
 };
 
-export const getDocumentIcon = (filename: string): JSX.Element | null => {
+export const getDocumentIcon = (filename: string): ReactElement | null => {
   const ext = filename.split(".").pop()?.toLowerCase();
   return <ExtIcon ext={ext} />;
 };

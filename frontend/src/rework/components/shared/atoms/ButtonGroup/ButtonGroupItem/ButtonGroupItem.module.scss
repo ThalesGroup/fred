@@ -1,0 +1,87 @@
+@use "sass:map";
+@use "src/index.scss" as *;
+
+.button-group-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  padding: 0;
+  text-wrap: nowrap;
+
+  @include typography("label", "large");
+
+  .state-layer {
+    corner-shape: round;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: var(--spacing-2xl);
+    background-color: var(--item-background-color, var(--surface-container));
+    padding: 0 var(--lateral-padding);
+    height: 100%;
+  }
+
+  .label {
+    color: var(--label-color);
+  }
+
+  .icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--icon-color);
+  }
+
+  &[data-size="small"] {
+    height: 2rem;
+    --lateral-padding: var(--spacing-s);
+
+    .state-layer {
+      gap: var(--spacing-2xs);
+    }
+
+    .icon {
+      font-size: 1.25rem;
+    }
+  }
+
+  &[data-size="medium"] {
+    height: 2.5rem;
+    --lateral-padding: var(--spacing-m);
+
+    .state-layer {
+      gap: var(--spacing-xs);
+    }
+
+    .icon {
+      font-size: 1.5rem;
+    }
+  }
+
+  @each $name, $scheme in $color-schemes {
+    &[data-color="#{$name}"] {
+      &:active .state-layer:not([data-selected="true"]) {
+        --item-background-color: #{map.get($scheme, "on-container-pressed")};
+      }
+
+      &:hover:not(:active) .state-layer:not([data-selected="true"]) {
+        --item-background-color: #{map.get($scheme, "on-container-hover")};
+      }
+
+      [data-selected="true"] {
+        --item-background-color: #{map.get($scheme, "container")};
+      }
+
+      .label {
+        --label-color: #{map.get($scheme, "on-container")};
+      }
+
+      .icon {
+        --icon-color: #{map.get($scheme, "on-container")};
+      }
+    }
+  }
+}

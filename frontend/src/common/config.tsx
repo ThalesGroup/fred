@@ -24,6 +24,7 @@ import type { FrontendConfigDto, FrontendFlags, Properties, UserSecurity } from 
 export interface AppConfig {
   backend_url_api: string; // Base URL of the Agentic backend
   backend_url_knowledge: string; // Base URL of the Knowledge Flow backend
+  backend_url_control_plane: string; // Base URL of the Control Plane backend
   websocket_url: string; // WebSocket server URL
   frontend_basename: string; // Base name used by the frontend
   feature_flags: Record<string, boolean>;
@@ -69,13 +70,22 @@ export const loadConfig = async () => {
   if (!res.ok) throw new Error(`Cannot load /config.json: ${res.status} ${res.statusText}`);
   const base = (await res.json()) as {
     backend_url_api: string;
-    backend_url_knowledge: string;
+    backend_url_knowledge?: string;
+    backend_url_control_plane?: string;
     websocket_url: string;
     frontend_basename: string;
   };
 
+  // Local dev can override backend targets via Vite env vars.
+  // If knowledge/control-plane are omitted, they fall back to api URL.
+  const backend_url_api = import.meta.env.VITE_BACKEND_URL_API || base.backend_url_api;
+  const backend_url_knowledge = import.meta.env.VITE_BACKEND_URL_KNOWLEDGE || base.backend_url_knowledge || backend_url_api;
+  const backend_url_control_plane =
+    import.meta.env.VITE_BACKEND_URL_CONTROL_PLANE || base.backend_url_control_plane || backend_url_api;
+  const websocket_url = import.meta.env.VITE_WEBSOCKET_URL || base.websocket_url;
+
   // 2) Dynamic config (typed)
-  const r = await fetch(`${base.backend_url_api}/agentic/v1/config/frontend_settings`);
+  const r = await fetch(`${backend_url_api}/agentic/v1/config/frontend_settings`);
   if (!r.ok) throw new Error(`Cannot load frontend settings: ${r.status} ${r.statusText}`);
   const settings = (await r.json()) as FrontendConfigDto;
 
@@ -88,7 +98,11 @@ export const loadConfig = async () => {
   const properties = normalizeProps(frontend.properties);
 
   config = {
-    ...base,
+    backend_url_api,
+    backend_url_knowledge,
+    backend_url_control_plane,
+    websocket_url,
+    frontend_basename: base.frontend_basename,
     feature_flags,
     properties,
     user_auth: settings.user_auth,
