@@ -128,7 +128,7 @@ class BasicReActDefinition(ReActAgentDefinition):
 
     Quick edit guide:
     - `system_prompt_template`: assistant behavior
-    - `tool_requirements`: allowed capabilities
+    - `declared_tool_refs`: exact Fred tools this agent may use
     - `fields`: what admins can tune in UI
     - `policy()`: small runtime behavior switches
     """
@@ -168,11 +168,11 @@ class BasicReActDefinition(ReActAgentDefinition):
     # A developer adds fields here when users should be able to tune prompts or
     # other business options from the interface.
     fields: tuple[FieldSpec, ...] = _basic_react_fields()
-    # Author-owned: declare allowed capabilities, not how tools are executed.
-    # Declared business capabilities available to the agent.
+    # Author-owned: declare exact tools the agent expects in its contract.
+    # This is for authoring/inspection/validation, not LangChain wiring.
     # This basic example starts without tools, but a developer can add them
     # later by listing tool refs here.
-    tool_requirements: tuple[ToolRefRequirement, ...] = ()
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = ()
 
     def policy(self) -> ReActPolicy:
         """

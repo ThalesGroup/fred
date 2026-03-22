@@ -7,15 +7,15 @@ from __future__ import annotations
 from pydantic import Field
 
 from agentic_backend.core.agents.agent_spec import FieldSpec, UIHints
-from agentic_backend.core.agents.v2.builtin_tools import (
+from agentic_backend.core.agents.v2 import (
+    GuardrailDefinition,
+    ToolRefRequirement,
+    load_packaged_markdown,
+)
+from agentic_backend.core.agents.v2.support.builtins import (
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
     TOOL_REF_KNOWLEDGE_SEARCH,
 )
-from agentic_backend.core.agents.v2.models import (
-    GuardrailDefinition,
-    ToolRefRequirement,
-)
-from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
 
 from .agent import BasicDeepAgentDefinition
 
@@ -81,7 +81,7 @@ class CorpusInvestigatorDeepV2Definition(BasicDeepAgentDefinition):
             ui=UIHints(group="Chat options"),
         ),
     )
-    tool_requirements: tuple[ToolRefRequirement, ...] = (
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = (
         ToolRefRequirement(
             tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
             description=(

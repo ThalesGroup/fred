@@ -1,12 +1,14 @@
 """RAG expert starting profile."""
 
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.core.agents.v2.builtin_tools import TOOL_REF_KNOWLEDGE_SEARCH
-from agentic_backend.core.agents.v2.models import (
+from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
     ToolRefRequirement,
+    load_packaged_markdown,
 )
-from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
+from agentic_backend.core.agents.v2.support.builtins import (
+    TOOL_REF_KNOWLEDGE_SEARCH,
+)
 
 from ..profile_model import ReActProfile
 
@@ -31,7 +33,7 @@ RAG_EXPERT_PROFILE = ReActProfile(
             "basic_react_rag_expert_system_prompt.md",
         ),
     ),
-    tool_requirements=(
+    declared_tool_refs=(
         ToolRefRequirement(
             tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
             description=(

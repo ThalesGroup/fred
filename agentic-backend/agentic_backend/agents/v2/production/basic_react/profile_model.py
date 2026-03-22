@@ -10,9 +10,9 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.core.agents.agent_spec import MCPServerRef
-from agentic_backend.core.agents.v2.models import (
+from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
+    MCPServerRef,
     ToolRefRequirement,
 )
 
@@ -53,5 +53,5 @@ class ReActProfile(FrozenModel):
     approval_required_tools: tuple[str, ...] = ()
     guardrails: tuple[GuardrailDefinition, ...] = ()
     mcp_servers: tuple[MCPServerRef, ...] = ()
-    tool_requirements: tuple[ToolRefRequirement, ...] = ()
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = ()
     chat_options: AgentChatOptions = Field(default_factory=AgentChatOptions)

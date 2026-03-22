@@ -7,11 +7,11 @@ from fred_core.common import ModelConfiguration, PostgresStoreConfig
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import VectorSearchHit
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 from agentic_backend.agents.v2 import BasicReActDefinition, RagExpertV2Definition
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -39,7 +39,12 @@ from agentic_backend.core.agents.v2 import (
     ToolProviderPort,
     inspect_agent,
 )
-from agentic_backend.core.agents.v2 import react_runtime as react_runtime_module
+from agentic_backend.core.agents.v2.contracts.models import ToolRefRequirement
+from agentic_backend.core.agents.v2.contracts.runtime import (
+    FinalRuntimeEvent,
+    SpanPort,
+    TracerPort,
+)
 from agentic_backend.core.agents.v2.model_routing import (
     ModelCapability,
     ModelProfile,
@@ -49,22 +54,22 @@ from agentic_backend.core.agents.v2.model_routing import (
     ModelRoutingResolver,
     RoutedChatModelFactory,
 )
-from agentic_backend.core.agents.v2.models import ToolRefRequirement
-from agentic_backend.core.agents.v2.react_runtime import (
+from agentic_backend.core.agents.v2.react.react_langchain_adapter import (
+    to_langchain_message,
+)
+from agentic_backend.core.agents.v2.react.react_runtime import (
     ReActInput,
     ReActMessage,
     ReActMessageRole,
     ReActRuntime,
     ReActToolCall,
-    _to_langchain_message,
     _to_runnable_config,
 )
-from agentic_backend.core.agents.v2.runtime import (
-    FinalRuntimeEvent,
-    SpanPort,
-    TracerPort,
+from agentic_backend.core.agents.v2.react.react_tool_utils import sanitize_tool_name
+from agentic_backend.core.agents.v2.runtime_support import FredSqlCheckpointer
+from agentic_backend.core.agents.v2.support.filesystem_context import (
+    build_filesystem_browsing_context,
 )
-from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
 from agentic_backend.core.chatbot.chat_schema import GeoPart, LinkKind, LinkPart
 
 
@@ -79,6 +84,42 @@ class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
 
     def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # type: ignore[override]
         return self
+
+
+class RecordingToolFriendlyFakeChatModel(ToolFriendlyFakeChatModel):
+    """
+    Test model that records the exact prompt messages received by the runtime.
+
+    Why this helper exists:
+    - filesystem context is injected into the model prompt, not emitted as a public event
+    - tests need one deterministic way to inspect the final system prompt
+
+    How to use:
+    - script normal fake responses through `responses=[...]`
+    - inspect `recorded_message_batches[-1][0]` for the system message
+
+    Example:
+    - `model.recorded_message_batches[-1][0].content`
+    """
+
+    _recorded_message_batches: list[list[object]] = PrivateAttr(default_factory=list)
+
+    def __init__(self, *, responses: list[AIMessage]) -> None:
+        super().__init__(responses=responses)
+
+    @property
+    def recorded_message_batches(self) -> list[list[object]]:
+        return self._recorded_message_batches
+
+    async def ainvoke(self, input, config=None, *, stop=None, **kwargs):  # type: ignore[override]
+        if isinstance(input, list):
+            self._recorded_message_batches.append(list(input))
+        return await super().ainvoke(
+            input,
+            config=config,
+            stop=stop,
+            **kwargs,
+        )
 
 
 class StaticChatModelFactory(ChatModelFactoryPort):
@@ -290,7 +331,10 @@ def test_react_runtime_sanitizes_legacy_dotted_tool_names_from_history() -> None
             ),
         ),
     )
-    assistant_lc = _to_langchain_message(assistant_message)
+    assistant_lc = to_langchain_message(
+        assistant_message,
+        sanitize_tool_name=sanitize_tool_name,
+    )
     assert isinstance(assistant_lc, AIMessage)
     assert assistant_lc.tool_calls[0]["name"] == "traces_summarize_conversation"
 
@@ -300,7 +344,10 @@ def test_react_runtime_sanitizes_legacy_dotted_tool_names_from_history() -> None
         tool_name="logs.query",
         tool_call_id="call-1",
     )
-    tool_lc = _to_langchain_message(tool_message)
+    tool_lc = to_langchain_message(
+        tool_message,
+        sanitize_tool_name=sanitize_tool_name,
+    )
     assert isinstance(tool_lc, ToolMessage)
     assert getattr(tool_lc, "name", None) == "logs_query"
 
@@ -311,7 +358,7 @@ def test_to_runnable_config_preserves_callbacks_and_configurable_values() -> Non
         ExecutionConfig(
             thread_id="thread-1",
             checkpoint_id="checkpoint-1",
-            runnable_config={
+            adapter_config={
                 "callbacks": [callback],
                 "tags": ["perf"],
                 "configurable": {"tenant": "fred"},
@@ -326,6 +373,44 @@ def test_to_runnable_config_preserves_callbacks_and_configurable_values() -> Non
     assert isinstance(configurable, dict)
     assert configurable["tenant"] == "fred"
     assert configurable["thread_id"] == "thread-1"
+
+
+def test_build_filesystem_browsing_context_resolves_short_follow_up_from_listing() -> (
+    None
+):
+    context = build_filesystem_browsing_context(
+        [
+            HumanMessage(content="show my corpus"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-1",
+                        "name": "ls",
+                        "args": {"path": "/corpus"},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content=(
+                    '[{"path": "ARXIV", "type": "directory"}, '
+                    '{"path": "CIR", "type": "directory"}, '
+                    '{"path": "DATA", "type": "directory"}]'
+                ),
+                tool_call_id="call-1",
+                name="ls",
+            ),
+            HumanMessage(content="le contenu de CIR stp"),
+        ],
+        available_tool_names={"ls", "read_file"},
+    )
+
+    assert context is not None
+    assert context.current_base_path == "/corpus"
+    assert context.last_listed_directory == "/corpus"
+    assert context.last_selected_entry == "CIR"
+    assert context.last_selected_path == "/corpus/CIR"
+    assert context.visible_entries == ("ARXIV", "CIR", "DATA")
 
 
 @pytest.mark.asyncio
@@ -348,6 +433,300 @@ async def test_basic_react_runtime_invokes_without_tools() -> None:
     assert [message.role for message in output.transcript][
         -1
     ] == ReActMessageRole.ASSISTANT
+
+
+@pytest.mark.asyncio
+async def test_basic_react_runtime_injects_filesystem_context_into_prompt() -> None:
+    definition = BasicReActDefinition()
+    model = RecordingToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="Here is the folder content.")]
+    )
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_provider=RecordingToolProvider(tool_name="ls"),
+        ),
+    )
+    runtime.bind(_binding("fs-follow-up", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    await executor.invoke(
+        ReActInput(
+            messages=(
+                ReActMessage(role=ReActMessageRole.USER, content="show my corpus"),
+                ReActMessage(
+                    role=ReActMessageRole.ASSISTANT,
+                    content="",
+                    tool_calls=(
+                        ReActToolCall(
+                            call_id="call-1",
+                            name="ls",
+                            arguments={"path": "/corpus"},
+                        ),
+                    ),
+                ),
+                ReActMessage(
+                    role=ReActMessageRole.TOOL,
+                    content=(
+                        '[{"path": "ARXIV", "type": "directory"}, '
+                        '{"path": "CIR", "type": "directory"}, '
+                        '{"path": "DATA", "type": "directory"}]'
+                    ),
+                    tool_name="ls",
+                    tool_call_id="call-1",
+                ),
+                ReActMessage(
+                    role=ReActMessageRole.USER,
+                    content="le contenu de CIR stp",
+                ),
+            )
+        ),
+        ExecutionConfig(),
+    )
+
+    assert model.recorded_message_batches
+    system_message = model.recorded_message_batches[-1][0]
+    assert isinstance(system_message, SystemMessage)
+    assert "Filesystem browsing context:" in system_message.content
+    assert "Current base path: /corpus" in system_message.content
+    assert "Last selected entry: CIR" in system_message.content
+    assert "Resolved selected path: /corpus/CIR" in system_message.content
+
+
+@pytest.mark.asyncio
+async def test_hitl_react_runtime_injects_filesystem_context_into_prompt() -> None:
+    definition = BasicReActDefinition(enable_tool_approval=True)
+    model = RecordingToolFriendlyFakeChatModel(
+        responses=[AIMessage(content="Here is the nested corpus folder.")]
+    )
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_provider=RecordingToolProvider(tool_name="ls"),
+        ),
+    )
+    runtime.bind(_binding("fs-follow-up-hitl", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    await executor.invoke(
+        ReActInput(
+            messages=(
+                ReActMessage(role=ReActMessageRole.USER, content="show my corpus"),
+                ReActMessage(
+                    role=ReActMessageRole.ASSISTANT,
+                    content="",
+                    tool_calls=(
+                        ReActToolCall(
+                            call_id="call-1",
+                            name="ls",
+                            arguments={"path": "/corpus"},
+                        ),
+                    ),
+                ),
+                ReActMessage(
+                    role=ReActMessageRole.TOOL,
+                    content=(
+                        '[{"path": "ARXIV", "type": "directory"}, '
+                        '{"path": "CIR", "type": "directory"}, '
+                        '{"path": "DATA", "type": "directory"}]'
+                    ),
+                    tool_name="ls",
+                    tool_call_id="call-1",
+                ),
+                ReActMessage(
+                    role=ReActMessageRole.USER,
+                    content="le contenu de CIR stp",
+                ),
+            )
+        ),
+        ExecutionConfig(),
+    )
+
+    assert model.recorded_message_batches
+    system_message = model.recorded_message_batches[-1][0]
+    assert isinstance(system_message, SystemMessage)
+    assert "Filesystem browsing context:" in system_message.content
+    assert "Current base path: /corpus" in system_message.content
+    assert "Resolved selected path: /corpus/CIR" in system_message.content
+
+
+@pytest.mark.asyncio
+async def test_basic_react_runtime_rewrites_filesystem_follow_up_tool_call() -> None:
+    definition = BasicReActDefinition()
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-follow-up-1",
+                        "name": "ls",
+                        "args": {"path": "/"},
+                    }
+                ],
+            ),
+            AIMessage(content="Opened CIR."),
+        ]
+    )
+
+    class FollowUpToolProvider(RecordingToolProvider):
+        def __init__(self) -> None:
+            super().__init__(tool_name="ls")
+            self.paths: list[str] = []
+
+        def get_tools(self) -> tuple[BaseTool, ...]:
+            class _Args(BaseModel):
+                path: str = "/"
+
+            async def _ls(path: str = "/") -> str:
+                self.paths.append(path)
+                return "[]"
+
+            return (
+                StructuredTool.from_function(
+                    func=None,
+                    coroutine=_ls,
+                    name="ls",
+                    description="List one directory.",
+                    args_schema=_Args,
+                ),
+            )
+
+    tool_provider = FollowUpToolProvider()
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_provider=tool_provider,
+        ),
+    )
+    runtime.bind(_binding("fs-follow-up-rewrite", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    output = await executor.invoke(
+        ReActInput(
+            messages=(
+                ReActMessage(role=ReActMessageRole.USER, content="show my corpus"),
+                ReActMessage(
+                    role=ReActMessageRole.ASSISTANT,
+                    content="",
+                    tool_calls=(
+                        ReActToolCall(
+                            call_id="call-1",
+                            name="ls",
+                            arguments={"path": "/corpus"},
+                        ),
+                    ),
+                ),
+                ReActMessage(
+                    role=ReActMessageRole.TOOL,
+                    content=(
+                        '[{"path": "ARXIV", "type": "directory"}, '
+                        '{"path": "CIR", "type": "directory"}, '
+                        '{"path": "DATA", "type": "directory"}]'
+                    ),
+                    tool_name="ls",
+                    tool_call_id="call-1",
+                ),
+                ReActMessage(role=ReActMessageRole.USER, content='"CIR"'),
+            )
+        ),
+        ExecutionConfig(),
+    )
+
+    assert output.final_message.content == "Opened CIR."
+    assert tool_provider.paths == ["/corpus/CIR"]
+
+
+@pytest.mark.asyncio
+async def test_hitl_react_runtime_rewrites_filesystem_follow_up_tool_call() -> None:
+    definition = BasicReActDefinition(enable_tool_approval=True)
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-follow-up-hitl-1",
+                        "name": "ls",
+                        "args": {"path": "/"},
+                    }
+                ],
+            ),
+            AIMessage(content="Opened CIR with approval loop."),
+        ]
+    )
+
+    class FollowUpToolProvider(RecordingToolProvider):
+        def __init__(self) -> None:
+            super().__init__(tool_name="ls")
+            self.paths: list[str] = []
+
+        def get_tools(self) -> tuple[BaseTool, ...]:
+            class _Args(BaseModel):
+                path: str = "/"
+
+            async def _ls(path: str = "/") -> str:
+                self.paths.append(path)
+                return "[]"
+
+            return (
+                StructuredTool.from_function(
+                    func=None,
+                    coroutine=_ls,
+                    name="ls",
+                    description="List one directory.",
+                    args_schema=_Args,
+                ),
+            )
+
+    tool_provider = FollowUpToolProvider()
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_provider=tool_provider,
+            checkpointer=MemorySaver(),
+        ),
+    )
+    runtime.bind(_binding("fs-follow-up-rewrite-hitl", agent_id=definition.agent_id))
+
+    executor = await runtime.get_executor()
+    output = await executor.invoke(
+        ReActInput(
+            messages=(
+                ReActMessage(role=ReActMessageRole.USER, content="show my corpus"),
+                ReActMessage(
+                    role=ReActMessageRole.ASSISTANT,
+                    content="",
+                    tool_calls=(
+                        ReActToolCall(
+                            call_id="call-1",
+                            name="ls",
+                            arguments={"path": "/corpus"},
+                        ),
+                    ),
+                ),
+                ReActMessage(
+                    role=ReActMessageRole.TOOL,
+                    content=(
+                        '[{"path": "ARXIV", "type": "directory"}, '
+                        '{"path": "CIR", "type": "directory"}, '
+                        '{"path": "DATA", "type": "directory"}]'
+                    ),
+                    tool_name="ls",
+                    tool_call_id="call-1",
+                ),
+                ReActMessage(role=ReActMessageRole.USER, content='"CIR"'),
+            )
+        ),
+        ExecutionConfig(thread_id="fs-follow-up-rewrite-hitl"),
+    )
+
+    assert output.final_message.content == "Opened CIR with approval loop."
+    assert tool_provider.paths == ["/corpus/CIR"]
 
 
 @pytest.mark.asyncio
@@ -433,9 +812,6 @@ async def test_basic_react_runtime_emits_model_span_per_model_call() -> None:
 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_chat_model_by_phase() -> None:
-    if react_runtime_module._LangchainAgentMiddleware is None:
-        pytest.skip("LangChain middleware is not available in this environment.")
-
     definition = BasicReActDefinition()
     routing_model = ToolFriendlyFakeChatModel(
         responses=[
@@ -640,11 +1016,11 @@ async def test_basic_react_runtime_emits_runtime_tool_span_for_provider_tools() 
     assert events[-1].kind == RuntimeEventKind.FINAL
     span_names = [span["name"] for span in tracer.finished_spans]
     assert "agent.stream" in span_names
-    assert "v2.graph.runtime_tool" in span_names
+    assert "v2.react.runtime_tool" in span_names
     runtime_tool_span = next(
         span
         for span in tracer.finished_spans
-        if span["name"] == "v2.graph.runtime_tool"
+        if span["name"] == "v2.react.runtime_tool"
     )
     runtime_tool_attributes = cast(dict[str, object], runtime_tool_span["attributes"])
     assert runtime_tool_attributes["tool_name"] == "ops_status"
@@ -654,7 +1030,7 @@ async def test_basic_react_runtime_emits_runtime_tool_span_for_provider_tools() 
 @pytest.mark.asyncio
 async def test_basic_react_runtime_publish_text_tool_returns_link_part() -> None:
     definition = BasicReActDefinition(
-        tool_requirements=(
+        declared_tool_refs=(
             ToolRefRequirement(
                 tool_ref="artifacts.publish_text",
                 description="Publish a generated text summary for the user.",
@@ -713,7 +1089,7 @@ async def test_basic_react_runtime_publish_text_tool_returns_link_part() -> None
 @pytest.mark.asyncio
 async def test_basic_react_runtime_fetch_text_tool_returns_template_text() -> None:
     definition = BasicReActDefinition(
-        tool_requirements=(
+        declared_tool_refs=(
             ToolRefRequirement(
                 tool_ref="resources.fetch_text",
                 description="Fetch a stored text template for the current agent.",
@@ -1182,7 +1558,7 @@ async def test_rag_react_runtime_routes_tool_calls_through_tool_invoker() -> Non
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_logs_query_through_tool_invoker() -> None:
     definition = BasicReActDefinition(
-        tool_requirements=(
+        declared_tool_refs=(
             ToolRefRequirement(
                 tool_ref="logs.query",
                 description="Query recent logs for triage.",
@@ -1246,7 +1622,7 @@ async def test_basic_react_runtime_routes_logs_query_through_tool_invoker() -> N
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_trace_summary_through_tool_invoker() -> None:
     definition = BasicReActDefinition(
-        tool_requirements=(
+        declared_tool_refs=(
             ToolRefRequirement(
                 tool_ref="traces.summarize_conversation",
                 description="Summarize one Fred conversation from Langfuse traces.",
@@ -1309,7 +1685,7 @@ async def test_basic_react_runtime_routes_trace_summary_through_tool_invoker() -
 @pytest.mark.asyncio
 async def test_basic_react_runtime_routes_geo_render_points_with_ui_parts() -> None:
     definition = BasicReActDefinition(
-        tool_requirements=(
+        declared_tool_refs=(
             ToolRefRequirement(
                 tool_ref="geo.render_points",
                 description="Render a map from latitude and longitude points.",
@@ -1487,6 +1863,6 @@ def test_rag_definition_inspection_stays_small_and_declared() -> None:
     inspection = inspect_agent(RagExpertV2Definition())
 
     assert inspection.execution_category.value == "react"
-    assert inspection.tool_requirements[0].kind == "tool_ref"
-    assert inspection.tool_requirements[0].tool_ref == "knowledge.search"
+    assert inspection.declared_tool_refs[0].kind == "tool_ref"
+    assert inspection.declared_tool_refs[0].tool_ref == "knowledge.search"
     assert "Declared tools: 1" in inspection.preview.content

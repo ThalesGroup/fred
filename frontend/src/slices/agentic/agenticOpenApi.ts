@@ -709,7 +709,7 @@ export type AgentInspection = {
   tags?: string[];
   fields?: FieldSpec[];
   execution_category: ExecutionCategory;
-  tool_requirements?: (
+  declared_tool_refs?: (
     | ({
         kind: "capability";
       } & ToolCapabilityRequirement)

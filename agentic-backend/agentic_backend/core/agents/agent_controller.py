@@ -46,10 +46,14 @@ from agentic_backend.core.agents.agent_service import (
     MissingTeamIdError,
 )
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
-from agentic_backend.core.agents.v2.catalog import build_definition_from_settings
-from agentic_backend.core.agents.v2.inspection import inspect_agent
-from agentic_backend.core.agents.v2.models import AgentInspection
-from agentic_backend.core.agents.v2.react_profiles import list_react_profiles_filtered
+from agentic_backend.core.agents.v2.authoring import inspect_agent
+from agentic_backend.core.agents.v2.contracts.models import AgentInspection
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
+    build_definition_from_settings,
+)
+from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
+    list_react_profiles_filtered,
+)
 from agentic_backend.core.mcp.mcp_server_manager import McpServerManager
 from agentic_backend.core.runtime_source import get_runtime_source_registry
 

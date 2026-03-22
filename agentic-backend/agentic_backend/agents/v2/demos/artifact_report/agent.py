@@ -14,8 +14,8 @@ from agentic_backend.core.agents.v2 import (
     ReActAgentDefinition,
     ReActPolicy,
     ToolRefRequirement,
+    load_packaged_markdown,
 )
-from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
 
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
@@ -69,7 +69,7 @@ class ArtifactReportDemoV2Definition(ReActAgentDefinition):
         min_length=1,
     )
     fields: tuple[FieldSpec, ...] = _artifact_report_fields()
-    tool_requirements: tuple[ToolRefRequirement, ...] = (
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = (
         ToolRefRequirement(
             tool_ref="resources.fetch_text",
             description="Fetch a stored text template or style guide for this agent.",

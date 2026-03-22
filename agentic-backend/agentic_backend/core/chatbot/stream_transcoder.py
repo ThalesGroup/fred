@@ -34,7 +34,7 @@ from pydantic import TypeAdapter, ValidationError
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_factory import RuntimeAgentInstance
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.checkpoints import (
+from agentic_backend.core.agents.v2.runtime_support import (
     AsyncCheckpointReader,
     load_checkpoint,
 )

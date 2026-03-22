@@ -85,6 +85,7 @@ export function AgentCreateEditForm({
     skip: !isCreateMode || !isAdmin,
   });
   const hasReactProfiles = reactProfiles.length > 0;
+  const isProfileCreateMode = isCreateMode && !!profileId;
 
   const { data: declaredClassPaths = [] } = useListDeclaredAgentClassPathsQuery(undefined, {
     skip: !isAdmin,
@@ -103,14 +104,46 @@ export function AgentCreateEditForm({
     });
   }, []);
 
-  // Fetch default tuning when classPath changes
+  // Keep create paths explicit: selecting a profile means "start from profile
+  // defaults", not "also derive tuning from a class path".
   useEffect(() => {
+    if (!isCreateMode || !profileId) {
+      return;
+    }
+    setClassPath(null);
+    setFields([]);
+    setTopLevelTuning({
+      role: "",
+      description: "",
+      tags: [],
+    });
+    setMcpServerRefs([]);
+  }, [isCreateMode, profileId]);
+
+  // Fetch default tuning when classPath changes for empty/basic creation or edit.
+  useEffect(() => {
+    if (isProfileCreateMode) {
+      return;
+    }
     fetchClassPathTuning({ classPath: classPath ?? undefined })
       .unwrap()
       .then((tuning) => {
         setFields((prev) => mergeFields(tuning.fields ?? [], prev));
+        setTopLevelTuning((prev) => ({
+          role: prev.role || tuning.role || "",
+          description: prev.description || tuning.description || "",
+          tags: prev.tags.length > 0 ? prev.tags : tuning.tags || [],
+        }));
+        if (isCreateMode) {
+          setMcpServerRefs(
+            (tuning.mcp_servers ?? []).map((ref) => ({
+              id: ref.id,
+              require_tools: ref.require_tools ?? [],
+            })),
+          );
+        }
       });
-  }, [classPath, fetchClassPathTuning, mergeFields]);
+  }, [classPath, fetchClassPathTuning, isProfileCreateMode, mergeFields]);
 
   // --- Handlers ---
 
@@ -144,6 +177,12 @@ export function AgentCreateEditForm({
             },
           }).unwrap()
         : agent;
+
+      if (isCreateMode && isProfileCreateMode) {
+        onSaved?.();
+        onClose();
+        return;
+      }
 
       const newTuning = {
         ...(targetAgent.tuning || {}),
@@ -188,8 +227,9 @@ export function AgentCreateEditForm({
     (f) => f.required && (f.default === undefined || f.default === null || f.default === ""),
   );
 
-  const isSaveDisabled =
-    isLoading || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
+  const isSaveDisabled = isProfileCreateMode
+    ? isLoading || !agentName.trim()
+    : isLoading || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -255,11 +295,16 @@ export function AgentCreateEditForm({
           )}
 
           {/* Class path selection (admin only) */}
-          {isAdmin && (
+          {isAdmin && !isProfileCreateMode && (
             <Autocomplete
               options={declaredClassPaths}
               value={classPath}
-              onChange={(_, value) => setClassPath(value)}
+              onChange={(_, value) => {
+                setClassPath(value);
+                if (value) {
+                  setProfileId(null);
+                }
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -273,38 +318,42 @@ export function AgentCreateEditForm({
           )}
 
           {/* Tuning Core Fields */}
-          <TextField
-            label="Role"
-            size="small"
-            value={topLevelTuning.role}
-            onChange={(e) => onTopLevelChange("role", e.target.value)}
-            required
-            fullWidth
-            slotProps={{
-              input: {
-                sx: (theme) => ({
-                  fontSize: theme.typography.body2.fontSize,
-                }),
-              },
-            }}
-          />
-          <TextField
-            label="Description"
-            size="small"
-            value={topLevelTuning.description}
-            onChange={(e) => onTopLevelChange("description", e.target.value)}
-            required
-            multiline
-            rows={3}
-            fullWidth
-            slotProps={{
-              input: {
-                sx: (theme) => ({
-                  fontSize: theme.typography.body2.fontSize,
-                }),
-              },
-            }}
-          />
+          {!isProfileCreateMode && (
+            <>
+              <TextField
+                label="Role"
+                size="small"
+                value={topLevelTuning.role}
+                onChange={(e) => onTopLevelChange("role", e.target.value)}
+                required
+                fullWidth
+                slotProps={{
+                  input: {
+                    sx: (theme) => ({
+                      fontSize: theme.typography.body2.fontSize,
+                    }),
+                  },
+                }}
+              />
+              <TextField
+                label="Description"
+                size="small"
+                value={topLevelTuning.description}
+                onChange={(e) => onTopLevelChange("description", e.target.value)}
+                required
+                multiline
+                rows={3}
+                fullWidth
+                slotProps={{
+                  input: {
+                    sx: (theme) => ({
+                      fontSize: theme.typography.body2.fontSize,
+                    }),
+                  },
+                }}
+              />
+            </>
+          )}
 
           {/* <TagsInput
             label={t("agentEditDrawer.tagsLabel")}
@@ -312,10 +361,17 @@ export function AgentCreateEditForm({
             onChange={(next) => onTopLevelChange("tags", next)}
           /> */}
 
-          <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
+          {!isProfileCreateMode && (
+            <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
+          )}
 
           {/* Dynamic Fields */}
-          {fields.length === 0 ? (
+          {isProfileCreateMode ? (
+            <Typography variant="body2" color="text.secondary">
+              {reactProfiles.find((p) => p.profile_id === profileId)?.agent_description ??
+                t("agentHub.fields.profileHelp")}
+            </Typography>
+          ) : fields.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {t("agentEditDrawer.noTunableFields")}
             </Typography>

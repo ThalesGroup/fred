@@ -60,13 +60,7 @@ from agentic_backend.core.agents.runtime_context import (
     get_search_policy,
     get_vector_search_scopes,
 )
-from agentic_backend.core.agents.v2.builtin_tools import (
-    TOOL_REF_GEO_RENDER_POINTS,
-    TOOL_REF_KNOWLEDGE_SEARCH,
-    TOOL_REF_LOGS_QUERY,
-    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
-)
-from agentic_backend.core.agents.v2.context import (
+from agentic_backend.core.agents.v2.contracts.context import (
     ArtifactPublishRequest,
     ArtifactScope,
     BoundRuntimeContext,
@@ -81,7 +75,7 @@ from agentic_backend.core.agents.v2.context import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
-from agentic_backend.core.agents.v2.runtime import (
+from agentic_backend.core.agents.v2.contracts.runtime import (
     ArtifactPublisherPort,
     ChatModelFactoryPort,
     ResourceReaderPort,
@@ -89,6 +83,12 @@ from agentic_backend.core.agents.v2.runtime import (
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+)
+from agentic_backend.core.agents.v2.support.builtins import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    TOOL_REF_KNOWLEDGE_SEARCH,
+    TOOL_REF_LOGS_QUERY,
+    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from agentic_backend.core.chatbot.chat_schema import GeoPart
 

@@ -51,7 +51,7 @@ from agentic_backend.core.agents.agent_class_resolver import (
 )
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_spec import AgentTuning
-from agentic_backend.core.agents.v2.catalog import (
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
     apply_profile_defaults_to_settings,
     apply_react_profile_to_definition,
     build_definition_from_settings,
@@ -59,7 +59,7 @@ from agentic_backend.core.agents.v2.catalog import (
     definition_to_agent_tuning,
     instantiate_definition_class,
 )
-from agentic_backend.core.agents.v2.react_profiles import (
+from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
     get_react_profile,
     is_react_profile_allowed,
 )

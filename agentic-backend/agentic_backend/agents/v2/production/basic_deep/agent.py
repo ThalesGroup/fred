@@ -4,7 +4,7 @@ Minimal v2 Deep Agent definition.
 This definition intentionally stays small:
 - one system prompt
 - optional declarative guardrails
-- explicit tool requirements
+- explicit declared tool refs
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
     ReActPolicy,
     ToolRefRequirement,
+    load_packaged_markdown,
 )
-from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
 
 DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
     package="agentic_backend",
@@ -53,7 +53,7 @@ class BasicDeepAgentDefinition(DeepAgentDefinition):
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
         ),
     )
-    tool_requirements: tuple[ToolRefRequirement, ...] = ()
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = ()
 
     def policy(self) -> ReActPolicy:
         return ReActPolicy(

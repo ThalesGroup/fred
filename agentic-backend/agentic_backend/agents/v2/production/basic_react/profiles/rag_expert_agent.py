@@ -10,7 +10,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from agentic_backend.core.agents.agent_spec import FieldSpec
-from agentic_backend.core.agents.v2.models import (
+from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
     ToolRefRequirement,
 )
@@ -37,7 +37,7 @@ class RagExpertV2Definition(BasicReActDefinition):
         else field.model_copy(deep=True)
         for field in BasicReActDefinition().fields
     )
-    tool_requirements: tuple[ToolRefRequirement, ...] = (
-        RAG_EXPERT_PROFILE.tool_requirements
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = (
+        RAG_EXPERT_PROFILE.declared_tool_refs
     )
     guardrails: tuple[GuardrailDefinition, ...] = RAG_EXPERT_PROFILE.guardrails

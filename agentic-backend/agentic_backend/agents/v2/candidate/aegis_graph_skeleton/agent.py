@@ -184,7 +184,7 @@ class AegisGraphV2SkeletonDefinition(GraphAgentDefinition):
     max_iterations: int = Field(default=2, ge=0, le=10)
     self_check_min_confidence: float = Field(default=0.65, ge=0.0, le=1.0)
     fields: tuple[FieldSpec, ...] = _aegis_graph_skeleton_fields()
-    tool_requirements: tuple[ToolRefRequirement, ...] = (
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = (
         ToolRefRequirement(
             tool_ref="knowledge.search",
             description="Retrieve candidate chunks from selected document scopes.",
