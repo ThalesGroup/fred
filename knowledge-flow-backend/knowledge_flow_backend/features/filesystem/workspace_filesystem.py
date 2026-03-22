@@ -31,7 +31,11 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from fred_core import KeycloakUser
-from fred_core.filesystem.structures import BaseFilesystem, FilesystemResourceInfoResult
+from fred_core.filesystem.structures import (
+    BaseFilesystem,
+    FilesystemResourceInfo,
+    FilesystemResourceInfoResult,
+)
 from minio.error import S3Error
 
 
@@ -49,6 +53,37 @@ def _normalize_key(key: str) -> str:
 
 def _join(*parts: str) -> str:
     return posixpath.join(*parts)
+
+
+def _direct_child_entry(
+    res: FilesystemResourceInfoResult,
+    *,
+    relative_path: str,
+) -> FilesystemResourceInfoResult:
+    """
+    Collapse one recursive filesystem hit into the direct child visible from a folder.
+
+    Why this exists:
+    - the underlying filesystem `list(...)` returns recursive descendants
+    - the MCP-facing workspace view should behave like a normal `ls`, which only shows
+      direct children of the requested directory
+
+    How to use:
+    - pass one result already stripped to the namespace-relative path
+    - use the returned entry in `WorkspaceFilesystem.list(...)`
+
+    Example:
+    - a recursive hit on `reports/2026/summary.md` becomes the direct directory entry
+      `reports`
+    """
+    direct_name = relative_path.split("/", 1)[0]
+    is_direct_child = "/" not in relative_path
+    return FilesystemResourceInfoResult(
+        path=direct_name,
+        size=res.size if is_direct_child else None,
+        type=res.type if is_direct_child else FilesystemResourceInfo.DIRECTORY,
+        modified=res.modified if is_direct_child else None,
+    )
 
 
 @dataclass(frozen=True)
@@ -166,6 +201,23 @@ class WorkspaceFilesystem:
         owner_override: str | None = None,
         root_prefix: str | None = None,
     ) -> List[FilesystemResourceInfoResult]:
+        """
+        List the direct children of one scoped workspace folder.
+
+        Why this exists:
+        - agents and MCP clients expect `list(...)` to behave like a standard directory
+          listing, not like a recursive tree dump
+        - this adapter keeps the lower filesystem backend unchanged while exposing the
+          simpler contract at the workspace boundary
+
+        How to use:
+        - pass an optional folder prefix inside the scoped namespace
+        - the result contains only direct files and directories visible from that folder
+
+        Example:
+        - `list(user, "reports")` returns `summary.md` and `archive`, not
+          `archive/2025/q1.md`
+        """
         # Allow optional sub-prefix inside the user's namespace
         sub = _normalize_key(prefix) if prefix else ""
         owner = (owner_override or user.uid).strip("/")
@@ -178,14 +230,17 @@ class WorkspaceFilesystem:
             namespace_root += "/"
 
         results = await self.fs.list(full_prefix)
-        cleaned = []
+        direct_children: dict[str, FilesystemResourceInfoResult] = {}
         for res in results:
             if res.path.startswith(namespace_root):
                 relative_path = res.path[len(namespace_root) :]
                 if not relative_path:
                     continue
-                cleaned.append(FilesystemResourceInfoResult(path=relative_path, size=res.size, type=res.type, modified=res.modified))
-        return cleaned
+                child = _direct_child_entry(res, relative_path=relative_path)
+                existing = direct_children.get(child.path)
+                if existing is None or child.is_dir():
+                    direct_children[child.path] = child
+        return [direct_children[name] for name in sorted(direct_children)]
 
     async def exists(
         self,
