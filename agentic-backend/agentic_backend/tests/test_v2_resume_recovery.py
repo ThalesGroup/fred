@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fred_core import BaseSessionStore, KeycloakUser
+from sqlalchemy.ext.asyncio import AsyncSession
 from fred_core.common import PostgresStoreConfig
 from fred_core.kpi import NoOpKPIWriter
 from fred_core.sql import create_async_engine_from_config
@@ -104,6 +105,9 @@ class InMemorySessionStore(BaseSessionStore):
     async def save_with_conn(self, conn, session: SessionSchema) -> None:
         await self.save(session)
 
+    async def save_with_session(self, async_session: AsyncSession, session: SessionSchema) -> None:
+        await self.save(session)
+
     async def count_for_user(self, user_id: str) -> int:
         return len(await self.get_for_user(user_id))
 
@@ -113,17 +117,12 @@ class InMemoryHistoryStore(NoOpHistoryStore):
         self.messages: dict[str, list[ChatMessage]] = {}
 
     async def save(
-        self, session_id: str, messages: list[ChatMessage], user_id: str
+        self, session_id: str, messages: list[ChatMessage], user_id: str, session: AsyncSession | None = None
     ) -> None:
         self.messages[session_id] = list(messages)
 
     async def get(self, session_id: str) -> list[ChatMessage]:
         return list(self.messages.get(session_id, []))
-
-    async def save_with_conn(
-        self, conn, session_id: str, messages: list[ChatMessage], user_id: str
-    ) -> None:
-        await self.save(session_id, messages, user_id)
 
 
 class FreshV2AgentFactory(BaseAgentFactory):

@@ -18,7 +18,7 @@ from typing import Any, List, Optional
 
 from fred_core import BaseSessionStore
 from fred_core.session.stores import BaseJsonSessionStore, PostgresJsonSessionStore
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from agentic_backend.core.chatbot.chat_schema import SessionSchema
 
@@ -33,16 +33,28 @@ class PostgresSessionStore(BaseSessionStore):
             prefix=prefix,
         )
 
-    async def save(self, session: SessionSchema) -> None:
+    async def save(self, session: SessionSchema, db_session: AsyncSession | None = None) -> None:
         payload = session.model_dump(mode="json")
-        await self._store.save(
-            session_id=session.id,
-            user_id=session.user_id,
-            updated_at=session.updated_at,
-            payload=payload,
-            team_id=payload.get("team_id"),
-            agent_id=payload.get("agent_id", ""),
-        )
+        if db_session is not None:
+            conn = await db_session.connection()
+            await self._store.save_with_conn(
+                conn,
+                session_id=session.id,
+                user_id=session.user_id,
+                updated_at=session.updated_at,
+                payload=payload,
+                team_id=payload.get("team_id"),
+                agent_id=payload.get("agent_id", ""),
+            )
+        else:
+            await self._store.save(
+                session_id=session.id,
+                user_id=session.user_id,
+                updated_at=session.updated_at,
+                payload=payload,
+                team_id=payload.get("team_id"),
+                agent_id=payload.get("agent_id", ""),
+            )
 
     async def save_with_conn(self, conn: Any, session: SessionSchema) -> None:
         payload = session.model_dump(mode="json")

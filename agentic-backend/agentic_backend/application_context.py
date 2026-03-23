@@ -192,6 +192,20 @@ def pg_async_tx():
     return get_app_context().begin_pg_transaction()
 
 
+def pg_async_session():
+    """
+    Convenience helper to open a short async Postgres ORM session using the
+    shared async engine. The caller is responsible for beginning/committing
+    the transaction (or use as an async context manager via async_sessionmaker).
+
+    Usage:
+        async with pg_async_session() as session:
+            async with session.begin():
+                ...
+    """
+    return get_app_context().begin_pg_session()
+
+
 def get_pg_async_engine():
     """
     Expose Fred's shared async SQL engine.
@@ -498,6 +512,11 @@ class ApplicationContext:
         """
         return self.get_pg_async_engine().begin()
 
+    def begin_pg_session(self):
+        from agentic_backend.core.db.session import make_session_factory
+        factory = make_session_factory(self.get_pg_async_engine())
+        return factory()
+
     def get_session_store(self) -> BaseSessionStore:
         """
         Factory function to create a sessions store instance based on the configuration.
@@ -535,15 +554,8 @@ class ApplicationContext:
             )
 
         if isinstance(store_config, PostgresTableConfig):
-            table_name = (
-                store_config.table
-                if storage_cfg.attachments_store is not None
-                else f"{store_config.table}_attachments"
-            )
             self._session_attachment_store_instance = PostgresSessionAttachmentStore(
                 engine=self.get_pg_async_engine(),
-                table_name=table_name,
-                prefix=store_config.prefix or "",
             )
             return self._session_attachment_store_instance
 
@@ -607,13 +619,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._history_store_instance = PostgresHistoryStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
-            logger.info(
-                "[HISTORY][STORE] Using Postgres backend table=%s prefix=%s",
-                store_config.table,
-                store_config.prefix or "",
             )
             return self._history_store_instance
         else:
@@ -659,8 +664,6 @@ class ApplicationContext:
 
             self._task_store_instance = PostgresAgentTaskStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._task_store_instance
         raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
@@ -697,8 +700,6 @@ class ApplicationContext:
 
             self._agent_store_instance = PostgresAgentStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._agent_store_instance
         else:
@@ -722,8 +723,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._mcp_server_store_instance = PostgresMcpServerStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._mcp_server_store_instance
         raise ValueError(
@@ -774,8 +773,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._feedback_store_instance = PostgresFeedbackStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._feedback_store_instance
         raise ValueError("Unsupported sessions storage backend")

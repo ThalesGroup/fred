@@ -1,0 +1,103 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import asyncio
+from logging.config import fileConfig
+
+from sqlalchemy import pool, text
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from alembic import context
+
+# Import Base and every ORM model so they all register with Base.metadata
+# before autogenerate inspects it.  These imports must stay here (not in
+# agentic_backend/models/__init__.py) to avoid circular imports at runtime.
+from agentic_backend.models.base import Base
+import agentic_backend.core.agents.store.agent_models  # noqa: F401
+import agentic_backend.core.feedback.store.feedback_models  # noqa: F401
+import agentic_backend.core.monitoring.history_models  # noqa: F401
+import agentic_backend.core.mcp.store.mcp_server_models  # noqa: F401
+import agentic_backend.core.session.stores.session_attachment_models  # noqa: F401
+import agentic_backend.scheduler.store.task_models  # noqa: F401
+from agentic_backend.common.config_loader import load_configuration
+
+# Alembic Config object — provides access to values in alembic.ini.
+config = context.config
+
+# Set up Python logging from alembic.ini if present.
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# All agentic-backend tables are captured here via the side-effect imports above.
+target_metadata = Base.metadata
+
+
+def _build_url() -> str:
+    """Build the asyncpg connection URL from configuration.yaml."""
+    cfg = load_configuration()
+    pg = cfg.storage.postgres
+    return (
+        f"postgresql+asyncpg://{pg.username}:{pg.password}"
+        f"@{pg.host}:{pg.port}/{pg.database}"
+    )
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode (emit SQL to stdout, no live DB needed)."""
+    url = _build_url()
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def do_run_migrations(connection: Connection) -> None:
+    """Execute migrations on a live synchronous connection.
+
+    Sets ``lock_timeout`` and ``statement_timeout`` before running so that
+    a migration waiting on a table lock fails fast rather than blocking
+    production traffic.  The Kubernetes init container will retry on failure.
+    """
+    connection.execute(text("SET lock_timeout = '1s'"))
+    connection.execute(text("SET statement_timeout = '5s'"))
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    """Create a transient async engine and run migrations."""
+    url = _build_url()
+    connectable = create_async_engine(url, poolclass=pool.NullPool)
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await connectable.dispose()
+
+
+def run_migrations_online() -> None:
+    """Entry point for online (live-DB) migration mode."""
+    asyncio.run(run_async_migrations())
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
