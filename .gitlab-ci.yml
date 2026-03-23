@@ -98,8 +98,8 @@ docker-code:
         DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
       - IMAGE_NAME: knowledge-flow-backend
         DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
-      - IMAGE_NAME: control-plane
-        DOCKER_FILE: control-plane/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: control-plane-backend
+        DOCKER_FILE: control-plane-backend/dockerfiles/Dockerfile-prod
 
 docker-benchmark:
   extends: .docker-default
