@@ -12,6 +12,16 @@ Example:
 - `from agentic_backend.core.agents.v2.graph import GraphRuntime`
 """
 
+from .authoring import (
+    GraphAgent,
+    GraphWorkflow,
+    StepResult,
+    WorkflowNode,
+    choice_step,
+    finalize_step,
+    model_text_step,
+    typed_node,
+)
 from .runtime import (
     GraphExecutionOutput,
     GraphNodeContext,
@@ -22,8 +32,16 @@ from .runtime import (
 
 __all__ = [
     "GraphExecutionOutput",
+    "GraphAgent",
+    "GraphWorkflow",
     "GraphNodeContext",
     "GraphNodeHandler",
     "GraphNodeResult",
     "GraphRuntime",
+    "StepResult",
+    "WorkflowNode",
+    "choice_step",
+    "finalize_step",
+    "model_text_step",
+    "typed_node",
 ]

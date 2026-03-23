@@ -108,6 +108,30 @@ class GraphNodeContext(Protocol):
         raise NotImplementedError()
 
     def emit_status(self, status: str, detail: str | None = None) -> None:
+        """
+        Publish a short progress signal for the current graph step.
+
+        Why this exists:
+        - authors sometimes need to tell the chat/session runtime what the
+          agent is currently doing before a slower model or tool call happens
+        - this keeps progress visible without polluting the business state
+
+        How to use it:
+        - call this inside a node when you want to expose a brief status such
+          as loading data, drafting a query, or waiting for confirmation
+        - `status` should be a short machine-stable label for the current
+          activity
+        - `detail` should be optional user-facing context that can appear in
+          logs or streaming status updates
+
+        Example:
+        ```python
+        context.emit_status(
+            "load_context",
+            "Loading tabular datasets.",
+        )
+        ```
+        """
         raise NotImplementedError()
 
     def emit_assistant_delta(self, delta: str) -> None:
@@ -119,6 +143,41 @@ class GraphNodeContext(Protocol):
         *,
         operation: str = "default",
     ) -> BaseMessage:
+        raise NotImplementedError()
+
+    async def invoke_structured_model(
+        self,
+        output_model: type[BaseModel],
+        messages: list[BaseMessage],
+        *,
+        operation: str = "default",
+    ) -> BaseModel:
+        """
+        Invoke the bound model and validate the response against one schema.
+
+        Why this exists:
+        - many graph agents need a routing or extraction step that should return
+          validated structured data instead of free text
+        - keeping structured invocation in the runtime preserves the same model
+          resolution and tracing boundary as normal graph model calls
+
+        How to use it:
+        - pass the Pydantic model the response must satisfy
+        - pass the system and human messages for the control step
+        - use `operation` to distinguish router, extraction, and drafting calls
+
+        Example:
+        ```python
+        decision = await context.invoke_structured_model(
+            RouteDecision,
+            [
+                SystemMessage(content="Classify the request."),
+                HumanMessage(content=user_text),
+            ],
+            operation="route_request",
+        )
+        ```
+        """
         raise NotImplementedError()
 
     async def invoke_tool(
@@ -271,6 +330,79 @@ class _GraphNodeExecutionContext:
                 if span is not None:
                     span.set_attribute("status", "ok")
                 return response
+            except Exception:
+                if span is not None:
+                    span.set_attribute("status", "error")
+                raise
+            finally:
+                if span is not None:
+                    span.end()
+
+    async def invoke_structured_model(
+        self,
+        output_model: type[BaseModel],
+        messages: list[BaseMessage],
+        *,
+        operation: str = "default",
+    ) -> BaseModel:
+        """
+        Invoke one structured-output control step with the bound chat model.
+
+        Use this when a graph node needs validated routing or extraction output
+        instead of plain assistant text.
+        """
+
+        resolved_model = (
+            self.model_resolver(operation)
+            if self.model_resolver is not None
+            else self.model
+        )
+        if resolved_model is None:
+            raise RuntimeError("GraphRuntime requires a bound chat model.")
+
+        model_name = _resolve_model_name(resolved_model)
+        span = _start_runtime_span(
+            services=self.services,
+            binding=self.binding,
+            name="v2.graph.structured_model",
+            attributes={
+                "agent_id": self.graph_agent_id,
+                "node_id": self.node_id,
+                "operation": operation,
+                "model_name": model_name,
+                "output_model": output_model.__name__,
+            },
+        )
+        structured_model = resolved_model.with_structured_output(
+            output_model,
+            method="json_schema",
+        )
+        with _graph_phase_timer(
+            kpi=self.services.kpi,
+            binding=self.binding,
+            agent_id=self.graph_agent_id,
+            phase="v2_graph_structured_model",
+            agent_step=f"{self.node_id}:{operation}",
+            extra_dims={
+                "node_id": self.node_id,
+                "operation": operation,
+                "model_name": model_name,
+                "output_model": output_model.__name__,
+            },
+        ):
+            try:
+                response = await structured_model.ainvoke(messages)
+                if isinstance(response, output_model):
+                    validated = response
+                elif isinstance(response, BaseModel):
+                    validated = output_model.model_validate(response.model_dump())
+                elif isinstance(response, dict):
+                    validated = output_model.model_validate(response)
+                else:
+                    validated = output_model.model_validate(dict(response))
+                if span is not None:
+                    span.set_attribute("status", "ok")
+                return validated
             except Exception:
                 if span is not None:
                     span.set_attribute("status", "error")

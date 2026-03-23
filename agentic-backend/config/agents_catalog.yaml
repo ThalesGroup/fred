@@ -26,12 +26,6 @@ agents:
       deep_search_delegate: false
       attach_files: true
 
-  - id: "Aegis"
-    name: "Aegis"
-    type: "agent"
-    class_path: "agentic_backend.agents.aegis.aegis_rag_expert.Aegis"
-    enabled: true
-
   - id: "Archie"
     name: "Archie"
     type: "agent"
@@ -48,6 +42,12 @@ agents:
     name: "Tessa"
     type: "agent"
     class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+    enabled: true
+
+  - id: "SQL Agent"
+    name: "SQL Agent"
+    type: "agent"
+    class_path: "agentic_backend.agents.v2.candidate.sql_analyst_graph.sql_agent_definition.SqlAgentDefinition"
     enabled: true
 
   - id: "Corpus Investigator Deep"
