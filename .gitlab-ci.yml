@@ -7,7 +7,7 @@ variables:
   BUILD_CODE_DOCKER_IMAGE:
     value: "false"
     options: ["true", "false"]
-    description: "Defines if code docker images (frontend, agentic-backend, knowledge-flow-backend) must be built"
+    description: "Defines if code docker images (frontend, agentic-backend, knowledge-flow-backend, control-plane) must be built"
   BENCHMARK_DOCKER_TAG:
     description: "Version of benchmark tools docker image."
   BUILD_BENCHMARK_DOCKER_IMAGE:
@@ -98,6 +98,8 @@ docker-code:
         DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
       - IMAGE_NAME: knowledge-flow-backend
         DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: control-plane
+        DOCKER_FILE: control-plane/dockerfiles/Dockerfile-prod
 
 docker-benchmark:
   extends: .docker-default
