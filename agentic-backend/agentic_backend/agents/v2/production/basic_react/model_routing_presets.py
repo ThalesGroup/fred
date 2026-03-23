@@ -145,10 +145,7 @@ def build_default_policy_with_basic_react_presets(
             target_profile_id=resolved_preset_profile_ids.rag_expert_chat,
             match=ModelRouteMatch(
                 purpose="chat",
-                agent_id=(
-                    "rag.expert.v2",
-                    "internal.react_profile.rag_expert",
-                ),
+                agent_id="internal.react_profile.rag_expert",
             ),
         )
     )

@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, PrivateAttr
 
-from agentic_backend.agents.v2 import BasicReActDefinition, RagExpertV2Definition
+from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
     ArtifactPublisherPort,
@@ -1518,7 +1518,7 @@ async def test_basic_react_runtime_resume_survives_sql_checkpointer_reconstructi
 
 @pytest.mark.asyncio
 async def test_rag_react_runtime_routes_tool_calls_through_tool_invoker() -> None:
-    definition = RagExpertV2Definition()
+    definition = BasicReActDefinition(react_profile_id="rag_expert")
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -1796,7 +1796,7 @@ async def test_basic_react_runtime_routes_geo_render_points_with_ui_parts() -> N
 
 @pytest.mark.asyncio
 async def test_rag_stream_emits_tool_and_final_events() -> None:
-    definition = RagExpertV2Definition()
+    definition = BasicReActDefinition(react_profile_id="rag_expert")
     model = ToolFriendlyFakeChatModel(
         responses=[
             AIMessage(
@@ -1841,7 +1841,7 @@ async def test_rag_stream_emits_tool_and_final_events() -> None:
 
 @pytest.mark.asyncio
 async def test_react_runtime_rejects_duplicate_tool_names() -> None:
-    definition = RagExpertV2Definition()
+    definition = BasicReActDefinition(react_profile_id="rag_expert")
     model = ToolFriendlyFakeChatModel(
         responses=[AIMessage(content="This response should never be reached.")]
     )
@@ -1860,7 +1860,7 @@ async def test_react_runtime_rejects_duplicate_tool_names() -> None:
 
 
 def test_rag_definition_inspection_stays_small_and_declared() -> None:
-    inspection = inspect_agent(RagExpertV2Definition())
+    inspection = inspect_agent(BasicReActDefinition(react_profile_id="rag_expert"))
 
     assert inspection.execution_category.value == "react"
     assert inspection.declared_tool_refs[0].kind == "tool_ref"

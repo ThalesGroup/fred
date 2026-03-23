@@ -28,7 +28,9 @@ How to add a new bot:
 
 from __future__ import annotations
 
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, model_validator
 
 from agentic_backend.core.agents.agent_spec import FieldSpec, UIHints
 from agentic_backend.core.agents.v2 import (
@@ -39,7 +41,7 @@ from agentic_backend.core.agents.v2 import (
     ToolRefRequirement,
 )
 
-from .profile_registry import list_react_profiles, profile_options_summary
+from .profile_registry import get_react_profile, list_react_profiles, profile_options_summary
 
 
 def _default_react_profile_id() -> str:
@@ -191,6 +193,41 @@ class BasicReActDefinition(ReActAgentDefinition):
     # This basic example starts without tools, but a developer can add them
     # later by listing tool refs here.
     declared_tool_refs: tuple[ToolRefRequirement, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_profile_defaults(cls, data: Any) -> Any:
+        """
+        Populate profile-owned fields from the selected profile when the caller
+        did not provide them explicitly.
+
+        This makes BasicReActDefinition(react_profile_id="rag_expert") produce
+        the same result as the legacy bridge — tools, guardrails, prompt, and
+        approval policy are all filled in from the profile automatically.
+
+        Only fields absent from the constructor call are filled. Explicit values
+        always win.
+        """
+        if not isinstance(data, dict):
+            return data
+        profile_id = data.get("react_profile_id")
+        if not profile_id or not isinstance(profile_id, str):
+            return data
+        try:
+            profile = get_react_profile(profile_id.strip())
+        except ValueError:
+            return data
+        for field, value in (
+            ("system_prompt_template", profile.system_prompt_template),
+            ("declared_tool_refs", profile.declared_tool_refs),
+            ("default_mcp_servers", profile.mcp_servers),
+            ("guardrails", profile.guardrails),
+            ("enable_tool_approval", profile.enable_tool_approval),
+            ("approval_required_tools", profile.approval_required_tools),
+        ):
+            if field not in data:
+                data[field] = value
+        return data
 
     def policy(self) -> ReActPolicy:
         """
