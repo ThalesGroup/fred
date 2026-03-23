@@ -84,36 +84,41 @@ class GraphNodeShape(str, Enum):
 
 class ToolRefRequirement(FrozenModel):
     """
-    One Fred built-in tool your agent is allowed to use.
+    Declares one Fred platform tool your agent can call.
 
-    Why this exists:
-    - use this when your agent needs one named Fred capability such as corpus
-      search or artifact publishing
-    - declaring the tool here makes that capability available to the runtime
+    Use the constants from agentic_backend.core.agents.v2.support.builtins —
+    do not write tool_ref strings by hand.
 
-    How to use:
-    - add one entry per Fred tool your agent should be able to call
-    - use the exact tool ref constant or exact tool ref string
-    - write a short description that helps the model choose the tool correctly
+    Available constants:
+        TOOL_REF_KNOWLEDGE_SEARCH          — search document libraries
+        TOOL_REF_ARTIFACTS_PUBLISH_TEXT    — publish a markdown report
+        TOOL_REF_RESOURCES_FETCH_TEXT      — read a config or template file
+        TOOL_REF_LOGS_QUERY                — query backend logs
+        TOOL_REF_TRACES_SUMMARIZE_CONVERSATION — summarise an execution trace
+
+    The description field is what the model reads to decide when to call the
+    tool — make it concrete and action-oriented.
 
     Example:
     ```python
-    ToolRefRequirement(
-        tool_ref="knowledge.search",
-        description="Search the selected library and return grounded snippets.",
+    from agentic_backend.core.agents.v2.support.builtins import (
+        TOOL_REF_KNOWLEDGE_SEARCH,
+        TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
     )
 
     declared_tool_refs = (
         ToolRefRequirement(
-            tool_ref="knowledge.search",
-            description="Search the selected library and return grounded snippets.",
+            tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
+            description="Search the selected document libraries for relevant evidence.",
         ),
         ToolRefRequirement(
-            tool_ref="artifacts.publish_text",
-            description="Publish the final summary report for the user.",
+            tool_ref=TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
+            description="Publish the final report as a markdown artifact for the user.",
         ),
     )
     ```
+
+    Note: `kind` and `required` are framework fields — leave them at their defaults.
     """
 
     kind: Literal["tool_ref"] = "tool_ref"
@@ -357,13 +362,16 @@ class GuardrailDefinition(FrozenModel):
 
     How to use it:
     - write one guardrail per important rule
-    - keep the `title` short
-    - write the `description` as a direct instruction the agent can follow
-    - do not use guardrails for broad tone or persona; keep that in the system
-      prompt
+    - `guardrail_id` is a slug you invent — pick a short lowercase name that
+      describes the rule, e.g. "grounding", "uncertainty", "scope". It does
+      not need to match anything else.
+    - keep `title` short (shown in inspection views)
+    - write `description` as a direct instruction the model can follow
+    - use guardrails for sharp, stable rules — not for tone or persona (those
+      belong in the system prompt)
 
     Important:
-    - a guardrail is still prompt-level guidance, not a hard technical sandbox
+    - a guardrail is prompt-level guidance, not a hard technical sandbox
 
     Example:
     ```python

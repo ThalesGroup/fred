@@ -26,7 +26,13 @@ _BASIC_REACT_PROFILE_PACKAGE = "agentic_backend.agents.v2.production.basic_react
 
 def load_basic_react_prompt(file_name: str) -> str:
     """
-    Load a Markdown prompt file from this package's directory.
+    Load a system prompt from the basic_react/prompts/ folder.
+
+    Put your .md file in:
+        agentic_backend/agents/v2/production/basic_react/prompts/<file_name>
+
+    Example:
+        system_prompt_template=load_basic_react_prompt("basic_react_it_support_system_prompt.md")
     """
     return load_agent_prompt_markdown(
         package=_BASIC_REACT_PROFILE_PACKAGE,
