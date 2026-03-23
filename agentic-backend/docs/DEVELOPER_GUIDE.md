@@ -64,7 +64,7 @@ Business value:
 Repository example:
 
 - `agentic_backend/agents/v2/production/basic_react/agent.py`
-- `agentic_backend/agents/v2/production/basic_react/profiles/rag_expert_agent.py`
+- `agentic_backend/agents/v2/production/basic_react/rag_expert_agent.py`
 
 ### Move to ReAct With Custom Tools
 

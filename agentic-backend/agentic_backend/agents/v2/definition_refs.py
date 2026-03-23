@@ -50,7 +50,7 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
             "agentic_backend.agents.v2.production.basic_deep.CorpusInvestigatorDeepV2Definition"
         ),
         RAG_EXPERT_DEFINITION_REF: (
-            "agentic_backend.agents.v2.production.basic_react.profiles.rag_expert_agent.RagExpertV2Definition"
+            "agentic_backend.agents.v2.production.basic_react.rag_expert_agent.RagExpertV2Definition"
         ),
         POSTAL_TRACKING_DEFINITION_REF: "agentic_backend.agents.v2.demos.postal_tracking.Definition",
         BID_MGR_DEFINITION_REF: "agentic_backend.agents.v2.candidate.bid_mgr.Definition",

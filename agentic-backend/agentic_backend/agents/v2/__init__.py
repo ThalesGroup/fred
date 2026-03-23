@@ -16,8 +16,7 @@ if TYPE_CHECKING:
         BasicDeepAgentDefinition,
         CorpusInvestigatorDeepV2Definition,
     )
-    from .production.basic_react import BasicReActDefinition
-    from .production.basic_react.profiles.rag_expert_agent import RagExpertV2Definition
+    from .production.basic_react import BasicReActDefinition, RagExpertV2Definition
 
 __all__ = [
     "AegisGraphV2SkeletonDefinition",
@@ -61,9 +60,7 @@ def __getattr__(name: str) -> object:
         return BasicReActDefinition
 
     if name == "RagExpertV2Definition":
-        from .production.basic_react.profiles.rag_expert_agent import (
-            RagExpertV2Definition,
-        )
+        from .production.basic_react import RagExpertV2Definition
 
         return RagExpertV2Definition
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

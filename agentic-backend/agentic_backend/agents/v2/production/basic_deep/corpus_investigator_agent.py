@@ -10,7 +10,6 @@ from agentic_backend.core.agents.agent_spec import FieldSpec, UIHints
 from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
     ToolRefRequirement,
-    load_packaged_markdown,
 )
 from agentic_backend.core.agents.v2.support.builtins import (
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
@@ -18,17 +17,10 @@ from agentic_backend.core.agents.v2.support.builtins import (
 )
 
 from .agent import BasicDeepAgentDefinition
+from .prompt_loader import load_basic_deep_prompt
 
-CORPUS_INVESTIGATOR_SYSTEM_PROMPT = load_packaged_markdown(
-    package="agentic_backend",
-    path_parts=(
-        "agents",
-        "v2",
-        "production",
-        "basic_deep",
-        "prompts",
-        "corpus_investigator_system_prompt.md",
-    ),
+CORPUS_INVESTIGATOR_SYSTEM_PROMPT = load_basic_deep_prompt(
+    "corpus_investigator_system_prompt.md"
 )
 
 

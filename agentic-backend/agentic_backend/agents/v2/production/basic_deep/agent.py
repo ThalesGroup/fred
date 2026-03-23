@@ -17,20 +17,11 @@ from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
     ReActPolicy,
     ToolRefRequirement,
-    load_packaged_markdown,
 )
 
-DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
-    package="agentic_backend",
-    path_parts=(
-        "agents",
-        "v2",
-        "production",
-        "basic_deep",
-        "prompts",
-        "basic_deep_system_prompt.md",
-    ),
-)
+from .prompt_loader import load_basic_deep_prompt
+
+DEFAULT_SYSTEM_PROMPT = load_basic_deep_prompt("basic_deep_system_prompt.md")
 
 
 class BasicDeepAgentDefinition(DeepAgentDefinition):
