@@ -224,8 +224,12 @@ class WorkspaceFilesystem:
         root = (root_prefix or self.prefix).rstrip("/")
         full_prefix = _join(root, owner, sub)
 
-        # Determine the namespace root to strip from results
-        namespace_root = _join(root, owner)
+        # Determine the namespace root to strip from results.
+        # When a sub-prefix is given (e.g. "config"), strip from that directory
+        # so that direct children are returned relative to the requested folder,
+        # not relative to the owner root.  Without this, every file inside
+        # "config/" would appear as a single "config" directory entry.
+        namespace_root = _join(root, owner, sub) if sub else _join(root, owner)
         if not namespace_root.endswith("/"):
             namespace_root += "/"
 
