@@ -4,6 +4,8 @@
 
 from typing import Dict, List
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from agentic_backend.core.chatbot.chat_schema import ChatMessage
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 
@@ -20,7 +22,11 @@ class NoOpHistoryStore(BaseHistoryStore):
     """
 
     async def save(
-        self, session_id: str, messages: List[ChatMessage], user_id: str
+        self,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
         return
 

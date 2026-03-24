@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 
 @dataclass
 class SessionAttachmentRecord(ABC):
@@ -33,37 +35,37 @@ class SessionAttachmentRecord(ABC):
     updated_at: Optional[datetime] = None
 
 
-class BaseSessionAttachmentStore:
+class BaseSessionAttachmentStore(ABC):
     """
     Persistence contract for session-scoped attachment summaries.
     """
 
     @abstractmethod
     async def save(
-        self, record: SessionAttachmentRecord
+        self, record: SessionAttachmentRecord, session: AsyncSession | None = None
     ) -> None:  # pragma: no cover - interface
         pass
 
     @abstractmethod
     async def list_for_session(
-        self, session_id: str
+        self, session_id: str, session: AsyncSession | None = None
     ) -> List[SessionAttachmentRecord]:  # pragma: no cover - interface
         pass
 
     @abstractmethod
     async def delete(
-        self, session_id: str, attachment_id: str
+        self, session_id: str, attachment_id: str, session: AsyncSession | None = None
     ) -> None:  # pragma: no cover - interface
         pass
 
     @abstractmethod
     async def delete_for_session(
-        self, session_id: str
+        self, session_id: str, session: AsyncSession | None = None
     ) -> None:  # pragma: no cover - interface
         pass
 
     @abstractmethod
     async def count_for_sessions(
-        self, session_ids: List[str]
+        self, session_ids: List[str], session: AsyncSession | None = None
     ) -> int:  # pragma: no cover - interface
         pass
