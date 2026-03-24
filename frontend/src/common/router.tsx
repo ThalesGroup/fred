@@ -31,6 +31,7 @@ import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -88,6 +89,10 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/*",
         element: <TeamDetailsPage />,
+      },
+      {
+        path: "marketplace/teams",
+        element: <MarketplaceTeams />,
       },
       {
         path: "monitoring/kpis",

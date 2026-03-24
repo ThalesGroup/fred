@@ -37,3 +37,7 @@
     @include typography("title", "large");
   }
 }
+
+.user-avatar-tooltip {
+  display: var(--display-tooltip);
+}

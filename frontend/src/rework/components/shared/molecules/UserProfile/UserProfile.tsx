@@ -21,7 +21,7 @@ export default function UserProfile() {
         </span>
         <span className={styles["user-settings-button"]}>
           <IconButton
-            color={"on-surface"}
+            color={"on-surface-retreat"}
             variant={"icon"}
             size={"medium"}
             icon={{ category: "outlined", type: "Settings", filled: true }}

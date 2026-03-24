@@ -115,6 +115,20 @@ $color-schemes: (
     "on-container-focused": var(--state-on-surface-container-focused),
     "on-container-selected": var(--state-on-surface-container-selected),
   ),
+  "on-surface-retreat": (
+    "main": var(--on-surface-retreat),
+    "on-main": var(--surface-main),
+    "container": var(--surface-container),
+    "on-container": var(--on-surface-retreat),
+    "hover": var(--state-on-surface-hover),
+    "pressed": var(--state-on-surface-pressed),
+    "focused": var(--state-on-surface-focused),
+    "selected": var(--state-on-surface-selected),
+    "on-container-hover": var(--state-on-surface-container-hover),
+    "on-container-pressed": var(--state-on-surface-container-pressed),
+    "on-container-focused": var(--state-on-surface-container-focused),
+    "on-container-selected": var(--state-on-surface-container-selected),
+  ),
 );
 
 @mixin use-scheme($name) {

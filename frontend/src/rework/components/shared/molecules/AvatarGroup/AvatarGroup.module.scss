@@ -1,0 +1,18 @@
+.user-avatar-container {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  transform: translateX(calc(-1 * var(--spacing-s)));
+
+  > :not(:first-child) {
+    transform: translateX(var(--spacing-s));
+  }
+
+  > * {
+    border: 2px solid var(--surface-container);
+  }
+}
+
+.user-avatar-wrapper {
+  display: contents;
+}

@@ -3,7 +3,6 @@ import {
   SessionWithFiles,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,
 } from "../../../../../../slices/agentic/agenticOpenApi.ts";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { useToast } from "../../../../../../components/ToastProvider.tsx";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -49,9 +48,6 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
           <div className={styles["title"]}>{chat.title}</div>
           <div className={styles["metadata"]}>
             <span className={styles["agent"]}>
-              <span className={styles["icon"]}>
-                <Icon category={"outlined"} type={"Person"} />
-              </span>
               <div className={styles["agent-name"]}>{chat.agents.length !== 0 ? chat.agents[0].name : ""}</div>
             </span>
             <span className={styles["separator"]}>•</span>
@@ -63,7 +59,7 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
             color={"error"}
             variant={"icon"}
             size={"medium"}
-            icon={{ category: "outlined", type: "Delete", filled: true }}
+            icon={{ category: "outlined", type: "delete_forever", filled: true }}
             onClick={handleDelete}
           />
         </span>

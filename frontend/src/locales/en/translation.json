@@ -1338,18 +1338,30 @@
       "manager": "Manager",
       "owner": "Owner"
     },
+    "teamCard": {
+      "memberCount": "{{count}} members"
+    },
     "sidebar": {
-      "title": "FRED.AI",
+      "title": "Fred",
       "team": {
         "avatarAlt": "Team {{teamName}}",
         "bannerAlt": "Team's banner",
         "userTeam": "Personal space",
-        "allTeams": "Marketplace"
+        "marketplace": "Marketplace",
+        "menu": {
+          "agents": "Agents",
+          "resources": "Resources",
+          "apps": "Apps"
+        }
       },
-      "menu": {
-        "agents": "Agents",
-        "resources": "Resources",
-        "apps": "Apps"
+      "marketplace": {
+        "title": "Marketplace",
+        "menu": {
+          "teams": "Teams",
+          "agents": "Agents",
+          "tools": "Tools",
+          "apps": "Apps"
+        }
       },
       "newChat": "New chat",
       "chatList": {
@@ -1411,6 +1423,13 @@
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
         }
+      }
+    },
+    "marketplace": {
+      "teams": {
+        "title": "Community teams",
+        "yourTeams": "Your teams",
+        "otherTeams": "Discover other teams"
       }
     }
   }

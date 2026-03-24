@@ -1,0 +1,15 @@
+@use "src/index.scss" as *;
+
+.marketplace-navbar-container {
+  width: 240px;
+}
+
+.marketplace-navbar-title {
+  display: flex;
+  align-items: end;
+  padding: 0 0 var(--spacing-xs) var(--spacing-m);
+  height: 56px;
+  color: var(--on-surface);
+
+  @include typography("title", "medium");
+}

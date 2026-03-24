@@ -1339,18 +1339,30 @@
       "manager": "Manager",
       "owner": "Propriétaire"
     },
+    "teamCard": {
+      "memberCount": "{{count}} membres"
+    },
     "sidebar": {
-      "title": "FRED.AI",
+      "title": "Fred",
       "team": {
         "avatarAlt": "Équipe {{teamName}}",
         "bannerAlt": "Bannière de l'équipe",
         "userTeam": "Espace personel",
-        "allTeams": "Marketplace"
+        "marketplace": "Marketplace",
+        "menu": {
+          "agents": "Agents",
+          "resources": "Ressources",
+          "apps": "Apps"
+        }
       },
-      "menu": {
-        "agents": "Agents",
-        "resources": "Ressources",
-        "apps": "Apps"
+      "marketplace": {
+        "title": "Marketplace",
+        "menu": {
+          "teams": "Equipe",
+          "agents": "Agents",
+          "tools": "Tools",
+          "apps": "Apps"
+        }
       },
       "newChat": "Nouvelle conversation",
       "chatList": {
@@ -1411,6 +1423,13 @@
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
         }
+      }
+    },
+    "marketplace": {
+      "teams": {
+        "title": "Equipes de la communauté",
+        "yourTeams": "Vos équipes",
+        "otherTeams": "Découvrez d'autres équipes"
       }
     }
   }

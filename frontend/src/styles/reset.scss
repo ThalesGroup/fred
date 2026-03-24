@@ -1,7 +1,4 @@
-// src/assets/styles/abstracts/_mixins.scss
-
 @mixin reset-button {
-  // 1. Structure & Layout
   display: inline-flex;
   position: relative;
   justify-content: center;
@@ -29,5 +26,16 @@
 
   &:focus {
     outline: none;
+  }
+}
+
+@mixin reset-headings {
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    padding: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: 1.2;
+    color: inherit;
   }
 }
