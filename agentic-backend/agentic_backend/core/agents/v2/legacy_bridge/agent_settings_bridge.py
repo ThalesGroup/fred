@@ -355,7 +355,9 @@ def _apply_profile_to_definition(
     # that have no class-level tools. If the definition already declares tool refs,
     # keep them; otherwise inherit from the profile.
     existing_tool_refs = getattr(definition, "declared_tool_refs", ())
-    effective_tool_refs = existing_tool_refs if existing_tool_refs else profile.declared_tool_refs
+    effective_tool_refs = (
+        existing_tool_refs if existing_tool_refs else profile.declared_tool_refs
+    )
     logger.debug(
         "[V2][PROFILE] applying profile=%s to class=%s profile_tool_refs=%r "
         "existing_tool_refs=%r effective_tool_refs=%r",

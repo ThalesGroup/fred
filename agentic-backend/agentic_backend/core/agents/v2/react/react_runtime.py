@@ -456,7 +456,9 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         logger.debug(
             "[V2][EXECUTOR] system_prompt_preview=%r",
-            (system_prompt[:200] + "...") if len(system_prompt) > 200 else system_prompt,
+            (system_prompt[:200] + "...")
+            if len(system_prompt) > 200
+            else system_prompt,
         )
         system_prompt = (
             f"{system_prompt}"
