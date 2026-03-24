@@ -34,9 +34,12 @@ Example:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import cast
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
@@ -183,10 +186,20 @@ class ReActRuntimeToolResolver:
         - `runtime_tools = resolver.resolve_tools()`
         """
 
+        logger.debug(
+            "[V2][TOOL_RESOLVER] start toolset_key=%r declared_tool_refs=%r",
+            self._toolset_key,
+            [r.tool_ref for r in self._declared_tool_refs],
+        )
         specs: list[FredRuntimeToolSpec] = []
         used_names: set[str] = set()
         specs.extend(self._resolve_declared_tools(used_names=used_names))
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
+        logger.debug(
+            "[V2][TOOL_RESOLVER] resolved %d tool(s): %r",
+            len(specs),
+            [s.runtime_name for s in specs],
+        )
         return specs
 
     def _resolve_declared_tools(

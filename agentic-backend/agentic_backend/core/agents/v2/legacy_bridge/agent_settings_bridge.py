@@ -118,11 +118,24 @@ def build_definition_from_settings(
     It also handles the application of ReAct profiles if one is selected.
     """
     base_definition = instantiate_definition_class(definition_class)
+    logger.debug(
+        "[V2][HYDRATE] base_definition class=%s agent_id=%s declared_tool_refs=%r toolset_key=%r",
+        definition_class.__name__,
+        base_definition.agent_id,
+        [r.tool_ref for r in getattr(base_definition, "declared_tool_refs", ())],
+        getattr(base_definition, "toolset_key", None),
+    )
+
     tuning = settings.tuning or definition_to_agent_tuning(base_definition)
     field_defaults = _field_defaults_by_key(tuning.fields)
     profiled_definition = _apply_profile_to_definition(
         base_definition,
         field_defaults=field_defaults,
+    )
+    logger.debug(
+        "[V2][HYDRATE] after_profile class=%s declared_tool_refs=%r",
+        definition_class.__name__,
+        [r.tool_ref for r in getattr(profiled_definition, "declared_tool_refs", ())],
     )
 
     updates: dict[str, Any] = {
@@ -171,7 +184,15 @@ def build_definition_from_settings(
             else:
                 updates[field_name] = value
 
-    return base_definition.model_copy(update=updates)
+    result = base_definition.model_copy(update=updates)
+    logger.debug(
+        "[V2][HYDRATE] final class=%s agent_id=%s declared_tool_refs=%r toolset_key=%r",
+        definition_class.__name__,
+        result.agent_id,
+        [r.tool_ref for r in getattr(result, "declared_tool_refs", ())],
+        getattr(result, "toolset_key", None),
+    )
+    return result
 
 
 def apply_profile_defaults_to_settings(
@@ -322,6 +343,22 @@ def _apply_profile_to_definition(
                 if profile is None:
                     return definition
 
+    # Authored ReActAgent subclasses set declared_tool_refs from their `tools = (...)`
+    # class attribute. A profile must not erase those authored tool refs, because
+    # profiles only carry tool refs for generic families (e.g. BasicReActDefinition)
+    # that have no class-level tools. If the definition already declares tool refs,
+    # keep them; otherwise inherit from the profile.
+    existing_tool_refs = getattr(definition, "declared_tool_refs", ())
+    effective_tool_refs = existing_tool_refs if existing_tool_refs else profile.declared_tool_refs
+    logger.debug(
+        "[V2][PROFILE] applying profile=%s to class=%s profile_tool_refs=%r "
+        "existing_tool_refs=%r effective_tool_refs=%r",
+        profile.profile_id,
+        definition.__class__.__name__,
+        [r.tool_ref for r in profile.declared_tool_refs],
+        [r.tool_ref for r in existing_tool_refs],
+        [r.tool_ref for r in effective_tool_refs],
+    )
     updates: dict[str, Any] = {
         "react_profile_id": profile.profile_id,
         "role": profile.role,
@@ -331,7 +368,7 @@ def _apply_profile_to_definition(
         "enable_tool_approval": profile.enable_tool_approval,
         "approval_required_tools": profile.approval_required_tools,
         "guardrails": profile.guardrails,
-        "declared_tool_refs": profile.declared_tool_refs,
+        "declared_tool_refs": effective_tool_refs,
     }
     supported_updates = {
         key: value

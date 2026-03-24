@@ -32,8 +32,11 @@ open.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Sequence
 from typing import cast
+
+logger = logging.getLogger(__name__)
 
 from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -424,6 +427,12 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
                 "Per-turn tool-call limits are not enforced by the first v2 ReAct runtime yet."
             )
 
+        logger.debug(
+            "[V2][EXECUTOR] build start agent=%s declared_tool_refs=%r toolset_key=%r",
+            self.definition.agent_id,
+            [r.tool_ref for r in self.definition.declared_tool_refs],
+            self._toolset_key(),
+        )
         runtime_tools = ReActRuntimeToolResolver(
             declared_tool_refs=self.definition.declared_tool_refs,
             toolset_key=self._toolset_key(),
@@ -435,10 +444,19 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
+        logger.debug(
+            "[V2][EXECUTOR] bound_tools=%d names=%r",
+            len(bound_tools),
+            [bt.tool.name for bt in bound_tools],
+        )
         system_prompt = _render_prompt_template(
             policy.system_prompt_template or "",
             binding=binding,
             agent_id=self.definition.agent_id,
+        )
+        logger.debug(
+            "[V2][EXECUTOR] system_prompt_preview=%r",
+            (system_prompt[:200] + "...") if len(system_prompt) > 200 else system_prompt,
         )
         system_prompt = (
             f"{system_prompt}"
