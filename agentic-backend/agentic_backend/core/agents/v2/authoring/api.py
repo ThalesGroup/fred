@@ -27,12 +27,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar, overload
 
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_core import PydanticUndefined
 
+from agentic_backend.core.agents.agent_spec import FieldSpec, FieldType, UIHints
 from ..contracts.context import (
     ArtifactPublishRequest,
     ArtifactScope,
@@ -57,6 +59,9 @@ from .legacy_runtime_bridge import _AuthorRuntime
 from .tool_args_schema import build_args_schema
 from .tool_context_helpers import ToolContextHelpers
 
+_M = TypeVar("_M", bound=BaseModel)
+_T = TypeVar("_T")
+
 
 @dataclass(frozen=True)
 class ToolOutput:
@@ -74,8 +79,11 @@ class ToolOutput:
     - instantiate `ToolOutput` yourself only when you want a custom
       combination of text, data, UI parts, or sources
 
-    Example:
-    - `return ToolOutput(text="Processed 3 records", data={"count": 3})`
+    Example::
+
+        ```python
+        return ToolOutput(text="Processed 3 records", data={"count": 3})
+        ```
     """
 
     text: str | None = None
@@ -86,6 +94,28 @@ class ToolOutput:
 
 
 _MISSING: Any = object()
+
+
+class ResourceNotFoundError(KeyError):
+    """
+    Raised by ``ctx.read_resource()`` when the requested key does not exist
+    in the agent config workspace.
+
+    Why this exists:
+    - gives authored tools a concrete exception to catch instead of a bare
+      ``KeyError`` or an opaque runtime error
+    - makes the error contract visible at import time, next to the SDK API
+
+    How to use it:
+    - catch it in your tool when a missing resource is a recoverable condition
+
+    Example::
+
+        ```python
+        except ResourceNotFoundError:
+            return ctx.error("Template not uploaded yet.")
+        ```
+    """
 
 
 class ToolContext:
@@ -106,11 +136,14 @@ class ToolContext:
     - use `context.helpers` only when you intentionally want optional Fred
       shortcuts
 
-    Example:
-    - `template_key = ctx.config("ppt_template_key")`
-    - `result = await context.invoke_tool("knowledge.search", query="policy", top_k=5)`
-    - `artifact = await context.publish_text(file_name="report.md", content="# Report")`
-    - `return context.text("Done")`
+    Example::
+
+        ```python
+        template_key = ctx.config("ppt_template_key")
+        result = await ctx.invoke_tool("knowledge.search", query="policy", top_k=5)
+        artifact = await ctx.publish_text(file_name="report.md", content="# Report")
+        return ctx.text("Done")
+        ```
     """
 
     def __init__(self, runtime: _AuthorRuntime) -> None:
@@ -131,8 +164,11 @@ class ToolContext:
         - most authors should ignore it
         - prefer the higher-level helpers on `ToolContext` first
 
-        Example:
-        - `session_id = context.binding.portable_context.session_id`
+        Example::
+
+            ```python
+            session_id = ctx.binding.portable_context.session_id
+            ```
         """
         return self._runtime.binding
 
@@ -149,8 +185,11 @@ class ToolContext:
         - ignore this in normal generic tools
         - use it only when your tool really needs one of those shortcuts
 
-        Example:
-        - `bundle = await context.helpers.search_corpus_many((("retention policy", 5),))`
+        Example::
+
+            ```python
+            bundle = await ctx.helpers.search_corpus_many((("retention policy", 5),))
+            ```
         """
         return self._helpers
 
@@ -172,8 +211,11 @@ class ToolContext:
         - pass that tool's inputs as keyword arguments
         - use the returned result when you need sources, UI parts, or raw data
 
-        Example:
-        - `result = await context.invoke_tool("knowledge.search", query="policy", top_k=5)`
+        Example::
+
+            ```python
+            result = await ctx.invoke_tool("knowledge.search", query="policy", top_k=5)
+            ```
         """
         result = await self._runtime.tool_invoker.invoke(
             ToolInvocationRequest(
@@ -187,11 +229,11 @@ class ToolContext:
 
     async def extract_structured(
         self,
-        output_model: type[BaseModel],
+        output_model: type[_M],
         *,
         prompt: str,
         text: str,
-    ) -> BaseModel:
+    ) -> _M:
         """
         Turn free text into a Pydantic model with the current agent model.
 
@@ -204,8 +246,13 @@ class ToolContext:
         - pass a short extraction prompt
         - pass the text to parse
 
-        Example:
-        - `parsed = await context.extract_structured(MySchema, prompt="Extract fields", text=raw_text)`
+        Example::
+
+            ```python
+            parsed = await ctx.extract_structured(
+                MySchema, prompt="Extract fields", text=raw_text
+            )
+            ```
         """
         model = self._runtime.model.with_structured_output(
             output_model,
@@ -241,8 +288,11 @@ class ToolContext:
         - pass the resource key
         - optionally override the scope
 
-        Example:
-        - `resource = await context.read_resource("instructions.md")`
+        Example::
+
+            ```python
+            resource = await ctx.read_resource("instructions.md")
+            ```
         """
         reader = self._runtime.ports.resource_reader
         if reader is None:
@@ -257,6 +307,11 @@ class ToolContext:
             )
         )
 
+    @overload
+    def config(self, key: str) -> Any: ...
+    @overload
+    def config(self, key: str, *, default: _T) -> _T: ...
+
     def config(self, key: str, *, default: Any = _MISSING) -> Any:
         """
         Read one field value from the agent's current configuration.
@@ -268,12 +323,16 @@ class ToolContext:
         How to use it:
         - pass the field name exactly as declared on the agent definition class
         - use dotted paths to reach nested fields
-        - pass `default=` to avoid a `KeyError` when the field may be absent
+        - pass `default=` to avoid a `KeyError` when the field may be absent;
+          the return type matches the type of the default value
 
-        Example:
-        - `template_key = ctx.config("ppt_template_key")`
-        - `threshold = ctx.config("confidence_threshold", default=0.8)`
-        - `attach = ctx.config("chat_options.attach_files", default=False)`
+        Example::
+
+            ```python
+            template_key = ctx.config("ppt_template_key")                    # -> Any
+            size         = ctx.config("font_size_pt", default=14)             # -> int
+            attach       = ctx.config("chat_options.attach_files", default=False)  # -> bool
+            ```
         """
         obj: Any = self._runtime.definition
         for part in key.split("."):
@@ -309,8 +368,11 @@ class ToolContext:
         - pass the output file name
         - pass the bytes to publish
 
-        Example:
-        - `artifact = await context.publish_bytes(file_name="report.txt", content=b"done")`
+        Example::
+
+            ```python
+            artifact = await ctx.publish_bytes(file_name="report.xlsx", content=xlsx_bytes)
+            ```
         """
         publisher = self._runtime.ports.artifact_publisher
         if publisher is None:
@@ -349,8 +411,11 @@ class ToolContext:
         - pass the file name
         - pass the text content
 
-        Example:
-        - `artifact = await context.publish_text(file_name="summary.md", content="# Summary")`
+        Example::
+
+            ```python
+            artifact = await ctx.publish_text(file_name="summary.md", content="# Summary")
+            ```
         """
         return await self.publish_bytes(
             file_name=file_name,
@@ -372,8 +437,11 @@ class ToolContext:
         How to use it:
         - pass the document uid and media file name
 
-        Example:
-        - `content = await context.fetch_media(document_uid="doc-1", file_name="figure.png")`
+        Example::
+
+            ```python
+            content = await ctx.fetch_media(document_uid="doc-1", file_name="figure.png")
+            ```
         """
         return await self._runtime.fetch_media(document_uid, file_name)
 
@@ -387,8 +455,11 @@ class ToolContext:
         How to use it:
         - pass the text you want the assistant to see
 
-        Example:
-        - `return context.text("Completed")`
+        Example::
+
+            ```python
+            return ctx.text("Completed")
+            ```
         """
         return ToolOutput(text=text, sources=self._collected_sources())
 
@@ -409,8 +480,11 @@ class ToolContext:
         - pass a Pydantic model or a dict
         - optionally add a short text message
 
-        Example:
-        - `return context.json({"total": 3}, text="Computed total")`
+        Example::
+
+            ```python
+            return ctx.json({"total": 3}, text="Computed total")
+            ```
         """
         payload = data.model_dump() if isinstance(data, BaseModel) else dict(data)
         return ToolOutput(
@@ -430,13 +504,42 @@ class ToolContext:
         How to use it:
         - pass the message you want the assistant to receive
 
-        Example:
-        - `return context.error("Missing account id.")`
+        Example::
+
+            ```python
+            return ctx.error("Missing account id.")
+            ```
         """
         return ToolOutput(
             text=message,
             sources=self._collected_sources(),
             is_error=True,
+        )
+
+    def link(self, artifact: PublishedArtifact, *, text: str = "") -> ToolOutput:
+        """
+        Return a published artifact as a clickable download link.
+
+        Why this exists:
+        - every tool that publishes a file follows the same pattern:
+          ``ToolOutput(text=..., ui_parts=(artifact.to_link_part(),))``
+        - this collapses that into one readable line
+
+        How to use it:
+        - call ``ctx.publish_bytes()`` or ``ctx.publish_text()`` first
+        - pass the returned artifact and an optional summary text
+
+        Example::
+
+            ```python
+            artifact = await ctx.publish_bytes(file_name="report.pdf", content=pdf_bytes)
+            return ctx.link(artifact, text="Report ready.")
+            ```
+        """
+        return ToolOutput(
+            text=text or None,
+            ui_parts=(artifact.to_link_part(),),
+            sources=self._collected_sources(),
         )
 
     def _record_sources(self, sources: Sequence[VectorSearchHit]) -> None:
@@ -451,8 +554,6 @@ class ToolContext:
         - internal runtime helper only; authored tools should not call this
           directly
 
-        Example:
-        - `context._record_sources(result.sources)`
         """
         existing = {(source.uid, source.content[:100]) for source in self._sources}
         for source in sources:
@@ -474,8 +575,6 @@ class ToolContext:
         - internal runtime helper only; authored tools should not call this
           directly
 
-        Example:
-        - `sources = context._collected_sources()`
         """
         return tuple(self._sources)
 
@@ -492,8 +591,13 @@ def prompt_md(*, package: str, file_name: str) -> str:
     - pass your package path
     - pass the markdown file name inside that package
 
-    Example:
-    - `system_prompt_template = prompt_md(package="my_pkg.agents.search", file_name="system_prompt.md")`
+    Example::
+
+        ```python
+        system_prompt_template = prompt_md(
+            package="my_pkg.agents.search", file_name="system_prompt.md"
+        )
+        ```
     """
     return load_agent_prompt_markdown(package=package, file_name=file_name)
 
@@ -525,9 +629,13 @@ def tool(
     - only pass `args_schema=...` if you explicitly want to override the schema
       inferred from the function signature
 
-    Example:
-    - `@tool("acme.math.add", description="Add two numbers.")`
-    - `async def add(context: ToolContext, a: int, b: int) -> str: ...`
+    Example::
+
+        ```python
+        @tool("acme.math.add", description="Add two numbers.")
+        async def add(ctx: ToolContext, a: int, b: int) -> ToolOutput:
+            return ctx.text(f"{a} + {b} = {a + b}")
+        ```
     """
 
     def decorator(fn: Callable[..., object]) -> Callable[..., object]:
@@ -543,6 +651,99 @@ def tool(
         return fn
 
     return decorator
+
+
+def ui_field(
+    default: Any = ...,
+    *,
+    title: str,
+    description: str,
+    ui_type: FieldType,
+    required: bool = False,
+    ui: UIHints | None = None,
+    **kwargs: Any,
+) -> Any:
+    """
+    Declare an agent configuration field with UI metadata — once.
+
+    Why this exists:
+    - the old pattern required declaring the field twice: as a Pydantic ``Field``
+      and again as a ``FieldSpec`` inside the ``fields`` tuple
+    - ``ui_field()`` replaces both: the ``FieldSpec`` is derived automatically
+      from the metadata stored here, so the ``fields`` tuple can be omitted
+
+    How to use it:
+    - use it exactly like ``pydantic.Field()``, but add ``title``, ``ui_type``,
+      and optionally ``ui`` (``UIHints``)
+    - declare the field on the agent class — no separate ``fields`` tuple needed
+    - omit ``default`` (or pass ``...``) to make the field required
+
+    Example::
+
+        ```python
+        ppt_template_key: str = ui_field(
+            "simple_template.pptx",
+            title="Template key",
+            description="Filename of the .pptx template.",
+            ui_type="text",
+            ui=UIHints(group="PowerPoint"),
+        )
+        ```
+    """
+    extra: dict[str, Any] = {
+        "_ui_type": ui_type,
+        "_ui_required": required,
+    }
+    if ui is not None:
+        extra["_ui_hints"] = ui.model_dump()
+    if default is ...:
+        return Field(
+            title=title, description=description, json_schema_extra=extra, **kwargs
+        )
+    return Field(
+        default=default,
+        title=title,
+        description=description,
+        json_schema_extra=extra,
+        **kwargs,
+    )
+
+
+def _derive_fields(cls: type) -> tuple[FieldSpec, ...]:
+    """
+    Build ``FieldSpec`` tuples from any field declared with ``ui_field()``.
+
+    Why this exists:
+    - ``ReActAgent.__pydantic_init_subclass__`` calls this to auto-populate
+      the ``fields`` tuple so authors don't have to maintain it manually
+
+    How to use it:
+    - internal hook; authored agents should use ``ui_field()`` and rely on
+      automatic derivation rather than calling this directly
+    """
+    specs: list[FieldSpec] = []
+    for field_name, field_info in cls.model_fields.items():
+        extra = field_info.json_schema_extra
+        if not isinstance(extra, dict):
+            continue
+        ui_type = extra.get("_ui_type")
+        if not ui_type:
+            continue
+        raw_default = field_info.default
+        default = None if raw_default is PydanticUndefined else raw_default
+        ui_hints_data = extra.get("_ui_hints", {})
+        specs.append(
+            FieldSpec(
+                key=field_name,
+                type=ui_type,
+                title=field_info.title or field_name.replace("_", " ").title(),
+                description=field_info.description,
+                default=default,
+                required=extra.get("_ui_required", False),
+                ui=UIHints(**ui_hints_data) if ui_hints_data else UIHints(),
+            )
+        )
+    return tuple(specs)
 
 
 class ReActAgent(ReActAgentDefinition):
@@ -587,9 +788,11 @@ class ReActAgent(ReActAgentDefinition):
 
         super().__pydantic_init_subclass__(**kwargs)
 
+        needs_rebuild = False
+
+        # Register authored tools declared in `tools = (...)`
         authored_tools = tuple(normalize_tool(tool_obj) for tool_obj in cls.tools)
         cls.__authored_tools__ = authored_tools
-
         if authored_tools:
             toolset_key = cls._authored_toolset_key()
             ensure_toolset_registered(cls, toolset_key, authored_tools)
@@ -601,6 +804,17 @@ class ReActAgent(ReActAgentDefinition):
                 )
                 for authored_tool in authored_tools
             )
+            needs_rebuild = True
+
+        # Auto-derive `fields` from ui_field() annotations when the subclass
+        # has not explicitly declared a `fields` tuple of its own.
+        if "fields" not in cls.__annotations__:
+            derived = _derive_fields(cls)
+            if derived:
+                cls.model_fields["fields"].default = derived
+                needs_rebuild = True
+
+        if needs_rebuild:
             cls.model_rebuild(force=True)
 
     @classmethod
@@ -645,8 +859,11 @@ class ReActAgent(ReActAgentDefinition):
 
 __all__ = [
     "ReActAgent",
+    "ResourceNotFoundError",
     "ToolContext",
     "ToolOutput",
+    "UIHints",
     "prompt_md",
     "tool",
+    "ui_field",
 ]

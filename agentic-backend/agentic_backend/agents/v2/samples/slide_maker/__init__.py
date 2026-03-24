@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .agent import TutorialToolsSampleDefinition
+from .agent import SlideMakerV2Definition
 
-__all__ = ["TutorialToolsSampleDefinition"]
+__all__ = ["SlideMakerV2Definition"]

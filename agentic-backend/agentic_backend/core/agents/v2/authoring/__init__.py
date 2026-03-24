@@ -42,7 +42,16 @@ Example:
 - `from agentic_backend.core.agents.v2.authoring import ReActAgent, tool`
 """
 
-from .api import ReActAgent, ToolContext, ToolOutput, prompt_md, tool
+from .api import (
+    ReActAgent,
+    ResourceNotFoundError,
+    ToolContext,
+    ToolOutput,
+    UIHints,
+    prompt_md,
+    tool,
+    ui_field,
+)
 from .inspection import inspect_agent
 from .knowledge_flow_mcp import (
     MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
@@ -61,9 +70,12 @@ __all__ = [
     "MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
     "ReActAgent",
+    "ResourceNotFoundError",
     "ToolContext",
     "ToolOutput",
+    "UIHints",
     "inspect_agent",
     "prompt_md",
     "tool",
+    "ui_field",
 ]
