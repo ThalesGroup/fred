@@ -354,6 +354,7 @@
     }
   },
   "assetManager": {
+    "title": "Ressources pour {{agentId}}",
     "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
