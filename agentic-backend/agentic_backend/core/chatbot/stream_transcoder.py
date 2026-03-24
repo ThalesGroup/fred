@@ -67,6 +67,11 @@ from agentic_backend.core.interrupts.base_interrupt_handler import InterruptHand
 
 logger = logging.getLogger(__name__)
 
+# Maximum interval between partial-stream WebSocket frames.
+# Tokens arriving faster than this are buffered and sent together,
+# reducing O(n²) bandwidth to roughly O(n * FLUSH_INTERVAL / token_interval).
+_STREAM_FLUSH_INTERVAL_S: float = 0.05  # 50 ms
+
 _VECTOR_SEARCH_HITS = TypeAdapter(List[VectorSearchHit])
 
 # WS callback type (sync or async)
@@ -558,6 +563,7 @@ class StreamTranscoder:
         pending_assistant_final: Optional[ChatMessage] = None
         partial_stream_rank: Optional[int] = None
         partial_stream_text = ""
+        last_partial_emit: float = 0.0
         pending_stream_token_usage = None
         token_usage_seen_from_messages = False
         token_usage_seen_from_updates = False
@@ -662,6 +668,10 @@ class StreamTranscoder:
                         continue
                     if partial_stream_rank is None:
                         partial_stream_rank = base_rank + seq
+                    now = time.monotonic()
+                    if now - last_partial_emit < _STREAM_FLUSH_INTERVAL_S:
+                        continue
+                    last_partial_emit = now
                     partial_msg = ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,
@@ -1069,6 +1079,26 @@ class StreamTranscoder:
                             )
                             pending_final_token_source = candidate_token_source
                         continue
+            # Flush any partial text that was buffered by the throttle but not yet sent.
+            if partial_stream_text.strip() and partial_stream_rank is not None:
+                flush_msg = ChatMessage(
+                    session_id=session_id,
+                    exchange_id=exchange_id,
+                    rank=partial_stream_rank,
+                    timestamp=_utcnow_dt(),
+                    role=Role.assistant,
+                    channel=Channel.final,
+                    parts=[TextPart(text=partial_stream_text)],
+                    metadata=ChatMetadata(
+                        agent_id=agent_id,
+                        extras={"streaming_partial": True},
+                    ),
+                )
+                emit_start = time.monotonic()
+                await self._emit(callback, flush_msg)
+                emit_time_total += time.monotonic() - emit_start
+                emit_count += 1
+
         except InterruptRaised as ir:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(
