@@ -55,6 +55,13 @@ agents:
     type: "agent"
     definition_ref: "v2.deep.corpus_investigator"
 
+  - id: "PPT Filler V2"
+    name: "PPT Filler"
+    type: "agent"
+    definition_ref: "v2.react.ppt_filler"
+    class_path: "agentic_backend.agents.v2.production.ppt_filler_v2.PptFillerReActV2Definition"
+    enabled: true
+
   - id: "BankTransferDemo"
     name: "BankTransferDemo"
     type: "agent"
