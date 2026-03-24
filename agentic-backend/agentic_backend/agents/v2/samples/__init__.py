@@ -6,7 +6,7 @@ Purpose:
 - stay out of the default product catalog unless explicitly adopted
 """
 
-from .slide_maker import SlideMakerV2Definition
+from .slide_maker import Definition
 from .tutorial_tools import TutorialToolsSampleDefinition
 
-__all__ = ["SlideMakerV2Definition", "TutorialToolsSampleDefinition"]
+__all__ = ["Definition", "TutorialToolsSampleDefinition"]

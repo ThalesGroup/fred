@@ -14,18 +14,6 @@ agents:
       attach_files: true
       include_corpus_in_search: true
 
-  - id: "Rico Senior"
-    name: "Rico Senior"
-    type: "agent"
-    class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
-    enabled: true
-    chat_options:
-      search_policy_selection: true
-      libraries_selection: true
-      search_rag_scoping: true
-      deep_search_delegate: false
-      attach_files: true
-
   - id: "Archie"
     name: "Archie"
     type: "agent"
@@ -41,7 +29,19 @@ agents:
   - id: "Tessa"
     name: "Tessa"
     type: "agent"
-    class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+    class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
+    enabled: true
+
+  - id: "SlideMaker"
+    name: "SlideMaker"
+    type: "agent"
+    class_path: "agentic_backend.agents.v1.samples.slide_maker.agent.Definition"
+    enabled: true
+
+  - id: "SlideMakerV2"
+    name: "SlideMakerV2"
+    type: "agent"
+    class_path: "agentic_backend.agents.v2.samples.slide_maker.agent.Definition"
     enabled: true
 
   - id: "SQL Agent"

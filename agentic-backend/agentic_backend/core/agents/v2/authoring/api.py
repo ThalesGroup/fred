@@ -118,6 +118,50 @@ class ResourceNotFoundError(KeyError):
     """
 
 
+class ResourceFetchError(RuntimeError):
+    """
+    Raised by ``ctx.read_resource()`` when a non-404 storage error occurs
+    (network failure, permission denied, corrupted object, etc.).
+
+    Why this exists:
+    - distinguishes transient / infrastructure errors from a plain missing key
+    - lets authored tools decide whether to retry, fall back, or propagate
+
+    How to use it:
+    - catch it alongside ``ResourceNotFoundError`` when you want to handle
+      infrastructure failures separately from missing resources
+
+    Example::
+
+        ```python
+        except ResourceFetchError as exc:
+            return ctx.error(f"Storage error while reading template: {exc}")
+        ```
+    """
+
+
+class ArtifactPublicationError(RuntimeError):
+    """
+    Raised by ``ctx.publish_bytes()`` when the storage backend rejects the
+    upload (network failure, quota exceeded, permission denied, etc.).
+
+    Why this exists:
+    - gives authored tools a typed exception instead of a raw infrastructure
+      error leaking through the SDK boundary
+
+    How to use it:
+    - catch it when you want to surface a clear error message rather than an
+      opaque traceback
+
+    Example::
+
+        ```python
+        except ArtifactPublicationError as exc:
+            return ctx.error(f"Could not save the generated file: {exc}")
+        ```
+    """
+
+
 class ToolContext:
     """
     Small runtime helper injected as the first argument of every authored tool.
@@ -858,7 +902,9 @@ class ReActAgent(ReActAgentDefinition):
 
 
 __all__ = [
+    "ArtifactPublicationError",
     "ReActAgent",
+    "ResourceFetchError",
     "ResourceNotFoundError",
     "ToolContext",
     "ToolOutput",

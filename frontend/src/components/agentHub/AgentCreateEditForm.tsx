@@ -128,7 +128,7 @@ export function AgentCreateEditForm({
     fetchClassPathTuning({ classPath: classPath ?? undefined })
       .unwrap()
       .then((tuning) => {
-        setFields((prev) => mergeFields(tuning.fields ?? [], prev));
+        setFields((prev) => (isCreateMode ? tuning.fields ?? [] : mergeFields(tuning.fields ?? [], prev)));
         setTopLevelTuning((prev) => ({
           role: prev.role || tuning.role || "",
           description: prev.description || tuning.description || "",

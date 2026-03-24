@@ -38,6 +38,7 @@ Example:
 from __future__ import annotations
 
 import inspect
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
@@ -67,6 +68,8 @@ from .legacy_runtime_bridge import _AuthorRuntime
 
 if TYPE_CHECKING:
     from .api import ReActAgent, ToolContext
+
+logger = logging.getLogger(__name__)
 
 _AUTHOR_TOOL_ATTR = "__fred_v2_author_tool__"
 
@@ -211,15 +214,33 @@ def _bind_tool_handler(
         payload_model = authored_tool.args_schema.model_validate(request.payload)
         payload = payload_model.model_dump()
         context = ToolContext(runtime)
-        value = authored_tool.handler(context, **payload)
-        if inspect.isawaitable(value):
-            value = await cast(Awaitable[object], value)
-        return _coerce_tool_return(
-            tool_ref=request.tool_ref,
-            value=value,
-            context=context,
-            success_message=authored_tool.success_message,
-        )
+        try:
+            value = authored_tool.handler(context, **payload)
+            if inspect.isawaitable(value):
+                value = await cast(Awaitable[object], value)
+            return _coerce_tool_return(
+                tool_ref=request.tool_ref,
+                value=value,
+                context=context,
+                success_message=authored_tool.success_message,
+            )
+        except Exception as exc:
+            # Last-resort safety net: any unhandled exception from authored
+            # tool code (or from SDK helpers like ctx.publish_bytes,
+            # ctx.read_resource, ctx.extract_structured) is caught here and
+            # returned as a structured error result instead of crashing the
+            # ReAct loop with a raw traceback.
+            logger.exception(
+                "Authored tool '%s' raised an unhandled exception", request.tool_ref
+            )
+            return ToolInvocationResult(
+                tool_ref=request.tool_ref,
+                blocks=_build_blocks(
+                    text=f"Tool '{request.tool_ref}' failed: {exc}",
+                    data=None,
+                ),
+                is_error=True,
+            )
 
     return handle
 

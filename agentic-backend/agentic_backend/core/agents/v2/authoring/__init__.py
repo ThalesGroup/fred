@@ -43,7 +43,9 @@ Example:
 """
 
 from .api import (
+    ArtifactPublicationError,
     ReActAgent,
+    ResourceFetchError,
     ResourceNotFoundError,
     ToolContext,
     ToolOutput,
@@ -63,6 +65,7 @@ from .knowledge_flow_mcp import (
 )
 
 __all__ = [
+    "ArtifactPublicationError",
     "MCPServerRef",
     "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
     "MCP_SERVER_KNOWLEDGE_FLOW_FS",
@@ -70,6 +73,7 @@ __all__ = [
     "MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
     "ReActAgent",
+    "ResourceFetchError",
     "ResourceNotFoundError",
     "ToolContext",
     "ToolOutput",

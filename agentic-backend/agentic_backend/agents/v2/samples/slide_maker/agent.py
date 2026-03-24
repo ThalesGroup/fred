@@ -37,6 +37,7 @@ Setup:
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,19 +53,16 @@ from agentic_backend.core.agents.v2.authoring import (
     ToolContext,
     ToolOutput,
     UIHints,
+    prompt_md,
     tool,
     ui_field,
 )
 
-SYSTEM_PROMPT = """
-You are a slide-generation assistant.
-When the user asks for a slide on any topic, call the generate_slide tool with that topic.
-Keep your responses short.
-""".strip()
+logger = logging.getLogger(__name__)
 
 _SLIDE_CONTENT_PROMPT = (
     "You are a concise summarization expert. "
-    "Given a topic, produce a short slide title and a 5-sentence body paragraph "
+    "Given a request or topic, produce a short slide title and a 5-sentence body paragraph "
     "suitable for a single presentation slide. No bullet points."
 )
 
@@ -79,25 +77,31 @@ class SlideContent(BaseModel):
 @tool(
     tool_ref="sample.slide_maker.generate",
     description=(
-        "Generate a PowerPoint slide on a topic and return a download link. "
+        "Generate a PowerPoint slide based on user instructions and return a download link. "
         "Reads the configured .pptx template, fills it with LLM-generated content, "
         "and publishes the result."
     ),
     success_message="Slide generated.",
 )
-async def generate_slide(ctx: ToolContext, topic: str) -> ToolOutput:
+async def generate_slide(ctx: ToolContext, instructions: str) -> ToolOutput:
+    logger.info(f"generate_slide called with instructions: {instructions!r}")
+
     # 1. Generate structured slide content with the agent LLM
+    logger.info("Extracting structured content...")
     slide_content = await ctx.extract_structured(
         SlideContent,
         prompt=_SLIDE_CONTENT_PROMPT,
-        text=f"Topic: {topic}",
+        text=f"Request: {instructions}",
     )
+    logger.info(f"Content extracted. Title: {slide_content.title!r}")
 
     # 2. Read the .pptx template from the agent config workspace
     template_key = ctx.config("ppt_template_key", default="simple_template.pptx")
+    logger.info(f"Reading template resource: {template_key}")
     try:
         resource = await ctx.read_resource(template_key)
     except ResourceNotFoundError:
+        logger.error(f"Template '{template_key}' not found.")
         return ctx.error(
             f"Template '{template_key}' not found. "
             "Upload it to the agent config workspace first."
@@ -128,6 +132,7 @@ async def generate_slide(ctx: ToolContext, topic: str) -> ToolOutput:
 
         # 4. Publish and return the download link
         timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+        logger.info("Publishing generated slide artifact...")
         artifact = await ctx.publish_bytes(
             file_name=f"slide_{timestamp}.pptx",
             content=output_path.read_bytes(),
@@ -137,6 +142,7 @@ async def generate_slide(ctx: ToolContext, topic: str) -> ToolOutput:
             ),
             title=f"Slide: {slide_content.title}",
         )
+        logger.info(f"Slide published. URL: {artifact}")
         return ctx.link(artifact, text=f"Slide '{slide_content.title}' generated.")
 
     finally:
@@ -146,7 +152,7 @@ async def generate_slide(ctx: ToolContext, topic: str) -> ToolOutput:
             output_path.unlink(missing_ok=True)
 
 
-class SlideMakerV2Definition(ReActAgent):
+class Definition(ReActAgent):
     """
     Sample v2 slide-maker agent.
 
@@ -165,14 +171,17 @@ class SlideMakerV2Definition(ReActAgent):
     tools = (generate_slide,)
 
     system_prompt_template: str = ui_field(
-        SYSTEM_PROMPT,
+        prompt_md(
+            package="agentic_backend.agents.v2.samples.slide_maker",
+            file_name="slide_maker_system_prompt.md",
+        ),
         title="System Prompt",
         description="Instructions for the slide generation assistant.",
         ui_type="prompt",
         required=True,
         ui=UIHints(group="Prompts", multiline=True, markdown=True),
-        min_length=1,
     )
+
     ppt_template_key: str = ui_field(
         "simple_template.pptx",
         title="PowerPoint Template Key",

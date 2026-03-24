@@ -75,7 +75,7 @@ class SlideMakerState(TypedDict, total=False):
 # --- Core Agent ---
 # ------------------
 @expose_runtime_source("agent.SlideMaker")
-class SlideMaker(AgentFlow):
+class Definition(AgentFlow):
     """
     Simplified agent to generate a PowerPoint slide with LLM content
     and return a structured download link.
