@@ -57,6 +57,8 @@ from agentic_backend.core.agents.v2.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
+from langgraph.checkpoint.memory import MemorySaver
+
 from agentic_backend.integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     FredArtifactPublisher,
@@ -130,7 +132,7 @@ def build_v2_session_agent(
         artifact_publisher=artifact_publisher,
         resource_reader=resource_reader,
         kpi=get_kpi_writer(),
-        checkpointer=checkpointer,
+        checkpointer=checkpointer if checkpointer is not None else MemorySaver(),
     )
     runtime = _build_runtime(definition=definition, services=services)
     runtime.bind(binding)
