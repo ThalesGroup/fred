@@ -96,7 +96,6 @@ from agentic_backend.core.session.session_cache import CachedSession, SessionCac
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.postgres_session_store import PostgresSessionStore
 
 logger = logging.getLogger(__name__)
 PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
@@ -726,7 +725,7 @@ class SessionOrchestrator:
                 async with orm_session.begin():
                     t1 = time.perf_counter()
                     await self.history_store.save(session.id, all_msgs, user.uid, session=orm_session)
-                    await cast(PostgresSessionStore, self.session_store).save(session, db_session=orm_session)
+                    await self.session_store.save(session, db_session=orm_session)
                     t2 = time.perf_counter()
 
             pool_wait_ms = (t1 - t0) * 1000.0

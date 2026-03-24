@@ -20,8 +20,8 @@ class BaseSessionStore(ABC):
     """Application-level session store contract."""
 
     @abstractmethod
-    async def save(self, session: Any) -> None:
-        """Save one session."""
+    async def save(self, session: Any, db_session: Any = None) -> None:
+        """Save one session, optionally reusing an existing DB session/transaction."""
 
     @abstractmethod
     async def get(self, session_id: str) -> Any | None:
