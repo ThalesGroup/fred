@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -85,6 +85,9 @@ class ToolOutput:
     is_error: bool = False
 
 
+_MISSING: Any = object()
+
+
 class ToolContext:
     """
     Small runtime helper injected as the first argument of every authored tool.
@@ -97,15 +100,16 @@ class ToolContext:
     - accept `context: ToolContext` as the first parameter of a `@tool(...)`
       function
     - then call only the helpers you need:
-      `invoke_tool(...)`, `extract_structured(...)`, `read_resource(...)`,
-      `publish_*`, `text(...)`, `json(...)`, `error(...)`
+      `config(...)`, `invoke_tool(...)`, `extract_structured(...)`,
+      `read_resource(...)`, `publish_*`, `text(...)`, `json(...)`, `error(...)`
     - ignore advanced details such as `binding`
     - use `context.helpers` only when you intentionally want optional Fred
       shortcuts
 
     Example:
+    - `template_key = ctx.config("ppt_template_key")`
     - `result = await context.invoke_tool("knowledge.search", query="policy", top_k=5)`
-    - `bundle = await context.helpers.search_corpus_many((("policy", 5),))`
+    - `artifact = await context.publish_text(file_name="report.md", content="# Report")`
     - `return context.text("Done")`
     """
 
@@ -252,6 +256,37 @@ class ToolContext:
                 target_user_id=target_user_id,
             )
         )
+
+    def config(self, key: str, *, default: Any = _MISSING) -> Any:
+        """
+        Read one field value from the agent's current configuration.
+
+        Why this exists:
+        - use this when your tool needs a value the admin or author configured,
+          such as a template key, output format, or threshold
+
+        How to use it:
+        - pass the field name exactly as declared on the agent definition class
+        - use dotted paths to reach nested fields
+        - pass `default=` to avoid a `KeyError` when the field may be absent
+
+        Example:
+        - `template_key = ctx.config("ppt_template_key")`
+        - `threshold = ctx.config("confidence_threshold", default=0.8)`
+        - `attach = ctx.config("chat_options.attach_files", default=False)`
+        """
+        obj: Any = self._runtime.definition
+        for part in key.split("."):
+            try:
+                obj = getattr(obj, part)
+            except AttributeError:
+                if default is not _MISSING:
+                    return default
+                raise KeyError(
+                    f"Agent configuration has no field '{key}'. "
+                    f"Declare it on the agent definition class."
+                ) from None
+        return obj
 
     async def publish_bytes(
         self,

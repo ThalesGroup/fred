@@ -41,7 +41,11 @@ from agentic_backend.core.agents.v2 import (
     ToolRefRequirement,
 )
 
-from .profile_registry import get_react_profile, list_react_profiles, profile_options_summary
+from .profile_registry import (
+    get_react_profile,
+    list_react_profiles,
+    profile_options_summary,
+)
 
 
 def _default_react_profile_id() -> str:
