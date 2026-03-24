@@ -1,0 +1,20 @@
+@use "src/index.scss" as *;
+
+.teamAgentContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  height: 100%;
+}
+
+.title {
+  display: flex;
+  width: 100%;
+  gap: var(--spacing-m);
+  align-items: center;
+  justify-content: center;
+  color: var(--on-surface);
+  padding: var(--spacing-m);
+
+  @include typography("title", "large");
+}
