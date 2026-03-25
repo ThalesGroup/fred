@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import nullcontext
@@ -65,6 +66,8 @@ from ..contracts.runtime import (
 )
 from ..model_routing.provider import RoutedChatModelFactory
 from ..runtime_support.checkpoints import AsyncCheckpointReader, AsyncCheckpointWriter
+
+logger = logging.getLogger(__name__)
 
 
 class FrozenModel(BaseModel):
@@ -804,7 +807,38 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         )
         checkpoint_key = self._checkpoint_key(config)
         steps = 0
+        try:
+            return await self._execute_loop(
+                state=state,
+                node_id=node_id,
+                resume_payload=resume_payload,
+                checkpoint_key=checkpoint_key,
+                steps=steps,
+                config=config,
+                emit_event=emit_event,
+            )
+        except Exception as exc:
+            logger.exception(
+                "[V2][GRAPH] Unhandled exception in graph agent=%s",
+                self._definition.agent_id,
+            )
+            error_content = f"An error occurred: {exc}"
+            if emit_event is not None:
+                emit_event(FinalRuntimeEvent(sequence=0, content=error_content))
+                return GraphExecutionOutput(content=error_content)
+            raise
 
+    async def _execute_loop(
+        self,
+        *,
+        state: BaseModel,
+        node_id: str | None,
+        resume_payload: object,
+        checkpoint_key: str,
+        steps: int,
+        config: ExecutionConfig,
+        emit_event: Callable[[RuntimeEvent], None] | None,
+    ) -> BaseModel:
         while node_id is not None:
             if steps >= config.max_steps:
                 raise RuntimeError(

@@ -327,6 +327,33 @@ def _apply_profile_to_definition(
     *,
     field_defaults: dict[str, Any],
 ) -> DefinitionT:
+    """
+    Apply a ReAct profile's defaults to a definition instance.
+
+    Why this exists:
+    - Generic agent families (e.g. `BasicReActDefinition`) get both their
+      tools and system prompt from a profile; this function merges those
+      defaults in.
+    - Authored `ReActAgent` subclasses (those with `tools = (...)` and a
+      class-level `system_prompt_template`) declare their own tools and
+      prompts at definition time.  The profile must not overwrite them.
+
+    How to distinguish authored vs generic:
+    - `toolset_key` is set by `ReActAgent.__pydantic_init_subclass__` when
+      `tools = (...)` is non-empty; it is empty-string for all generic families.
+    - `declared_tool_refs`: use the class-defined refs when non-empty; fall back
+      to the profile refs only for generic families.
+    - `system_prompt_template`: preserved as-is for authored agents
+      (`has_authored_tools=True`); replaced by the profile prompt for generic
+      families where profile-switching must work correctly.
+
+    How to use:
+    - call from `build_definition_from_settings` after loading base defaults
+    - do not call directly for new code; prefer `build_definition_from_settings`
+
+    Example:
+    - `profiled = _apply_profile_to_definition(definition, field_defaults={})`
+    """
     profile_id = field_defaults.get("react_profile_id")
     if not isinstance(profile_id, str) or not profile_id.strip():
         profile = _selected_react_profile(definition)
@@ -343,28 +370,45 @@ def _apply_profile_to_definition(
                 if profile is None:
                     return definition
 
-    # Authored ReActAgent subclasses set declared_tool_refs from their `tools = (...)`
-    # class attribute. A profile must not erase those authored tool refs, because
-    # profiles only carry tool refs for generic families (e.g. BasicReActDefinition)
-    # that have no class-level tools. If the definition already declares tool refs,
-    # keep them; otherwise inherit from the profile.
+    # Authored ReActAgent subclasses own their tool refs AND their system prompt via
+    # class-level declarations (`tools = (...)` and `system_prompt_template = ui_field(...)`).
+    # Profiles are designed for generic families like BasicReActDefinition where both come
+    # from the profile. We distinguish authored agents by the presence of a non-empty
+    # `toolset_key` (set automatically by ReActAgent.__pydantic_init_subclass__).
+    #
+    # - declared_tool_refs: use the class-defined refs if non-empty, else fall back to profile.
+    # - system_prompt_template: preserve the class-defined prompt for authored agents;
+    #   for generic families (no toolset_key), always use the profile prompt because
+    #   their system_prompt_template is set from the fallback profile and profile switching
+    #   must work correctly.
+    has_authored_tools = bool(getattr(definition, "toolset_key", "").strip())
     existing_tool_refs = getattr(definition, "declared_tool_refs", ())
-    effective_tool_refs = existing_tool_refs if existing_tool_refs else profile.declared_tool_refs
+    effective_tool_refs = (
+        existing_tool_refs if existing_tool_refs else profile.declared_tool_refs
+    )
+    existing_system_prompt = getattr(definition, "system_prompt_template", "")
+    effective_system_prompt = (
+        existing_system_prompt
+        if (has_authored_tools and existing_system_prompt)
+        else profile.system_prompt_template
+    )
     logger.debug(
-        "[V2][PROFILE] applying profile=%s to class=%s profile_tool_refs=%r "
-        "existing_tool_refs=%r effective_tool_refs=%r",
+        "[V2][PROFILE] applying profile=%s to class=%s has_authored_tools=%s "
+        "profile_tool_refs=%r effective_tool_refs=%r "
+        "using_authored_prompt=%s",
         profile.profile_id,
         definition.__class__.__name__,
+        has_authored_tools,
         [r.tool_ref for r in profile.declared_tool_refs],
-        [r.tool_ref for r in existing_tool_refs],
         [r.tool_ref for r in effective_tool_refs],
+        has_authored_tools and bool(existing_system_prompt),
     )
     updates: dict[str, Any] = {
         "react_profile_id": profile.profile_id,
         "role": profile.role,
         "description": profile.agent_description,
         "tags": profile.tags,
-        "system_prompt_template": profile.system_prompt_template,
+        "system_prompt_template": effective_system_prompt,
         "enable_tool_approval": profile.enable_tool_approval,
         "approval_required_tools": profile.approval_required_tools,
         "guardrails": profile.guardrails,

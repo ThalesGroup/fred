@@ -36,8 +36,6 @@ import logging
 from collections.abc import AsyncIterator, Sequence
 from typing import cast
 
-logger = logging.getLogger(__name__)
-
 from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -146,6 +144,8 @@ from .react_tool_loop import build_tool_loop_compiled_react_agent
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
 from .react_tool_utils import sanitize_tool_name as _sanitize_tool_name
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ReActInput",
@@ -265,6 +265,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         last_model_name: str | None = None
         last_token_usage: dict[str, int] | None = None
         last_finish_reason: str | None = None
+        # When any tool returns is_error=True, the error is surfaced directly as
+        # the final response.  The LLM is NOT trusted to relay it: its subsequent
+        # turn is consumed but discarded, and its streaming deltas are suppressed.
+        last_tool_error: str | None = None
+        suppress_assistant_deltas: bool = False
         try:
             async for raw_event in self._compiled_agent.astream(
                 _graph_input(input_model, config),
@@ -284,7 +289,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     if finish_reason is not None:
                         last_finish_reason = finish_reason
                     delta = _assistant_delta_from_stream_event(update)
-                    if delta is not None:
+                    if delta is not None and not suppress_assistant_deltas:
                         yield AssistantDeltaRuntimeEvent(
                             sequence=sequence,
                             delta=delta,
@@ -313,14 +318,24 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         collected_ui_parts = _merge_ui_parts(
                             collected_ui_parts, ui_parts
                         )
+                        is_error = artifact.is_error if artifact is not None else False
+                        if is_error:
+                            # Strip the "Tool error:\n" prefix added for the LLM's
+                            # benefit — the user-facing message should be clean.
+                            raw = _stringify_content(message.content)
+                            last_tool_error = raw.removeprefix("Tool error:\n")
+                            suppress_assistant_deltas = True
+                            logger.debug(
+                                "[V2][REACT] tool error intercepted tool=%s — "
+                                "suppressing LLM turn, surfacing error directly",
+                                message.name,
+                            )
                         yield ToolResultRuntimeEvent(
                             sequence=sequence,
                             call_id=message.tool_call_id,
                             content=_stringify_content(message.content),
                             tool_name=message.name,
-                            is_error=artifact.is_error
-                            if artifact is not None
-                            else False,
+                            is_error=is_error,
                             sources=sources,
                             ui_parts=ui_parts,
                         )
@@ -355,10 +370,15 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                             sanitize_tool_name=_sanitize_tool_name,
                         )
 
-            if last_assistant_message is not None:
+            if last_tool_error is not None or last_assistant_message is not None:
+                final_content = (
+                    last_tool_error
+                    if last_tool_error is not None
+                    else last_assistant_message.content  # type: ignore[union-attr]
+                )
                 yield FinalRuntimeEvent(
                     sequence=sequence,
-                    content=last_assistant_message.content,
+                    content=final_content,
                     sources=collected_sources,
                     ui_parts=collected_ui_parts,
                     model_name=last_model_name,
@@ -456,7 +476,9 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         logger.debug(
             "[V2][EXECUTOR] system_prompt_preview=%r",
-            (system_prompt[:200] + "...") if len(system_prompt) > 200 else system_prompt,
+            (system_prompt[:200] + "...")
+            if len(system_prompt) > 200
+            else system_prompt,
         )
         system_prompt = (
             f"{system_prompt}"
