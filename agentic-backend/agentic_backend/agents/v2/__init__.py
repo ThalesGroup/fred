@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
+    from .candidate.dva_risk_validator_assistant_v2_1 import (
+        DVARiskValidatorGraph,
+        DVARiskValidatorQA,
+    )
     from .demos.artifact_report import ArtifactReportDemoV2Definition
 
     # from .demos.postal_tracking import Definition as PostalTrackingDefinition
@@ -23,6 +27,8 @@ __all__ = [
     "ArtifactReportDemoV2Definition",
     "BasicDeepAgentDefinition",
     "CorpusInvestigatorDeepV2Definition",
+    "DVARiskValidatorGraph",
+    "DVARiskValidatorQA",
     "BasicReActDefinition",
 ]
 
@@ -45,6 +51,16 @@ def __getattr__(name: str) -> object:
         from .demos.artifact_report import ArtifactReportDemoV2Definition
 
         return ArtifactReportDemoV2Definition
+    if name == "DVARiskValidatorGraph":
+        from .candidate.dva_risk_validator_assistant_v2_1 import (
+            DVARiskValidatorGraph,
+        )
+
+        return DVARiskValidatorGraph
+    if name == "DVARiskValidatorQA":
+        from .candidate.dva_risk_validator_assistant_v2_1 import DVARiskValidatorQA
+
+        return DVARiskValidatorQA
     if name == "BasicDeepAgentDefinition":
         from .production.basic_deep import BasicDeepAgentDefinition
 
