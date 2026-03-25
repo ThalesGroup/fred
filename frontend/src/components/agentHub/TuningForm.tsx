@@ -11,8 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Box, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
+import { AgentOptionSelectionCard } from "./AgentOptionSelectionCard";
 import { PromptEditor } from "./PromptEditor";
 
 type Props = {
@@ -21,20 +23,23 @@ type Props = {
 };
 
 export function TuningForm({ fields, onChange }: Props) {
+  const { t } = useTranslation();
   // optional grouping by ui.group
-  const groups = groupBy(fields, (f) => f.ui?.group || "General");
+  const filedsToShow = fields.filter((f) => !f.ui?.hide);
+  const groups = groupBy(filedsToShow, (f) => f.ui?.group || "General");
 
   return (
     <Stack spacing={2}>
       {Object.entries(groups).map(([groupName, groupFields]) => (
         <Box key={groupName} sx={{ mt: 0.5 }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            {groupName}
+            {t(groupName)}
           </Typography>
           <Stack spacing={1.5}>
             {groupFields.map((f) => {
               const idx = fields.indexOf(f);
-              const label = f.title || f.key;
+              const label = t(f.title || f.key);
+              const description = f.description ? t(f.description) : undefined;
               const val = f.default as any;
 
               if (f.type === "prompt") {
@@ -51,41 +56,19 @@ export function TuningForm({ fields, onChange }: Props) {
                     defaultValue={f.default as string}
                     onChange={(next) => onChange(idx, next)}
                     tokens={tokens}
+                    required={f.required}
                   />
                 );
               }
 
               if (f.type === "boolean") {
                 return (
-                  <Stack
-                    key={f.key}
-                    direction="row"
-                    alignItems="center"
-                    spacing={1}
-                    sx={{
-                      px: 1,
-                      py: 0.5,
-                      borderRadius: 1,
-                      border: (theme) => `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <Switch
-                      size="small"
-                      checked={!!val}
-                      onChange={(e) => onChange(idx, e.target.checked)}
-                      inputProps={{ "aria-label": label }}
-                    />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {label}
-                      </Typography>
-                      {f.description && (
-                        <Typography variant="caption" color="text.secondary">
-                          {f.description}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Stack>
+                  <AgentOptionSelectionCard
+                    name={label}
+                    description={description}
+                    selected={!!val}
+                    onSelectedChange={(next) => onChange(idx, next)}
+                  />
                 );
               }
 
@@ -99,6 +82,7 @@ export function TuningForm({ fields, onChange }: Props) {
                     label={label}
                     value={val ?? ""}
                     onChange={(e) => onChange(idx, e.target.value)}
+                    required={f.required}
                   >
                     {f.enum!.map((opt) => (
                       <MenuItem key={opt} value={opt}>
@@ -121,6 +105,7 @@ export function TuningForm({ fields, onChange }: Props) {
                   multiline={!!f.ui?.multiline}
                   minRows={f.ui?.multiline ? Math.min(f.ui?.max_lines ?? 6, 10) : undefined}
                   placeholder={f.ui?.placeholder || ""}
+                  required={f.required}
                 />
               );
             })}

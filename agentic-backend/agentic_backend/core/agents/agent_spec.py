@@ -44,6 +44,7 @@ class UIHints(BaseModel):
     markdown: bool = False
     textarea: bool = False
     group: Optional[str] = None  # e.g., "Prompts", "MCP", "Advanced"
+    hide: bool = False  # if true, the field is not shown in the UI but can still be set via API or defaults
 
 
 class FieldSpec(BaseModel):
