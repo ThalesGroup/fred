@@ -1,8 +1,7 @@
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
-import ConversationButton from "@shared/atoms/ConversationButton/ConversationButton.tsx";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -15,7 +14,6 @@ import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPag
 export default function TeamContentNavbar() {
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const { teamId } = useParams<{ teamId: string }>();
   const { pathname } = useLocation();
 
@@ -64,10 +62,6 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  const newChatHandler = () => {
-    navigate(`/new-chat`);
-  };
-
   const isUserSpace = pathname.startsWith(`/team/user`);
 
   const bannerStyle = {
@@ -81,7 +75,9 @@ export default function TeamContentNavbar() {
       <div className={styles["team-content-navbar-container"]}>
         <div className={styles["banner-container"]} style={bannerStyle}>
           <div className={styles["team-name-container"]}>
-            <span className={styles["team-name"]}>{teamId == "user" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}</span>
+            <span className={styles["team-name"]}>
+              {teamId == "user" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+            </span>
             {canOpenTeamSettings && (
               <span className={styles["user-settings-button-container"]}>
                 <IconButton
@@ -96,11 +92,6 @@ export default function TeamContentNavbar() {
               </span>
             )}
           </div>
-          <span className={styles["conversation-button-container"]}>
-            <ConversationButton icon={{ category: "outlined", type: "Add" }} onClick={newChatHandler}>
-              {t("rework.sidebar.newChat")}
-            </ConversationButton>
-          </span>
         </div>
         <div className={styles["navigation-container"]}>
           <NavigationMenu items={isUserSpace ? userNavigationItems : teamsNavigationItems} />

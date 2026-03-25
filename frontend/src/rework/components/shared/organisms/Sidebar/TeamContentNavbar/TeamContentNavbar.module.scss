@@ -10,34 +10,23 @@
 }
 
 .banner-container {
-  background:
-    linear-gradient(to bottom, transparent 0%, var(--surface-container-low) 100%),
-    var(--banner-img) center;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 0 0 var(--radius-s) var(--radius-s);
+  background: var(--banner-img) center;
   background-size: cover;
+  padding: 0 var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
+  height: 88px;
 }
 
 .team-name-container {
   display: flex;
   justify-content: space-between;
   align-items: end;
-  gap: 0.5rem;
-  height: 56px;
-  @include typography("title", "medium");
-  padding: 0 var(--spacing-2xs) 0 var(--spacing-s);
+  width: 100%;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 1);
-}
 
-.team-name {
-  margin-bottom: var(--spacing-xs);
-}
-
-.user-settings-button-container {
-  margin-bottom: var(--spacing-2xs);
-}
-
-.conversation-button-container {
-  display: flex;
-  padding: 0 var(--spacing-xs);
+  @include typography("title", "medium");
 }
 
 .navigation-container {

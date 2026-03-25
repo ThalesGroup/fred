@@ -26,7 +26,10 @@ export type MaterialIconType =
   | "search"
   | "more_vert"
   | "more_horiz"
-  | "storefront";
+  | "storefront"
+  | "edit"
+  | "visibility"
+  | "reviews";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;
