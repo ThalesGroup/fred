@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Main PPTX Markdown processor.
+
+This processor orchestrates PPTX-specific helper modules for native slide extraction,
+formatting, speaker notes, and deck-level cleanup. The split keeps the native
+extraction reusable for future multimodal PPTX processing.
+"""
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -19,6 +26,15 @@ from typing import Any
 from pptx import Presentation
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
+    detect_repeated_noise_texts,
+)
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
+    extract_native_slide_content,
+)
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import (
+    format_slide_markdown,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,33 +63,33 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
         return metadata
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
-        """Converts each slide's text content into Markdown."""
+        """Converts each slide's content into structured Markdown."""
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
 
         try:
             presentation = Presentation(str(file_path))
-            slide_texts = []
+            slide_markdowns = []
 
-            for slide in presentation.slides:
-                slide_md = []
-                for shape in slide.shapes:
-                    has_text_frame = bool(getattr(shape, "has_text_frame", False))
-                    text_frame = getattr(shape, "text_frame", None)
-                    if not has_text_frame or text_frame is None:
-                        continue
-                    text = str(getattr(text_frame, "text", "")).strip()
-                    if text:
-                        slide_md.append(text)
+            repeated_noise_texts = detect_repeated_noise_texts(presentation.slides)
+
+            for slide_number, slide in enumerate(presentation.slides, start=1):
+                native_content = extract_native_slide_content(
+                    slide,
+                    slide_number,
+                    repeated_noise_texts=repeated_noise_texts,
+                )
+                slide_md = format_slide_markdown(native_content)
                 if slide_md:
-                    slide_texts.append("### Slide\n" + "\n\n".join(slide_md))
+                    slide_markdowns.append(slide_md)
 
-            content = "\n\n---\n\n".join(slide_texts) if slide_texts else "*No extractable text*"
+            content = "\n\n---\n\n".join(slide_markdowns) if slide_markdowns else "*No extractable text*"
             md_path.write_text(content, encoding="utf-8")
+
             return {
                 "doc_dir": str(output_dir),
                 "md_file": str(md_path),
-                "message": "PPTX slides converted to Markdown.",
+                "message": "PPTX slides converted to structured Markdown.",
             }
 
         except Exception as exc:

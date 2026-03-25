@@ -2,6 +2,8 @@ CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend control-pl
 TEST_DIRS := agentic-backend knowledge-flow-backend control-plane-backend
 DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backend frontend
 
+.DEFAULT_GOAL := help
+
 ##@ Code quality
 
 .PHONY: code-quality
@@ -116,13 +118,14 @@ HELM_VALUES    ?= deploy/local/k3d/values-local.yaml
 AGENTIC_IMAGE  ?= ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1
 KF_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:0.1
 FRONTEND_IMAGE ?= ghcr.io/thalesgroup/fred-agent/frontend:0.1
+CP_IMAGE       ?= ghcr.io/thalesgroup/fred-agent/control-plane-backend:0.1
 
 ##@ k3d Deployment
 
 .PHONY: k3d-build
 k3d-build: ## Build Docker images for all services (in parallel)
 	@echo "🔨 Building all images in parallel..."
-	@$(MAKE) -j3 build-agentic build-kf build-frontend
+	@$(MAKE) -j4 build-agentic build-kf build-frontend build-cp
 
 .PHONY: build-agentic
 build-agentic:
@@ -136,10 +139,14 @@ build-kf:
 build-frontend:
 	$(MAKE) -C frontend docker-build
 
+.PHONY: build-cp
+build-cp:
+	$(MAKE) -C control-plane-backend docker-build
+
 .PHONY: k3d-import
 k3d-import: ## Import Docker images into k3d cluster
 	@echo "📦 Importing images into k3d cluster '$(K3D_CLUSTER)'..."
-	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
+	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
 
 .PHONY: k3d-deploy
 k3d-deploy: k3d-build k3d-import k3d-deploy-only ## Build, import, and deploy all services to k3d
@@ -152,7 +159,7 @@ k3d-deploy-only: ## Deploy/upgrade Helm chart (images must already be in k3d)
 		--create-namespace \
 		-f $(HELM_VALUES)
 	@echo "🔄 Forcing pods to restart to pick up newest local images..."
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
 
 # --- Selective Turbo Deploy Targets ---
 
@@ -171,10 +178,15 @@ k3d-turbo-frontend: build-frontend ## Turbo: build, import and roll frontend ONL
 	k3d image import $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
 	kubectl rollout restart deployment -n $(K3D_NAMESPACE) frontend
 
+.PHONY: k3d-turbo-cp
+k3d-turbo-cp: build-cp ## Turbo: build, import and roll control-plane-backend ONLY
+	k3d image import $(CP_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) control-plane-backend
+
 .PHONY: k3d-turbo-all
 k3d-turbo-all: k3d-build ## Turbo: build and import all images, then roll all deployments
-	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) -c $(K3D_CLUSTER)
-	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend
+	k3d image import $(AGENTIC_IMAGE) $(KF_IMAGE) $(FRONTEND_IMAGE) $(CP_IMAGE) -c $(K3D_CLUSTER)
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
 
 .PHONY: k3d-undeploy
 k3d-undeploy: ## Uninstall the Helm release
