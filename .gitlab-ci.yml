@@ -236,7 +236,7 @@ sync-develop-prism:
         exit 1
       fi
       echo "✅ No conflicts detected (merge_status=${MERGE_STATUS})."
-    # Auto-merge the MR (TEMP: disabled for testing — only create the MR)
+    # Auto-merge the MR
     - |
       echo "Auto-merging MR !${MR_IID}..."
       MERGE_RESPONSE=$(curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
@@ -253,4 +253,3 @@ sync-develop-prism:
         echo "$MERGE_RESPONSE" | jq .
         exit 1
       fi
-    - echo "✅ MR !${MR_IID} created and ready for manual review (auto-merge disabled for testing)."
