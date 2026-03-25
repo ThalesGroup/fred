@@ -287,29 +287,6 @@ class ProcessingConfig(BaseModel):
             description="If true, keep annotated markdown tables intact (do not split by size).",
         )
 
-    class PdfPipelineConfig(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-
-        backend: Literal["dlparse_v4", "pypdfium2", "docling_parse"] = Field(
-            default="docling_parse",
-            description="PDF backend for Docling conversion.",
-        )
-        images_scale: float = Field(default=2.0, gt=0.0, description="Docling PDF image scaling factor.")
-        generate_picture_images: bool = Field(
-            default=False,
-            description=("Generate extracted picture image assets during PDF conversion. Independent from profile.process_images (image description)."),
-        )
-        generate_page_images: bool = Field(default=False, description="Generate full-page images for PDFs.")
-        generate_table_images: bool = Field(default=False, description="Generate table images for PDFs.")
-        do_table_structure: bool = Field(
-            default=False,
-            description="Enable table structure extraction in the standard Docling PDF pipeline.",
-        )
-        do_ocr: bool = Field(
-            default=False,
-            description="Enable OCR in the standard Docling PDF pipeline.",
-        )
-
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
@@ -339,10 +316,6 @@ class ProcessingConfig(BaseModel):
         input_activity_timeout: str = Field(
             default="1h",
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
-        )
-        pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
-            default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
-            description="PDF processing options for this profile.",
         )
         text_splitter: "ProcessingConfig.TextSplitterConfig" = Field(
             default_factory=lambda: ProcessingConfig.TextSplitterConfig(),
@@ -392,7 +365,7 @@ class ProcessingConfig(BaseModel):
     )
     profiles: ProfilesConfig = Field(
         default_factory=ProfilesConfig,
-        description="Named ingestion profiles for request-level pipeline/option selection.",
+        description="Named ingestion profiles for request-level flag selection.",
     )
 
     def normalize_profile(self, profile: IngestionProcessingProfile | str | None) -> IngestionProcessingProfile:

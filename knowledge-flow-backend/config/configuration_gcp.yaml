@@ -31,101 +31,12 @@ processing:
     fast:
       use_gpu: true
       generate_summary: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      input_activity_timeout: 1h
       process_images: false
-      pdf:
-        backend: pypdfium2
-        images_scale: 1.0
-        generate_picture_images: false
-        generate_page_images: false
-        generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
-      input_processors:
-        - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
-        - suffix: ".docx"
-          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-        - suffix: ".pptx"
-          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-        - suffix: ".csv"
-          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-        - suffix: ".txt"
-          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-        - suffix: ".md"
-          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".jsonl"
-          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-        - suffix: ".png"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".jpg"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".jpeg"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".gif"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".bmp"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".svg"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".webp"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".ico"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-    medium:
-      use_gpu: true
-      generate_summary: false
-      process_images: false
-      pdf:
-        backend: docling_parse
-        images_scale: 2.0
-        generate_picture_images: false
-        generate_page_images: true
-        generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
-      input_processors:
-        - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
-        - suffix: ".docx"
-          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
-        - suffix: ".pptx"
-          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
-        - suffix: ".csv"
-          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
-        - suffix: ".txt"
-          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
-        - suffix: ".md"
-          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".jsonl"
-          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
-        - suffix: ".png"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".jpg"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".jpeg"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".gif"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".bmp"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".svg"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".webp"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-        - suffix: ".ico"
-          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-    rich:
-      use_gpu: true
-      generate_summary: false
-      process_images: true
-      pdf:
-        backend: docling_parse
-        images_scale: 2.0
-        generate_picture_images: true
-        generate_page_images: true
-        generate_table_images: false
-        do_table_structure: true
-        do_ocr: true
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -157,7 +68,86 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-
+    medium:
+      use_gpu: true
+      generate_summary: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      input_activity_timeout: 1h
+      process_images: false
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    rich:
+      use_gpu: true
+      generate_summary: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      input_activity_timeout: 1h
+      process_images: false
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 security:
   m2m:
     enabled: false

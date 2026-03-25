@@ -15,8 +15,10 @@
 
 import logging
 import os
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Type
+from typing import Literal, Type
 
 import pypdf
 from docling.backend.abstract_backend import AbstractDocumentBackend
@@ -30,12 +32,82 @@ from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
 
 from knowledge_flow_backend.application_context import get_configuration
-from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
-from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
+from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfMarkdownProcessor
 
 logger = logging.getLogger(__name__)
+
+
+class PdfComplexity(str, Enum):
+    """Supported PDF families used by the document-aware routing logic."""
+
+    DIGITALLY_BORN_TEXT_PDF = "digitally_born_text_pdf"
+    SCANNED_PDF = "scanned_pdf"
+    SCIENTIFIC_PDF = "scientific_pdf"
+    TABLE_HEAVY = "table_heavy"
+    SLIDE_LIKE = "slide_like"
+    MULTICOLUMN = "multicolumn"
+
+
+@dataclass(frozen=True)
+class PdfComplexityStats:
+    """
+    Why:
+        Keep PDF routing decisions explicit and testable before the expensive
+        conversion step starts.
+
+    How:
+        Populate this structure from a lightweight PDF inspection pass, then feed
+        it into `PdfMarkdownProcessor._classify_pdf_kind()`.
+    """
+
+    page_count: int
+    total_text_chars: int
+    pages_without_text: int
+    pages_with_images: int
+
+    @property
+    def average_text_chars_per_page(self) -> float:
+        """
+        Why:
+            Expose a stable density signal for distinguishing simple digital PDFs
+            from scanned or layout-heavy documents.
+
+        How:
+            Read the computed average after constructing the stats instance.
+        """
+        if self.page_count <= 0:
+            return 0.0
+        return self.total_text_chars / self.page_count
+
+    @property
+    def textless_page_ratio(self) -> float:
+        """
+        Why:
+            Many scanned or image-heavy PDFs have little extractable text on a
+            large share of pages.
+
+        How:
+            Read the computed ratio after constructing the stats instance.
+        """
+        if self.page_count <= 0:
+            return 1.0
+        return self.pages_without_text / self.page_count
+
+    @property
+    def image_page_ratio(self) -> float:
+        """
+        Why:
+            Different document families show very different image densities, which
+            helps with early routing before full parsing.
+
+        How:
+            Read the computed ratio after constructing the stats instance.
+        """
+        if self.page_count <= 0:
+            return 0.0
+        return self.pages_with_images / self.page_count
 
 
 def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> str:
@@ -77,13 +149,108 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         super().__init__()
         self.image_describer = None
         self._warned_missing_vision_model = False
+        self._lite_processor = LitePdfMarkdownProcessor()
 
-    def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, bool, ProcessingConfig.PdfPipelineConfig]:
-        processing = get_configuration().processing
-        current_profile = get_current_processing_profile()
-        active_profile = processing.normalize_profile(current_profile)
-        profile_cfg = processing.get_profile_config(active_profile)
-        return active_profile, profile_cfg.process_images, profile_cfg.pdf.model_copy(deep=True)
+    def _collect_pdf_complexity_stats(self, file_path: Path) -> PdfComplexityStats:
+        """
+        Why:
+            Route PDFs to a lightweight or layout-aware pipeline based on the
+            actual document shape instead of a caller-selected profile name.
+
+        How:
+            Call with a local PDF path. The method performs a best-effort,
+            low-cost inspection with `pypdf` and returns the aggregated routing
+            signals used by the conversion pipeline.
+        """
+        with open(file_path, "rb") as f:
+            reader = pypdf.PdfReader(f)
+            page_count = len(reader.pages)
+            total_text_chars = 0
+            pages_without_text = 0
+            pages_with_images = 0
+
+            for page in reader.pages:
+                try:
+                    page_text = (page.extract_text() or "").strip()
+                except Exception:
+                    page_text = ""
+                total_text_chars += len(page_text)
+                if not page_text:
+                    pages_without_text += 1
+
+                try:
+                    page_images = list(page.images)
+                except Exception:
+                    page_images = []
+                if page_images:
+                    pages_with_images += 1
+
+        return PdfComplexityStats(
+            page_count=page_count,
+            total_text_chars=total_text_chars,
+            pages_without_text=pages_without_text,
+            pages_with_images=pages_with_images,
+        )
+
+    def _classify_pdf_kind(self, stats: PdfComplexityStats) -> PdfComplexity:
+        """
+        Why:
+            Use document-family labels that match the parser tradeoffs we care
+            about instead of a binary simple/complex split.
+
+        How:
+            Pass the stats from `_collect_pdf_complexity_stats()`. The returned
+            label is one of the PDF families used by the document-aware router.
+        """
+        if stats.page_count <= 0:
+            return PdfComplexity.SCANNED_PDF
+
+        if stats.textless_page_ratio >= 0.30 or stats.total_text_chars < max(400, stats.page_count * 120):
+            return PdfComplexity.SCANNED_PDF
+
+        if stats.image_page_ratio >= 0.60 and stats.average_text_chars_per_page < 700:
+            return PdfComplexity.SLIDE_LIKE
+
+        if stats.image_page_ratio >= 0.50 and stats.average_text_chars_per_page < 1400:
+            return PdfComplexity.TABLE_HEAVY
+
+        if stats.page_count >= 4 and stats.average_text_chars_per_page >= 2200:
+            return PdfComplexity.SCIENTIFIC_PDF
+
+        if stats.page_count >= 2 and 900 <= stats.average_text_chars_per_page < 2200:
+            return PdfComplexity.MULTICOLUMN
+
+        return PdfComplexity.DIGITALLY_BORN_TEXT_PDF
+
+    def _select_conversion_mode(self, document_kind: PdfComplexity) -> Literal["lite", "docling"]:
+        """
+        Why:
+            Keep the routing outcome explicit so the fast digital-text path and
+            the richer layout-aware path can evolve independently.
+
+        How:
+            Pass the result of `_classify_pdf_kind()`. The method returns the
+            implementation family to execute for this PDF.
+        """
+        if document_kind == PdfComplexity.DIGITALLY_BORN_TEXT_PDF:
+            return "lite"
+        return "docling"
+
+    def _resolve_complex_options(self) -> tuple[bool, str]:
+        """
+        Why:
+            Keep one explicit, deterministic configuration baseline for complex
+            PDFs while letting the active ingestion profile control image description.
+
+        How:
+            Call before Docling conversion. The return value contains whether
+            image descriptions are enabled and which Docling backend to use.
+        """
+        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+
+        profile = get_current_processing_profile()
+        profile_cfg = get_configuration().processing.get_profile_config(profile)
+        return profile_cfg.process_images, "docling_parse"
 
     def _resolve_image_describer(self, process_images: bool):
         if not process_images:
@@ -104,6 +271,104 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         except KeyError as exc:
             allowed = ", ".join(sorted(self._BACKEND_BY_NAME))
             raise InputConversionError(f"Unsupported PDF backend '{backend_name}'. Allowed values: {allowed}") from exc
+
+    def _convert_with_lite_pipeline(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Why:
+            Reuse the existing lightweight PDF converter for digitally-born PDFs
+            instead of duplicating its fast-path logic here.
+
+        How:
+            Call with the same arguments as `convert_file_to_markdown()`. The
+            method delegates to `LitePdfMarkdownProcessor` and returns its
+            standard output payload.
+        """
+        return self._lite_processor.convert_file_to_markdown(file_path, output_dir, document_uid)
+
+    def _convert_with_docling_pipeline(self, file_path: Path, output_dir: Path) -> None:
+        """
+        Why:
+            Centralize the layout-aware PDF conversion path used for complex or
+            scanned PDFs.
+
+        How:
+            Call with the source PDF path and a writable output directory. The
+            method writes `output.md` in place using Docling and post-processes
+            tables and image placeholders.
+        """
+        output_markdown_path = output_dir / "output.md"
+        process_images, backend_name = self._resolve_complex_options()
+        image_describer = self._resolve_image_describer(process_images)
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.images_scale = 2.0
+        pipeline_options.generate_picture_images = process_images
+        pipeline_options.generate_page_images = True
+        pipeline_options.generate_table_images = False
+        pipeline_options.do_table_structure = True
+        pipeline_options.do_ocr = True
+        pipeline_options.ocr_options = RapidOcrOptions()
+
+        artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+        if artifacts_dir:
+            artifacts_path = Path(artifacts_dir).expanduser()
+            pipeline_options.artifacts_path = artifacts_path
+            logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
+
+        backend_cls = self._resolve_pdf_backend(backend_name)
+        logger.info(
+            "[PROCESSOR][PDF] Using document-aware complex pipeline backend=%s process_images=%s",
+            backend_name,
+            process_images,
+        )
+        converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(
+                    pipeline_options=pipeline_options,
+                    backend=backend_cls,
+                )
+            }
+        )
+
+        result = converter.convert(file_path)
+        doc = result.document
+
+        pictures_desc = []
+        if not doc.pictures:
+            logger.info("[PROCESSOR][PDF] No pictures found in document.")
+        elif process_images:
+            for pic in doc.pictures:
+                if not pic.image or not pic.image.uri:
+                    pictures_desc.append("Image data not available.")
+                    continue
+                data_uri = str(pic.image.uri)
+                if "," not in data_uri:
+                    pictures_desc.append("Image data not available.")
+                    continue
+                base64 = data_uri.split(",", 1)[1]
+                if image_describer:
+                    try:
+                        description = image_describer.describe(base64)
+                    except Exception as e:
+                        logger.warning(f"Image description failed: {e}")
+                        description = "Image could not be described."
+                else:
+                    description = "Image description not available."
+                pictures_desc.append(description)
+
+        doc.save_as_markdown(output_markdown_path, image_mode=ImageRefMode.PLACEHOLDER, image_placeholder="%%ANNOTATION%%")
+
+        with open(output_markdown_path, "r", encoding="utf-8") as f:
+            md_content = f.read()
+
+        if doc.tables:
+            table_markdown = [table.export_to_markdown(doc=doc).strip() for table in doc.tables]
+            md_content = _annotate_markdown_tables(md_content, table_markdown)
+
+        for desc in pictures_desc:
+            md_content = md_content.replace("%%ANNOTATION%%", desc, 1)
+
+        with open(output_markdown_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""
@@ -128,13 +393,10 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 info = reader.metadata or {}
 
                 return {
-                    # Identity-level fields
                     "title": info.get("/Title") or None,
                     "author": info.get("/Author") or None,
                     "document_name": file_path.name,
-                    # File-level fields
                     "page_count": len(reader.pages),
-                    # Extras — preserved but not polluting core schema
                     "extras": {
                         "pdf.subject": info.get("/Subject") or None,
                         "pdf.producer": info.get("/Producer") or None,
@@ -149,7 +411,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         """
         Why:
             Convert an input PDF into the normalized Markdown artifact used by the
-            ingestion pipeline, including table and image annotations needed later.
+            ingestion pipeline while selecting the parsing strategy from the PDF
+            itself instead of caller-facing profile names.
 
         How:
             Call with the source PDF path, a writable output directory, and the
@@ -158,94 +421,25 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         """
         output_markdown_path = output_dir / "output.md"
         try:
-            active_profile, process_images, pdf_options = self._resolve_effective_options()
-            image_describer = self._resolve_image_describer(process_images)
             output_dir.mkdir(parents=True, exist_ok=True)
-            # Initialize the DocumentConverter with PDF format options
-            pipeline_options = PdfPipelineOptions()
-
-            pipeline_options.images_scale = pdf_options.images_scale
-            pipeline_options.generate_picture_images = pdf_options.generate_picture_images
-            pipeline_options.generate_page_images = pdf_options.generate_page_images
-            pipeline_options.generate_table_images = pdf_options.generate_table_images
-            pipeline_options.do_table_structure = pdf_options.do_table_structure
-            pipeline_options.do_ocr = pdf_options.do_ocr
-            if pdf_options.do_ocr:
-                pipeline_options.ocr_options = RapidOcrOptions()
-            artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
-            if artifacts_dir:
-                artifacts_path = Path(artifacts_dir).expanduser()
-                pipeline_options.artifacts_path = artifacts_path
-                logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
-            # pipeline_options.do_picture_classification = True
-            # pipeline_options.do_picture_description = True
-            backend_cls = self._resolve_pdf_backend(pdf_options.backend)
-            if not pdf_options.do_ocr and not pdf_options.do_table_structure:
-                logger.info("[PROCESSOR][PDF] OCR and Table AI are disabled. Activating High-Speed Programmatic mode.")
-                pipeline_options.do_formula_enrichment = False  # Pas de math IA
-                pipeline_options.do_code_enrichment = False  # Pas de code IA
-                pipeline_options.force_backend_text = True  # Utilise directement le flux PDF
-
+            stats = self._collect_pdf_complexity_stats(file_path)
+            document_kind = self._classify_pdf_kind(stats)
+            conversion_mode = self._select_conversion_mode(document_kind)
             logger.info(
-                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s",
-                active_profile.value,
-                pdf_options.backend,
-                process_images,
-            )
-            converter = DocumentConverter(
-                format_options={
-                    InputFormat.PDF: PdfFormatOption(
-                        pipeline_options=pipeline_options,
-                        backend=backend_cls,
-                    )
-                }
+                "[PROCESSOR][PDF] Document-aware routing kind=%s mode=%s pages=%s total_text_chars=%s textless_pages=%s image_pages=%s avg_text_per_page=%.1f",
+                document_kind.value,
+                conversion_mode,
+                stats.page_count,
+                stats.total_text_chars,
+                stats.pages_without_text,
+                stats.pages_with_images,
+                stats.average_text_chars_per_page,
             )
 
-            # Convert the PDF document to a Document object
-            result = converter.convert(file_path)
-            doc = result.document
+            if conversion_mode == "lite":
+                return self._convert_with_lite_pipeline(file_path, output_dir, document_uid)
 
-            # Extract the pictures descriptions from the document
-            pictures_desc = []
-            if not doc.pictures:
-                logger.info("[PROCESSOR][PDF] No pictures found in document.")
-            elif process_images:
-                for pic in doc.pictures:
-                    if not pic.image or not pic.image.uri:
-                        pictures_desc.append("Image data not available.")
-                        continue
-                    data_uri = str(pic.image.uri)
-                    if "," not in data_uri:
-                        pictures_desc.append("Image data not available.")
-                        continue
-                    base64 = data_uri.split(",", 1)[1]  # Extract base64 part from the data URI
-                    if image_describer:
-                        try:
-                            description = image_describer.describe(base64)
-                        except Exception as e:
-                            logger.warning(f"Image description failed: {e}")
-                            description = "Image could not be described."
-                    else:
-                        description = "Image description not available."
-                    pictures_desc.append(description)
-
-            # Generate the markdown file with placeholders for images
-            doc.save_as_markdown(output_markdown_path, image_mode=ImageRefMode.PLACEHOLDER, image_placeholder="%%ANNOTATION%%")
-
-            # Replace placeholders with picture descriptions in the markdown file
-            with open(output_markdown_path, "r", encoding="utf-8") as f:
-                md_content = f.read()
-
-            # Add comments to identify tables
-            if doc.tables:
-                table_markdown = [table.export_to_markdown(doc=doc).strip() for table in doc.tables]
-                md_content = _annotate_markdown_tables(md_content, table_markdown)
-
-            for desc in pictures_desc:
-                md_content = md_content.replace("%%ANNOTATION%%", desc, 1)
-
-            with open(output_markdown_path, "w", encoding="utf-8") as f:
-                f.write(md_content)
+            self._convert_with_docling_pipeline(file_path, output_dir)
 
         except Exception as exc:
             logger.exception("[PROCESSOR][PDF] conversion failed for %s", file_path)

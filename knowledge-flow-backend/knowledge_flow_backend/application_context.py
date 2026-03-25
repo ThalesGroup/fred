@@ -1139,13 +1139,6 @@ class ApplicationContext:
             logger.info("     ↳ profile.%s.use_gpu: %s", profile_name, profile_cfg.use_gpu)
             logger.info("     ↳ profile.%s.process_images: %s", profile_name, profile_cfg.process_images)
             logger.info("     ↳ profile.%s.generate_summary: %s", profile_name, profile_cfg.generate_summary)
-            logger.info("     ↳ profile.%s.pdf.backend: %s", profile_name, profile_cfg.pdf.backend)
-            logger.info("     ↳ profile.%s.pdf.images_scale: %s", profile_name, profile_cfg.pdf.images_scale)
-            logger.info("     ↳ profile.%s.pdf.generate_picture_images: %s", profile_name, profile_cfg.pdf.generate_picture_images)
-            logger.info("     ↳ profile.%s.pdf.generate_page_images: %s", profile_name, profile_cfg.pdf.generate_page_images)
-            logger.info("     ↳ profile.%s.pdf.generate_table_images: %s", profile_name, profile_cfg.pdf.generate_table_images)
-            logger.info("     ↳ profile.%s.pdf.do_table_structure: %s", profile_name, profile_cfg.pdf.do_table_structure)
-            logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
             logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")

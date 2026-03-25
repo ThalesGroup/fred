@@ -32,17 +32,15 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: false
-      pdf:
-        backend: pypdfium2
-        images_scale: 1.0
-        generate_picture_images: false
-        generate_page_images: false
-        generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
+      input_activity_timeout: 1h
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"
@@ -74,15 +72,12 @@ processing:
     medium:
       use_gpu: false
       generate_summary: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      input_activity_timeout: 1h
       process_images: false
-      pdf:
-        backend: docling_parse
-        images_scale: 2.0
-        generate_picture_images: false
-        generate_page_images: false
-        generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -118,14 +113,12 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: true
-      pdf:
-        backend: docling_parse
-        images_scale: 2.0
-        generate_picture_images: true
-        generate_page_images: true
-        generate_table_images: false
-        do_table_structure: true
-        do_ocr: true
+      input_activity_timeout: 1h
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor

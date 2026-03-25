@@ -13,17 +13,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProcessingPipelineManager:
-    """
-    Registry for library-aware pipelines.
+    """Registry for library-aware pipelines.
 
-    This manager owns:
-      - a default pipeline (mirroring legacy behaviour),
-      - an optional set of named pipelines,
-      - a mapping from tag_id -> pipeline_name.
-
-    For now, only the default pipeline is instantiated. Tag-based routing is
-    prepared but no tag is mapped yet; all documents go through the default
-    pipeline. Admin APIs can later populate tag_to_pipeline and pipelines.
+    Profiles keep their own input processor registry while sharing the same
+    output pipeline structure.
     """
 
     default_pipeline: ProcessingPipeline
@@ -56,8 +49,6 @@ class ProcessingPipelineManager:
 
     @staticmethod
     def _clone_pipeline(template: ProcessingPipeline, name: str) -> ProcessingPipeline:
-        # Keep this clone lightweight: profile pipelines only need different input
-        # mappings. Output processors and library processors are shared instances.
         input_processors = dict(template.input_processors)
         output_processors = {ext: list(processors) for ext, processors in template.output_processors.items()}
         library_output_processors = list(template.library_output_processors)
@@ -81,7 +72,6 @@ class ProcessingPipelineManager:
             pipeline = self._clone_pipeline(self.default_pipeline, pipeline_name)
             selected_processors: List[ProcessingConfig.ProfileInputProcessorConfig] = profile_cfg.input_processors or []
 
-            # Profile input processors are explicit; do not keep hidden inherited entries.
             pipeline.input_processors = {}
             for entry in selected_processors:
                 pipeline.input_processors[entry.suffix.lower()] = self._instantiate_input_processor(entry.class_path)
