@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 from typing import FrozenSet
 
-from fred_core.common.lru_cache import ThreadSafeLRUCache
+from fred_core.common import ThreadSafeLRUCache
 from fred_core.security.structure import KeycloakUser
 
 logger = logging.getLogger(__name__)

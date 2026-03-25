@@ -16,7 +16,8 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast, get_type_hints
 
-from fred_core import VectorSearchHit, get_keycloak_client_id, get_keycloak_url
+from fred_core import get_keycloak_client_id, get_keycloak_url
+from fred_core.store import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, create_model
 

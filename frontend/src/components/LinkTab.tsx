@@ -16,9 +16,7 @@ import * as React from "react";
 import Tab from "@mui/material/Tab";
 import { Link, useLocation } from "react-router-dom";
 
-function samePageLinkNavigation(
-  event: React.MouseEvent<HTMLAnchorElement, MouseEvent>,
-) {
+function samePageLinkNavigation(event: React.MouseEvent<HTMLAnchorElement, MouseEvent>) {
   if (
     event.defaultPrevented ||
     event.button !== 0 || // ignore everything but left-click

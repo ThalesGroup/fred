@@ -354,7 +354,7 @@
     }
   },
   "assetManager": {
-    "title": "Gérer les ressources pour {{agentName}}",
+    "title": "Ressources pour {{agentId}}",
     "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
@@ -380,18 +380,40 @@
     "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible.",
     "addMoreFiles": "Ajouter plus de fichiers"
   },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Options de chat"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "Prompt système",
+        "description": "Instructions de comportement principal pour l'assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Autoriser les pièces jointes",
+        "description": "Afficher les contrôles de téléversement/pièces jointes pour cet agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Sélecteur de bibliothèques de documents",
+        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent."
+      }
+    }
+  },
   "agentEditDrawer": {
     "nameLabel": "Nom",
-    "nameHelperText": "Le nom d'affichage de l'agent.",
-    "roleHelperText": "Le rôle obligatoire de l'agent pour la découverte (ex. 'Analyste Financier')",
-    "descriptionHelperText": "La description obligatoire de l'agent.",
-    "tagsHelperText": "Tags utilisés pour la catégorisation et le filtrage.",
     "noTunableFields": "Cet agent n'expose aucun champ réglable.",
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
-    "noMcpServers": "Aucun serveur MCP disponible pour le moment."
+    "noMcpServers": "Aucun serveur MCP disponible pour le moment.",
+    "headerTitle": "Édition d'un {{agentsNicknameSingular}}",
+    "headerTitleCreate": "Créer un {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Échec de la création de l'agent",
+      "updateFailed": "Échec de la mise à jour de l'agent"
+    }
   },
   "agentHub": {
     "title": "Vos {{agentsNicknamePlural}}",
@@ -1310,5 +1332,87 @@
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Annuler",
     "defaultConfirmButtonLabel": "Confirmer"
+  },
+  "rework": {
+    "back": "Retour",
+    "teamRoles": {
+      "member": "Membre",
+      "manager": "Manager",
+      "owner": "Propriétaire"
+    },
+    "sidebar": {
+      "title": "FRED.AI",
+      "team": {
+        "avatarAlt": "Équipe {{teamName}}",
+        "bannerAlt": "Bannière de l'équipe",
+        "userTeam": "Espace personel",
+        "allTeams": "Marketplace"
+      },
+      "menu": {
+        "agents": "Agents",
+        "resources": "Ressources",
+        "apps": "Apps"
+      },
+      "newChat": "Nouvelle conversation",
+      "chatList": {
+        "title": "Conversations"
+      }
+    },
+    "userSettings": {
+      "disconnect": "Déconnexion",
+      "title": "Votre profil",
+      "app": {
+        "dark": "Sombre",
+        "system": "Système",
+        "light": "Clair",
+        "french": "Français",
+        "english": "Anglais"
+      },
+      "conversationProfile": {
+        "title": "Profil de conversation",
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos agents doivent s’adresser à vous."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Membres",
+        "settings": "Paramètres",
+        "leaveTeam": "Quitter l'équipe"
+      },
+      "members": {
+        "title": "Membres de l'équipe",
+        "addMember": {
+          "placeholder": "Inviter des utilisateurs"
+        },
+        "table": {
+          "deleteAction": "Supprimer",
+          "identifiant": "Identifiant",
+          "firstName": "Prénom",
+          "lastName": "Nom",
+          "role": "Rôle",
+          "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Échec de la mise à jour du rôle",
+          "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
+          "removeMemberSummary": "Échec de la suppression du membre",
+          "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire."
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Bannière de l'équipe",
+        "description": {
+          "label": "Description de l'équipe",
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+        },
+        "privateTeam": "Equipe privé",
+        "teamPrompt": {
+          "label": "Contexte de l'équipe (prompt)",
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
+        }
+      }
+    }
   }
 }

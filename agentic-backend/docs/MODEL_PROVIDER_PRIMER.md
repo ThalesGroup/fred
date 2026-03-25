@@ -54,7 +54,7 @@ This is aligned with genai_sdk principles:
 ### 5.1 Tune one profile now (LogGenius or RAG) without YAML migration
 
 ```python
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 
 from agentic_backend.agents.v2.production.basic_react.model_routing_presets import (
     build_default_policy_with_basic_react_presets,

@@ -22,7 +22,7 @@ import {
   ProcessingGraph,
   ProcessingGraphEdge,
   ProcessingGraphNode,
-  useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery
+  useGetProcessingGraphKnowledgeFlowV1DocumentsProcessingGraphGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
 import { useTranslation } from "react-i18next";
 import { useMemo, useState } from "react";
@@ -110,51 +110,55 @@ export const DocumentData = () => {
 
   const [search, setSearch] = useState("");
 
-  return <>
-    {isLoading && <Typography>{t("common.loading")}</Typography>}
-    {isError && (
-      <Stack direction="row" gap={1} alignItems="center">
-        <Typography color="error">{t("dataHub.error", "Failed to load processing graph")}</Typography>
-        <Chip label={t("common.retry", "Retry")} onClick={() => refetch()} size="small" />
-      </Stack>
-    )}
-    {!isLoading && !isError && !hasData && (
-      <Typography variant="body2" color="text.secondary">
-        {t(
-          "dataHub.empty",
-          "No processing graph data available yet. Ingest and process documents to populate this view.",
-        )}
-      </Typography>
-    )}
-    {hasData && (
-      <Box sx={{ width: "100%", mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-        <Stack
-          direction="row"
-          justifyContent="flex-end"
-          alignItems="center"
-          sx={{
-            position: "relative",
-            mb: -3,
-            zIndex: 2,
-          }}
-        >
-          <Chip label={t("common.refresh")} size="small" onClick={() => refetch()} variant="outlined"/>
+  return (
+    <>
+      {isLoading && <Typography>{t("common.loading")}</Typography>}
+      {isError && (
+        <Stack direction="row" gap={1} alignItems="center">
+          <Typography color="error">{t("dataHub.error", "Failed to load processing graph")}</Typography>
+          <Chip label={t("common.retry", "Retry")} onClick={() => refetch()} size="small" />
         </Stack>
-        <DocumentDataSearch search={search} setSearch={setSearch} />
-        {(hasVectorData || hasTableData) && (
-          <Box sx={{
-            mb: 1,
-            display: "flex",
-            flexDirection: { xs: "column", md: "row" },
-            gap: 2,
-          }}>
-            {hasVectorData && <DocumentDataVectorPie slices={vectorSlices} />}
-            {hasTableData && <DocumentDataTablePie slices={tableSlices}/>}
-          </Box>
-        )}
-        {hasVectorData && <DocumentDataVectorList rows={rows} search={search} />}
-        {hasTableData && <DocumentDataTableList rows={rows} search={search} />}
-      </Box>
-    )}
-  </>
-}
+      )}
+      {!isLoading && !isError && !hasData && (
+        <Typography variant="body2" color="text.secondary">
+          {t(
+            "dataHub.empty",
+            "No processing graph data available yet. Ingest and process documents to populate this view.",
+          )}
+        </Typography>
+      )}
+      {hasData && (
+        <Box sx={{ width: "100%", mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+          <Stack
+            direction="row"
+            justifyContent="flex-end"
+            alignItems="center"
+            sx={{
+              position: "relative",
+              mb: -3,
+              zIndex: 2,
+            }}
+          >
+            <Chip label={t("common.refresh")} size="small" onClick={() => refetch()} variant="outlined" />
+          </Stack>
+          <DocumentDataSearch search={search} setSearch={setSearch} />
+          {(hasVectorData || hasTableData) && (
+            <Box
+              sx={{
+                mb: 1,
+                display: "flex",
+                flexDirection: { xs: "column", md: "row" },
+                gap: 2,
+              }}
+            >
+              {hasVectorData && <DocumentDataVectorPie slices={vectorSlices} />}
+              {hasTableData && <DocumentDataTablePie slices={tableSlices} />}
+            </Box>
+          )}
+          {hasVectorData && <DocumentDataVectorList rows={rows} search={search} />}
+          {hasTableData && <DocumentDataTableList rows={rows} search={search} />}
+        </Box>
+      )}
+    </>
+  );
+};

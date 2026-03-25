@@ -14,7 +14,7 @@
 
 from typing import List, Optional
 
-from fred_core import VectorSearchHit
+from fred_core.store import VectorSearchHit
 
 from agentic_backend.core.chatbot.chat_schema import LinkKind, LinkPart
 

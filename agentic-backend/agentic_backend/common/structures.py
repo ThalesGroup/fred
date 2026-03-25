@@ -17,13 +17,16 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
     TemporalSchedulerConfig,
 )
+from fred_core.scheduler import SchedulerBackend
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
 
@@ -220,6 +223,13 @@ class AIConfig(BaseModel):
             "persistent configurations are ignored."
         ),
     )
+    enable_catalog_mode: bool = Field(
+        False,
+        description=(
+            "If true, external catalogs (agents/mcp/models) may override missing "
+            "sections from configuration YAML."
+        ),
+    )
     enable_v2_sql_checkpointer: bool = Field(
         False,
         description=(
@@ -353,7 +363,7 @@ class AppConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: str = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 

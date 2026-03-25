@@ -14,6 +14,7 @@
   {{- include "common-library.configmap-frontend" $ctx }}
   {{- include "common-library.configmap-kube" $ctx }}
   {{- include "common-library.configmap-backend" $ctx }}
+  {{- include "common-library.configmap-catalog" $ctx }}
   {{- include "common-library.pvc_pv" $ctx }}
   {{- include "common-library.deployment" $ctx }}
   {{- include "common-library.secrets-env" $ctx }}

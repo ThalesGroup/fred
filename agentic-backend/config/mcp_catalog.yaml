@@ -91,6 +91,24 @@ servers:
     sse_read_timeout: 5000
     auth_mode: "user_token"
 
+  - id: "mcp-bank-core-demo"
+    name: "Bank Core Demo MCP"
+    description: "Local demo MCP server for account balances and transfer execution workflow"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9801/mcp"
+    sse_read_timeout: 5000
+    auth_mode: "no_token"
+
+  - id: "mcp-risk-guard-demo"
+    name: "Risk Guard Demo MCP"
+    description: "Local demo MCP server for transfer risk scoring and validation hints"
+    enabled: true
+    transport: "streamable_http"
+    url: "http://localhost:9802/mcp"
+    sse_read_timeout: 5000
+    auth_mode: "no_token"
+
   - id: "mcp-web-github-readonly"
     name: "mcp.servers.web_github_readonly.name"
     description: "mcp.servers.web_github_readonly.description"

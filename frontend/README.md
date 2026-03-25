@@ -9,10 +9,20 @@ committed to ensure all developers share the same configuration.
 ## Run the Dev Server
 
 ```bash
-make run          # installs deps (if missing) and starts `npm run dev`
+make run               # auto: split mode if 8111+8222 are reachable, else standalone mode
 ```
 
 The Vite server starts on <http://localhost:5173> with hot module reload.
+
+In standalone mode, frontend backend URLs are overridden at runtime by env vars,
+so `frontend/public/config.json` does not need to be edited manually.
+
+You can force the mode with:
+
+```bash
+make run FRONTEND_BACKEND_MODE=multi
+make run FRONTEND_BACKEND_MODE=standalone
+```
 
 ## UI Architecture Overview
 
@@ -117,4 +127,10 @@ If you need to update one of them, just run one of the command while the corresp
 
   ```sh
   make update-knowledge-flow-api
+  ```
+
+- Control Plane backend:
+
+  ```sh
+  make update-control-plane-api
   ```

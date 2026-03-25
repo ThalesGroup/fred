@@ -43,7 +43,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import TypeAlias
 
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 

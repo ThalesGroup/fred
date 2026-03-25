@@ -18,9 +18,13 @@ from typing import Optional, Sequence
 
 from fastapi import BackgroundTasks
 from fred_core import KeycloakUser
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import (
+    SchedulerBackend,
+    TemporalClientProvider,
+    resolve_scheduler_backend,
+)
 
-from knowledge_flow_backend.common.structures import SchedulerConfig
+from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.in_memory_scheduler import InMemoryScheduler
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
@@ -46,20 +50,22 @@ class IngestionTaskService:
         self,
         *,
         scheduler_config: SchedulerConfig,
+        processing_config: ProcessingConfig,
         metadata_service: MetadataService,
         temporal_client_provider: Optional[TemporalClientProvider] = None,
         max_parallelism: int = 1,
     ) -> None:
         self._scheduler_config = scheduler_config
+        self._processing_config = processing_config
         self._metadata_service = metadata_service
         self._client_provider = temporal_client_provider
         self._task_queue: Optional[str] = None
         self._max_parallelism = max(1, int(max_parallelism))
 
-        backend = scheduler_config.backend.lower()
-        if backend == "memory":
+        backend = resolve_scheduler_backend(scheduler_config.backend)
+        if backend == SchedulerBackend.MEMORY:
             self._scheduler = InMemoryScheduler(self._metadata_service)
-        elif backend == "temporal":
+        elif backend == SchedulerBackend.TEMPORAL:
             # Reuse the shared Temporal client provider if provided (preferred),
             # otherwise create a local one from configuration.
             self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)
@@ -92,9 +98,20 @@ class IngestionTaskService:
         if has_pull and has_push:
             raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
 
+        enriched_files: list[FileToProcess] = []
+        for file in files:
+            normalized_profile = self._processing_config.normalize_profile(file.profile)
+            profile_config = self._processing_config.get_profile_config(normalized_profile)
+            with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(
+                update={
+                    "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
+                }
+            )
+            enriched_files.append(with_timeout)
+
         definition = PipelineDefinition(
             name=pipeline_name,
-            files=[FileToProcess.from_file_to_process_without_user(f, user) for f in files],
+            files=enriched_files,
             max_parallelism=self._max_parallelism,
         )
         handle = await self._scheduler.start_document_processing(
