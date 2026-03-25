@@ -238,20 +238,21 @@ sync-develop-prism:
         exit 1
       fi
       echo "✅ No conflicts detected (merge_status=${MERGE_STATUS})."
-    # Auto-merge the MR
-    - |
-      echo "Auto-merging MR !${MR_IID}..."
-      MERGE_RESPONSE=$(curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/merge" \
-        --form "squash=false")
-      MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
-      MERGE_ERROR=$(echo "$MERGE_RESPONSE" | jq -r '.message // empty')
-      echo "API response: state=${MERGE_STATE}"
-      if [ "$MERGE_STATE" = "merged" ]; then
-        echo "✅ MR !${MR_IID} merged successfully (${SOURCE_BRANCH} → ${DEV_BRANCH})."
-      else
-        echo "❌ Auto-merge failed for MR !${MR_IID}."
-        echo "Error: ${MERGE_ERROR}"
-        echo "$MERGE_RESPONSE" | jq .
-        exit 1
-      fi
+    # Auto-merge the MR (TEMP: disabled for testing — only create the MR)
+    # - |
+    #   echo "Auto-merging MR !${MR_IID}..."
+    #   MERGE_RESPONSE=$(curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+    #     "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/merge" \
+    #     --form "squash=false")
+    #   MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
+    #   MERGE_ERROR=$(echo "$MERGE_RESPONSE" | jq -r '.message // empty')
+    #   echo "API response: state=${MERGE_STATE}"
+    #   if [ "$MERGE_STATE" = "merged" ]; then
+    #     echo "✅ MR !${MR_IID} merged successfully (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+    #   else
+    #     echo "❌ Auto-merge failed for MR !${MR_IID}."
+    #     echo "Error: ${MERGE_ERROR}"
+    #     echo "$MERGE_RESPONSE" | jq .
+    #     exit 1
+    #   fi
+    - echo "✅ MR !${MR_IID} created and ready for manual review (auto-merge disabled for testing)."
