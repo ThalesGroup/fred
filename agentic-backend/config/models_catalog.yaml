@@ -14,10 +14,29 @@ common_model_settings:
   temperature: 0.0
 
 default_profile_by_capability:
-  chat: default.chat.openai.prod
-  language: default.language.openai.prod
+  chat: chat.ollama.gptoss20b
+  language: language.ollama.gptoss20b
 
 profiles:
+
+  - profile_id: chat.ollama.gptoss20b
+    capability: chat
+    description: "Local Ollama Mistral profile for private/offline chat experimentation."
+    model:
+      provider: ollama
+      name: "gpt-oss:20b"
+      settings:
+        base_url: "http://192.168.1.95:11434"
+
+  - profile_id: language.ollama.gptoss20b
+    capability: language
+    description: "Local Ollama Mistral profile for private/offline language tasks."
+    model:
+      provider: ollama
+      name: "gpt-oss:20b"
+      settings:
+        base_url: "http://192.168.1.95:11434"
+
   - profile_id: default.chat.openai.prod
     capability: chat
     description: "Default balanced chat model for production conversations."
