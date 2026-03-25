@@ -23,7 +23,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from agentic_backend.core.agents.agent_spec import MCPServerConfiguration
-from agentic_backend.core.db.session import make_session_factory, use_session
+from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.core.mcp.store.base_mcp_server_store import BaseMcpServerStore
 from agentic_backend.core.mcp.store.mcp_server_models import McpServerRow
 

@@ -15,9 +15,12 @@ from fred_core.sql.base_sql import (
     json_for_engine,
     run_ddl_with_advisory_lock,
 )
+from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.sql.mixin import PydanticJsonMixin, SeedMarkerMixin
 
 __all__ = [
+    "make_session_factory",
+    "use_session",
     "BaseSqlStore",
     "AsyncBaseSqlStore",
     "create_engine_from_config",

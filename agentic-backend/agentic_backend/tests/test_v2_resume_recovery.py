@@ -36,7 +36,9 @@ from agentic_backend.core.agents.v2.react_runtime import (
 from agentic_backend.core.agents.v2.runtime import AwaitingHumanRuntimeEvent
 from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
-from agentic_backend.core.chatbot.chat_schema import ChatMessage, SessionSchema
+from fred_core import SessionSchema
+
+from agentic_backend.core.chatbot.chat_schema import ChatMessage
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore
 
@@ -90,25 +92,29 @@ class InMemorySessionStore(BaseSessionStore):
     def __init__(self) -> None:
         self.sessions: dict[str, SessionSchema] = {}
 
-    async def save(self, session: SessionSchema) -> None:
+    async def save(
+        self, session: SessionSchema, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions[session.id] = session
 
-    async def get(self, session_id: str) -> SessionSchema | None:
+    async def get(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> SessionSchema | None:
         return self.sessions.get(session_id)
 
-    async def delete(self, session_id: str) -> None:
+    async def delete(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions.pop(session_id, None)
 
-    async def get_for_user(self, user_id: str) -> list[SessionSchema]:
+    async def get_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> list[SessionSchema]:
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
-    async def save_with_conn(self, conn, session: SessionSchema) -> None:
-        await self.save(session)
-
-    async def save_with_session(self, async_session: AsyncSession, session: SessionSchema) -> None:
-        await self.save(session)
-
-    async def count_for_user(self, user_id: str) -> int:
+    async def count_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> int:
         return len(await self.get_for_user(user_id))
 
 

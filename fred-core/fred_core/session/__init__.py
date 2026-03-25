@@ -1,7 +1,4 @@
-from fred_core.session.stores import (
-    BaseJsonSessionStore,
-    BaseSessionStore,
-    PostgresJsonSessionStore,
-)
+from fred_core.session.session_schema import SessionSchema
+from fred_core.session.stores import BaseSessionStore, PostgresSessionStore
 
-__all__ = ["BaseJsonSessionStore", "BaseSessionStore", "PostgresJsonSessionStore"]
+__all__ = ["BaseSessionStore", "PostgresSessionStore", "SessionSchema"]

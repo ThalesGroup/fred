@@ -31,12 +31,13 @@ from agentic_backend.application_context import (
     get_app_context,
     get_default_chat_model,
 )
+from fred_core import SessionSchema
+
 from agentic_backend.core.chatbot.chat_schema import (
     ChatAskInput,
     ChatTokenUsage,
     ErrorEvent,
     FinalEvent,
-    SessionSchema,
     StreamEvent,
     TextPart,
     make_assistant_final,

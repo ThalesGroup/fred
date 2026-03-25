@@ -22,7 +22,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from agentic_backend.core.db.session import make_session_factory, use_session
+from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1
 from agentic_backend.scheduler.store.task_models import AgentTaskRow
 from agentic_backend.scheduler.task_structures import (

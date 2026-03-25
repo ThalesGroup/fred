@@ -98,9 +98,7 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.postgres_session_store import (
-    PostgresSessionStore,
-)
+from fred_core import PostgresSessionStore
 from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)
@@ -513,7 +511,7 @@ class ApplicationContext:
         return self.get_pg_async_engine().begin()
 
     def begin_pg_session(self):
-        from agentic_backend.core.db.session import make_session_factory
+        from fred_core.sql.async_session import make_session_factory
         factory = make_session_factory(self.get_pg_async_engine())
         return factory()
 
@@ -532,8 +530,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._session_store_instance = PostgresSessionStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._session_store_instance
         raise ValueError("Unsupported sessions storage backend (async-only)")

@@ -12,11 +12,12 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import NoOpAgentFactory
+from fred_core import SessionSchema
+
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
     Role,
-    SessionSchema,
     TextPart,
     ToolCallPart,
     ToolResultPart,

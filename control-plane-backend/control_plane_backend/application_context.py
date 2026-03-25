@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Optional
 
 from fred_core import (
-    BaseJsonSessionStore,
-    PostgresJsonSessionStore,
+    BaseSessionStore,
+    PostgresSessionStore,
     RebacEngine,
     rebac_factory,
 )
@@ -46,7 +46,7 @@ class ApplicationContext:
         self._policy_catalog: ConversationPolicyCatalog | None = None
         self._policy_catalog_path = self._resolve_policy_catalog_path()
         self._pg_async_engine: AsyncEngine | None = None
-        self._session_store: BaseJsonSessionStore | None = None
+        self._session_store: BaseSessionStore | None = None
         self._purge_queue_store: PurgeQueueStore | None = None
         self._team_metadata_store: TeamMetadataStore | None = None
         self._content_store: ContentStore | None = None
@@ -110,13 +110,10 @@ class ApplicationContext:
             )
         return self._pg_async_engine
 
-    def get_session_store(self) -> BaseJsonSessionStore:
+    def get_session_store(self) -> BaseSessionStore:
         if self._session_store is None:
-            cfg = self.configuration.storage.session_store
-            self._session_store = PostgresJsonSessionStore(
+            self._session_store = PostgresSessionStore(
                 engine=self.get_pg_async_engine(),
-                table_name=cfg.table,
-                prefix=cfg.prefix or "",
             )
         return self._session_store
 

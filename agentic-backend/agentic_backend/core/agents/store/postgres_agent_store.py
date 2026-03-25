@@ -29,7 +29,7 @@ from agentic_backend.core.agents.store.base_agent_store import (
     AgentNotFoundError,
     BaseAgentStore,
 )
-from agentic_backend.core.db.session import make_session_factory, use_session
+from fred_core.sql.async_session import make_session_factory, use_session
 
 logger = logging.getLogger(__name__)
 

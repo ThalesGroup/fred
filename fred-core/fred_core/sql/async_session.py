@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Shared session utilities for all agentic-backend Postgres stores.
+Shared async session utilities for all SQLAlchemy ORM stores.
 """
 
 from __future__ import annotations

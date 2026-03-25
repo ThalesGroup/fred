@@ -1,0 +1,21 @@
+{
+    "python.defaultInterpreterPath": ".venv/bin/python",
+    "search.exclude": {
+        "**/.venv": true,
+        "**/__pycache__": true
+    },
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.wordBasedSuggestions": "off",
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "always"
+    },
+    "python.testing.pytestArgs": [
+        "control_plane_backend",
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}

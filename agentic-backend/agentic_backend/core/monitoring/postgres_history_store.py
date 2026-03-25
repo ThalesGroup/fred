@@ -35,7 +35,7 @@ from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
     MetricsResponse,
 )
-from agentic_backend.core.db.session import make_session_factory, use_session
+from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.monitoring.history_models import SessionHistoryRow
 

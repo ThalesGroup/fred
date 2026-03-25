@@ -22,7 +22,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from agentic_backend.core.db.session import make_session_factory, use_session
+from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.core.feedback.feedback_structures import FeedbackRecord
 from agentic_backend.core.feedback.store.base_feedback_store import BaseFeedbackStore
 from agentic_backend.core.feedback.store.feedback_models import FeedbackRow

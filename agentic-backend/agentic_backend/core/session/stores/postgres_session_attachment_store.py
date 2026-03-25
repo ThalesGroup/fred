@@ -21,7 +21,7 @@ from typing import List
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from agentic_backend.core.db.session import make_session_factory, use_session
+from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
     SessionAttachmentRecord,
