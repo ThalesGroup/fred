@@ -7,12 +7,12 @@ from ..profile_prompt_loader import load_basic_react_prompt
 
 PROMETHEUS_PROFILE = ReActProfile(
     profile_id="prometheus",
-    title="Prometheus",
-    description="Cluster-wide Prometheus and PromQL investigation.",
-    role="prometheus_expert",
+    title="Spot",
+    description="Cluster-wide Prometheus investigation with metric discovery-first PromQL.",
+    role="Cluster Prometheus Investigator",
     agent_description=(
-        "Cluster-wide monitoring assistant for Prometheus metric discovery, "
-        "PromQL investigation, and cross-namespace troubleshooting."
+        "Investigates cluster-wide Prometheus metrics with discovery-first "
+        "PromQL workflows and MCP tools."
     ),
     tags=("monitoring", "promql", "react"),
     system_prompt_template=load_basic_react_prompt(
