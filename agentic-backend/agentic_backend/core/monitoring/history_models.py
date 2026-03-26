@@ -17,10 +17,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import DateTime, Index, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
+from fred_core.models.base import JsonColumn
 
 
 class SessionHistoryRow(Base):
@@ -37,5 +37,5 @@ class SessionHistoryRow(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)
     channel: Mapped[str] = mapped_column(String, nullable=False)
     exchange_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    parts_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    parts_json: Mapped[list | None] = mapped_column(JsonColumn, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)

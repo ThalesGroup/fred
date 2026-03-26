@@ -18,11 +18,9 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import DateTime, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import JSON
 
-from fred_core.models.base import Base
+from fred_core.models.base import Base, JsonColumn
 
 
 class SessionRow(Base):
@@ -39,9 +37,8 @@ class SessionRow(Base):
     user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     team_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     agent_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
-    # Use JSONB on Postgres, fall back to JSON on SQLite (tests)
     session_data: Mapped[dict[str, Any]] = mapped_column(
-        JSONB().with_variant(JSON(), "sqlite"),  # type: ignore[arg-type]
+        JsonColumn,
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(

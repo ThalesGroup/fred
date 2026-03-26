@@ -12,8 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from sqlalchemy import DateTime
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.types import JSON
 
 
 class Base(DeclarativeBase):
     """Shared declarative base for all fred-core ORM models."""
+
+
+# Portable column types: use JSONB on PostgreSQL, plain JSON on SQLite.
+JsonColumn = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[arg-type]
+TimestampColumn = TIMESTAMP(timezone=True).with_variant(DateTime(timezone=True), "sqlite")

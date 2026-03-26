@@ -15,10 +15,10 @@
 from __future__ import annotations
 
 from sqlalchemy import String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
+from fred_core.models.base import JsonColumn
 
 
 class McpServerRow(Base):
@@ -31,4 +31,4 @@ class McpServerRow(Base):
     __tablename__ = "mcp-server"
 
     server_id: Mapped[str] = mapped_column(String, primary_key=True)
-    payload_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    payload_json: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
