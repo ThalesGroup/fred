@@ -319,7 +319,7 @@ def test_agent_loader_loads_static_prometheus_agent_via_definition_ref() -> None
     assert entry.settings.definition_ref == "v2.react.prometheus_expert"
     assert entry.settings.class_path is None
     assert entry.settings.tuning is not None
-    assert entry.settings.tuning.role == "prometheus_expert"
+    assert entry.settings.tuning.role == "Cluster Prometheus Investigator"
     assert [server.id for server in entry.settings.tuning.mcp_servers] == [
         "mcp-knowledge-flow-prometheus-ops"
     ]
