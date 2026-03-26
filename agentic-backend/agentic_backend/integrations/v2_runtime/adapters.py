@@ -35,10 +35,10 @@ from fred_core import (
     LogFilter,
     LogQuery,
     LogQueryResult,
-    OwnerFilter,
     get_keycloak_client_id,
     get_keycloak_url,
 )
+from fred_core.common import OwnerFilter
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 
@@ -176,10 +176,14 @@ class LangfuseTracerAdapter(TracerPort):
         }
         if attributes:
             metadata.update(attributes)
-        span = self._client.start_span(
-            name=name,
-            trace_context={"trace_id": trace_id},
-            metadata=metadata,
+        span = cast(
+            "_LangfuseSpanLike",
+            self._client.start_observation(
+                name=name,
+                as_type="span",
+                trace_context={"trace_id": trace_id},
+                metadata=metadata,
+            ),
         )
         return LangfuseSpanAdapter(span)
 

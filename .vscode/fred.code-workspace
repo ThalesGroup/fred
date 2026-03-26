@@ -10,6 +10,12 @@
 			"path": "../agentic-backend"
 		},
 		{
+			"path": "../app-backend"
+		},
+		{
+			"path": "../control-plane-backend"
+		},
+		{
 			"path": "../knowledge-flow-backend"
 		},
 		{
@@ -19,6 +25,8 @@
 	"settings": {
 		"files.exclude": {
 			"agentic-backend/": true,
+			"app-backend/": true,
+			"control-plane-backend/": true,
 			"knowledge-flow/": true,
 			"frontend/": true,
 			"fred-core/": true,

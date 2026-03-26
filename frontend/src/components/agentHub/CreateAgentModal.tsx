@@ -23,6 +23,7 @@ import {
   DialogTitle,
   FormControl,
   FormLabel,
+  Grid,
   Paper,
   Radio,
   RadioGroup,
@@ -30,7 +31,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
 import React from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -40,6 +40,7 @@ import { z } from "zod";
 import {
   CreateAgentRequest,
   useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useListAgentsAgenticV1AgentsGetQuery as useListAgentsQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
   useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
 } from "../../slices/agentic/agenticOpenApi";
@@ -51,9 +52,10 @@ const createSimpleAgentSchema = (t: (key: string, options?: any) => string) =>
   z.object({
     name: z.string().min(1, { message: t("validation.required") }),
     type: z.literal("basic"),
-    creation_mode: z.enum(["basic", "profile", "class"]),
+    creation_mode: z.enum(["basic", "profile", "class", "definition"]),
     profile_id: z.string().optional(),
     class_path: z.string().optional(),
+    definition_ref: z.string().optional(),
   });
 
 type FormData = z.infer<ReturnType<typeof createSimpleAgentSchema>>;
@@ -94,11 +96,14 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       creation_mode: "basic",
       profile_id: "",
       class_path: "",
+      definition_ref: "",
     },
   });
   const watchCreationMode = useWatch({ control, name: "creation_mode", defaultValue: "basic" });
   const watchProfileId = useWatch({ control, name: "profile_id", defaultValue: "" });
+  const watchDefinitionRef = useWatch({ control, name: "definition_ref", defaultValue: "" });
   const isClassCreation = isAdmin && watchCreationMode === "class";
+  const isDefinitionCreation = watchCreationMode === "definition";
   const { data: reactProfiles = [], isFetching: isProfilesLoading } = useListReactProfilesQuery(undefined, {
     skip: false,
   });
@@ -128,7 +133,38 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       skip: !isAdmin || !isClassCreation,
     },
   );
+  const { data: availableAgents = [] } = useListAgentsQuery({});
   const selectedProfile = reactProfiles.find((profile) => profile.profile_id === watchProfileId) ?? null;
+  const knownDefinitionRefs = React.useMemo<string[]>(() => ["v2.demo.postal_tracking_workflow"], []);
+  const definitionRefsFromAgents = React.useMemo<string[]>(
+    () =>
+      Array.from(
+        new Set(
+          (availableAgents || [])
+            .map((agent) => agent.definition_ref)
+            .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            .map((value) => value.trim()),
+        ),
+      ),
+    [availableAgents],
+  );
+  const definitionRefOptions = React.useMemo<string[]>(
+    () => Array.from(new Set([...knownDefinitionRefs, ...definitionRefsFromAgents])).sort((a, b) => a.localeCompare(b)),
+    [definitionRefsFromAgents, knownDefinitionRefs],
+  );
+
+  React.useEffect(() => {
+    if (!isDefinitionCreation) {
+      return;
+    }
+    if (watchDefinitionRef && watchDefinitionRef.trim().length > 0) {
+      return;
+    }
+    if (definitionRefOptions.length === 0) {
+      return;
+    }
+    setValue("definition_ref", definitionRefOptions[0], { shouldDirty: false });
+  }, [definitionRefOptions, isDefinitionCreation, setValue, watchDefinitionRef]);
 
   const submit = async (data: FormData) => {
     if (data.creation_mode === "profile" && !data.profile_id?.trim()) {
@@ -146,17 +182,23 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       });
       return;
     }
+    if (data.creation_mode === "definition" && !data.definition_ref?.trim()) {
+      showError({
+        summary: t("validation.required"),
+        detail: t("agentHub.fields.definitionRefRequired", {
+          defaultValue: "A definition reference is required.",
+        }),
+      });
+      return;
+    }
 
     const req: CreateAgentRequest = {
       name: data.name.trim(),
       type: "basic",
       team_id: teamId,
-      class_path:
-        data.creation_mode === "class"
-          ? data.class_path?.trim() || undefined
-          : undefined,
-      profile_id:
-        data.creation_mode === "profile" ? data.profile_id?.trim() || undefined : undefined,
+      class_path: data.creation_mode === "class" ? data.class_path?.trim() || undefined : undefined,
+      definition_ref: data.creation_mode === "definition" ? data.definition_ref?.trim() || undefined : undefined,
+      profile_id: data.creation_mode === "profile" ? data.profile_id?.trim() || undefined : undefined,
     };
 
     try {
@@ -184,8 +226,8 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
       <DialogContent dividers>
         {/* Note: The <form> element is required for handleSubmit, but we'll manually trigger it below */}
         <form onSubmit={handleSubmit(submit)}>
-          <Grid2 container spacing={2}>
-            <Grid2 size={12}>
+          <Grid container spacing={2}>
+            <Grid size={12}>
               <Controller
                 name="name"
                 control={control}
@@ -202,9 +244,9 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                   />
                 )}
               />
-            </Grid2>
+            </Grid>
 
-            <Grid2 size={12}>
+            <Grid size={12}>
               <FormControl component="fieldset" fullWidth>
                 <FormLabel component="legend">{t("agentHub.fields.creationMode")}</FormLabel>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
@@ -219,6 +261,15 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                         value: "basic",
                         title: t("agentHub.fields.creationModeBasic"),
                         description: t("agentHub.fields.creationModeBasicHelp"),
+                      },
+                      {
+                        value: "definition",
+                        title: t("agentHub.fields.creationModeDefinition", {
+                          defaultValue: "Definition ref",
+                        }),
+                        description: t("agentHub.fields.creationModeDefinitionHelp", {
+                          defaultValue: "Create from a backend v2 definition reference.",
+                        }),
                       },
                       ...(hasReactProfiles
                         ? [
@@ -285,10 +336,10 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                   }}
                 />
               </FormControl>
-            </Grid2>
+            </Grid>
 
             {isProfileCreation && (
-              <Grid2 size={12}>
+              <Grid size={12}>
                 <Controller
                   name="profile_id"
                   control={control}
@@ -323,11 +374,11 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     />
                   )}
                 />
-              </Grid2>
+              </Grid>
             )}
 
             {isClassCreation && (
-              <Grid2 size={12}>
+              <Grid size={12}>
                 <Controller
                   name="class_path"
                   control={control}
@@ -353,10 +404,48 @@ export const CreateAgentModal: React.FC<CreateAgentModalProps> = ({
                     />
                   )}
                 />
-              </Grid2>
+              </Grid>
             )}
-
-          </Grid2>
+            {isDefinitionCreation && (
+              <Grid size={12}>
+                <Controller
+                  name="definition_ref"
+                  control={control}
+                  render={({ field: f }) => (
+                    <Autocomplete
+                      freeSolo
+                      options={definitionRefOptions}
+                      value={f.value || ""}
+                      onInputChange={(_, value) => {
+                        f.onChange(value);
+                      }}
+                      onChange={(_, value) => {
+                        f.onChange(typeof value === "string" ? value : "");
+                      }}
+                      noOptionsText={t("agentHub.fields.definitionRefNoOptions", {
+                        defaultValue: "No predefined definition refs.",
+                      })}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          fullWidth
+                          size="small"
+                          required
+                          label={t("agentHub.fields.definitionRef", {
+                            defaultValue: "Definition reference",
+                          })}
+                          placeholder="v2.demo.postal_tracking_workflow"
+                          helperText={t("agentHub.fields.definitionRefHelp", {
+                            defaultValue: "Example: v2.demo.postal_tracking_workflow",
+                          })}
+                        />
+                      )}
+                    />
+                  )}
+                />
+              </Grid>
+            )}
+          </Grid>
         </form>
       </DialogContent>
 

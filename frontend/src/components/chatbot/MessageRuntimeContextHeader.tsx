@@ -101,7 +101,14 @@ export default function MessageRuntimeContextHeader({ message, libraryNameById, 
   const showChatCtx = ctxLabeled.length > 0;
   const showAny = showLibs || showChatCtx;
 
-  if (!showAny && !searchPolicy && usedTemperature == null && modelName == null && latencyMs == null && !tokenUsageSource) {
+  if (
+    !showAny &&
+    !searchPolicy &&
+    usedTemperature == null &&
+    modelName == null &&
+    latencyMs == null &&
+    !tokenUsageSource
+  ) {
     return null;
   }
 

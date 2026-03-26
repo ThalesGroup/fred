@@ -1,0 +1,8 @@
+.team-settings-page {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+  width: 100%;
+  height: 100%;
+}

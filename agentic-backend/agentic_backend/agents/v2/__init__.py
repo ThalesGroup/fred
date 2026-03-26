@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from .candidate.aegis_graph_skeleton import AegisGraphV2SkeletonDefinition
     from .candidate.bid_mgr import Definition as BidMgrDefinition
     from .demos.artifact_report import ArtifactReportDemoV2Definition
-    from .demos.postal_tracking import Definition as PostalTrackingDefinition
     from .production.basic_react import BasicReActDefinition
     from .production.basic_react.profiles.prometheus_expert_agent import (
         PrometheusExpertV2Definition,
@@ -55,10 +54,6 @@ def __getattr__(name: str) -> object:
         from .candidate.bid_mgr import Definition as BidMgrDefinition
 
         return BidMgrDefinition
-    if name == "PostalTrackingDefinition":
-        from .demos.postal_tracking import Definition as PostalTrackingDefinition
-
-        return PostalTrackingDefinition
     if name == "PrometheusExpertV2Definition":
         from .production.basic_react.profiles.prometheus_expert_agent import (
             PrometheusExpertV2Definition,

@@ -23,13 +23,15 @@ make update-knowledge-flow-api  # From frontend directory
 To add cache invalidation for auto-generated endpoints:
 
 1. Add the tag type to `knowledgeFlowApi.ts`:
+
    ```typescript
-   tagTypes: ["BenchRun", "Team", "YourNewTag"]
+   tagTypes: ["BenchRun", "Team", "YourNewTag"];
    ```
 
 2. Enhance endpoints in `knowledgeFlowApiEnhancements.ts`:
 
    **For a single resource:**
+
    ```typescript
    getYourResource: {
      providesTags: (_, __, arg) => [{ type: "YourNewTag", id: arg.id }],
@@ -40,6 +42,7 @@ To add cache invalidation for auto-generated endpoints:
    ```
 
    **For a list resource:**
+
    ```typescript
    listYourResources: {
      providesTags: (result) =>
@@ -50,6 +53,7 @@ To add cache invalidation for auto-generated endpoints:
    ```
 
    When updating a resource, invalidate both the specific item and the list:
+
    ```typescript
    updateYourResource: {
      invalidatesTags: (_, __, arg) => [
@@ -60,12 +64,10 @@ To add cache invalidation for auto-generated endpoints:
    ```
 
 3. Re-export the hooks you need:
+
    ```typescript
-   export const {
-     useListYourResourcesQuery,
-     useGetYourResourceQuery,
-     useUpdateYourResourceMutation,
-   } = enhancedKnowledgeFlowApi;
+   export const { useListYourResourcesQuery, useGetYourResourceQuery, useUpdateYourResourceMutation } =
+     enhancedKnowledgeFlowApi;
    ```
 
 4. Import from the enhancements file in your components:

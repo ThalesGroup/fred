@@ -230,10 +230,7 @@ export default function ReasoningTraceAccordion({ steps, isOpenByDefault = false
                 const resultSummary =
                   entry.kind === "combo" && entry.result ? summarizeToolResultCompact(entry.result) : undefined;
                 const pendingResult = entry.kind === "combo" && !entry.result ? "waiting for result…" : undefined;
-                const primary =
-                  entry.kind === "combo"
-                    ? resultSummary || pendingResult || chipChannel
-                    : primarySolo;
+                const primary = entry.kind === "combo" ? resultSummary || pendingResult || chipChannel : primarySolo;
                 const primaryTooltip = undefined;
 
                 const secondary = entry.kind === "combo" ? undefined : undefined;

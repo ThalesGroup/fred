@@ -21,8 +21,8 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Protocol, cast
 
-from fred_core import VectorSearchHit
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig

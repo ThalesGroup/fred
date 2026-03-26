@@ -38,17 +38,20 @@ async function pollUploadProcessProgress(
   return new Promise<void>((resolve, reject) => {
     const poll = async () => {
       try {
-        const progress = (await store.dispatch(
-          knowledgeFlowApi.endpoints.getUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGet.initiate(
-            { workflowId },
-            { subscribe: false },
-          ),
-        ).unwrap()) as ProcessDocumentsProgressResponse;
+        const progress = (await store
+          .dispatch(
+            knowledgeFlowApi.endpoints.getUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGet.initiate(
+              { workflowId },
+              { subscribe: false },
+            ),
+          )
+          .unwrap()) as ProcessDocumentsProgressResponse;
         onProgressSummary?.({ filename: fileName, workflowId, summary: progress });
         const hasFailed = progress.documents_failed > 0;
         const hasSucceeded =
           progress.total_documents > 0 &&
-          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >= progress.total_documents;
+          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >=
+            progress.total_documents;
 
         if (hasSucceeded && hasFailed) {
           resolve();

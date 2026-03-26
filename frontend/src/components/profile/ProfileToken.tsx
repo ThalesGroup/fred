@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import CodeIcon from "@mui/icons-material/Code";
-import { Box, Card, CardContent, Grid2, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Card, CardContent, Grid, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 interface ProfileTokenProps {
@@ -26,12 +26,7 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
 
   return (
     // Right-anchored container to match ProfileCard
-    <Grid2
-      size={{ xs: 12 }}
-      display="flex"
-      justifyContent={{ xs: "stretch", md: "flex-start" }}
-      px={{ xs: 1.5, md: 3 }}
-    >
+    <Grid size={{ xs: 12 }} display="flex" justifyContent={{ xs: "stretch", md: "flex-start" }} px={{ xs: 1.5, md: 3 }}>
       <Card
         variant="outlined"
         sx={{
@@ -81,6 +76,6 @@ export function ProfileToken({ tokenParsed }: ProfileTokenProps) {
           </Box>
         </CardContent>
       </Card>
-    </Grid2>
+    </Grid>
   );
 }

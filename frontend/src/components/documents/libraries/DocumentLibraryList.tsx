@@ -27,12 +27,12 @@ import { EmptyState } from "../../EmptyState";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { buildTree, findNode, TagNode } from "../../../shared/utils/tagTree";
+import { useListUsersQuery } from "../../../slices/controlPlane/controlPlaneApi";
 import {
   DocumentMetadata,
   TagWithItemsId,
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation,
   useListAllTagsKnowledgeFlowV1TagsGetQuery,
-  useListUsersKnowledgeFlowV1UsersGetQuery,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 import { useToast } from "../../ToastProvider";
@@ -64,7 +64,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   const selectedCount = React.useMemo(() => Object.keys(selectedDocs).length, [selectedDocs]);
   const clearSelection = React.useCallback(() => setSelectedDocs({}), []);
 
-  const { data: users = [] } = useListUsersKnowledgeFlowV1UsersGetQuery();
+  const { data: users = [] } = useListUsersQuery();
   const ownerNamesById = React.useMemo(() => {
     const m: Record<string, string> = {};
     users.forEach((u) => {

@@ -20,23 +20,8 @@ from agentic_backend.core.agents.v2 import (
     ToolApprovalPolicy,
     ToolRefRequirement,
 )
-from agentic_backend.core.agents.v2.prompt_resources import (
-    load_packaged_markdown,
-)
 
 from .profile_registry import list_react_profiles, profile_options_summary
-
-DEFAULT_SYSTEM_PROMPT = load_packaged_markdown(
-    package="agentic_backend",
-    path_parts=(
-        "agents",
-        "v2",
-        "production",
-        "basic_react",
-        "prompts",
-        "basic_react_system_prompt.md",
-    ),
-)
 
 
 def _default_react_profile_id() -> str:
@@ -79,19 +64,35 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
             required=True,
             default=DEFAULT_REACT_PROFILE_ID,
             enum=[profile.profile_id for profile in list_react_profiles()],
-            ui=UIHints(group="Profile"),
+            ui=UIHints(group="Profile", hide=True),
         ),
         FieldSpec(
             key="system_prompt_template",
             type="prompt",
-            title="System prompt",
-            description=(
-                "Core behavior instructions for the assistant. This stays on the "
-                "definition side so the runtime can remain generic."
-            ),
+            title="agentTuning.fields.prompts_system.title",
+            description="agentTuning.fields.prompts_system.description",
             required=True,
-            default=DEFAULT_SYSTEM_PROMPT,
-            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+            ui=UIHints(
+                group="agentTuning.groups.prompts", multiline=True, markdown=True
+            ),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="agentTuning.fields.chat_options_attach_files.title",
+            description="agentTuning.fields.chat_options_attach_files.description",
+            required=False,
+            default=False,
+            ui=UIHints(group="agentTuning.groups.chatOptions"),
+        ),
+        FieldSpec(
+            key="chat_options.libraries_selection",
+            type="boolean",
+            title="agentTuning.fields.chat_options_libraries_selection.title",
+            description="agentTuning.fields.chat_options_libraries_selection.description",
+            required=False,
+            default=False,
+            ui=UIHints(group="agentTuning.groups.chatOptions"),
         ),
         FieldSpec(
             key="enable_tool_approval",
@@ -103,7 +104,7 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
             ),
             required=False,
             default=False,
-            ui=UIHints(group="Safety"),
+            ui=UIHints(group="Safety", hide=True),
         ),
         FieldSpec(
             key="approval_required_tools",
@@ -116,7 +117,7 @@ def _basic_react_fields() -> tuple[FieldSpec, ...]:
             ),
             required=False,
             default=[],
-            ui=UIHints(group="Safety"),
+            ui=UIHints(group="Safety", hide=True),
         ),
     )
 
@@ -147,8 +148,8 @@ class BasicReActDefinition(ReActAgentDefinition):
     # Main business instruction for the agent.
     # A developer edits this when they want to change the answer style or core
     # user-facing behavior.
-    system_prompt_template: str = Field(
-        default=DEFAULT_SYSTEM_PROMPT,
+    system_prompt_template: str | None = Field(
+        default=None,
         min_length=1,
     )
     # Author-owned: optional human approval for sensitive tool calls.

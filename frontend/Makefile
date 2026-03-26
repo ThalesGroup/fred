@@ -65,7 +65,11 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 ##@ Run
 
 .PHONY: run
-run: check-node node_modules ## Run fred-ui front-end locally
+run: check-node node_modules ## Run frontend locally with split backend ports (8000/8111/8222)
+	VITE_BACKEND_URL=http://localhost:8000 \
+	VITE_BACKEND_URL_API=http://localhost:8000 \
+	VITE_BACKEND_URL_KNOWLEDGE=http://localhost:8111 \
+	VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:8222 \
 	npm run dev
 
 run-only:
@@ -79,6 +83,8 @@ format: ## Use prettier to format all codebase
 
 .PHONY: update-agentic-api
 update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
+	@echo "🔧 Installing frontend dependencies..."
+	npm ci
 	@echo "🔧 Generating agentic backend OpenAPI specification..."
 	cd ../agentic-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for agentic backend..."
@@ -86,10 +92,19 @@ update-agentic-api: ## update the generated hooks used in UI based on agentic ba
 
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
+	@echo "🔧 Installing frontend dependencies..."
+	npm ci
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
 	cd ../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
+
+.PHONY: update-control-plane-api
+update-control-plane-api: ## update the generated hooks used in UI based on control-plane backend openApi spec
+	@echo "🔧 Generating control-plane backend OpenAPI specification..."
+	cd ../control-plane-backend && make generate-openapi
+	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
+	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
 ##@ Clean
 

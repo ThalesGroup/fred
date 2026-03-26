@@ -20,7 +20,8 @@ type team
     define organization: [organization]
 
     # A team can have members that are users or other teams (nested teams)
-    define owner: [user] or admin from organization
+    # Safe mode: global admin role does NOT grant implicit team ownership.
+    define owner: [user]
     define manager: [user] or owner
     define member: [user] or manager
 

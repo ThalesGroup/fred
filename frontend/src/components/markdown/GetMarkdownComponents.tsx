@@ -46,7 +46,9 @@ export function getMarkdownComponents({ theme, size, enableEmojiFix = true }: Ge
         {...props}
       />
     ),
-    a: ({ node, ...props }) => <a style={baseStyle(theme.typography.markdown.a)} target="_blank" rel="noopener noreferrer" {...props} />,
+    a: ({ node, ...props }) => (
+      <a style={baseStyle(theme.typography.markdown.a)} target="_blank" rel="noopener noreferrer" {...props} />
+    ),
     ul: ({ node, ...props }) => <ul style={baseStyle(theme.typography.markdown.ul)} {...props} />,
     li: ({ node, ...props }) => <li style={baseStyle(theme.typography.markdown.li)} {...props} />,
     code: ({ node, inline, className, children, ...props }) => {

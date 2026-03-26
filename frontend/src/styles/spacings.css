@@ -1,0 +1,12 @@
+/* Spacings */
+:root {
+  --spacing-3xl: 48px;
+  --spacing-2xl: 40px;
+  --spacing-xl: 32px;
+  --spacing-l: 24px;
+  --spacing-m: 16px;
+  --spacing-s: 12px;
+  --spacing-xs: 8px;
+  --spacing-2xs: 4px;
+  --spacing-3xs: 2px;
+}

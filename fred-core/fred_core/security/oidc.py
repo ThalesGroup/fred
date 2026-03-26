@@ -25,7 +25,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
-from fred_core.common.lru_cache import ThreadSafeLRUCache
+from fred_core.common import ThreadSafeLRUCache, read_env_bool
 from fred_core.security.structure import KeycloakUser, UserSecurity
 from fred_core.security.whitelist_access_control.access_control import (
     is_user_whitelisted,
@@ -35,18 +35,10 @@ from fred_core.security.whitelist_access_control.access_control import (
 logger = logging.getLogger(__name__)
 
 # --- runtime toggles ------------------
-STRICT_ISSUER = os.getenv("FRED_STRICT_ISSUER", "false").lower() in ("1", "true", "yes")
-STRICT_AUDIENCE = os.getenv("FRED_STRICT_AUDIENCE", "false").lower() in (
-    "1",
-    "true",
-    "yes",
-)
+STRICT_ISSUER = read_env_bool("FRED_STRICT_ISSUER", default=False)
+STRICT_AUDIENCE = read_env_bool("FRED_STRICT_AUDIENCE", default=False)
 CLOCK_SKEW_SECONDS = int(os.getenv("FRED_JWT_CLOCK_SKEW", "0"))  # optional leeway
-JWT_CACHE_ENABLED = os.getenv("FRED_JWT_CACHE_ENABLED", "true").lower() in (
-    "1",
-    "true",
-    "yes",
-)
+JWT_CACHE_ENABLED = read_env_bool("FRED_JWT_CACHE_ENABLED", default=True)
 JWT_CACHE_TTL_SECONDS = int(os.getenv("FRED_JWT_CACHE_TTL", "60"))
 JWT_CACHE_MAX_SIZE = int(os.getenv("FRED_JWT_CACHE_SIZE", "512"))
 

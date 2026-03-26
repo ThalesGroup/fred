@@ -15,7 +15,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fred_core import BaseModelWithId
+from fred_core.common import BaseModelWithId
 from pydantic import ConfigDict, Field
 
 

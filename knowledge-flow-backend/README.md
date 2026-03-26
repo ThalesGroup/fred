@@ -35,6 +35,12 @@ To learn how to:
 
 → See the [**Developer Guide**](docs/DEVELOPER_GUIDE.md)
 
+For shared startup config and policy conventions across all Fred backends, read:
+
+- [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+
+Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as Agentic and Control Plane.
+
 ---
 
 ## Quick Start

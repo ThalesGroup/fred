@@ -16,6 +16,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { transformWithEsbuild } from "vite";
 import svgr from "@svgr/rollup";
+import path from "path";
+import tsconfigPaths from "vite-tsconfig-paths";
+import { visualizer } from "rollup-plugin-visualizer";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -26,6 +29,12 @@ export default defineConfig({
     proxy: {
       "/agentic": process.env.VITE_BACKEND_URL || "http://localhost:8000",
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
+      "/control-plane": process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
+    },
+  },
+  resolve: {
+    alias: {
+      src: path.resolve(__dirname, "./src"),
     },
   },
   plugins: [
@@ -44,6 +53,8 @@ export default defineConfig({
     },
     react(),
     svgr({ exportType: "named" }),
+    tsconfigPaths(),
+    visualizer({ open: false }),
   ],
   optimizeDeps: {
     force: true,

@@ -11,6 +11,9 @@ include ../scripts/makefiles/python-test.mk
 include ../scripts/makefiles/python-clean.mk
 include ../scripts/makefiles/help.mk
 
+ENV_FILE := $(ROOT_DIR)/config/.env
+export ENV_FILE
+
 ##@ Run
 
 .PHONY: tools-check
