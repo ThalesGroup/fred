@@ -268,11 +268,12 @@ storage:
       path: "/app/.fred-test/db.duckdb"
       mode: "read_and_write"
 
-# prometheus:
-#   base_url: http://prometheus:9090
-#   verify_ssl: false
-#   timeout_seconds: 15.0
-#   username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
+# integrations:
+#   prometheus:
+#     base_url: http://prometheus:9090
+#     verify_ssl: false
+#     timeout_seconds: 15.0
+#     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
 
 mcp:
   reports_enabled: true

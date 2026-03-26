@@ -554,6 +554,15 @@ class PrometheusConfig(BaseModel):
         return self
 
 
+class IntegrationsConfig(BaseModel):
+    """Optional upstream service integrations consumed by Knowledge Flow."""
+
+    prometheus: Optional[PrometheusConfig] = Field(
+        default=None,
+        description="Optional Prometheus API configuration for cluster-wide metrics queries.",
+    )
+
+
 class PullProvider(str, Enum):
     LOCAL_PATH = "local_path"
     WEBDAV = "webdav"
@@ -745,9 +754,9 @@ class WorkspaceLayoutConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
-    prometheus: Optional[PrometheusConfig] = Field(
+    integrations: Optional[IntegrationsConfig] = Field(
         default=None,
-        description="Optional Prometheus API configuration for cluster-wide metrics queries.",
+        description="Optional third-party service integrations used by the backend.",
     )
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration

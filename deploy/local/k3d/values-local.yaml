@@ -204,12 +204,6 @@ x-kf-storage: &kf-storage
       path: null
       username: "tabular"
 
-x-kf-prometheus: &kf-prometheus
-  base_url: "http://prometheus:9090"
-  verify_ssl: false
-  timeout_seconds: 15.0
-  username: "admin"
-
 x-kf-mcp: &kf-mcp
   prometheus_ops_enabled: true
 
@@ -587,7 +581,12 @@ applications:
       crossencoder_model: *kf-crossencoder-model
 
       storage:         *kf-storage
-      prometheus:      *kf-prometheus
+      integrations:
+        prometheus:
+          base_url: "http://prometheus:9090"
+          verify_ssl: false
+          timeout_seconds: 15.0
+          username: "admin"
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
@@ -621,7 +620,12 @@ applications:
       vision_model:       *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:            *kf-storage
-      prometheus:         *kf-prometheus
+      integrations:
+        prometheus:
+          base_url: "http://prometheus:9090"
+          verify_ssl: false
+          timeout_seconds: 15.0
+          username: "admin"
       mcp:                *kf-mcp
       filesystem:         *kf-filesystem
     dotenv: *kf-dotenv

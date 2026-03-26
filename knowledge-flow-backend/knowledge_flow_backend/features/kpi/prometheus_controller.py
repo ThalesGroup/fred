@@ -38,9 +38,12 @@ class PrometheusOpsController:
     """Read-only Prometheus HTTP API endpoints for monitoring agents."""
 
     def __init__(self, router: APIRouter):
-        config = get_app_context().configuration.prometheus
+        integrations = get_app_context().configuration.integrations
+        config = integrations.prometheus if integrations is not None else None
         if config is None:
-            raise ValueError("Prometheus MCP is enabled but no Prometheus configuration is defined.")
+            raise ValueError(
+                "Prometheus MCP is enabled but no integrations.prometheus configuration is defined."
+            )
         self.service = PrometheusOpsService(config)
         self._register_routes(router)
 

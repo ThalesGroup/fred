@@ -6,7 +6,7 @@ from fred_core import Action, Resource
 
 from knowledge_flow_backend import main as main_module
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import PrometheusConfig
+from knowledge_flow_backend.common.structures import IntegrationsConfig, PrometheusConfig
 from knowledge_flow_backend.features.kpi import prometheus_controller as prom_controller_module
 from knowledge_flow_backend.features.kpi.prometheus_controller import PrometheusOpsController
 from knowledge_flow_backend.main import create_app
@@ -24,10 +24,12 @@ def test_prometheus_query_uses_metrics_resource_and_returns_payload(
     app_context: ApplicationContext,
     monkeypatch,
 ) -> None:
-    app_context.configuration.prometheus = PrometheusConfig(
-        base_url="http://prometheus:9090",
-        verify_ssl=False,
-        timeout_seconds=10.0,
+    app_context.configuration.integrations = IntegrationsConfig(
+        prometheus=PrometheusConfig(
+            base_url="http://prometheus:9090",
+            verify_ssl=False,
+            timeout_seconds=10.0,
+        )
     )
     observed: dict[str, object] = {}
 
@@ -61,10 +63,12 @@ def test_prometheus_query_uses_metrics_resource_and_returns_payload(
 def test_prometheus_query_rejects_blank_query(
     app_context: ApplicationContext,
 ) -> None:
-    app_context.configuration.prometheus = PrometheusConfig(
-        base_url="http://prometheus:9090",
-        verify_ssl=False,
-        timeout_seconds=10.0,
+    app_context.configuration.integrations = IntegrationsConfig(
+        prometheus=PrometheusConfig(
+            base_url="http://prometheus:9090",
+            verify_ssl=False,
+            timeout_seconds=10.0,
+        )
     )
 
     with _build_prometheus_app() as client:
@@ -78,10 +82,12 @@ def test_prometheus_label_values_forwards_matchers(
     app_context: ApplicationContext,
     monkeypatch,
 ) -> None:
-    app_context.configuration.prometheus = PrometheusConfig(
-        base_url="http://prometheus:9090",
-        verify_ssl=False,
-        timeout_seconds=10.0,
+    app_context.configuration.integrations = IntegrationsConfig(
+        prometheus=PrometheusConfig(
+            base_url="http://prometheus:9090",
+            verify_ssl=False,
+            timeout_seconds=10.0,
+        )
     )
     observed: dict[str, object] = {}
 
@@ -118,10 +124,12 @@ def test_prometheus_metrics_forwards_limit_and_search(
     app_context: ApplicationContext,
     monkeypatch,
 ) -> None:
-    app_context.configuration.prometheus = PrometheusConfig(
-        base_url="http://prometheus:9090",
-        verify_ssl=False,
-        timeout_seconds=10.0,
+    app_context.configuration.integrations = IntegrationsConfig(
+        prometheus=PrometheusConfig(
+            base_url="http://prometheus:9090",
+            verify_ssl=False,
+            timeout_seconds=10.0,
+        )
     )
     observed: dict[str, object] = {}
 
@@ -151,10 +159,12 @@ def test_prometheus_metrics_catalog_forwards_limit_and_search(
     app_context: ApplicationContext,
     monkeypatch,
 ) -> None:
-    app_context.configuration.prometheus = PrometheusConfig(
-        base_url="http://prometheus:9090",
-        verify_ssl=False,
-        timeout_seconds=10.0,
+    app_context.configuration.integrations = IntegrationsConfig(
+        prometheus=PrometheusConfig(
+            base_url="http://prometheus:9090",
+            verify_ssl=False,
+            timeout_seconds=10.0,
+        )
     )
     observed: dict[str, object] = {}
 
@@ -192,10 +202,12 @@ def test_create_app_mounts_prometheus_mcp_when_enabled(
     monkeypatch,
 ) -> None:
     config = app_context.configuration.model_copy(deep=True)
-    config.prometheus = PrometheusConfig(
-        base_url="http://prometheus:9090",
-        verify_ssl=False,
-        timeout_seconds=10.0,
+    config.integrations = IntegrationsConfig(
+        prometheus=PrometheusConfig(
+            base_url="http://prometheus:9090",
+            verify_ssl=False,
+            timeout_seconds=10.0,
+        )
     )
     config.mcp = config.mcp.model_copy(update={"prometheus_ops_enabled": True})
 
