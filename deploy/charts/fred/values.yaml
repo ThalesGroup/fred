@@ -278,6 +278,12 @@ x-kf-storage: &kf-storage
       path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
 
+x-kf-prometheus: &kf-prometheus {}
+  # base_url: http://prometheus:9090
+  # verify_ssl: false
+  # timeout_seconds: 15.0
+  # username: admin
+
 x-kf-mcp: &kf-mcp
   reports_enabled: true
   kpi_enabled: true
@@ -288,6 +294,7 @@ x-kf-mcp: &kf-mcp
   resources_enabled: true
   filesystem_enabled: false
   opensearch_ops_enabled: false
+  prometheus_ops_enabled: false
   neo4j_enabled: false
 
 x-kf-filesystem: &kf-filesystem
@@ -1259,6 +1266,7 @@ applications:
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
+      prometheus:      *kf-prometheus
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
@@ -1422,6 +1430,7 @@ applications:
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
+      prometheus:      *kf-prometheus
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 

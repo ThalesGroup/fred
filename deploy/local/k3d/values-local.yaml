@@ -204,6 +204,15 @@ x-kf-storage: &kf-storage
       path: null
       username: "tabular"
 
+x-kf-prometheus: &kf-prometheus
+  base_url: "http://prometheus:9090"
+  verify_ssl: false
+  timeout_seconds: 15.0
+  username: "admin"
+
+x-kf-mcp: &kf-mcp
+  prometheus_ops_enabled: true
+
 x-cp-scheduler: &cp-scheduler
   enabled: true
   backend: "temporal"
@@ -361,6 +370,13 @@ applications:
             url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-prometheus-ops"
+            name: "mcp.servers.prometheus.name"
+            description: "mcp.servers.prometheus.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-prometheus-ops"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
           - id: "mcp-knowledge-flow-fs"
             name: "mcp.servers.filesystem.name"
             description: "mcp.servers.filesystem.description"
@@ -489,6 +505,14 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
+        - id: "mcp-knowledge-flow-prometheus-ops"
+          name: "mcp.servers.prometheus.name"
+          description: "mcp.servers.prometheus.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-prometheus-ops"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
 
   # ===========================================================================
   # FRONTEND
@@ -563,6 +587,8 @@ applications:
       crossencoder_model: *kf-crossencoder-model
 
       storage:         *kf-storage
+      prometheus:      *kf-prometheus
+      mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
     dotenv: &kf-dotenv
@@ -574,6 +600,8 @@ applications:
       OPENFGA_API_TOKEN: "Azerty123_"
       FRED_POSTGRES_PASSWORD: "Azerty123_"
       TABULAR_POSTGRES_PASSWORD: "Azerty123_"
+      PROMETHEUS_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
 
   # ===========================================================================
   # KNOWLEDGE FLOW WORKER — disabled for now
@@ -593,6 +621,8 @@ applications:
       vision_model:       *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:            *kf-storage
+      prometheus:         *kf-prometheus
+      mcp:                *kf-mcp
       filesystem:         *kf-filesystem
     dotenv: *kf-dotenv
 
@@ -625,4 +655,3 @@ applications:
       scheduler: *cp-scheduler
       storage:   *cp-storage
     dotenv: *cp-dotenv
-
