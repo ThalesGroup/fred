@@ -1042,6 +1042,24 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.prometheusSeriesRequest,
       }),
     }),
+    prometheusMetrics: build.query<PrometheusMetricsApiResponse, PrometheusMetricsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+        },
+      }),
+    }),
+    prometheusMetricsCatalog: build.query<PrometheusMetricsCatalogApiResponse, PrometheusMetricsCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics_catalog`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+        },
+      }),
+    }),
     prometheusMetadata: build.query<PrometheusMetadataApiResponse, PrometheusMetadataApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/prometheus/metadata`,
@@ -1849,6 +1867,24 @@ export type PrometheusSeriesApiResponse = /** status 200 Successful Response */ 
 };
 export type PrometheusSeriesApiArg = {
   prometheusSeriesRequest: PrometheusSeriesRequest;
+};
+export type PrometheusMetricsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsApiArg = {
+  /** Maximum number of metric names to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+};
+export type PrometheusMetricsCatalogApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsCatalogApiArg = {
+  /** Maximum number of catalog entries to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
 };
 export type PrometheusMetadataApiResponse = /** status 200 Successful Response */ {
   [key: string]: any;
@@ -3014,6 +3050,10 @@ export const {
   usePrometheusQueryMutation,
   usePrometheusQueryRangeMutation,
   usePrometheusSeriesMutation,
+  usePrometheusMetricsQuery,
+  useLazyPrometheusMetricsQuery,
+  usePrometheusMetricsCatalogQuery,
+  useLazyPrometheusMetricsCatalogQuery,
   usePrometheusMetadataQuery,
   useLazyPrometheusMetadataQuery,
   usePrometheusLabelsQuery,
