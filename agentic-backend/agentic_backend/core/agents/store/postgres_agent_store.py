@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any, List, Optional, cast
 
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
@@ -29,7 +30,6 @@ from agentic_backend.core.agents.store.base_agent_store import (
     AgentNotFoundError,
     BaseAgentStore,
 )
-from fred_core.sql.async_session import make_session_factory, use_session
 
 logger = logging.getLogger(__name__)
 

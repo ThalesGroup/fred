@@ -18,10 +18,10 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
+from fred_core.sql.async_session import make_session_factory, use_session
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
     SessionAttachmentRecord,

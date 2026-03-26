@@ -512,11 +512,31 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
             self.delete_relations_calls += 1
 
     class _FakeSessionStore:
-        async def get_for_user(self, _user_id: str, db_session=None) -> list[SessionSchema]:
+        async def get_for_user(
+            self, _user_id: str, db_session=None
+        ) -> list[SessionSchema]:
             return [
-                SessionSchema(id="s-1", user_id=_user_id, team_id="swiftpost", title="", updated_at=datetime.now()),
-                SessionSchema(id="s-2", user_id=_user_id, team_id="northbridge", title="", updated_at=datetime.now()),
-                SessionSchema(id="s-3", user_id=_user_id, team_id="swiftpost", title="", updated_at=datetime.now()),
+                SessionSchema(
+                    id="s-1",
+                    user_id=_user_id,
+                    team_id="swiftpost",
+                    title="",
+                    updated_at=datetime.now(),
+                ),
+                SessionSchema(
+                    id="s-2",
+                    user_id=_user_id,
+                    team_id="northbridge",
+                    title="",
+                    updated_at=datetime.now(),
+                ),
+                SessionSchema(
+                    id="s-3",
+                    user_id=_user_id,
+                    team_id="swiftpost",
+                    title="",
+                    updated_at=datetime.now(),
+                ),
             ]
 
     class _FakeQueueStore:
@@ -609,8 +629,18 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
             return None
 
     class _FakeSessionStore:
-        async def get_for_user(self, _user_id: str, db_session=None) -> list[SessionSchema]:
-            return [SessionSchema(id="s-1", user_id=_user_id, team_id="temp-lab", title="", updated_at=datetime.now())]
+        async def get_for_user(
+            self, _user_id: str, db_session=None
+        ) -> list[SessionSchema]:
+            return [
+                SessionSchema(
+                    id="s-1",
+                    user_id=_user_id,
+                    team_id="temp-lab",
+                    title="",
+                    updated_at=datetime.now(),
+                )
+            ]
 
     class _FakeQueueStore:
         async def enqueue(

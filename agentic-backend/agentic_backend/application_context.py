@@ -41,6 +41,7 @@ from fred_core import (
     InMemoryLogStorageConfig,
     OpenFgaRebacConfig,
     OpenSearchLogStore,
+    PostgresSessionStore,
     RamLogStore,
     RebacEngine,
     get_model,
@@ -98,7 +99,6 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
 )
-from fred_core import PostgresSessionStore
 from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)

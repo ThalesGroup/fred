@@ -6,14 +6,12 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, SessionSchema
 from fred_core.kpi import NoOpKPIWriter
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import NoOpAgentFactory
-from fred_core import SessionSchema
-
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,

@@ -3,7 +3,6 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table
 from sqlalchemy.dialects import postgresql
 
 from agentic_backend.core.monitoring.postgres_history_store import PostgresHistoryStore

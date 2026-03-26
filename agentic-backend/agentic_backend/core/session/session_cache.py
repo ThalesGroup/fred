@@ -19,6 +19,7 @@ from threading import Lock
 from typing import Optional
 
 from fred_core import SessionSchema
+
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     SessionAttachmentRecord,
 )

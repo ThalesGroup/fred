@@ -31,6 +31,7 @@ from fred_core import (
     BaseSessionStore,
     KeycloakUser,
     Resource,
+    SessionSchema,
     authorize,
 )
 from fred_core.kpi import (
@@ -67,8 +68,6 @@ from agentic_backend.core.agents.v2.models import ReActAgentDefinition
 from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_error_replies import human_error_message
-from fred_core import SessionSchema
-
 from agentic_backend.core.chatbot.chat_schema import (
     AgentRef,
     AttachmentRef,

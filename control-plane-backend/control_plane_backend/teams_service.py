@@ -70,7 +70,6 @@ _BANNER_EXTENSION_BY_MIME = {
 }
 
 
-
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 

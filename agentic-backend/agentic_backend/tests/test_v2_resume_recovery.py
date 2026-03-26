@@ -4,8 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import BaseSessionStore, KeycloakUser
-from sqlalchemy.ext.asyncio import AsyncSession
+from fred_core import BaseSessionStore, KeycloakUser, SessionSchema
 from fred_core.common import PostgresStoreConfig
 from fred_core.kpi import NoOpKPIWriter
 from fred_core.sql import create_async_engine_from_config
@@ -13,6 +12,7 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.common.structures import Configuration
@@ -36,8 +36,6 @@ from agentic_backend.core.agents.v2.react_runtime import (
 from agentic_backend.core.agents.v2.runtime import AwaitingHumanRuntimeEvent
 from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
-from fred_core import SessionSchema
-
 from agentic_backend.core.chatbot.chat_schema import ChatMessage
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore

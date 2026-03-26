@@ -17,12 +17,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, cast
 
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1
 from agentic_backend.scheduler.store.task_models import AgentTaskRow
 from agentic_backend.scheduler.task_structures import (

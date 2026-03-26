@@ -44,4 +44,6 @@ class SessionRow(Base):
         JSONB().with_variant(JSON(), "sqlite"),  # type: ignore[arg-type]
         nullable=False,
     )
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )

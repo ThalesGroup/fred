@@ -38,6 +38,7 @@ from fred_core import (
     KeycloakUser,
     RBACProvider,
     Resource,
+    SessionSchema,
     TeamPermission,
     UserSecurity,
     authorize_or_raise,
@@ -64,8 +65,6 @@ from agentic_backend.core.agents.runtime_context import (
 from agentic_backend.core.agents.v2.model_routing.catalog import load_model_catalog
 from agentic_backend.core.agents.v2.model_routing.contracts import MatchValue
 from agentic_backend.core.chatbot.attachment_service import AttachmentService
-from fred_core import SessionSchema
-
 from agentic_backend.core.chatbot.chat_schema import (
     AwaitingHumanEvent,
     ChatAskInput,

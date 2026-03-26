@@ -17,27 +17,27 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
+import fred_core.session.stores.session_models  # noqa: F401
+
+# fred-core ORM models (session table) — included so Alembic manages them here.
+from fred_core.models.base import Base as FredCoreBase
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from alembic import context
+import agentic_backend.core.agents.store.agent_models  # noqa: F401
+import agentic_backend.core.feedback.store.feedback_models  # noqa: F401
+import agentic_backend.core.mcp.store.mcp_server_models  # noqa: F401
+import agentic_backend.core.monitoring.history_models  # noqa: F401
+import agentic_backend.core.session.stores.session_attachment_models  # noqa: F401
+import agentic_backend.scheduler.store.task_models  # noqa: F401
+from agentic_backend.common.config_loader import load_configuration
 
 # Import Base and every ORM model so they all register with Base.metadata
 # before autogenerate inspects it.  These imports must stay here (not in
 # agentic_backend/models/__init__.py) to avoid circular imports at runtime.
 from agentic_backend.models.base import Base
-import agentic_backend.core.agents.store.agent_models  # noqa: F401
-import agentic_backend.core.feedback.store.feedback_models  # noqa: F401
-import agentic_backend.core.monitoring.history_models  # noqa: F401
-import agentic_backend.core.mcp.store.mcp_server_models  # noqa: F401
-import agentic_backend.core.session.stores.session_attachment_models  # noqa: F401
-import agentic_backend.scheduler.store.task_models  # noqa: F401
-
-# fred-core ORM models (session table) — included so Alembic manages them here.
-from fred_core.models.base import Base as FredCoreBase
-import fred_core.session.stores.session_models  # noqa: F401
-from agentic_backend.common.config_loader import load_configuration
+from alembic import context
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config

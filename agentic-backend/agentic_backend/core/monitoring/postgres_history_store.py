@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -35,7 +36,6 @@ from agentic_backend.core.chatbot.metric_structures import (
     MetricsBucket,
     MetricsResponse,
 )
-from fred_core.sql.async_session import make_session_factory, use_session
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
 from agentic_backend.core.monitoring.history_models import SessionHistoryRow
 
