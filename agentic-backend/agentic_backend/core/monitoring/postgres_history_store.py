@@ -140,21 +140,29 @@ class PostgresHistoryStore(BaseHistoryStore):
         async with use_session(self._sessions, session) as s:
             await s.execute(upsert_stmt)
 
-    async def get(self, session_id: str, session: AsyncSession | None = None) -> List[ChatMessage]:
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> List[ChatMessage]:
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(
-                    select(SessionHistoryRow)
-                    .where(SessionHistoryRow.session_id == session_id)
-                    .order_by(SessionHistoryRow.rank.asc())
+                (
+                    await s.execute(
+                        select(SessionHistoryRow)
+                        .where(SessionHistoryRow.session_id == session_id)
+                        .order_by(SessionHistoryRow.rank.asc())
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         out: List[ChatMessage] = []
         for row in rows:
             try:
                 parts_payload = row.parts_json or []
-                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(parts_payload)
+                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(
+                    parts_payload
+                )
                 md = _safe_md(row.metadata_json or {})
                 out.append(
                     ChatMessage(
@@ -190,22 +198,28 @@ class PostgresHistoryStore(BaseHistoryStore):
 
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(
-                    select(SessionHistoryRow)
-                    .where(
-                        SessionHistoryRow.timestamp >= start_dt,
-                        SessionHistoryRow.timestamp <= end_dt,
-                        SessionHistoryRow.user_id == user_id,
+                (
+                    await s.execute(
+                        select(SessionHistoryRow)
+                        .where(
+                            SessionHistoryRow.timestamp >= start_dt,
+                            SessionHistoryRow.timestamp <= end_dt,
+                            SessionHistoryRow.user_id == user_id,
+                        )
+                        .order_by(SessionHistoryRow.timestamp.asc())
                     )
-                    .order_by(SessionHistoryRow.timestamp.asc())
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
         grouped: Dict[tuple, list] = {}
         for row in rows:
             try:
                 parts_payload = row.parts_json or []
-                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(parts_payload)
+                parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(
+                    parts_payload
+                )
                 md = _safe_md(row.metadata_json or {})
                 msg = ChatMessage(
                     session_id=row.session_id,

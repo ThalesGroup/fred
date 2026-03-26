@@ -47,7 +47,11 @@ def test_feedback_store_methods_use_session():
         mock_session.get = AsyncMock(side_effect=[row, None])
         mock_session.execute = AsyncMock(
             side_effect=[
-                MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[row])))),
+                MagicMock(
+                    scalars=MagicMock(
+                        return_value=MagicMock(all=MagicMock(return_value=[row]))
+                    )
+                ),
                 MagicMock(rowcount=1),
             ]
         )

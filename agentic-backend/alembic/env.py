@@ -33,6 +33,7 @@ import agentic_backend.core.monitoring.history_models  # noqa: F401
 import agentic_backend.core.mcp.store.mcp_server_models  # noqa: F401
 import agentic_backend.core.session.stores.session_attachment_models  # noqa: F401
 import agentic_backend.scheduler.store.task_models  # noqa: F401
+
 # fred-core ORM models (session table) — included so Alembic manages them here.
 from fred_core.models.base import Base as FredCoreBase
 import fred_core.session.stores.session_models  # noqa: F401

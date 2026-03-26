@@ -26,21 +26,27 @@ class BaseMcpServerStore(ABC):
     """
 
     @abstractmethod
-    async def save(self, server: MCPServerConfiguration, session: AsyncSession | None = None) -> None:
+    async def save(
+        self, server: MCPServerConfiguration, session: AsyncSession | None = None
+    ) -> None:
         """
         Persist or replace an MCP server configuration.
         """
         pass
 
     @abstractmethod
-    async def load_all(self, session: AsyncSession | None = None) -> List[MCPServerConfiguration]:
+    async def load_all(
+        self, session: AsyncSession | None = None
+    ) -> List[MCPServerConfiguration]:
         """
         Retrieve all persisted MCP server configurations.
         """
         pass
 
     @abstractmethod
-    async def get(self, server_id: str, session: AsyncSession | None = None) -> Optional[MCPServerConfiguration]:
+    async def get(
+        self, server_id: str, session: AsyncSession | None = None
+    ) -> Optional[MCPServerConfiguration]:
         """
         Retrieve a single MCP server configuration by id.
         """

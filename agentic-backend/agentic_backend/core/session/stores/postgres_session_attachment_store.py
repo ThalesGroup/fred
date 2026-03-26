@@ -26,7 +26,9 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
     SessionAttachmentRecord,
 )
-from agentic_backend.core.session.stores.session_attachment_models import SessionAttachmentRow
+from agentic_backend.core.session.stores.session_attachment_models import (
+    SessionAttachmentRow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,9 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
 
-    async def save(self, record: SessionAttachmentRecord, session: AsyncSession | None = None) -> None:
+    async def save(
+        self, record: SessionAttachmentRecord, session: AsyncSession | None = None
+    ) -> None:
         now = datetime.now(timezone.utc)
         row = SessionAttachmentRow(
             session_id=record.session_id,
@@ -55,15 +59,21 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
         async with use_session(self._sessions, session) as s:
             await s.merge(row)
 
-    async def list_for_session(self, session_id: str, session: AsyncSession | None = None) -> List[SessionAttachmentRecord]:
+    async def list_for_session(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> List[SessionAttachmentRecord]:
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(
-                    select(SessionAttachmentRow)
-                    .where(SessionAttachmentRow.session_id == session_id)
-                    .order_by(SessionAttachmentRow.created_at.asc())
+                (
+                    await s.execute(
+                        select(SessionAttachmentRow)
+                        .where(SessionAttachmentRow.session_id == session_id)
+                        .order_by(SessionAttachmentRow.created_at.asc())
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         return [
             SessionAttachmentRecord(
                 session_id=row.session_id,
@@ -79,7 +89,9 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
             for row in rows
         ]
 
-    async def delete(self, session_id: str, attachment_id: str, session: AsyncSession | None = None) -> None:
+    async def delete(
+        self, session_id: str, attachment_id: str, session: AsyncSession | None = None
+    ) -> None:
         async with use_session(self._sessions, session) as s:
             await s.execute(
                 delete(SessionAttachmentRow).where(
@@ -88,7 +100,9 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
                 )
             )
 
-    async def delete_for_session(self, session_id: str, session: AsyncSession | None = None) -> None:
+    async def delete_for_session(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> None:
         async with use_session(self._sessions, session) as s:
             await s.execute(
                 delete(SessionAttachmentRow).where(
@@ -96,13 +110,15 @@ class PostgresSessionAttachmentStore(BaseSessionAttachmentStore):
                 )
             )
 
-    async def count_for_sessions(self, session_ids: List[str], session: AsyncSession | None = None) -> int:
+    async def count_for_sessions(
+        self, session_ids: List[str], session: AsyncSession | None = None
+    ) -> int:
         if not session_ids:
             return 0
         async with use_session(self._sessions, session) as s:
             result = await s.execute(
-                select(func.count()).select_from(SessionAttachmentRow).where(
-                    SessionAttachmentRow.session_id.in_(session_ids)
-                )
+                select(func.count())
+                .select_from(SessionAttachmentRow)
+                .where(SessionAttachmentRow.session_id.in_(session_ids))
             )
             return result.scalar() or 0

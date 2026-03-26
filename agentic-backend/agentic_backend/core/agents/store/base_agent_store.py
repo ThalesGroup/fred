@@ -39,7 +39,9 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    async def load_all(self, session: AsyncSession | None = None) -> List[AgentSettings]:
+    async def load_all(
+        self, session: AsyncSession | None = None
+    ) -> List[AgentSettings]:
         """
         Retrieve all persisted agent definitions.
         """

@@ -41,7 +41,9 @@ class PostgresMcpServerStore(BaseMcpServerStore):
         self._sessions = make_session_factory(engine)
         self._seed_marker_id = "__static_seeded__"
 
-    async def load_all(self, session: AsyncSession | None = None) -> List[MCPServerConfiguration]:
+    async def load_all(
+        self, session: AsyncSession | None = None
+    ) -> List[MCPServerConfiguration]:
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(McpServerRow))).scalars().all()
 
@@ -59,7 +61,9 @@ class PostgresMcpServerStore(BaseMcpServerStore):
                 )
         return servers
 
-    async def get(self, server_id: str, session: AsyncSession | None = None) -> Optional[MCPServerConfiguration]:
+    async def get(
+        self, server_id: str, session: AsyncSession | None = None
+    ) -> Optional[MCPServerConfiguration]:
         if server_id == self._seed_marker_id:
             return None
         async with use_session(self._sessions, session) as s:
@@ -73,10 +77,14 @@ class PostgresMcpServerStore(BaseMcpServerStore):
             logger.exception("[STORE][PG][MCP] Failed to parse server id=%s", server_id)
             return None
 
-    async def save(self, server: MCPServerConfiguration, session: AsyncSession | None = None) -> None:
+    async def save(
+        self, server: MCPServerConfiguration, session: AsyncSession | None = None
+    ) -> None:
         row = McpServerRow(
             server_id=server.id,
-            payload_json=McpServerAdapter.dump_python(server, mode="json", exclude_none=True),
+            payload_json=McpServerAdapter.dump_python(
+                server, mode="json", exclude_none=True
+            ),
         )
         async with use_session(self._sessions, session) as s:
             await s.merge(row)
@@ -87,9 +95,12 @@ class PostgresMcpServerStore(BaseMcpServerStore):
             logger.info("[STORE][PG][MCP] Seed marker delete skipped")
             return
         async with use_session(self._sessions, session) as s:
-            result = cast(CursorResult, await s.execute(
-                delete(McpServerRow).where(McpServerRow.server_id == server_id)
-            ))
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    delete(McpServerRow).where(McpServerRow.server_id == server_id)
+                ),
+            )
         if result.rowcount == 0:
             logger.warning("[STORE][PG][MCP] Server id=%s not found", server_id)
         else:

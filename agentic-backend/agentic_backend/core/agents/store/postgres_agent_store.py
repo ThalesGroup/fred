@@ -58,7 +58,9 @@ class PostgresAgentStore(BaseAgentStore):
         if settings.id == self._seed_marker_id:
             raise ValueError("Invalid agent id: reserved for seed marker")
 
-        payload = AgentSettingsAdapter.dump_python(settings, mode="json", exclude_none=True)
+        payload = AgentSettingsAdapter.dump_python(
+            settings, mode="json", exclude_none=True
+        )
         if tuning is not None and "tuning" not in payload:
             try:
                 payload["tuning"] = tuning.model_dump(exclude_none=True)
@@ -72,7 +74,9 @@ class PostgresAgentStore(BaseAgentStore):
         async with use_session(self._sessions, session) as s:
             await s.merge(row)
 
-    async def load_all(self, session: AsyncSession | None = None) -> List[AgentSettings]:
+    async def load_all(
+        self, session: AsyncSession | None = None
+    ) -> List[AgentSettings]:
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(AgentRow))).scalars().all()
 
@@ -125,7 +129,10 @@ class PostgresAgentStore(BaseAgentStore):
         if agent_id == self._seed_marker_id:
             return
         async with use_session(self._sessions, session) as s:
-            result = cast(CursorResult, await s.execute(delete(AgentRow).where(AgentRow.id == agent_id)))
+            result = cast(
+                CursorResult,
+                await s.execute(delete(AgentRow).where(AgentRow.id == agent_id)),
+            )
         if result.rowcount == 0:
             raise AgentNotFoundError(f"Agent '{agent_id}' not found")
 

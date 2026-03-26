@@ -77,9 +77,7 @@ async def test_get_chatbot_metrics_rejects_invalid_start_timestamp():
     store = cast(Any, object.__new__(PostgresHistoryStore))
     store._sessions = None  # bypassed __init__; use_session is patched below
 
-    with patch(
-        "agentic_backend.core.monitoring.postgres_history_store.use_session"
-    ):
+    with patch("agentic_backend.core.monitoring.postgres_history_store.use_session"):
         with pytest.raises(ValueError, match=r"Invalid 'start' timestamp"):
             await cast(PostgresHistoryStore, store).get_chatbot_metrics(
                 start="not-a-datetime",

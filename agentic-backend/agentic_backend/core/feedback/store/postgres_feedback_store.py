@@ -43,18 +43,30 @@ class PostgresFeedbackStore(BaseFeedbackStore):
     async def list(self, session: AsyncSession | None = None) -> List[FeedbackRecord]:
         async with use_session(self._sessions, session) as s:
             rows = (
-                await s.execute(select(FeedbackRow).order_by(FeedbackRow.created_at.desc()))
-            ).scalars().all()
-        return [FeedbackAdapter.validate_python(row, from_attributes=True) for row in rows]
+                (
+                    await s.execute(
+                        select(FeedbackRow).order_by(FeedbackRow.created_at.desc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return [
+            FeedbackAdapter.validate_python(row, from_attributes=True) for row in rows
+        ]
 
-    async def get(self, feedback_id: str, session: AsyncSession | None = None) -> Optional[FeedbackRecord]:
+    async def get(
+        self, feedback_id: str, session: AsyncSession | None = None
+    ) -> Optional[FeedbackRecord]:
         async with use_session(self._sessions, session) as s:
             row = await s.get(FeedbackRow, feedback_id)
         if row is None:
             return None
         return FeedbackAdapter.validate_python(row, from_attributes=True)
 
-    async def save(self, feedback: FeedbackRecord, session: AsyncSession | None = None) -> None:
+    async def save(
+        self, feedback: FeedbackRecord, session: AsyncSession | None = None
+    ) -> None:
         row = FeedbackRow(
             id=feedback.id,
             session_id=feedback.session_id,
@@ -69,11 +81,16 @@ class PostgresFeedbackStore(BaseFeedbackStore):
             await s.merge(row)
         logger.info("[FEEDBACK][PG] Saved feedback entry '%s'", feedback.id)
 
-    async def delete(self, feedback_id: str, session: AsyncSession | None = None) -> None:
+    async def delete(
+        self, feedback_id: str, session: AsyncSession | None = None
+    ) -> None:
         async with use_session(self._sessions, session) as s:
-            result = cast(CursorResult, await s.execute(
-                delete(FeedbackRow).where(FeedbackRow.id == feedback_id)
-            ))
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    delete(FeedbackRow).where(FeedbackRow.id == feedback_id)
+                ),
+            )
         deleted = result.rowcount
         if deleted:
             logger.info("[FEEDBACK][PG] Deleted feedback entry '%s'", feedback_id)

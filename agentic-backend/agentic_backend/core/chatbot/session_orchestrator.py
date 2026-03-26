@@ -722,10 +722,15 @@ class SessionOrchestrator:
             session.next_rank = base_rank + len(all_msgs)
 
             t0 = time.perf_counter()
-            async with phase_timer(self.kpi, "persist_tx"), pg_async_session() as orm_session:
+            async with (
+                phase_timer(self.kpi, "persist_tx"),
+                pg_async_session() as orm_session,
+            ):
                 async with orm_session.begin():
                     t1 = time.perf_counter()
-                    await self.history_store.save(session.id, all_msgs, user.uid, session=orm_session)
+                    await self.history_store.save(
+                        session.id, all_msgs, user.uid, session=orm_session
+                    )
                     await self.session_store.save(session, db_session=orm_session)
                     t2 = time.perf_counter()
 

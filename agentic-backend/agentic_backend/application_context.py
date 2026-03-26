@@ -512,6 +512,7 @@ class ApplicationContext:
 
     def begin_pg_session(self):
         from fred_core.sql.async_session import make_session_factory
+
         factory = make_session_factory(self.get_pg_async_engine())
         return factory()
 

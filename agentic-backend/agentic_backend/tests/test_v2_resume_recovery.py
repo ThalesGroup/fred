@@ -123,7 +123,11 @@ class InMemoryHistoryStore(NoOpHistoryStore):
         self.messages: dict[str, list[ChatMessage]] = {}
 
     async def save(
-        self, session_id: str, messages: list[ChatMessage], user_id: str, session: AsyncSession | None = None
+        self,
+        session_id: str,
+        messages: list[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
         self.messages[session_id] = list(messages)
 

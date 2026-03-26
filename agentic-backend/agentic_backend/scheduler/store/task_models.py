@@ -32,11 +32,17 @@ class AgentTaskRow(Base):
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     target_agent: Mapped[str] = mapped_column(String, index=True, nullable=False)
     request_text: Mapped[str] = mapped_column(String, nullable=False)
-    workflow_id: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(
+        String, unique=True, index=True, nullable=False
+    )
     run_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False
+    )
     context_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     parameters_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     last_message: Mapped[str | None] = mapped_column(String, nullable=True)

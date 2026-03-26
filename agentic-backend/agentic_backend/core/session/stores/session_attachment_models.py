@@ -34,5 +34,9 @@ class SessionAttachmentRow(Base):
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     summary_md: Mapped[str] = mapped_column(Text, nullable=False)
     document_uid: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

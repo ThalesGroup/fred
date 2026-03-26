@@ -86,14 +86,18 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
             await s.flush()
             return self._row_to_record(row)
 
-    async def get(self, task_id: str, session: AsyncSession | None = None) -> AgentTaskRecordV1:
+    async def get(
+        self, task_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
         async with use_session(self._sessions, session) as s:
             row = await s.get(AgentTaskRow, task_id)
         if row is None:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
         return self._row_to_record(row)
 
-    async def get_for_user(self, *, task_id: str, user_id: str, session: AsyncSession | None = None) -> AgentTaskRecordV1:
+    async def get_for_user(
+        self, *, task_id: str, user_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
         async with use_session(self._sessions, session) as s:
             row = await s.get(AgentTaskRow, task_id)
         if row is None:
@@ -133,15 +137,18 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         session: AsyncSession | None = None,
     ) -> None:
         async with use_session(self._sessions, session) as s:
-            result = cast(CursorResult, await s.execute(
-                update(AgentTaskRow)
-                .where(AgentTaskRow.task_id == task_id)
-                .values(
-                    workflow_id=workflow_id,
-                    run_id=run_id,
-                    updated_at=datetime.now(timezone.utc),
-                )
-            ))
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    update(AgentTaskRow)
+                    .where(AgentTaskRow.task_id == task_id)
+                    .values(
+                        workflow_id=workflow_id,
+                        run_id=run_id,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                ),
+            )
         if result.rowcount == 0:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
 
@@ -173,11 +180,14 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
             values["error_json"] = error_json
 
         async with use_session(self._sessions, session) as s:
-            result = cast(CursorResult, await s.execute(
-                update(AgentTaskRow)
-                .where(AgentTaskRow.task_id == task_id)
-                .values(**values)
-            ))
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    update(AgentTaskRow)
+                    .where(AgentTaskRow.task_id == task_id)
+                    .values(**values)
+                ),
+            )
         if result.rowcount == 0:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
 

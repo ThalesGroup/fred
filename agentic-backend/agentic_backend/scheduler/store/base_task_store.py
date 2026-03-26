@@ -65,12 +65,16 @@ class BaseAgentTaskStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get(self, task_id: str, session: AsyncSession | None = None) -> AgentTaskRecordV1:
+    async def get(
+        self, task_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
         """Return task by id or raise AgentTaskNotFoundError."""
         raise NotImplementedError
 
     @abstractmethod
-    async def get_for_user(self, *, task_id: str, user_id: str, session: AsyncSession | None = None) -> AgentTaskRecordV1:
+    async def get_for_user(
+        self, *, task_id: str, user_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
         """Return task if owned by user, else raise AgentTaskForbiddenError/NotFound."""
         raise NotImplementedError
 

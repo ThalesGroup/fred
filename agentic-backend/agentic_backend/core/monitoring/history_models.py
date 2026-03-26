@@ -28,9 +28,7 @@ class SessionHistoryRow(Base):
 
     __tablename__ = "session_history"
 
-    __table_args__ = (
-        Index("ix_session_history_timestamp", "timestamp"),
-    )
+    __table_args__ = (Index("ix_session_history_timestamp", "timestamp"),)
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
