@@ -107,10 +107,7 @@ class PrometheusOpsService:
     ) -> str:
         if not items:
             return "none"
-        return ", ".join(
-            f"{key}={self._truncate(value, 120)}"
-            for key, value in items
-        )
+        return ", ".join(f"{key}={self._truncate(value, 120)}" for key, value in items)
 
     async def instant_query(
         self,
@@ -232,9 +229,7 @@ class PrometheusOpsService:
         fallback_warnings = fallback_payload.get("warnings")
         if isinstance(fallback_warnings, list):
             warnings.extend(str(warning) for warning in fallback_warnings)
-        warnings.append(
-            f"Metadata for {metric_name} resolved from base metric {fallback_metric_name}."
-        )
+        warnings.append(f"Metadata for {metric_name} resolved from base metric {fallback_metric_name}.")
 
         resolved_payload = {
             **fallback_payload,
@@ -328,10 +323,7 @@ class PrometheusOpsService:
                     metric_name,
                     exc.detail.get("error", "unknown error"),
                 )
-                warnings.append(
-                    f"Metadata unavailable for {metric_name}: "
-                    f"{exc.detail.get('error', 'unknown error')}"
-                )
+                warnings.append(f"Metadata unavailable for {metric_name}: {exc.detail.get('error', 'unknown error')}")
                 catalog.append(entry)
                 continue
 
@@ -557,9 +549,7 @@ class PrometheusOpsService:
         if not isinstance(raw_entries, list):
             return []
 
-        return [
-            entry for entry in raw_entries if isinstance(entry, dict)
-        ]
+        return [entry for entry in raw_entries if isinstance(entry, dict)]
 
     def _metadata_family_name(self, metric_name: str) -> str | None:
         for suffix in METRIC_METADATA_FAMILY_SUFFIXES:

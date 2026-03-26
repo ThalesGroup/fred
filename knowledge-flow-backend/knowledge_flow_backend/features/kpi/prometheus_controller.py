@@ -51,12 +51,7 @@ class PrometheusOpsController:
         return text[: limit - 3] + "..."
 
     def _user_ref(self, user: KeycloakUser) -> str:
-        return str(
-            getattr(user, "preferred_username", None)
-            or getattr(user, "email", None)
-            or getattr(user, "sub", None)
-            or "unknown"
-        )
+        return str(getattr(user, "preferred_username", None) or getattr(user, "email", None) or getattr(user, "sub", None) or "unknown")
 
     def _summarize_response(self, payload: dict[str, Any]) -> str:
         status = payload.get("status", "unknown")
@@ -85,10 +80,7 @@ class PrometheusOpsController:
         user: KeycloakUser,
         **details: Any,
     ) -> None:
-        rendered = ", ".join(
-            f"{key}={self._truncate(value, 120)}"
-            for key, value in details.items()
-        ) or "no_args"
+        rendered = ", ".join(f"{key}={self._truncate(value, 120)}" for key, value in details.items()) or "no_args"
         logger.info(
             "[PROM-CTRL] request endpoint=%s user=%s %s",
             endpoint,

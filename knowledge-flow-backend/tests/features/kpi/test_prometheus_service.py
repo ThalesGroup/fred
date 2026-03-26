@@ -289,10 +289,7 @@ async def test_metadata_falls_back_to_base_metric_for_histogram_suffix() -> None
     assert payload["resolvedMetric"] == "ingestion_document_duration_ms"
     assert payload["data"]["ingestion_document_duration_ms"][0]["type"] == "histogram"
     assert payload["data"]["ingestion_document_duration_ms_bucket"][0]["help"] == "KPI timer"
-    assert (
-        "Metadata for ingestion_document_duration_ms_bucket resolved from base metric "
-        "ingestion_document_duration_ms."
-    ) in payload["warnings"]
+    assert ("Metadata for ingestion_document_duration_ms_bucket resolved from base metric ingestion_document_duration_ms.") in payload["warnings"]
 
 
 @pytest.mark.asyncio
