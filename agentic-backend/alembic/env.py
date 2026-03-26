@@ -79,8 +79,8 @@ def do_run_migrations(connection: Connection) -> None:
     a migration waiting on a table lock fails fast rather than blocking
     production traffic.  The Kubernetes init container will retry on failure.
     """
-    connection.execute(text("SET lock_timeout = '1s'"))
-    connection.execute(text("SET statement_timeout = '5s'"))
+    connection.execute(text("SET lock_timeout = '5s'"))
+    connection.execute(text("SET statement_timeout = '30s'"))
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
@@ -90,7 +90,7 @@ async def run_async_migrations() -> None:
     """Create a transient async engine and run migrations."""
     url = _build_url()
     connectable = create_async_engine(url, poolclass=pool.NullPool)
-    async with connectable.connect() as connection:
+    async with connectable.begin() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
 
