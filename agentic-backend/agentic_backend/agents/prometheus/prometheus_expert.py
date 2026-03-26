@@ -140,7 +140,9 @@ class Spot(AgentFlow):
         return payload
 
     def _known_metric_names(self, state: PrometheusState) -> set[str]:
-        metrics_data = state.get("prometheus_context", {}).get("metrics", {}).get("data", [])
+        metrics_data = (
+            state.get("prometheus_context", {}).get("metrics", {}).get("data", [])
+        )
         if not isinstance(metrics_data, list):
             return set()
         return {str(metric) for metric in metrics_data if isinstance(metric, str)}
@@ -258,7 +260,11 @@ class Spot(AgentFlow):
 
             if name == "prometheus_metadata":
                 metric = args.get("metric")
-                if isinstance(metric, str) and metric and metric not in known_metric_names:
+                if (
+                    isinstance(metric, str)
+                    and metric
+                    and metric not in known_metric_names
+                ):
                     suggestions = [
                         candidate
                         for candidate in sorted(known_metric_names)

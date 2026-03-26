@@ -60,9 +60,18 @@ def test_spot_keeps_full_metric_inventory_out_of_prompt() -> None:
         }
     )
 
-    assert "Full metric inventory preloaded outside the prompt: 6 exact metric names." in prompt_context
-    assert "The raw inventory is intentionally hidden to avoid polluting the LLM context." in prompt_context
-    assert "Use prometheus_metrics(search=...) to inspect only the relevant subset" in prompt_context
+    assert (
+        "Full metric inventory preloaded outside the prompt: 6 exact metric names."
+        in prompt_context
+    )
+    assert (
+        "The raw inventory is intentionally hidden to avoid polluting the LLM context."
+        in prompt_context
+    )
+    assert (
+        "Use prometheus_metrics(search=...) to inspect only the relevant subset"
+        in prompt_context
+    )
     assert "container_memory_working_set_bytes" not in prompt_context
     assert "kube_node_status_condition" not in prompt_context
 
