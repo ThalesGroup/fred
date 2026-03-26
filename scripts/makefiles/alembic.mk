@@ -2,6 +2,9 @@
 
 ALEMBIC_CONFIG_FILE ?= ./config/configuration_prod.yaml
 
+# Auto-upgrade the database before starting.
+run-local: db-upgrade
+
 .PHONY: db-migrate
 db-migrate: dev ## generate a new migration revision (usage: make db-migrate MSG="description")
 	CONFIG_FILE=$(ALEMBIC_CONFIG_FILE) $(UV) run alembic revision --autogenerate -m "$(MSG)"
