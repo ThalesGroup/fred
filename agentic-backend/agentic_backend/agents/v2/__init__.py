@@ -22,7 +22,6 @@ __all__ = [
     "ArtifactReportDemoV2Definition",
     "BasicReActDefinition",
     "BidMgrDefinition",
-    "PostalTrackingDefinition",
     "PrometheusExpertV2Definition",
     "RagExpertV2Definition",
 ]
