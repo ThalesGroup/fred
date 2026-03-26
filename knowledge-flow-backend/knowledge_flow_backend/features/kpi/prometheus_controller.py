@@ -41,9 +41,7 @@ class PrometheusOpsController:
         integrations = get_app_context().configuration.integrations
         config = integrations.prometheus if integrations is not None else None
         if config is None:
-            raise ValueError(
-                "Prometheus MCP is enabled but no integrations.prometheus configuration is defined."
-            )
+            raise ValueError("Prometheus MCP is enabled but no integrations.prometheus configuration is defined.")
         self.service = PrometheusOpsService(config)
         self._register_routes(router)
 
