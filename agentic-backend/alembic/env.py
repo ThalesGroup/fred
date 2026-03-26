@@ -51,13 +51,26 @@ target_metadata = [Base.metadata, FredCoreBase.metadata]
 
 
 def _build_url() -> str:
-    """Build the asyncpg connection URL from configuration.yaml."""
+    """Build a database URL from the active configuration.
+
+    Returns an asyncpg URL for PostgreSQL or an aiosqlite URL when the
+    configuration specifies ``sqlite_path`` instead of a PostgreSQL host.
+    """
     cfg = load_configuration()
     pg = cfg.storage.postgres
+    if pg.sqlite_path:
+        from pathlib import Path
+        path = Path(pg.sqlite_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return f"sqlite+aiosqlite:///{path}"
     return (
         f"postgresql+asyncpg://{pg.username}:{pg.password}"
         f"@{pg.host}:{pg.port}/{pg.database}"
     )
+
+
+def _is_postgres(url: str) -> bool:
+    return url.startswith("postgresql")
 
 
 def run_migrations_offline() -> None:
@@ -73,16 +86,21 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection: Connection) -> None:
+def do_run_migrations(connection: Connection, *, is_postgres: bool = True) -> None:
     """Execute migrations on a live synchronous connection.
 
-    Sets ``lock_timeout`` and ``statement_timeout`` before running so that
+    On PostgreSQL, sets ``lock_timeout`` and ``statement_timeout`` so that
     a migration waiting on a table lock fails fast rather than blocking
     production traffic.  The Kubernetes init container will retry on failure.
     """
-    connection.execute(text("SET lock_timeout = '5s'"))
-    connection.execute(text("SET statement_timeout = '30s'"))
-    context.configure(connection=connection, target_metadata=target_metadata)
+    if is_postgres:
+        connection.execute(text("SET lock_timeout = '5s'"))
+        connection.execute(text("SET statement_timeout = '30s'"))
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=not is_postgres,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -90,9 +108,10 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Create a transient async engine and run migrations."""
     url = _build_url()
+    postgres = _is_postgres(url)
     connectable = create_async_engine(url, poolclass=pool.NullPool)
     async with connectable.begin() as connection:
-        await connection.run_sync(do_run_migrations)
+        await connection.run_sync(do_run_migrations, is_postgres=postgres)
     await connectable.dispose()
 
 
