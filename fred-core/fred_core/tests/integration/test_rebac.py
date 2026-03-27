@@ -458,7 +458,7 @@ async def test_team_hierarchy_and_permissions(
     # ~~~~~~~~~~~~~~~~~~~~
     # Manager
 
-    # Test manager can update members
+    # Test manager can not update members
     assert not await rebac_engine.has_permission(
         team_manager,
         TeamPermission.CAN_ADMINISTER_MEMBERS,

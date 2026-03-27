@@ -11,14 +11,12 @@ export default function MarketplaceNavbar() {
       type: "link",
       label: t("rework.sidebar.marketplace.menu.teams"),
       icon: { category: "outlined", type: "groups", filled: true },
-      selected: false,
       linkProps: { to: "/marketplace/teams" },
     },
     {
       type: "link",
       label: t("rework.sidebar.marketplace.menu.agents"),
       icon: { category: "outlined", type: "person" },
-      selected: false,
       linkProps: { to: "/marketplace/agents" },
     },
   ];

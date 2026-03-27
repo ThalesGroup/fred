@@ -5,7 +5,6 @@ import { LinkProps, NavLink } from "react-router-dom";
 export interface NavigationMenuItemBase {
   label: string;
   icon: IconProps;
-  selected: boolean;
 }
 
 export interface NavigationLinkProps extends NavigationMenuItemBase {
@@ -16,11 +15,12 @@ export interface NavigationLinkProps extends NavigationMenuItemBase {
 export interface NavigationActionProps extends NavigationMenuItemBase {
   type: "button";
   onClick: () => void;
+  selected: boolean;
 }
 
 export type NavigationMenuItemProps = NavigationLinkProps | NavigationActionProps;
 
-export default function NavigationMenuItem({ label, icon, selected, ...props }: NavigationMenuItemProps) {
+export default function NavigationMenuItem({ label, icon, ...props }: NavigationMenuItemProps) {
   const Content = (
     <>
       <span className={styles.icon} aria-hidden="true">
@@ -49,8 +49,8 @@ export default function NavigationMenuItem({ label, icon, selected, ...props }: 
       type="button"
       className={styles["navigation-menu-item"]}
       onClick={props.onClick}
-      data-selected={selected}
-      aria-selected={selected}
+      data-selected={props.selected}
+      aria-selected={props.selected}
     >
       {Content}
     </button>

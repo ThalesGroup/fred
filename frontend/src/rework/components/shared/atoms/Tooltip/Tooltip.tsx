@@ -28,14 +28,14 @@ export const Tooltip = ({ text, children }: TooltipProps) => {
     <>
       {cloneElement(children, tooltipHandlers)}
 
-        <div
-          ref={popoverRef}
-          id={tooltipId}
-          popover="manual"
-          style={{ positionAnchor: anchorName } as CSSProperties}
-          className={styles["tooltip-content"]}
-        >
-          {text}
+      <div
+        ref={popoverRef}
+        id={tooltipId}
+        popover="manual"
+        style={{ positionAnchor: anchorName } as CSSProperties}
+        className={styles["tooltip-content"]}
+      >
+        {text}
       </div>
     </>
   );

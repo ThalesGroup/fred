@@ -40,7 +40,7 @@ export default function TeamCard({ team, withDescription }: TeamCardProps) {
         </div>
         {withDescription && <div className={styles["team-card-description"]}>{team.description}</div>}
         <div className={styles["team-card-footer"]}>
-          <AvatarGroup tooltip={true} avatars={team.owners.map((o) => ({ name: o.first_name + " " + o.last_name, size: "small" }))} />
+          <AvatarGroup avatars={team.owners.map((o) => ({ name: o.first_name + " " + o.last_name, size: "small" }))} />
         </div>
       </div>
     </div>

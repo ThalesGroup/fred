@@ -25,7 +25,6 @@ import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
 import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
-import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
 import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
@@ -81,10 +80,6 @@ export const routes: RouteObject[] = [
       {
         path: "knowledge",
         element: <KnowledgeHub />,
-      },
-      {
-        path: "teams",
-        element: <TeamsPage />,
       },
       {
         path: "team/:teamId/*",

@@ -5,7 +5,6 @@ import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
 import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
-import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
 import { capitalize } from "../utils/capitalize";
@@ -24,12 +23,6 @@ export function TeamDetailsPage() {
     // Should never happen
     return <>need a team id in the url</>;
   }
-
-  const memberTab: TabConfig = {
-    label: t("teamDetails.tabs.members"),
-    path: `/team/${teamId}/members`,
-    component: <TeamMembersPage teamId={teamId} permissions={team?.permissions} />,
-  };
 
   const tabs: TabConfig[] = [
     {
@@ -57,7 +50,6 @@ export function TeamDetailsPage() {
       path: `/team/${teamId}/apps`,
       component: <TeamAppsPage />,
     },
-    ...(team?.permissions?.includes("can_read_members") ? [memberTab] : []),
   ];
 
   return (

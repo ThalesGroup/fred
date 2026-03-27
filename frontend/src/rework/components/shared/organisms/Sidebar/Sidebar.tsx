@@ -8,15 +8,15 @@ import MarketplaceNavbar from "@shared/organisms/Sidebar/MarketplaceNavbar/Marke
 export default function Sidebar() {
   const { pathname } = useLocation();
 
-  const sidebarMode = pathname.startsWith("/marketplace") ? SidebarMode.MARKETPLACE : SidebarMode.TEAM;
+  const sidebarMode: SidebarMode = pathname.startsWith("/marketplace") ? "MARKETPLACE" : "TEAM";
 
   return (
     <div className={styles["sidebar-container"]}>
       <div className={styles["team-selection-container"]}>
         <TeamSelectionNavbar />
       </div>
-      {sidebarMode === SidebarMode.TEAM && <TeamContentNavbar />}
-      {sidebarMode === SidebarMode.MARKETPLACE && <MarketplaceNavbar />}
+      {sidebarMode === "TEAM" && <TeamContentNavbar />}
+      {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
       <div className={styles["user-profile-container"]}>
         <UserProfile />
       </div>
@@ -24,7 +24,4 @@ export default function Sidebar() {
   );
 }
 
-enum SidebarMode {
-  TEAM,
-  MARKETPLACE,
-}
+type SidebarMode =  "TEAM" | "MARKETPLACE";

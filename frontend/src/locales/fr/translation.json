@@ -1287,47 +1287,6 @@
     "noAppDescription": "Les propriétaires de l’équipe n’ont configuré aucune application pour ce groupe pour le moment.",
     "noAppTitle": "Aucune app"
   },
-  "teamSettingsPage": {
-    "teamBanner": {
-      "label": "Bannière de l'équipe",
-      "buttonLabel": "Télécharger une image...",
-      "alt": "Image de bannière de l'équipe",
-      "noImage": "Aucune image de bannière téléchargée",
-      "uploadSuccess": "Bannière téléchargée avec succès",
-      "uploadError": "Échec du téléchargement de l'image de bannière",
-      "invalidType": "Type de fichier invalide. Veuillez utiliser le format JPEG, PNG ou WebP.",
-      "tooLarge": "Le fichier est trop volumineux. La taille maximale est de 5 Mo."
-    },
-    "description": {
-      "label": "Description de l'équipe",
-      "placeholder": "Décrivez ici la raison d'être de votre équipe ainsi que ses enjeux. "
-    },
-    "private": {
-      "label": "Équipe privée"
-    }
-  },
-  "teamMembersPage": {
-    "tableHeader": {
-      "username": "Identifiant",
-      "firstName": "Prénom",
-      "lastName": "Nom de famille",
-      "role": "Rôle",
-      "actions": "Actions"
-    },
-    "headerTitle": "Membres de l'équipe",
-    "headerInfoTooltip": "Voici les membres de cette équipe. Un membre peut faire partie de plusieurs équipes à la fois.",
-    "teamRole": {
-      "member": "Membre",
-      "manager": "Manager",
-      "owner": "Propriétaire"
-    },
-    "addUserInputPlaceholder": "Ajouter un utilisateur...",
-    "removeMemberConfonfirmationDialog": {
-      "title": "Confirmer la suppression ?",
-      "message": "Vous etes sur le point de supprimer cet utilisateur de l'équipe. Êtes-vous certain de vouloir continuer ?",
-      "confirmButtonLabel": "Supprimer"
-    }
-  },
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Annuler",
     "defaultConfirmButtonLabel": "Confirmer"

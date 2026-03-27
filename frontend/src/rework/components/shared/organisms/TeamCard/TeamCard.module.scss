@@ -22,10 +22,10 @@
   bottom: anchor(bottom);
   left: var(--spacing-m);
   transform: translateY(50%);
+  box-shadow: var(--shadow-s);
   border-radius: var(--radius-s);
   width: 48px;
   height: 48px;
-  box-shadow: var(--shadow-s);
 }
 
 .team-card-details {
@@ -41,13 +41,17 @@
   flex-direction: column;
   gap: var(--spacing-3xs);
 }
+
 .team-information {
   display: flex;
   justify-content: space-between;
 }
 
 .team-name {
+  overflow: hidden;
   color: var(--on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   @include typography("title", "large", true);
 }
@@ -76,6 +80,7 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   color: var(--on-surface-retreat);
+  overflow-wrap: anywhere;
 
   @include typography("body", "medium");
 }
