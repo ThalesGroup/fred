@@ -605,7 +605,7 @@ applications:
         enable_catalog_mode: true
         # Enable durable SQL checkpointer for v2 runtimes.
         # Disabled by default.
-        enable_v2_sql_checkpointer: false
+        enable_v2_sql_checkpointer: true
         # Number of past exchanges to restore when initializing an agent session
         # This setting is used to limit the amount of historical context
         # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
