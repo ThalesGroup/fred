@@ -106,6 +106,44 @@ added since the stamp point:
 make db-upgrade
 ```
 
+## SQLite compatibility
+
+Migrations must work on both PostgreSQL and SQLite (CI validates both).
+Two rules to follow:
+
+### Use `with_variant` for PostgreSQL-specific types
+
+SQLite does not support types like `JSONB` or `TIMESTAMP WITH TIME ZONE`.
+Use SQLAlchemy's `with_variant` to pick the right type per dialect.
+
+Common portable types are already defined in `fred_core/models/base.py`
+(`JsonColumn`, `TimestampColumn`) -- prefer these in ORM models. In migration
+files, apply the same pattern:
+
+```python
+from sqlalchemy.dialects import postgresql
+
+jsonb_type = postgresql.JSONB(astext_type=sa.Text()).with_variant(
+    sa.JSON(), "sqlite"
+)
+```
+
+### Use `batch_alter_table` when altering columns
+
+SQLite does not support most `ALTER TABLE` operations (drop column, change type,
+add NOT NULL, etc.). Alembic's
+[batch mode](https://alembic.sqlalchemy.org/en/latest/batch.html) works around
+this by recreating the table behind the scenes:
+
+```python
+with op.batch_alter_table("session", schema=None) as batch_op:
+    batch_op.add_column(sa.Column("team_id", sa.String(), nullable=True))
+    batch_op.alter_column("user_id", existing_type=sa.String(), nullable=False)
+```
+
+See `alembic/versions/5c9bc83efbfb_upgrade_session_schema.py` for a full
+example.
+
 ## CI checks
 
 A CI workflow (`Check-migrations.yml`) runs on every PR that touches migration
@@ -136,19 +174,3 @@ make db-check-postgres-down  # stop the PostgreSQL container
 make db-check-postgres-full  # start container, run checks, stop container
 ```
 
-## Make targets reference
-
-| Target               | Description                                    |
-|----------------------|------------------------------------------------|
-| `db-migrate`         | Generate a new migration (`MSG="description"`) |
-| `db-upgrade`         | Apply all pending migrations                   |
-| `db-downgrade`       | Roll back the last migration                   |
-| `db-stamp`           | Mark DB as up-to-date without running SQL      |
-| `db-history`         | Show migration history                         |
-| `db-check-migrations`   | Run full migration CI check suite              |
-| `db-check-heads`        | Assert single Alembic head                     |
-| `db-check-sqlite`       | Migration checks against SQLite                |
-| `db-check-postgres-up`  | Start PostgreSQL container                     |
-| `db-check-postgres`     | Migration checks against PostgreSQL            |
-| `db-check-postgres-down`| Stop PostgreSQL container                      |
-| `db-check-postgres-full`| Start, check, stop PostgreSQL                  |
