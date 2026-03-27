@@ -34,7 +34,7 @@ export interface Credentials {
 // Base API slice definition
 export const apiSlice = createApi({
   reducerPath: "api", // Optional: Defines where the slice is added to the state
-  baseQuery: createDynamicBaseQuery({ backend: "api" }),
+  baseQuery: createDynamicBaseQuery(),
   endpoints: () => ({}),
 });
 

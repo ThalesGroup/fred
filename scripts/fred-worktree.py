@@ -149,7 +149,7 @@ def generate_vscode_settings(color: str) -> dict:
 
 def patch_vscode_tasks(wt: Path, ports: dict[str, int]) -> None:
     """Patch the existing .vscode/tasks.json: replace default ports with worktree ports
-    and inject frontend env vars for backend URL proxying."""
+    and inject VITE_PORT for the frontend task."""
     tasks_file = wt / ".vscode" / "tasks.json"
     if not tasks_file.exists():
         raise click.ClickException(f"tasks.json not found at {tasks_file}")
@@ -158,14 +158,6 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int]) -> None:
 
     # Port replacement map: default port -> worktree port
     port_map = {str(DEFAULT_PORTS[svc]): str(ports[svc]) for svc in ALL_SERVICES}
-
-    frontend_env = (
-        f"VITE_PORT={ports['frontend']} "
-        f"VITE_BACKEND_URL=http://localhost:{ports['agentic-backend']} "
-        f"VITE_BACKEND_URL_API=http://localhost:{ports['agentic-backend']} "
-        f"VITE_BACKEND_URL_KNOWLEDGE=http://localhost:{ports['knowledge-flow-backend']} "
-        f"VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:{ports['control-plane-backend']} "
-    )
 
     def replace_ports(s: str) -> str:
         for old, new in port_map.items():
@@ -177,10 +169,17 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int]) -> None:
         # Replace ports in args
         if "args" in task:
             task["args"] = [replace_ports(a) for a in task["args"]]
-            # Inject frontend env vars for frontend tasks
+            # Inject env vars for frontend tasks: VITE_PORT + backend URLs for the Vite proxy
             for i, arg in enumerate(task["args"]):
-                if "npm run dev" in arg and "VITE_PORT" not in arg:
-                    task["args"][i] = arg.replace("make run", f"{frontend_env}make run")
+                if "make run" in arg and "frontend" in task.get("label", "").lower():
+                    if "VITE_PORT" not in arg:
+                        frontend_env = (
+                            f"VITE_PORT={ports['frontend']} "
+                            f"VITE_BACKEND_URL=http://localhost:{ports['agentic-backend']} "
+                            f"VITE_BACKEND_URL_KNOWLEDGE=http://localhost:{ports['knowledge-flow-backend']} "
+                            f"VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:{ports['control-plane-backend']}"
+                        )
+                        task["args"][i] = arg.replace("make run", f"{frontend_env} make run")
 
         # Replace ports in command string
         if "command" in task and isinstance(task["command"], str):

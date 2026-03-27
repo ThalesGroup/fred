@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { getConfig } from "../common/config";
 import { store } from "../common/store";
 import { KeyCloakService } from "../security/KeycloakService";
 import { knowledgeFlowApi, ProcessDocumentsProgressResponse } from "./knowledgeFlow/knowledgeFlowOpenApi";
@@ -93,15 +92,10 @@ export async function streamUploadOrProcessDocument(
 
   formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
-  const backend_url_knowledge = getConfig().backend_url_knowledge;
-  if (!backend_url_knowledge) {
-    throw new Error("Knowledge backend URL is not defined");
-  }
-
   const endpoint =
     mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
 
-  const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

@@ -60,7 +60,7 @@ export interface RemoveTeamMemberResponse {
 
 export const controlPlaneApi = createApi({
   reducerPath: "controlPlaneApi",
-  baseQuery: createDynamicBaseQuery({ backend: "controlPlane" }),
+  baseQuery: createDynamicBaseQuery(),
   keepUnusedDataFor: 0,
   refetchOnMountOrArgChange: true,
   refetchOnFocus: true,

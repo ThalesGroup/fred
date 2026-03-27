@@ -22,10 +22,6 @@ import type { FrontendConfigDto, FrontendFlags, Properties, UserSecurity } from 
 
 /** Final merged app config used by the UI. */
 export interface AppConfig {
-  backend_url_api: string; // Base URL of the Agentic backend
-  backend_url_knowledge: string; // Base URL of the Knowledge Flow backend
-  backend_url_control_plane: string; // Base URL of the Control Plane backend
-  websocket_url: string; // WebSocket server URL
   frontend_basename: string; // Base name used by the frontend
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
@@ -61,31 +57,20 @@ const normalizeProps = (p?: Properties): Record<string, string> => {
 };
 
 /**
- * Loads /config.json then queries backend /config/frontend_settings (typed via OpenAPI).
- * Backend returns FrontendConfigDto: { frontend_settings: { feature_flags, properties }, user_auth }
+ * Loads /config.json for static settings, then queries backend /config/frontend_settings.
+ * All API calls use relative URLs — the Vite proxy (dev) or nginx ingress (prod)
+ * routes /agentic, /knowledge-flow, /control-plane to the correct backends.
  */
 export const loadConfig = async () => {
-  // 1) Static config
+  // 1) Static config (frontend_basename only)
   const res = await fetch("/config.json");
   if (!res.ok) throw new Error(`Cannot load /config.json: ${res.status} ${res.statusText}`);
   const base = (await res.json()) as {
-    backend_url_api: string;
-    backend_url_knowledge?: string;
-    backend_url_control_plane?: string;
-    websocket_url: string;
     frontend_basename: string;
   };
 
-  // Local dev can override backend targets via Vite env vars.
-  // If knowledge/control-plane are omitted, they fall back to api URL.
-  const backend_url_api = import.meta.env.VITE_BACKEND_URL_API || base.backend_url_api;
-  const backend_url_knowledge = import.meta.env.VITE_BACKEND_URL_KNOWLEDGE || base.backend_url_knowledge || backend_url_api;
-  const backend_url_control_plane =
-    import.meta.env.VITE_BACKEND_URL_CONTROL_PLANE || base.backend_url_control_plane || backend_url_api;
-  const websocket_url = import.meta.env.VITE_WEBSOCKET_URL || base.websocket_url;
-
-  // 2) Dynamic config (typed)
-  const r = await fetch(`${backend_url_api}/agentic/v1/config/frontend_settings`);
+  // 2) Dynamic config from backend (uses relative URL via proxy/ingress)
+  const r = await fetch("/agentic/v1/config/frontend_settings");
   if (!r.ok) throw new Error(`Cannot load frontend settings: ${r.status} ${r.statusText}`);
   const settings = (await r.json()) as FrontendConfigDto;
 
@@ -98,10 +83,6 @@ export const loadConfig = async () => {
   const properties = normalizeProps(frontend.properties);
 
   config = {
-    backend_url_api,
-    backend_url_knowledge,
-    backend_url_control_plane,
-    websocket_url,
     frontend_basename: base.frontend_basename,
     feature_flags,
     properties,
@@ -149,7 +130,7 @@ export const loadPermissions = async () => {
     const token = KeyCloakService.GetToken();
     if (!token) throw new Error("No Keycloak token available");
 
-    const res = await fetch(`${getConfig().backend_url_api}/agentic/v1/config/permissions`, {
+    const res = await fetch("/agentic/v1/config/permissions", {
       headers: {
         Authorization: `Bearer ${token}`,
       },

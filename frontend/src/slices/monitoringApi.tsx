@@ -38,7 +38,7 @@ export type Precision = "sec" | "min" | "hour" | "day";
  */
 export const monitoringApi = createApi({
   reducerPath: "monitoringApi",
-  baseQuery: createDynamicBaseQuery({ backend: "api" }),
+  baseQuery: createDynamicBaseQuery(),
   endpoints: (builder) => ({
     fetchNumericalMetrics: builder.mutation<
       NumericalMetric[],

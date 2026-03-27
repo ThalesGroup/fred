@@ -15,7 +15,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
-import { getConfig } from "../common/config";
 import { mergeAuthoritative, toWsUrl, upsertOne } from "../components/chatbot/ChatBotUtils";
 import { KeyCloakService } from "../security/KeycloakService";
 
@@ -87,7 +86,7 @@ export function useChatSocket(params: {
       }
     }
 
-    const rawWs = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
+    const rawWs = toWsUrl("/agentic/v1/chatbot/query/ws");
     const url = new URL(rawWs);
     if (token) url.searchParams.set("token", token);
 
