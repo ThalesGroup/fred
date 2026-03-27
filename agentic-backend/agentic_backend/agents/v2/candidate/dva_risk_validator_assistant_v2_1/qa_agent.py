@@ -25,7 +25,6 @@ from agentic_backend.core.agents.v2.support.builtins import TOOL_REF_KNOWLEDGE_S
 
 from .prompt_loader import load_dva_risk_validator_prompt
 
-
 QA_SYSTEM_PROMPT = load_dva_risk_validator_prompt(
     "dva_risk_validator_qa_system_prompt.md"
 )

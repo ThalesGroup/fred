@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 from pydantic_core import PydanticUndefined
 
 from agentic_backend.core.agents.agent_spec import FieldSpec, FieldType, UIHints
+
 from ..contracts.context import (
     ArtifactPublishRequest,
     ArtifactScope,

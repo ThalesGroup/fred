@@ -14,6 +14,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, PrivateAttr
 
 from agentic_backend.agents.v2 import BasicReActDefinition
+from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
     ArtifactPublisherPort,
@@ -77,7 +78,6 @@ from agentic_backend.core.agents.v2.support.filesystem_context import (
     build_filesystem_browsing_context,
 )
 from agentic_backend.core.chatbot.chat_schema import GeoPart, LinkKind, LinkPart
-from agentic_backend.common.structures import AgentSettings
 from agentic_backend.integrations.v2_runtime.adapters import CompositeToolInvoker
 
 
