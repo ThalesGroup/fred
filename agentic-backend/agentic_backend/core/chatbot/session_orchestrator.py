@@ -506,10 +506,19 @@ class SessionOrchestrator:
         try:
             if session_updated and session_callback:
                 await self._emit_session(session_callback, session)
-            # 3) Rebuild minimal LangChain history (user/assistant/system only),
-            # This method will only restore history if the agent is not cached.
+            # 3) Rebuild minimal LangChain history (user/assistant/system only).
+            #
+            # Memory ownership by agent type:
+            # - V1 (AgentFlow) cache hit:  MemorySaver lives in the cached instance — skip.
+            # - V1 (AgentFlow) cache miss: MemorySaver is empty — restore from DB.
+            # - V2 with SQL checkpointer:  LangGraph reads state via thread_id — NEVER restore.
+            #   Restoring would inject messages with new IDs alongside the checkpoint's messages,
+            #   causing duplication via the add_messages reducer.
+            # - V2 without SQL checkpointer (explicit opt-out): no checkpointer, always restore.
+            _v2_agent = isinstance(agent, V2SessionAgent)
+            _v2_has_checkpointer = _v2_agent and agent.streaming_memory is not None
             lc_history: List[AnyMessage] = []
-            if not is_cached:
+            if not _v2_has_checkpointer and (not is_cached or _v2_agent):
                 async with phase_timer(self.kpi, "history_restore"):
                     lc_history = await self._restore_history(
                         user=user,
