@@ -204,6 +204,9 @@ x-kf-storage: &kf-storage
       path: null
       username: "tabular"
 
+x-kf-mcp: &kf-mcp
+  prometheus_ops_enabled: true
+
 x-cp-scheduler: &cp-scheduler
   enabled: true
   backend: "temporal"
@@ -259,6 +262,7 @@ applications:
         log_level: "warning"
       scheduler:
         enabled: true
+        backend: temporal
         temporal:
           host: "temporal:7233"
 
@@ -279,6 +283,110 @@ applications:
         timeout:
           connect: 20
           read: 60
+        default_chat_model:
+          provider: "openai"
+          name: "gpt-4o-mini"
+          settings:
+            max_retries: 0
+            timeout:
+              connect: 10.0
+              read: 30.0
+              write: 30.0
+              pool: 5.0
+            http_client_limits:
+              max_connections: 500
+              max_keepalive_connections: 200
+              keepalive_expiry_seconds: 10
+            temperature: 0.0
+        default_language_model:
+          provider: "openai"
+          name: "gpt-4o-mini"
+          settings:
+            max_retries: 0
+            timeout:
+              connect: 10.0
+              read: 30.0
+              write: 30.0
+              pool: 5.0
+            http_client_limits:
+              max_connections: 500
+              max_keepalive_connections: 200
+              keepalive_expiry_seconds: 10
+            temperature: 0.0
+        recursion:
+          recursion_limit: 40
+        agents:
+          - id: "Georges"
+            name: "Georges"
+            type: "agent"
+            class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+            enabled: true
+            chat_options:
+              attach_files: false
+          - id: "Rico"
+            name: "Rico"
+            type: "agent"
+            class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+            enabled: true
+            chat_options:
+              search_policy_selection: true
+              libraries_selection: true
+              search_rag_scoping: true
+              deep_search_delegate: false
+              attach_files: true
+              include_corpus_in_search: true
+          - id: "Tessa"
+            name: "Tessa"
+            type: "agent"
+            class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+            enabled: true
+
+      mcp:
+        servers:
+          - id: "mcp-knowledge-flow-mcp-text"
+            name: "mcp.servers.search_documents.name"
+            description: "mcp.servers.search_documents.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-text"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-mcp-tabular"
+            name: "mcp.servers.tabular.name"
+            description: "mcp.servers.tabular.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-tabular"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-opensearch-ops"
+            name: "mcp.servers.search_opensearch.name"
+            description: "mcp.servers.search_opensearch.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-prometheus-ops"
+            name: "mcp.servers.prometheus.name"
+            description: "mcp.servers.prometheus.description"
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-prometheus-ops"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-fs"
+            name: "mcp.servers.filesystem.name"
+            description: "mcp.servers.filesystem.description"
+            enabled: true
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-fs"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
+          - id: "mcp-knowledge-flow-corpus"
+            name: "mcp.servers.corpus.name"
+            description: "mcp.servers.corpus.description"
+            enabled: true
+            transport: "streamable_http"
+            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-corpus"
+            sse_read_timeout: 2000
+            auth_mode: "user_token"
 
       storage:
         postgres:
@@ -391,6 +499,14 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
+        - id: "mcp-knowledge-flow-prometheus-ops"
+          name: "mcp.servers.prometheus.name"
+          description: "mcp.servers.prometheus.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-prometheus-ops"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
 
   # ===========================================================================
   # FRONTEND
@@ -465,13 +581,26 @@ applications:
       crossencoder_model: *kf-crossencoder-model
 
       storage:         *kf-storage
+      integrations:
+        prometheus:
+          base_url: "http://prometheus:9090"
+          verify_ssl: false
+          timeout_seconds: 15.0
+          username: "admin"
+      mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
     dotenv: &kf-dotenv
       <<: *common-dotenv
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_"
       MINIO_SECRET_KEY: "Azerty123_"
+      OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
+      OPENSEARCH_PASSWORD: "FredDemo_2026!"
+      OPENFGA_API_TOKEN: "Azerty123_"
+      FRED_POSTGRES_PASSWORD: "Azerty123_"
       TABULAR_POSTGRES_PASSWORD: "Azerty123_"
+      PROMETHEUS_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
 
   # ===========================================================================
   # KNOWLEDGE FLOW WORKER — disabled for now
@@ -491,6 +620,13 @@ applications:
       vision_model:       *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:            *kf-storage
+      integrations:
+        prometheus:
+          base_url: "http://prometheus:9090"
+          verify_ssl: false
+          timeout_seconds: 15.0
+          username: "admin"
+      mcp:                *kf-mcp
       filesystem:         *kf-filesystem
     dotenv: *kf-dotenv
 
@@ -523,4 +659,3 @@ applications:
       scheduler: *cp-scheduler
       storage:   *cp-storage
     dotenv: *cp-dotenv
-

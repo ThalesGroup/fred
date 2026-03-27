@@ -82,6 +82,7 @@ class RBACProvider(AuthorizationProvider):
                 Resource.TABLES_DATABASES: READ_ONLY,
                 Resource.TABLES: READ_ONLY,
                 Resource.OPENSEARCH: READ_ONLY,
+                Resource.METRICS: READ_ONLY,
             },
         }
 
