@@ -15,7 +15,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from logging.config import fileConfig
+from pathlib import Path
 
 import fred_core.session.stores.session_models  # noqa: F401
 
@@ -55,11 +57,16 @@ def _build_url() -> str:
 
     Returns an asyncpg URL for PostgreSQL or an aiosqlite URL when the
     configuration specifies ``sqlite_path`` instead of a PostgreSQL host.
+
+    If the ``DATABASE_URL`` environment variable is set it is used directly,
+    bypassing configuration file loading (useful for CI).
     """
+    url_override = os.environ.get("DATABASE_URL")
+    if url_override:
+        return url_override
     cfg = load_configuration()
     pg = cfg.storage.postgres
     if pg.sqlite_path:
-        from pathlib import Path
         path = Path(pg.sqlite_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite+aiosqlite:///{path}"

@@ -27,6 +27,13 @@ You can override it:
 make db-upgrade ALEMBIC_CONFIG_FILE=./config/my_config.yaml
 ```
 
+Alternatively, set the `DATABASE_URL` environment variable to bypass configuration
+file loading entirely and connect to an arbitrary database:
+
+```bash
+DATABASE_URL="postgresql+asyncpg://user:pass@host:5432/mydb" make db-upgrade
+```
+
 ## Changing a table definition
 
 1. Edit the SQLAlchemy ORM model (e.g. add a column, create a new table).
@@ -99,12 +106,49 @@ added since the stamp point:
 make db-upgrade
 ```
 
+## CI checks
+
+A CI workflow (`Check-migrations.yml`) runs on every PR that touches migration
+files or ORM models. It validates migrations against both SQLite and PostgreSQL.
+
+You can run the same checks locally:
+
+```bash
+make db-check-migrations
+```
+
+This runs four checks:
+
+1. **Single head** -- asserts there is exactly one Alembic head (catches branch conflicts).
+2. **SQLite upgrade/check/downgrade** -- validates the full migration chain on a temporary SQLite database.
+3. **PostgreSQL upgrade/check/downgrade** -- same validation against a PostgreSQL container
+   (started and stopped automatically via `scripts/docker-compose.postgres.yml`).
+4. **`alembic check`** -- compares ORM models against the migrated schema to detect forgotten migrations.
+
+Individual checks are also available:
+
+```bash
+make db-check-heads          # single head assertion only
+make db-check-sqlite         # SQLite checks only
+make db-check-postgres-up    # start the PostgreSQL container
+make db-check-postgres       # PostgreSQL checks only (assumes container is running)
+make db-check-postgres-down  # stop the PostgreSQL container
+make db-check-postgres-full  # start container, run checks, stop container
+```
+
 ## Make targets reference
 
-| Target           | Description                                    |
-|------------------|------------------------------------------------|
-| `db-migrate`     | Generate a new migration (`MSG="description"`) |
-| `db-upgrade`     | Apply all pending migrations                   |
-| `db-downgrade`   | Roll back the last migration                   |
-| `db-stamp`       | Mark DB as up-to-date without running SQL      |
-| `db-history`     | Show migration history                         |
+| Target               | Description                                    |
+|----------------------|------------------------------------------------|
+| `db-migrate`         | Generate a new migration (`MSG="description"`) |
+| `db-upgrade`         | Apply all pending migrations                   |
+| `db-downgrade`       | Roll back the last migration                   |
+| `db-stamp`           | Mark DB as up-to-date without running SQL      |
+| `db-history`         | Show migration history                         |
+| `db-check-migrations`   | Run full migration CI check suite              |
+| `db-check-heads`        | Assert single Alembic head                     |
+| `db-check-sqlite`       | Migration checks against SQLite                |
+| `db-check-postgres-up`  | Start PostgreSQL container                     |
+| `db-check-postgres`     | Migration checks against PostgreSQL            |
+| `db-check-postgres-down`| Stop PostgreSQL container                      |
+| `db-check-postgres-full`| Start, check, stop PostgreSQL                  |
