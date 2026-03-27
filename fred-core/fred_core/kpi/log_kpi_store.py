@@ -47,7 +47,7 @@ class KpiLogStore(BaseKPIStore):
         self._log("[KPI][LOG] ensure_ready called")
 
     def index_event(self, event: KPIEvent) -> None:
-        pass
+        self._log(f"[KPI][LOG] index_event: {event.model_dump(exclude_none=True)}")
 
     def bulk_index(self, events: List[KPIEvent]) -> None:
         self._log(f"[KPI][LOG] bulk_index: {len(events)} events")
