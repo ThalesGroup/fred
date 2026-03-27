@@ -2,15 +2,28 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Agentic + Knowledge + Frontend + kf worker + control-plane",
+      "label": "All Services",
       "dependsOn": [
         "agentic-backend",
         "knowledge-flow-backend",
         "frontend",
-        "kf worker",
+        "kf-worker",
         "control-plane"
       ],
-      "dependsOrder": "parallel"
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "All Services PROD",
+      "dependsOn": [
+        "agentic-backend-prod",
+        "knowledge-flow-backend-prod",
+        "frontend",
+        "kf-worker-prod",
+        "control-plane-prod"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
     },
     {
       "label": "agentic-backend",
@@ -18,7 +31,19 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8000"
+      ],
+      "options": { "cwd": "${workspaceFolder}/agentic-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
+    },
+    {
+      "label": "agentic-backend-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8000"
       ],
       "options": { "cwd": "${workspaceFolder}/agentic-backend" },
       "problemMatcher": [],
@@ -30,28 +55,60 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8111"
       ],
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
     },
-        {
+    {
+      "label": "knowledge-flow-backend-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8111"
+      ],
+      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
+    },
+    {
       "label": "control-plane",
       "type": "shell",
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8222"
       ],
       "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
     },
     {
-      "label": "kf worker",
+      "label": "control-plane-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8222"
+      ],
+      "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
+    },
+    {
+      "label": "kf-worker",
       "type": "shell",
       "command": "make run-worker",
+      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
+    },
+    {
+      "label": "kf-worker-prod",
+      "type": "shell",
+      "command": "make run-worker-prod",
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
