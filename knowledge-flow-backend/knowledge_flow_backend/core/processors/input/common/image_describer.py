@@ -67,7 +67,10 @@ Output constraints:
 """.strip()
 
 
-def build_image_describer(vision_cfg: Optional[ModelConfiguration],system_prompt: str | None = None,) -> Optional[BaseImageDescriber]:
+def build_image_describer(
+    vision_cfg: Optional[ModelConfiguration],
+    system_prompt: str | None = None,
+) -> Optional[BaseImageDescriber]:
     """
     Fred rationale:
     - Centralizes the decision: if 'vision' is configured, we return a describer.
@@ -77,7 +80,7 @@ def build_image_describer(vision_cfg: Optional[ModelConfiguration],system_prompt
         logger.info("No vision configuration found; images won't be described.")
         return None
     model = get_model(vision_cfg)  # one constructor for all providers
-    return VisionImageDescriber(model,system_prompt or VISION_DESCRIBE_PROMPT_V1,provider=vision_cfg.provider)
+    return VisionImageDescriber(model, system_prompt or VISION_DESCRIBE_PROMPT_V1, provider=vision_cfg.provider)
 
 
 def _stringify_content(content: Union[str, List[Any], Dict[str, Any]]) -> str:
@@ -113,13 +116,13 @@ class VisionImageDescriber(BaseImageDescriber):
     - Prompt lives here; transport/auth stays in fred_core.model_hub.
     """
 
-    def __init__(self, model: BaseChatModel, system_prompt: str,provider: str | None = None, max_tokens: int = 512):
+    def __init__(self, model: BaseChatModel, system_prompt: str, provider: str | None = None, max_tokens: int = 512):
         # Bind per-call kwargs like max_tokens via LC's .bind()
         self.provider = (provider or "").lower()
         # `max_tokens` via LangChain `.bind(...)` is not accepted by the Ollama chat client
         # used in our current setup. Keep the historical bound behavior for other providers,
         # but skip it for Ollama and rely on provider-native settings (e.g. `num_predict`).
-        if self.provider == "ollama": 
+        if self.provider == "ollama":
             self.model = model
         else:
             self.model = model.bind(max_tokens=max_tokens)

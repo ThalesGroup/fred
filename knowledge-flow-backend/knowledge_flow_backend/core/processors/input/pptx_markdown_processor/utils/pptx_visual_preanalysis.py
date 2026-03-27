@@ -60,7 +60,6 @@ class PptxSlidePreanalysis:
     vision_priority: str = "low"
 
 
-
 @dataclass
 class PptxDocumentPreanalysis:
     total_slides: int
@@ -189,12 +188,7 @@ def _compute_vision_priority(slide_summary: PptxSlidePreanalysis) -> str:
     if "chart" in reasons:
         return "high"
 
-    if "visual_heavy" in reasons and (
-        "object_placeholder" in reasons
-        or "unclassified_visual" in reasons
-        or "group" in reasons
-        or "picture" in reasons
-    ):
+    if "visual_heavy" in reasons and ("object_placeholder" in reasons or "unclassified_visual" in reasons or "group" in reasons or "picture" in reasons):
         return "high"
 
     if "low_native_text_with_visuals" in reasons and len(slide_summary.visual_elements) >= 1:
@@ -207,6 +201,7 @@ def _compute_vision_priority(slide_summary: PptxSlidePreanalysis) -> str:
         return "high"
 
     return "low"
+
 
 def _compute_vision_reasons(slide_summary: PptxSlidePreanalysis) -> list[str]:
     reasons: list[str] = []
@@ -271,7 +266,6 @@ def preanalyze_slide(
     summary.needs_vision = bool(summary.vision_reasons)
     summary.vision_priority = _compute_vision_priority(summary)
 
-
     return summary
 
 
@@ -294,11 +288,7 @@ def preanalyze_presentation(
         )
         result.slides.append(slide_summary)
 
-    result.slides_for_vision = [
-        slide_summary.slide_number
-        for slide_summary in result.slides
-        if slide_summary.needs_vision
-    ]
+    result.slides_for_vision = [slide_summary.slide_number for slide_summary in result.slides if slide_summary.needs_vision]
     result.activate_vision = bool(result.slides_for_vision)
 
     return result

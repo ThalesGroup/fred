@@ -25,9 +25,19 @@ from typing import Any
 
 from pptx import Presentation
 
+from knowledge_flow_backend.application_context import get_configuration
+from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
+from knowledge_flow_backend.core.processors.input.common.image_describer import (
+    PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,
+    build_image_describer,
+)
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
     detect_repeated_noise_texts,
+)
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_multimodal_enricher import (
+    enrich_slides_with_vision,
 )
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
     extract_native_slide_content,
@@ -38,25 +48,13 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_visual_preanalysis import (
     preanalyze_presentation,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_multimodal_enricher import (
-    enrich_slides_with_vision,
-)
-from knowledge_flow_backend.core.processors.input.common.image_describer import (
-    PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,
-    build_image_describer,
-)
-from knowledge_flow_backend.application_context import get_configuration
-from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
-from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-
-
 
 logger = logging.getLogger(__name__)
 
 
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PPTX slide decks into Markdown sections, slide by slide."
-    
+
     def __init__(self):
         super().__init__()
         self.image_describer = None
@@ -82,23 +80,23 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             return self.image_describer
         if not get_configuration().vision_model:
             if not self._warned_missing_vision_model:
-                logger.warning(
-                    "[PROCESSOR][PPTX] Vision model configuration is missing while multimodal mode is enabled."
-                )
+                logger.warning("[PROCESSOR][PPTX] Vision model configuration is missing while multimodal mode is enabled.")
                 self._warned_missing_vision_model = True
             return None
-        self.image_describer = build_image_describer(get_configuration().vision_model,system_prompt=PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,)
+        self.image_describer = build_image_describer(
+            get_configuration().vision_model,
+            system_prompt=PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,
+        )
         return self.image_describer
-    
+
     def _build_native_markdown(
         self,
         presentation: Any,
         visual_enrichments: dict[int, str] | None = None,
     ) -> tuple[list[str], list]:
-        
         slide_markdowns = []
         native_contents = []
-        
+
         visual_enrichments = visual_enrichments or {}
         repeated_noise_texts = detect_repeated_noise_texts(presentation.slides)
 
@@ -144,11 +142,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             )
 
     def _select_slides_for_multimodal(self, visual_preanalysis) -> list[int]:
-        return [
-            slide_summary.slide_number
-            for slide_summary in visual_preanalysis.slides
-            if slide_summary.needs_vision
-        ]
+        return [slide_summary.slide_number for slide_summary in visual_preanalysis.slides if slide_summary.needs_vision]
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PPTX file is valid and can be opened."""
@@ -185,18 +179,17 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 enable_multimodal,
                 bool(image_describer),
             )
-            
+
             presentation = Presentation(str(file_path))
 
             _, native_contents = self._build_native_markdown(presentation)
-
 
             visual_preanalysis = preanalyze_presentation(
                 presentation,
                 native_contents=native_contents,
             )
             self._log_visual_preanalysis(visual_preanalysis)
-            
+
             visual_enrichments: dict[int, str] = {}
             if enable_multimodal and image_describer:
                 slides_to_enrich = self._select_slides_for_multimodal(visual_preanalysis)
@@ -205,14 +198,14 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                     len(slides_to_enrich),
                     slides_to_enrich,
                 )
-                
+
                 visual_enrichments = enrich_slides_with_vision(
                     pptx_path=file_path,
                     slide_numbers=slides_to_enrich,
                     output_dir=output_dir,
                     image_describer=image_describer,
                 )
-                
+
             slide_markdowns = [
                 format_slide_markdown(
                     native_content,
@@ -229,7 +222,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 "md_file": str(md_path),
                 "message": "PPTX slides converted to structured Markdown.",
             }
-        
+
         except Exception as exc:
             logger.exception("Failed to convert PPTX to Markdown: %s", file_path)
             raise InputConversionError(f"PptxMarkdownProcessor failed for '{file_path.name}': {exc}") from exc

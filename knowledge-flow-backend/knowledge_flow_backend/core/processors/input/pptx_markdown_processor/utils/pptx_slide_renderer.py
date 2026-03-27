@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-import subprocess
+import subprocess  # nosec
 from pathlib import Path
 
 import fitz
@@ -32,10 +32,7 @@ def convert_pptx_to_pdf(pptx_path: Path) -> Path | None:
     try:
         soffice_path = shutil.which("soffice")
         if not soffice_path:
-            raise FileNotFoundError(
-                "LibreOffice executable 'soffice' not found in PATH. "
-                "Please ensure LibreOffice is installed and available."
-            )
+            raise FileNotFoundError("LibreOffice executable 'soffice' not found in PATH. Please ensure LibreOffice is installed and available.")
 
         subprocess.run(
             [
