@@ -36,14 +36,14 @@ from knowledge_flow_backend.core.processors.input.common.image_describer import 
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
     detect_repeated_noise_texts,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_vision_enricher import (
-    enrich_slides_with_vision,
-)
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
     extract_native_slide_content,
 )
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import (
     format_slide_markdown,
+)
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_vision_enricher import (
+    enrich_slides_with_vision,
 )
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_visual_preanalysis import (
     preanalyze_presentation,
