@@ -11,7 +11,8 @@
         "control-plane"
       ],
       "dependsOrder": "parallel",
-      "problemMatcher": []
+      "problemMatcher": [],
+      "icon": { "id": "rocket", "color": "terminal.ansiGreen" }
     },
     {
       "label": "All Services PROD",
@@ -23,7 +24,8 @@
         "control-plane-prod"
       ],
       "dependsOrder": "parallel",
-      "problemMatcher": []
+      "problemMatcher": [],
+      "icon": { "id": "flame", "color": "terminal.ansiGreen" }
     },
     {
       "label": "agentic-backend",
@@ -35,7 +37,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/agentic-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "hubot", "color": "terminal.ansiMagenta" }
     },
     {
       "label": "agentic-backend-prod",
@@ -47,7 +50,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/agentic-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "hubot", "color": "terminal.ansiMagenta" }
     },
     {
       "label": "knowledge-flow-backend",
@@ -59,7 +63,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "database", "color": "terminal.ansiCyan" }
     },
     {
       "label": "knowledge-flow-backend-prod",
@@ -71,7 +76,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "database", "color": "terminal.ansiCyan" }
     },
     {
       "label": "control-plane",
@@ -83,7 +89,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "settings-gear", "color": "terminal.ansiYellow" }
     },
     {
       "label": "control-plane-prod",
@@ -95,7 +102,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "settings-gear", "color": "terminal.ansiYellow" }
     },
     {
       "label": "kf-worker",
@@ -103,7 +111,8 @@
       "command": "make run-worker",
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "filter", "color": "terminal.ansiBlue" }
     },
     {
       "label": "kf-worker-prod",
@@ -111,7 +120,8 @@
       "command": "make run-worker-prod",
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "filter", "color": "terminal.ansiBlue" }
     },
     {
       "label": "frontend",
@@ -123,7 +133,8 @@
       ],
       "options": { "cwd": "${workspaceFolder}/frontend" },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": { "panel": "new", "reveal": "always" },
+      "icon": { "id": "browser", "color": "terminal.ansiGreen" }
     }
   ]
 }
