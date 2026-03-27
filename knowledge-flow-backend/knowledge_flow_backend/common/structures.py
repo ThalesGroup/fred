@@ -457,6 +457,10 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
     )
+    prometheus_ops_enabled: bool = Field(
+        default=False,
+        description="Expose Prometheus operational endpoints and the corresponding MCP server.",
+    )
     neo4j_enabled: bool = Field(
         default=False,
         description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
@@ -496,6 +500,66 @@ class AppConfig(BaseModel):
     kpi_log_summary_top_n: int = Field(
         default=0,
         description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
+    )
+
+
+class PrometheusConfig(BaseModel):
+    base_url: str = Field(
+        ...,
+        description="Base URL of a Prometheus-compatible HTTP API.",
+    )
+    verify_ssl: bool = Field(
+        default=True,
+        description="Verify upstream TLS certificates when querying Prometheus.",
+    )
+    timeout_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        description="HTTP timeout applied to Prometheus API calls.",
+    )
+    bearer_token: Optional[str] = Field(
+        default=None,
+        description="Optional bearer token loaded from PROMETHEUS_BEARER_TOKEN.",
+    )
+    username: Optional[str] = Field(
+        default="admin",
+        description="Basic-auth username configured directly in prometheus.username. Defaults to 'admin'.",
+    )
+    password: Optional[str] = Field(
+        default=None,
+        description="Optional basic-auth password loaded from PROMETHEUS_PASSWORD.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_credentials(cls, values: dict) -> dict:
+        values.setdefault("bearer_token", os.getenv("PROMETHEUS_BEARER_TOKEN"))
+        values.setdefault("password", os.getenv("PROMETHEUS_PASSWORD"))
+        return values
+
+    @field_validator("base_url", mode="after")
+    @classmethod
+    def normalize_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            raise ValueError("prometheus.base_url must not be empty")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_basic_auth_pair(self) -> "PrometheusConfig":
+        if self.password and not self.username:
+            raise ValueError(
+                "prometheus.username must not be empty when prometheus.password is set",
+            )
+        return self
+
+
+class IntegrationsConfig(BaseModel):
+    """Optional upstream service integrations consumed by Knowledge Flow."""
+
+    prometheus: Optional[PrometheusConfig] = Field(
+        default=None,
+        description="Optional Prometheus API configuration for cluster-wide metrics queries.",
     )
 
 
@@ -690,6 +754,10 @@ class WorkspaceLayoutConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
+    integrations: Optional[IntegrationsConfig] = Field(
+        default=None,
+        description="Optional third-party service integrations used by the backend.",
+    )
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None

@@ -231,9 +231,13 @@ class AIConfig(BaseModel):
         ),
     )
     enable_v2_sql_checkpointer: bool = Field(
-        False,
+        True,
         description=(
-            "Enable durable SQL checkpointing for v2 runtimes. Disabled by default."
+            "Enable durable SQL checkpointing for v2 runtimes. "
+            "The checkpointer is the sole source of agent memory for v2: "
+            "LangGraph reads and writes conversation state via thread_id=session.id. "
+            "The history_store remains the source of truth for UI display only. "
+            "Tables are auto-created on first use."
         ),
     )
     restore_max_exchanges: int = Field(

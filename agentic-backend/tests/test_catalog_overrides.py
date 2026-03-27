@@ -6,7 +6,29 @@ from agentic_backend.common.catalog_overrides import (
     apply_external_catalog_overrides,
     resolve_model_routing_bootstrap_config,
 )
-from agentic_backend.common.structures import Configuration
+from agentic_backend.common.structures import Agent, Configuration
+from agentic_backend.core.agents.agent_loader import AgentLoader
+from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
+
+
+class _NoopAgentStore(BaseAgentStore):
+    async def save(self, settings, tuning) -> None:
+        return None
+
+    async def load_all(self):
+        return []
+
+    async def get(self, agent_id: str):
+        return None
+
+    async def delete(self, agent_id: str) -> None:
+        return None
+
+    async def static_seeded(self) -> bool:
+        return False
+
+    async def mark_static_seeded(self) -> None:
+        return None
 
 
 def _minimal_configuration(
@@ -277,3 +299,53 @@ def test_model_routing_bootstrap_respects_catalog_mode(tmp_path, monkeypatch) ->
 
     assert enabled_bootstrap.catalog_exists is True
     assert disabled_bootstrap.catalog_exists is False
+
+
+def test_agent_loader_loads_static_prometheus_agent_via_definition_ref() -> None:
+    configuration = _minimal_configuration(include_agents=False)
+    configuration.ai.agents = [
+        Agent(
+            id="Prometheus",
+            name="Prometheus",
+            definition_ref="v2.react.prometheus_expert",
+            enabled=True,
+        )
+    ]
+
+    entries = AgentLoader(configuration, _NoopAgentStore()).load_static()
+
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.settings.definition_ref == "v2.react.prometheus_expert"
+    assert entry.settings.class_path is None
+    assert entry.settings.tuning is not None
+    assert entry.settings.tuning.role == "Cluster Prometheus Investigator"
+    assert [server.id for server in entry.settings.tuning.mcp_servers] == [
+        "mcp-knowledge-flow-prometheus-ops"
+    ]
+
+
+def test_agent_loader_loads_static_spot_agent_via_class_path() -> None:
+    configuration = _minimal_configuration(include_agents=False)
+    configuration.ai.agents = [
+        Agent(
+            id="Spot",
+            name="Spot",
+            class_path="agentic_backend.agents.prometheus.prometheus_expert.Spot",
+            enabled=True,
+        )
+    ]
+
+    entries = AgentLoader(configuration, _NoopAgentStore()).load_static()
+
+    assert len(entries) == 1
+    entry = entries[0]
+    assert (
+        entry.settings.class_path
+        == "agentic_backend.agents.prometheus.prometheus_expert.Spot"
+    )
+    assert entry.settings.definition_ref is None
+    assert entry.tuning.role == "Cluster Prometheus Investigator"
+    assert [server.id for server in entry.tuning.mcp_servers] == [
+        "mcp-knowledge-flow-prometheus-ops"
+    ]

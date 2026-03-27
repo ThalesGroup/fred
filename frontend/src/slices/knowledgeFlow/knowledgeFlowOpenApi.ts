@@ -1021,6 +1021,70 @@ const injectedRtkApi = api.injectEndpoints({
     osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
     }),
+    prometheusQuery: build.mutation<PrometheusQueryApiResponse, PrometheusQueryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/query`,
+        method: "POST",
+        body: queryArg.prometheusQueryRequest,
+      }),
+    }),
+    prometheusQueryRange: build.mutation<PrometheusQueryRangeApiResponse, PrometheusQueryRangeApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/query_range`,
+        method: "POST",
+        body: queryArg.prometheusQueryRangeRequest,
+      }),
+    }),
+    prometheusSeries: build.mutation<PrometheusSeriesApiResponse, PrometheusSeriesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/series`,
+        method: "POST",
+        body: queryArg.prometheusSeriesRequest,
+      }),
+    }),
+    prometheusMetrics: build.query<PrometheusMetricsApiResponse, PrometheusMetricsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+        },
+      }),
+    }),
+    prometheusMetricsCatalog: build.query<PrometheusMetricsCatalogApiResponse, PrometheusMetricsCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics_catalog`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+        },
+      }),
+    }),
+    prometheusMetadata: build.query<PrometheusMetadataApiResponse, PrometheusMetadataApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metadata`,
+        params: {
+          metric: queryArg.metric,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    prometheusLabels: build.query<PrometheusLabelsApiResponse, PrometheusLabelsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/prometheus/labels` }),
+    }),
+    prometheusLabelValues: build.query<PrometheusLabelValuesApiResponse, PrometheusLabelValuesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/labels/${queryArg.labelName}/values`,
+        params: {
+          start: queryArg.start,
+          end: queryArg.end,
+          match: queryArg.match,
+        },
+      }),
+    }),
+    prometheusTargets: build.query<PrometheusTargetsApiResponse, PrometheusTargetsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/prometheus/targets` }),
+    }),
     writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
       WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
       WriteReportKnowledgeFlowV1McpReportsWritePostApiArg
@@ -1786,6 +1850,74 @@ export type OsRecoveryApiArg = {
 };
 export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
 export type OsDiagnosticsApiArg = void;
+export type PrometheusQueryApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusQueryApiArg = {
+  prometheusQueryRequest: PrometheusQueryRequest;
+};
+export type PrometheusQueryRangeApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusQueryRangeApiArg = {
+  prometheusQueryRangeRequest: PrometheusQueryRangeRequest;
+};
+export type PrometheusSeriesApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusSeriesApiArg = {
+  prometheusSeriesRequest: PrometheusSeriesRequest;
+};
+export type PrometheusMetricsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsApiArg = {
+  /** Maximum number of metric names to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+};
+export type PrometheusMetricsCatalogApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsCatalogApiArg = {
+  /** Maximum number of catalog entries to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+};
+export type PrometheusMetadataApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetadataApiArg = {
+  /** Optional metric name filter. */
+  metric?: string | null;
+  /** Maximum number of metadata entries returned by Prometheus. */
+  limit?: number;
+};
+export type PrometheusLabelsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusLabelsApiArg = void;
+export type PrometheusLabelValuesApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusLabelValuesApiArg = {
+  /** Prometheus label name. */
+  labelName: string;
+  /** Optional range start; defaults to a bounded discovery window. */
+  start?: string | null;
+  /** Optional range end; defaults to a bounded discovery window. */
+  end?: string | null;
+  match?: {
+    /** Optional series matchers used to scope label values. */
+    ""?: string[] | null;
+  };
+};
+export type PrometheusTargetsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusTargetsApiArg = void;
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
   /** status 200 Successful Response */ WriteReportResponse;
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
@@ -2619,6 +2751,34 @@ export type PcaRequest = {
   features: string[];
   n_components?: number;
 };
+export type PrometheusQueryRequest = {
+  /** PromQL expression to evaluate. */
+  query: string;
+  /** Optional evaluation timestamp accepted by the Prometheus HTTP API. */
+  time?: string | number | number | null;
+  /** Optional upstream Prometheus timeout, for example 5s. */
+  timeout?: string | null;
+};
+export type PrometheusQueryRangeRequest = {
+  /** PromQL expression to evaluate over a range. */
+  query: string;
+  /** Range start accepted by the Prometheus HTTP API. */
+  start: string | number | number;
+  /** Range end accepted by the Prometheus HTTP API. */
+  end: string | number | number;
+  /** Range step duration accepted by the Prometheus HTTP API. */
+  step: string | number | number;
+  /** Optional upstream Prometheus timeout, for example 30s. */
+  timeout?: string | null;
+};
+export type PrometheusSeriesRequest = {
+  /** Prometheus series matchers, for example up or http_requests_total{job='api'}. */
+  matchers: string[];
+  /** Optional range start used to bound series discovery. */
+  start?: string | number | number | null;
+  /** Optional range end used to bound series discovery. */
+  end?: string | number | number | null;
+};
 export type WriteReportResponse = {
   document_uid: string;
   md_url: string;
@@ -2887,6 +3047,21 @@ export const {
   useLazyOsRecoveryQuery,
   useOsDiagnosticsQuery,
   useLazyOsDiagnosticsQuery,
+  usePrometheusQueryMutation,
+  usePrometheusQueryRangeMutation,
+  usePrometheusSeriesMutation,
+  usePrometheusMetricsQuery,
+  useLazyPrometheusMetricsQuery,
+  usePrometheusMetricsCatalogQuery,
+  useLazyPrometheusMetricsCatalogQuery,
+  usePrometheusMetadataQuery,
+  useLazyPrometheusMetadataQuery,
+  usePrometheusLabelsQuery,
+  useLazyPrometheusLabelsQuery,
+  usePrometheusLabelValuesQuery,
+  useLazyPrometheusLabelValuesQuery,
+  usePrometheusTargetsQuery,
+  useLazyPrometheusTargetsQuery,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,
