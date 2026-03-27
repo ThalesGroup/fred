@@ -259,6 +259,32 @@ def _strip_hitl_resume_ui_meta(resume_payload: Dict[str, Any]) -> None:
         resume_payload.pop(key, None)
 
 
+def _agent_requires_replayed_history(agent: object, *, is_cached: bool) -> bool:
+    """
+    Why this function exists:
+    - decide when the chat layer must replay persisted transcript history
+    - avoid cache-hit regressions for runtimes that do not keep conversation state
+      between turns on their own
+
+    How to use it:
+    - call it before building `input_messages` for one chat turn
+    - when it returns `True`, restore persisted history and append the new user
+      message after that restored transcript
+
+    Example:
+    - `if _agent_requires_replayed_history(agent, is_cached=is_cached): ...`
+
+    Shared-helper note:
+    - cached runtimes with a checkpointer / streaming memory can resume from their
+      own state, so replay would duplicate history
+    - cached runtimes without that memory still need persisted chat history on
+      every turn, otherwise they only see the latest user message
+    """
+    if not is_cached:
+        return True
+    return getattr(agent, "streaming_memory", None) is None
+
+
 class SessionOrchestrator:
     """
     Why this class exists (architecture note):
@@ -506,10 +532,10 @@ class SessionOrchestrator:
         try:
             if session_updated and session_callback:
                 await self._emit_session(session_callback, session)
-            # 3) Rebuild minimal LangChain history (user/assistant/system only),
-            # This method will only restore history if the agent is not cached.
+            # 3) Rebuild minimal LangChain history when the runtime cannot rely on
+            # its own persisted/in-memory conversation state.
             lc_history: List[AnyMessage] = []
-            if not is_cached:
+            if _agent_requires_replayed_history(agent, is_cached=is_cached):
                 async with phase_timer(self.kpi, "history_restore"):
                     lc_history = await self._restore_history(
                         user=user,

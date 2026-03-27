@@ -2,19 +2,23 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import BaseSessionStore, KeycloakUser
 from fred_core.kpi import NoOpKPIWriter
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agentic_backend.common.structures import Configuration
 from agentic_backend.core.agents.agent_factory import NoOpAgentFactory
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
+    ChatMetadata,
     Role,
     SessionSchema,
     TextPart,
@@ -22,6 +26,7 @@ from agentic_backend.core.chatbot.chat_schema import (
     ToolResultPart,
 )
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
+from agentic_backend.core.chatbot import session_orchestrator as session_orchestrator_module
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore
 from agentic_backend.core.session.noop_session_store import NoOpSessionStore
 
@@ -79,6 +84,67 @@ def _mk_orchestrator(minimal_generalist_config: Configuration):
         kpi=NoOpKPIWriter(),
     )
     return orch, session_store
+
+
+class _InMemorySessionStore(BaseSessionStore):
+    def __init__(self) -> None:
+        self.sessions: dict[str, SessionSchema] = {}
+
+    async def save(self, session: SessionSchema) -> None:
+        self.sessions[session.id] = session
+
+    async def get(self, session_id: str) -> SessionSchema | None:
+        return self.sessions.get(session_id)
+
+    async def delete(self, session_id: str) -> None:
+        self.sessions.pop(session_id, None)
+
+    async def get_for_user(self, user_id: str) -> list[SessionSchema]:
+        return [s for s in self.sessions.values() if s.user_id == user_id]
+
+    async def save_with_conn(self, conn, session: SessionSchema) -> None:
+        await self.save(session)
+
+    async def count_for_user(self, user_id: str) -> int:
+        return len(await self.get_for_user(user_id))
+
+
+class _CachedStatelessAgent:
+    streaming_memory = None
+
+
+class _CachedStatelessAgentFactory(NoOpAgentFactory):
+    def __init__(self) -> None:
+        self.agent = _CachedStatelessAgent()
+
+    async def create_and_init(
+        self,
+        user: KeycloakUser,
+        agent_id: str,
+        runtime_context: RuntimeContext,
+        session_id: str,
+    ):
+        return self.agent, True
+
+
+class _CapturingTranscoder:
+    def __init__(self) -> None:
+        self.captured_input_messages = None
+
+    async def stream_agent_response(self, **kwargs):
+        self.captured_input_messages = list(kwargs["input_messages"])
+        return [
+            ChatMessage(
+                session_id=kwargs["session_id"],
+                exchange_id=kwargs["exchange_id"],
+                rank=kwargs["base_rank"],
+                timestamp=_utcnow(),
+                role=Role.assistant,
+                channel=Channel.final,
+                parts=[TextPart(text="Simon")],
+                metadata=ChatMetadata(),
+            )
+        ]
 
 
 # -----------------------
@@ -750,3 +816,73 @@ async def test_sample_from_prompt_checks(
         not (isinstance(m, ToolMessage) and "SHOULD_SKIP" in (m.content or ""))
         for m in lc_messages
     )
+
+
+async def test_cached_stateless_agent_replays_history_before_next_turn(
+    minimal_generalist_config, monkeypatch
+):
+    """
+    Cached v2 runtimes without checkpointer-backed memory must still receive the
+    restored transcript on the next turn, otherwise they only see the latest user
+    question and forget facts shared one message earlier.
+    """
+    session_store = _InMemorySessionStore()
+    agent_factory = _CachedStatelessAgentFactory()
+    transcoder = _CapturingTranscoder()
+    orch = SessionOrchestrator(
+        configuration=minimal_generalist_config,
+        session_store=session_store,
+        attachments_store=None,
+        agent_factory=agent_factory,
+        agent_manager=MagicMock(),
+        history_store=NoOpHistoryStore(),
+        kpi=NoOpKPIWriter(),
+    )
+    cast(Any, orch).transcoder = transcoder
+
+    user = KeycloakUser(
+        uid="user-1", username="tester", email="tester@example.com", roles=["editor"]
+    )
+    session = SessionSchema(
+        id="sess-cache-hit",
+        user_id=user.uid,
+        title="Nom et présentation rapide Intent",
+        updated_at=_utcnow(),
+    )
+    await session_store.save(session)
+
+    restored_history = [
+        HumanMessage(content="je m'appelle Simon"),
+        AIMessage(content="Enchanté, Simon !"),
+    ]
+
+    async def _fake_restore_history(*, user, session):
+        return restored_history
+
+    monkeypatch.setattr(orch, "_restore_history", _fake_restore_history)
+
+    @asynccontextmanager
+    async def _fake_pg_async_tx():
+        yield object()
+
+    monkeypatch.setattr(session_orchestrator_module, "pg_async_tx", _fake_pg_async_tx)
+
+    emitted = []
+
+    async def _callback(payload):
+        emitted.append(payload)
+
+    await orch.chat_ask_websocket(
+        user=user,
+        callback=_callback,
+        session_id=session.id,
+        message="quel est mon prénom ?",
+        agent_id="basic.react.v2",
+        runtime_context=RuntimeContext(language="fr-FR"),
+    )
+
+    assert transcoder.captured_input_messages is not None
+    assert transcoder.captured_input_messages == [
+        *restored_history,
+        HumanMessage(content="quel est mon prénom ?"),
+    ]
