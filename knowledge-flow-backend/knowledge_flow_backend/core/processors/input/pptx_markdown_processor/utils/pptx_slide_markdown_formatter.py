@@ -23,7 +23,10 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 )
 
 
-def format_slide_markdown(content: NativeSlideContent) -> str:
+def format_slide_markdown(
+    content: NativeSlideContent,
+    visual_enrichment: str | None = None,
+) -> str:
     lines: List[str] = []
 
     if content.title:
@@ -58,6 +61,11 @@ def format_slide_markdown(content: NativeSlideContent) -> str:
     if content.notes:
         lines.append("### Speaker Notes")
         lines.append(content.notes)
+        lines.append("")
+
+    if visual_enrichment:
+        lines.append("### Visual Enrichment")
+        lines.append(visual_enrichment)
         lines.append("")
 
     return "\n".join(lines).strip()
