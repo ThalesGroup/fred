@@ -24,7 +24,6 @@ from knowledge_flow_backend.core.processors.input.common.base_image_describer im
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
     PdfMarkdownProcessor,
     _annotate_markdown_tables,
-    _resolve_rapidocr_backend,
 )
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
@@ -54,30 +53,6 @@ def test_annotate_markdown_tables_treats_backslash_digits_as_literal_text():
     assert "<!-- TABLE_START:id=0 -->" in annotated
     assert "| \\6 |" in annotated
     assert "<!-- TABLE_END -->" in annotated
-
-
-def test_resolve_rapidocr_backend_falls_back_to_onnxruntime_when_openvino_is_missing(monkeypatch: pytest.MonkeyPatch):
-    specs = {
-        "openvino": None,
-        "onnxruntime": object(),
-    }
-
-    monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.find_spec",
-        lambda module_name: specs.get(module_name),
-    )
-
-    assert _resolve_rapidocr_backend("openvino") == "onnxruntime"
-
-
-def test_resolve_rapidocr_backend_keeps_openvino_when_runtime_is_available(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.find_spec",
-        lambda module_name: object() if module_name == "openvino" else None,
-    )
-
-    assert _resolve_rapidocr_backend("openvino") == "openvino"
-
 
 @pytest.mark.integration
 def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_file):

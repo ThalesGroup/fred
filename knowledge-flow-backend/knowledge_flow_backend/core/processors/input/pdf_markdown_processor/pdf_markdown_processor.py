@@ -15,7 +15,6 @@
 
 import logging
 import os
-from importlib.util import find_spec
 from pathlib import Path
 from typing import Type
 
@@ -63,35 +62,6 @@ def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> st
         md_content = md_content.replace(table_md, annotated_table, 1)
 
     return md_content
-
-
-def _resolve_rapidocr_backend(ocr_backend: str | None) -> str | None:
-    """
-    Why:
-        Keep PDF OCR working on platforms where the configured OpenVINO runtime is
-        unavailable by transparently using the lighter ONNX Runtime backend.
-
-    How:
-        Pass the configured RapidOCR backend name. The helper returns it unchanged
-        in the normal case, or swaps `openvino` to `onnxruntime` when OpenVINO is
-        missing but ONNX Runtime is importable.
-
-    Example:
-        _resolve_rapidocr_backend("openvino")
-    """
-    if ocr_backend != "openvino":
-        return ocr_backend
-
-    if find_spec("openvino") is not None:
-        return ocr_backend
-
-    if find_spec("onnxruntime") is not None:
-        logger.warning(
-            "[PROCESSOR][PDF] OpenVINO OCR backend requested but unavailable on this platform. Falling back to onnxruntime.",
-        )
-        return "onnxruntime"
-
-    return ocr_backend
 
 
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
@@ -203,9 +173,8 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             rapid_ocr_options: RapidOcrOptions | None = None
             if pdf_options.do_ocr:
                 rapid_ocr_options = RapidOcrOptions()
-                resolved_ocr_backend = _resolve_rapidocr_backend(pdf_options.ocr_backend)
-                if resolved_ocr_backend is not None:
-                    rapid_ocr_options.backend = resolved_ocr_backend
+                if pdf_options.ocr_backend is not None:
+                    rapid_ocr_options.backend = pdf_options.ocr_backend
                 if pdf_options.force_full_page_ocr is not None:
                     rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
                 pipeline_options.ocr_options = rapid_ocr_options
