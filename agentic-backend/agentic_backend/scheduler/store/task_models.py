@@ -16,11 +16,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from fred_core.models.base import JsonColumn, TimestampColumn
 from sqlalchemy import Float, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
-from fred_core.models.base import JsonColumn, TimestampColumn
 
 
 class AgentTaskRow(Base):
@@ -37,12 +37,8 @@ class AgentTaskRow(Base):
     )
     run_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        TimestampColumn, nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TimestampColumn, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(TimestampColumn, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(TimestampColumn, nullable=False)
     context_json: Mapped[dict] = mapped_column(JsonColumn, nullable=False)
     parameters_json: Mapped[dict] = mapped_column(JsonColumn, nullable=False)
     last_message: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -24,4 +24,6 @@ class Base(DeclarativeBase):
 
 # Portable column types: use JSONB on PostgreSQL, plain JSON on SQLite.
 JsonColumn = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[arg-type]
-TimestampColumn = TIMESTAMP(timezone=True).with_variant(DateTime(timezone=True), "sqlite")
+TimestampColumn = TIMESTAMP(timezone=True).with_variant(
+    DateTime(timezone=True), "sqlite"
+)

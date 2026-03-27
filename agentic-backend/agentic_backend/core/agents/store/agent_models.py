@@ -14,11 +14,11 @@
 
 from __future__ import annotations
 
+from fred_core.models.base import JsonColumn
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
-from fred_core.models.base import JsonColumn
 
 
 class AgentRow(Base):
