@@ -25,6 +25,7 @@ from fred_core.sql import create_async_engine_from_config
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import Field
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
@@ -39,7 +40,14 @@ from agentic_backend.core.agents.v2 import (
 from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
 from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
-from agentic_backend.core.chatbot.chat_schema import ChatMessage, SessionSchema
+from agentic_backend.core.chatbot.chat_schema import (
+    Channel,
+    ChatMessage,
+    ChatMetadata,
+    Role,
+    SessionSchema,
+    TextPart,
+)
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore
 
@@ -61,11 +69,19 @@ _USER = KeycloakUser(
 
 
 class RecordingChatModel(BaseChatModel):
-    """Fake chat model that records every call's message list and returns
-    pre-canned responses in order."""
+    """Fake chat model that records each instance's calls and returns responses.
+
+    Why this exists:
+    - Tests need a deterministic chat model that captures the exact message
+      history passed into LangGraph across turns.
+
+    How to use it:
+    - Instantiate with a list of `responses`, then inspect `received` after
+      invoking the runtime to assert which messages were provided to the model.
+    """
 
     responses: list[str]
-    received: list[list[BaseMessage]] = []
+    received: list[list[BaseMessage]] = Field(default_factory=list)
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -353,18 +369,18 @@ async def test_v2_sql_checkpointer_provides_memory_across_exchanges(
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — history_store.get must not be called for V2 + SQL checkpointer
+# Test 2 — history_store.get must not be called when a V2 checkpoint exists
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_v2_sql_checkpointer_history_store_not_read(
+async def test_v2_sql_checkpointer_history_store_not_read_when_checkpoint_exists(
     tmp_path,
 ) -> None:
     """
-    When a V2 agent has an active SQL checkpointer, _restore_history must never
-    read from history_store — on either the first exchange (is_cached=False) or
-    subsequent ones (is_cached=True).
+    When a V2 agent already has durable checkpoint state for its session,
+    _restore_history must not read from history_store on either the first
+    orchestrated exchange (is_cached=False) or later cached ones.
 
     Injecting restored messages alongside the checkpoint state would duplicate
     messages because add_messages deduplicates by ID, and messages reconstructed
@@ -390,6 +406,15 @@ async def test_v2_sql_checkpointer_history_store_not_read(
         )
         runtime.bind(_binding(session_id, agent_id=definition.agent_id))
         agent = V2SessionAgent(runtime=runtime)
+        lc_config: dict[str, dict[str, str]] = {
+            "configurable": {"thread_id": session_id}
+        }
+
+        async for _ in agent.astream_updates(
+            state={"messages": [HumanMessage("Checkpoint seed")]},
+            config=lc_config,
+        ):
+            pass
 
         session_store = InMemorySessionStore()
         history_store = InMemoryHistoryStore()
@@ -446,12 +471,136 @@ async def test_v2_sql_checkpointer_history_store_not_read(
             reads_after_second = history_store.get_call_count
 
         assert reads_after_first == 0, (
-            "history_store.get must not be called for V2 + SQL checkpointer "
-            f"(first exchange). Got {reads_after_first} call(s)."
+            "history_store.get must not be called when a V2 SQL checkpoint "
+            f"already exists (first exchange). Got {reads_after_first} call(s)."
         )
         assert reads_after_second == 0, (
-            "history_store.get must not be called for V2 + SQL checkpointer "
-            f"(second/cached exchange). Got {reads_after_second} call(s)."
+            "history_store.get must not be called when a V2 SQL checkpoint "
+            f"already exists (second/cached exchange). Got {reads_after_second} call(s)."
         )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_v2_sql_checkpointer_restores_history_once_when_checkpoint_missing(
+    tmp_path,
+) -> None:
+    """
+    A migrated V2 session can have persisted chat history before any SQL
+    checkpoint exists for its thread.
+
+    In that case the first cache miss must restore history exactly once to seed
+    the durable checkpoint; later exchanges must stop reading history_store and
+    rely on the checkpoint instead.
+    """
+    session_id = "restore-once-session"
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "restore-once.db"))
+    )
+    try:
+        model = RecordingChatModel(
+            responses=["Migrated response 1.", "Migrated response 2."],
+            received=[],
+        )
+        definition = BasicReActDefinition(system_prompt_template="You are helpful.")
+        checkpointer = FredSqlCheckpointer(engine)
+        runtime = ReActRuntime(
+            definition=definition,
+            services=RuntimeServices(
+                chat_model_factory=StaticChatModelFactory(model),
+                checkpointer=checkpointer,
+            ),
+        )
+        runtime.bind(_binding(session_id, agent_id=definition.agent_id))
+        agent = V2SessionAgent(runtime=runtime)
+
+        session_store = InMemorySessionStore()
+        history_store = InMemoryHistoryStore()
+        history_store.messages[session_id] = [
+            ChatMessage(
+                session_id=session_id,
+                exchange_id="legacy-exchange",
+                rank=0,
+                timestamp=_utcnow(),
+                role=Role.user,
+                channel=Channel.final,
+                parts=[TextPart(text="Legacy hello")],
+                metadata=ChatMetadata(agent_id=definition.agent_id),
+            ),
+            ChatMessage(
+                session_id=session_id,
+                exchange_id="legacy-exchange",
+                rank=1,
+                timestamp=_utcnow(),
+                role=Role.assistant,
+                channel=Channel.final,
+                parts=[TextPart(text="Legacy reply")],
+                metadata=ChatMetadata(agent_id=definition.agent_id),
+            ),
+        ]
+        session = SessionSchema(
+            id=session_id,
+            user_id="user-1",
+            agent_id=definition.agent_id,
+            title="Restore once test",
+            updated_at=_utcnow(),
+            next_rank=2,
+        )
+        await session_store.save(session)
+
+        orchestrator = SessionOrchestrator(
+            configuration=_minimal_config(enable_v2_sql_checkpointer=True),
+            session_store=session_store,
+            attachments_store=None,
+            agent_factory=CachedV2AgentFactory(agent),
+            agent_manager=MagicMock(),
+            history_store=history_store,
+            kpi=NoOpKPIWriter(),
+        )
+
+        runtime_ctx = RuntimeContext(session_id=session_id, user_id="user-1")
+
+        async def _noop_cb(event: dict) -> None:
+            pass
+
+        with patch(
+            "agentic_backend.core.chatbot.session_orchestrator.pg_async_tx",
+            _fake_pg_tx,
+        ):
+            await orchestrator.chat_ask_websocket(
+                user=_USER,
+                callback=_noop_cb,
+                session_id=session_id,
+                message="First migrated question",
+                agent_id=definition.agent_id,
+                runtime_context=runtime_ctx,
+            )
+            reads_after_first = history_store.get_call_count
+
+            await orchestrator.chat_ask_websocket(
+                user=_USER,
+                callback=_noop_cb,
+                session_id=session_id,
+                message="Second migrated question",
+                agent_id=definition.agent_id,
+                runtime_context=runtime_ctx,
+            )
+            reads_after_second = history_store.get_call_count
+
+        first_call_contents = " ".join(str(m.content) for m in model.received[0])
+        second_call_contents = " ".join(str(m.content) for m in model.received[1])
+
+        assert reads_after_first == 1, (
+            "The first cache-miss exchange should restore history exactly once "
+            "when the durable checkpoint thread is still empty."
+        )
+        assert reads_after_second == 1, (
+            "Later exchanges should stop reading history_store once the SQL "
+            "checkpointer has been seeded."
+        )
+        assert "Legacy hello" in first_call_contents
+        assert "Legacy reply" in first_call_contents
+        assert "Migrated response 1." in second_call_contents
     finally:
         await engine.dispose()
