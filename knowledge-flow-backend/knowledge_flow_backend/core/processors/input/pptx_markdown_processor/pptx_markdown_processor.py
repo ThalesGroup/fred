@@ -16,7 +16,7 @@
 
 This processor orchestrates PPTX-specific helper modules for native slide extraction,
 formatting, speaker notes, and deck-level cleanup. The split keeps the native
-extraction reusable for future multimodal PPTX processing.
+extraction reusable for future vision-enriched PPTX processing.
 """
 
 import logging
@@ -36,7 +36,7 @@ from knowledge_flow_backend.core.processors.input.common.image_describer import 
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_deck_noise import (
     detect_repeated_noise_texts,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_multimodal_enricher import (
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_vision_enricher import (
     enrich_slides_with_vision,
 )
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
@@ -67,20 +67,20 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
 
         # V1 choice:
         # - fast: native only
-        # - medium: enable multimodal
+        # - medium: enable vision enrichment
         # - rich: kept disabled for now until the rich strategy is finalized
-        enable_multimodal = active_profile == IngestionProcessingProfile.MEDIUM
+        enable_vision = active_profile == IngestionProcessingProfile.MEDIUM
 
-        return active_profile, enable_multimodal
+        return active_profile, enable_vision
 
-    def _resolve_image_describer(self, enable_multimodal: bool):
-        if not enable_multimodal:
+    def _resolve_image_describer(self, enable_vision: bool):
+        if not enable_vision:
             return None
         if self.image_describer is not None:
             return self.image_describer
         if not get_configuration().vision_model:
             if not self._warned_missing_vision_model:
-                logger.warning("[PROCESSOR][PPTX] Vision model configuration is missing while multimodal mode is enabled.")
+                logger.warning("[PROCESSOR][PPTX] Vision model configuration is missing while vision enrichment is enabled.")
                 self._warned_missing_vision_model = True
             return None
         self.image_describer = build_image_describer(
@@ -141,7 +141,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 slide_summary.other_count,
             )
 
-    def _select_slides_for_multimodal(self, visual_preanalysis) -> list[int]:
+    def _select_slides_for_vision(self, visual_preanalysis) -> list[int]:
         return [slide_summary.slide_number for slide_summary in visual_preanalysis.slides if slide_summary.needs_vision]
 
     def check_file_validity(self, file_path: Path) -> bool:
@@ -170,13 +170,13 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
         md_path = output_dir / "output.md"
 
         try:
-            active_profile, enable_multimodal = self._resolve_effective_options()
-            image_describer = self._resolve_image_describer(enable_multimodal)
+            active_profile, enable_vision = self._resolve_effective_options()
+            image_describer = self._resolve_image_describer(enable_vision)
 
             logger.info(
-                "[PROCESSOR][PPTX] Using profile=%s enable_multimodal=%s vision_model_available=%s",
+                "[PROCESSOR][PPTX] Using profile=%s enable_vision=%s vision_model_available=%s",
                 active_profile.value,
-                enable_multimodal,
+                enable_vision,
                 bool(image_describer),
             )
 
@@ -191,10 +191,10 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             self._log_visual_preanalysis(visual_preanalysis)
 
             visual_enrichments: dict[int, str] = {}
-            if enable_multimodal and image_describer:
-                slides_to_enrich = self._select_slides_for_multimodal(visual_preanalysis)
+            if enable_vision and image_describer:
+                slides_to_enrich = self._select_slides_for_vision(visual_preanalysis)
                 logger.info(
-                    "[PROCESSOR][PPTX] Selected %s slide(s) for multimodal enrichment: %s",
+                    "[PROCESSOR][PPTX] Selected %s slide(s) for vision enrichment: %s",
                     len(slides_to_enrich),
                     slides_to_enrich,
                 )

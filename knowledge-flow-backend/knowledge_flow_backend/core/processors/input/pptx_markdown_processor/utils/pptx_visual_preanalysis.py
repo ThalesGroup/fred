@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pre-analyzes PPTX slides to decide whether multimodal enrichment is needed."""
+"""Pre-analyzes PPTX slides to decide whether vision enrichment is needed."""
 
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def _extract_shape_text_lines(shape: Any) -> list[str]:
 
 
 def _classify_shape(shape: Any) -> str:
-    """Classify a PPTX shape for multimodal pre-analysis."""
+    """Classify a PPTX shape for vision-oriented pre-analysis."""
     if bool(getattr(shape, "has_table", False)):
         return "table"
 

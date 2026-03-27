@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Multimodal enrichment helpers for PPTX slides."""
+"""Vision enrichment helpers for PPTX slides."""
 
 from __future__ import annotations
 
@@ -39,12 +39,12 @@ def enrich_slides_with_vision(
         return {}
 
     if image_describer is None:
-        logger.warning("[PROCESSOR][PPTX] No image describer available for multimodal enrichment.")
+        logger.warning("[PROCESSOR][PPTX] No image describer available for vision enrichment.")
         return {}
 
     pdf_path = convert_pptx_to_pdf(pptx_path)
     if pdf_path is None:
-        logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion failed; skipping multimodal enrichment.")
+        logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion failed; skipping vision enrichment.")
         return {}
 
     slides_dir = output_dir / "slides_png"
@@ -68,7 +68,7 @@ def enrich_slides_with_vision(
             enrichments[slide_number] = "Visual enrichment not available."
 
     logger.info(
-        "[PROCESSOR][PPTX] Generated multimodal enrichments for %s slide(s).",
+        "[PROCESSOR][PPTX] Generated vision enrichments for %s slide(s).",
         len(enrichments),
     )
     return enrichments

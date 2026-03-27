@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Renders PPTX slides as PNG images for multimodal enrichment."""
+"""Renders PPTX slides as PNG images for vision enrichment."""
 
 from __future__ import annotations
 
