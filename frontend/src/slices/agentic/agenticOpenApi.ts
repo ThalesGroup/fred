@@ -684,16 +684,10 @@ export type ReActProfileSummary = {
   tags: string[];
 };
 export type ExecutionCategory = "graph" | "react" | "proxy";
-export type ToolCapabilityRequirement = {
-  required?: boolean;
-  description?: string | null;
-  kind?: "capability";
-  capability: string;
-};
 export type ToolRefRequirement = {
+  kind?: "tool_ref";
   required?: boolean;
   description?: string | null;
-  kind?: "tool_ref";
   tool_ref: string;
 };
 export type PreviewKind = "none" | "mermaid" | "dag" | "text";
@@ -709,14 +703,9 @@ export type AgentInspection = {
   tags?: string[];
   fields?: FieldSpec[];
   execution_category: ExecutionCategory;
-  declared_tool_refs?: (
-    | ({
-        kind: "capability";
-      } & ToolCapabilityRequirement)
-    | ({
-        kind: "tool_ref";
-      } & ToolRefRequirement)
-  )[];
+  /** Exact Fred runtime tools declared by the agent author. This exists so inspection and UIs can explain what the agent expects before runtime binding happens. */
+  declared_tool_refs?: ToolRefRequirement[];
+  /** Default MCP servers Fred should attach for this agent. These are runtime tool providers, not substitutes for first-class Fred declared tool refs. */
   default_mcp_servers?: McpServerRef[];
   preview?: AgentPreview;
 };
