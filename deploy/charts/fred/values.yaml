@@ -288,6 +288,7 @@ x-kf-mcp: &kf-mcp
   resources_enabled: true
   filesystem_enabled: false
   opensearch_ops_enabled: false
+  prometheus_ops_enabled: false
   neo4j_enabled: false
 
 x-kf-filesystem: &kf-filesystem
@@ -1259,6 +1260,12 @@ applications:
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
+      integrations:
+        prometheus:
+          # base_url: http://prometheus:9090
+          # verify_ssl: false
+          # timeout_seconds: 15.0
+          # username: admin
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
@@ -1268,6 +1275,8 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""
@@ -1420,6 +1429,12 @@ applications:
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
+      integrations:
+        prometheus:
+          # base_url: http://prometheus:9090
+          # verify_ssl: false
+          # timeout_seconds: 15.0
+          # username: admin
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
@@ -1429,6 +1444,8 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""

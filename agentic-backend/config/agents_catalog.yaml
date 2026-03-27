@@ -50,6 +50,12 @@ agents:
     class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
     enabled: true
 
+  - id: "Spot"
+    name: "Spot"
+    type: "agent"
+    class_path: "agentic_backend.agents.prometheus.prometheus_expert.Spot"
+    enabled: true
+
   - id: "BankTransferDemo"
     name: "BankTransferDemo"
     type: "agent"
