@@ -44,10 +44,12 @@ Example:
 
 from .api import (
     ArtifactPublicationError,
+    ModelInvocationError,
     ReActAgent,
     ResourceFetchError,
     ResourceNotFoundError,
     ToolContext,
+    ToolInvocationError,
     ToolOutput,
     UIHints,
     prompt_md,
@@ -67,6 +69,7 @@ from .knowledge_flow_mcp import (
 __all__ = [
     "ArtifactPublicationError",
     "MCPServerRef",
+    "ModelInvocationError",
     "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
     "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
@@ -76,6 +79,7 @@ __all__ = [
     "ResourceFetchError",
     "ResourceNotFoundError",
     "ToolContext",
+    "ToolInvocationError",
     "ToolOutput",
     "UIHints",
     "inspect_agent",

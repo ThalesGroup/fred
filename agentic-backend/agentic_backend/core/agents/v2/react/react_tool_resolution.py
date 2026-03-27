@@ -39,8 +39,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import cast
 
-logger = logging.getLogger(__name__)
-
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
@@ -68,6 +66,8 @@ from .react_tool_rendering import (
     stringify_tool_output,
 )
 from .react_tool_utils import sanitize_tool_name
+
+logger = logging.getLogger(__name__)
 
 RuntimeToolInvoke = Callable[
     [dict[str, object]],

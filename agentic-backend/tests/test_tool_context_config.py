@@ -17,7 +17,6 @@ from agentic_backend.core.agents.v2.authoring.legacy_runtime_bridge import (
     _AuthorRuntime,
 )
 
-
 # ---------------------------------------------------------------------------
 # Minimal agent used as the config carrier
 # ---------------------------------------------------------------------------

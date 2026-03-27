@@ -14,6 +14,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, PrivateAttr
 
 from agentic_backend.agents.v2 import BasicReActDefinition
+from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
     ArtifactPublisherPort,
@@ -39,6 +40,8 @@ from agentic_backend.core.agents.v2 import (
     ToolProviderPort,
     inspect_agent,
 )
+from agentic_backend.core.agents.v2.authoring import ReActAgent, tool, ui_field
+from agentic_backend.core.agents.v2.authoring.api import ToolContext, ToolOutput
 from agentic_backend.core.agents.v2.contracts.models import ToolRefRequirement
 from agentic_backend.core.agents.v2.contracts.runtime import (
     FinalRuntimeEvent,
@@ -67,10 +70,15 @@ from agentic_backend.core.agents.v2.react.react_runtime import (
 )
 from agentic_backend.core.agents.v2.react.react_tool_utils import sanitize_tool_name
 from agentic_backend.core.agents.v2.runtime_support import FredSqlCheckpointer
+from agentic_backend.core.agents.v2.support.authored_toolsets import (
+    AuthoredToolRuntimePorts,
+    build_authored_tool_handlers,
+)
 from agentic_backend.core.agents.v2.support.filesystem_context import (
     build_filesystem_browsing_context,
 )
 from agentic_backend.core.chatbot.chat_schema import GeoPart, LinkKind, LinkPart
+from agentic_backend.integrations.v2_runtime.adapters import CompositeToolInvoker
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
@@ -1866,3 +1874,181 @@ def test_rag_definition_inspection_stays_small_and_declared() -> None:
     assert inspection.declared_tool_refs[0].kind == "tool_ref"
     assert inspection.declared_tool_refs[0].tool_ref == "knowledge.search"
     assert "Declared tools: 1" in inspection.preview.content
+
+
+# ---------------------------------------------------------------------------
+# Tool error interception tests
+#
+# When ctx.error() is returned by an authored tool, the runtime must surface
+# the error message directly as the final response — NOT rely on the LLM to
+# relay it.  This is a hard contract: the LLM turn that follows an error is
+# consumed but its content is DISCARDED and its streaming deltas are
+# SUPPRESSED.
+# ---------------------------------------------------------------------------
+
+
+def _authored_tool_invoker(
+    definition: ReActAgent,
+    binding: BoundRuntimeContext,
+) -> CompositeToolInvoker:
+    """
+    Build a CompositeToolInvoker wired to the authored Python tools of `definition`.
+
+    Why this helper exists:
+    - production bootstrap calls `build_v2_session_agent` which assembles the
+      CompositeToolInvoker before creating RuntimeServices
+    - offline tests bypass that bootstrap, so they need the same wiring in one
+      small helper
+
+    How to use it:
+    - call before creating RuntimeServices, pass the same `binding` you will
+      later pass to `runtime.bind()`
+    """
+    handlers = build_authored_tool_handlers(
+        definition=definition,
+        toolset_key=getattr(definition, "toolset_key", None),
+        binding=binding,
+        settings=AgentSettings(id=definition.agent_id, name=definition.agent_id),
+        ports=AuthoredToolRuntimePorts(),
+    )
+    return CompositeToolInvoker(handlers=handlers)
+
+
+@tool(
+    tool_ref="test.authored.failing_tool",
+    description="A tool that always returns a recoverable error.",
+)
+async def _always_failing_tool(ctx: ToolContext, topic: str) -> ToolOutput:
+    return ctx.error(f"Template not found for topic '{topic}'. Upload it first.")
+
+
+class _ErrorProneAgent(ReActAgent):
+    """Authored agent used in tool-error interception tests."""
+
+    agent_id: str = "test.error_prone"
+    role: str = "Test error-prone agent"
+    description: str = "Used to verify deterministic tool error propagation."
+    system_prompt_template: str = ui_field(
+        "You are a test agent. Use the failing_tool.",
+        title="System Prompt",
+        description="Test agent instructions.",
+        ui_type="prompt",
+        required=True,
+    )
+    tools = (_always_failing_tool,)
+
+
+@pytest.mark.asyncio
+async def test_authored_tool_ctx_error_overrides_llm_final_response() -> None:
+    """
+    When ctx.error() is returned, the runtime must use the tool's error
+    message as the final response — regardless of what the LLM says next.
+
+    Regression test: without the fix the LLM hallucinated "slides ready"
+    despite the tool returning a template-not-found error.
+    """
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-err-1",
+                        "name": "always_failing_tool",
+                        "args": {"topic": "slides"},
+                    }
+                ],
+            ),
+            # LLM hallucination: it would say "done!" even though the tool failed
+            AIMessage(content="Your slides are ready, enjoy!"),
+        ]
+    )
+    definition = _ErrorProneAgent()
+    binding = _binding("err-interception", agent_id="test.error_prone")
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_invoker=_authored_tool_invoker(definition, binding),
+        ),
+    )
+    runtime.bind(binding)
+
+    executor = await runtime.get_executor()
+    events = [
+        event
+        async for event in executor.stream(
+            _user_input("make slides"),
+            ExecutionConfig(),
+        )
+    ]
+
+    kinds = [e.kind for e in events]
+    assert RuntimeEventKind.TOOL_CALL in kinds
+    assert RuntimeEventKind.TOOL_RESULT in kinds
+    assert RuntimeEventKind.FINAL in kinds
+
+    tool_result_event = next(
+        e for e in events if e.kind == RuntimeEventKind.TOOL_RESULT
+    )
+    assert tool_result_event.is_error is True  # type: ignore[union-attr]
+
+    final_event = events[-1]
+    assert isinstance(final_event, FinalRuntimeEvent)
+    assert "Template not found" in final_event.content, (
+        f"Expected error message in final response, got: {final_event.content!r}"
+    )
+    assert "slides are ready" not in final_event.content.lower(), (
+        "LLM hallucination leaked into the final response — "
+        "tool error was not intercepted."
+    )
+
+
+@pytest.mark.asyncio
+async def test_authored_tool_ctx_error_suppresses_streaming_deltas() -> None:
+    """
+    After a ctx.error(), any AssistantDeltaRuntimeEvent from the LLM's
+    subsequent turn must be suppressed — the user must not see partial
+    hallucinated text streaming before the error is surfaced.
+    """
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-err-2",
+                        "name": "always_failing_tool",
+                        "args": {"topic": "report"},
+                    }
+                ],
+            ),
+            AIMessage(content="Your report is ready!"),
+        ]
+    )
+    definition = _ErrorProneAgent()
+    binding = _binding("err-suppress-deltas", agent_id="test.error_prone")
+    runtime = ReActRuntime(
+        definition=definition,
+        services=RuntimeServices(
+            chat_model_factory=StaticChatModelFactory(model),
+            tool_invoker=_authored_tool_invoker(definition, binding),
+        ),
+    )
+    runtime.bind(binding)
+
+    executor = await runtime.get_executor()
+    events = [
+        event
+        async for event in executor.stream(
+            _user_input("make report"),
+            ExecutionConfig(),
+        )
+    ]
+
+    # No assistant delta events should appear after the tool error
+    delta_events = [e for e in events if e.kind == RuntimeEventKind.ASSISTANT_DELTA]
+    assert not delta_events, (
+        f"Got {len(delta_events)} delta event(s) after tool error — "
+        "hallucinated text was streamed to the user."
+    )

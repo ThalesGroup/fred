@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 from pydantic_core import PydanticUndefined
 
 from agentic_backend.core.agents.agent_spec import FieldSpec, FieldType, UIHints
+
 from ..contracts.context import (
     ArtifactPublishRequest,
     ArtifactScope,
@@ -162,6 +163,50 @@ class ArtifactPublicationError(RuntimeError):
     """
 
 
+class ModelInvocationError(RuntimeError):
+    """
+    Raised by ``ctx.extract_structured()`` when the LLM call fails (network
+    error, model timeout, schema validation failure, etc.).
+
+    Why this exists:
+    - gives authored tools a typed exception instead of a raw LangChain or
+      Pydantic error leaking through the SDK boundary
+
+    How to use it:
+    - catch it when you want to surface a clear error message rather than an
+      opaque traceback
+
+    Example::
+
+        ```python
+        except ModelInvocationError as exc:
+            return ctx.error(f"Could not extract slide content: {exc}")
+        ```
+    """
+
+
+class ToolInvocationError(RuntimeError):
+    """
+    Raised by ``ctx.invoke_tool()`` when the target tool is unknown or when
+    the tool call itself raises an unhandled exception.
+
+    Why this exists:
+    - gives authored tools a typed exception instead of a raw RuntimeError or
+      infrastructure error leaking through the SDK boundary
+
+    How to use it:
+    - catch it when your tool delegates to another Fred tool and you want to
+      handle failures gracefully
+
+    Example::
+
+        ```python
+        except ToolInvocationError as exc:
+            return ctx.error(f"Search failed: {exc}")
+        ```
+    """
+
+
 class ToolContext:
     """
     Small runtime helper injected as the first argument of every authored tool.
@@ -261,13 +306,20 @@ class ToolContext:
             result = await ctx.invoke_tool("knowledge.search", query="policy", top_k=5)
             ```
         """
-        result = await self._runtime.tool_invoker.invoke(
-            ToolInvocationRequest(
-                tool_ref=tool_ref,
-                payload=dict(payload),
-                context=self.binding.portable_context,
+        try:
+            result = await self._runtime.tool_invoker.invoke(
+                ToolInvocationRequest(
+                    tool_ref=tool_ref,
+                    payload=dict(payload),
+                    context=self.binding.portable_context,
+                )
             )
-        )
+        except ToolInvocationError:
+            raise
+        except Exception as exc:
+            raise ToolInvocationError(
+                f"Tool '{tool_ref}' invocation failed: {exc}"
+            ) from exc
         self._record_sources(result.sources)
         return result
 
@@ -298,21 +350,28 @@ class ToolContext:
             )
             ```
         """
-        model = self._runtime.model.with_structured_output(
-            output_model,
-            method="json_schema",
-        )
-        result = await model.ainvoke(
-            [
-                SystemMessage(content=prompt),
-                HumanMessage(content=text),
-            ]
-        )
-        if isinstance(result, output_model):
-            return result
-        if isinstance(result, dict):
-            return output_model.model_validate(result)
-        return output_model.model_validate(dict(result))
+        try:
+            model = self._runtime.model.with_structured_output(
+                output_model,
+                method="json_schema",
+            )
+            result = await model.ainvoke(
+                [
+                    SystemMessage(content=prompt),
+                    HumanMessage(content=text),
+                ]
+            )
+            if isinstance(result, output_model):
+                return result
+            if isinstance(result, dict):
+                return output_model.model_validate(result)
+            return output_model.model_validate(dict(result))
+        except ModelInvocationError:
+            raise
+        except Exception as exc:
+            raise ModelInvocationError(
+                f"Structured extraction failed ({output_model.__name__}): {exc}"
+            ) from exc
 
     async def read_resource(
         self,
@@ -903,10 +962,12 @@ class ReActAgent(ReActAgentDefinition):
 
 __all__ = [
     "ArtifactPublicationError",
+    "ModelInvocationError",
     "ReActAgent",
     "ResourceFetchError",
     "ResourceNotFoundError",
     "ToolContext",
+    "ToolInvocationError",
     "ToolOutput",
     "UIHints",
     "prompt_md",

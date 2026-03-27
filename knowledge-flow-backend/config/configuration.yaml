@@ -208,6 +208,7 @@ document_sources:
     provider: local_path
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
+
 embedding_model:
   provider: openai
   name: text-embedding-3-large
