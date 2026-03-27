@@ -506,10 +506,27 @@ class SessionOrchestrator:
         try:
             if session_updated and session_callback:
                 await self._emit_session(session_callback, session)
-            # 3) Rebuild minimal LangChain history (user/assistant/system only),
-            # This method will only restore history if the agent is not cached.
+            # 3) Rebuild minimal LangChain history (user/assistant/system only).
+            #
+            # Memory ownership by agent type:
+            # - V1 (AgentFlow) cache hit:  MemorySaver lives in the cached instance — skip.
+            # - V1 (AgentFlow) cache miss: MemorySaver is empty — restore from DB.
+            # - V2 with SQL checkpointer:
+            #   - cache hit: LangGraph already has state for this bound runtime — skip restore.
+            #   - cache miss: restore only when the durable checkpoint thread is still empty.
+            #     This preserves context for sessions created before SQL checkpointing was enabled,
+            #     while still avoiding duplicate message injection once a checkpoint exists.
+            # - V2 without SQL checkpointer (explicit opt-out): no checkpointer, always restore.
+            _v2_agent = isinstance(agent, V2SessionAgent)
+            _v2_has_checkpointer = _v2_agent and agent.streaming_memory is not None
+            _v2_skip_history_restore = _v2_has_checkpointer and is_cached
+            if _v2_has_checkpointer and not is_cached:
+                _v2_skip_history_restore = await self._v2_checkpoint_exists(
+                    agent=cast(V2SessionAgent, agent),
+                    session_id=session.id,
+                )
             lc_history: List[AnyMessage] = []
-            if not is_cached:
+            if not _v2_skip_history_restore and (not is_cached or _v2_agent):
                 async with phase_timer(self.kpi, "history_restore"):
                     lc_history = await self._restore_history(
                         user=user,
@@ -1652,6 +1669,51 @@ class SessionOrchestrator:
         result = callback(session)
         if asyncio.iscoroutine(result):
             await result
+
+    async def _v2_checkpoint_exists(
+        self,
+        *,
+        agent: V2SessionAgent,
+        session_id: str,
+    ) -> bool:
+        """
+        Return whether a v2 session already has durable checkpoint state.
+
+        Why this exists:
+        - V2 sessions may be migrated from history-only memory to SQL-backed
+          checkpointing.
+        - On the first cache miss after that migration, the runtime can expose a
+          checkpointer object before any checkpoint rows exist for the session.
+        - In that bootstrap case, skipping `_restore_history(...)` would drop the
+          prior conversation context for the first post-migration exchange.
+
+        How to use it:
+        - Call this only for V2 agents that already expose `streaming_memory`.
+        - When it returns `True`, LangGraph can hydrate itself from the durable
+          checkpoint thread and history restore must stay disabled.
+        - When it returns `False`, callers may restore history once to seed the
+          first durable checkpoint for `thread_id=session_id`.
+
+        Example:
+        - `if await self._v2_checkpoint_exists(agent=agent, session_id=session.id):`
+        - `    # Skip _restore_history; durable thread state already exists.`
+        """
+        try:
+            return (
+                await load_checkpoint(
+                    cast(AsyncCheckpointReader | None, agent.streaming_memory),
+                    thread_id=session_id,
+                )
+                is not None
+            )
+        except Exception as checkpoint_err:
+            logger.warning(
+                "[SESSIONS] v2 checkpoint probe failed; restoring history to preserve continuity session=%s agent=%s err=%s",
+                session_id,
+                agent.get_id(),
+                checkpoint_err,
+            )
+            return False
 
     async def _restore_history(
         self,
