@@ -58,6 +58,7 @@ class TabularController:
             except Exception as e:
                 logger.exception("Failed to list databases")
                 _raise_http_exception(e)
+                raise
 
         @router.get(
             "/tabular/databases/{db_name}/tables",
