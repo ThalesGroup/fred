@@ -1,6 +1,6 @@
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import ConversationButton from "@shared/atoms/ConversationButton/ConversationButton.tsx";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
@@ -17,7 +17,6 @@ export default function TeamContentNavbar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { teamId } = useParams<{ teamId: string }>();
-  const { pathname } = useLocation();
 
   const { data: team } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
   const selectedTeam = teamId ? team : undefined;
@@ -28,14 +27,12 @@ export default function TeamContentNavbar() {
       type: "link",
       label: t("rework.sidebar.team.menu.agents"),
       icon: { category: "outlined", type: "Person" },
-      selected: pathname.startsWith(`/team/${teamId}/agents`),
       linkProps: { to: `/team/${teamId}/agents` },
     },
     {
       type: "link",
       label: t("rework.sidebar.team.menu.resources"),
       icon: { category: "outlined", type: "Folder" },
-      selected: pathname.startsWith(`/team/${teamId}/resources`),
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
