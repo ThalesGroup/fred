@@ -112,7 +112,7 @@ class TabularController:
                 )
             except Exception as e:
                 logger.exception(f"Failed to list schemas for database {db_name}")
-                _raise_http_exception(e)
+                raise _raise_http_exception(e)
 
         @router.get(
             "/tabular/databases/{db_name}/tables/{table_name}/descibe_table",
@@ -141,7 +141,7 @@ class TabularController:
                 )
             except Exception as e:
                 logger.exception(f"Failed to get schema for {table_name} in database {db_name}")
-                _raise_http_exception(e)
+                raise _raise_http_exception(e)
 
         @router.get(
             "/tabular/context",
@@ -166,7 +166,7 @@ class TabularController:
                 )
             except Exception as e:
                 logger.exception("Failed to list databases and tables")
-                _raise_http_exception(e)
+                raise _raise_http_exception(e)
 
         @router.post(
             "/tabular/databases/{db_name}/sql/read",
