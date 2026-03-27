@@ -32,6 +32,8 @@ Example:
 
 from __future__ import annotations
 
+from langgraph.checkpoint.memory import MemorySaver
+
 from agentic_backend.application_context import get_kpi_writer
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.v2.contracts.context import BoundRuntimeContext
@@ -57,8 +59,6 @@ from agentic_backend.core.agents.v2.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
-from langgraph.checkpoint.memory import MemorySaver
-
 from agentic_backend.integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     FredArtifactPublisher,
