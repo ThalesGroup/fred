@@ -54,6 +54,7 @@ def test_annotate_markdown_tables_treats_backslash_digits_as_literal_text():
     assert "| \\6 |" in annotated
     assert "<!-- TABLE_END -->" in annotated
 
+
 @pytest.mark.integration
 def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_file):
     output_dir = Path("/tmp/knowledge_flow/test/output")
