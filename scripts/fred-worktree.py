@@ -127,8 +127,8 @@ def slugify_issue(issue_num: str) -> str:
 # ── VSCode config generators ────────────────────────────────────────────────
 
 
-def generate_vscode_settings(color: str) -> dict:
-    settings: dict = {
+def color_customizations(color: str) -> dict:
+    return {
         "workbench.colorCustomizations": {
             "titleBar.activeBackground": color,
             "titleBar.activeForeground": "#FFFFFF",
@@ -136,16 +136,23 @@ def generate_vscode_settings(color: str) -> dict:
             "titleBar.inactiveForeground": "#FFFFFFAA",
             "statusBar.background": color,
             "statusBar.foreground": "#FFFFFF",
-        },
-        "python-envs.pythonProjects": [
-            {
-                "path": "",
-                "envManager": "ms-python.python:system",
-                "packageManager": "ms-python.python:pip",
-            }
-        ],
+        }
     }
-    return settings
+
+
+def patch_workspace_file(wt: Path, color: str) -> None:
+    """Inject color customizations into the .code-workspace settings block."""
+    workspace_file = wt / ".vscode" / "fred.code-workspace"
+    if not workspace_file.exists():
+        raise click.ClickException(f"Workspace file not found: {workspace_file}")
+
+    # Strip trailing commas so standard json can parse it
+    content = workspace_file.read_text()
+    clean = re.sub(r",\s*([}\]])", r"\1", content)
+    workspace = json.loads(clean)
+
+    workspace.setdefault("settings", {}).update(color_customizations(color))
+    workspace_file.write_text(json.dumps(workspace, indent="\t") + "\n")
 
 
 def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None = None) -> None:
@@ -312,13 +319,14 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         shutil.copy2(f, vscode_dir / f.name)
 
     color = pick_color()
-    (vscode_dir / "settings.json").write_text(json.dumps(generate_vscode_settings(color), indent=4) + "\n")
+    patch_workspace_file(wt, color)
     patch_vscode_tasks(wt, ports, autorun_task)
     click.echo(":: VSCode config patched")
 
     # Open VSCode
     click.echo(":: Opening VSCode...")
-    subprocess.Popen(["code", str(wt)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    workspace_file = wt / ".vscode" / "fred.code-workspace"
+    subprocess.Popen(["code", str(workspace_file)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Summary
     click.echo()
