@@ -358,6 +358,12 @@ def _apply_profile_to_definition(
     if not isinstance(profile_id, str) or not profile_id.strip():
         profile = _selected_react_profile(definition)
         if profile is None:
+            # Only apply a fallback profile to definitions that actually support
+            # profiles (i.e. have a react_profile_id field).  Custom agents like
+            # PptFillerReActV2Definition define their own system prompt and tools;
+            # overwriting them with a generic fallback profile is wrong.
+            if "react_profile_id" not in definition.__class__.model_fields:
+                return definition
             profile = _fallback_react_profile()
             if profile is None:
                 return definition

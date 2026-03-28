@@ -53,7 +53,7 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
         POSTAL_TRACKING_DEFINITION_REF: "agentic_backend.agents.v2.demos.postal_tracking.Definition",
         BID_MGR_DEFINITION_REF: "agentic_backend.agents.v2.candidate.bid_mgr.Definition",
         PPT_FILLER_REACT_DEFINITION_REF: (
-            "agentic_backend.agents.v2.production.ppt_filler_react.PptFillerReActV2Definition"
+            "agentic_backend.agents.v2.production.ppt_filler_v2.PptFillerReActV2Definition"
         ),
         ARTIFACT_REPORT_DEFINITION_REF: (
             "agentic_backend.agents.v2.demos.artifact_report.ArtifactReportDemoV2Definition"
