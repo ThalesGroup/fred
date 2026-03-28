@@ -12,7 +12,10 @@
       ],
       "dependsOrder": "parallel",
       "problemMatcher": [],
-      "icon": { "id": "rocket", "color": "terminal.ansiGreen" }
+      "icon": {
+        "id": "rocket",
+        "color": "terminal.ansiRed"
+      }
     },
     {
       "label": "All Services PROD",
@@ -25,7 +28,10 @@
       ],
       "dependsOrder": "parallel",
       "problemMatcher": [],
-      "icon": { "id": "flame", "color": "terminal.ansiGreen" }
+      "icon": {
+        "id": "flame",
+        "color": "terminal.ansiRed"
+      }
     },
     {
       "label": "agentic-backend",
@@ -35,10 +41,18 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8000"
       ],
-      "options": { "cwd": "${workspaceFolder}/agentic-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/agentic-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "hubot", "color": "terminal.ansiMagenta" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "hubot",
+        "color": "terminal.ansiMagenta"
+      }
     },
     {
       "label": "agentic-backend-prod",
@@ -48,10 +62,18 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8000"
       ],
-      "options": { "cwd": "${workspaceFolder}/agentic-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/agentic-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "hubot", "color": "terminal.ansiMagenta" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "hubot",
+        "color": "terminal.ansiMagenta"
+      }
     },
     {
       "label": "knowledge-flow-backend",
@@ -61,10 +83,18 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8111"
       ],
-      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "database", "color": "terminal.ansiCyan" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "database",
+        "color": "terminal.ansiCyan"
+      }
     },
     {
       "label": "knowledge-flow-backend-prod",
@@ -74,10 +104,18 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8111"
       ],
-      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "database", "color": "terminal.ansiCyan" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "database",
+        "color": "terminal.ansiCyan"
+      }
     },
     {
       "label": "control-plane",
@@ -87,10 +125,18 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8222"
       ],
-      "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/control-plane-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "settings-gear", "color": "terminal.ansiYellow" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "settings-gear",
+        "color": "terminal.ansiYellow"
+      }
     },
     {
       "label": "control-plane-prod",
@@ -100,28 +146,52 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8222"
       ],
-      "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/control-plane-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "settings-gear", "color": "terminal.ansiYellow" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "settings-gear",
+        "color": "terminal.ansiYellow"
+      }
     },
     {
       "label": "kf-worker",
       "type": "shell",
       "command": "make run-worker",
-      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "filter", "color": "terminal.ansiBlue" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "filter",
+        "color": "terminal.ansiBlue"
+      }
     },
     {
       "label": "kf-worker-prod",
       "type": "shell",
       "command": "make run-worker-prod",
-      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "filter", "color": "terminal.ansiBlue" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "filter",
+        "color": "terminal.ansiBlue"
+      }
     },
     {
       "label": "frontend",
@@ -131,10 +201,18 @@
         "-lc",
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:5173 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
       ],
-      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" },
-      "icon": { "id": "browser", "color": "terminal.ansiGreen" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "browser",
+        "color": "terminal.ansiGreen"
+      }
     }
   ]
 }
