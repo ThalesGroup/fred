@@ -39,7 +39,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8000"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8000"
       ],
       "options": {
         "cwd": "${workspaceFolder}/agentic-backend"
@@ -60,7 +60,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8000"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8000"
       ],
       "options": {
         "cwd": "${workspaceFolder}/agentic-backend"
@@ -81,7 +81,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8111"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8111 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8111"
       ],
       "options": {
         "cwd": "${workspaceFolder}/knowledge-flow-backend"
@@ -102,7 +102,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8111"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8111 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8111"
       ],
       "options": {
         "cwd": "${workspaceFolder}/knowledge-flow-backend"
@@ -123,7 +123,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run PORT=8222"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8222 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8222"
       ],
       "options": {
         "cwd": "${workspaceFolder}/control-plane-backend"
@@ -144,7 +144,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make rrun-prod PORT=8222"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8222 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8222"
       ],
       "options": {
         "cwd": "${workspaceFolder}/control-plane-backend"
@@ -162,7 +162,8 @@
     {
       "label": "kf-worker",
       "type": "shell",
-      "command": "make run-worker",
+      "command": "bash",
+      "args": ["-lc", "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker"],
       "options": {
         "cwd": "${workspaceFolder}/knowledge-flow-backend"
       },
@@ -179,7 +180,8 @@
     {
       "label": "kf-worker-prod",
       "type": "shell",
-      "command": "make run-worker-prod",
+      "command": "bash",
+      "args": ["-lc", "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker-prod"],
       "options": {
         "cwd": "${workspaceFolder}/knowledge-flow-backend"
       },
@@ -199,7 +201,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:5173 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:5173 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
       ],
       "options": {
         "cwd": "${workspaceFolder}/frontend"
