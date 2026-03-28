@@ -128,7 +128,7 @@ def slugify_issue(issue_num: str) -> str:
 
 
 def generate_vscode_settings(color: str) -> dict:
-    return {
+    settings: dict = {
         "workbench.colorCustomizations": {
             "titleBar.activeBackground": color,
             "titleBar.activeForeground": "#FFFFFF",
@@ -145,11 +145,12 @@ def generate_vscode_settings(color: str) -> dict:
             }
         ],
     }
+    return settings
 
 
-def patch_vscode_tasks(wt: Path, ports: dict[str, int]) -> None:
-    """Patch the existing .vscode/tasks.json: replace default ports with worktree ports
-    and inject VITE_PORT for the frontend task."""
+def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None = None) -> None:
+    """Patch the existing .vscode/tasks.json: replace default ports with worktree ports,
+    inject VITE_PORT for the frontend task, and optionally mark a task to run on folder open."""
     tasks_file = wt / ".vscode" / "tasks.json"
     if not tasks_file.exists():
         raise click.ClickException(f"tasks.json not found at {tasks_file}")
@@ -165,6 +166,7 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int]) -> None:
             s = s.replace(f"PORT={old}", f"PORT={new}")
         return s
 
+    matched_autorun = False
     for task in tasks.get("tasks", []):
         # Replace ports in args
         if "args" in task:
@@ -184,6 +186,14 @@ def patch_vscode_tasks(wt: Path, ports: dict[str, int]) -> None:
         # Replace ports in command string
         if "command" in task and isinstance(task["command"], str):
             task["command"] = replace_ports(task["command"])
+
+        # Mark task to run automatically on folder open
+        if autorun_task and task.get("label") == autorun_task:
+            task["runOptions"] = {"runOn": "folderOpen"}
+            matched_autorun = True
+
+    if autorun_task and not matched_autorun:
+        raise click.ClickException(f"Task '{autorun_task}' not found in tasks.json")
 
     tasks_file.write_text(json.dumps(tasks, indent=2) + "\n")
 
@@ -223,7 +233,13 @@ PROVIDER_MAKE_TARGETS: dict[str, str] = {
     default=None,
     help="Configure a specific LLM provider in the worktree (e.g. mistral)",
 )
-def create(branch: str | None, from_issue: str | None, provider: str | None):
+@click.option(
+    "--autorun-task",
+    type=str,
+    default=None,
+    help="VSCode task label to run automatically when the worktree folder is opened (e.g. 'All Services PROD')",
+)
+def create(branch: str | None, from_issue: str | None, provider: str | None, autorun_task: str | None):
     """Create a new worktree with full dev environment."""
     # Resolve branch name
     if from_issue and not branch:
@@ -297,7 +313,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None):
 
     color = pick_color()
     (vscode_dir / "settings.json").write_text(json.dumps(generate_vscode_settings(color), indent=4) + "\n")
-    patch_vscode_tasks(wt, ports)
+    patch_vscode_tasks(wt, ports, autorun_task)
     click.echo(":: VSCode config patched")
 
     # Open VSCode
