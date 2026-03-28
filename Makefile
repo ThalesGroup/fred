@@ -110,6 +110,16 @@ use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: m
 		echo "  OPENAI_API_KEY was NOT updated. Pass MISTRAL_API_KEY=<key> to also set it in .env files."; \
 	fi
 
+##@ Tools
+
+.PHONY: install-wtf
+install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallback to pip)
+	@if command -v uv >/dev/null 2>&1; then \
+		uv tool install --editable scripts/wtf; \
+	else \
+		pip install --editable scripts/wtf; \
+	fi
+
 ##@ Release
 
 VERSION ?=

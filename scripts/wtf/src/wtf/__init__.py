@@ -1,17 +1,3 @@
-#!/usr/bin/env -S uv run --script
-#
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["click"]
-# ///
-#
-# fred-worktree - Manage git worktrees for parallel Fred development
-#
-# Usage:
-#   fred-worktree create <branch> [--from-issue <num>] [--fresh]
-#   fred-worktree remove <branch>
-#   fred-worktree list
-
 from __future__ import annotations
 
 import json
@@ -29,7 +15,7 @@ from click.shell_completion import CompletionItem
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-FRED_ROOT = Path(__file__).resolve().parent.parent
+FRED_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 WORKTREE_BASE = FRED_ROOT.parent
 PORT_RANGE = (9300, 9999)
 
@@ -396,7 +382,3 @@ def list_worktrees():
             for match in re.findall(r"(http://localhost:\d+\S*)", ports_file.read_text()):
                 click.echo(f"    {match}")
         click.echo()
-
-
-if __name__ == "__main__":
-    cli()
