@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import random
@@ -7,7 +8,10 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import textwrap
+import threading
+import time
 from pathlib import Path
 
 import click
@@ -40,6 +44,52 @@ TITLEBAR_COLORS = [
     "#F9A825",  # yellow
     "#4E342E",  # brown
 ]
+
+
+# ── Output helpers ───────────────────────────────────────────────────────────
+
+def step(msg: str) -> None:
+    """Print a colored step indicator."""
+    click.echo(click.style("▶ ", fg="cyan", bold=True) + msg)
+
+
+def ok(msg: str) -> None:
+    """Print a success line."""
+    click.echo(click.style("✓ ", fg="green", bold=True) + msg)
+
+
+def info(msg: str) -> None:
+    """Print an indented info line."""
+    click.echo("  " + click.style("·", fg="bright_black") + " " + msg)
+
+
+class Spinner:
+    """Context manager that shows an animated spinner while work is running."""
+
+    FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    def __init__(self, msg: str):
+        self._msg = msg
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+
+    def _spin(self) -> None:
+        for frame in itertools.cycle(self.FRAMES):
+            if self._stop.is_set():
+                break
+            sys.stderr.write(f"\r{click.style(frame, fg='cyan', bold=True)} {self._msg}")
+            sys.stderr.flush()
+            time.sleep(0.08)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop.set()
+        self._thread.join()
+        sys.stderr.write("\r\033[K")  # clear the spinner line
+        sys.stderr.flush()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -236,9 +286,9 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     """Create a new worktree with full dev environment."""
     # Resolve branch name
     if from_issue and not branch:
-        click.echo(f":: Fetching issue #{from_issue}...")
+        step(f"Fetching issue #{from_issue}...")
         branch = slugify_issue(from_issue)
-        click.echo(f":: Branch name: {branch}")
+        ok(f"Branch name: {click.style(branch, fg='yellow')}")
 
     if not branch:
         raise click.UsageError("Provide a branch name or --from-issue <num>")
@@ -248,7 +298,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         raise click.ClickException(f"Worktree already exists: {wt}")
 
     # Create worktree
-    click.echo(f":: Creating worktree at {wt}...")
+    step(f"Creating worktree at {click.style(str(wt), fg='yellow')}...")
     os.chdir(FRED_ROOT)
 
     branch_exists_local = subprocess.run(
@@ -266,18 +316,18 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         run(["git", "worktree", "add", "-b", branch, str(wt)])
 
     # Copy .env files
-    click.echo(":: Copying .env files...")
+    step("Copying .env files...")
     for svc in PYTHON_SERVICES:
         src = FRED_ROOT / svc / "config" / ".env"
         dst = wt / svc / "config" / ".env"
         if src.exists():
             shutil.copy2(src, dst)
-            click.echo(f"   {svc}/config/.env")
+            info(f"{svc}/config/.env")
 
     # Configure LLM provider
     if provider:
         make_target = PROVIDER_MAKE_TARGETS[provider]
-        click.echo(f":: Configuring provider '{provider}' (make {make_target})...")
+        step(f"Configuring provider {click.style(provider, fg='magenta')} (make {make_target})...")
         run(["make", make_target], cwd=wt)
 
     # Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
@@ -289,11 +339,12 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
             prod_cfg.write_text(content)
 
     # Allocate ports
-    click.echo(":: Allocating ports...")
+    step("Allocating ports...")
     used_ports: set[int] = set()
     ports = {}
     for svc in ALL_SERVICES:
         ports[svc] = find_free_port(used_ports)
+        info(f"{svc}: {click.style(str(ports[svc]), fg='cyan')}")
 
     # Write PORTS.md
     (wt / "PORTS.md").write_text(generate_ports_md(branch, ports))
@@ -307,26 +358,28 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     color = pick_color()
     patch_workspace_file(wt, color)
     patch_vscode_tasks(wt, ports, autorun_task)
-    click.echo(":: VSCode config patched")
+    ok("VSCode config patched")
 
     # Open VSCode
-    click.echo(":: Opening VSCode...")
+    step("Opening VSCode...")
     workspace_file = wt / ".vscode" / "fred.code-workspace"
     subprocess.Popen(["code", str(workspace_file)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Summary
+    w = 54
+    bar = click.style("━" * w, fg="green", bold=True)
     click.echo()
-    click.echo("=" * 50)
-    click.echo(f"  Worktree ready: {branch}")
-    click.echo("=" * 50)
-    click.echo(f"  Directory:  {wt}")
-    click.echo(f"  Agentic:    http://localhost:{ports['agentic-backend']}/agentic/v1/docs")
-    click.echo(f"  KF:         http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v1/docs")
-    click.echo(f"  CP:         http://localhost:{ports['control-plane-backend']}/control-plane/v1/docs")
-    click.echo(f"  Frontend:   http://localhost:{ports['frontend']}")
+    click.echo(bar)
+    click.echo(click.style(f"  🌿 Worktree ready: {branch}", fg="green", bold=True))
+    click.echo(bar)
+    click.echo(f"  {click.style('Dir:', bold=True)}      {wt}")
+    click.echo(f"  {click.style('Agentic:', bold=True)}  " + click.style(f"http://localhost:{ports['agentic-backend']}/agentic/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('KF:', bold=True)}        " + click.style(f"http://localhost:{ports['knowledge-flow-backend']}/knowledge-flow/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('CP:', bold=True)}        " + click.style(f"http://localhost:{ports['control-plane-backend']}/control-plane/v1/docs", fg="cyan"))
+    click.echo(f"  {click.style('Frontend:', bold=True)} " + click.style(f"http://localhost:{ports['frontend']}", fg="cyan"))
     click.echo()
-    click.echo(f"  Run services: Ctrl+Shift+P > Tasks: Run Task > 'All Services (wt: {branch})'")
-    click.echo("=" * 50)
+    click.echo(f"  {click.style('▶', fg='yellow')} Ctrl+Shift+P › Tasks: Run Task › " + click.style(f"All Services (wt: {branch})", fg="yellow"))
+    click.echo(bar)
 
 
 @cli.command()
@@ -338,24 +391,23 @@ def remove(branch: str, prune: bool):
     if not wt.exists():
         raise click.ClickException(f"Worktree not found: {wt}")
 
-    click.echo(f":: Removing worktree {branch}...")
     os.chdir(FRED_ROOT)
-    try:
-        run(["git", "worktree", "remove", "--force", str(wt)])
-    except subprocess.CalledProcessError:
-        # git worktree remove fails when directory has untracked files;
-        # fall back to manual removal + prune
-        click.echo(":: Force-removing directory and pruning worktree list...")
-        shutil.rmtree(wt)
-        run(["git", "worktree", "prune"])
-    click.echo(f":: Worktree removed: {wt}")
+    with Spinner(f"Removing worktree {click.style(branch, fg='yellow')}..."):
+        try:
+            run(["git", "worktree", "remove", "--force", str(wt)])
+        except subprocess.CalledProcessError:
+            # git worktree remove fails when directory has untracked files;
+            # fall back to manual removal + prune
+            shutil.rmtree(wt)
+            run(["git", "worktree", "prune"])
+    ok(f"Worktree removed: {wt}")
 
     # Delete the branch if fully merged
     result = subprocess.run(["git", "branch", "--merged"], capture_output=True, text=True)
     if branch in result.stdout:
         if prune or click.confirm(f"Branch '{branch}' is fully merged. Delete it?", default=False):
             run(["git", "branch", "-d", branch])
-            click.echo(f":: Branch deleted: {branch}")
+            ok(f"Branch deleted: {click.style(branch, fg='yellow')}")
 
 
 @cli.command(name="list")
@@ -363,9 +415,10 @@ def list_worktrees():
     """List all Fred worktrees."""
     dirs = existing_worktree_dirs()
     if not dirs:
-        click.echo("No Fred worktrees found.")
+        click.echo(click.style("No Fred worktrees found.", fg="bright_black"))
         return
 
+    click.echo(click.style(f"  {len(dirs)} worktree(s)\n", fg="bright_black"))
     for wt in dirs:
         name = wt.name.removeprefix("fred-wt-")
         try:
@@ -373,12 +426,12 @@ def list_worktrees():
         except subprocess.CalledProcessError:
             branch = "???"
 
-        click.echo(f"  {click.style(name, bold=True)}")
-        click.echo(f"    Dir:    {wt}")
-        click.echo(f"    Branch: {branch}")
+        click.echo(click.style("  🌿 ", fg="green") + click.style(name, bold=True, fg="green"))
+        click.echo(f"    {click.style('Dir:', bold=True)}    {wt}")
+        click.echo(f"    {click.style('Branch:', bold=True)} {click.style(branch, fg='yellow')}")
 
         ports_file = wt / "PORTS.md"
         if ports_file.exists():
             for match in re.findall(r"(http://localhost:\d+\S*)", ports_file.read_text()):
-                click.echo(f"    {match}")
+                click.echo("    " + click.style(match, fg="cyan"))
         click.echo()
