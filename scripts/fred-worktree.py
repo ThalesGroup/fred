@@ -29,8 +29,8 @@ from click.shell_completion import CompletionItem
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-FRED_ROOT = Path("/home/fmuller/Documents/fred-universe/fred")
-WORKTREE_BASE = Path("/home/fmuller/Documents/fred-universe")
+FRED_ROOT = Path(__file__).resolve().parent.parent
+WORKTREE_BASE = FRED_ROOT.parent
 PORT_RANGE = (9300, 9999)
 
 PYTHON_SERVICES = ["agentic-backend", "knowledge-flow-backend", "control-plane-backend"]
