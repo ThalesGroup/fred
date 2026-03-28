@@ -21,6 +21,9 @@ if TYPE_CHECKING:
         CorpusInvestigatorDeepV2Definition,
     )
     from .production.basic_react import BasicReActDefinition
+    from .production.basic_react.profiles.prometheus_expert_agent import (
+        PrometheusExpertV2Definition,
+    )
 
 __all__ = [
     "AegisGraphV2SkeletonDefinition",
@@ -30,6 +33,7 @@ __all__ = [
     "DVARiskValidatorGraph",
     "DVARiskValidatorQA",
     "BasicReActDefinition",
+    "PrometheusExpertV2Definition",
 ]
 
 
@@ -73,5 +77,12 @@ def __getattr__(name: str) -> object:
         from .production.basic_react import BasicReActDefinition
 
         return BasicReActDefinition
+
+    if name == "PrometheusExpertV2Definition":
+        from .production.basic_react.profiles.prometheus_expert_agent import (
+            PrometheusExpertV2Definition,
+        )
+
+        return PrometheusExpertV2Definition
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

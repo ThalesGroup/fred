@@ -31,6 +31,8 @@ from types import MappingProxyType
 BASIC_REACT_DEFINITION_REF = "v2.react.basic"
 BASIC_DEEP_DEFINITION_REF = "v2.deep.basic"
 CORPUS_INVESTIGATOR_DEEP_DEFINITION_REF = "v2.deep.corpus_investigator"
+RAG_EXPERT_DEFINITION_REF = "v2.react.rag_expert"
+PROMETHEUS_EXPERT_DEFINITION_REF = "v2.react.prometheus_expert"
 POSTAL_TRACKING_DEFINITION_REF = "v2.demo.postal_tracking"
 BID_MGR_DEFINITION_REF = "v2.proto.bid_mgr"
 PPT_FILLER_REACT_DEFINITION_REF = "v2.react.ppt_filler"
@@ -49,6 +51,9 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
         ),
         CORPUS_INVESTIGATOR_DEEP_DEFINITION_REF: (
             "agentic_backend.agents.v2.production.basic_deep.CorpusInvestigatorDeepV2Definition"
+        ),
+        PROMETHEUS_EXPERT_DEFINITION_REF: (
+            "agentic_backend.agents.v2.production.basic_react.profiles.prometheus_expert_agent.PrometheusExpertV2Definition"
         ),
         POSTAL_TRACKING_DEFINITION_REF: "agentic_backend.agents.v2.demos.postal_tracking.Definition",
         BID_MGR_DEFINITION_REF: "agentic_backend.agents.v2.candidate.bid_mgr.Definition",

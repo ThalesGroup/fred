@@ -1192,6 +1192,10 @@
         "name": "Filesystem access",
         "description": "Allow your agent to access a filesystem (local or Minio)"
       },
+      "prometheus": {
+        "name": "Prometheus access",
+        "description": "Allow your agent to query Prometheus metrics and execute PromQL requests"
+      },
       "search_opensearch": {
         "name": "Search in opensearch",
         "description": "Allow your agent to search in opensearch indices"

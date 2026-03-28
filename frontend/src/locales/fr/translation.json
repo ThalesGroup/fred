@@ -1193,6 +1193,10 @@
         "name": "Accès au système de fichiers",
         "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)"
       },
+      "prometheus": {
+        "name": "Accès à Prometheus",
+        "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL"
+      },
       "search_opensearch": {
         "name": "Rechercher dans opensearch",
         "description": "Permet à votre agent de rechercher dans les indices opensearch"

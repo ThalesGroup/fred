@@ -55,10 +55,10 @@ agents:
     type: "agent"
     definition_ref: "v2.deep.corpus_investigator"
 
-  - id: "BankTransferDemo"
-    name: "BankTransferDemo"
+  - id: "Spot"
+    name: "Spot"
     type: "agent"
-    class_path: "agentic_backend.banking.agent.BankTransferWorkflowAgent"
+    class_path: "agentic_backend.agents.prometheus.prometheus_expert.Spot"
     enabled: true
 
 react_profiles:

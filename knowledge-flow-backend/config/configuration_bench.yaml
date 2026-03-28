@@ -328,6 +328,13 @@ storage:
   log_store:
     type: "in_memory"
 
+# integrations:
+#   prometheus:
+#     base_url: http://prometheus:9090
+#     verify_ssl: false
+#     timeout_seconds: 15.0
+#     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
+
 mcp:
   reports_enabled: true
   kpi_enabled: true
@@ -337,6 +344,7 @@ mcp:
   templates_enabled: true
   resources_enabled: true
   opensearch_ops_enabled: true
+  prometheus_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
 

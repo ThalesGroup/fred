@@ -119,7 +119,7 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 | yq           | Utility                    | system                                                                                              | Install via system package manager                                                          |
 | SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
 | Pandoc       | 2.9.2.1                    | [Pandoc installation instructions](https://pandoc.org/installing.html)                              | For DOCX document ingestion                                                                 |
-| LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | For PPTX conversion into PDF                                                                |
+| LibreOffice  | Headless doc converter     | [LibreOffice installation instructions](https://www.libreoffice.org/download/download-libreoffice/) | Required for PPTX vision enrichment (`pptx -> pdf`) via the `soffice` command                                                                |
 | libmagic     | Identifies file types by content | Install via system package manager (e.g., `apt install libmagic1`, `brew install libmagic`)         | To check file type                                                                          |
 
   <details>
@@ -180,6 +180,7 @@ graph TD
 git clone https://github.com/ThalesGroup/fred.git
 cd fred
 ```
+> Note: the PPTX vision enrichment path in `knowledge-flow-backend` requires LibreOffice to be installed locally and the `soffice` command to be available in `PATH`. On Debian/Ubuntu, this can be installed with `apt install libreoffice`.
 
 </details>
 
