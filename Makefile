@@ -86,6 +86,8 @@ use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: m
 	@echo "--- agentic-backend: models_catalog.yaml ---"
 	yq -i '.default_profile_by_capability.chat = "default.chat.mistral"' agentic-backend/config/models_catalog.yaml
 	yq -i '.default_profile_by_capability.language = "default.language.mistral"' agentic-backend/config/models_catalog.yaml
+	yq -i 'del(.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' agentic-backend/config/models_catalog.yaml
+	yq -i '.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .profiles' agentic-backend/config/models_catalog.yaml
 	@echo "--- knowledge-flow-backend: configuration_prod.yaml ---"
 	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
 	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_prod.yaml

@@ -47,7 +47,7 @@ DEFAULT_PORTS = {
 TITLEBAR_COLORS = [
     "#6A1B9A",  # purple
     "#00838F",  # teal
-    "#E65100",  # orange
+    "#DF8C60",  # orange
     "#2E7D32",  # green
     "#AD1457",  # pink
     "#1565C0",  # blue
@@ -209,10 +209,21 @@ def cli():
     """Manage git worktrees for parallel Fred development."""
 
 
+PROVIDER_MAKE_TARGETS: dict[str, str] = {
+    "mistral": "use-mistral",
+}
+
+
 @cli.command()
 @click.argument("branch", required=False)
 @click.option("--from-issue", type=str, help="Create branch name from a GitHub issue number")
-def create(branch: str | None, from_issue: str | None):
+@click.option(
+    "--provider",
+    type=click.Choice(list(PROVIDER_MAKE_TARGETS), case_sensitive=False),
+    default=None,
+    help="Configure a specific LLM provider in the worktree (e.g. mistral)",
+)
+def create(branch: str | None, from_issue: str | None, provider: str | None):
     """Create a new worktree with full dev environment."""
     # Resolve branch name
     if from_issue and not branch:
@@ -227,7 +238,7 @@ def create(branch: str | None, from_issue: str | None):
     if wt.exists():
         raise click.ClickException(f"Worktree already exists: {wt}")
 
-    # 1. Create worktree
+    # Create worktree
     click.echo(f":: Creating worktree at {wt}...")
     os.chdir(FRED_ROOT)
 
@@ -245,7 +256,7 @@ def create(branch: str | None, from_issue: str | None):
     else:
         run(["git", "worktree", "add", "-b", branch, str(wt)])
 
-    # 2. Copy .env files
+    # Copy .env files
     click.echo(":: Copying .env files...")
     for svc in PYTHON_SERVICES:
         src = FRED_ROOT / svc / "config" / ".env"
@@ -254,7 +265,13 @@ def create(branch: str | None, from_issue: str | None):
             shutil.copy2(src, dst)
             click.echo(f"   {svc}/config/.env")
 
-    # 3. Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
+    # Configure LLM provider
+    if provider:
+        make_target = PROVIDER_MAKE_TARGETS[provider]
+        click.echo(f":: Configuring provider '{provider}' (make {make_target})...")
+        run(["make", make_target], cwd=wt)
+
+    # Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
     for svc in PYTHON_SERVICES:
         prod_cfg = wt / svc / "config" / "configuration_prod.yaml"
         if prod_cfg.exists():
@@ -262,7 +279,7 @@ def create(branch: str | None, from_issue: str | None):
             content = content.replace("metrics_enabled: true", "metrics_enabled: false")
             prod_cfg.write_text(content)
 
-    # 4. Allocate ports
+    # Allocate ports
     click.echo(":: Allocating ports...")
     used_ports: set[int] = set()
     ports = {}
@@ -272,7 +289,7 @@ def create(branch: str | None, from_issue: str | None):
     # Write PORTS.md
     (wt / "PORTS.md").write_text(generate_ports_md(branch, ports))
 
-    # 4. Copy .vscode from main repo (ensures latest tasks.json) then patch
+    # Copy .vscode from main repo (ensures latest tasks.json) then patch
     vscode_dir = wt / ".vscode"
     vscode_dir.mkdir(exist_ok=True)
     for f in (FRED_ROOT / ".vscode").iterdir():
@@ -283,7 +300,7 @@ def create(branch: str | None, from_issue: str | None):
     patch_vscode_tasks(wt, ports)
     click.echo(":: VSCode config patched")
 
-    # 5. Open VSCode
+    # Open VSCode
     click.echo(":: Opening VSCode...")
     subprocess.Popen(["code", str(wt)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
