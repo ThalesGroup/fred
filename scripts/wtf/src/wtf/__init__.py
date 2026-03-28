@@ -308,12 +308,13 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         ["git", "show-ref", "--verify", f"refs/remotes/origin/{branch}"], capture_output=True
     ).returncode == 0
 
+    git_env = {**os.environ, "GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0"}
     if branch_exists_local:
-        run(["git", "worktree", "add", str(wt), branch])
+        run(["git", "worktree", "add", str(wt), branch], env=git_env)
     elif branch_exists_remote:
-        run(["git", "worktree", "add", str(wt), f"origin/{branch}"])
+        run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
     else:
-        run(["git", "worktree", "add", "-b", branch, str(wt)])
+        run(["git", "worktree", "add", "-b", branch, str(wt)], env=git_env)
 
     # Copy .env files
     step("Copying .env files...")
@@ -363,7 +364,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     # Open VSCode
     step("Opening VSCode...")
     workspace_file = wt / ".vscode" / "fred.code-workspace"
-    subprocess.Popen(["code", str(workspace_file)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["code", str(workspace_file)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Summary
     w = 54
