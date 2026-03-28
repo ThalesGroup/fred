@@ -176,8 +176,8 @@ def color_customizations(color: str) -> dict:
     }
 
 
-def patch_workspace_file(wt: Path, color: str) -> None:
-    """Inject color customizations into the .code-workspace settings block."""
+def patch_workspace_file(wt: Path, color: str, branch: str) -> None:
+    """Inject color customizations and window title into the .code-workspace settings block."""
     workspace_file = wt / ".vscode" / "fred.code-workspace"
     if not workspace_file.exists():
         raise click.ClickException(f"Workspace file not found: {workspace_file}")
@@ -188,6 +188,7 @@ def patch_workspace_file(wt: Path, color: str) -> None:
     workspace = json.loads(clean)
 
     workspace.setdefault("settings", {}).update(color_customizations(color))
+    workspace["settings"]["window.title"] = f"fred [{branch}]${{dirty}}"
     workspace_file.write_text(json.dumps(workspace, indent="\t") + "\n")
 
 
@@ -357,7 +358,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         shutil.copy2(f, vscode_dir / f.name)
 
     color = pick_color()
-    patch_workspace_file(wt, color)
+    patch_workspace_file(wt, color, branch)
     patch_vscode_tasks(wt, ports, autorun_task)
     ok("VSCode config patched")
 
