@@ -146,7 +146,7 @@ class OpsAssistant(ReActAgentDefinition):
     agent_id = "ops.assistant"
     role = "Operations assistant"
     description = "Helps investigate platform issues."
-    tool_requirements = (
+    declared_tool_refs = (
         ToolRefRequirement(tool_ref="logs.query"),
     )
 

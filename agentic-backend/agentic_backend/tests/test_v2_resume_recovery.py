@@ -26,15 +26,19 @@ from agentic_backend.core.agents.v2 import (
     RuntimeServices,
     ToolProviderPort,
 )
-from agentic_backend.core.agents.v2.react_runtime import (
+from agentic_backend.core.agents.v2.contracts.runtime import (
+    AwaitingHumanRuntimeEvent,
+)
+from agentic_backend.core.agents.v2.react.react_runtime import (
     ReActInput,
     ReActMessage,
     ReActMessageRole,
     ReActRuntime,
 )
-from agentic_backend.core.agents.v2.runtime import AwaitingHumanRuntimeEvent
-from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
-from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
+from agentic_backend.core.agents.v2.runtime_support import (
+    FredSqlCheckpointer,
+    V2SessionAgent,
+)
 from agentic_backend.core.chatbot.chat_schema import ChatMessage, SessionSchema
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore

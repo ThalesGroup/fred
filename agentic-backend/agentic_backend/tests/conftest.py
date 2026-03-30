@@ -93,7 +93,7 @@ def minimal_generalist_config() -> Configuration:
         ai=AIConfig(
             use_static_config_only=True,
             enable_catalog_mode=False,
-            enable_v2_sql_checkpointer=False,
+            enable_v2_sql_checkpointer=True,
             max_concurrent_agents=128,
             restore_max_exchanges=20,
             knowledge_flow_url="http://localhost:8000/agentic/v1",

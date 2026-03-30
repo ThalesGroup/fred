@@ -97,9 +97,9 @@ x-rich-input-processors: &rich-input-processors
     class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 
 # ── Ingestion profiles ──────────────────────────────────────────────────────────────
-#   fast   : pypdfium2, no OCR    — ideal for text PDFs, fastest
-#   medium : docling, no OCR      — good quality, recommended default profile
-#   rich   : docling + OCR + images  — best quality, slowest
+#   fast   : pypdfium2, no OCR                  — ideal for text PDFs, fastest
+#   medium : docling + selective OCR + tables  — balanced quality/cost profile
+#   rich   : docling + full OCR + images       — best quality, slowest
 
 x-profile-fast: &profile-fast
   use_gpu: true
@@ -121,12 +121,14 @@ x-profile-medium: &profile-medium
   process_images: false
   pdf:
     backend: docling_parse
-    images_scale: 2.0
+    images_scale: 1.5
     generate_picture_images: false
     generate_page_images: false
     generate_table_images: false
-    do_table_structure: false
-    do_ocr: false
+    do_table_structure: true
+    do_ocr: true
+    ocr_backend: openvino
+    force_full_page_ocr: false
   input_processors: *rich-input-processors
 
 x-profile-rich-backend: &profile-rich-backend
@@ -137,10 +139,12 @@ x-profile-rich-backend: &profile-rich-backend
     backend: docling_parse
     images_scale: 2.0
     generate_picture_images: true
-    generate_page_images: true
+    generate_page_images: false
     generate_table_images: false
     do_table_structure: true
     do_ocr: true
+    ocr_backend: openvino
+    force_full_page_ocr: true
   input_processors: *rich-input-processors
 
 # Rich profile for the Temporal worker: same as backend but generate_summary: true
@@ -288,6 +292,7 @@ x-kf-mcp: &kf-mcp
   resources_enabled: true
   filesystem_enabled: false
   opensearch_ops_enabled: false
+  prometheus_ops_enabled: false
   neo4j_enabled: false
 
 x-kf-filesystem: &kf-filesystem
@@ -604,7 +609,7 @@ applications:
         enable_catalog_mode: true
         # Enable durable SQL checkpointer for v2 runtimes.
         # Disabled by default.
-        enable_v2_sql_checkpointer: false
+        enable_v2_sql_checkpointer: true
         # Number of past exchanges to restore when initializing an agent session
         # This setting is used to limit the amount of historical context
         # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
@@ -1244,7 +1249,7 @@ applications:
 
       # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:   *profile-fast
           medium: *profile-medium
@@ -1259,6 +1264,12 @@ applications:
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
+      integrations:
+        prometheus:
+          # base_url: http://prometheus:9090
+          # verify_ssl: false
+          # timeout_seconds: 15.0
+          # username: admin
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
@@ -1268,6 +1279,8 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""
@@ -1405,7 +1418,7 @@ applications:
 
       # ── rich.generate_summary=true for the worker (generates summaries at ingestion) ──
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:   *profile-fast
           medium: *profile-medium
@@ -1420,6 +1433,12 @@ applications:
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
       storage:         *kf-storage
+      integrations:
+        prometheus:
+          # base_url: http://prometheus:9090
+          # verify_ssl: false
+          # timeout_seconds: 15.0
+          # username: admin
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
 
@@ -1429,6 +1448,8 @@ applications:
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
+      PROMETHEUS_PASSWORD: ""
+      PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
       TABULAR_POSTGRES_PASSWORD: ""

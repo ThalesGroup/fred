@@ -1,4 +1,4 @@
-# Copyright Thales 2025
+# Copyright Thales 2026
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +16,32 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
 
 logger = logging.getLogger(__name__)
+
+
+class EditFileRequest(BaseModel):
+    """
+    Exact text replacement request for the virtual filesystem.
+
+    Why this exists:
+    - standard coding-oriented filesystem tools need one compact edit payload
+    - using a small request model keeps the HTTP route explicit and easy to consume
+
+    How to use:
+    - pass the exact `old_string` to replace plus the `new_string`
+    - set `replace_all=true` only when all matches should be replaced
+
+    Example:
+    - `{"old_string": "draft", "new_string": "final", "replace_all": false}`
+    """
+
+    old_string: str
+    new_string: str
+    replace_all: bool = False
 
 
 class McpFilesystemController:
@@ -45,14 +67,14 @@ class McpFilesystemController:
     # ----------- Routes -----------
 
     def _register_routes(self, router: APIRouter):
-        @router.get("/fs/list", tags=["Filesystem"], summary="List files and directories in the root", operation_id="list_files")
+        @router.get("/fs/list", tags=["Filesystem"], summary="List a directory", operation_id="ls")
         async def list_entries(
-            prefix: str = "",
+            path: str = "/",
             user: KeycloakUser = Depends(get_current_user),
         ):
             authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
-                return await self.service.list(user, prefix)
+                return await self.service.ls(user, path)
             except Exception as e:
                 self._handle_exception(e, "List")
 
@@ -67,11 +89,16 @@ class McpFilesystemController:
             except Exception as e:
                 self._handle_exception(e, "Stat")
 
-        @router.get("/fs/cat/{path:path}", tags=["Filesystem"], summary="Read a file", operation_id="cat_file")
-        async def cat(path: str, user: KeycloakUser = Depends(get_current_user)):
+        @router.get("/fs/cat/{path:path}", tags=["Filesystem"], summary="Read a file", operation_id="read_file")
+        async def cat(
+            path: str,
+            offset: int = 0,
+            limit: int = 100,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
             authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
-                return await self.service.cat(user, path)
+                return await self.service.read_file(user, path, offset=offset, limit=limit)
             except Exception as e:
                 self._handle_exception(e, "Cat")
 
@@ -91,23 +118,41 @@ class McpFilesystemController:
             except Exception as e:
                 self._handle_exception(e, "Delete")
 
-        @router.get("/fs/grep", tags=["Filesystem"], summary="Search files by regex", operation_id="grep_file_regex")
-        async def grep(pattern: str, prefix: str = "", user: KeycloakUser = Depends(get_current_user)):
+        @router.post("/fs/edit/{path:path}", tags=["Filesystem"], summary="Edit a file", operation_id="edit_file")
+        async def edit(
+            path: str,
+            payload: EditFileRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            authorize_or_raise(user, Action.CREATE, Resource.FILES)
+            try:
+                return await self.service.edit_file(
+                    user,
+                    path,
+                    old_string=payload.old_string,
+                    new_string=payload.new_string,
+                    replace_all=payload.replace_all,
+                )
+            except Exception as e:
+                self._handle_exception(e, "Edit")
+
+        @router.get("/fs/glob", tags=["Filesystem"], summary="Find files matching a glob", operation_id="glob")
+        async def glob(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.READ, Resource.FILES)
             try:
-                return await self.service.grep(user, pattern, prefix)
+                return await self.service.glob(user, pattern, path)
+            except Exception as e:
+                self._handle_exception(e, "Glob")
+
+        @router.get("/fs/grep", tags=["Filesystem"], summary="Search files by regex", operation_id="grep")
+        async def grep(pattern: str, path: str = "/", user: KeycloakUser = Depends(get_current_user)):
+            authorize_or_raise(user, Action.READ, Resource.FILES)
+            try:
+                return await self.service.grep(user, pattern, path)
             except Exception as e:
                 self._handle_exception(e, "Grep")
 
-        @router.get("/fs/print_root_dir", tags=["Filesystem"], summary="Get root path of the filesystem", operation_id="print_root_directory")
-        async def print_root_dir(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.FILES)
-            try:
-                return await self.service.print_root_dir(user)
-            except Exception as e:
-                self._handle_exception(e, "print_root_dir")
-
-        @router.post("/fs/mkdir/{path:path}", tags=["Filesystem"], summary="Create a directory/folder", operation_id="create_directory")
+        @router.post("/fs/mkdir/{path:path}", tags=["Filesystem"], summary="Create a directory/folder", operation_id="mkdir")
         async def mkdir(path: str, user: KeycloakUser = Depends(get_current_user)):
             authorize_or_raise(user, Action.CREATE, Resource.FILES)
             try:

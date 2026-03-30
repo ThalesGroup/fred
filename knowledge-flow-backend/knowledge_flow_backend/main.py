@@ -66,6 +66,9 @@ from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
 from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
+from knowledge_flow_backend.features.kpi.prometheus_controller import (
+    PrometheusOpsController,
+)
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
@@ -256,6 +259,12 @@ def create_app() -> FastAPI:
     else:
         logger.warning("%s OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
 
+    if configuration.mcp.prometheus_ops_enabled:
+        PrometheusOpsController(router)
+        logger.info("%s PrometheusOpsController registered (mcp.prometheus_ops_enabled=true)", LOG_PREFIX)
+    else:
+        logger.warning("%s PrometheusOpsController disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
+
     if configuration.mcp.neo4j_enabled:
         Neo4jController(router)
         logger.info("%s Neo4jController registered (mcp.neo4j_enabled=true)", LOG_PREFIX)
@@ -340,6 +349,22 @@ def create_app() -> FastAPI:
         logger.info("%s MCP OpenSearch Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
     else:
         logger.warning("%s MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
+
+    if configuration.mcp.prometheus_ops_enabled:
+        mcp_prometheus_ops = FastApiMCP(
+            app,
+            name="Knowledge Flow Prometheus Ops MCP",
+            description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
+            include_tags=["Prometheus"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_mount_path = f"{mcp_prefix}/mcp-prometheus-ops"
+        mcp_prometheus_ops.mount_http(mount_path=mcp_mount_path)
+        logger.info("%s MCP Prometheus Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
+    else:
+        logger.warning("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.neo4j_enabled:
         mcp_neo4j = FastApiMCP(

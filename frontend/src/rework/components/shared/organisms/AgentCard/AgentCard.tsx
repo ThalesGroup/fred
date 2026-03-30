@@ -11,9 +11,10 @@ interface AgentCardProps {
   agent: Agent;
   readOnly: boolean;
   onToggleEnabled: (agent: AnyAgent) => void;
+  onEditAgent: (agent: AnyAgent) => void;
 }
 
-export default function AgentCard({ agent, readOnly, onToggleEnabled }: AgentCardProps) {
+export default function AgentCard({ agent, readOnly, onToggleEnabled, onEditAgent }: AgentCardProps) {
   const { t } = useTranslation();
 
   const cardContent = useMemo(() => {
@@ -49,6 +50,10 @@ export default function AgentCard({ agent, readOnly, onToggleEnabled }: AgentCar
                 variant={"icon"}
                 size={"medium"}
                 icon={{ category: "outlined", type: "edit" }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onEditAgent(agent);
+                }}
               />
             </div>
           )}

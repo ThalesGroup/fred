@@ -4,10 +4,10 @@ Repository-wide instructions for Claude Code.
 
 ## Mandatory Read Order
 
-1. [`docs/DEVELOPER_CONTRACT.md`](./docs/DEVELOPER_CONTRACT.md)
-2. [`docs/PLATFORM_RUNTIME_MAP.md`](./docs/PLATFORM_RUNTIME_MAP.md)
-3. [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](./docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
-4. [`docs/REBAC.md`](./docs/REBAC.md) when access/team behavior is touched
+1. [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/platform/DEVELOPER_CONTRACT.md)
+2. [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md)
+3. [`docs/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](./docs/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+4. [`docs/platform/REBAC.md`](./docs/platform/REBAC.md) when access/team behavior is touched
 
 ## Non-Negotiable Defaults
 
@@ -20,7 +20,7 @@ Repository-wide instructions for Claude Code.
 
 Canonical source:
 
-- [`docs/PLATFORM_RUNTIME_MAP.md`](./docs/PLATFORM_RUNTIME_MAP.md)
+- [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md)
 
 This defines:
 

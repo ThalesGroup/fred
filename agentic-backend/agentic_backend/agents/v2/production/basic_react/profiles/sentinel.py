@@ -1,6 +1,9 @@
 """Sentinel starting profile."""
 
-from agentic_backend.core.agents.agent_spec import MCPServerRef
+from agentic_backend.core.agents.v2 import (
+    MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
+    MCPServerRef,
+)
 
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
@@ -9,7 +12,7 @@ SENTINEL_PROFILE = ReActProfile(
     profile_id="sentinel",
     title="Sentinel",
     description="Monitor platform health with OpenSearch and KPI MCP tools.",
-    role="sentinel_expert",
+    role="Monitoring assistant",
     agent_description=(
         "Operations and monitoring assistant for OpenSearch health, diagnostics, "
         "and platform KPI review."
@@ -18,5 +21,5 @@ SENTINEL_PROFILE = ReActProfile(
     system_prompt_template=load_basic_react_prompt(
         "basic_react_sentinel_system_prompt.md"
     ),
-    mcp_servers=(MCPServerRef(id="mcp-knowledge-flow-opensearch-ops"),),
+    mcp_servers=(MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),),
 )

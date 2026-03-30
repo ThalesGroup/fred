@@ -1,10 +1,21 @@
 """
-Tiny tutorial sample for v2 authored tools.
+Tutorial sample for v2 authored tools.
 
-Use this when onboarding a new developer:
+Two patterns are shown:
+
+1. Sync tools — pure Python logic, no Fred runtime interaction.
+   Good for computation, formatting, validation.
+
+2. Async tools — use ctx.publish_text() / ctx.publish_bytes() to store a
+   file in Fred and return a download link to the user.
+   Good for report generation, export, any tool that produces a file.
+
+Use this when onboarding a developer who needs to write Python-authored tools:
 - no business dependencies
 - no MCP dependencies
-- very small tools and deterministic outputs
+- deterministic outputs
+- runnable without an external service (except artifact publishing, which
+  requires RuntimeServices.artifact_publisher — marked integration below)
 """
 
 from __future__ import annotations
@@ -24,8 +35,14 @@ from agentic_backend.core.agents.v2.authoring import (
 
 DEFAULT_SYSTEM_PROMPT = """
 You are a tutorial assistant.
-Prefer short answers and call tools when arithmetic or text formatting helps.
+Prefer short answers and call tools when arithmetic, text formatting, or file
+generation is needed.
 """.strip()
+
+
+# ---------------------------------------------------------------------------
+# Pattern 1 — Sync tools (pure computation, no await needed)
+# ---------------------------------------------------------------------------
 
 
 @tool(
@@ -65,18 +82,69 @@ def utc_now(ctx: ToolContext) -> ToolOutput:
     return ToolOutput(text=datetime.now(tz=UTC).isoformat())
 
 
+# ---------------------------------------------------------------------------
+# Pattern 2 — Async tool that publishes a file and returns a download link
+#
+# Use ctx.publish_text() to store any text content (markdown, CSV, JSON…)
+# in Fred storage. The returned PublishedArtifact carries a download link
+# that the UI renders as a clickable file attachment.
+#
+# Use ctx.publish_bytes() for binary content (XLSX, PDF, images…).
+#
+# Note: requires RuntimeServices.artifact_publisher at runtime.
+# Mark tests that call this tool with @pytest.mark.integration.
+# ---------------------------------------------------------------------------
+
+
+@tool(
+    tool_ref="sample.report.generate",
+    description=(
+        "Generate a short markdown report on a topic and publish it as a "
+        "downloadable file. Returns a link the user can click to download."
+    ),
+    success_message="Report published.",
+)
+async def generate_report(ctx: ToolContext, topic: str) -> ToolOutput:
+    # 1. Build the content (replace this with real business logic)
+    now = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
+    content = f"# Report: {topic}\n\n_Generated on {now}_\n\nAdd your content here.\n"
+
+    # 2. Publish to Fred storage — returns a PublishedArtifact
+    artifact = await ctx.publish_text(
+        file_name=f"{topic.lower().replace(' ', '_')}_report.md",
+        content=content,
+        title=f"Report: {topic}",
+    )
+
+    # 3. Return the link as a UI part so the user sees a download button,
+    #    and a text summary so the model can describe what was produced.
+    return ToolOutput(
+        text=f"Report on '{topic}' is ready.",
+        ui_parts=(artifact.to_link_part(),),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Agent definition
+# ---------------------------------------------------------------------------
+
+
 class Definition(ReActAgent):
     """
-    Minimal tutorial definition with simple local Python tools.
+    Tutorial agent exposing both sync and async Python tools.
+
+    Sync tools: add_numbers, slugify_text, utc_now
+    Async tool: generate_report (publishes a file and returns a download link)
     """
 
     agent_id: str = "sample.tutorial.tools.v2"
     role: str = "Tutorial Tools Sample"
     description: str = (
-        "Simple v2 sample agent exposing tiny local tools (math, slugify, UTC time)."
+        "Sample agent demonstrating sync computation tools and async file "
+        "publishing with download links."
     )
     tags: tuple[str, ...] = ("sample", "tutorial", "tools", "react")
-    tools = (add_numbers, slugify_text, utc_now)
+    tools = (add_numbers, slugify_text, utc_now, generate_report)
     system_prompt_template: str = Field(default=DEFAULT_SYSTEM_PROMPT, min_length=1)
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(

@@ -1,10 +1,10 @@
 """LogGenius starting profile."""
 
-from agentic_backend.core.agents.v2.builtin_tools import (
+from agentic_backend.core.agents.v2 import ToolRefRequirement
+from agentic_backend.core.agents.v2.support.builtins import (
     TOOL_REF_LOGS_QUERY,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
-from agentic_backend.core.agents.v2.models import ToolRefRequirement
 
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
@@ -21,7 +21,7 @@ LOG_GENIUS_PROFILE = ReActProfile(
     system_prompt_template=load_basic_react_prompt(
         "basic_react_log_genius_system_prompt.md"
     ),
-    tool_requirements=(
+    declared_tool_refs=(
         ToolRefRequirement(
             tool_ref=TOOL_REF_LOGS_QUERY,
             description="Query recent application logs and return a structured triage digest.",

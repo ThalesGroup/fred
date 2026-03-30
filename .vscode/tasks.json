@@ -2,12 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Agentic + Knowledge + Frontend + kf worker",
+      "label": "Agentic + Knowledge + Frontend + kf worker + control-plane",
       "dependsOn": [
         "agentic-backend",
         "knowledge-flow-backend",
         "frontend",
-        "kf worker"
+        "kf worker",
+        "control-plane"
       ],
       "dependsOrder": "parallel"
     },
@@ -32,6 +33,18 @@
         "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
       ],
       "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "problemMatcher": [],
+      "presentation": { "panel": "new", "reveal": "always" }
+    },
+        {
+      "label": "control-plane",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+      ],
+      "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
       "problemMatcher": [],
       "presentation": { "panel": "new", "reveal": "always" }
     },

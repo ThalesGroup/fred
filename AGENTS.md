@@ -2,8 +2,8 @@
 
 All coding assistants working in this repository must follow:
 
-- [`docs/DEVELOPER_CONTRACT.md`](./docs/DEVELOPER_CONTRACT.md)
-- [`docs/PLATFORM_RUNTIME_MAP.md`](./docs/PLATFORM_RUNTIME_MAP.md)
+- [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/platform/DEVELOPER_CONTRACT.md)
+- [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md)
 
 Mandatory defaults:
 
