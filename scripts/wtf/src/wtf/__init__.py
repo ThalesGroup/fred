@@ -272,18 +272,27 @@ PROVIDER_MAKE_TARGETS: dict[str, str] = {
 @click.argument("branch", required=False)
 @click.option("--from-issue", type=str, help="Create branch name from a GitHub issue number")
 @click.option(
+    "-p",
     "--provider",
     type=click.Choice(list(PROVIDER_MAKE_TARGETS), case_sensitive=False),
     default=None,
     help="Configure a specific LLM provider in the worktree (e.g. mistral)",
 )
 @click.option(
+    "-t",
     "--autorun-task",
     type=str,
     default=None,
     help="VSCode task label to run automatically when the worktree folder is opened (e.g. 'All Services PROD')",
 )
-def create(branch: str | None, from_issue: str | None, provider: str | None, autorun_task: str | None):
+@click.option(
+    "-f",
+    "--from-branch",
+    type=str,
+    default=None,
+    help="Source branch to create the new branch from (defaults to current HEAD)",
+)
+def create(branch: str | None, from_issue: str | None, provider: str | None, autorun_task: str | None, from_branch: str | None):
     """Create a new worktree with full dev environment."""
     # Resolve branch name
     if from_issue and not branch:
@@ -310,12 +319,28 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     ).returncode == 0
 
     git_env = {**os.environ, "GIT_PAGER": "cat", "GIT_TERMINAL_PROMPT": "0"}
+
+    # Parse --from-branch: accept "remote/branch" or bare "branch" (defaults to origin)
+    from_ref: str | None = None
+    if from_branch:
+        if "/" in from_branch:
+            remote, remote_branch = from_branch.split("/", 1)
+        else:
+            remote, remote_branch = "origin", from_branch
+        with Spinner(f"Fetching latest {click.style(from_branch, fg='yellow')}..."):
+            subprocess.run(["git", "fetch", remote, remote_branch], env=git_env, capture_output=True)
+        ok(f"Fetched {remote}/{remote_branch}")
+        from_ref = f"{remote}/{remote_branch}"
+
     if branch_exists_local:
         run(["git", "worktree", "add", str(wt), branch], env=git_env)
     elif branch_exists_remote:
         run(["git", "worktree", "add", str(wt), f"origin/{branch}"], env=git_env)
     else:
-        run(["git", "worktree", "add", "-b", branch, str(wt)], env=git_env)
+        cmd = ["git", "worktree", "add", "-b", branch, str(wt)]
+        if from_ref:
+            cmd.append(from_ref)
+        run(cmd, env=git_env)
 
     # Copy .env files
     step("Copying .env files...")
