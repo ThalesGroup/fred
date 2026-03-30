@@ -1,0 +1,28 @@
+name: Check Alembic Migrations
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  check-migrations:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agentic-backend
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run migration checks
+        run: make db-check-migrations

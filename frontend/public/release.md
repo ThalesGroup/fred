@@ -15,6 +15,7 @@
   - Add dedicated catalog files for models, agents, and MCP servers (`models_catalog.yaml`, `agents_catalog.yaml`, `mcp_catalog.yaml`)
   - Stream agent response in the UI
   - Add support for Human In the Loop for react agent (#1207)
+  - Add Alembic to handle Postgres and Squlite migrations
 
 - **Improvements**
 

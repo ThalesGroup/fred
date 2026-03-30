@@ -89,11 +89,8 @@ from fred_core.security.structure import (
     SecurityConfiguration,
     UserSecurity,
 )
-from fred_core.session.stores import (
-    BaseJsonSessionStore,
-    BaseSessionStore,
-    PostgresJsonSessionStore,
-)
+from fred_core.session import SessionSchema
+from fred_core.session.stores import BaseSessionStore, PostgresSessionStore
 
 __all__ = [
     "BaseLogStore",
@@ -142,9 +139,9 @@ __all__ = [
     "get_structured_chain",
     "get_embeddings",
     "ModelProvider",
-    "BaseJsonSessionStore",
     "BaseSessionStore",
-    "PostgresJsonSessionStore",
+    "PostgresSessionStore",
+    "SessionSchema",
     "RebacReference",
     "Relation",
     "RelationType",

@@ -19,6 +19,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
+from fred_core import SessionSchema
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -282,15 +283,6 @@ class ChatMessage(BaseModel):
 
 
 # ---------- Sessions ----------
-class SessionSchema(BaseModel):
-    id: str
-    user_id: str
-    team_id: str | None = None
-    agent_id: str | None = None
-    title: str
-    updated_at: datetime
-    next_rank: int | None = None
-    preferences: Dict[str, Any] | None = None
 
 
 class AttachmentRef(BaseModel):
