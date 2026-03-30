@@ -15,8 +15,6 @@
 
 import logging
 import os
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import Literal, Type
 
@@ -32,82 +30,14 @@ from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
 
 from knowledge_flow_backend.application_context import get_configuration
+from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
 from knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor import LitePdfMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.structures import PdfComplexity, PdfComplexityStats
 
 logger = logging.getLogger(__name__)
-
-
-class PdfComplexity(str, Enum):
-    """Supported PDF families used by the document-aware routing logic."""
-
-    DIGITALLY_BORN_TEXT_PDF = "digitally_born_text_pdf"
-    SCANNED_PDF = "scanned_pdf"
-    SCIENTIFIC_PDF = "scientific_pdf"
-    TABLE_HEAVY = "table_heavy"
-    SLIDE_LIKE = "slide_like"
-    MULTICOLUMN = "multicolumn"
-
-
-@dataclass(frozen=True)
-class PdfComplexityStats:
-    """
-    Why:
-        Keep PDF routing decisions explicit and testable before the expensive
-        conversion step starts.
-
-    How:
-        Populate this structure from a lightweight PDF inspection pass, then feed
-        it into `PdfMarkdownProcessor._classify_pdf_kind()`.
-    """
-
-    page_count: int
-    total_text_chars: int
-    pages_without_text: int
-    pages_with_images: int
-
-    @property
-    def average_text_chars_per_page(self) -> float:
-        """
-        Why:
-            Expose a stable density signal for distinguishing simple digital PDFs
-            from scanned or layout-heavy documents.
-
-        How:
-            Read the computed average after constructing the stats instance.
-        """
-        if self.page_count <= 0:
-            return 0.0
-        return self.total_text_chars / self.page_count
-
-    @property
-    def textless_page_ratio(self) -> float:
-        """
-        Why:
-            Many scanned or image-heavy PDFs have little extractable text on a
-            large share of pages.
-
-        How:
-            Read the computed ratio after constructing the stats instance.
-        """
-        if self.page_count <= 0:
-            return 1.0
-        return self.pages_without_text / self.page_count
-
-    @property
-    def image_page_ratio(self) -> float:
-        """
-        Why:
-            Different document families show very different image densities, which
-            helps with early routing before full parsing.
-
-        How:
-            Read the computed ratio after constructing the stats instance.
-        """
-        if self.page_count <= 0:
-            return 0.0
-        return self.pages_with_images / self.page_count
 
 
 def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> str:
@@ -236,21 +166,118 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return "lite"
         return "docling"
 
-    def _resolve_complex_options(self) -> tuple[bool, str]:
+    def _resolve_active_profile(self) -> IngestionProcessingProfile:
         """
         Why:
-            Keep one explicit, deterministic configuration baseline for complex
-            PDFs while letting the active ingestion profile control image description.
+            Use the normalized ingestion profile everywhere the PDF processor
+            needs profile-specific behavior so routing stays predictable.
 
         How:
-            Call before Docling conversion. The return value contains whether
-            image descriptions are enabled and which Docling backend to use.
+            Call from conversion helpers. The method reads the current profile
+            context and falls back to the configured default profile.
         """
-        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+        processing = get_configuration().processing
+        return processing.normalize_profile(get_current_processing_profile())
 
-        profile = get_current_processing_profile()
-        profile_cfg = get_configuration().processing.get_profile_config(profile)
-        return profile_cfg.process_images, "docling_parse"
+    def _resolve_pdf_profile_options(
+        self,
+        active_profile: IngestionProcessingProfile,
+    ) -> tuple[bool, ProcessingConfig.PdfPipelineConfig]:
+        """
+        Why:
+            Keep the Docling setup driven by the per-profile configuration so
+            merges with the 1188 branch stay additive instead of conflicting.
+
+        How:
+            Pass the normalized ingestion profile. The method returns whether
+            semantic image descriptions are enabled and a defensive copy of the
+            PDF pipeline configuration for that profile.
+        """
+        profile_cfg = get_configuration().processing.get_profile_config(active_profile)
+        return profile_cfg.process_images, profile_cfg.pdf.model_copy(deep=True)
+
+    def _select_conversion_mode_for_profile(
+        self,
+        file_path: Path,
+        active_profile: IngestionProcessingProfile,
+    ) -> Literal["lite", "docling"]:
+        """
+        Why:
+            Restrict document-shape-based routing to the medium profile while
+            keeping fast and rich profiles deterministic and easy to reason about.
+
+        How:
+            Pass the source PDF path and the normalized ingestion profile. Fast
+            always uses the lite pipeline, rich always uses Docling, and medium
+            inspects the PDF before choosing between both.
+        """
+        if active_profile == IngestionProcessingProfile.FAST:
+            logger.info("[PROCESSOR][PDF] Using fixed fast profile routing mode=lite")
+            return "lite"
+
+        if active_profile == IngestionProcessingProfile.RICH:
+            logger.info("[PROCESSOR][PDF] Using fixed rich profile routing mode=docling")
+            return "docling"
+
+        stats = self._collect_pdf_complexity_stats(file_path)
+        document_kind = self._classify_pdf_kind(stats)
+        conversion_mode = self._select_conversion_mode(document_kind)
+        logger.info(
+            "[PROCESSOR][PDF] Medium profile document-aware routing kind=%s mode=%s pages=%s total_text_chars=%s textless_pages=%s image_pages=%s avg_text_per_page=%.1f",
+            document_kind.value,
+            conversion_mode,
+            stats.page_count,
+            stats.total_text_chars,
+            stats.pages_without_text,
+            stats.pages_with_images,
+            stats.average_text_chars_per_page,
+        )
+        return conversion_mode
+
+    def _build_docling_pipeline_options(
+        self,
+        active_profile: IngestionProcessingProfile,
+    ) -> tuple[bool, str, PdfPipelineOptions]:
+        """
+        Why:
+            Build the Docling options from the active profile configuration so
+            medium and rich stay merge-safe with the 1188 config contract.
+
+        How:
+            Pass the normalized ingestion profile. The method returns whether
+            image descriptions are enabled, the Docling backend name, and the
+            fully prepared `PdfPipelineOptions` instance for conversion.
+        """
+        process_images, pdf_options = self._resolve_pdf_profile_options(active_profile)
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.images_scale = pdf_options.images_scale
+        pipeline_options.generate_picture_images = pdf_options.generate_picture_images
+        pipeline_options.generate_page_images = pdf_options.generate_page_images
+        pipeline_options.generate_table_images = pdf_options.generate_table_images
+        pipeline_options.do_table_structure = pdf_options.do_table_structure
+        pipeline_options.do_ocr = pdf_options.do_ocr
+
+        if pdf_options.do_ocr:
+            rapid_ocr_options = RapidOcrOptions()
+            if pdf_options.ocr_backend is not None:
+                rapid_ocr_options.backend = pdf_options.ocr_backend
+            if pdf_options.force_full_page_ocr is not None:
+                rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
+            pipeline_options.ocr_options = rapid_ocr_options
+
+        if not pdf_options.do_ocr and not pdf_options.do_table_structure:
+            logger.info("[PROCESSOR][PDF] OCR and Table AI are disabled. Activating High-Speed Programmatic mode.")
+            pipeline_options.do_formula_enrichment = False
+            pipeline_options.do_code_enrichment = False
+            pipeline_options.force_backend_text = True
+
+        artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+        if artifacts_dir:
+            artifacts_path = Path(artifacts_dir).expanduser()
+            pipeline_options.artifacts_path = artifacts_path
+            logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
+
+        return process_images, pdf_options.backend, pipeline_options
 
     def _resolve_image_describer(self, process_images: bool):
         if not process_images:
@@ -285,40 +312,28 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         """
         return self._lite_processor.convert_file_to_markdown(file_path, output_dir, document_uid)
 
-    def _convert_with_docling_pipeline(self, file_path: Path, output_dir: Path) -> None:
+    def _convert_with_docling_pipeline(self, file_path: Path, output_dir: Path, active_profile: IngestionProcessingProfile) -> None:
         """
         Why:
-            Centralize the layout-aware PDF conversion path used for complex or
-            scanned PDFs.
+            Centralize the layout-aware PDF conversion path while preserving the
+            profile-specific Docling behavior for medium and rich processing.
 
         How:
-            Call with the source PDF path and a writable output directory. The
-            method writes `output.md` in place using Docling and post-processes
-            tables and image placeholders.
+            Call with the source PDF path, a writable output directory, and the
+            normalized profile. The method writes `output.md` in place using the
+            matching Docling setup and post-processes tables and image placeholders.
         """
         output_markdown_path = output_dir / "output.md"
-        process_images, backend_name = self._resolve_complex_options()
+        process_images, backend_name, pipeline_options = self._build_docling_pipeline_options(active_profile)
         image_describer = self._resolve_image_describer(process_images)
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.images_scale = 2.0
-        pipeline_options.generate_picture_images = process_images
-        pipeline_options.generate_page_images = True
-        pipeline_options.generate_table_images = False
-        pipeline_options.do_table_structure = True
-        pipeline_options.do_ocr = True
-        pipeline_options.ocr_options = RapidOcrOptions()
-
-        artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
-        if artifacts_dir:
-            artifacts_path = Path(artifacts_dir).expanduser()
-            pipeline_options.artifacts_path = artifacts_path
-            logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
-
         backend_cls = self._resolve_pdf_backend(backend_name)
         logger.info(
-            "[PROCESSOR][PDF] Using document-aware complex pipeline backend=%s process_images=%s",
+            "[PROCESSOR][PDF] Using profile=%s Docling pipeline backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s",
+            active_profile.value,
             backend_name,
             process_images,
+            getattr(pipeline_options.ocr_options, "backend", None),
+            getattr(pipeline_options.ocr_options, "force_full_page_ocr", None),
         )
         converter = DocumentConverter(
             format_options={
@@ -422,24 +437,13 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         output_markdown_path = output_dir / "output.md"
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
-            stats = self._collect_pdf_complexity_stats(file_path)
-            document_kind = self._classify_pdf_kind(stats)
-            conversion_mode = self._select_conversion_mode(document_kind)
-            logger.info(
-                "[PROCESSOR][PDF] Document-aware routing kind=%s mode=%s pages=%s total_text_chars=%s textless_pages=%s image_pages=%s avg_text_per_page=%.1f",
-                document_kind.value,
-                conversion_mode,
-                stats.page_count,
-                stats.total_text_chars,
-                stats.pages_without_text,
-                stats.pages_with_images,
-                stats.average_text_chars_per_page,
-            )
+            active_profile = self._resolve_active_profile()
+            conversion_mode = self._select_conversion_mode_for_profile(file_path, active_profile)
 
             if conversion_mode == "lite":
                 return self._convert_with_lite_pipeline(file_path, output_dir, document_uid)
 
-            self._convert_with_docling_pipeline(file_path, output_dir)
+            self._convert_with_docling_pipeline(file_path, output_dir, active_profile)
 
         except Exception as exc:
             logger.exception("[PROCESSOR][PDF] conversion failed for %s", file_path)
