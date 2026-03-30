@@ -49,8 +49,6 @@ from agentic_backend.core.agents.v2 import (
     ToolInvocationResult,
     ToolInvokerPort,
     ToolRefRequirement,
-    WorkspaceClientFactoryPort,
-    WorkspaceClientPort,
     inspect_agent,
 )
 from agentic_backend.core.agents.v2.model_routing import (
@@ -74,21 +72,6 @@ class DemoState(BaseModel):
     approved: bool | None = None
     published_report: PublishedArtifact | None = None
     final_text: str | None = None
-
-
-class DemoWorkspaceClient(WorkspaceClientPort):
-    def __init__(self, *, session_id: str | None):
-        self.session_id = session_id
-
-
-class DemoWorkspaceFactory(WorkspaceClientFactoryPort):
-    def __init__(self) -> None:
-        self.calls: list[str | None] = []
-
-    def build(self, binding: BoundRuntimeContext) -> WorkspaceClientPort:
-        session_id = binding.runtime_context.session_id
-        self.calls.append(session_id)
-        return DemoWorkspaceClient(session_id=session_id)
 
 
 class DemoToolInvoker(ToolInvokerPort):
@@ -345,7 +328,7 @@ class DemoGraphAgent(GraphAgentDefinition):
             default="You are a concise demo agent.",
         ),
     )
-    tool_requirements: tuple[ToolRefRequirement, ...] = (
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = (
         ToolRefRequirement(tool_ref="search:v1"),
     )
 
@@ -430,9 +413,7 @@ class DemoGraphAgent(GraphAgentDefinition):
         self, state: BaseModel, context: GraphNodeContext
     ) -> GraphNodeResult:
         graph_state = cast(DemoState, state)
-        workspace = cast(DemoWorkspaceClient | None, context.workspace_client)
-        session_hint = workspace.session_id if workspace is not None else "n/a"
-        context.emit_status("lookup", f"session={session_hint}")
+        context.emit_status("lookup", "starting")
         context.emit_assistant_delta("Looking up context...")
         result = await context.invoke_tool("search:v1", {"query": graph_state.text})
         summary = result.blocks[0].text if result.blocks else "n/a"
@@ -683,7 +664,7 @@ def test_graph_agent_inspection_is_pure_and_structured() -> None:
     assert inspection.agent_id == "demo.graph"
     assert inspection.execution_category.value == "graph"
     assert len(inspection.fields) == 1
-    assert len(inspection.tool_requirements) == 1
+    assert len(inspection.declared_tool_refs) == 1
     assert inspection.preview.kind.value == "mermaid"
     assert "flowchart TD;" in inspection.preview.content
     assert "Lookup context" in inspection.preview.content
@@ -703,24 +684,17 @@ def test_graph_definition_rejects_dangling_edges() -> None:
 @pytest.mark.asyncio
 async def test_graph_runtime_rebind_rebuilds_context_scoped_helpers() -> None:
     definition = DemoGraphAgent()
-    workspace_factory = DemoWorkspaceFactory()
     runtime = GraphRuntime(
         definition=definition,
-        services=RuntimeServices(workspace_client_factory=workspace_factory),
+        services=RuntimeServices(),
     )
 
     runtime.bind(_binding("s1"))
     first_executor = await runtime.get_executor()
-    assert workspace_factory.calls == ["s1"]
-    assert isinstance(runtime.workspace_client, DemoWorkspaceClient)
-    assert runtime.workspace_client.session_id == "s1"
 
     runtime.bind(_binding("s2"))
     second_executor = await runtime.get_executor()
 
-    assert workspace_factory.calls == ["s1", "s2"]
-    assert isinstance(runtime.workspace_client, DemoWorkspaceClient)
-    assert runtime.workspace_client.session_id == "s2"
     assert first_executor is not second_executor
 
 

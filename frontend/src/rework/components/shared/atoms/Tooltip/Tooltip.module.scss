@@ -1,0 +1,103 @@
+@use "src/index.scss" as *;
+
+.tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+// ── Bubble ────────────────────────────────────────────────────────────────────
+// position: fixed + top/left are injected as inline styles by the component.
+// The bubble is rendered in a Portal so no overflow ancestor can clip it.
+
+.bubble {
+  z-index: 1500;
+  max-width: 320px;
+  width: max-content;
+
+  background-color: var(--surface-container-highest);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--spacing-xs);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+  padding: var(--spacing-xs) var(--spacing-s);
+}
+
+// ── Arrow ─────────────────────────────────────────────────────────────────────
+
+.arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: var(--surface-container-highest);
+
+  &[data-placement="top"],
+  &[data-placement="top-start"],
+  &[data-placement="top-end"] {
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    border-right: 1px solid var(--outline-muted);
+    border-bottom: 1px solid var(--outline-muted);
+  }
+
+  &[data-placement="bottom"],
+  &[data-placement="bottom-start"],
+  &[data-placement="bottom-end"] {
+    top: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    border-top: 1px solid var(--outline-muted);
+    border-left: 1px solid var(--outline-muted);
+  }
+
+  &[data-placement="left"],
+  &[data-placement="left-start"] {
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+    border-top: 1px solid var(--outline-muted);
+    border-right: 1px solid var(--outline-muted);
+  }
+
+  &[data-placement="right"],
+  &[data-placement="right-start"] {
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+    border-bottom: 1px solid var(--outline-muted);
+    border-left: 1px solid var(--outline-muted);
+  }
+}
+
+// ── Simple variant ────────────────────────────────────────────────────────────
+
+.title {
+  color: var(--on-surface);
+  @include typography("body", "small");
+}
+
+// ── Detailed variant ──────────────────────────────────────────────────────────
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.label {
+  color: var(--on-surface);
+  @include typography("label", "large", true);
+}
+
+.description {
+  color: var(--on-surface-retreat);
+  white-space: pre-line;
+  @include typography("body", "small");
+}
+
+.disabled-reason {
+  color: var(--on-surface-retreat);
+  white-space: pre-line;
+  opacity: 0.7;
+  @include typography("body", "small");
+}

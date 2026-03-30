@@ -1,0 +1,1489 @@
+Transport & Session
+===================
+[2026-03-23T06:33:23.289Z] session
+{
+  "type": "session",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "agent_id": "de6b7b31-ef68-474e-bfec-cd3a7cb059fc",
+    "updated_at": "2026-03-23T06:33:22Z",
+    "next_rank": 0
+  }
+}
+
+Exchange eaae7da7 - Quelles sont les colonnes de la table des radars ?
+======================================================================
+[2026-03-23T06:33:23.317Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+    "rank": 0,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Quelles sont les colonnes de la table des radars ?"
+  }
+}
+
+[2026-03-23T06:33:25.503Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+    "rank": 1,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_1ba5a55319944506a6b9",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:33:25.527Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+    "rank": 2,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_1ba5a55319944506a6b9",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:33:25.528Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+    "rank": 3,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "La base disponible s’appelle `data` et contient notamment la table suivante liée aux radars :\n\nTable `radar_sites_preview` avec les colonnes :\n- `radar_id` (string)\n- `name` (string)\n- `lat` (float)\n- `lon` (float)\n- `site_class` (string)\n- `elevation_m` (integer)\n- `owner` (string)\n- `nominal_range_km` (integer)\n- `bearing_coverage_start_deg` (integer)\n- `bearing_coverage_end_deg` (integer)"
+  }
+}
+
+[2026-03-23T06:33:25.574Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:33:25Z",
+    "next_rank": 4
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+      "rank": 0,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Quelles sont les colonnes de la table des radars ?"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+      "rank": 1,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_1ba5a55319944506a6b9",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+      "rank": 2,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_1ba5a55319944506a6b9",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "eaae7da7-2a26-4e29-a961-ba0f389c4316",
+      "rank": 3,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "La base disponible s’appelle `data` et contient notamment la table suivante liée aux radars :\n\nTable `radar_sites_preview` avec les colonnes :\n- `radar_id` (string)\n- `name` (string)\n- `lat` (float)\n- `lon` (float)\n- `site_class` (string)\n- `elevation_m` (integer)\n- `owner` (string)\n- `nominal_range_km` (integer)\n- `bearing_coverage_start_deg` (integer)\n- `bearing_coverage_end_deg` (integer)"
+    }
+  ]
+}
+
+Exchange 10d455a1 - Bonjour, qui es-tu ?
+========================================
+[2026-03-23T06:33:49.664Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+    "rank": 4,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Bonjour, qui es-tu ?"
+  }
+}
+
+[2026-03-23T06:33:53.539Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+    "rank": 5,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_b22b939e60c04dd3bfa9",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:33:53.579Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+    "rank": 6,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_b22b939e60c04dd3bfa9",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:33:53.581Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+    "rank": 7,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Je suis une IA conçue pour t’aider à interroger une base de données maritime.\n\nJ’ai accès à un ensemble de données appelé `data` qui contient trois tables principales :\n\n1) `ports_preview`\n   - Champs : `port_name`, `country`, `iso2`, `lat`, `lon`, `port_type`, `notes`\n   - Sert à : trouver des informations de base sur des ports (nom, pays, type, position géographique, etc.).\n\n2) `radar_sites_preview`\n   - Champs : `radar_id`, `name`, `lat`, `lon`, `site_class`, `elevation_m`, `owner`, `nominal_range_km`, `bearing_coverage_start_deg`, `bearing_coverage_end_deg`\n   - Sert à : obtenir des infos sur des sites radar (position, portée, couverture angulaire, propriétaire, etc.).\n\n3) `ship_tracks_demo`\n   - Champs : `timestamp_iso`, `ship_id`, `ship_name`, `callsign`, `type`, `home_port`, `lat`, `lon`, `sog_knots`, `cog_deg`, `radar_id`, `radar_azimuth_deg`, `frequency_mhz`, `signal_dbm`, `status`, `anomaly_hint`\n   - Sert à : analyser des trajectoires de navires, leurs vitesses, positions, et éventuelles anomalies détectées.\n\nTu peux par exemple me demander :\n- « Donne-moi quelques ports en France avec leurs coordonnées. »\n- « Quels radars ont la plus grande portée nominale ? »\n- « Montre-moi les dernières positions du navire X. »\n\nDis-moi ce que tu veux explorer et je préparerai la requête adaptée."
+  }
+}
+
+[2026-03-23T06:33:53.634Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:33:53Z",
+    "next_rank": 8
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+      "rank": 4,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Bonjour, qui es-tu ?"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+      "rank": 5,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_b22b939e60c04dd3bfa9",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+      "rank": 6,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_b22b939e60c04dd3bfa9",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "10d455a1-4a93-488c-afce-c39713f56007",
+      "rank": 7,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Je suis une IA conçue pour t’aider à interroger une base de données maritime.\n\nJ’ai accès à un ensemble de données appelé `data` qui contient trois tables principales :\n\n1) `ports_preview`\n   - Champs : `port_name`, `country`, `iso2`, `lat`, `lon`, `port_type`, `notes`\n   - Sert à : trouver des informations de base sur des ports (nom, pays, type, position géographique, etc.).\n\n2) `radar_sites_preview`\n   - Champs : `radar_id`, `name`, `lat`, `lon`, `site_class`, `elevation_m`, `owner`, `nominal_range_km`, `bearing_coverage_start_deg`, `bearing_coverage_end_deg`\n   - Sert à : obtenir des infos sur des sites radar (position, portée, couverture angulaire, propriétaire, etc.).\n\n3) `ship_tracks_demo`\n   - Champs : `timestamp_iso`, `ship_id`, `ship_name`, `callsign`, `type`, `home_port`, `lat`, `lon`, `sog_knots`, `cog_deg`, `radar_id`, `radar_azimuth_deg`, `frequency_mhz`, `signal_dbm`, `status`, `anomaly_hint`\n   - Sert à : analyser des trajectoires de navires, leurs vitesses, positions, et éventuelles anomalies détectées.\n\nTu peux par exemple me demander :\n- « Donne-moi quelques ports en France avec leurs coordonnées. »\n- « Quels radars ont la plus grande portée nominale ? »\n- « Montre-moi les dernières positions du navire X. »\n\nDis-moi ce que tu veux explorer et je préparerai la requête adaptée."
+    }
+  ]
+}
+
+Exchange 87b78d53 - Combien y a-t-il de ports dans la base ?
+============================================================
+[2026-03-23T06:34:10.743Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+    "rank": 8,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Combien y a-t-il de ports dans la base ?"
+  }
+}
+
+[2026-03-23T06:34:13.069Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+    "rank": 9,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_973de975f57e4feb92cf",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:34:13.135Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+    "rank": 10,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_973de975f57e4feb92cf",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:34:13.137Z] tool_call read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+    "rank": 11,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_2eb4cd0b9f5f45bb9a12",
+      "name": "read_query",
+      "args": {
+        "db_name": "data",
+        "query": "SELECT COUNT(*) AS nombre_de_ports\nFROM ports_preview;"
+      }
+    }
+  }
+}
+
+[2026-03-23T06:34:13.137Z] tool_result read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+    "rank": 12,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_2eb4cd0b9f5f45bb9a12",
+      "ok": true,
+      "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT COUNT(*) AS nombre_de_ports\\nFROM ports_preview;\", \"rows\": [{\"nombre_de_ports\": 8}], \"error\": null}",
+      "tool_name": "read_query"
+    }
+  }
+}
+
+[2026-03-23T06:34:13.137Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+    "rank": 13,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Il y a 8 ports dans la base."
+  }
+}
+
+[2026-03-23T06:34:13.205Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:34:13Z",
+    "next_rank": 14
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+      "rank": 8,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Combien y a-t-il de ports dans la base ?"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+      "rank": 9,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_973de975f57e4feb92cf",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+      "rank": 10,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_973de975f57e4feb92cf",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+      "rank": 11,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_2eb4cd0b9f5f45bb9a12",
+        "name": "read_query",
+        "args": {
+          "db_name": "data",
+          "query": "SELECT COUNT(*) AS nombre_de_ports\nFROM ports_preview;"
+        }
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+      "rank": 12,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_2eb4cd0b9f5f45bb9a12",
+        "ok": true,
+        "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT COUNT(*) AS nombre_de_ports\\nFROM ports_preview;\", \"rows\": [{\"nombre_de_ports\": 8}], \"error\": null}",
+        "tool_name": "read_query"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "87b78d53-c049-4599-8784-a9bbb367674e",
+      "rank": 13,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Il y a 8 ports dans la base."
+    }
+  ]
+}
+
+Exchange daaadee9 - Donne-moi la liste des ports militaires.
+============================================================
+[2026-03-23T06:34:29.217Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+    "rank": 14,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Donne-moi la liste des ports militaires."
+  }
+}
+
+[2026-03-23T06:34:34.523Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+    "rank": 15,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_1c15cb57a02d4efea36b",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:34:34.631Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+    "rank": 16,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_1c15cb57a02d4efea36b",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:34:34.631Z] tool_call read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+    "rank": 17,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_50c4d39ab4644facaa96",
+      "name": "read_query",
+      "args": {
+        "db_name": "data",
+        "query": "SELECT\n  port_name,\n  country,\n  iso2,\n  lat,\n  lon,\n  port_type,\n  notes\nFROM ports_preview\nWHERE port_type = 'military'\n   OR LOWER(port_type) LIKE '%military%'\n   OR LOWER(notes) LIKE '%military%'\nLIMIT 20;"
+      }
+    }
+  }
+}
+
+[2026-03-23T06:34:34.631Z] tool_result read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+    "rank": 18,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_50c4d39ab4644facaa96",
+      "ok": true,
+      "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  port_name,\\n  country,\\n  iso2,\\n  lat,\\n  lon,\\n  port_type,\\n  notes\\nFROM ports_preview\\nWHERE port_type = 'military'\\n   OR LOWER(port_type) LIKE '%military%'\\n   OR LOWER(...",
+      "tool_name": "read_query"
+    }
+  }
+}
+
+[2026-03-23T06:34:34.631Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+    "rank": 19,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Voici quelques ports militaires français présents dans la base :\n\n- Toulon (France) – principale base navale française en Méditerranée  \n- Brest (France) – grande base navale sur l’Atlantique  \n- Cherbourg (France) – base navale et chantier naval"
+  }
+}
+
+[2026-03-23T06:34:34.711Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:34:34Z",
+    "next_rank": 20
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+      "rank": 14,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Donne-moi la liste des ports militaires."
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+      "rank": 15,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_1c15cb57a02d4efea36b",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+      "rank": 16,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_1c15cb57a02d4efea36b",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+      "rank": 17,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_50c4d39ab4644facaa96",
+        "name": "read_query",
+        "args": {
+          "db_name": "data",
+          "query": "SELECT\n  port_name,\n  country,\n  iso2,\n  lat,\n  lon,\n  port_type,\n  notes\nFROM ports_preview\nWHERE port_type = 'military'\n   OR LOWER(port_type) LIKE '%military%'\n   OR LOWER(notes) LIKE '%military%'\nLIMIT 20;"
+        }
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+      "rank": 18,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_50c4d39ab4644facaa96",
+        "ok": true,
+        "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  port_name,\\n  country,\\n  iso2,\\n  lat,\\n  lon,\\n  port_type,\\n  notes\\nFROM ports_preview\\nWHERE port_type = 'military'\\n   OR LOWER(port_type) LIKE '%military%'\\n   OR LOWER(...",
+        "tool_name": "read_query"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "daaadee9-8818-451e-96f7-5f7c5315bdfb",
+      "rank": 19,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Voici quelques ports militaires français présents dans la base :\n\n- Toulon (France) – principale base navale française en Méditerranée  \n- Brest (France) – grande base navale sur l’Atlantique  \n- Cherbourg (France) – base navale et chantier naval"
+    }
+  ]
+}
+
+Exchange 2e94ff26 - Quel est le radar qui a la plus grande portée (nominal_range) ?
+===================================================================================
+[2026-03-23T06:35:06.491Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+    "rank": 20,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Quel est le radar qui a la plus grande portée (nominal_range) ?"
+  }
+}
+
+[2026-03-23T06:35:09.597Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+    "rank": 21,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_a0ea2b5b37fd4d6aa3a1",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:09.709Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+    "rank": 22,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_a0ea2b5b37fd4d6aa3a1",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:09.709Z] tool_call read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+    "rank": 23,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_cfe831d5772f4ffe9fd3",
+      "name": "read_query",
+      "args": {
+        "db_name": "data",
+        "query": "SELECT\n  radar_id,\n  name,\n  nominal_range_km\nFROM radar_sites_preview\nORDER BY nominal_range_km DESC\nLIMIT 1;"
+      }
+    }
+  }
+}
+
+[2026-03-23T06:35:09.709Z] tool_result read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+    "rank": 24,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_cfe831d5772f4ffe9fd3",
+      "ok": true,
+      "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  radar_id,\\n  name,\\n  nominal_range_km\\nFROM radar_sites_preview\\nORDER BY nominal_range_km DESC\\nLIMIT 1;\", \"rows\": [{\"radar_id\": \"RAD-BRE\", \"name\": \"Pointe Saint-Mathieu\", \"n...",
+      "tool_name": "read_query"
+    }
+  }
+}
+
+[2026-03-23T06:35:09.709Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+    "rank": 25,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Le radar ayant la plus grande portée nominale est **Pointe Saint-Mathieu** (`radar_id` = `RAD-BRE`), avec une portée de **500 km**."
+  }
+}
+
+[2026-03-23T06:35:09.790Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:35:09Z",
+    "next_rank": 26
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+      "rank": 20,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Quel est le radar qui a la plus grande portée (nominal_range) ?"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+      "rank": 21,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_a0ea2b5b37fd4d6aa3a1",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+      "rank": 22,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_a0ea2b5b37fd4d6aa3a1",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+      "rank": 23,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_cfe831d5772f4ffe9fd3",
+        "name": "read_query",
+        "args": {
+          "db_name": "data",
+          "query": "SELECT\n  radar_id,\n  name,\n  nominal_range_km\nFROM radar_sites_preview\nORDER BY nominal_range_km DESC\nLIMIT 1;"
+        }
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+      "rank": 24,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_cfe831d5772f4ffe9fd3",
+        "ok": true,
+        "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  radar_id,\\n  name,\\n  nominal_range_km\\nFROM radar_sites_preview\\nORDER BY nominal_range_km DESC\\nLIMIT 1;\", \"rows\": [{\"radar_id\": \"RAD-BRE\", \"name\": \"Pointe Saint-Mathieu\", \"n...",
+        "tool_name": "read_query"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "2e94ff26-ba89-459f-9dea-89dc6f444bea",
+      "rank": 25,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Le radar ayant la plus grande portée nominale est **Pointe Saint-Mathieu** (`radar_id` = `RAD-BRE`), avec une portée de **500 km**."
+    }
+  ]
+}
+
+Exchange bf7bb92c - Quel est le navire le plus rapide enregistré dans les traces ?
+==================================================================================
+[2026-03-23T06:35:22.285Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+    "rank": 26,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Quel est le navire le plus rapide enregistré dans les traces ?"
+  }
+}
+
+[2026-03-23T06:35:25.079Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+    "rank": 27,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_97e293f19b164582ae7d",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:25.190Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+    "rank": 28,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_97e293f19b164582ae7d",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:25.191Z] tool_call read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+    "rank": 29,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_b448fe132aa94b0dba66",
+      "name": "read_query",
+      "args": {
+        "db_name": "data",
+        "query": "SELECT\n  ship_id,\n  ship_name,\n  MAX(sog_knots) AS max_speed_knots\nFROM ship_tracks_demo\nGROUP BY ship_id, ship_name\nORDER BY max_speed_knots DESC\nLIMIT 1;"
+      }
+    }
+  }
+}
+
+[2026-03-23T06:35:25.191Z] tool_result read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+    "rank": 30,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_b448fe132aa94b0dba66",
+      "ok": true,
+      "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  ship_id,\\n  ship_name,\\n  MAX(sog_knots) AS max_speed_knots\\nFROM ship_tracks_demo\\nGROUP BY ship_id, ship_name\\nORDER BY max_speed_knots DESC\\nLIMIT 1;\", \"rows\": [{\"ship_id\": ...",
+      "tool_name": "read_query"
+    }
+  }
+}
+
+[2026-03-23T06:35:25.191Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+    "rank": 31,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Le navire le plus rapide enregistré dans les traces est l’**ES Reina** (ID : **MIL-ES-004**), avec une vitesse maximale de **23,2 nœuds**."
+  }
+}
+
+[2026-03-23T06:35:25.267Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:35:25Z",
+    "next_rank": 32
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+      "rank": 26,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Quel est le navire le plus rapide enregistré dans les traces ?"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+      "rank": 27,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_97e293f19b164582ae7d",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+      "rank": 28,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_97e293f19b164582ae7d",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+      "rank": 29,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_b448fe132aa94b0dba66",
+        "name": "read_query",
+        "args": {
+          "db_name": "data",
+          "query": "SELECT\n  ship_id,\n  ship_name,\n  MAX(sog_knots) AS max_speed_knots\nFROM ship_tracks_demo\nGROUP BY ship_id, ship_name\nORDER BY max_speed_knots DESC\nLIMIT 1;"
+        }
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+      "rank": 30,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_b448fe132aa94b0dba66",
+        "ok": true,
+        "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  ship_id,\\n  ship_name,\\n  MAX(sog_knots) AS max_speed_knots\\nFROM ship_tracks_demo\\nGROUP BY ship_id, ship_name\\nORDER BY max_speed_knots DESC\\nLIMIT 1;\", \"rows\": [{\"ship_id\": ...",
+        "tool_name": "read_query"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bf7bb92c-ed3a-4415-a715-9106b50eb91b",
+      "rank": 31,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Le navire le plus rapide enregistré dans les traces est l’**ES Reina** (ID : **MIL-ES-004**), avec une vitesse maximale de **23,2 nœuds**."
+    }
+  ]
+}
+
+Exchange bcefd93d - Combien de navires uniques sont suivis ?
+============================================================
+[2026-03-23T06:35:37.115Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+    "rank": 32,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Combien de navires uniques sont suivis ?"
+  }
+}
+
+[2026-03-23T06:35:39.707Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+    "rank": 33,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_ceb70aaa930e43a19890",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:39.856Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+    "rank": 34,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_ceb70aaa930e43a19890",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:39.857Z] tool_call read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+    "rank": 35,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_440ba817b835489993cf",
+      "name": "read_query",
+      "args": {
+        "db_name": "data",
+        "query": "SELECT COUNT(DISTINCT ship_id) AS nombre_navires_uniques\nFROM ship_tracks_demo;"
+      }
+    }
+  }
+}
+
+[2026-03-23T06:35:39.857Z] tool_result read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+    "rank": 36,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_440ba817b835489993cf",
+      "ok": true,
+      "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT COUNT(DISTINCT ship_id) AS nombre_navires_uniques\\nFROM ship_tracks_demo;\", \"rows\": [{\"nombre_navires_uniques\": 12}], \"error\": null}",
+      "tool_name": "read_query"
+    }
+  }
+}
+
+[2026-03-23T06:35:39.857Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+    "rank": 37,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Il y a 12 navires uniques suivis dans les données."
+  }
+}
+
+[2026-03-23T06:35:39.942Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:35:39Z",
+    "next_rank": 38
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+      "rank": 32,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Combien de navires uniques sont suivis ?"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+      "rank": 33,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_ceb70aaa930e43a19890",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+      "rank": 34,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_ceb70aaa930e43a19890",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+      "rank": 35,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_440ba817b835489993cf",
+        "name": "read_query",
+        "args": {
+          "db_name": "data",
+          "query": "SELECT COUNT(DISTINCT ship_id) AS nombre_navires_uniques\nFROM ship_tracks_demo;"
+        }
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+      "rank": 36,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_440ba817b835489993cf",
+        "ok": true,
+        "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT COUNT(DISTINCT ship_id) AS nombre_navires_uniques\\nFROM ship_tracks_demo;\", \"rows\": [{\"nombre_navires_uniques\": 12}], \"error\": null}",
+        "tool_name": "read_query"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "bcefd93d-5487-4f59-9e6f-e2c6a9e6b4b5",
+      "rank": 37,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Il y a 12 navires uniques suivis dans les données."
+    }
+  ]
+}
+
+Exchange 033a961a - Trouve-moi les navires qui ont une anomalie de fréquence
+============================================================================
+[2026-03-23T06:35:50.837Z] user/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+    "rank": 38,
+    "role": "user",
+    "channel": "final",
+    "sources_count": 0,
+    "text": "Trouve-moi les navires qui ont une anomalie de fréquence"
+  }
+}
+
+[2026-03-23T06:35:53.955Z] tool_call get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+    "rank": 39,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_7958555d963247018f05",
+      "name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:54.125Z] tool_result get_context
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+    "rank": 40,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_7958555d963247018f05",
+      "ok": true,
+      "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+      "tool_name": "get_context"
+    }
+  }
+}
+
+[2026-03-23T06:35:54.125Z] tool_call read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+    "rank": 41,
+    "role": "assistant",
+    "channel": "tool_call",
+    "sources_count": 0,
+    "tool_call": {
+      "call_id": "call_b9484d530c9e44fe9659",
+      "name": "read_query",
+      "args": {
+        "db_name": "data",
+        "query": "SELECT\n  ship_id,\n  ship_name,\n  callsign,\n  type,\n  home_port,\n  timestamp_iso,\n  frequency_mhz,\n  anomaly_hint,\n  sog_knots,\n  cog_deg,\n  lat,\n  lon,\n  radar_id,\n  signal_dbm,\n  status\nFROM ship_tracks_demo\nWHERE anomaly_hint ILIKE '%fréquence%'\n   OR anomaly_hint ILIKE '%frequence%'\nLIMIT 20;"
+      }
+    }
+  }
+}
+
+[2026-03-23T06:35:54.125Z] tool_result read_query
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+    "rank": 42,
+    "role": "tool",
+    "channel": "tool_result",
+    "sources_count": 0,
+    "tool_result": {
+      "call_id": "call_b9484d530c9e44fe9659",
+      "ok": true,
+      "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  ship_id,\\n  ship_name,\\n  callsign,\\n  type,\\n  home_port,\\n  timestamp_iso,\\n  frequency_mhz,\\n  anomaly_hint,\\n  sog_knots,\\n  cog_deg,\\n  lat,\\n  lon,\\n  radar_id,\\n  signal...",
+      "tool_name": "read_query"
+    }
+  }
+}
+
+[2026-03-23T06:35:54.125Z] assistant/final
+{
+  "type": "stream",
+  "message": {
+    "session_id": "P2HJVWHPAM4",
+    "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+    "rank": 43,
+    "role": "assistant",
+    "channel": "final",
+    "token_usage_source": "unavailable",
+    "sources_count": 0,
+    "text": "Aucun navire avec une anomalie de fréquence n’a été trouvé dans la base de données avec la requête utilisée."
+  }
+}
+
+[2026-03-23T06:35:54.206Z] final snapshot
+{
+  "type": "final",
+  "session": {
+    "id": "P2HJVWHPAM4",
+    "title": "Colonnes de la table radars",
+    "updated_at": "2026-03-23T06:35:53Z",
+    "next_rank": 44
+  },
+  "messages": [
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+      "rank": 38,
+      "role": "user",
+      "channel": "final",
+      "sources_count": 0,
+      "text": "Trouve-moi les navires qui ont une anomalie de fréquence"
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+      "rank": 39,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_7958555d963247018f05",
+        "name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+      "rank": 40,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_7958555d963247018f05",
+        "ok": true,
+        "content_preview": "{\"data\": [{\"table_name\": \"ports_preview\", \"columns\": [{\"name\": \"port_name\", \"dtype\": \"string\"}, {\"name\": \"country\", \"dtype\": \"string\"}, {\"name\": \"iso2\", \"dtype\": \"string\"}, {\"name\": \"lat\", \"dtype\": \"float\"}, {\"name\": \"lo...",
+        "tool_name": "get_context"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+      "rank": 41,
+      "role": "assistant",
+      "channel": "tool_call",
+      "sources_count": 0,
+      "tool_call": {
+        "call_id": "call_b9484d530c9e44fe9659",
+        "name": "read_query",
+        "args": {
+          "db_name": "data",
+          "query": "SELECT\n  ship_id,\n  ship_name,\n  callsign,\n  type,\n  home_port,\n  timestamp_iso,\n  frequency_mhz,\n  anomaly_hint,\n  sog_knots,\n  cog_deg,\n  lat,\n  lon,\n  radar_id,\n  signal_dbm,\n  status\nFROM ship_tracks_demo\nWHERE anomaly_hint ILIKE '%fréquence%'\n   OR anomaly_hint ILIKE '%frequence%'\nLIMIT 20;"
+        }
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+      "rank": 42,
+      "role": "tool",
+      "channel": "tool_result",
+      "sources_count": 0,
+      "tool_result": {
+        "call_id": "call_b9484d530c9e44fe9659",
+        "ok": true,
+        "content_preview": "{\"db_name\": \"data\", \"sql_query\": \"SELECT\\n  ship_id,\\n  ship_name,\\n  callsign,\\n  type,\\n  home_port,\\n  timestamp_iso,\\n  frequency_mhz,\\n  anomaly_hint,\\n  sog_knots,\\n  cog_deg,\\n  lat,\\n  lon,\\n  radar_id,\\n  signal...",
+        "tool_name": "read_query"
+      }
+    },
+    {
+      "session_id": "P2HJVWHPAM4",
+      "exchange_id": "033a961a-73e3-4345-a5db-116e657823ad",
+      "rank": 43,
+      "role": "assistant",
+      "channel": "final",
+      "token_usage_source": "unavailable",
+      "sources_count": 0,
+      "runtime_context": {
+        "language": "fr-FR",
+        "session_id": "P2HJVWHPAM4",
+        "search_policy": "semantic",
+        "include_session_scope": true,
+        "include_corpus_scope": true
+      },
+      "text": "Aucun navire avec une anomalie de fréquence n’a été trouvé dans la base de données avec la requête utilisée."
+    }
+  ]
+}

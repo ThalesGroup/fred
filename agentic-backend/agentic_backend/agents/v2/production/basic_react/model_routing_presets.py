@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Basic ReAct model-routing presets.
 
@@ -25,7 +39,7 @@ from agentic_backend.core.agents.v2.model_routing.contracts import FrozenModel
 
 class BasicReActPresetProfileIds(FrozenModel):
     """
-    Stable profile ids for optional Basic ReAct model-routing presets.
+    Registry of Profile IDs that have special model requirements.
     """
 
     log_genius_chat: str = Field(default="preset.chat.log_genius", min_length=1)
@@ -34,7 +48,7 @@ class BasicReActPresetProfileIds(FrozenModel):
 
 class BasicReActPresetRuleIds(FrozenModel):
     """
-    Stable rule ids for optional Basic ReAct model-routing presets.
+    Internal IDs for the routing rules defined in this file.
     """
 
     log_genius_chat: str = Field(default="preset.log_genius.chat", min_length=1)
@@ -53,16 +67,7 @@ def build_default_policy_with_basic_react_presets(
     default_image_model: ModelConfiguration | None = None,
 ) -> ModelRoutingPolicy:
     """
-    Build default policy and append concrete Basic ReAct chat presets.
-
-    Presets added:
-    - `internal.react_profile.log_genius` -> lightweight chat profile
-    - `rag.expert.v2` and `internal.react_profile.rag_expert` -> stronger RAG
-      chat profile
-
-    Model source defaults (overrideable by arguments):
-    - LogGenius: `ai.default_language_model` fallback `ai.default_chat_model`
-    - RAG Expert: `ai.default_chat_model`
+    Construct the routing policy, wiring specific profiles to specific models.
     """
 
     base = build_default_policy_from_ai_config(
@@ -78,6 +83,7 @@ def build_default_policy_with_basic_react_presets(
     resolved_preset_profile_ids = preset_profile_ids or BasicReActPresetProfileIds()
     resolved_preset_rule_ids = preset_rule_ids or BasicReActPresetRuleIds()
 
+    # 1. Resolve which models to use (Config vs Defaults)
     resolved_log_genius_model = (
         log_genius_chat_model.model_copy(deep=True)
         if log_genius_chat_model is not None
@@ -96,6 +102,7 @@ def build_default_policy_with_basic_react_presets(
     profiles = list(base.profiles)
     rules = list(base.rules)
 
+    # 2. Add Rule: LogGenius uses the fast/cheap model
     profiles.append(
         ModelProfile(
             profile_id=resolved_preset_profile_ids.log_genius_chat,
@@ -119,6 +126,7 @@ def build_default_policy_with_basic_react_presets(
         )
     )
 
+    # 3. Add Rule: RAG Expert uses the smart/grounded model
     profiles.append(
         ModelProfile(
             profile_id=resolved_preset_profile_ids.rag_expert_chat,
@@ -137,10 +145,7 @@ def build_default_policy_with_basic_react_presets(
             target_profile_id=resolved_preset_profile_ids.rag_expert_chat,
             match=ModelRouteMatch(
                 purpose="chat",
-                agent_id=(
-                    "rag.expert.v2",
-                    "internal.react_profile.rag_expert",
-                ),
+                agent_id="internal.react_profile.rag_expert",
             ),
         )
     )

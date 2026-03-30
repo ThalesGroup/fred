@@ -35,6 +35,19 @@
     color: var(--icon-color);
   }
 
+  &[data-size="xs"] {
+    height: 1.5rem;
+    --lateral-padding: var(--spacing-xs);
+
+    .state-layer {
+      gap: var(--spacing-3xs);
+    }
+
+    .icon {
+      font-size: 1rem;
+    }
+  }
+
   &[data-size="small"] {
     height: 2rem;
     --lateral-padding: var(--spacing-s);

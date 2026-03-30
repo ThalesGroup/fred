@@ -1,4 +1,4 @@
-// Copyright Thales 2025
+// Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ export function AgentCreateEditDrawer({
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: "100%", sm: 720, md: 880 } } }}
+      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 720, md: 880 } } } }}
     >
       <AgentCreateEditForm
         key={agent?.id ?? "create"}

@@ -1,14 +1,30 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """RAG expert starting profile."""
 
 from agentic_backend.common.structures import AgentChatOptions
-from agentic_backend.core.agents.v2.builtin_tools import TOOL_REF_KNOWLEDGE_SEARCH
-from agentic_backend.core.agents.v2.models import (
+from agentic_backend.core.agents.v2 import (
     GuardrailDefinition,
     ToolRefRequirement,
 )
-from agentic_backend.core.agents.v2.prompt_resources import load_packaged_markdown
+from agentic_backend.core.agents.v2.support.builtins import (
+    TOOL_REF_KNOWLEDGE_SEARCH,
+)
 
 from ..profile_model import ReActProfile
+from ..profile_prompt_loader import load_basic_react_prompt
 
 RAG_EXPERT_PROFILE = ReActProfile(
     profile_id="rag_expert",
@@ -20,18 +36,10 @@ RAG_EXPERT_PROFILE = ReActProfile(
         "and clearly distinguishes grounded evidence from uncertainty."
     ),
     tags=("rag", "documents", "react"),
-    system_prompt_template=load_packaged_markdown(
-        package="agentic_backend",
-        path_parts=(
-            "agents",
-            "v2",
-            "production",
-            "basic_react",
-            "prompts",
-            "basic_react_rag_expert_system_prompt.md",
-        ),
+    system_prompt_template=load_basic_react_prompt(
+        "basic_react_rag_expert_system_prompt.md"
     ),
-    tool_requirements=(
+    declared_tool_refs=(
         ToolRefRequirement(
             tool_ref=TOOL_REF_KNOWLEDGE_SEARCH,
             description=(

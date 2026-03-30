@@ -75,11 +75,12 @@ class PostgresJsonSessionStore(BaseJsonSessionStore):
             insp = inspect(sync_conn)
             cols = {c["name"] for c in insp.get_columns(self.table_name)}
             if "team_id" not in cols:
+                # SQLite compatibility:
+                # some bundled SQLite versions reject `ADD COLUMN IF NOT EXISTS`.
+                # We already checked column presence via inspector, so plain ADD
+                # is safe and works across Postgres + SQLite.
                 sync_conn.execute(
-                    text(
-                        f'ALTER TABLE "{self.table_name}" '
-                        "ADD COLUMN IF NOT EXISTS team_id VARCHAR"
-                    )
+                    text(f'ALTER TABLE "{self.table_name}" ADD COLUMN team_id VARCHAR')
                 )
                 logger.info(
                     "[SESSION][PG] Added missing team_id column to %s",
