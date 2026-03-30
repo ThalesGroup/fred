@@ -355,7 +355,13 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     if provider:
         make_target = PROVIDER_MAKE_TARGETS[provider]
         step(f"Configuring provider {click.style(provider, fg='magenta')} (make {make_target})...")
-        run(["make", make_target], cwd=wt)
+        # Check if the target exists in the worktree Makefile; if not, use the one from FRED_ROOT
+        # so the target runs in the worktree directory (editing worktree files, not FRED_ROOT files)
+        target_in_wt = subprocess.run(
+            ["make", "--dry-run", make_target], cwd=wt, capture_output=True
+        ).returncode == 0
+        make_cmd = ["make", make_target] if target_in_wt else ["make", "-f", str(FRED_ROOT / "Makefile"), make_target]
+        run(make_cmd, cwd=wt)
 
     # Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
     for svc in PYTHON_SERVICES:
