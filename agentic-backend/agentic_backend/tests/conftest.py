@@ -96,6 +96,7 @@ def minimal_generalist_config() -> Configuration:
             enable_v2_sql_checkpointer=True,
             max_concurrent_agents=128,
             restore_max_exchanges=20,
+            stream_flush_interval_ms=100,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
             max_concurrent_sessions_per_user=10,

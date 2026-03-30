@@ -616,6 +616,10 @@ applications:
         # or when an agent session is re-initialized for any reason.
         restore_max_exchanges: 20
 
+        # Interval in milliseconds between partial-stream WebSocket frames (delta protocol).
+        # Raise to 200 on high-concurrency deployments to reduce write frequency.
+        stream_flush_interval_ms: 100
+
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 1024
 

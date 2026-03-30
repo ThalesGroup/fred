@@ -67,11 +67,6 @@ from agentic_backend.core.interrupts.base_interrupt_handler import InterruptHand
 
 logger = logging.getLogger(__name__)
 
-# Maximum interval between partial-stream WebSocket frames.
-# Tokens arriving faster than this are buffered and sent together,
-# reducing O(n²) bandwidth to roughly O(n * FLUSH_INTERVAL / token_interval).
-_STREAM_FLUSH_INTERVAL_S: float = 0.05  # 50 ms
-
 _VECTOR_SEARCH_HITS = TypeAdapter(List[VectorSearchHit])
 
 # WS callback type (sync or async)
@@ -315,6 +310,9 @@ class StreamTranscoder:
     Non-Responsibilities:
       - Session lifecycle, KPI, persistence (owned by SessionOrchestrator)
     """
+
+    def __init__(self, stream_flush_interval_ms: int) -> None:
+        self._stream_flush_interval_s: float = stream_flush_interval_ms / 1000.0
 
     async def _handle_interrupt(
         self,
@@ -563,6 +561,7 @@ class StreamTranscoder:
         pending_assistant_final: Optional[ChatMessage] = None
         partial_stream_rank: Optional[int] = None
         partial_stream_text = ""
+        last_emitted_offset: int = 0
         last_partial_emit: float = 0.0
         pending_stream_token_usage = None
         token_usage_seen_from_messages = False
@@ -669,24 +668,21 @@ class StreamTranscoder:
                     if partial_stream_rank is None:
                         partial_stream_rank = base_rank + seq
                     now = time.monotonic()
-                    if now - last_partial_emit < _STREAM_FLUSH_INTERVAL_S:
+                    if now - last_partial_emit < self._stream_flush_interval_s:
                         continue
                     last_partial_emit = now
-                    # DESIGN FLAW (tracked, not yet fixed): each partial emit sends
-                    # the full cumulative text, not just the new delta. If the final
-                    # response is N bytes and we flush K times, total bytes sent =
-                    # O(N * K) instead of O(N). Enable DEBUG to measure the waste.
+                    delta_text = partial_stream_text[last_emitted_offset:]
+                    last_emitted_offset = len(partial_stream_text)
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            "[TRANSCODER][PARTIAL_EMIT][DESIGN_FLAW] "
+                            "[TRANSCODER][PARTIAL_EMIT][STREAMING_DELTA] "
                             "session=%s exchange=%s emit_number=%d "
-                            "cumulative_bytes_sent=%d last_chunk_bytes=%d "
-                            "-- full accumulated text resent on every partial emit, not just the new delta",
+                            "delta_bytes=%d cumulative_bytes=%d",
                             session_id,
                             exchange_id,
                             emit_count + 1,
+                            len(delta_text.encode()),
                             len(partial_stream_text.encode()),
-                            len(chunk_text.encode()),
                         )
                     partial_msg = ChatMessage(
                         session_id=session_id,
@@ -695,10 +691,10 @@ class StreamTranscoder:
                         timestamp=_utcnow_dt(),
                         role=Role.assistant,
                         channel=Channel.final,
-                        parts=[TextPart(text=partial_stream_text)],
+                        parts=[TextPart(text=delta_text)],
                         metadata=ChatMetadata(
                             agent_id=agent_id,
-                            extras={"streaming_partial": True},
+                            extras={"streaming_delta": True},
                         ),
                     )
                     emit_start = time.monotonic()
@@ -786,6 +782,7 @@ class StreamTranscoder:
                         pending_assistant_final = None
                         partial_stream_rank = None
                         partial_stream_text = ""
+                        last_emitted_offset = 0
                         if logger.isEnabledFor(logging.DEBUG):
                             logger.debug(
                                 "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
@@ -846,6 +843,7 @@ class StreamTranscoder:
                         pending_assistant_final = None
                         partial_stream_rank = None
                         partial_stream_text = ""
+                        last_emitted_offset = 0
                         call_id = (
                             getattr(msg, "tool_call_id", None)
                             or raw_md.get("tool_call_id")
@@ -1096,16 +1094,17 @@ class StreamTranscoder:
                             pending_final_token_source = candidate_token_source
                         continue
             # Flush any partial text that was buffered by the throttle but not yet sent.
-            if partial_stream_text.strip() and partial_stream_rank is not None:
+            end_flush_delta = partial_stream_text[last_emitted_offset:]
+            if end_flush_delta.strip() and partial_stream_rank is not None:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
-                        "[TRANSCODER][END_FLUSH][DESIGN_FLAW] "
+                        "[TRANSCODER][END_FLUSH][STREAMING_DELTA] "
                         "session=%s exchange=%s total_partial_emits=%d "
-                        "final_flush_bytes=%d "
-                        "-- this flush also sends full cumulative text, same design flaw",
+                        "delta_bytes=%d cumulative_bytes=%d",
                         session_id,
                         exchange_id,
                         emit_count,
+                        len(end_flush_delta.encode()),
                         len(partial_stream_text.encode()),
                     )
                 flush_msg = ChatMessage(
@@ -1115,10 +1114,10 @@ class StreamTranscoder:
                     timestamp=_utcnow_dt(),
                     role=Role.assistant,
                     channel=Channel.final,
-                    parts=[TextPart(text=partial_stream_text)],
+                    parts=[TextPart(text=end_flush_delta)],
                     metadata=ChatMetadata(
                         agent_id=agent_id,
-                        extras={"streaming_partial": True},
+                        extras={"streaming_delta": True},
                     ),
                 )
                 emit_start = time.monotonic()

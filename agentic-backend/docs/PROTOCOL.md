@@ -109,7 +109,13 @@ Important roles:
 Partial assistant streaming uses:
 
 - `channel = "final"`
-- `metadata.extras.streaming_partial = true`
+- `metadata.extras.streaming_delta = true`
+
+Each partial frame carries only the **new text fragment** since the previous frame (delta protocol).
+The frontend accumulates deltas into the displayed message; it must not replace the full text on each frame.
+
+The final non-partial frame (no `streaming_delta` flag) carries the complete authoritative text and
+serves as a consistency checkpoint — the frontend replaces the accumulated buffer with this value.
 
 ### 2.3 `awaiting_human`
 
