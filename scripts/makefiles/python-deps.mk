@@ -8,18 +8,14 @@
 $(TARGET)/.venv-created:
 	@echo "🔧 Creating virtualenv..."
 	mkdir -p $(TARGET)
-	python3 -m venv $(VENV)
-	touch $@
+	flock $(TARGET)/.venv.lock sh -c 'test -f $@ || (python3 -m venv $(VENV) && touch $@)'
 
 $(TARGET)/.uv-installed: $(TARGET)/.venv-created
 	@echo "📦 Installing uv..."
-	$(PIP) install --upgrade pip setuptools wheel
-	$(PIP) install uv
-	touch $@
+	flock $(TARGET)/.uv.lock sh -c 'test -f $@ || ($(PIP) install --upgrade pip setuptools wheel && $(PIP) install uv && touch $@)'
 
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
-	$(UV) sync --extra dev
-	touch $@
+	flock $(TARGET)/.compiled.lock sh -c 'test -f $@ || ($(UV) sync --extra dev && touch $@)'
 
 .PHONY: dev
 dev: $(TARGET)/.compiled ## Install from compiled lock
