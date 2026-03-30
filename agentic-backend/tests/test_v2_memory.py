@@ -17,8 +17,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 import pytest
 from fred_core import BaseSessionStore, KeycloakUser
 from fred_core.common import PostgresStoreConfig
@@ -28,6 +26,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
@@ -125,19 +124,29 @@ class InMemorySessionStore(BaseSessionStore):
     def __init__(self) -> None:
         self.sessions: dict[str, SessionSchema] = {}
 
-    async def save(self, session: SessionSchema, db_session: AsyncSession | None = None) -> None:
+    async def save(
+        self, session: SessionSchema, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions[session.id] = session
 
-    async def get(self, session_id: str, db_session: AsyncSession | None = None) -> SessionSchema | None:
+    async def get(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> SessionSchema | None:
         return self.sessions.get(session_id)
 
-    async def delete(self, session_id: str, db_session: AsyncSession | None = None) -> None:
+    async def delete(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions.pop(session_id, None)
 
-    async def get_for_user(self, user_id: str, db_session: AsyncSession | None = None) -> list[SessionSchema]:
+    async def get_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> list[SessionSchema]:
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
-    async def count_for_user(self, user_id: str, db_session: AsyncSession | None = None) -> int:
+    async def count_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> int:
         return len(await self.get_for_user(user_id))
 
 
@@ -147,11 +156,17 @@ class InMemoryHistoryStore(NoOpHistoryStore):
         self.get_call_count = 0
 
     async def save(
-        self, session_id: str, messages: list[ChatMessage], user_id: str, session: AsyncSession | None = None
+        self,
+        session_id: str,
+        messages: list[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
         self.messages[session_id] = list(messages)
 
-    async def get(self, session_id: str, session: AsyncSession | None = None) -> list[ChatMessage]:
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> list[ChatMessage]:
         self.get_call_count += 1
         return list(self.messages.get(session_id, []))
 

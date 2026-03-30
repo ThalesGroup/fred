@@ -30,7 +30,9 @@ class NoOpHistoryStore(BaseHistoryStore):
     ) -> None:
         return
 
-    async def get(self, session_id: str, session: AsyncSession | None = None) -> List[ChatMessage]:
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> List[ChatMessage]:
         return []
 
     async def get_chatbot_metrics(
