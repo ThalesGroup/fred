@@ -18,8 +18,8 @@ import os
 from pathlib import Path
 
 import pytest
-from dotenv import load_dotenv
 from docling.datamodel.pipeline_options import RapidOcrOptions
+from dotenv import load_dotenv
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
