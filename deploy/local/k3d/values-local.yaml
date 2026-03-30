@@ -428,7 +428,7 @@ applications:
     # -------------------------------------------------------------------------
     dotenv:
       <<: *common-dotenv
-      KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_"
+      KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_"  # pragma: allowlist secret
 
     # -------------------------------------------------------------------------
     # Agentic Backend — Agent catalog (overrides default: only Georges)
@@ -592,13 +592,13 @@ applications:
 
     dotenv: &kf-dotenv
       <<: *common-dotenv
-      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_"
-      MINIO_SECRET_KEY: "Azerty123_"
-      OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
-      OPENSEARCH_PASSWORD: "FredDemo_2026!"
-      OPENFGA_API_TOKEN: "Azerty123_"
-      FRED_POSTGRES_PASSWORD: "Azerty123_"
-      TABULAR_POSTGRES_PASSWORD: "Azerty123_"
+      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_"  # pragma: allowlist secret
+      MINIO_SECRET_KEY: "Azerty123_"  # pragma: allowlist secret
+      OPENAI_API_KEY: "123"  # pragma: allowlist secret
+      OPENSEARCH_PASSWORD: "FredDemo_2026!"  # pragma: allowlist secret
+      OPENFGA_API_TOKEN: "Azerty123_"  # pragma: allowlist secret
+      FRED_POSTGRES_PASSWORD: "Azerty123_"  # pragma: allowlist secret
+      TABULAR_POSTGRES_PASSWORD: "Azerty123_"  # pragma: allowlist secret
       PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
 
@@ -642,8 +642,8 @@ applications:
       storage:   *cp-storage
     dotenv: &cp-dotenv
       <<: *common-dotenv
-      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_"
-      MINIO_SECRET_KEY: "Azerty123_"
+      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_"  # pragma: allowlist secret
+      MINIO_SECRET_KEY: "Azerty123_"  # pragma: allowlist secret
 
   # ===========================================================================
   # CONTROL PLANE WORKER
