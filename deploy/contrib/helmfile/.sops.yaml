@@ -1,0 +1,9 @@
+creation_rules:
+  - path_regex: .*/prod/.*\.*\.yaml$
+    age: "age1fguh0tj0gmh879mgxaeseyzxtx7chsw5he7x6ngkglg24p2h2elqrez9hf"
+
+  - path_regex: .*/int/.*\.*\.yaml$
+    age: "age1tquhly4cdzdplr2zn5fz5ka9q50dlec2vfmjenznydeju7e88s4qu4dpfe"
+
+  - path_regex: \.*\.yaml$
+    age: "age1tquhly4cdzdplr2zn5fz5ka9q50dlec2vfmjenznydeju7e88s4qu4dpfe"

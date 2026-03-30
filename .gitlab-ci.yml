@@ -1,0 +1,255 @@
+variables:
+  DEV_BRANCH:
+    value: "develop-prism"
+    description: "Development branch name. Commits on this branch auto-build code images with dev-prism tag."
+  CODE_DOCKER_TAG:
+    description: "Version tag for code docker images (used for manual builds)."
+  BUILD_CODE_DOCKER_IMAGE:
+    value: "false"
+    options: ["true", "false"]
+    description: "Defines if code docker images (frontend, agentic-backend, knowledge-flow-backend, control-plane) must be built"
+  BENCHMARK_DOCKER_TAG:
+    description: "Version of benchmark tools docker image."
+  BUILD_BENCHMARK_DOCKER_IMAGE:
+    value: "false"
+    options: ["true", "false"]
+    description: "Defines if benchmark tools docker image must be built"
+  CHART_TAG:
+    description: "Version tag for Helm chart (used for manual builds)."
+  BUILD_CHART:
+    value: "false"
+    options: ["true", "false"]
+    description: "Defines if Helm chart must be packaged and pushed"
+
+# -----------------------------------------------------------------------------
+# Stages definition, order and workflow conditions
+# -----------------------------------------------------------------------------
+
+stages:
+  - sync
+  - build-image
+  - package-chart
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^code\/v/
+    - if: $CI_COMMIT_TAG =~ /^chart\/v/
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+# -----------------------------------------------------------------------------
+# Build docker images
+# -----------------------------------------------------------------------------
+
+.docker-auth: &docker-auth
+  - CI_REGISTRY_AUTH="$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')"
+  - |
+    cat << EOF > /kaniko/.docker/config.json
+    {
+      "auths": {
+        "${CI_REGISTRY}": {
+          "auth": "${CI_REGISTRY_AUTH}"
+        }
+      }
+    }
+    EOF
+
+.docker-default:
+  image: gcr.io/kaniko-project/executor:v1.23.2-debug
+  stage: build-image
+  before_script: *docker-auth
+  script:
+    - |
+      echo CONTEXT = ${CONTEXT}
+      echo DOCKER_FILE = ${DOCKER_FILE}
+      echo CI_REGISTRY_IMAGE = ${CI_REGISTRY_IMAGE}
+      echo IMAGE_NAME = ${IMAGE_NAME}
+      echo IMAGE_TAG = ${IMAGE_TAG}
+      /kaniko/executor --context ${CONTEXT} --dockerfile ${CONTEXT}/${DOCKER_FILE} --destination ${CI_REGISTRY_IMAGE}/${IMAGE_NAME}:${IMAGE_TAG}
+
+.docker-code:
+  extends: .docker-default
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^code\/v/
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+      variables:
+        IMAGE_TAG: dev-prism
+    - if: $BUILD_CODE_DOCKER_IMAGE == "true"
+  before_script:
+    - *docker-auth
+    - |
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        IMAGE_TAG=$(echo "${CI_COMMIT_TAG}" | sed 's|^code/v||')
+        export IMAGE_TAG
+      fi
+
+docker-code:
+  extends: .docker-code
+  needs: []
+  variables:
+    IMAGE_TAG: ${CODE_DOCKER_TAG}
+    CONTEXT: ${CI_PROJECT_DIR}
+  parallel:
+    matrix:
+      - IMAGE_NAME: frontend
+        DOCKER_FILE: frontend/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: agentic-backend
+        DOCKER_FILE: agentic-backend/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: knowledge-flow-backend
+        DOCKER_FILE: knowledge-flow-backend/dockerfiles/Dockerfile-prod
+      - IMAGE_NAME: control-plane-backend
+        DOCKER_FILE: control-plane-backend/dockerfiles/Dockerfile-prod
+
+docker-benchmark:
+  extends: .docker-default
+  needs: []
+  variables:
+    IMAGE_NAME: benchmark-tools
+    IMAGE_TAG: ${BENCHMARK_DOCKER_TAG}
+    CONTEXT: ${CI_PROJECT_DIR}/developer_tools/benchmarks
+    DOCKER_FILE: Dockerfile
+  rules:
+    - if: $BUILD_BENCHMARK_DOCKER_IMAGE == "true"
+
+# -----------------------------------------------------------------------------
+# Package and push Helm charts
+# -----------------------------------------------------------------------------
+
+.helm-chart:
+  image: mirror.gcr.io/alpine/helm:3.17.3
+  stage: package-chart
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^chart\/v/
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+      variables:
+        CHART_VERSION: 0.0.0-dev-prism
+    - if: $BUILD_CHART == "true"
+  before_script:
+    - |
+      if [ -n "${CI_COMMIT_TAG}" ]; then
+        CHART_VERSION=$(echo "${CI_COMMIT_TAG}" | sed 's|^chart/v||')
+        export CHART_VERSION
+      fi
+  script:
+    - |
+      echo "Packaging ${CHART_NAME} with version ${CHART_VERSION}"
+      helm package "${CHART_PATH}" --version "${CHART_VERSION}" --destination ./packages
+      PACKAGE_FILE=$(ls ./packages/${CHART_NAME}-${CHART_VERSION}.tgz)
+      echo "Pushing ${PACKAGE_FILE} to ${CI_REGISTRY_CHART}"
+      curl --fail --user "${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD}" \
+        -T "${PACKAGE_FILE}" \
+        "${CI_REGISTRY_CHART}/${CHART_NAME}-${CHART_VERSION}.tgz"
+
+helm-chart:
+  extends: .helm-chart
+  needs: []
+  variables:
+    CHART_VERSION: ${CHART_TAG}
+  parallel:
+    matrix:
+      - CHART_NAME: fred
+        CHART_PATH: ${CI_PROJECT_DIR}/deploy/charts/fred
+
+# -----------------------------------------------------------------------------
+# Sync develop-prism with the most recent GitHub branch (develop)
+# -----------------------------------------------------------------------------
+
+sync-develop-prism:
+  image: mirror.gcr.io/library/alpine:3.21
+  stage: sync
+  needs: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+  script:
+    - apk add --no-cache curl jq
+    - SOURCE_BRANCH="${CI_COMMIT_BRANCH}"
+    - echo "Mirror updated on branch ${SOURCE_BRANCH}, creating MR to ${DEV_BRANCH}"
+    # Check if a MR already exists
+    - |
+      EXISTING_MR=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${SOURCE_BRANCH}&target_branch=${DEV_BRANCH}&state=opened" \
+        | jq '.[0]')
+      if [ "$EXISTING_MR" != "null" ]; then
+        echo "A MR already exists from ${SOURCE_BRANCH} to ${DEV_BRANCH}. Skipping creation."
+        MR_IID=$(echo "$EXISTING_MR" | jq -r '.iid')
+      else
+        # Create the MR
+        MR_RESPONSE=$(curl -s --request POST --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests" \
+          --form "source_branch=${SOURCE_BRANCH}" \
+          --form "target_branch=${DEV_BRANCH}" \
+          --form "title=Auto-sync: Merge ${SOURCE_BRANCH} into ${DEV_BRANCH}" \
+          --form "description=Automatic MR to sync ${DEV_BRANCH} with ${SOURCE_BRANCH} following a GitHub push." \
+          --form "remove_source_branch=false" \
+          --form "squash=false")
+        MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
+        echo "✅ MR !${MR_IID} created."
+      fi
+    # Wait for GitLab to compute merge status and check for conflicts
+    - |
+      echo "Waiting for MR !${MR_IID} merge status..."
+      RETRIES=0
+      MAX_RETRIES=10
+      while [ "$RETRIES" -lt "$MAX_RETRIES" ]; do
+        MR_DETAIL=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}")
+        MERGE_STATUS=$(echo "$MR_DETAIL" | jq -r '.detailed_merge_status // .merge_status')
+        HAS_CONFLICTS=$(echo "$MR_DETAIL" | jq -r '.has_conflicts')
+        echo "Attempt $((RETRIES+1))/${MAX_RETRIES}: merge_status=${MERGE_STATUS}, has_conflicts=${HAS_CONFLICTS}"
+        if [ "$MERGE_STATUS" != "checking" ] && [ "$MERGE_STATUS" != "unchecked" ] && [ "$MERGE_STATUS" != "preparing" ]; then
+          break
+        fi
+        RETRIES=$((RETRIES+1))
+        sleep 5
+      done
+      if [ "$HAS_CONFLICTS" = "true" ]; then
+        echo ""
+        echo "============================================================"
+        echo "❌ CONFLICT detected on MR !${MR_IID} (${SOURCE_BRANCH} → ${DEV_BRANCH})"
+        echo "============================================================"
+        echo ""
+        # Fetch the list of conflicting files from the MR changes API
+        MR_CHANGES=$(curl -s --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/changes")
+        CONFLICTING_FILES=$(echo "$MR_CHANGES" | jq -r '.changes[]? | select(.diff // "" | test("^<<<<<<< |^=======$|^>>>>>>> "; "m")) | .new_path')
+        if [ -z "$CONFLICTING_FILES" ]; then
+          # Fallback: if diff-based detection found nothing, list all changed files
+          CONFLICTING_FILES=$(echo "$MR_CHANGES" | jq -r '.changes[]? | .new_path')
+          echo "⚠️  Could not determine exact conflicting files from diffs."
+          echo "   Listing all changed files in this MR:"
+        else
+          CONFLICT_COUNT=$(echo "$CONFLICTING_FILES" | wc -l)
+          echo "📄 ${CONFLICT_COUNT} file(s) with conflicts:"
+        fi
+        echo ""
+        echo "$CONFLICTING_FILES" | while read -r file; do
+          echo "   • ${file}"
+        done
+        echo ""
+        echo "Adding reviewers for notification..."
+        curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}" \
+          --form "reviewer_ids=${REVIEWER_IDS}"
+        echo ""
+        echo "👉 Please resolve the conflicts manually and re-run the pipeline."
+        exit 1
+      fi
+      echo "✅ No conflicts detected (merge_status=${MERGE_STATUS})."
+    # Auto-merge the MR
+    - |
+      echo "Auto-merging MR !${MR_IID}..."
+      MERGE_RESPONSE=$(curl -s --request PUT --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/merge" \
+        --form "squash=false")
+      MERGE_STATE=$(echo "$MERGE_RESPONSE" | jq -r '.state')
+      MERGE_ERROR=$(echo "$MERGE_RESPONSE" | jq -r '.message // empty')
+      echo "API response: state=${MERGE_STATE}"
+      if [ "$MERGE_STATE" = "merged" ]; then
+        echo "✅ MR !${MR_IID} merged successfully (${SOURCE_BRANCH} → ${DEV_BRANCH})."
+      else
+        echo "❌ Auto-merge failed for MR !${MR_IID}."
+        echo "Error: ${MERGE_ERROR}"
+        echo "$MERGE_RESPONSE" | jq .
+        exit 1
+      fi
