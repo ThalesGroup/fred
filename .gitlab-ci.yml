@@ -158,6 +158,7 @@ helm-chart:
 sync-develop-prism:
   image: mirror.gcr.io/library/alpine:3.21
   stage: sync
+  interruptible: true
   needs: []
   rules:
     - if: $CI_COMMIT_BRANCH == "develop"
