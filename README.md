@@ -598,13 +598,13 @@ Other infrastructure services remain accessible on their usual ports:
 > [!IMPORTANT]
 > **Access-control reminder (shared environments):**
 > Keycloak app roles and team ReBAC rights are different controls.
-> For the Fred access model and deployment bootstrap rules, see [`docs/REBAC.md`](./docs/REBAC.md).
+> For the Fred access model and deployment bootstrap rules, see [`docs/platform/REBAC.md`](./docs/platform/REBAC.md).
 
 For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
-- [`docs/DEPLOYMENT_GUIDE.md`](./docs/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
-- [`docs/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
-- [`docs/REBAC.md`](./docs/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
+- [`docs/platform/DEPLOYMENT_GUIDE.md`](./docs/platform/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
+- [`docs/platform/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/platform/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
+- [`docs/platform/REBAC.md`](./docs/platform/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 
@@ -666,7 +666,7 @@ Persistence options:
 - Generic information
 
   - [Main docs](https://fredk8.dev/docs)
-  - [Features overview](./docs/FEATURES.md)
+  - [Features overview](./docs/platform/FEATURES.md)
 
 - Agentic backend
 
@@ -685,16 +685,16 @@ Persistence options:
 
 - Security-related topics
 
-  - [Security overview](./docs/SECURITY.md)
-  - [Keycloak](./docs/KEYCLOAK.md)
+  - [Security overview](./docs/platform/SECURITY.md)
+  - [Keycloak](./docs/platform/KEYCLOAK.md)
 
 - Developer and contributors guides
 
-  - [Developer Contract (humans + AI)](./docs/DEVELOPER_CONTRACT.md)
-  - [Platform Runtime Map (API apps + Temporal apps)](./docs/PLATFORM_RUNTIME_MAP.md)
+  - [Developer Contract (humans + AI)](./docs/platform/DEVELOPER_CONTRACT.md)
+  - [Platform Runtime Map (API apps + Temporal apps)](./docs/platform/PLATFORM_RUNTIME_MAP.md)
   - [Developer Tools](./developer_tools/README.md)
   - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
-  - [Python Coding Guide](./docs/PYTHON_CODING_GUIDELINES.md)
+  - [Python Coding Guide](./docs/platform/PYTHON_CODING_GUIDELINES.md)
   - [Contributing](./docs/CONTRIBUTING.md)
 
 ### Licensing Note

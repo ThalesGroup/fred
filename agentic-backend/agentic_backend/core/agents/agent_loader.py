@@ -30,7 +30,7 @@ from agentic_backend.core.agents.agent_class_resolver import (
 from agentic_backend.core.agents.agent_flow import AgentFlow
 from agentic_backend.core.agents.agent_spec import AgentTuning
 from agentic_backend.core.agents.store.base_agent_store import BaseAgentStore
-from agentic_backend.core.agents.v2.catalog import (
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
     apply_profile_defaults_to_settings,
     build_definition_from_settings,
     definition_to_agent_settings,

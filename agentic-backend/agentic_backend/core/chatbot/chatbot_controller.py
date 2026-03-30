@@ -645,14 +645,6 @@ async def websocket_chatbot_question(
                 async def ws_callback(msg_dict: dict):
                     # Callback to stream agent tokens/messages back to the client
                     # It handles both ChatMessage payloads and AwaitingHumanEvent emitted by interrupts.
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            "[CHATBOT WS] ws_callback session=%s exchange=%s type=%s keys=%s",
-                            msg_dict.get("session_id"),
-                            msg_dict.get("exchange_id"),
-                            msg_dict.get("type") or "stream",
-                            list(msg_dict.keys()),
-                        )
                     msg_type = msg_dict.get("type")
                     if msg_type == "awaiting_human":
                         if logger.isEnabledFor(logging.DEBUG):

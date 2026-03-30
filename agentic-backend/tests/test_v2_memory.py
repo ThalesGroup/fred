@@ -37,9 +37,11 @@ from agentic_backend.core.agents.v2 import (
     PortableEnvironment,
     RuntimeServices,
 )
-from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
-from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
-from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
+from agentic_backend.core.agents.v2.react.react_runtime import ReActRuntime
+from agentic_backend.core.agents.v2.runtime_support.session_agent import V2SessionAgent
+from agentic_backend.core.agents.v2.runtime_support.sql_checkpointer import (
+    FredSqlCheckpointer,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,

@@ -13,11 +13,25 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    createAgentAgenticV1AgentsCreatePost: build.mutation<
-      CreateAgentAgenticV1AgentsCreatePostApiResponse,
-      CreateAgentAgenticV1AgentsCreatePostApiArg
+    createV2AgentAgenticV1AgentsV2CreatePost: build.mutation<
+      CreateV2AgentAgenticV1AgentsV2CreatePostApiResponse,
+      CreateV2AgentAgenticV1AgentsV2CreatePostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/v2/create`,
+        method: "POST",
+        body: queryArg.createV2AgentRequest,
+      }),
+    }),
+    createV1AgentAgenticV1AgentsV1CreatePost: build.mutation<
+      CreateV1AgentAgenticV1AgentsV1CreatePostApiResponse,
+      CreateV1AgentAgenticV1AgentsV1CreatePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/v1/create`,
+        method: "POST",
+        body: queryArg.createV1AgentRequest,
+      }),
     }),
     listReactAgentProfilesAgenticV1AgentsReactProfilesGet: build.query<
       ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse,
@@ -37,6 +51,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/agents/class-paths` }),
     }),
+    listV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGet: build.query<
+      ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiResponse,
+      ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/v2/definition-refs` }),
+    }),
     getClassPathTuningAgenticV1AgentsClassPathsTuningGet: build.query<
       GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiResponse,
       GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiArg
@@ -45,6 +65,7 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/agentic/v1/agents/class-paths/tuning`,
         params: {
           class_path: queryArg.classPath,
+          definition_ref: queryArg.definitionRef,
         },
       }),
     }),
@@ -345,9 +366,13 @@ export type ListAgentsAgenticV1AgentsGetApiArg = {
   ownerFilter?: OwnerFilter | null;
   teamId?: string | null;
 };
-export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ Agent;
-export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
-  createAgentRequest: CreateAgentRequest;
+export type CreateV2AgentAgenticV1AgentsV2CreatePostApiResponse = /** status 200 Successful Response */ Agent;
+export type CreateV2AgentAgenticV1AgentsV2CreatePostApiArg = {
+  createV2AgentRequest: CreateV2AgentRequest;
+};
+export type CreateV1AgentAgenticV1AgentsV1CreatePostApiResponse = /** status 200 Successful Response */ Agent;
+export type CreateV1AgentAgenticV1AgentsV1CreatePostApiArg = {
+  createV1AgentRequest: CreateV1AgentRequest;
 };
 export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse =
   /** status 200 Successful Response */ ReActProfileSummary[];
@@ -360,10 +385,14 @@ export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg = {
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
   /** status 200 Successful Response */ string[];
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg = void;
+export type ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiResponse =
+  /** status 200 Successful Response */ string[];
+export type ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiArg = void;
 export type GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiResponse =
   /** status 200 Successful Response */ AgentTuning;
 export type GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiArg = {
   classPath?: string | null;
+  definitionRef?: string | null;
 };
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
@@ -668,13 +697,16 @@ export type HttpValidationError = {
   detail?: ValidationError[];
 };
 export type OwnerFilter = "personal" | "team";
-export type CreateAgentRequest = {
+export type CreateV2AgentRequest = {
   name: string;
-  type?: "basic";
   team_id?: string | null;
-  class_path?: string | null;
   definition_ref?: string | null;
   profile_id?: string | null;
+};
+export type CreateV1AgentRequest = {
+  name: string;
+  team_id?: string | null;
+  class_path: string;
 };
 export type ReActProfileSummary = {
   profile_id: string;
@@ -684,16 +716,10 @@ export type ReActProfileSummary = {
   tags: string[];
 };
 export type ExecutionCategory = "graph" | "react" | "proxy";
-export type ToolCapabilityRequirement = {
-  required?: boolean;
-  description?: string | null;
-  kind?: "capability";
-  capability: string;
-};
 export type ToolRefRequirement = {
+  kind?: "tool_ref";
   required?: boolean;
   description?: string | null;
-  kind?: "tool_ref";
   tool_ref: string;
 };
 export type PreviewKind = "none" | "mermaid" | "dag" | "text";
@@ -709,14 +735,9 @@ export type AgentInspection = {
   tags?: string[];
   fields?: FieldSpec[];
   execution_category: ExecutionCategory;
-  tool_requirements?: (
-    | ({
-        kind: "capability";
-      } & ToolCapabilityRequirement)
-    | ({
-        kind: "tool_ref";
-      } & ToolRefRequirement)
-  )[];
+  /** Exact Fred runtime tools declared by the agent author. This exists so inspection and UIs can explain what the agent expects before runtime binding happens. */
+  declared_tool_refs?: ToolRefRequirement[];
+  /** Default MCP servers Fred should attach for this agent. These are runtime tool providers, not substitutes for first-class Fred declared tool refs. */
   default_mcp_servers?: McpServerRef[];
   preview?: AgentPreview;
 };
@@ -1311,13 +1332,16 @@ export type AgentTaskRecordV1 = {
 export const {
   useListAgentsAgenticV1AgentsGetQuery,
   useLazyListAgentsAgenticV1AgentsGetQuery,
-  useCreateAgentAgenticV1AgentsCreatePostMutation,
+  useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
+  useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
   useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
   useLazyListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
   useInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useLazyInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
+  useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery,
+  useLazyListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery,
   useGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery,
   useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,

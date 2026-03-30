@@ -36,7 +36,7 @@ async def test_instant_query_serializes_body_and_auth_header() -> None:
             base_url="http://prometheus:9090/",
             verify_ssl=False,
             timeout_seconds=12.0,
-            bearer_token="secret-token",
+            bearer_token="secret-token",  # pragma: allowlist secret
         ),
         transport=httpx.MockTransport(handler),
     )
@@ -72,7 +72,7 @@ async def test_targets_uses_basic_auth_when_configured() -> None:
             base_url="http://prometheus:9090",
             timeout_seconds=12.0,
             username="alice",
-            password="secret",
+            password="secret",  # pragma: allowlist secret
         ),
         transport=httpx.MockTransport(handler),
     )
@@ -100,7 +100,7 @@ async def test_targets_uses_admin_as_default_basic_auth_username() -> None:
         PrometheusConfig(
             base_url="http://prometheus:9090",
             timeout_seconds=12.0,
-            password="secret",
+            password="secret",  # pragma: allowlist secret
         ),
         transport=httpx.MockTransport(handler),
     )

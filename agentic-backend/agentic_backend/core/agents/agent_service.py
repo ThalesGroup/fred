@@ -14,7 +14,7 @@
 
 import asyncio
 import logging
-from typing import List, Literal, Optional, Union
+from typing import List, Optional, Union
 from uuid import uuid4
 
 from fred_core import (
@@ -38,17 +38,17 @@ from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
 from agentic_backend.application_context import get_agent_store, get_rebac_engine
 from agentic_backend.common.structures import (
     Agent,
-    AgentChatOptions,
     AgentSettings,
 )
 from agentic_backend.core.agents.agent_class_resolver import (
-    AgentImplementationKind,
+    ResolvedFlowAgentClass,
+    ResolvedV2AgentClass,
     resolve_agent_class,
     resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_spec import AgentTuning
-from agentic_backend.core.agents.v2.catalog import (
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
     apply_profile_defaults_to_settings,
     apply_react_profile_to_definition,
     build_definition_from_settings,
@@ -56,16 +56,12 @@ from agentic_backend.core.agents.v2.catalog import (
     definition_to_agent_tuning,
     instantiate_definition_class,
 )
-from agentic_backend.core.agents.v2.react_profiles import (
+from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
     get_react_profile,
     is_react_profile_allowed,
 )
 
 logger = logging.getLogger(__name__)
-
-LEGACY_V1_REACT_CLASS_PATH = (
-    "agentic_backend.core.agents.basic_react_agent.BasicReActAgent"
-)
 
 
 class MissingTeamIdError(Exception):
@@ -141,7 +137,7 @@ class AgentService:
 
         agent_cls = resolved.cls
 
-        if resolved.implementation_kind == AgentImplementationKind.FLOW:
+        if isinstance(resolved, ResolvedFlowAgentClass):
             class_tuning = getattr(agent_cls, "tuning", None)
             if class_tuning is None:
                 return agent_settings
@@ -283,6 +279,28 @@ class AgentService:
         }
         return sorted(class_paths)
 
+    async def list_declared_definition_refs(self, user: KeycloakUser) -> List[str]:
+        """
+        Return v2 definition refs declared in the static catalog.
+
+        Why:
+        - Only refs explicitly listed in agents_catalog.yaml are presented to the UI.
+        - Mirrors list_declared_class_paths: the catalog is the gatekeeper for
+          both v1 class paths and v2 definition refs.
+        - Permissions stay aligned with advanced agent creation.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+        definition_refs = {
+            agent_cfg.definition_ref.strip()
+            for agent_cfg in self.agent_manager.config.ai.agents
+            if agent_cfg.definition_ref and agent_cfg.definition_ref.strip()
+        }
+        return sorted(definition_refs)
+
     async def get_agent_by_id(
         self, user: KeycloakUser, agent_id: str
     ) -> AgentSettings | None:
@@ -295,21 +313,24 @@ class AgentService:
             return None
         return await self._enrich_agent_settings(settings)
 
-    async def create_agent(
+    async def create_v2_agent(
         self,
         user: KeycloakUser,
         name: str,
         *,
-        agent_type: Literal["basic"] = "basic",
         team_id: Optional[str] = None,
-        class_path: Optional[str] = None,
         definition_ref: Optional[str] = None,
         profile_id: Optional[str] = None,
     ):
         """
-        Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
+        Create a v2 agent. Two choices:
+
+        1. ``definition_ref`` — fixed-behaviour agent wired in code, e.g. ``"v2.react.prometheus_expert"``.
+        2. ``profile_id`` only — configurable BasicReAct agent with a starting profile, e.g. ``"custodian"``.
+           Omitting both falls back to a blank BasicReAct agent.
+
+        ``profile_id`` is only valid when ``definition_ref`` is omitted or is ``v2.react.basic``.
         """
-        # If team_id is provided, check user has permission to manage team agents
         if team_id:
             await self.rebac.check_user_team_permission_or_raise(
                 user=user,
@@ -317,19 +338,11 @@ class AgentService:
                 team_id=team_id,
             )
 
-        # If class_path/definition_ref is provided, validate and resolve target class
-        resolved_agent_cls: type[object] | None = None
-        resolved_definition_ref: str | None = None
-        resolved_class_path: str | None = None
-        basic_react_class_path = _class_path(BasicReActDefinition)
-        basic_react_definition_ref = BASIC_REACT_DEFINITION_REF
         normalized_profile_id = profile_id.strip() if profile_id else None
         normalized_definition_ref = (
             definition_ref.strip() if isinstance(definition_ref, str) else None
         )
-        normalized_class_path = (
-            class_path.strip() if isinstance(class_path, str) else None
-        )
+
         if normalized_profile_id:
             if not is_react_profile_allowed(
                 normalized_profile_id,
@@ -342,12 +355,11 @@ class AgentService:
                 get_react_profile(normalized_profile_id)
             except ValueError as exc:
                 raise InvalidClassPathError(str(exc)) from exc
-        if normalized_class_path and normalized_definition_ref:
-            raise InvalidClassPathError(
-                "Provide either class_path or definition_ref, not both."
-            )
+
+        agent_id = str(uuid4())
 
         if normalized_definition_ref:
+            # Choice 1: fixed-behaviour v2 agent addressed by stable ref
             try:
                 resolved = resolve_agent_reference(
                     class_path=None,
@@ -355,112 +367,134 @@ class AgentService:
                 )
             except Exception as exc:
                 raise InvalidClassPathError(str(exc)) from exc
-            resolved_agent_cls = resolved.cls
-            resolved_definition_ref = resolved.definition_ref
-            resolved_class_path = resolved.class_path
+
+            if not isinstance(resolved, ResolvedV2AgentClass):
+                raise InvalidClassPathError(
+                    f"definition_ref '{normalized_definition_ref}' does not resolve to a v2 definition."
+                )
+
             if (
                 normalized_profile_id
-                and resolved_definition_ref != basic_react_definition_ref
+                and resolved.definition_ref != BASIC_REACT_DEFINITION_REF
             ):
                 raise InvalidClassPathError(
                     "profile_id is only supported for v2.react.basic."
                 )
-        elif normalized_class_path:
-            is_safe_builtin = normalized_class_path in {
-                basic_react_class_path,
-                LEGACY_V1_REACT_CLASS_PATH,
-            }
-            if not is_safe_builtin:
-                await self.rebac.check_user_permission_or_raise(
-                    user,
-                    OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
-                    ORGANIZATION_ID,
-                )
-            resolved_agent_cls = _validate_class_path(normalized_class_path)
-            resolved_class_path = normalized_class_path
-            if (
-                normalized_profile_id
-                and normalized_class_path != basic_react_class_path
-            ):
-                raise InvalidClassPathError(
-                    "profile_id is only supported for BasicReActDefinition"
-                )
 
-        agent_id = str(uuid4())
-
-        if resolved_agent_cls is None:
+            base_definition = instantiate_definition_class(resolved.cls)
+            effective_definition = (
+                apply_react_profile_to_definition(
+                    base_definition, normalized_profile_id
+                )
+                if normalized_profile_id
+                else base_definition
+            )
+            default_definition_ref = resolved.definition_ref
+        else:
+            # Choice 2: configurable BasicReAct agent (with optional starting profile)
             base_definition = instantiate_definition_class(BasicReActDefinition)
             effective_definition = apply_react_profile_to_definition(
-                base_definition,
-                normalized_profile_id,
+                base_definition, normalized_profile_id
             )
-            base_settings = definition_to_agent_settings(
-                base_definition,
-                class_path=None,
-                definition_ref=basic_react_definition_ref,
-                enabled=True,
-            )
-            default_settings = apply_profile_defaults_to_settings(
-                definition=effective_definition,
-                settings=base_settings,
-            )
-            default_tuning = default_settings.tuning or AgentTuning(
-                role=effective_definition.role,
-                description=effective_definition.description,
-            )
-            default_chat_options = default_settings.chat_options
-            default_class_path = None
-            default_definition_ref = basic_react_definition_ref
-        else:
-            assert resolved_class_path is not None
-            resolved = resolve_agent_class(resolved_class_path)
-            if resolved.implementation_kind == AgentImplementationKind.FLOW:
-                default_tuning = resolved.cls.tuning
-                default_chat_options = AgentChatOptions()
-                default_class_path = resolved_class_path
-                default_definition_ref = None
-            else:
-                base_definition = instantiate_definition_class(resolved.cls)
-                effective_definition = (
-                    apply_react_profile_to_definition(
-                        base_definition,
-                        normalized_profile_id,
-                    )
-                    if resolved_class_path == basic_react_class_path
-                    else base_definition
-                )
-                base_settings = definition_to_agent_settings(
-                    base_definition,
-                    class_path=None if resolved_definition_ref else resolved_class_path,
-                    definition_ref=resolved_definition_ref,
-                    enabled=True,
-                )
-                default_settings = apply_profile_defaults_to_settings(
-                    definition=effective_definition,
-                    settings=base_settings,
-                )
-                default_tuning = default_settings.tuning or definition_to_agent_tuning(
-                    effective_definition
-                )
-                default_chat_options = default_settings.chat_options
-                default_class_path = (
-                    None if resolved_definition_ref else resolved_class_path
-                )
-                default_definition_ref = resolved_definition_ref
+            default_definition_ref = BASIC_REACT_DEFINITION_REF
+
+        base_settings = definition_to_agent_settings(
+            base_definition,
+            class_path=None,
+            definition_ref=default_definition_ref,
+            enabled=True,
+        )
+        default_settings = apply_profile_defaults_to_settings(
+            definition=effective_definition,
+            settings=base_settings,
+        )
+        default_tuning = default_settings.tuning or definition_to_agent_tuning(
+            effective_definition
+        )
+
         agent_settings = Agent(
             id=agent_id,
             name=name,
             team_id=team_id,
-            class_path=default_class_path,
+            class_path=None,
             definition_ref=default_definition_ref,
             enabled=True,
             tuning=default_tuning,
-            chat_options=default_chat_options,
-            mcp_servers=[],  # Empty list by default; to be configured later
+            chat_options=default_settings.chat_options,
+            mcp_servers=[],
         )
         await self.agent_manager.create_dynamic_agent(agent_settings, default_tuning)
 
         # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
+        if team_id:
+            await self.rebac.add_relation(
+                Relation(
+                    subject=RebacReference(type=Resource.TEAM, id=team_id),
+                    relation=RelationType.OWNER,
+                    resource=RebacReference(type=Resource.AGENT, id=agent_id),
+                )
+            )
+        else:
+            await self.rebac.add_user_relation(
+                user,
+                RelationType.OWNER,
+                resource_type=Resource.AGENT,
+                resource_id=agent_id,
+            )
+
+        return agent_settings
+
+    async def create_v1_agent(
+        self,
+        user: KeycloakUser,
+        name: str,
+        *,
+        team_id: Optional[str] = None,
+        class_path: str,
+    ) -> AgentSettings:
+        """
+        Create a v1 (AgentFlow) agent by explicit class path.
+
+        Admin-only: requires CAN_EDIT_AGENT_CLASS_PATH permission.
+        The class must be a subclass of AgentFlow declared in the static catalog.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+        if team_id:
+            await self.rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
+            )
+
+        try:
+            resolved = resolve_agent_class(class_path)
+        except Exception as exc:
+            raise InvalidClassPathError(str(exc)) from exc
+
+        if not isinstance(resolved, ResolvedFlowAgentClass):
+            raise InvalidClassPathError(
+                f"'{class_path}' is a v2 definition — use POST /agents/v2/create with a definition_ref instead."
+            )
+
+        agent_id = str(uuid4())
+        agent_settings = Agent(
+            id=agent_id,
+            name=name,
+            team_id=team_id,
+            class_path=class_path,
+            definition_ref=None,
+            enabled=True,
+            tuning=resolved.cls.tuning,
+            mcp_servers=[],
+        )
+        await self.agent_manager.create_dynamic_agent(
+            agent_settings, resolved.cls.tuning
+        )
+
         if team_id:
             await self.rebac.add_relation(
                 Relation(
@@ -524,19 +558,73 @@ class AgentService:
         await self.agent_manager.update_agent(new_settings=agent_settings)
 
     def get_class_path_tuning(
-        self, user: KeycloakUser, class_path: str | None
+        self,
+        class_path: str | None,
+        *,
+        definition_ref: str | None = None,
     ) -> AgentTuning:
-        """Return the default tuning for a given class_path (or the default BasicReAct if None)."""
+        """Return the default tuning for a given class_path or definition_ref.
+
+        Resolution order:
+        1. definition_ref  → resolve v2 definition, return its tuning fields
+        2. class_path      → resolve class, return its tuning (v1) or definition fields (v2)
+        3. neither         → return blank BasicReAct defaults
+        """
+        if definition_ref:
+            logger.debug(
+                "[AGENTS][TUNING] resolving tuning for definition_ref=%r",
+                definition_ref,
+            )
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=None, definition_ref=definition_ref
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[AGENTS][TUNING] definition_ref=%r could not be resolved: %s",
+                    definition_ref,
+                    exc,
+                )
+                raise InvalidClassPathError(str(exc)) from exc
+            if not isinstance(resolved, ResolvedV2AgentClass):
+                raise InvalidClassPathError(
+                    f"definition_ref '{definition_ref}' does not resolve to a v2 definition."
+                )
+            definition = instantiate_definition_class(resolved.cls)
+            tuning = definition_to_agent_tuning(definition)
+            logger.debug(
+                "[AGENTS][TUNING] definition_ref=%r → class=%s fields=%d",
+                definition_ref,
+                resolved.cls.__name__,
+                len(tuning.fields or []),
+            )
+            return tuning
+
         if not class_path:
+            logger.debug(
+                "[AGENTS][TUNING] no class_path/definition_ref → returning BasicReAct defaults"
+            )
             definition = instantiate_definition_class(BasicReActDefinition)
             return definition_to_agent_tuning(definition)
 
+        logger.debug("[AGENTS][TUNING] resolving tuning for class_path=%r", class_path)
         resolved = resolve_agent_class(class_path)
-        if resolved.implementation_kind == AgentImplementationKind.FLOW:
+        if isinstance(resolved, ResolvedFlowAgentClass):
+            logger.debug(
+                "[AGENTS][TUNING] class_path=%r → v1 flow agent fields=%d",
+                class_path,
+                len(resolved.cls.tuning.fields or []),
+            )
             return resolved.cls.tuning
 
         definition = instantiate_definition_class(resolved.cls)
-        return definition_to_agent_tuning(definition)
+        tuning = definition_to_agent_tuning(definition)
+        logger.debug(
+            "[AGENTS][TUNING] class_path=%r → v2 definition fields=%d",
+            class_path,
+            len(tuning.fields or []),
+        )
+        return tuning
 
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
         await self.rebac.check_user_permission_or_raise(

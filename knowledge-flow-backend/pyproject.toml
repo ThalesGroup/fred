@@ -68,7 +68,7 @@ dependencies = [
   "umap-learn>=0.5.9.post2",
   "prometheus-fastapi-instrumentator>=7.1.0",
   "sqlmodel>=0.0.32",
-  "python-magic>=0.4.27",
+  "python-magic>=0.4.27"
 ]
 
 [project.optional-dependencies]

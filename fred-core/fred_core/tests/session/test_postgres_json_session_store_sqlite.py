@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import text
 
 from fred_core.common import PostgresStoreConfig
 from fred_core.session.session_schema import SessionSchema
