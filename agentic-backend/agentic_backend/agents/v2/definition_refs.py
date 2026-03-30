@@ -33,13 +33,11 @@ BASIC_DEEP_DEFINITION_REF = "v2.deep.basic"
 CORPUS_INVESTIGATOR_DEEP_DEFINITION_REF = "v2.deep.corpus_investigator"
 RAG_EXPERT_DEFINITION_REF = "v2.react.rag_expert"
 PROMETHEUS_EXPERT_DEFINITION_REF = "v2.react.prometheus_expert"
-POSTAL_TRACKING_DEFINITION_REF = "v2.demo.postal_tracking"
-BID_MGR_DEFINITION_REF = "v2.proto.bid_mgr"
-PPT_FILLER_REACT_DEFINITION_REF = "v2.react.ppt_filler"
-ARTIFACT_REPORT_DEFINITION_REF = "v2.demo.artifact_report"
-AEGIS_GRAPH_SKELETON_DEFINITION_REF = "v2.graph.aegis_skeleton"
-DVA_RISK_VALIDATOR_GRAPH_DEFINITION_REF = "v2.candidate.dva_risk_validator.graph"
-DVA_RISK_VALIDATOR_QA_DEFINITION_REF = "v2.candidate.dva_risk_validator.qa"
+DVA_RISK_VALIDATOR_GRAPH_DEFINITION_REF = "v2.production.dva_risk_validator.graph"
+DVA_RISK_VALIDATOR_QA_DEFINITION_REF = "v2.production.dva_risk_validator.qa"
+SLIDE_MAKER_SAMPLE_DEFINITION_REF = "v2.sample.slide_maker"
+SQL_ANALYST_DEFINITION_REF = "v2.production.sql_analyst"
+ARCHIE_DEFINITION_REF = "v2.production.archie"
 
 _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
     {
@@ -55,22 +53,20 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
         PROMETHEUS_EXPERT_DEFINITION_REF: (
             "agentic_backend.agents.v2.production.basic_react.profiles.prometheus_expert_agent.PrometheusExpertV2Definition"
         ),
-        POSTAL_TRACKING_DEFINITION_REF: "agentic_backend.agents.v2.demos.postal_tracking.Definition",
-        BID_MGR_DEFINITION_REF: "agentic_backend.agents.v2.candidate.bid_mgr.Definition",
-        PPT_FILLER_REACT_DEFINITION_REF: (
-            "agentic_backend.agents.v2.production.ppt_filler_react.PptFillerReActV2Definition"
-        ),
-        ARTIFACT_REPORT_DEFINITION_REF: (
-            "agentic_backend.agents.v2.demos.artifact_report.ArtifactReportDemoV2Definition"
-        ),
-        AEGIS_GRAPH_SKELETON_DEFINITION_REF: (
-            "agentic_backend.agents.v2.candidate.aegis_graph_skeleton.AegisGraphV2SkeletonDefinition"
-        ),
         DVA_RISK_VALIDATOR_GRAPH_DEFINITION_REF: (
-            "agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.DVARiskValidatorGraph"
+            "agentic_backend.agents.v2.production.dva_risk_validator.DVARiskValidatorGraph"
         ),
         DVA_RISK_VALIDATOR_QA_DEFINITION_REF: (
-            "agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.DVARiskValidatorQA"
+            "agentic_backend.agents.v2.production.dva_risk_validator.DVARiskValidatorQA"
+        ),
+        SLIDE_MAKER_SAMPLE_DEFINITION_REF: (
+            "agentic_backend.agents.v2.samples.slide_maker.agent.Definition"
+        ),
+        SQL_ANALYST_DEFINITION_REF: (
+            "agentic_backend.agents.v2.production.sql_analyst_graph.sql_agent_definition.SqlAgentDefinition"
+        ),
+        ARCHIE_DEFINITION_REF: (
+            "agentic_backend.agents.v2.production.archie.ArchieV2Definition"
         ),
     }
 )

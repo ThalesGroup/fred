@@ -5,17 +5,20 @@ from typing import cast
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1 import (
+from agentic_backend.agents.v2.definition_refs import (
+    class_path_for_definition_ref,
+)
+from agentic_backend.agents.v2.production.dva_risk_validator import (
     DVARiskValidatorGraph,
     DVARiskValidatorQA,
 )
-from agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.graph_state import (
+from agentic_backend.agents.v2.production.dva_risk_validator.graph_state import (
     CitationSource,
     DVARiskValidatorState,
     RiskEvidence,
     RiskRecord,
 )
-from agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.graph_steps import (
+from agentic_backend.agents.v2.production.dva_risk_validator.graph_steps import (
     _clean_extracted_risk_titles,
     _derive_coverage_reference,
     _result_contains_risk_table_signal,
@@ -24,15 +27,12 @@ from agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.graph
     preview_required_nodes,
     publish_outputs_step,
 )
-from agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.reporting import (
+from agentic_backend.agents.v2.production.dva_risk_validator.reporting import (
     blocker_status_for_risk,
     render_validation_report,
 )
-from agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.session_scope import (
+from agentic_backend.agents.v2.production.dva_risk_validator.session_scope import (
     merge_session_scope,
-)
-from agentic_backend.agents.v2.definition_refs import (
-    class_path_for_definition_ref,
 )
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2 import (
@@ -79,7 +79,7 @@ class _FakeContext:
                 tenant="fred",
                 environment=PortableEnvironment.DEV,
                 session_id="session-1",
-                agent_id="candidate.dva_risk_validator.graph.v2_1",
+                agent_id="production.dva_risk_validator.graph",
             ),
         )
 
@@ -183,16 +183,16 @@ def test_definition_wiring_and_stable_ids() -> None:
     graph = DVARiskValidatorGraph()
     qa = DVARiskValidatorQA()
 
-    assert graph.agent_id == "candidate.dva_risk_validator.graph.v2_1"
-    assert qa.agent_id == "candidate.dva_risk_validator.qa.v2_1"
+    assert graph.agent_id == "production.dva_risk_validator.graph"
+    assert qa.agent_id == "production.dva_risk_validator.qa"
 
     assert (
-        class_path_for_definition_ref("v2.candidate.dva_risk_validator.graph")
-        == "agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.DVARiskValidatorGraph"
+        class_path_for_definition_ref("v2.production.dva_risk_validator.graph")
+        == "agentic_backend.agents.v2.production.dva_risk_validator.DVARiskValidatorGraph"
     )
     assert (
-        class_path_for_definition_ref("v2.candidate.dva_risk_validator.qa")
-        == "agentic_backend.agents.v2.candidate.dva_risk_validator_assistant_v2_1.DVARiskValidatorQA"
+        class_path_for_definition_ref("v2.production.dva_risk_validator.qa")
+        == "agentic_backend.agents.v2.production.dva_risk_validator.DVARiskValidatorQA"
     )
 
 

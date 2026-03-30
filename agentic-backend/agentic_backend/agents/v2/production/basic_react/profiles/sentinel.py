@@ -12,7 +12,7 @@ SENTINEL_PROFILE = ReActProfile(
     profile_id="sentinel",
     title="Sentinel",
     description="Monitor platform health with OpenSearch and KPI MCP tools.",
-    role="sentinel_expert",
+    role="Monitoring assistant",
     agent_description=(
         "Operations and monitoring assistant for OpenSearch health, diagnostics, "
         "and platform KPI review."

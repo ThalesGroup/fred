@@ -672,6 +672,22 @@ class StreamTranscoder:
                     if now - last_partial_emit < _STREAM_FLUSH_INTERVAL_S:
                         continue
                     last_partial_emit = now
+                    # DESIGN FLAW (tracked, not yet fixed): each partial emit sends
+                    # the full cumulative text, not just the new delta. If the final
+                    # response is N bytes and we flush K times, total bytes sent =
+                    # O(N * K) instead of O(N). Enable DEBUG to measure the waste.
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "[TRANSCODER][PARTIAL_EMIT][DESIGN_FLAW] "
+                            "session=%s exchange=%s emit_number=%d "
+                            "cumulative_bytes_sent=%d last_chunk_bytes=%d "
+                            "-- full accumulated text resent on every partial emit, not just the new delta",
+                            session_id,
+                            exchange_id,
+                            emit_count + 1,
+                            len(partial_stream_text.encode()),
+                            len(chunk_text.encode()),
+                        )
                     partial_msg = ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,
@@ -1081,6 +1097,17 @@ class StreamTranscoder:
                         continue
             # Flush any partial text that was buffered by the throttle but not yet sent.
             if partial_stream_text.strip() and partial_stream_rank is not None:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[TRANSCODER][END_FLUSH][DESIGN_FLAW] "
+                        "session=%s exchange=%s total_partial_emits=%d "
+                        "final_flush_bytes=%d "
+                        "-- this flush also sends full cumulative text, same design flaw",
+                        session_id,
+                        exchange_id,
+                        emit_count,
+                        len(partial_stream_text.encode()),
+                    )
                 flush_msg = ChatMessage(
                     session_id=session_id,
                     exchange_id=exchange_id,

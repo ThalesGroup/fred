@@ -1,11 +1,11 @@
-from agentic_backend.agents.v2.candidate.sql_analyst_graph import (
+from agentic_backend.agents.v2.production.sql_analyst_graph import (
     SqlAgentDefinition,
 )
-from agentic_backend.agents.v2.candidate.sql_analyst_graph.sql_agent_state import (
+from agentic_backend.agents.v2.production.sql_analyst_graph.sql_agent_state import (
     SqlAgentInput,
     SqlAgentState,
 )
-from agentic_backend.agents.v2.candidate.sql_analyst_graph.sql_agent_steps import (
+from agentic_backend.agents.v2.production.sql_analyst_graph.sql_agent_steps import (
     _choose_database_from_request,
 )
 from agentic_backend.core.agents.v2 import (
@@ -23,7 +23,7 @@ def _binding() -> BoundRuntimeContext:
         tenant="test-tenant",
         environment=PortableEnvironment.DEV,
         session_id="sql-agent-session",
-        agent_id="candidate.sql_agent.graph.v2",
+        agent_id="production.sql_analyst.graph.v2",
     )
     return BoundRuntimeContext.model_construct(
         portable_context=portable_context,
@@ -57,12 +57,15 @@ def test_sql_agent_builds_initial_state() -> None:
     assert typed_state.available_databases == []
     assert typed_state.selected_db is None
     assert typed_state.selected_tables == []
+    # Tunable prompt is injected from the definition into state at run start
+    assert typed_state.draft_sql_system_prompt == definition.draft_sql_system_prompt
+    assert len(typed_state.draft_sql_system_prompt) > 0
 
 
 def test_sql_agent_definition_has_expected_agent_id() -> None:
     definition = SqlAgentDefinition()
 
-    assert definition.agent_id == "candidate.sql_agent.graph.v2"
+    assert definition.agent_id == "production.sql_analyst.graph.v2"
 
 
 def test_sql_agent_auto_selects_database_from_table_name() -> None:

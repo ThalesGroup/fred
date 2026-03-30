@@ -17,7 +17,7 @@ import inspect
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -178,13 +178,17 @@ def _import_class(class_path: str) -> object:
 router = APIRouter(tags=["Agents"])
 
 
-class CreateAgentRequest(BaseModel):
+class CreateV2AgentRequest(BaseModel):
     name: str
-    type: Literal["basic"] = "basic"
     team_id: str | None = None
-    class_path: str | None = None
     definition_ref: str | None = None
     profile_id: str | None = None
+
+
+class CreateV1AgentRequest(BaseModel):
+    name: str
+    team_id: str | None = None
+    class_path: str
 
 
 class ReActProfileSummary(BaseModel):
@@ -213,24 +217,42 @@ async def list_agents(
 
 
 @router.post(
-    "/agents/create",
-    summary="Create a Dynamic Agent that can access tools",
+    "/agents/v2/create",
+    summary="Create a v2 agent (definition ref or react profile)",
     response_model=AgentSettings,
 )
-async def create_agent(
-    request: CreateAgentRequest,
+async def create_v2_agent(
+    request: CreateV2AgentRequest,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ) -> AgentSettings:
     service = AgentService(agent_manager=agent_manager)
-    return await service.create_agent(
+    return await service.create_v2_agent(
         user,
         request.name,
-        agent_type=request.type,
         team_id=request.team_id,
-        class_path=request.class_path,
         definition_ref=request.definition_ref,
         profile_id=request.profile_id,
+    )
+
+
+@router.post(
+    "/agents/v1/create",
+    summary="Create a v1 agent by class path (admin only, legacy)",
+    response_model=AgentSettings,
+    deprecated=True,
+)
+async def create_v1_agent(
+    request: CreateV1AgentRequest,
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> AgentSettings:
+    service = AgentService(agent_manager=agent_manager)
+    return await service.create_v1_agent(
+        user,
+        request.name,
+        team_id=request.team_id,
+        class_path=request.class_path,
     )
 
 
@@ -313,17 +335,31 @@ async def list_declared_agent_class_paths(
 
 
 @router.get(
+    "/agents/v2/definition-refs",
+    summary="List known v2 definition refs available for agent creation",
+    response_model=list[str],
+)
+async def list_v2_definition_refs(
+    user: KeycloakUser = Depends(get_current_user),
+    agent_manager: AgentManager = Depends(get_agent_manager),
+) -> list[str]:
+    service = AgentService(agent_manager=agent_manager)
+    return await service.list_declared_definition_refs(user)
+
+
+@router.get(
     "/agents/class-paths/tuning",
-    summary="Get the default tuning (including fields) for a given class path",
+    summary="Get the default tuning (including fields) for a given class path or definition ref",
     response_model=AgentTuning,
 )
 async def get_class_path_tuning(
     class_path: Optional[str] = None,
+    definition_ref: Optional[str] = None,
     user: KeycloakUser = Depends(get_current_user),
     agent_manager: AgentManager = Depends(get_agent_manager),
 ) -> AgentTuning:
     service = AgentService(agent_manager=agent_manager)
-    return service.get_class_path_tuning(user, class_path)
+    return service.get_class_path_tuning(class_path, definition_ref=definition_ref)
 
 
 @router.put(

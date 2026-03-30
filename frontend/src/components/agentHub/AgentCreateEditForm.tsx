@@ -1,4 +1,4 @@
-// Copyright Thales 2025
+// Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,15 +17,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
+import SegmentedControl from "../../rework/components/shared/molecules/SegmentedControl/SegmentedControl";
+import { OptionModel } from "../../rework/core/models/Option.model";
 import { KeyCloakService } from "../../security/KeycloakService";
 import {
   FieldSpec,
   McpServerRef,
-  useCreateAgentAgenticV1AgentsCreatePostMutation,
+  ReActProfileSummary,
+  useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
+  useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
   useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
   useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
+  useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
@@ -40,6 +45,12 @@ type TopLevelTuningState = {
   tags: string[];
 };
 
+/** How a v2 agent is created. Only relevant in create mode. */
+type V2CreateMode = "react" | "profile" | "definition_ref";
+
+/** Top-level version choice in create mode (admin only). */
+type AgentVersion = "v2" | "v1";
+
 export type AgentCreateEditFormProps = Omit<AgentCreateEditDrawerProps, "open">;
 
 export function AgentCreateEditForm({
@@ -51,7 +62,8 @@ export function AgentCreateEditForm({
   onDeleted,
 }: AgentCreateEditFormProps) {
   const { agentsNicknameSingular } = useFrontendProperties();
-  const [createAgent] = useCreateAgentAgenticV1AgentsCreatePostMutation();
+  const [createV2Agent] = useCreateV2AgentAgenticV1AgentsV2CreatePostMutation();
+  const [createV1Agent] = useCreateV1AgentAgenticV1AgentsV1CreatePostMutation();
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -77,6 +89,11 @@ export function AgentCreateEditForm({
   );
   const [classPath, setClassPath] = useState<string | null>(agent?.class_path ?? null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [definitionRef, setDefinitionRef] = useState<string | null>(null);
+
+  // Create-mode choices (reset when toggling)
+  const [agentVersion, setAgentVersion] = useState<AgentVersion>("v2");
+  const [v2CreateMode, setV2CreateMode] = useState<V2CreateMode>("react");
 
   const userRoles = KeyCloakService.GetUserRoles();
   const isAdmin = userRoles.includes("admin");
@@ -85,7 +102,11 @@ export function AgentCreateEditForm({
     skip: !isCreateMode || !isAdmin,
   });
   const hasReactProfiles = reactProfiles.length > 0;
-  const isProfileCreateMode = isCreateMode && !!profileId;
+
+  const { data: v2DefinitionRefs = [] } = useListV2DefinitionRefsQuery(undefined, {
+    skip: !isCreateMode || !isAdmin,
+  });
+  const hasDefinitionRefs = v2DefinitionRefs.length > 0;
 
   const { data: declaredClassPaths = [] } = useListDeclaredAgentClassPathsQuery(undefined, {
     skip: !isAdmin,
@@ -104,31 +125,38 @@ export function AgentCreateEditForm({
     });
   }, []);
 
-  // Keep create paths explicit: selecting a profile means "start from profile
-  // defaults", not "also derive tuning from a class path".
-  useEffect(() => {
-    if (!isCreateMode || !profileId) {
-      return;
-    }
-    setClassPath(null);
+  // Reset v2 sub-choice state when switching modes
+  const handleV2CreateModeChange = (next: V2CreateMode) => {
+    setV2CreateMode(next);
+    setProfileId(null);
+    setDefinitionRef(null);
     setFields([]);
-    setTopLevelTuning({
-      role: "",
-      description: "",
-      tags: [],
-    });
+    setTopLevelTuning({ role: "", description: "", tags: [] });
     setMcpServerRefs([]);
-  }, [isCreateMode, profileId]);
+  };
 
-  // Fetch default tuning when classPath changes for empty/basic creation or edit.
+  // Reset everything when switching V1/V2
+  const handleAgentVersionChange = (next: AgentVersion) => {
+    setAgentVersion(next);
+    setV2CreateMode("react");
+    setClassPath(null);
+    setProfileId(null);
+    setDefinitionRef(null);
+  };
+
+  // Fetch default tuning when classPath or definitionRef changes (create react mode or edit).
+  const editDefinitionRef = !isCreateMode ? (agent?.definition_ref ?? null) : null;
   useEffect(() => {
-    if (isProfileCreateMode) {
+    if (isCreateMode && (v2CreateMode === "profile" || v2CreateMode === "definition_ref")) {
       return;
     }
-    fetchClassPathTuning({ classPath: classPath ?? undefined })
+    fetchClassPathTuning({
+      classPath: classPath ?? undefined,
+      definitionRef: editDefinitionRef ?? undefined,
+    })
       .unwrap()
       .then((tuning) => {
-        setFields((prev) => (isCreateMode ? tuning.fields ?? [] : mergeFields(tuning.fields ?? [], prev)));
+        setFields((prev) => (isCreateMode ? (tuning.fields ?? []) : mergeFields(tuning.fields ?? [], prev)));
         setTopLevelTuning((prev) => ({
           role: prev.role || tuning.role || "",
           description: prev.description || tuning.description || "",
@@ -143,7 +171,7 @@ export function AgentCreateEditForm({
           );
         }
       });
-  }, [classPath, fetchClassPathTuning, isProfileCreateMode, mergeFields]);
+  }, [classPath, editDefinitionRef, fetchClassPathTuning, isCreateMode, v2CreateMode, mergeFields]);
 
   // --- Handlers ---
 
@@ -167,18 +195,26 @@ export function AgentCreateEditForm({
 
     try {
       const targetAgent = isCreateMode
-        ? await createAgent({
-            createAgentRequest: {
-              name: trimmedName,
-              type: "basic",
-              team_id: teamId,
-              class_path: classPath || undefined,
-              profile_id: profileId || undefined,
-            },
-          }).unwrap()
+        ? agentVersion === "v1"
+          ? await createV1Agent({
+              createV1AgentRequest: {
+                name: trimmedName,
+                team_id: teamId,
+                class_path: classPath!,
+              },
+            }).unwrap()
+          : await createV2Agent({
+              createV2AgentRequest: {
+                name: trimmedName,
+                team_id: teamId,
+                profile_id: v2CreateMode === "profile" ? profileId || undefined : undefined,
+                definition_ref: v2CreateMode === "definition_ref" ? definitionRef || undefined : undefined,
+              },
+            }).unwrap()
         : agent;
 
-      if (isCreateMode && isProfileCreateMode) {
+      // Profile, definition_ref, and V1 class_path agents are created with defaults — skip tuning update.
+      if (isCreateMode && (v2CreateMode === "profile" || v2CreateMode === "definition_ref" || agentVersion === "v1")) {
         onSaved?.();
         onClose();
         return;
@@ -227,9 +263,20 @@ export function AgentCreateEditForm({
     (f) => f.required && (f.default === undefined || f.default === null || f.default === ""),
   );
 
-  const isSaveDisabled = isProfileCreateMode
-    ? isLoading || !agentName.trim()
-    : isLoading || !agentName.trim() || !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
+  const isSaveDisabled = (() => {
+    if (!agentName.trim()) return true;
+    if (isLoading) return true;
+    if (!isCreateMode) return !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
+    if (agentVersion === "v1") return !classPath;
+    if (v2CreateMode === "profile") return !profileId;
+    if (v2CreateMode === "definition_ref") return !definitionRef;
+    // react: require role + description
+    return !topLevelTuning.role || !topLevelTuning.description || hasEmptyRequiredFields;
+  })();
+
+  // Derived booleans for JSX clarity
+  const showTuningFields = !isCreateMode || (agentVersion === "v2" && v2CreateMode === "react");
+  const showTools = showTuningFields;
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -246,6 +293,41 @@ export function AgentCreateEditForm({
       {/* Body (scrollable) */}
       <Box sx={{ p: 2, flex: 1, overflow: "auto" }}>
         <Stack spacing={3}>
+          {/* ── Version toggle (create mode, team admin only) ── */}
+          {isCreateMode && isAdmin && (
+            <SegmentedControl<AgentVersion>
+              label={t("agentHub.fields.agentVersion")}
+              options={[
+                { key: "v2", value: "v2", label: t("agentHub.fields.agentVersionV2"), tooltipLabel: t("agentHub.fields.agentVersionV2"), tooltip: t("agentHub.fields.agentVersionV2Help") },
+                { key: "v1", value: "v1", label: t("agentHub.fields.agentVersionV1"), tooltipLabel: t("agentHub.fields.agentVersionV1"), tooltip: t("agentHub.fields.agentVersionV1Help") },
+              ]}
+              value={agentVersion}
+              onChange={handleAgentVersionChange}
+              size="xs"
+              color="secondary"
+            />
+          )}
+
+          {/* ── V2 type toggle (create mode, team admin only) ── */}
+          {isCreateMode && isAdmin && agentVersion === "v2" && (
+            <SegmentedControl<V2CreateMode>
+              label={t("agentHub.fields.agentType")}
+              options={
+                (
+                  [
+                    { key: "react", value: "react", label: t("agentHub.fields.v2ModeReact"), tooltipLabel: t("agentHub.fields.v2ModeReact"), tooltip: t("agentHub.fields.v2ModeReactHelp") },
+                    hasReactProfiles && { key: "profile", value: "profile", label: t("agentHub.fields.v2ModeProfile"), tooltipLabel: t("agentHub.fields.v2ModeProfile"), tooltip: t("agentHub.fields.v2ModeProfileHelp") },
+                    hasDefinitionRefs && { key: "definition_ref", value: "definition_ref", label: t("agentHub.fields.v2ModeDefinition"), tooltipLabel: t("agentHub.fields.v2ModeDefinition"), tooltip: t("agentHub.fields.v2ModeDefinitionHelp") },
+                  ] as const
+                ).filter(Boolean) as OptionModel<V2CreateMode>[]
+              }
+              value={v2CreateMode}
+              onChange={handleV2CreateModeChange}
+              size="xs"
+              color="secondary"
+            />
+          )}
+
           {/* Agent Name */}
           <TextField
             label={t("agentEditDrawer.nameLabel")}
@@ -262,8 +344,9 @@ export function AgentCreateEditForm({
               },
             }}
           />
-          {/* Profile selection (create mode only, when profiles are available) */}
-          {isCreateMode && isAdmin && hasReactProfiles && (
+
+          {/* ── Profile picker (V2 profile mode) ── */}
+          {isCreateMode && v2CreateMode === "profile" && (
             <Autocomplete
               options={reactProfiles}
               value={reactProfiles.find((p) => p.profile_id === profileId) ?? null}
@@ -294,17 +377,29 @@ export function AgentCreateEditForm({
             />
           )}
 
-          {/* Class path selection (admin only) */}
-          {isAdmin && !isProfileCreateMode && (
-            <Autocomplete
+          {/* ── Definition ref picker (V2 definition mode) ── */}
+          {isCreateMode && v2CreateMode === "definition_ref" && (
+            <Autocomplete<string>
+              options={v2DefinitionRefs}
+              value={definitionRef}
+              onChange={(_, value) => setDefinitionRef(value)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  size="small"
+                  label={t("agentHub.fields.definitionRef")}
+                  helperText={t("agentHub.fields.definitionRefHelp")}
+                />
+              )}
+            />
+          )}
+
+          {/* ── Class path picker (V1 create or edit, admin only) ── */}
+          {isAdmin && (!isCreateMode || agentVersion === "v1") && (
+            <Autocomplete<string>
               options={declaredClassPaths}
               value={classPath}
-              onChange={(_, value) => {
-                setClassPath(value);
-                if (value) {
-                  setProfileId(null);
-                }
-              }}
+              onChange={(_, value) => setClassPath(value)}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -317,11 +412,11 @@ export function AgentCreateEditForm({
             />
           )}
 
-          {/* Tuning Core Fields */}
-          {!isProfileCreateMode && (
+          {/* ── Tuning core fields (react create or edit) ── */}
+          {showTuningFields && (
             <>
               <TextField
-                label="Role"
+                label={t("agentHub.fields.role")}
                 size="small"
                 value={topLevelTuning.role}
                 onChange={(e) => onTopLevelChange("role", e.target.value)}
@@ -336,7 +431,7 @@ export function AgentCreateEditForm({
                 }}
               />
               <TextField
-                label="Description"
+                label={t("agentHub.fields.description")}
                 size="small"
                 value={topLevelTuning.description}
                 onChange={(e) => onTopLevelChange("description", e.target.value)}
@@ -355,31 +450,28 @@ export function AgentCreateEditForm({
             </>
           )}
 
-          {/* <TagsInput
-            label={t("agentEditDrawer.tagsLabel")}
-            value={topLevelTuning.tags}
-            onChange={(next) => onTopLevelChange("tags", next)}
-          /> */}
+          {/* ── Tools ── */}
+          {showTools && <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />}
 
-          {!isProfileCreateMode && (
-            <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
-          )}
+          {/* ── Dynamic tuning fields ── */}
+          {showTuningFields &&
+            (fields.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {t("agentEditDrawer.noTunableFields")}
+              </Typography>
+            ) : (
+              <TuningForm fields={fields} onChange={onChange} />
+            ))}
 
-          {/* Dynamic Fields */}
-          {isProfileCreateMode ? (
+          {/* ── Profile description (profile mode) ── */}
+          {isCreateMode && v2CreateMode === "profile" && profileId && (
             <Typography variant="body2" color="text.secondary">
-              {reactProfiles.find((p) => p.profile_id === profileId)?.agent_description ??
+              {reactProfiles.find((p: ReActProfileSummary) => p.profile_id === profileId)?.agent_description ??
                 t("agentHub.fields.profileHelp")}
             </Typography>
-          ) : fields.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {t("agentEditDrawer.noTunableFields")}
-            </Typography>
-          ) : (
-            <TuningForm fields={fields} onChange={onChange} />
           )}
 
-          {/* Workspace Files (edit mode only. Only for admin for now to simplify. Should be moved to tools param that require files) */}
+          {/* Workspace Files (edit mode only, admin only) */}
           {isAdmin && !isCreateMode && (
             <>
               <Divider />

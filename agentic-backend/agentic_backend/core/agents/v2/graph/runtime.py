@@ -13,6 +13,7 @@ orchestration, streaming events, checkpoints, and resume behavior.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -778,21 +779,43 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
     async def stream(
         self, input_model: BaseModel, config: ExecutionConfig
     ) -> AsyncIterator[RuntimeEvent]:
+        """
+        Stream runtime events as they are emitted by each graph node.
+
+        Previous implementation collected all events during _execute() then
+        replayed them after completion — blocking the caller until the entire
+        graph finished. This implementation uses asyncio.Queue so each event
+        is yielded immediately when the node emits it, giving the same
+        real-time token streaming behaviour as the V2 ReAct runtime.
+        """
+        queue: asyncio.Queue[RuntimeEvent | None] = asyncio.Queue()
         sequence = 0
-        emitted_events: list[RuntimeEvent] = []
 
-        def _collect(event: RuntimeEvent) -> None:
-            emitted_events.append(event)
+        def _put(event: RuntimeEvent) -> None:
+            # Called synchronously from within the async _execute loop.
+            # put_nowait is safe here: both producer and consumer run in the
+            # same event loop; the queue is unbounded so it never blocks.
+            queue.put_nowait(event)
 
-        await self._execute(
-            input_model=input_model,
-            config=config,
-            emit_event=_collect,
+        execute_task = asyncio.create_task(
+            self._execute(input_model=input_model, config=config, emit_event=_put)
         )
 
-        for event in emitted_events:
+        # Signal end-of-stream via sentinel once the task finishes (normal or error).
+        # _execute() already emits a FinalRuntimeEvent on error when emit_event is set,
+        # so by the time the sentinel arrives all events are already in the queue.
+        execute_task.add_done_callback(lambda _: queue.put_nowait(None))
+
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
             yield _resequence_event(event, sequence)
             sequence += 1
+
+        # Re-raise any exception that escaped _execute's own error handler.
+        if not execute_task.cancelled():
+            execute_task.result()
 
     async def _execute(
         self,

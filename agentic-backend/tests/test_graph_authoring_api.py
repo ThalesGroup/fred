@@ -7,10 +7,6 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel
 
-from agentic_backend.agents.v2.candidate.sql_analyst_graph.tabular_capabilities import (
-    get_database_context,
-    read_query_rows,
-)
 from agentic_backend.core.agents.v2 import (
     BoundRuntimeContext,
     GraphExecutionOutput,
@@ -238,28 +234,6 @@ async def test_intent_router_step_returns_route_key_and_updates() -> None:
 
     assert result.route_key == "capabilities"
     assert result.state_update == {"final_text": "meta"}
-
-
-@pytest.mark.asyncio
-async def test_tabular_capabilities_hide_runtime_tool_payload_shapes() -> None:
-    context_map = await get_database_context(
-        cast(
-            GraphNodeContext,
-            _FakeContext(runtime_payload='{"analytics": [{"table_name": "sales"}]}'),
-        )
-    )
-    rows = await read_query_rows(
-        cast(
-            GraphNodeContext,
-            _FakeContext(runtime_payload='{"rows": [{"count": 3}, {"count": 4}]}'),
-        ),
-        db_name="analytics",
-        query="SELECT count(*) FROM sales",
-        maximum=1,
-    )
-
-    assert context_map == {"analytics": [{"table_name": "sales"}]}
-    assert rows == [{"count": 3}]
 
 
 def test_finalize_step_sets_fallback_only_when_terminal_text_is_missing() -> None:

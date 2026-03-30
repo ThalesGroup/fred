@@ -4,7 +4,7 @@ import asyncio
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agentic_backend.agents.prometheus.prometheus_expert import Spot
+from agentic_backend.agents.v1.production.prometheus.prometheus_expert import Spot
 from agentic_backend.common.structures import AgentSettings
 
 
