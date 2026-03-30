@@ -40,6 +40,10 @@
   height: var(--select-height);
 }
 
+.select-container[data-size="xs"] {
+  --select-height: 2rem;
+}
+
 .select-container[data-size="small"] {
   --select-height: 2.5rem;
 }

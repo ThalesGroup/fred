@@ -78,6 +78,16 @@ processing:
         preserve_tables: true
       input_activity_timeout: 1h
       process_images: false
+      pdf:
+        backend: docling_parse
+        images_scale: 1.5
+        generate_picture_images: false
+        generate_page_images: false
+        generate_table_images: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: false
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -113,6 +123,16 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: true
+      pdf:
+        backend: docling_parse
+        images_scale: 2.0
+        generate_picture_images: true
+        generate_page_images: false
+        generate_table_images: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_activity_timeout: 1h
       text_splitter:
         chunk_size: 1500

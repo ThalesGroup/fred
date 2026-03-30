@@ -40,46 +40,38 @@ from agentic_backend.core.agents.agent_loader import AgentLoader
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_service import AgentService
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.catalog import (
+from agentic_backend.core.agents.v2.contracts.models import (
+    AgentDefinition,
+    GraphAgentDefinition,
+    ReActAgentDefinition,
+)
+from agentic_backend.core.agents.v2.contracts.runtime import (
+    ChatModelFactoryPort,
+)
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
     apply_profile_defaults_to_settings,
     apply_react_profile_to_definition,
-    build_bound_runtime_context,
     build_definition_from_settings,
     definition_to_agent_settings,
     instantiate_definition_class,
 )
-from agentic_backend.core.agents.v2.context import BoundRuntimeContext
-from agentic_backend.core.agents.v2.graph_runtime import GraphRuntime
+from agentic_backend.core.agents.v2.legacy_bridge.runtime_bootstrap import (
+    build_v2_session_agent,
+)
+from agentic_backend.core.agents.v2.legacy_bridge.runtime_context_bridge import (
+    build_bound_runtime_context,
+)
 from agentic_backend.core.agents.v2.model_routing import (
     ModelRoutingResolver,
     RoutedChatModelFactory,
     load_model_routing_policy_from_catalog,
 )
-from agentic_backend.core.agents.v2.models import (
-    AgentDefinition,
-    GraphAgentDefinition,
-    ReActAgentDefinition,
-)
-from agentic_backend.core.agents.v2.react_runtime import ReActRuntime
-from agentic_backend.core.agents.v2.runtime import (
-    ChatModelFactoryPort,
-    RuntimeServices,
-    ToolInvokerPort,
-)
-from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
-from agentic_backend.core.agents.v2.sql_checkpointer import FredSqlCheckpointer
-from agentic_backend.core.agents.v2.toolset_registry import (
-    ToolsetRuntimePorts,
-    build_registered_tool_handlers,
+from agentic_backend.core.agents.v2.runtime_support import (
+    FredSqlCheckpointer,
+    V2SessionAgent,
 )
 from agentic_backend.integrations.v2_runtime.adapters import (
-    CompositeToolInvoker,
     DefaultFredChatModelFactory,
-    FredArtifactPublisher,
-    FredKnowledgeSearchToolInvoker,
-    FredMcpToolProvider,
-    FredResourceReader,
-    build_langfuse_tracer,
 )
 
 logger = logging.getLogger(__name__)
@@ -407,6 +399,23 @@ class AgentFactory(BaseAgentFactory):
         definition: AgentDefinition,
         effective_settings: AgentSettings,
     ) -> V2SessionAgent:
+        """
+        Build one v2 session agent through the explicit legacy bridge package.
+
+        Why this function exists:
+        - `AgentFactory` still lives in the mixed legacy/v2 orchestration layer
+        - the actual v2 runtime bootstrap should be delegated to
+          `v2.legacy_bridge.runtime_bootstrap` so the migration boundary stays
+          visible
+
+        How to use it:
+        - call after a typed v2 `definition` and effective legacy
+          `AgentSettings` were already resolved
+
+        Example:
+        - `session_agent = self._build_v2_session_agent(user=user, runtime_context=ctx, definition=definition, effective_settings=settings)`
+        """
+
         binding = build_bound_runtime_context(
             user=user,
             runtime_context=runtime_context,
@@ -414,65 +423,18 @@ class AgentFactory(BaseAgentFactory):
             agent_name=effective_settings.name,
             team_id=effective_settings.team_id,
         )
-        chat_model_factory = self._resolve_chat_model_factory(definition)
-        base_tool_invoker = FredKnowledgeSearchToolInvoker(
-            binding=binding,
-            settings=effective_settings,
-        )
-        tool_provider = FredMcpToolProvider(
-            binding=binding,
-            settings=effective_settings,
-        )
-        artifact_publisher = FredArtifactPublisher(
-            binding=binding,
-            settings=effective_settings,
-        )
-        resource_reader = FredResourceReader(
-            binding=binding,
-            settings=effective_settings,
-        )
         checkpointer = (
             self._get_v2_checkpointer()
             if self._configuration.ai.enable_v2_sql_checkpointer
             else None
         )
-        services = RuntimeServices(
-            tracer=build_langfuse_tracer(),
-            chat_model_factory=chat_model_factory,
-            tool_invoker=self._build_v2_tool_invoker(
-                definition=definition,
-                binding=binding,
-                effective_settings=effective_settings,
-                base_tool_invoker=base_tool_invoker,
-                ports=ToolsetRuntimePorts(
-                    chat_model_factory=chat_model_factory,
-                    artifact_publisher=artifact_publisher,
-                    resource_reader=resource_reader,
-                    fallback_tool_invoker=base_tool_invoker,
-                ),
-            ),
-            tool_provider=tool_provider,
-            artifact_publisher=artifact_publisher,
-            resource_reader=resource_reader,
-            kpi=get_kpi_writer(),
+        return build_v2_session_agent(
+            definition=definition,
+            effective_settings=effective_settings,
+            binding=binding,
+            chat_model_factory=self._resolve_chat_model_factory(definition),
             checkpointer=checkpointer,
         )
-        if isinstance(definition, ReActAgentDefinition):
-            runtime = ReActRuntime(
-                definition=definition,
-                services=services,
-            )
-        elif isinstance(definition, GraphAgentDefinition):
-            runtime = GraphRuntime(
-                definition=definition,
-                services=services,
-            )
-        else:
-            raise NotImplementedError(
-                f"V2 execution category '{definition.execution_category.value}' is not wired yet."
-            )
-        runtime.bind(binding)
-        return V2SessionAgent(runtime=runtime)
 
     def _resolve_chat_model_factory(
         self, definition: AgentDefinition
@@ -588,30 +550,6 @@ class AgentFactory(BaseAgentFactory):
                 "[V2][MODEL_ROUTING] Failed to initialize routed chat model factory. Falling back to default chat model."
             )
             return None
-
-    def _build_v2_tool_invoker(
-        self,
-        *,
-        definition: AgentDefinition,
-        binding: BoundRuntimeContext,
-        effective_settings: AgentSettings,
-        base_tool_invoker: ToolInvokerPort,
-        ports: ToolsetRuntimePorts,
-    ):
-        toolset_key = getattr(definition, "toolset_key", None)
-        handlers = build_registered_tool_handlers(
-            definition=definition,
-            toolset_key=toolset_key,
-            binding=binding,
-            settings=effective_settings,
-            ports=ports,
-        )
-        if not handlers:
-            return base_tool_invoker
-        return CompositeToolInvoker(
-            handlers=handlers,
-            fallback=base_tool_invoker,
-        )
 
     def _get_v2_checkpointer(self) -> FredSqlCheckpointer:
         """

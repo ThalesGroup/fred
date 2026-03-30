@@ -3,10 +3,10 @@ Public v2 API surface with lazy exports.
 
 Why this file is intentionally lazy:
 - importing `agentic_backend.core.agents.v2.<submodule>` first loads this
-  package module;
+  package module
 - eager imports here can create startup-time circular imports with
-  `application_context`;
-- runtime code should not depend on package import side effects.
+  `application_context`
+- runtime code should not depend on package import side effects
 """
 
 from __future__ import annotations
@@ -15,9 +15,23 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
-    from .authoring import ReActAgent as AuthoredReActAgent
-    from .authoring import SearchBundle, ToolContext, ToolOutput, prompt_md, tool
-    from .context import (
+    from .authoring import (
+        MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
+        MCP_SERVER_KNOWLEDGE_FLOW_FS,
+        MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
+        MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS,
+        MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
+        MCPServerRef,
+        ToolContext,
+        ToolOutput,
+        inspect_agent,
+        prompt_md,
+        tool,
+    )
+    from .authoring import (
+        ReActAgent as AuthoredReActAgent,
+    )
+    from .contracts.context import (
         ArtifactPublishRequest,
         ArtifactScope,
         BoundRuntimeContext,
@@ -33,22 +47,11 @@ if TYPE_CHECKING:
         ToolInvocationResult,
         UiPart,
     )
-    from .graph_runtime import (
-        GraphExecutionOutput,
-        GraphNodeContext,
-        GraphNodeHandler,
-        GraphNodeResult,
-        GraphRuntime,
-    )
-    from .inspection import inspect_agent
-    from .lexicon_resources import (
-        load_agent_lexicon_json,
-        load_packaged_json_object,
-    )
-    from .models import (
+    from .contracts.models import (
         AgentDefinition,
         AgentInspection,
         AgentPreview,
+        DeepAgentDefinition,
         ExecutionCategory,
         GraphAgentDefinition,
         GraphConditionalDefinition,
@@ -65,21 +68,11 @@ if TYPE_CHECKING:
         ReActAgentDefinition,
         ReActPolicy,
         ToolApprovalPolicy,
-        ToolCapabilityRequirement,
         ToolRefRequirement,
         ToolRequirement,
         ToolSelectionPolicy,
     )
-    from .react_profiles import ReActProfile, get_react_profile, list_react_profiles
-    from .react_runtime import (
-        ReActInput,
-        ReActMessage,
-        ReActMessageRole,
-        ReActOutput,
-        ReActRuntime,
-        ReActToolCall,
-    )
-    from .runtime import (
+    from .contracts.runtime import (
         AgentRuntime,
         ArtifactPublisherPort,
         AssistantDeltaRuntimeEvent,
@@ -103,34 +96,41 @@ if TYPE_CHECKING:
         ToolProviderPort,
         ToolResultRuntimeEvent,
         TracerPort,
-        WorkspaceClientFactoryPort,
-        WorkspaceClientPort,
     )
-    from .toolset_registry import (
-        ToolHandler,
-        ToolRefSpec,
-        ToolsetRegistration,
-        ToolsetRuntimePorts,
-        build_registered_tool_handlers,
-        get_registered_tool_spec,
-        get_toolset_registration,
-        register_toolset,
+    from .deep import DeepAgentRuntime
+    from .graph import (
+        GraphExecutionOutput,
+        GraphNodeContext,
+        GraphNodeHandler,
+        GraphNodeResult,
+        GraphRuntime,
     )
+    from .react.react_runtime import (
+        ReActInput,
+        ReActMessage,
+        ReActMessageRole,
+        ReActOutput,
+        ReActRuntime,
+        ReActToolCall,
+    )
+    from .resources import load_agent_prompt_markdown, load_packaged_markdown
 
 __all__ = [
     "AgentDefinition",
     "AgentInspection",
     "AgentPreview",
     "AgentRuntime",
-    "AuthoredReActAgent",
     "ArtifactPublishRequest",
     "ArtifactPublisherPort",
     "ArtifactScope",
     "AssistantDeltaRuntimeEvent",
+    "AuthoredReActAgent",
     "AwaitingHumanRuntimeEvent",
     "BoundRuntimeContext",
     "ChatModelFactoryPort",
     "CheckpointStrategy",
+    "DeepAgentDefinition",
+    "DeepAgentRuntime",
     "ExecutionCategory",
     "ExecutionConfig",
     "Executor",
@@ -144,72 +144,63 @@ __all__ = [
     "GraphNodeContext",
     "GraphNodeDefinition",
     "GraphNodeHandler",
-    "GraphNodeShape",
     "GraphNodeResult",
+    "GraphNodeShape",
     "GraphRouteDefinition",
     "GraphRuntime",
     "GuardrailDefinition",
     "HumanChoiceOption",
     "HumanInputRequest",
+    "MCPServerRef",
+    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
+    "MCP_SERVER_KNOWLEDGE_FLOW_FS",
+    "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
+    "MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS",
+    "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
     "PortableContext",
     "PortableEnvironment",
     "PreviewKind",
-    "PublishedArtifact",
-    "ResourceFetchRequest",
-    "ResourceReaderPort",
-    "ResourceScope",
     "ProxyAgentDefinition",
     "ProxySpec",
     "ProxyTransportKind",
-    "ReActInput",
+    "PublishedArtifact",
     "ReActAgentDefinition",
+    "ReActInput",
     "ReActMessage",
     "ReActMessageRole",
     "ReActOutput",
-    "ReActProfile",
     "ReActPolicy",
     "ReActRuntime",
     "ReActToolCall",
+    "ResourceFetchRequest",
+    "ResourceReaderPort",
+    "ResourceScope",
     "RuntimeEvent",
     "RuntimeEventKind",
     "RuntimeServices",
     "SpanPort",
     "StatusRuntimeEvent",
     "TokenProviderPort",
-    "ToolCapabilityRequirement",
+    "ToolApprovalPolicy",
     "ToolCallRuntimeEvent",
     "ToolContentBlock",
     "ToolContentKind",
+    "ToolContext",
     "ToolInvocationRequest",
     "ToolInvocationResult",
     "ToolInvokerPort",
+    "ToolOutput",
     "ToolProviderPort",
     "ToolRefRequirement",
-    "ToolRefSpec",
     "ToolRequirement",
     "ToolResultRuntimeEvent",
     "ToolSelectionPolicy",
-    "ToolApprovalPolicy",
-    "ToolContext",
-    "ToolHandler",
-    "ToolOutput",
-    "ToolsetRegistration",
-    "ToolsetRuntimePorts",
     "TracerPort",
     "UiPart",
-    "SearchBundle",
-    "WorkspaceClientFactoryPort",
-    "WorkspaceClientPort",
-    "build_registered_tool_handlers",
-    "get_react_profile",
-    "get_registered_tool_spec",
-    "get_toolset_registration",
     "inspect_agent",
-    "list_react_profiles",
-    "load_agent_lexicon_json",
-    "load_packaged_json_object",
+    "load_agent_prompt_markdown",
+    "load_packaged_markdown",
     "prompt_md",
-    "register_toolset",
     "tool",
 ]
 
@@ -223,7 +214,26 @@ def _module_exports(
 _EXPORTS: Final[dict[str, tuple[str, str]]] = {}
 _EXPORTS.update(
     _module_exports(
-        module="context",
+        module="authoring",
+        names=(
+            "MCPServerRef",
+            "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
+            "MCP_SERVER_KNOWLEDGE_FLOW_FS",
+            "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
+            "MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS",
+            "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
+            "ToolContext",
+            "ToolOutput",
+            "inspect_agent",
+            "prompt_md",
+            "tool",
+        ),
+    )
+)
+_EXPORTS["AuthoredReActAgent"] = ("authoring", "ReActAgent")
+_EXPORTS.update(
+    _module_exports(
+        module="contracts.context",
         names=(
             "ArtifactPublishRequest",
             "ArtifactScope",
@@ -244,23 +254,12 @@ _EXPORTS.update(
 )
 _EXPORTS.update(
     _module_exports(
-        module="graph_runtime",
-        names=(
-            "GraphExecutionOutput",
-            "GraphNodeContext",
-            "GraphNodeHandler",
-            "GraphNodeResult",
-            "GraphRuntime",
-        ),
-    )
-)
-_EXPORTS.update(
-    _module_exports(
-        module="models",
+        module="contracts.models",
         names=(
             "AgentDefinition",
             "AgentInspection",
             "AgentPreview",
+            "DeepAgentDefinition",
             "ExecutionCategory",
             "GraphAgentDefinition",
             "GraphConditionalDefinition",
@@ -277,7 +276,6 @@ _EXPORTS.update(
             "ReActAgentDefinition",
             "ReActPolicy",
             "ToolApprovalPolicy",
-            "ToolCapabilityRequirement",
             "ToolRefRequirement",
             "ToolRequirement",
             "ToolSelectionPolicy",
@@ -286,30 +284,7 @@ _EXPORTS.update(
 )
 _EXPORTS.update(
     _module_exports(
-        module="react_profiles",
-        names=(
-            "ReActProfile",
-            "get_react_profile",
-            "list_react_profiles",
-        ),
-    )
-)
-_EXPORTS.update(
-    _module_exports(
-        module="react_runtime",
-        names=(
-            "ReActInput",
-            "ReActMessage",
-            "ReActMessageRole",
-            "ReActOutput",
-            "ReActRuntime",
-            "ReActToolCall",
-        ),
-    )
-)
-_EXPORTS.update(
-    _module_exports(
-        module="runtime",
+        module="contracts.runtime",
         names=(
             "AgentRuntime",
             "ArtifactPublisherPort",
@@ -334,49 +309,49 @@ _EXPORTS.update(
             "ToolProviderPort",
             "ToolResultRuntimeEvent",
             "TracerPort",
-            "WorkspaceClientFactoryPort",
-            "WorkspaceClientPort",
         ),
     )
 )
 _EXPORTS.update(
     _module_exports(
-        module="toolset_registry",
+        module="deep",
+        names=("DeepAgentRuntime",),
+    )
+)
+_EXPORTS.update(
+    _module_exports(
+        module="graph",
         names=(
-            "ToolHandler",
-            "ToolRefSpec",
-            "ToolsetRegistration",
-            "ToolsetRuntimePorts",
-            "build_registered_tool_handlers",
-            "get_registered_tool_spec",
-            "get_toolset_registration",
-            "register_toolset",
+            "GraphExecutionOutput",
+            "GraphNodeContext",
+            "GraphNodeHandler",
+            "GraphNodeResult",
+            "GraphRuntime",
         ),
     )
 )
 _EXPORTS.update(
     _module_exports(
-        module="lexicon_resources",
+        module="react.react_runtime",
         names=(
-            "load_agent_lexicon_json",
-            "load_packaged_json_object",
+            "ReActInput",
+            "ReActMessage",
+            "ReActMessageRole",
+            "ReActOutput",
+            "ReActRuntime",
+            "ReActToolCall",
         ),
     )
 )
-_EXPORTS.update(_module_exports(module="inspection", names=("inspect_agent",)))
 _EXPORTS.update(
     _module_exports(
-        module="authoring",
+        module="resources",
         names=(
-            "SearchBundle",
-            "ToolContext",
-            "ToolOutput",
-            "prompt_md",
-            "tool",
+            "load_agent_prompt_markdown",
+            "load_packaged_markdown",
         ),
     )
 )
-_EXPORTS["AuthoredReActAgent"] = ("authoring", "ReActAgent")
 
 
 if set(__all__) != set(_EXPORTS):

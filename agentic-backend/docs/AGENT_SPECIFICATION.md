@@ -28,8 +28,12 @@ Fred is a runtime platform for agents.
 An agent is a declarative component that provides:
 
 - static metadata (role, description, tags, fields)
-- declared tool requirements
 - an execution description (graph factory, policy, or proxy contract)
+
+Tool-aware executable families such as ReAct and Graph additionally provide:
+
+- declared Fred tool refs
+- optional default MCP servers
 
 Fred runtime owns:
 
@@ -59,9 +63,13 @@ Properties:
 - stable agent identifier (string)
 - metadata (role, description, tags)
 - field schema (tuning fields)
-- tool requirements (names/capabilities)
 - execution category (see section 6)
 - optional preview/inspection artifact (see section 5)
+
+Tool-aware executable families such as ReAct and Graph additionally declare:
+
+- declared Fred tool refs
+- optional default MCP servers
 
 AgentDefinition MUST be buildable and inspectable without activating runtime dependencies.
 AgentDefinition MUST NOT perform external I/O.
@@ -155,7 +163,8 @@ AgentInspection is a structured payload containing:
 - role, description, tags
 - field schema (including UI hints)
 - execution category
-- declared tool requirements (names, optional capability descriptors)
+- declared Fred tool refs
+- default MCP servers when relevant
 - preview (optional):
   - `preview.kind` in {"none", "mermaid", "dag", "text"}
   - `preview.content` (string)
@@ -200,7 +209,8 @@ GraphDefinition MAY be used to produce a preview artifact (Mermaid) without acti
 ReActAgent provides:
 
 - a system prompt template (tuned fields)
-- a tool policy (declared tools + selection constraints)
+- declared Fred tool refs plus optional default MCP servers
+- a tool policy (selection constraints + approval)
 - optional guardrails
 
 Contract:
@@ -352,11 +362,15 @@ the platform MUST:
 Agent authors implement only:
 
 - metadata and tuning fields
-- declared tool requirements
 - execution category contract:
   - GraphAgent: `build_graph(...)` and node functions
   - ReActAgent: `policy(...)` (prompt + tools + guardrails)
   - ProxyAgent: `proxy_spec(...)`
+
+When the chosen family is tool-aware, authors also declare:
+
+- declared Fred tool refs
+- optional default MCP servers
 
 Agent authors MUST NOT:
 
@@ -392,7 +406,7 @@ Minimum required tests per agent definition:
 - Call inspect_agent(...)
 - Assert no activation occurs
 - Assert no external I/O occurs (best-effort detection)
-- Assert payload includes metadata and tool requirements
+- Assert payload includes metadata and declared tool refs
 
 ### 12.2 runtime_reuse_equivalence
 
@@ -443,7 +457,8 @@ However:
 
 ## 15. One-Paragraph Summary (Contributor Facing)
 
-An agent is a definition: metadata, fields, tool requirements, and an execution category contract.
+An agent is a definition: metadata, fields, and an execution category contract.
+Tool-aware families such as ReAct and Graph additionally declare Fred tool refs and optional MCP defaults.
 Fred owns runtime: binding context, activating dependencies, compiling executors, streaming execution,
 inspection, caching, and observability.
 Inspection is metadata-first and never activates dependencies.
