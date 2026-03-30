@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, cast
 
 import pytest
-from fred_core import RelationType, TeamPermission
+from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
@@ -512,11 +512,31 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
             self.delete_relations_calls += 1
 
     class _FakeSessionStore:
-        async def get_payloads_for_user(self, _user_id: str) -> list[dict]:
+        async def get_for_user(
+            self, _user_id: str, db_session=None
+        ) -> list[SessionSchema]:
             return [
-                {"id": "s-1", "team_id": "swiftpost"},
-                {"id": "s-2", "team_id": "northbridge"},
-                {"id": "s-3", "team_id": "swiftpost"},
+                SessionSchema(
+                    id="s-1",
+                    user_id=_user_id,
+                    team_id="swiftpost",
+                    title="",
+                    updated_at=datetime.now(),
+                ),
+                SessionSchema(
+                    id="s-2",
+                    user_id=_user_id,
+                    team_id="northbridge",
+                    title="",
+                    updated_at=datetime.now(),
+                ),
+                SessionSchema(
+                    id="s-3",
+                    user_id=_user_id,
+                    team_id="swiftpost",
+                    title="",
+                    updated_at=datetime.now(),
+                ),
             ]
 
     class _FakeQueueStore:
@@ -609,8 +629,18 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
             return None
 
     class _FakeSessionStore:
-        async def get_payloads_for_user(self, _user_id: str) -> list[dict]:
-            return [{"id": "s-1", "team_id": "temp-lab"}]
+        async def get_for_user(
+            self, _user_id: str, db_session=None
+        ) -> list[SessionSchema]:
+            return [
+                SessionSchema(
+                    id="s-1",
+                    user_id=_user_id,
+                    team_id="temp-lab",
+                    title="",
+                    updated_at=datetime.now(),
+                )
+            ]
 
     class _FakeQueueStore:
         async def enqueue(

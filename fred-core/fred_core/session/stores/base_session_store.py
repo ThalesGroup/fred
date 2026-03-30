@@ -12,33 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fred_core.session.session_schema import SessionSchema
 
 
 class BaseSessionStore(ABC):
     """Application-level session store contract."""
 
     @abstractmethod
-    async def save(self, session: Any) -> None:
-        """Save one session."""
+    async def save(
+        self, session: SessionSchema, db_session: AsyncSession | None = None
+    ) -> None:
+        """Save one session, optionally reusing an existing DB session/transaction."""
 
     @abstractmethod
-    async def get(self, session_id: str) -> Any | None:
+    async def get(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> SessionSchema | None:
         """Retrieve one session by ID."""
 
     @abstractmethod
-    async def delete(self, session_id: str) -> None:
+    async def delete(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> None:
         """Delete one session by ID."""
 
     @abstractmethod
-    async def get_for_user(self, user_id: str) -> list[Any]:
+    async def get_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> list[SessionSchema]:
         """Retrieve all sessions for a user."""
 
     @abstractmethod
-    async def count_for_user(self, user_id: str) -> int:
+    async def count_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> int:
         """Count sessions for a user."""
-
-    @abstractmethod
-    async def save_with_conn(self, conn: Any, session: Any) -> None:
-        """Save one session using an existing transaction connection."""

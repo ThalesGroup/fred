@@ -13,26 +13,31 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Dict, List
 
-from agentic_backend.core.chatbot.chat_schema import (
-    ChatMessage,
-)
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from agentic_backend.core.chatbot.chat_schema import ChatMessage
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 
 
 class BaseHistoryStore(ABC):
     @abstractmethod
     async def save(
-        self, session_id: str, messages: List[ChatMessage], user_id: str
+        self,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
-        """Save a batch of messages to the session history."""
+        """Save a batch of messages, optionally reusing an existing DB session/transaction."""
         pass
 
     @abstractmethod
     async def get(
         self,
         session_id: str,
+        session: AsyncSession | None = None,
     ) -> List[ChatMessage]:
         """Retrieve messages for a given session."""
         pass
@@ -46,15 +51,7 @@ class BaseHistoryStore(ABC):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
+        session: AsyncSession | None = None,
     ) -> MetricsResponse:
-        """Retrieve messages for a given session."""
-        pass
-
-    @abstractmethod
-    async def save_with_conn(
-        self, conn: Any, session_id: str, messages: List[ChatMessage], user_id: str
-    ) -> None:
-        """
-        Reuse an existing DB connection/transaction.
-        """
+        """Retrieve chatbot metrics."""
         pass

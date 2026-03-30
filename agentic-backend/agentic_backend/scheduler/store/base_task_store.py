@@ -17,6 +17,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Sequence
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from agentic_backend.scheduler.task_structures import (
     AgentContextRefsV1,
     AgentTaskRecordV1,
@@ -51,6 +53,7 @@ class BaseAgentTaskStore(ABC):
         run_id: Optional[str] = None,
         context: Optional[AgentContextRefsV1] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        session: AsyncSession | None = None,
     ) -> AgentTaskRecordV1:
         """
         Create or upsert a task record.
@@ -62,12 +65,16 @@ class BaseAgentTaskStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get(self, task_id: str) -> AgentTaskRecordV1:
+    async def get(
+        self, task_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
         """Return task by id or raise AgentTaskNotFoundError."""
         raise NotImplementedError
 
     @abstractmethod
-    async def get_for_user(self, *, task_id: str, user_id: str) -> AgentTaskRecordV1:
+    async def get_for_user(
+        self, *, task_id: str, user_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
         """Return task if owned by user, else raise AgentTaskForbiddenError/NotFound."""
         raise NotImplementedError
 
@@ -79,6 +86,7 @@ class BaseAgentTaskStore(ABC):
         limit: int = 20,
         statuses: Optional[Sequence[AgentTaskStatus]] = None,
         target_agent: Optional[str] = None,
+        session: AsyncSession | None = None,
     ) -> List[AgentTaskRecordV1]:
         """List tasks for user ordered by creation time (newest first)."""
         raise NotImplementedError
@@ -90,6 +98,7 @@ class BaseAgentTaskStore(ABC):
         task_id: str,
         workflow_id: str,
         run_id: Optional[str],
+        session: AsyncSession | None = None,
     ) -> None:
         """Update workflow handle fields for an existing task."""
         raise NotImplementedError
@@ -105,6 +114,7 @@ class BaseAgentTaskStore(ABC):
         blocked: Optional[Dict[str, Any]] = None,
         artifacts: Optional[List[str]] = None,
         error_json: Optional[Dict[str, Any]] = None,
+        session: AsyncSession | None = None,
     ) -> None:
         """
         Updates the cached status and progress.

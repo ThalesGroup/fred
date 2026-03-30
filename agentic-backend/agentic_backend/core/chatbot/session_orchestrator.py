@@ -31,6 +31,7 @@ from fred_core import (
     BaseSessionStore,
     KeycloakUser,
     Resource,
+    SessionSchema,
     authorize,
 )
 from fred_core.kpi import (
@@ -47,7 +48,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-from agentic_backend.application_context import get_default_model, pg_async_tx
+from agentic_backend.application_context import get_default_model, pg_async_session
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -75,7 +76,6 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatMessage,
     ChatMetadata,
     Role,
-    SessionSchema,
     SessionWithFiles,
     TextPart,
     ToolCallPart,
@@ -738,13 +738,17 @@ class SessionOrchestrator:
             session.next_rank = base_rank + len(all_msgs)
 
             t0 = time.perf_counter()
-            async with phase_timer(self.kpi, "persist_tx"), pg_async_tx() as conn:
-                t1 = time.perf_counter()
-                await self.history_store.save_with_conn(
-                    conn, session.id, all_msgs, user.uid
-                )
-                await self.session_store.save_with_conn(conn, session)
-                t2 = time.perf_counter()
+            async with (
+                phase_timer(self.kpi, "persist_tx"),
+                pg_async_session() as orm_session,
+            ):
+                async with orm_session.begin():
+                    t1 = time.perf_counter()
+                    await self.history_store.save(
+                        session.id, all_msgs, user.uid, session=orm_session
+                    )
+                    await self.session_store.save(session, db_session=orm_session)
+                    t2 = time.perf_counter()
 
             pool_wait_ms = (t1 - t0) * 1000.0
             sql_ms = (t2 - t1) * 1000.0

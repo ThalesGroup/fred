@@ -1,19 +1,22 @@
 from datetime import datetime, timezone
 from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table
 from sqlalchemy.dialects import postgresql
 
 from agentic_backend.core.monitoring.postgres_history_store import PostgresHistoryStore
 
 
 class _FakeResult:
-    def fetchall(self):
-        return []
+    def __init__(self):
+        self.statement = None
+
+    def scalars(self):
+        return MagicMock(all=MagicMock(return_value=[]))
 
 
-class _FakeConn:
+class _FakeSession:
     def __init__(self):
         self.statement = None
 
@@ -22,60 +25,37 @@ class _FakeConn:
         return _FakeResult()
 
 
-class _FakeBeginContext:
-    def __init__(self, conn):
-        self.conn = conn
-
-    async def __aenter__(self):
-        return self.conn
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
-
-
-class _FakeStore:
-    def __init__(self, conn):
-        self.conn = conn
-
-    def begin(self):
-        return _FakeBeginContext(self.conn)
-
-
 @pytest.mark.asyncio
 async def test_get_chatbot_metrics_binds_datetime_filters():
-    conn = _FakeConn()
+    fake_session = _FakeSession()
 
-    # Bypass __init__ on purpose to isolate the SQL filter typing behavior.
-    # Use Any during setup because we inject test doubles for internals.
     store = cast(Any, object.__new__(PostgresHistoryStore))
-    store.store = _FakeStore(conn)
-    store.table = Table(
-        "session_history",
-        MetaData(),
-        Column("session_id", String),
-        Column("user_id", String),
-        Column("rank", Integer),
-        Column("timestamp", DateTime(timezone=True)),
-        Column("role", String),
-        Column("channel", String),
-        Column("exchange_id", String),
-        Column("parts_json", String),
-        Column("metadata_json", String),
-    )
+    store._sessions = None  # bypassed __init__; use_session is patched below
 
-    response = await cast(PostgresHistoryStore, store).get_chatbot_metrics(
-        start="2026-02-15T16:00:00.000Z",
-        end="2026-02-16T04:59:59.999Z",
-        user_id="u-1",
-        precision="hour",
-        groupby=[],
-        agg_mapping={},
-    )
+    with patch(
+        "agentic_backend.core.monitoring.postgres_history_store.use_session"
+    ) as mock_use_session:
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _fake_use_session(factory, session=None):
+            yield fake_session
+
+        mock_use_session.side_effect = _fake_use_session
+
+        response = await cast(PostgresHistoryStore, store).get_chatbot_metrics(
+            start="2026-02-15T16:00:00.000Z",
+            end="2026-02-16T04:59:59.999Z",
+            user_id="u-1",
+            precision="hour",
+            groupby=[],
+            agg_mapping={},
+        )
 
     assert response.buckets == []
-    assert conn.statement is not None
+    assert fake_session.statement is not None
 
-    compiled = conn.statement.compile(dialect=postgresql.dialect())
+    compiled = fake_session.statement.compile(dialect=postgresql.dialect())
     timestamp_params = {
         key: value for key, value in compiled.params.items() if "timestamp" in key
     }
@@ -93,30 +73,16 @@ async def test_get_chatbot_metrics_binds_datetime_filters():
 
 @pytest.mark.asyncio
 async def test_get_chatbot_metrics_rejects_invalid_start_timestamp():
-    conn = _FakeConn()
-
     store = cast(Any, object.__new__(PostgresHistoryStore))
-    store.store = _FakeStore(conn)
-    store.table = Table(
-        "session_history",
-        MetaData(),
-        Column("session_id", String),
-        Column("user_id", String),
-        Column("rank", Integer),
-        Column("timestamp", DateTime(timezone=True)),
-        Column("role", String),
-        Column("channel", String),
-        Column("exchange_id", String),
-        Column("parts_json", String),
-        Column("metadata_json", String),
-    )
+    store._sessions = None  # bypassed __init__; use_session is patched below
 
-    with pytest.raises(ValueError, match=r"Invalid 'start' timestamp"):
-        await cast(PostgresHistoryStore, store).get_chatbot_metrics(
-            start="not-a-datetime",
-            end="2026-02-16T04:59:59.999Z",
-            user_id="u-1",
-            precision="hour",
-            groupby=[],
-            agg_mapping={},
-        )
+    with patch("agentic_backend.core.monitoring.postgres_history_store.use_session"):
+        with pytest.raises(ValueError, match=r"Invalid 'start' timestamp"):
+            await cast(PostgresHistoryStore, store).get_chatbot_metrics(
+                start="not-a-datetime",
+                end="2026-02-16T04:59:59.999Z",
+                user_id="u-1",
+                precision="hour",
+                groupby=[],
+                agg_mapping={},
+            )

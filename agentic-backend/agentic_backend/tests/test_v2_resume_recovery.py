@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import BaseSessionStore, KeycloakUser
+from fred_core import BaseSessionStore, KeycloakUser, SessionSchema
 from fred_core.common import PostgresStoreConfig
 from fred_core.kpi import NoOpKPIWriter
 from fred_core.sql import create_async_engine_from_config
@@ -12,6 +12,7 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.common.structures import Configuration
@@ -39,7 +40,7 @@ from agentic_backend.core.agents.v2.runtime_support import (
     FredSqlCheckpointer,
     V2SessionAgent,
 )
-from agentic_backend.core.chatbot.chat_schema import ChatMessage, SessionSchema
+from agentic_backend.core.chatbot.chat_schema import ChatMessage
 from agentic_backend.core.chatbot.session_orchestrator import SessionOrchestrator
 from agentic_backend.core.monitoring.noop_history_store import NoOpHistoryStore
 
@@ -93,22 +94,29 @@ class InMemorySessionStore(BaseSessionStore):
     def __init__(self) -> None:
         self.sessions: dict[str, SessionSchema] = {}
 
-    async def save(self, session: SessionSchema) -> None:
+    async def save(
+        self, session: SessionSchema, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions[session.id] = session
 
-    async def get(self, session_id: str) -> SessionSchema | None:
+    async def get(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> SessionSchema | None:
         return self.sessions.get(session_id)
 
-    async def delete(self, session_id: str) -> None:
+    async def delete(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions.pop(session_id, None)
 
-    async def get_for_user(self, user_id: str) -> list[SessionSchema]:
+    async def get_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> list[SessionSchema]:
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
-    async def save_with_conn(self, conn, session: SessionSchema) -> None:
-        await self.save(session)
-
-    async def count_for_user(self, user_id: str) -> int:
+    async def count_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> int:
         return len(await self.get_for_user(user_id))
 
 
@@ -117,17 +125,16 @@ class InMemoryHistoryStore(NoOpHistoryStore):
         self.messages: dict[str, list[ChatMessage]] = {}
 
     async def save(
-        self, session_id: str, messages: list[ChatMessage], user_id: str
+        self,
+        session_id: str,
+        messages: list[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
         self.messages[session_id] = list(messages)
 
     async def get(self, session_id: str) -> list[ChatMessage]:
         return list(self.messages.get(session_id, []))
-
-    async def save_with_conn(
-        self, conn, session_id: str, messages: list[ChatMessage], user_id: str
-    ) -> None:
-        await self.save(session_id, messages, user_id)
 
 
 class FreshV2AgentFactory(BaseAgentFactory):
