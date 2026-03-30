@@ -406,7 +406,7 @@ def test_default_policy_with_basic_react_presets_routes_log_genius_and_rag() -> 
         ModelSelectionRequest(
             capability=ModelCapability.CHAT,
             purpose="chat",
-            agent_id="rag.expert.v2",
+            agent_id="internal.react_profile.rag_expert",
             team_id="team-rag",
             user_id="alice",
             operation=None,

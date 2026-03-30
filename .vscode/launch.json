@@ -258,6 +258,7 @@
       "name": "Debug Knowledge Flow Worker",
       "type": "debugpy",
       "request": "launch",
+      "python": "${workspaceFolder}/knowledge-flow-backend/.venv/bin/python",
       "cwd": "${workspaceFolder}/knowledge-flow-backend",
       "program": "${workspaceFolder}/knowledge-flow-backend/knowledge_flow_backend/main_worker.py",
       "args": [

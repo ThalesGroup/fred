@@ -264,6 +264,7 @@ def log_setup(
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)
         lg.handlers.clear()  # their own handlers (if any) → gone
+        lg.addHandler(logging.NullHandler())
         lg.setLevel(logging.WARNING)
         lg.propagate = False  # <-- key: do NOT bubble up to root
     extra_noisy = (

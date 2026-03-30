@@ -14,9 +14,9 @@ from fred_core import get_embeddings, get_model
 from fred_core.common import ModelConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from ..context import BoundRuntimeContext
-from ..models import AgentDefinition
-from ..runtime import ChatModelFactoryPort
+from ..contracts.context import BoundRuntimeContext
+from ..contracts.models import AgentDefinition
+from ..contracts.runtime import ChatModelFactoryPort
 from .contracts import (
     ModelCapability,
     ModelSelection,

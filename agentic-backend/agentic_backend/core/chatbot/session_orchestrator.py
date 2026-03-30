@@ -59,12 +59,12 @@ from agentic_backend.core.agents.agent_factory import BaseAgentFactory
 from agentic_backend.core.agents.agent_manager import AgentManager
 from agentic_backend.core.agents.agent_utils import log_agent_message_summary
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.checkpoints import (
+from agentic_backend.core.agents.v2.contracts.models import ReActAgentDefinition
+from agentic_backend.core.agents.v2.runtime_support import (
     AsyncCheckpointReader,
+    V2SessionAgent,
     load_checkpoint,
 )
-from agentic_backend.core.agents.v2.models import ReActAgentDefinition
-from agentic_backend.core.agents.v2.session_agent import V2SessionAgent
 from agentic_backend.core.chatbot.attachment_service import AttachmentService
 from agentic_backend.core.chatbot.chat_error_replies import human_error_message
 from agentic_backend.core.chatbot.chat_schema import (
