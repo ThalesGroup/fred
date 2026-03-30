@@ -53,11 +53,6 @@ agents:
     type: "agent"
     definition_ref: "v2.deep.corpus_investigator"
 
-  - id: "Archie"
-    name: "Archie"
-    type: "agent"
-    definition_ref: "v2.production.archie"
-
   - id: "DVARiskValidatorGraph"
     name: "DVA Risk Validator"
     type: "agent"
