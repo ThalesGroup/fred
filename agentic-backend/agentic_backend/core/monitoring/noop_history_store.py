@@ -30,7 +30,9 @@ class NoOpHistoryStore(BaseHistoryStore):
     ) -> None:
         return
 
-    async def get(self, session_id: str) -> List[ChatMessage]:
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> List[ChatMessage]:
         return []
 
     async def get_chatbot_metrics(
@@ -41,6 +43,7 @@ class NoOpHistoryStore(BaseHistoryStore):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
+        session: AsyncSession | None = None,
     ) -> MetricsResponse:
         raise NotImplementedError(
             "NoOpHistoryStore does not compute metrics. "

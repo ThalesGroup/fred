@@ -15,7 +15,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fred_core import BaseSessionStore, KeycloakUser
@@ -26,6 +26,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentic_backend.agents.v2 import BasicReActDefinition
 from agentic_backend.core.agents.agent_factory import BaseAgentFactory
@@ -123,22 +124,29 @@ class InMemorySessionStore(BaseSessionStore):
     def __init__(self) -> None:
         self.sessions: dict[str, SessionSchema] = {}
 
-    async def save(self, session: SessionSchema) -> None:
+    async def save(
+        self, session: SessionSchema, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions[session.id] = session
 
-    async def get(self, session_id: str) -> SessionSchema | None:
+    async def get(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> SessionSchema | None:
         return self.sessions.get(session_id)
 
-    async def delete(self, session_id: str) -> None:
+    async def delete(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> None:
         self.sessions.pop(session_id, None)
 
-    async def get_for_user(self, user_id: str) -> list[SessionSchema]:
+    async def get_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> list[SessionSchema]:
         return [s for s in self.sessions.values() if s.user_id == user_id]
 
-    async def save_with_conn(self, conn: Any, session: SessionSchema) -> None:
-        await self.save(session)
-
-    async def count_for_user(self, user_id: str) -> int:
+    async def count_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> int:
         return len(await self.get_for_user(user_id))
 
 
@@ -148,18 +156,19 @@ class InMemoryHistoryStore(NoOpHistoryStore):
         self.get_call_count = 0
 
     async def save(
-        self, session_id: str, messages: list[ChatMessage], user_id: str
+        self,
+        session_id: str,
+        messages: list[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
         self.messages[session_id] = list(messages)
 
-    async def get(self, session_id: str) -> list[ChatMessage]:
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> list[ChatMessage]:
         self.get_call_count += 1
         return list(self.messages.get(session_id, []))
-
-    async def save_with_conn(
-        self, conn: Any, session_id: str, messages: list[ChatMessage], user_id: str
-    ) -> None:
-        await self.save(session_id, messages, user_id)
 
 
 class CachedV2AgentFactory(BaseAgentFactory):
@@ -295,8 +304,13 @@ def _minimal_config(enable_v2_sql_checkpointer: bool = True):
 
 @asynccontextmanager
 async def _fake_pg_tx():
-    """Drop-in replacement for pg_async_tx() that uses no real DB connection."""
-    yield MagicMock()
+    """Drop-in replacement for pg_async_session() that uses no real DB connection."""
+    orm_session = MagicMock()
+    orm_session.begin.return_value = AsyncMock(
+        __aenter__=AsyncMock(return_value=None),
+        __aexit__=AsyncMock(return_value=False),
+    )
+    yield orm_session
 
 
 # ---------------------------------------------------------------------------
@@ -447,7 +461,7 @@ async def test_v2_sql_checkpointer_history_store_not_read_when_checkpoint_exists
 
         # Patch pg_async_tx so the persist path works without a real Postgres connection.
         with patch(
-            "agentic_backend.core.chatbot.session_orchestrator.pg_async_tx",
+            "agentic_backend.core.chatbot.session_orchestrator.pg_async_session",
             _fake_pg_tx,
         ):
             # First exchange: CachedV2AgentFactory reports is_cached=False
@@ -567,7 +581,7 @@ async def test_v2_sql_checkpointer_restores_history_once_when_checkpoint_missing
             pass
 
         with patch(
-            "agentic_backend.core.chatbot.session_orchestrator.pg_async_tx",
+            "agentic_backend.core.chatbot.session_orchestrator.pg_async_session",
             _fake_pg_tx,
         ):
             await orchestrator.chat_ask_websocket(

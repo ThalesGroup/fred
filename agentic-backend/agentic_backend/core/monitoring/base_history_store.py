@@ -37,6 +37,7 @@ class BaseHistoryStore(ABC):
     async def get(
         self,
         session_id: str,
+        session: AsyncSession | None = None,
     ) -> List[ChatMessage]:
         """Retrieve messages for a given session."""
         pass
@@ -50,6 +51,7 @@ class BaseHistoryStore(ABC):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
+        session: AsyncSession | None = None,
     ) -> MetricsResponse:
-        """Retrieve messages for a given session."""
+        """Retrieve chatbot metrics."""
         pass
