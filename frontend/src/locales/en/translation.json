@@ -454,7 +454,7 @@
       "agentVersion": "Agent version",
       "agentVersionV2": "v2",
       "agentVersionV2Help": "Recommended for all new agents. Fully configurable — set the role, tools and behaviour to match any use case.",
-      "agentVersionV1": "V1",
+      "agentVersionV1": "v1",
       "agentVersionV1Help": "Legacy format. Use only if specifically instructed. All new agents should use V2.",
       "v2ModeReact": "Custom",
       "v2ModeReactHelp": "A blank-slate agent you configure entirely yourself — role, tools and instructions from scratch.",

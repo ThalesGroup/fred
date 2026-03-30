@@ -16,26 +16,34 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from agentic_backend.core.feedback.feedback_structures import FeedbackRecord
 
 
 class BaseFeedbackStore(ABC):
     @abstractmethod
-    async def list(self) -> List[FeedbackRecord]:
+    async def list(self, session: AsyncSession | None = None) -> List[FeedbackRecord]:
         """Return all feedback entries as a list of dictionaries."""
         pass
 
     @abstractmethod
-    async def get(self, feedback_id: str) -> FeedbackRecord | None:
+    async def get(
+        self, feedback_id: str, session: AsyncSession | None = None
+    ) -> FeedbackRecord | None:
         """Retrieve a single feedback entry by ID."""
         pass
 
     @abstractmethod
-    async def save(self, feedback: FeedbackRecord) -> None:
+    async def save(
+        self, feedback: FeedbackRecord, session: AsyncSession | None = None
+    ) -> None:
         """Save or update a feedback entry."""
         pass
 
     @abstractmethod
-    async def delete(self, feedback_id: str) -> None:
+    async def delete(
+        self, feedback_id: str, session: AsyncSession | None = None
+    ) -> None:
         """Delete a feedback entry by ID."""
         pass

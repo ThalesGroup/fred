@@ -65,14 +65,7 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 ##@ Run
 
 .PHONY: run
-run: check-node node_modules ## Run frontend locally with split backend ports (8000/8111/8222)
-	VITE_BACKEND_URL=http://localhost:8000 \
-	VITE_BACKEND_URL_API=http://localhost:8000 \
-	VITE_BACKEND_URL_KNOWLEDGE=http://localhost:8111 \
-	VITE_BACKEND_URL_CONTROL_PLANE=http://localhost:8222 \
-	npm run dev
-
-run-only:
+run: check-node node_modules ## Run frontend locally (Vite proxy handles backend routing)
 	npm run dev
 
 ##@ Dev

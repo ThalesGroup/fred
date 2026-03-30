@@ -13,23 +13,18 @@
 # limitations under the License.
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, cast
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    advisory_lock_key,
-    json_for_engine,
-    run_ddl_with_advisory_lock,
-)
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter
-from sqlalchemy import Column, Float, MetaData, String, Table, select
-from sqlalchemy.dialects.postgresql import TIMESTAMP
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from agentic_backend.scheduler.agent_contracts import AgentContextRefsV1
+from agentic_backend.scheduler.store.task_models import AgentTaskRow
 from agentic_backend.scheduler.task_structures import (
     AgentTaskForbiddenError,
     AgentTaskNotFoundError,
@@ -41,73 +36,16 @@ from .base_task_store import BaseAgentTaskStore
 
 logger = logging.getLogger(__name__)
 
-# Used for explicit validation to satisfy type checkers
 AgentContextAdapter = TypeAdapter(AgentContextRefsV1)
 
 
 class PostgresAgentTaskStore(BaseAgentTaskStore):
     """
-    PostgreSQL-backed Agent Task registry.
+    PostgreSQL-backed Agent Task registry (ORM sessions).
     """
 
-    def __init__(
-        self,
-        engine: AsyncEngine,
-        table_name: str = "agent_tasks",
-        prefix: str = "sched_",
-    ):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
-
-        metadata = MetaData()
-        json_type = json_for_engine(self.store.engine)
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("task_id", String, primary_key=True),
-            Column("user_id", String, index=True, nullable=False),
-            Column("target_agent", String, index=True, nullable=False),
-            Column("request_text", String, nullable=False),
-            Column("workflow_id", String, unique=True, index=True, nullable=False),
-            Column("run_id", String, nullable=True),
-            Column("status", String, index=True, nullable=False),
-            Column("created_at", TIMESTAMP(timezone=True), nullable=False),
-            Column("updated_at", TIMESTAMP(timezone=True), nullable=False),
-            Column("context_json", json_type, nullable=False),
-            Column("parameters_json", json_type, nullable=False),
-            Column("last_message", String, nullable=True),
-            Column("percent_complete", Float, nullable=False, default=0.0),
-            Column("blocked_json", json_type, nullable=True),
-            Column("artifacts_json", json_type, nullable=True),
-            Column("error_json", json_type, nullable=True),  # Standardized to _json
-            keep_existing=True,
-        )
-
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-        # Kick off table creation without blocking callers.
-        try:
-            loop = asyncio.get_running_loop()
-            self._create_task = loop.create_task(_create())
-        except RuntimeError:
-            self._create_task = None
-            asyncio.run(_create())
-
-        logger.info(
-            "[SCHEDULER][PG][ASYNC] Agent tasks table ready: %s", self.table_name
-        )
-
-    async def _ensure_table(self) -> None:
-        task = getattr(self, "_create_task", None)
-        if task is not None and not task.done():
-            await task
+    def __init__(self, engine: AsyncEngine):
+        self._sessions = make_session_factory(engine)
 
     async def create(
         self,
@@ -120,67 +58,54 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         run_id: Optional[str] = None,
         context: Optional[AgentContextRefsV1] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        session: AsyncSession | None = None,
     ) -> AgentTaskRecordV1:
-        await self._ensure_table()
         now = datetime.now(timezone.utc)
         ctx_obj = context or AgentContextRefsV1()
 
-        values = {
-            "task_id": task_id,
-            "user_id": user_id,
-            "target_agent": target_agent,
-            "request_text": request_text,
-            "workflow_id": workflow_id,
-            "run_id": run_id,
-            "status": AgentTaskStatus.QUEUED.value,
-            "created_at": now,
-            "updated_at": now,
-            "context_json": AgentContextAdapter.dump_python(ctx_obj, mode="json"),
-            "parameters_json": parameters or {},
-            "percent_complete": 0.0,
-        }
-
-        async with self.store.begin() as conn:
-            # Idempotent create: if the task already exists, return it untouched.
-            existing_result = await conn.execute(
-                select(self.table).where(self.table.c.task_id == task_id)
-            )
-            existing = existing_result.fetchone()
+        async with use_session(self._sessions, session) as s:
+            existing = await s.get(AgentTaskRow, task_id)
             if existing:
                 return self._row_to_record(existing)
-            await conn.execute(self.table.insert().values(**values))
 
-        return await self.get(task_id)
-
-    async def get(self, task_id: str) -> AgentTaskRecordV1:
-        await self._ensure_table()
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table).where(self.table.c.task_id == task_id)
+            row = AgentTaskRow(
+                task_id=task_id,
+                user_id=user_id,
+                target_agent=target_agent,
+                request_text=request_text,
+                workflow_id=workflow_id,
+                run_id=run_id,
+                status=AgentTaskStatus.QUEUED.value,
+                created_at=now,
+                updated_at=now,
+                context_json=AgentContextAdapter.dump_python(ctx_obj, mode="json"),
+                parameters_json=parameters or {},
+                percent_complete=0.0,
             )
-            row = result.fetchone()
+            s.add(row)
+            await s.flush()
+            return self._row_to_record(row)
 
-        if not row:
+    async def get(
+        self, task_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(AgentTaskRow, task_id)
+        if row is None:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
-
         return self._row_to_record(row)
 
-    async def get_for_user(self, *, task_id: str, user_id: str) -> AgentTaskRecordV1:
-        await self._ensure_table()
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table).where(self.table.c.task_id == task_id)
-            )
-            row = result.fetchone()
-
-        if not row:
+    async def get_for_user(
+        self, *, task_id: str, user_id: str, session: AsyncSession | None = None
+    ) -> AgentTaskRecordV1:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(AgentTaskRow, task_id)
+        if row is None:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
-
-        if row._mapping.get("user_id") != user_id:
+        if row.user_id != user_id:
             raise AgentTaskForbiddenError(
                 f"Task '{task_id}' is not owned by user '{user_id}'"
             )
-
         return self._row_to_record(row)
 
     async def list_for_user(
@@ -190,43 +115,40 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         limit: int = 20,
         statuses: Optional[Sequence[AgentTaskStatus]] = None,
         target_agent: Optional[str] = None,
+        session: AsyncSession | None = None,
     ) -> List[AgentTaskRecordV1]:
-        await self._ensure_table()
-        query = select(self.table).where(self.table.c.user_id == user_id)
-
+        query = select(AgentTaskRow).where(AgentTaskRow.user_id == user_id)
         if statuses:
-            query = query.where(
-                self.table.c.status.in_([status.value for status in statuses])
-            )
-
+            query = query.where(AgentTaskRow.status.in_([s.value for s in statuses]))
         if target_agent:
-            query = query.where(self.table.c.target_agent == target_agent)
+            query = query.where(AgentTaskRow.target_agent == target_agent)
+        query = query.order_by(AgentTaskRow.created_at.desc()).limit(limit)
 
-        query = query.order_by(self.table.c.created_at.desc()).limit(limit)
-
-        async with self.store.begin() as conn:
-            result = await conn.execute(query)
-            rows = result.fetchall()
-
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(query)).scalars().all()
         return [self._row_to_record(row) for row in rows]
 
     async def update_handle(
-        self, *, task_id: str, workflow_id: str, run_id: Optional[str]
+        self,
+        *,
+        task_id: str,
+        workflow_id: str,
+        run_id: Optional[str],
+        session: AsyncSession | None = None,
     ) -> None:
-        await self._ensure_table()
-        values: Dict[str, Any] = {
-            "workflow_id": workflow_id,
-            "run_id": run_id,
-            "updated_at": datetime.now(timezone.utc),
-        }
-
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                self.table.update()
-                .where(self.table.c.task_id == task_id)
-                .values(**values)
+        async with use_session(self._sessions, session) as s:
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    update(AgentTaskRow)
+                    .where(AgentTaskRow.task_id == task_id)
+                    .values(
+                        workflow_id=workflow_id,
+                        run_id=run_id,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                ),
             )
-
         if result.rowcount == 0:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
 
@@ -239,14 +161,13 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         percent_complete: Optional[float] = None,
         blocked: Optional[Dict[str, Any]] = None,
         artifacts: Optional[List[str]] = None,
-        error_json: Optional[Dict[str, Any]] = None,  # Corrected parameter name
+        error_json: Optional[Dict[str, Any]] = None,
+        session: AsyncSession | None = None,
     ) -> None:
-        await self._ensure_table()
         values: Dict[str, Any] = {
             "status": status.value,
             "updated_at": datetime.now(timezone.utc),
         }
-
         if last_message is not None:
             values["last_message"] = last_message
         if percent_complete is not None:
@@ -258,39 +179,35 @@ class PostgresAgentTaskStore(BaseAgentTaskStore):
         if error_json is not None:
             values["error_json"] = error_json
 
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                self.table.update()
-                .where(self.table.c.task_id == task_id)
-                .values(**values)
+        async with use_session(self._sessions, session) as s:
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    update(AgentTaskRow)
+                    .where(AgentTaskRow.task_id == task_id)
+                    .values(**values)
+                ),
             )
         if result.rowcount == 0:
             raise AgentTaskNotFoundError(f"Task '{task_id}' not found")
 
-    def _row_to_record(self, row: Any) -> AgentTaskRecordV1:
-        m = dict(row._mapping)
-
-        # Explicit validation to satisfy static analysis
-        context_data = m.get("context_json") or {}
-        validated_context = AgentContextAdapter.validate_python(context_data)
-
+    def _row_to_record(self, row: AgentTaskRow) -> AgentTaskRecordV1:
+        validated_context = AgentContextAdapter.validate_python(row.context_json or {})
         return AgentTaskRecordV1(
-            task_id=m["task_id"],
-            user_id=m["user_id"],
-            target_agent=m["target_agent"],
-            status=AgentTaskStatus(m["status"]),
-            request_text=m["request_text"],
+            task_id=row.task_id,
+            user_id=row.user_id,
+            target_agent=row.target_agent,
+            status=AgentTaskStatus(row.status),
+            request_text=row.request_text,
             context=validated_context,
-            parameters=m.get("parameters_json") or {},
-            workflow_id=m["workflow_id"],
-            run_id=m.get("run_id"),
-            last_message=m.get("last_message"),
-            percent_complete=m.get("percent_complete") or 0.0,
-            artifacts=m.get("artifacts_json") or [],
-            error_details=m.get(
-                "error_json"
-            ),  # Maps DB error_json to Pydantic error_details
-            blocked_details=m.get("blocked_json"),
-            created_at=m["created_at"],
-            updated_at=m["updated_at"],
+            parameters=row.parameters_json or {},
+            workflow_id=row.workflow_id,
+            run_id=row.run_id,
+            last_message=row.last_message,
+            percent_complete=row.percent_complete or 0.0,
+            artifacts=row.artifacts_json or [],
+            error_details=row.error_json,
+            blocked_details=row.blocked_json,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
         )

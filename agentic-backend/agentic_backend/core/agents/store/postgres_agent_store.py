@@ -14,22 +14,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    advisory_lock_key,
-    json_for_engine,
-    run_ddl_with_advisory_lock,
-)
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter
-from sqlalchemy import Column, MetaData, String, Table, select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.store.agent_models import AgentRow
 from agentic_backend.core.agents.store.base_agent_store import (
     AgentNotFoundError,
     BaseAgentStore,
@@ -46,55 +42,19 @@ def _is_legacy_leader_payload(payload_json: Any) -> bool:
 
 class PostgresAgentStore(BaseAgentStore):
     """
-    PostgreSQL-backed agent store using JSONB (async).
+    PostgreSQL-backed agent store using JSONB (async, ORM sessions).
     """
 
-    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "agents_"):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
+    def __init__(self, engine: AsyncEngine):
+        self._sessions = make_session_factory(engine)
         self._seed_marker_id = "__static_seeded__"
-        # Deterministic 64-bit key to guard DDL with a Postgres advisory lock.
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
-
-        json_type = json_for_engine(self.store.engine)
-
-        metadata = MetaData()
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("id", String, primary_key=True),
-            Column("name", String),
-            Column("payload_json", json_type),
-            keep_existing=True,
-        )
-
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-        try:
-            loop = asyncio.get_running_loop()
-            self._create_task = loop.create_task(_create())
-        except RuntimeError:
-            self._create_task = None
-            asyncio.run(_create())
-        logger.info("[AGENTS][PG][ASYNC] Table ready: %s", self.table_name)
-
-    async def _ensure_table(self) -> None:
-        task = getattr(self, "_create_task", None)
-        if task is not None and not task.done():
-            await task
 
     async def save(
         self,
         settings: AgentSettings,
         tuning: AgentTuning,
+        session: AsyncSession | None = None,
     ) -> None:
-        await self._ensure_table()
         if settings.id == self._seed_marker_id:
             raise ValueError("Invalid agent id: reserved for seed marker")
 
@@ -109,40 +69,28 @@ class PostgresAgentStore(BaseAgentStore):
                     "[STORE][PG][AGENTS] Could not embed tuning into AgentSettings for '%s'",
                     settings.id,
                 )
-                pass
 
-        async with self.store.begin() as conn:
-            await self.store.upsert(
-                conn,
-                self.table,
-                values={
-                    "id": settings.id,
-                    "name": settings.name,
-                    "payload_json": payload,
-                },
-                pk_cols=["id"],
-            )
+        row = AgentRow(id=settings.id, name=settings.name, payload_json=payload)
+        async with use_session(self._sessions, session) as s:
+            await s.merge(row)
 
-    async def load_all(self) -> List[AgentSettings]:
-        await self._ensure_table()
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table.c.payload_json, self.table.c.id)
-            )
-            rows = result.fetchall()
+    async def load_all(
+        self, session: AsyncSession | None = None
+    ) -> List[AgentSettings]:
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(AgentRow))).scalars().all()
 
         out: List[AgentSettings] = []
-        for payload_json, agent_id in rows:
-            if agent_id == self._seed_marker_id:
+        for row in rows:
+            if row.id == self._seed_marker_id:
                 continue
-            if _is_legacy_leader_payload(payload_json):
+            if _is_legacy_leader_payload(row.payload_json):
                 logger.info(
-                    "[STORE][PG][AGENTS] Ignoring deprecated leader agent '%s'.",
-                    agent_id,
+                    "[STORE][PG][AGENTS] Ignoring deprecated leader agent '%s'.", row.id
                 )
                 continue
             try:
-                out.append(AgentSettingsAdapter.validate_python(payload_json or {}))
+                out.append(AgentSettingsAdapter.validate_python(row.payload_json or {}))
             except Exception as e:
                 logger.error("[STORE][PG][AGENTS] Failed to parse AgentSettings: %s", e)
         return out
@@ -150,25 +98,21 @@ class PostgresAgentStore(BaseAgentStore):
     async def get(
         self,
         agent_id: str,
+        session: AsyncSession | None = None,
     ) -> Optional[AgentSettings]:
-        await self._ensure_table()
         if agent_id == self._seed_marker_id:
             return None
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table.c.payload_json).where(self.table.c.id == agent_id)
-            )
-            row = result.fetchone()
-        if not row:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(AgentRow, agent_id)
+        if row is None:
             return None
-        if _is_legacy_leader_payload(row[0]):
+        if _is_legacy_leader_payload(row.payload_json):
             logger.info(
-                "[STORE][PG][AGENTS] Ignoring deprecated leader agent '%s'.",
-                agent_id,
+                "[STORE][PG][AGENTS] Ignoring deprecated leader agent '%s'.", agent_id
             )
             return None
         try:
-            return AgentSettingsAdapter.validate_python(row[0] or {})
+            return AgentSettingsAdapter.validate_python(row.payload_json or {})
         except Exception as e:
             logger.error(
                 "[STORE][PG][AGENTS] Failed to parse AgentSettings for '%s': %s",
@@ -180,36 +124,28 @@ class PostgresAgentStore(BaseAgentStore):
     async def delete(
         self,
         agent_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
-        await self._ensure_table()
         if agent_id == self._seed_marker_id:
             return
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                self.table.delete().where(self.table.c.id == agent_id)
+        async with use_session(self._sessions, session) as s:
+            result = cast(
+                CursorResult,
+                await s.execute(delete(AgentRow).where(AgentRow.id == agent_id)),
             )
         if result.rowcount == 0:
             raise AgentNotFoundError(f"Agent '{agent_id}' not found")
 
-    async def static_seeded(self) -> bool:
-        await self._ensure_table()
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table.c.id).where(self.table.c.id == self._seed_marker_id)
-            )
-            row = result.fetchone()
-        return bool(row)
+    async def static_seeded(self, session: AsyncSession | None = None) -> bool:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(AgentRow, self._seed_marker_id)
+        return row is not None
 
-    async def mark_static_seeded(self) -> None:
-        await self._ensure_table()
-        async with self.store.begin() as conn:
-            await self.store.upsert(
-                conn,
-                self.table,
-                values={
-                    "id": self._seed_marker_id,
-                    "name": self._seed_marker_id,
-                    "payload_json": {},
-                },
-                pk_cols=["id"],
-            )
+    async def mark_static_seeded(self, session: AsyncSession | None = None) -> None:
+        row = AgentRow(
+            id=self._seed_marker_id,
+            name=self._seed_marker_id,
+            payload_json={},
+        )
+        async with use_session(self._sessions, session) as s:
+            await s.merge(row)
