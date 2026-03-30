@@ -1,4 +1,4 @@
-**Unreleased** - 2026-XX-XX
+**v2.0.0** — 2026-03-30
 
 - **Summary**
 
