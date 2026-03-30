@@ -72,7 +72,7 @@ async def test_targets_uses_basic_auth_when_configured() -> None:
             base_url="http://prometheus:9090",
             timeout_seconds=12.0,
             username="alice",
-            password="secret",
+            password="secret",  # pragma: allowlist secret`
         ),
         transport=httpx.MockTransport(handler),
     )
