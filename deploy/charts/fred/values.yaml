@@ -97,9 +97,9 @@ x-rich-input-processors: &rich-input-processors
     class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 
 # ── Ingestion profiles ──────────────────────────────────────────────────────────────
-#   fast   : pypdfium2, no OCR    — ideal for text PDFs, fastest
-#   medium : docling, no OCR      — good quality, recommended default profile
-#   rich   : docling + OCR + images  — best quality, slowest
+#   fast   : pypdfium2, no OCR                  — ideal for text PDFs, fastest
+#   medium : docling + selective OCR + tables  — balanced quality/cost profile
+#   rich   : docling + full OCR + images       — best quality, slowest
 
 x-profile-fast: &profile-fast
   use_gpu: true
@@ -121,12 +121,14 @@ x-profile-medium: &profile-medium
   process_images: false
   pdf:
     backend: docling_parse
-    images_scale: 2.0
+    images_scale: 1.5
     generate_picture_images: false
     generate_page_images: false
     generate_table_images: false
-    do_table_structure: false
-    do_ocr: false
+    do_table_structure: true
+    do_ocr: true
+    ocr_backend: openvino
+    force_full_page_ocr: false
   input_processors: *rich-input-processors
 
 x-profile-rich-backend: &profile-rich-backend
@@ -137,10 +139,12 @@ x-profile-rich-backend: &profile-rich-backend
     backend: docling_parse
     images_scale: 2.0
     generate_picture_images: true
-    generate_page_images: true
+    generate_page_images: false
     generate_table_images: false
     do_table_structure: true
     do_ocr: true
+    ocr_backend: openvino
+    force_full_page_ocr: true
   input_processors: *rich-input-processors
 
 # Rich profile for the Temporal worker: same as backend but generate_summary: true
@@ -1245,7 +1249,7 @@ applications:
 
       # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:   *profile-fast
           medium: *profile-medium
@@ -1414,7 +1418,7 @@ applications:
 
       # ── rich.generate_summary=true for the worker (generates summaries at ingestion) ──
       processing:
-        default_profile: medium
+        default_profile: fast
         profiles:
           fast:   *profile-fast
           medium: *profile-medium

@@ -67,6 +67,7 @@ WORKDIR /app/knowledge-flow-backend
 
 # Install dependencies with uv
 RUN make dev
+RUN python /app/scripts/patch_docling_rapidocr_openvino.py
 
 # Expose Fast API port
 EXPOSE 8111
