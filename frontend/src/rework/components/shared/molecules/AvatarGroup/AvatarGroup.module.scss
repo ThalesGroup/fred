@@ -1,0 +1,14 @@
+.user-avatar-container {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+
+  > * {
+    margin-right: calc(-1 * var(--spacing-s));
+    border: 2px solid var(--surface-container);
+  }
+}
+
+.user-avatar-wrapper {
+  display: contents;
+}

@@ -12,11 +12,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 1rem;
-  color: var(--on-surface-muted);
-  font-weight: 700;
-  font-size: 9px;
-  line-height: 100%;
-  font-family: var(--font-family);
-  letter-spacing: 0.4px;
+  height: 2rem;
+  color: var(--on-surface);
+
+  @include typography("label", "large", true);
 }
