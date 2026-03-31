@@ -1146,6 +1146,8 @@ class ApplicationContext:
             logger.info("     ↳ profile.%s.pdf.generate_table_images: %s", profile_name, profile_cfg.pdf.generate_table_images)
             logger.info("     ↳ profile.%s.pdf.do_table_structure: %s", profile_name, profile_cfg.pdf.do_table_structure)
             logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
+            logger.info("     ↳ profile.%s.pdf.ocr_backend: %s", profile_name, profile_cfg.pdf.ocr_backend)
+            logger.info("     ↳ profile.%s.pdf.force_full_page_ocr: %s", profile_name, profile_cfg.pdf.force_full_page_ocr)
             logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")

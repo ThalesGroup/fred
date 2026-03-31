@@ -24,7 +24,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
-import { getConfig } from "../../common/config.tsx";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { useAuth } from "../../security/AuthContext.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
@@ -1197,7 +1196,7 @@ const ChatBot = ({
     const connectSeq = ++wsConnectSeqRef.current;
 
     return new Promise((resolve, reject) => {
-      const rawWsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
+      const rawWsUrl = toWsUrl("/agentic/v1/chatbot/query/ws");
       const url = new URL(rawWsUrl);
       if (token) url.searchParams.set("token", token); // ⚠️ nécessite WSS en prod + logs sans query
 

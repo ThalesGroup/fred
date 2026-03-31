@@ -35,11 +35,15 @@ Runtime semantics live below it.
 - Agent loading and warm instance caching
   - `agentic_backend/core/agents/agent_factory.py`
 - v2 runtime contracts
-  - `agentic_backend/core/agents/v2/models.py`
-  - `agentic_backend/core/agents/v2/runtime.py`
+  - `agentic_backend/core/agents/v2/contracts/models.py`
+  - `agentic_backend/core/agents/v2/contracts/runtime.py`
 - v2 executable runtimes
-  - `agentic_backend/core/agents/v2/react_runtime.py`
+  - `agentic_backend/core/agents/v2/react/react_runtime.py`
   - `agentic_backend/core/agents/v2/graph_runtime.py`
+- v2 legacy bridge
+  - `agentic_backend/core/agents/v2/legacy_bridge/agent_settings_bridge.py`
+  - `agentic_backend/core/agents/v2/legacy_bridge/runtime_context_bridge.py`
+  - `agentic_backend/core/agents/v2/legacy_bridge/runtime_bootstrap.py`
 - v2 compatibility bridge to the current chat stack
   - `agentic_backend/core/agents/v2/session_agent.py`
 - chat event transcoding
@@ -58,8 +62,12 @@ The author provides:
 
 - `AgentDefinition`
 - `ReActPolicy` or `GraphDefinition` plus node handlers
-- declared tool requirements
 - tuning fields
+
+For tool-aware families such as ReAct and Graph, the author also provides:
+
+- declared Fred tool refs
+- optional default MCP servers
 
 ### Platform-owned layer
 
@@ -74,6 +82,25 @@ Fred runtime owns:
 
 This is what moves Fred closer to a platform model instead of a collection of custom LangGraph classes.
 
+Legacy-bridge note:
+
+- `v2/legacy_bridge/` is the explicit home for code that still depends on
+  legacy `AgentSettings`, legacy `RuntimeContext`, or the mixed `AgentFactory`
+  world
+- when reviewing pure v2 runtime behavior, start with `contracts/`, `react/`,
+  `support/`, `deep_runtime.py`, and `graph_runtime.py`
+- when removing migration code later, `legacy_bridge/` is the first folder to
+  shrink or delete
+
+Context-binding note:
+
+- `BoundRuntimeContext.portable_context` is the preferred v2-facing context contract
+- `BoundRuntimeContext.runtime_context` still exists as a transitional compatibility
+  bridge for legacy Fred runtime concerns not yet lifted into explicit v2 ports or
+  portable fields
+- new runtime code should prefer portable context and explicit ports over growing
+  direct dependency on legacy runtime context
+
 ## 4. Two Executable v2 Categories Today
 
 ### 4.1 ReActRuntime
@@ -87,7 +114,7 @@ Used for:
 Runtime responsibilities:
 
 - resolve chat model
-- merge declared tools and runtime MCP tools
+- merge declared Fred tool refs and runtime MCP tools into one runtime tool surface
 - manage tool approval
 - stream tool activity and final answer
 - propagate structured outputs such as sources, `GeoPart`, `LinkPart`

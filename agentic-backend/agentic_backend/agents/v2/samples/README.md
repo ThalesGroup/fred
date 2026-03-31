@@ -1,26 +1,24 @@
 # v2 Samples
 
-This folder is for **authoring samples**.
+Runnable starting points for new agent authors.
 
-Use it when you want a clean starting point for a new business agent, without
-mixing with:
+New here? Start with [`../AUTHORING.md`](../AUTHORING.md).
 
-- `demos/`: runtime or product demonstrations
-- `candidate/`: exploratory agents that may evolve into production agents
-- `production/`: agents currently intended for real usage
+---
 
-## Current sample
+## Current samples
 
-- `tutorial_tools/agent.py`
-  - minimal ReAct definition
-  - tiny Python tools (add numbers, slugify text, utc timestamp)
-  - no default registration in `definition_refs.py`
+- [`tutorial_tools/agent.py`](tutorial_tools/agent.py)
+  — minimal ReAct agent with custom Python tools (math, slugify, UTC time).
+  Not registered in the catalog. Safe to copy and modify.
 
-## Promotion path (sample -> real agent)
+---
 
-1. Copy sample into `v2/candidate/<agent_name>/`.
-2. Move prompt to markdown resources.
-3. Split tools into `tools/` modules.
+## Promotion path (sample → production)
+
+1. Copy into `v2/candidate/<agent_name>/`.
+2. Move the inline prompt to a `.md` file under `prompts/`.
+3. Split tools into a `tools/` module if they grow large.
 4. Add tests.
-5. Promote to `v2/production/<agent_name>/` when stabilized.
-6. Register stable `definition_ref` only when ready for catalog usage.
+5. Move to `v2/production/<agent_name>/` when stable.
+6. Register in `definition_refs.py` only when ready for catalog use.

@@ -22,7 +22,7 @@ from typing import Awaitable, Callable, cast
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocket, WebSocketDisconnect
-from fred_core import decode_jwt
+from fred_core import SessionSchema, decode_jwt
 from fred_core.kpi import KPIActor
 from langchain_core.messages import HumanMessage
 from pydantic import TypeAdapter, ValidationError
@@ -36,7 +36,6 @@ from agentic_backend.core.chatbot.chat_schema import (
     ChatTokenUsage,
     ErrorEvent,
     FinalEvent,
-    SessionSchema,
     StreamEvent,
     TextPart,
     make_assistant_final,

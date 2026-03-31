@@ -11,34 +11,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from fred_core import BaseSessionStore
-
-from agentic_backend.core.chatbot.chat_schema import SessionSchema
+from fred_core import BaseSessionStore, SessionSchema
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class NoOpSessionStore(BaseSessionStore):
     """A session store that does nothing. Useful for testing or ephemeral sessions."""
 
-    async def save(self, session: SessionSchema) -> None:
+    async def save(
+        self, session: SessionSchema, db_session: AsyncSession | None = None
+    ) -> None:
         """No-op save method."""
         pass
 
-    async def get(self, session_id: str) -> SessionSchema | None:
+    async def get(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> SessionSchema | None:
         """No-op get method that always returns None."""
         return None
 
-    async def delete(self, session_id: str) -> None:
+    async def delete(
+        self, session_id: str, db_session: AsyncSession | None = None
+    ) -> None:
         """No-op delete method."""
         pass
 
-    async def get_for_user(self, user_id: str) -> list[SessionSchema]:
+    async def get_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> list[SessionSchema]:
         """No-op get_for_user method that always returns an empty list."""
         return []
 
-    async def save_with_conn(self, conn, session: SessionSchema) -> None:
-        """Reuse no-op save for transactional path."""
-        await self.save(session)
-
-    async def count_for_user(self, user_id: str) -> int:
+    async def count_for_user(
+        self, user_id: str, db_session: AsyncSession | None = None
+    ) -> int:
         """No-op count_for_user method that always returns 0."""
         return 0

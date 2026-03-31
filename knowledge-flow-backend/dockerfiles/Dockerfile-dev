@@ -11,7 +11,7 @@ ARG HF_OFFLINE_STRICT=0
 
 # Install required system dependencies
 RUN apt-get update && \
-    apt-get install -y git curl make net-tools inkscape libgl1 && \
+    apt-get install -y git curl make net-tools inkscape libgl1 libreoffice && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv globally
@@ -67,6 +67,7 @@ WORKDIR /app/knowledge-flow-backend
 
 # Install dependencies with uv
 RUN make dev
+RUN python /app/scripts/patch_docling_rapidocr_openvino.py
 
 # Expose Fast API port
 EXPOSE 8111

@@ -1,0 +1,13 @@
+[project]
+name = "wtf"
+version = "0.1.0"
+description = "Manage git worktrees for parallel Fred development"
+requires-python = ">=3.12"
+dependencies = ["click"]
+
+[project.scripts]
+wtf = "wtf:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

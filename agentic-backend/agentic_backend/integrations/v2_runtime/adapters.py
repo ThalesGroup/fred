@@ -45,7 +45,11 @@ from langfuse import Langfuse
 from agentic_backend.application_context import get_app_context, get_default_chat_model
 from agentic_backend.common.kf_logs_client import KfLogsClient
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
-from agentic_backend.common.kf_workspace_client import KfWorkspaceClient
+from agentic_backend.common.kf_workspace_client import (
+    KfWorkspaceClient,
+    WorkspaceRetrievalError,
+    WorkspaceUploadError,
+)
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.common.user_token_refresher import (
@@ -60,13 +64,12 @@ from agentic_backend.core.agents.runtime_context import (
     get_search_policy,
     get_vector_search_scopes,
 )
-from agentic_backend.core.agents.v2.builtin_tools import (
-    TOOL_REF_GEO_RENDER_POINTS,
-    TOOL_REF_KNOWLEDGE_SEARCH,
-    TOOL_REF_LOGS_QUERY,
-    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+from agentic_backend.core.agents.v2.authoring.api import (
+    ArtifactPublicationError,
+    ResourceFetchError,
+    ResourceNotFoundError,
 )
-from agentic_backend.core.agents.v2.context import (
+from agentic_backend.core.agents.v2.contracts.context import (
     ArtifactPublishRequest,
     ArtifactScope,
     BoundRuntimeContext,
@@ -81,7 +84,7 @@ from agentic_backend.core.agents.v2.context import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
-from agentic_backend.core.agents.v2.runtime import (
+from agentic_backend.core.agents.v2.contracts.runtime import (
     ArtifactPublisherPort,
     ChatModelFactoryPort,
     ResourceReaderPort,
@@ -89,6 +92,12 @@ from agentic_backend.core.agents.v2.runtime import (
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+)
+from agentic_backend.core.agents.v2.support.builtins import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    TOOL_REF_KNOWLEDGE_SEARCH,
+    TOOL_REF_LOGS_QUERY,
+    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from agentic_backend.core.chatbot.chat_schema import GeoPart
 
@@ -768,39 +777,44 @@ class FredArtifactPublisher(ArtifactPublisherPort):
         )
         content_type = request.content_type or "application/octet-stream"
 
-        if request.scope == ArtifactScope.USER:
-            result = await self._workspace_client.upload_user_blob(
-                key=key,
-                file_content=request.content_bytes,
-                filename=request.file_name,
-                content_type=content_type,
-            )
-        elif request.scope == ArtifactScope.AGENT_CONFIG:
-            result = await self._workspace_client.upload_agent_config_blob(
-                key=key,
-                file_content=request.content_bytes,
-                filename=request.file_name,
-                agent_id=self._settings.id,
-                content_type=content_type,
-            )
-        elif request.scope == ArtifactScope.AGENT_USER:
-            target_user_id = (
-                request.target_user_id or self._binding.runtime_context.user_id
-            )
-            if not target_user_id:
-                raise RuntimeError(
-                    "agent_user artifact publication requires a target_user_id or a bound runtime_context.user_id."
+        try:
+            if request.scope == ArtifactScope.USER:
+                result = await self._workspace_client.upload_user_blob(
+                    key=key,
+                    file_content=request.content_bytes,
+                    filename=request.file_name,
+                    content_type=content_type,
                 )
-            result = await self._workspace_client.upload_agent_user_blob(
-                key=key,
-                file_content=request.content_bytes,
-                filename=request.file_name,
-                agent_id=self._settings.id,
-                target_user_id=target_user_id,
-                content_type=content_type,
-            )
-        else:
-            raise RuntimeError(f"Unsupported artifact scope: {request.scope!r}")
+            elif request.scope == ArtifactScope.AGENT_CONFIG:
+                result = await self._workspace_client.upload_agent_config_blob(
+                    key=key,
+                    file_content=request.content_bytes,
+                    filename=request.file_name,
+                    agent_id=self._settings.id,
+                    content_type=content_type,
+                )
+            elif request.scope == ArtifactScope.AGENT_USER:
+                target_user_id = (
+                    request.target_user_id or self._binding.runtime_context.user_id
+                )
+                if not target_user_id:
+                    raise RuntimeError(
+                        "agent_user artifact publication requires a target_user_id or a bound runtime_context.user_id."
+                    )
+                result = await self._workspace_client.upload_agent_user_blob(
+                    key=key,
+                    file_content=request.content_bytes,
+                    filename=request.file_name,
+                    agent_id=self._settings.id,
+                    target_user_id=target_user_id,
+                    content_type=content_type,
+                )
+            else:
+                raise RuntimeError(f"Unsupported artifact scope: {request.scope!r}")
+        except WorkspaceUploadError as e:
+            raise ArtifactPublicationError(
+                f"Could not publish '{request.file_name}': {e}"
+            ) from e
 
         return PublishedArtifact(
             scope=request.scope,
@@ -840,33 +854,38 @@ class FredResourceReader(ResourceReaderPort):
     async def fetch(self, request: ResourceFetchRequest) -> FetchedResource:
         access_token = _workspace_access_token(self._binding.runtime_context)
 
-        if request.scope == ResourceScope.USER:
-            blob = await self._workspace_client.fetch_user_blob(
-                key=request.key,
-                access_token=access_token,
-            )
-        elif request.scope == ResourceScope.AGENT_CONFIG:
-            blob = await self._workspace_client.fetch_agent_config_blob(
-                key=request.key,
-                access_token=access_token,
-                agent_id=self._settings.id,
-            )
-        elif request.scope == ResourceScope.AGENT_USER:
-            target_user_id = (
-                request.target_user_id or self._binding.runtime_context.user_id
-            )
-            if not target_user_id:
-                raise RuntimeError(
-                    "agent_user resource fetch requires a target_user_id or a bound runtime_context.user_id."
+        try:
+            if request.scope == ResourceScope.USER:
+                blob = await self._workspace_client.fetch_user_blob(
+                    key=request.key,
+                    access_token=access_token,
                 )
-            blob = await self._workspace_client.fetch_agent_user_blob(
-                key=request.key,
-                access_token=access_token,
-                agent_id=self._settings.id,
-                target_user_id=target_user_id,
-            )
-        else:
-            raise RuntimeError(f"Unsupported resource scope: {request.scope!r}")
+            elif request.scope == ResourceScope.AGENT_CONFIG:
+                blob = await self._workspace_client.fetch_agent_config_blob(
+                    key=request.key,
+                    access_token=access_token,
+                    agent_id=self._settings.id,
+                )
+            elif request.scope == ResourceScope.AGENT_USER:
+                target_user_id = (
+                    request.target_user_id or self._binding.runtime_context.user_id
+                )
+                if not target_user_id:
+                    raise RuntimeError(
+                        "agent_user resource fetch requires a target_user_id or a bound runtime_context.user_id."
+                    )
+                blob = await self._workspace_client.fetch_agent_user_blob(
+                    key=request.key,
+                    access_token=access_token,
+                    agent_id=self._settings.id,
+                    target_user_id=target_user_id,
+                )
+            else:
+                raise RuntimeError(f"Unsupported resource scope: {request.scope!r}")
+        except WorkspaceRetrievalError as e:
+            if e.status_code == 404:
+                raise ResourceNotFoundError(request.key) from e
+            raise ResourceFetchError(f"Could not fetch '{request.key}': {e}") from e
 
         return FetchedResource(
             scope=request.scope,

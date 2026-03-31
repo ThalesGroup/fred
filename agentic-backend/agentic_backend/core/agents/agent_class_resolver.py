@@ -19,7 +19,7 @@ from typing import Literal, TypeAlias
 
 from agentic_backend.agents.v2.definition_refs import class_path_for_definition_ref
 from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.v2.models import AgentDefinition
+from agentic_backend.core.agents.v2.contracts.models import AgentDefinition
 
 
 class AgentImplementationKind(str, Enum):

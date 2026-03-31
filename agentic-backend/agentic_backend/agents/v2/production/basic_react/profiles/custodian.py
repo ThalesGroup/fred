@@ -1,6 +1,10 @@
 """Custodian starting profile."""
 
-from agentic_backend.core.agents.agent_spec import MCPServerRef
+from agentic_backend.core.agents.v2 import (
+    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
+    MCP_SERVER_KNOWLEDGE_FLOW_FS,
+    MCPServerRef,
+)
 
 from ..profile_model import ReActProfile
 from ..profile_prompt_loader import load_basic_react_prompt
@@ -25,7 +29,7 @@ CUSTODIAN_PROFILE = ReActProfile(
         "purge_vectors",
     ),
     mcp_servers=(
-        MCPServerRef(id="mcp-knowledge-flow-fs"),
-        MCPServerRef(id="mcp-knowledge-flow-corpus"),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
     ),
 )

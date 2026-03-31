@@ -3,7 +3,7 @@ import { createDynamicBaseQuery } from "../../common/dynamicBaseQuery";
 
 export const agenticApi = createApi({
   reducerPath: "agenticApi",
-  baseQuery: createDynamicBaseQuery({ backend: "api" }),
+  baseQuery: createDynamicBaseQuery(),
 
   // Make cache/invalidation coherent across the app.
   tagTypes: ["McpServers"],

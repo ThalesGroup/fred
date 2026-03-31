@@ -12,21 +12,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Dict, List, Optional
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    advisory_lock_key,
-    json_for_engine,
-    run_ddl_with_advisory_lock,
-)
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from agentic_backend.common.utils import truncate_datetime
 from agentic_backend.core.chatbot.chat_schema import (
@@ -42,6 +37,7 @@ from agentic_backend.core.chatbot.metric_structures import (
     MetricsResponse,
 )
 from agentic_backend.core.monitoring.base_history_store import BaseHistoryStore
+from agentic_backend.core.monitoring.history_models import SessionHistoryRow
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +84,7 @@ def _safe_md(v: Any) -> ChatMetadata:
         try:
             return ChatMetadata.model_validate(v)
         except ValidationError:
-            return ChatMetadata(extras=v)  # preserve unknown keys
+            return ChatMetadata(extras=v)
     return ChatMetadata()
 
 
@@ -97,55 +93,17 @@ class PostgresHistoryStore(BaseHistoryStore):
     v2-native Postgres history store. Persists ChatMessage (role/channel/parts/metadata).
     """
 
-    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "history_"):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
-
-        json_type = json_for_engine(self.store.engine)
-
-        metadata = MetaData()
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("session_id", String, primary_key=True),
-            Column("user_id", String, primary_key=True),
-            Column("rank", Integer, primary_key=True),
-            Column("timestamp", DateTime(timezone=True), nullable=False),
-            Column("role", String, nullable=False),
-            Column("channel", String, nullable=False),
-            Column("exchange_id", String),
-            Column("parts_json", json_type),
-            Column("metadata_json", json_type),
-            keep_existing=True,
-        )
-
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_create())
-        except RuntimeError:
-            asyncio.run(_create())
-        logger.info("[HISTORY][PG][ASYNC] Table ready: %s", self.table_name)
+    def __init__(self, engine: AsyncEngine):
+        self._sessions = make_session_factory(engine)
 
     # ------------------------------------------------------------------ io
     async def save(
-        self, session_id: str, messages: List[ChatMessage], user_id: str
+        self,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
-        async with self.store.begin() as conn:
-            await self.save_with_conn(conn, session_id, messages, user_id)
-
-    async def save_with_conn(
-        self, conn, session_id: str, messages: List[ChatMessage], user_id: str
-    ) -> None:
-        # Prepare all values first
         all_values = []
         for i, msg in enumerate(messages):
             all_values.append(
@@ -171,11 +129,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                 }
             )
 
-        # Robust batch upsert (SQLAlchemy native)
-        # This is much faster than the loop as it sends 1 command for N rows.
-        from sqlalchemy.dialects.postgresql import insert
-
-        stmt = insert(self.table).values(all_values)
+        stmt = insert(SessionHistoryRow).values(all_values)
         upsert_stmt = stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],
             set_={
@@ -183,42 +137,41 @@ class PostgresHistoryStore(BaseHistoryStore):
                 for k in ["parts_json", "metadata_json", "timestamp"]
             },
         )
-        await conn.execute(upsert_stmt)
+        async with use_session(self._sessions, session) as s:
+            await s.execute(upsert_stmt)
 
-    async def get(self, session_id: str) -> List[ChatMessage]:
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(
-                    self.table.c.user_id,
-                    self.table.c.rank,
-                    self.table.c.timestamp,
-                    self.table.c.role,
-                    self.table.c.channel,
-                    self.table.c.exchange_id,
-                    self.table.c.parts_json,
-                    self.table.c.metadata_json,
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> List[ChatMessage]:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(SessionHistoryRow)
+                        .where(SessionHistoryRow.session_id == session_id)
+                        .order_by(SessionHistoryRow.rank.asc())
+                    )
                 )
-                .where(self.table.c.session_id == session_id)
-                .order_by(self.table.c.rank.asc())
+                .scalars()
+                .all()
             )
-            rows = result.fetchall()
 
         out: List[ChatMessage] = []
         for row in rows:
             try:
-                parts_payload = row[6] or []
+                parts_payload = row.parts_json or []
                 parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(
                     parts_payload
                 )
-                md = _safe_md(row[7] or {})
+                md = _safe_md(row.metadata_json or {})
                 out.append(
                     ChatMessage(
                         session_id=session_id,
-                        rank=row[1],
-                        timestamp=row[2],
-                        role=row[3],
-                        channel=row[4],
-                        exchange_id=row[5],
+                        rank=row.rank,
+                        timestamp=row.timestamp,
+                        role=Role(row.role),
+                        channel=Channel(row.channel),
+                        exchange_id=row.exchange_id or "",
                         parts=parts,
                         metadata=md,
                     )
@@ -236,49 +189,45 @@ class PostgresHistoryStore(BaseHistoryStore):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
+        session: AsyncSession | None = None,
     ) -> MetricsResponse:
         start_dt = _parse_metrics_bound(start, "start")
         end_dt = _parse_metrics_bound(end, "end")
         if end_dt < start_dt:
             raise ValueError("Invalid metrics window: 'end' must be >= 'start'.")
 
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(
-                    self.table.c.session_id,
-                    self.table.c.user_id,
-                    self.table.c.rank,
-                    self.table.c.timestamp,
-                    self.table.c.role,
-                    self.table.c.channel,
-                    self.table.c.exchange_id,
-                    self.table.c.parts_json,
-                    self.table.c.metadata_json,
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(SessionHistoryRow)
+                        .where(
+                            SessionHistoryRow.timestamp >= start_dt,
+                            SessionHistoryRow.timestamp <= end_dt,
+                            SessionHistoryRow.user_id == user_id,
+                        )
+                        .order_by(SessionHistoryRow.timestamp.asc())
+                    )
                 )
-                .where(
-                    self.table.c.timestamp >= start_dt,
-                    self.table.c.timestamp <= end_dt,
-                    self.table.c.user_id == user_id,
-                )
-                .order_by(self.table.c.timestamp.asc())
+                .scalars()
+                .all()
             )
-            rows = result.fetchall()
 
         grouped: Dict[tuple, list] = {}
         for row in rows:
             try:
-                parts_payload = row[7] or []
+                parts_payload = row.parts_json or []
                 parts: List[MessagePart] = MESSAGE_PARTS_ADAPTER.validate_python(
                     parts_payload
                 )
-                md = _safe_md(row[8] or {})
+                md = _safe_md(row.metadata_json or {})
                 msg = ChatMessage(
-                    session_id=row[0],
-                    rank=row[2],
-                    timestamp=row[3],
-                    role=row[4],
-                    channel=row[5],
-                    exchange_id=row[6],
+                    session_id=row.session_id,
+                    rank=row.rank,
+                    timestamp=row.timestamp,
+                    role=Role(row.role),
+                    channel=Channel(row.channel),
+                    exchange_id=row.exchange_id or "",
                     parts=parts,
                     metadata=md,
                 )
@@ -341,9 +290,6 @@ class PostgresHistoryStore(BaseHistoryStore):
     # ------------------------------------------------------------------ helpers
     @staticmethod
     def _flatten_message_v2(msg: ChatMessage) -> Dict:
-        """
-        Produce a flat dict for metrics/groupby. Keep it small & stable.
-        """
         out: Dict = {
             "role": msg.role,
             "channel": msg.channel,

@@ -77,6 +77,49 @@ docker-build: ## Build Docker images for agentic, knowledge-flow, control-plane,
 		$(MAKE) -C $$dir docker-build; \
 	done
 
+##@ Configuration
+
+MISTRAL_API_KEY ?=
+
+.PHONY: use-mistral
+use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: make use-mistral [MISTRAL_API_KEY=<key>])
+	@echo "--- agentic-backend: models_catalog.yaml ---"
+	yq -i '.default_profile_by_capability.chat = "default.chat.mistral"' agentic-backend/config/models_catalog.yaml
+	yq -i '.default_profile_by_capability.language = "default.language.mistral"' agentic-backend/config/models_catalog.yaml
+	yq -i 'del(.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' agentic-backend/config/models_catalog.yaml
+	yq -i '.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .profiles' agentic-backend/config/models_catalog.yaml
+	@echo "--- knowledge-flow-backend: configuration_prod.yaml ---"
+	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
+	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_prod.yaml
+	@if [ -n "$(MISTRAL_API_KEY)" ]; then \
+		echo "--- .env files: setting OPENAI_API_KEY to Mistral API key ---"; \
+		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env control-plane-backend/config/.env; do \
+			if [ -f "$$env_file" ]; then \
+				if grep -q '^OPENAI_API_KEY=' "$$env_file"; then \
+					sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY="$(MISTRAL_API_KEY)"|' "$$env_file"; \
+				else \
+					echo 'OPENAI_API_KEY="$(MISTRAL_API_KEY)"' >> "$$env_file"; \
+				fi; \
+				echo "  Updated $$env_file"; \
+			fi; \
+		done; \
+	fi
+	@echo ""
+	@echo "Done. Reminder: Mistral uses OPENAI_API_KEY as its API key (OpenAI-compatible provider)."
+	@if [ -z "$(MISTRAL_API_KEY)" ]; then \
+		echo "  OPENAI_API_KEY was NOT updated. Pass MISTRAL_API_KEY=<key> to also set it in .env files."; \
+	fi
+
+##@ Tools
+
+.PHONY: install-wtf
+install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallback to pip)
+	@if command -v uv >/dev/null 2>&1; then \
+		uv tool install --editable scripts/wtf; \
+	else \
+		pip install --editable scripts/wtf; \
+	fi
+
 ##@ Release
 
 VERSION ?=

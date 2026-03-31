@@ -164,7 +164,7 @@ class KfWorkspaceClient(KfBaseClient):
             await response.aclose()
             return bytes(content).decode("utf-8")
 
-        except requests.exceptions.HTTPError as e:
+        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
             status = e.response.status_code
             logger.error(
                 f"HTTP error ({status}) reading asset at {path}: {e}", exc_info=True
@@ -253,7 +253,7 @@ class KfWorkspaceClient(KfBaseClient):
                 bytes=content, content_type=ctype, filename=filename, size=total
             )
 
-        except requests.exceptions.HTTPError as e:
+        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
             status = e.response.status_code
             logger.error(
                 f"HTTP error ({status}) reading asset {path}: {e}", exc_info=True

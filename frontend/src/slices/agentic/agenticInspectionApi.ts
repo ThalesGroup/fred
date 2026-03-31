@@ -27,7 +27,7 @@ export type AgentInspection = {
   tags?: string[];
   fields?: FieldSpec[];
   execution_category: InspectionExecutionCategory;
-  tool_requirements?: InspectionToolRequirement[];
+  declared_tool_refs?: InspectionToolRequirement[];
   default_mcp_servers?: McpServerRef[];
   preview?: {
     kind: InspectionPreviewKind;

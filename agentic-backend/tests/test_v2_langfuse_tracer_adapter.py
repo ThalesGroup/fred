@@ -14,7 +14,10 @@
 
 from __future__ import annotations
 
-from agentic_backend.core.agents.v2.context import PortableContext, PortableEnvironment
+from agentic_backend.core.agents.v2.contracts.context import (
+    PortableContext,
+    PortableEnvironment,
+)
 from agentic_backend.integrations.v2_runtime.adapters import LangfuseTracerAdapter
 
 

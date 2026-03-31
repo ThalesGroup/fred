@@ -21,10 +21,9 @@ from typing import Awaitable, Callable, Optional
 
 import httpx
 from fastapi import HTTPException, UploadFile
-from fred_core import BaseSessionStore, KeycloakUser
+from fred_core import BaseSessionStore, KeycloakUser, SessionSchema
 
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
-from agentic_backend.core.chatbot.chat_schema import SessionSchema
 from agentic_backend.core.session.session_cache import CachedSession, SessionCache
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,

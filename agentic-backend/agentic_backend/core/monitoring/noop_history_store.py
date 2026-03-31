@@ -4,10 +4,12 @@
 
 from typing import Dict, List
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from agentic_backend.core.chatbot.chat_schema import ChatMessage
 from agentic_backend.core.chatbot.metric_structures import MetricsResponse
 
-from .base_history_store import BaseHistoryStore  # adjust import to your path
+from .base_history_store import BaseHistoryStore
 
 
 class NoOpHistoryStore(BaseHistoryStore):
@@ -20,22 +22,18 @@ class NoOpHistoryStore(BaseHistoryStore):
     """
 
     async def save(
-        self, session_id: str, messages: List[ChatMessage], user_id: str
+        self,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
-        # Intentionally do nothing: the contract is "fire-and-forget".
-        # Why: Tests that focus on reasoning should not assert on storage side-effects.
         return
 
-    async def get(self, session_id: str) -> List[ChatMessage]:
-        # Always return an empty transcript.
-        # Why: Each test starts with a clean slate unless you explicitly fake history upstream.
+    async def get(
+        self, session_id: str, session: AsyncSession | None = None
+    ) -> List[ChatMessage]:
         return []
-
-    async def save_with_conn(
-        self, conn, session_id: str, messages: List[ChatMessage], user_id: str
-    ) -> None:
-        # Same no-op behavior for transactional path.
-        return
 
     async def get_chatbot_metrics(
         self,
@@ -45,9 +43,8 @@ class NoOpHistoryStore(BaseHistoryStore):
         precision: str,
         groupby: List[str],
         agg_mapping: Dict[str, List[str]],
+        session: AsyncSession | None = None,
     ) -> MetricsResponse:
-        # No metrics are computed in NoOp mode. We raise to make accidental
-        # production usage noisy while keeping unit tests explicit.
         raise NotImplementedError(
             "NoOpHistoryStore does not compute metrics. "
             "Use a real store (e.g., OpenSearchHistoryStore) or a metrics stub in tests."

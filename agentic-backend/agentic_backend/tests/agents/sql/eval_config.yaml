@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Evaluation configuration for the V2 SQL analyst agent.
+#
+# To run:   make eval-sql-agent          (from agentic-backend/)
+# Requires: Knowledge Flow server running (for MCP tools get_context / read_query)
+#           Set AGENTIC_TOKEN in config/.env if KF server requires auth.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Test scenario — path relative to the agentic-backend/ directory.
+# Format: [{question, expect}]  (same file used by the Go probe)
+dataset_path: "../developer_tools/sql_scenario.json"
+
+# ── App config ───────────────────────────────────────────────────────────────
+
+# The configuration.yaml to load.  This configures the LLM provider
+# (Ollama, Azure, OpenAI) used both by the agent and — by default — as the
+# evaluation judge.
+configuration_file: "configuration.yaml"
+
+# ── Judge model ──────────────────────────────────────────────────────────────
+#
+# WHY a judge model?
+#   The agent uses models_catalog.yaml for its own inference.
+#   DeepEval metrics work differently: they ask a *separate* LLM to score the
+#   answers ("Is this response relevant?", "Does it contain the expected value?").
+#
+# DEFAULT BEHAVIOUR (no judge_model set):
+#   Auto-detected in this order:
+#   1. OPENAI_API_KEY in config/.env → uses gpt-4o-mini  (no extra config needed)
+#   2. Default model in configuration_file → reused as judge
+#
+# OVERRIDE (uncomment to use a specific model):
+#   Example for OpenAI:  judge_model: "gpt-4o"
+#   Example for Ollama:  judge_model: "llama3.1:70b"
+#
+# judge_model: ""
