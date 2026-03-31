@@ -4,9 +4,6 @@ import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
-import { TeamMembersPage } from "../components/teamDetails/TeamMembersPage";
-import { TeamAvatar } from "../components/teams/TeamVisuals";
-import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
 import { KnowledgeHub } from "./KnowledgeHub.tsx";
 
