@@ -18,13 +18,10 @@
 
 .user-identity-name {
   color: var(--on-surface);
-  @include typography("body", "large");
+  @include typography("body", "medium");
 }
 
 .user-identity-id {
   color: var(--on-surface-retreat);
-  @include typography("body", "medium");
-}
-
-.user-settings-button {
+  @include typography("body", "small");
 }

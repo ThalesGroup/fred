@@ -1,4 +1,13 @@
-export type ColorTheme = "primary" | "secondary" | "tertiary" | "error" | "success" | "warning" | "info" | "on-surface";
+export type ColorTheme =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "error"
+  | "success"
+  | "warning"
+  | "info"
+  | "on-surface"
+  | "on-surface-retreat";
 export type ButtonVariant = "filled" | "outlined" | "text";
 
 /**
@@ -40,7 +49,8 @@ export type MaterialIconType =
   | "search"
   | "more_vert"
   | "more_horiz"
-  | "storefront";
+  | "storefront"
+  | "delete_forever";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;
