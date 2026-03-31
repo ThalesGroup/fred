@@ -25,12 +25,12 @@ import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
 import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
-import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
 import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -82,12 +82,12 @@ export const routes: RouteObject[] = [
         element: <KnowledgeHub />,
       },
       {
-        path: "teams",
-        element: <TeamsPage />,
-      },
-      {
         path: "team/:teamId/*",
         element: <TeamDetailsPage />,
+      },
+      {
+        path: "marketplace/teams",
+        element: <MarketplaceTeams />,
       },
       {
         path: "monitoring/kpis",

@@ -12,32 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import DeleteIcon from "@mui/icons-material/Delete";
-import { Autocomplete, Box, Button, Divider, Stack, TextField, Typography } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { useFrontendProperties } from "../../hooks/useFrontendProperties";
-import SegmentedControl from "../../rework/components/shared/molecules/SegmentedControl/SegmentedControl";
-import { OptionModel } from "../../rework/core/models/Option.model";
-import { KeyCloakService } from "../../security/KeycloakService";
+import {Autocomplete, Box, Button, Divider, Stack, TextField, Typography} from "@mui/material";
+import {useCallback, useEffect, useState} from "react";
+import {useTranslation} from "react-i18next";
+import {useAgentUpdater} from "../../hooks/useAgentUpdater";
+import {useFrontendProperties} from "../../hooks/useFrontendProperties";
+import {KeyCloakService} from "../../security/KeycloakService";
 import {
-  FieldSpec,
-  McpServerRef,
-  ReActProfileSummary,
-  useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
-  useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
-  useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
-  useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
-  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
-  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
-  useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
+    FieldSpec,
+    McpServerRef,
+    ReActProfileSummary,
+    useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
+    useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
+    useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
+    useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
+    useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
+    useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
+    useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
-import { useConfirmationDialog } from "../ConfirmationDialogProvider";
-import { useToast } from "../ToastProvider";
-import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
-import { AgentCreateEditDrawerProps } from "./AgentCreateEditDrawer";
-import { AgentToolsSelection } from "./AgentToolsSelection";
-import { TuningForm } from "./TuningForm";
+import {useConfirmationDialog} from "../ConfirmationDialogProvider";
+import {useToast} from "../ToastProvider";
+import {AgentPrivateResourcesManager} from "./AgentConfigWorkspaceManagerDrawer";
+import {AgentCreateEditDrawerProps} from "./AgentCreateEditDrawer";
+import {AgentToolsSelection} from "./AgentToolsSelection";
+import {TuningForm} from "./TuningForm";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 
 type TopLevelTuningState = {
   role: string;
@@ -276,7 +275,7 @@ export function AgentCreateEditForm({
 
   // Derived booleans for JSX clarity
   const showTuningFields = !isCreateMode || (agentVersion === "v2" && v2CreateMode === "react");
-  const showTools = showTuningFields;
+
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -295,36 +294,51 @@ export function AgentCreateEditForm({
         <Stack spacing={3}>
           {/* ── Version toggle (create mode, team admin only) ── */}
           {isCreateMode && isAdmin && (
-            <SegmentedControl<AgentVersion>
-              label={t("agentHub.fields.agentVersion")}
-              options={[
-                { key: "v2", value: "v2", label: t("agentHub.fields.agentVersionV2"), tooltipLabel: t("agentHub.fields.agentVersionV2"), tooltip: t("agentHub.fields.agentVersionV2Help") },
-                { key: "v1", value: "v1", label: t("agentHub.fields.agentVersionV1"), tooltipLabel: t("agentHub.fields.agentVersionV1"), tooltip: t("agentHub.fields.agentVersionV1Help") },
+            <ButtonGroup
+              items={[
+                {
+                  key: "v2",
+                  value: "v2",
+                  label: t("agentHub.fields.agentVersionV2"),
+                  onClick: () => handleAgentVersionChange("v2"),
+                },
+                {
+                  key: "v1",
+                  value: "v1",
+                  label: t("agentHub.fields.agentVersionV1"),
+                  onClick: () => handleAgentVersionChange("v1"),
+                },
               ]}
-              value={agentVersion}
-              onChange={handleAgentVersionChange}
-              size="xs"
-              color="secondary"
+              size={"xs"}
+              color={"secondary"}
             />
           )}
 
           {/* ── V2 type toggle (create mode, team admin only) ── */}
           {isCreateMode && isAdmin && agentVersion === "v2" && (
-            <SegmentedControl<V2CreateMode>
-              label={t("agentHub.fields.agentType")}
-              options={
-                (
-                  [
-                    { key: "react", value: "react", label: t("agentHub.fields.v2ModeReact"), tooltipLabel: t("agentHub.fields.v2ModeReact"), tooltip: t("agentHub.fields.v2ModeReactHelp") },
-                    hasReactProfiles && { key: "profile", value: "profile", label: t("agentHub.fields.v2ModeProfile"), tooltipLabel: t("agentHub.fields.v2ModeProfile"), tooltip: t("agentHub.fields.v2ModeProfileHelp") },
-                    hasDefinitionRefs && { key: "definition_ref", value: "definition_ref", label: t("agentHub.fields.v2ModeDefinition"), tooltipLabel: t("agentHub.fields.v2ModeDefinition"), tooltip: t("agentHub.fields.v2ModeDefinitionHelp") },
-                  ] as const
-                ).filter(Boolean) as OptionModel<V2CreateMode>[]
-              }
-              value={v2CreateMode}
-              onChange={handleV2CreateModeChange}
-              size="xs"
-              color="secondary"
+            <ButtonGroup
+              items={[
+                {
+                  key: "react",
+                  value: "react",
+                  label: t("agentHub.fields.v2ModeReact"),
+                  onClick: () => handleV2CreateModeChange("react"),
+                },
+                hasReactProfiles && {
+                  key: "profile",
+                  value: "profile",
+                  label: t("agentHub.fields.v2ModeProfile"),
+                  onClick: () => handleV2CreateModeChange("profile"),
+                },
+                hasDefinitionRefs && {
+                  key: "definition_ref",
+                  value: "definition_ref",
+                  label: t("agentHub.fields.v2ModeDefinition"),
+                  onClick: () => handleV2CreateModeChange("definition_ref"),
+                },
+              ]}
+              size={"small"}
+              color={"secondary"}
             />
           )}
 
@@ -451,7 +465,9 @@ export function AgentCreateEditForm({
           )}
 
           {/* ── Tools ── */}
-          {showTools && <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />}
+          {showTuningFields && (
+            <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
+          )}
 
           {/* ── Dynamic tuning fields ── */}
           {showTuningFields &&
