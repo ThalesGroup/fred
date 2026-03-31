@@ -128,7 +128,7 @@ x-profile-medium: &profile-medium
     do_table_structure: true
     do_ocr: true
     ocr_backend: openvino
-    force_full_page_ocr: false
+    force_full_page_ocr: true
   input_processors: *rich-input-processors
 
 x-profile-rich-backend: &profile-rich-backend
