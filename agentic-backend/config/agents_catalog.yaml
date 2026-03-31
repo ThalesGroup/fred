@@ -4,7 +4,7 @@ agents:
   - id: "Rico"
     name: "Rico"
     type: "agent"
-    class_path: "agentic_backend.agents.rags.rag_expert.Rico"
+    class_path: "agentic_backend.agents.v1.production.rags.rag_expert.Rico"
     enabled: true
     chat_options:
       search_policy_selection: true
@@ -14,62 +14,59 @@ agents:
       attach_files: true
       include_corpus_in_search: true
 
-  - id: "Rico Senior"
-    name: "Rico Senior"
-    type: "agent"
-    class_path: "agentic_backend.agents.rags.advanced_rag_expert.AdvancedRico"
-    enabled: true
-    chat_options:
-      search_policy_selection: true
-      libraries_selection: true
-      search_rag_scoping: true
-      deep_search_delegate: false
-      attach_files: true
-
-  - id: "Aegis"
-    name: "Aegis"
-    type: "agent"
-    class_path: "agentic_backend.agents.aegis.aegis_rag_expert.Aegis"
-    enabled: true
-
-  - id: "Archie"
-    name: "Archie"
-    type: "agent"
-    class_path: "agentic_backend.agents.rags.archie.Archie"
-    enabled: true
-    chat_model: {}
-    chat_options:
-      search_policy_selection: true
-      libraries_selection: true
-      search_rag_scoping: true
-      attach_files: true
+  # - id: "Archie"
+  #   name: "Archie"
+  #   type: "agent"
+  #   class_path: "agentic_backend.agents.v1.production.rags.archie.Archie"
+  #   enabled: true
+  #   chat_model: {}
+  #   chat_options:
+  #     search_policy_selection: true
+  #     libraries_selection: true
+  #     search_rag_scoping: true
+  #     attach_files: true
 
   - id: "Tessa"
     name: "Tessa"
     type: "agent"
-    class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+    class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
     enabled: true
 
   - id: "Spot"
     name: "Spot"
     type: "agent"
-    class_path: "agentic_backend.agents.prometheus.prometheus_expert.Spot"
+    class_path: "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
     enabled: true
 
-  - id: "BankTransferDemo"
-    name: "BankTransferDemo"
+  # - id: "SlideMaker"
+  #   name: "SlideMaker"
+  #   type: "agent"
+  #   definition_ref: "v2.sample.slide_maker"
+
+  - id: "SQL Agent"
+    name: "SQL Agent"
     type: "agent"
-    class_path: "agentic_backend.banking.agent.BankTransferWorkflowAgent"
-    enabled: true
+    definition_ref: "v2.production.sql_analyst"
+
+  - id: "Corpus Investigator Deep"
+    name: "Corpus Investigator Deep"
+    type: "agent"
+    definition_ref: "v2.deep.corpus_investigator"
+
+  - id: "DVARiskValidatorGraph"
+    name: "DVA Risk Validator"
+    type: "agent"
+    definition_ref: "v2.production.dva_risk_validator.graph"
+
+  - id: "DVARiskValidatorQA"
+    name: "DVA Risk Validator QA"
+    type: "agent"
+    definition_ref: "v2.production.dva_risk_validator.qa"
 
 react_profiles:
-  - profile_id: "base_assistant"
-    enabled: true
   - profile_id: "custodian"
     enabled: true
   - profile_id: "rag_expert"
     enabled: true
   - profile_id: "sentinel"
-    enabled: true
-  - profile_id: "log_genius"
     enabled: true

@@ -331,7 +331,7 @@ def test_agent_loader_loads_static_spot_agent_via_class_path() -> None:
         Agent(
             id="Spot",
             name="Spot",
-            class_path="agentic_backend.agents.prometheus.prometheus_expert.Spot",
+            class_path="agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot",
             enabled=True,
         )
     ]
@@ -342,7 +342,7 @@ def test_agent_loader_loads_static_spot_agent_via_class_path() -> None:
     entry = entries[0]
     assert (
         entry.settings.class_path
-        == "agentic_backend.agents.prometheus.prometheus_expert.Spot"
+        == "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
     )
     assert entry.settings.definition_ref is None
     assert entry.tuning.role == "Cluster Prometheus Investigator"

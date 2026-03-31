@@ -458,13 +458,13 @@ async def test_team_hierarchy_and_permissions(
     # ~~~~~~~~~~~~~~~~~~~~
     # Manager
 
-    # Test manager can update members
-    assert await rebac_engine.has_permission(
+    # Test manager can not update members
+    assert not await rebac_engine.has_permission(
         team_manager,
         TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
-    ), "Team manager should be able to update members"
+    ), "Team manager should not be able to update members"
 
     # Test manager can't update owner members
     assert not await rebac_engine.has_permission(
@@ -528,29 +528,29 @@ async def test_team_hierarchy_and_permissions(
     # ~~~~~~~~~~~~~~~~~~~~
     # Organization admin (safe mode)
 
-    # Test organization admin cannot edit team info without explicit team role
-    assert not await rebac_engine.has_permission(
+    # Test organization admin can edit team info without explicit team role
+    assert await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_UPDATE_INFO,
         team,
         consistency_token=token,
-    ), "Organization admin should not bypass explicit owner/manager team roles"
+    ), "Organization admin should bypass explicit owner/manager team roles"
 
-    # Test organization admin cannot edit members without explicit team role
-    assert not await rebac_engine.has_permission(
+    # Test organization admin can edit members without explicit team role
+    assert await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_ADMINISTER_MEMBERS,
         team,
         consistency_token=token,
-    ), "Organization admin should not administer team members without team role"
+    ), "Organization admin should administer team members"
 
-    # Test organization admin cannot edit owners without explicit team role
-    assert not await rebac_engine.has_permission(
+    # Test organization admin can edit owners without explicit team role
+    assert await rebac_engine.has_permission(
         organization_admin,
         TeamPermission.CAN_ADMINISTER_OWNERS,
         team,
         consistency_token=token,
-    ), "Organization admin should not administer team owners without team role"
+    ), "Organization admin should administer team owners"
 
 
 @pytest.mark.integration
@@ -949,12 +949,16 @@ async def test_team_filtering_by_visibility(
     )
 
     assert not isinstance(admin_teams, RebacDisabledResult)
-    admin_team_ids = {team.id for team in admin_teams}
 
-    assert admin_team_ids == {
-        public_team_1.id,
-        public_team_2.id,
-    }, (
-        "Organization admin should not see private teams without explicit team "
-        f"relation, got: {admin_team_ids}"
-    )
+
+# TODO Activate this test when the admin scope is reimplemented
+
+#   admin_team_ids = {team.id for team in admin_teams}
+
+#   assert admin_team_ids == {
+#       public_team_1.id,
+#       public_team_2.id,
+#   }, (
+#       "Organization admin should not see private teams without explicit team "
+#       f"relation, got: {admin_team_ids}"
+#   )

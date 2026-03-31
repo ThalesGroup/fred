@@ -77,12 +77,25 @@ class RecursionConfig(BaseModel):
 
 class AgentChatOptions(BaseModel):
     """
-    UI toggles for the chat input.
+    Controls which extra input options appear in the chat UI for this agent.
 
-    Fred rationale:
-    - These flags control which optional pickers/actions appear next to the user message box.
-    - They do not change agent behavior by themselves; they expose inputs the agent may consume.
-    - All options are opt-in and default to False.
+    All flags default to False — opt in to what your agent actually needs.
+
+    Quick reference:
+        attach_files=True          — users can attach PDF/image/text files to a message
+        libraries_selection=True   — users can pick which document libraries to search
+        search_rag_scoping=True    — users can choose corpus-only vs broader search
+        documents_selection=True   — users can restrict retrieval to specific documents
+        search_policy_selection    — users can pick the retrieval strategy (hybrid, semantic…)
+        deep_search_delegate       — users can delegate retrieval to a senior deep-search agent
+        record_audio_files         — users can attach a recorded audio clip
+
+    Example (RAG assistant):
+        chat_options=AgentChatOptions(
+            attach_files=True,
+            libraries_selection=True,
+            search_rag_scoping=True,
+        )
     """
 
     search_policy_selection: bool = Field(

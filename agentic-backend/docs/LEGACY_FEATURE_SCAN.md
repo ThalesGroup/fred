@@ -37,7 +37,7 @@ Seen in legacy:
 
 V2 status:
 - covered by `ReActAgentDefinition`
-- runtime tools can come from declared `tool_requirements`
+- runtime tools can come from declared `declared_tool_refs`
 - runtime tools can also come from MCP bindings
 
 Follow-up rule worth keeping in mind:

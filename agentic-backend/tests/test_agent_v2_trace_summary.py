@@ -2,15 +2,15 @@ import pytest
 
 from agentic_backend.common.structures import Agent
 from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2.builtin_tools import (
-    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
-)
-from agentic_backend.core.agents.v2.context import (
+from agentic_backend.core.agents.v2.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
     ToolContentKind,
     ToolInvocationRequest,
+)
+from agentic_backend.core.agents.v2.support.builtins import (
+    TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
 )
 from agentic_backend.integrations.v2_runtime.adapters import (
     FredKnowledgeSearchToolInvoker,

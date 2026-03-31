@@ -1,81 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from types import SimpleNamespace
-from typing import cast
-from unittest.mock import AsyncMock, MagicMock
-
-from fred_core.sql import AsyncBaseSqlStore
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agentic_backend.core.feedback.feedback_structures import FeedbackRecord
-from agentic_backend.core.feedback.store import (
-    postgres_feedback_store as feedback_store_module,
-)
+from agentic_backend.core.feedback.store.feedback_models import FeedbackRow
 from agentic_backend.core.feedback.store.postgres_feedback_store import (
     PostgresFeedbackStore,
 )
-
-
-class _FakeTask:
-    def __init__(self, coro):
-        self._coro = coro
-        self._done = False
-
-    def done(self):
-        return self._done
-
-    def __await__(self):
-        async def _runner():
-            try:
-                return await self._coro
-            finally:
-                self._done = True
-
-        return _runner().__await__()
-
-
-class _FakeLoop:
-    def __init__(self):
-        self.task = None
-
-    def create_task(self, coro):
-        self.task = _FakeTask(coro)
-        return self.task
-
-
-class _FakeRow:
-    def __init__(self, **values):
-        self._mapping = values
-
-
-class _FakeResult:
-    def __init__(self, *, rows=None, row=None):
-        self._rows = rows or []
-        self._row = row
-
-    def fetchall(self):
-        return list(self._rows)
-
-    def fetchone(self):
-        return self._row
-
-
-def _build_feedback_table() -> Table:
-    return Table(
-        "feedbacks",
-        MetaData(),
-        Column("id", String, primary_key=True),
-        Column("session_id", String, nullable=False),
-        Column("message_id", String, nullable=False),
-        Column("agent_id", String, nullable=False),
-        Column("rating", Integer, nullable=False),
-        Column("comment", Text, nullable=True),
-        Column("created_at", DateTime(timezone=True), nullable=False),
-        Column("user_id", String, nullable=False),
-    )
 
 
 def _build_feedback() -> FeedbackRecord:
@@ -91,81 +25,62 @@ def _build_feedback() -> FeedbackRecord:
     )
 
 
-def test_feedback_store_initialization_schedules_table_creation(monkeypatch):
-    async def _run() -> None:
-        fake_loop = _FakeLoop()
-        run_ddl = AsyncMock()
-
-        monkeypatch.setattr(
-            feedback_store_module.asyncio,
-            "get_running_loop",
-            lambda: fake_loop,
-        )
-        monkeypatch.setattr(
-            feedback_store_module,
-            "run_ddl_with_advisory_lock",
-            run_ddl,
-        )
-
-        store = PostgresFeedbackStore(
-            engine=MagicMock(name="engine"),
-            table_name="feedbacks",
-            prefix="",
-        )
-
-        assert store._create_task is fake_loop.task
-        await store._ensure_table()
-        run_ddl.assert_awaited_once()
-
-    asyncio.run(_run())
+def _make_feedback_row(feedback: FeedbackRecord) -> FeedbackRow:
+    return FeedbackRow(
+        id=feedback.id,
+        session_id=feedback.session_id,
+        message_id=feedback.message_id,
+        agent_id=feedback.agent_id,
+        rating=feedback.rating,
+        comment=feedback.comment,
+        created_at=feedback.created_at,
+        user_id=feedback.user_id,
+    )
 
 
-def test_feedback_store_methods_wait_for_table_and_use_row_results():
+def test_feedback_store_methods_use_session():
     async def _run() -> None:
         feedback = _build_feedback()
-        row = _FakeRow(**feedback.model_dump())
-        ensure_table = AsyncMock()
-        upsert = AsyncMock()
-        conn = SimpleNamespace(
-            execute=AsyncMock(
-                side_effect=[
-                    _FakeResult(rows=[row]),
-                    _FakeResult(row=row),
-                    SimpleNamespace(rowcount=1),
-                    _FakeResult(row=None),
-                ]
-            )
+        row = _make_feedback_row(feedback)
+
+        mock_session = AsyncMock()
+        mock_session.get = AsyncMock(side_effect=[row, None])
+        mock_session.execute = AsyncMock(
+            side_effect=[
+                MagicMock(
+                    scalars=MagicMock(
+                        return_value=MagicMock(all=MagicMock(return_value=[row]))
+                    )
+                ),
+                MagicMock(rowcount=1),
+            ]
         )
+        mock_session.merge = AsyncMock()
 
-        @asynccontextmanager
-        async def _begin():
-            yield conn
+        store = cast(Any, object.__new__(PostgresFeedbackStore))
+        store._sessions = None  # bypassed __init__; use_session is patched below
 
-        store = object.__new__(PostgresFeedbackStore)
-        store.table = _build_feedback_table()
-        store.store = cast(
-            AsyncBaseSqlStore,
-            SimpleNamespace(begin=_begin, upsert=upsert),
-        )
-        store._ensure_table = ensure_table
+        with patch(
+            "agentic_backend.core.feedback.store.postgres_feedback_store.use_session"
+        ) as mock_use_session:
+            from contextlib import asynccontextmanager
 
-        listed = await store.list()
-        stored = await store.get(feedback.id)
-        await store.save(feedback)
-        await store.delete(feedback.id)
-        missing = await store.get(feedback.id)
+            @asynccontextmanager
+            async def _fake_use_session(factory, session=None):
+                yield mock_session
+
+            mock_use_session.side_effect = _fake_use_session
+
+            listed = await store.list()
+            stored = await store.get(feedback.id)
+            await store.save(feedback)
+            await store.delete(feedback.id)
+            missing = await store.get(feedback.id)
 
         assert [item.id for item in listed] == [feedback.id]
         assert stored is not None
         assert stored.id == feedback.id
         assert missing is None
-        assert ensure_table.await_count == 5
-
-        upsert.assert_awaited_once()
-        upsert_call = upsert.await_args
-        assert upsert_call is not None
-        assert upsert_call.args[1] is store.table
-        assert upsert_call.kwargs["values"]["created_at"] == feedback.created_at
-        assert upsert_call.kwargs["pk_cols"] == ["id"]
+        mock_session.merge.assert_awaited_once()
 
     asyncio.run(_run())

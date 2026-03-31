@@ -1,6 +1,29 @@
-export type ColorTheme = "primary" | "secondary" | "tertiary" | "error" | "success" | "warning" | "info" | "on-surface";
+export type ColorTheme =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "error"
+  | "success"
+  | "warning"
+  | "info"
+  | "on-surface"
+  | "on-surface-retreat";
 export type ButtonVariant = "filled" | "outlined" | "text";
-export type ComponentSize = "medium" | "small";
+
+/**
+ * Shared size scale for interactive components (Button, IconButton, ButtonGroupItem, Select…).
+ *
+ * | Value    | Height  | Typical use                                      |
+ * |----------|---------|--------------------------------------------------|
+ * | medium   | 2.5rem  | Default — primary actions, main form controls    |
+ * | small    | 2rem    | Secondary actions, dense forms                   |
+ * | xs       | 1.5rem  | Compact / auxiliary controls (admin toggles, …)  |
+ *
+ * Each component that consumes this type must implement all three sizes in its
+ * SCSS module via the `data-size` attribute (atoms) or a `btn-{size}` class (Button/IconButton).
+ */
+export type ComponentSize = "medium" | "small" | "xs";
+
 export type IconButtonVariant = "filled" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
 
@@ -26,7 +49,8 @@ export type MaterialIconType =
   | "search"
   | "more_vert"
   | "more_horiz"
-  | "storefront";
+  | "storefront"
+  | "delete_forever";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

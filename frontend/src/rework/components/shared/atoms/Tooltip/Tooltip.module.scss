@@ -1,0 +1,18 @@
+@use "src/index.scss" as *;
+
+.tooltip-content {
+  position: absolute;
+  top: auto;
+  bottom: anchor(0%);
+  left: anchor(0%);
+  transform: translateX(-50%);
+  margin: 0 0 var(--spacing-2xs) 0;
+  box-shadow: var(--shadow-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-highest);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface);
+
+  @include typography("label", "large");
+}

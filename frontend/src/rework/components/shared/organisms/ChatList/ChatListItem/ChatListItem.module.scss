@@ -48,19 +48,6 @@
   min-width: 0;
 }
 
-.icon {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 50%;
-  corner-shape: round;
-  background-color: var(--secondary);
-  width: 0.75rem;
-  height: 0.75rem;
-  color: var(--surface-container-lowest);
-  font-size: 0.625rem;
-}
-
 .agent-name {
   color: var(--secondary);
 }

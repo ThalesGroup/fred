@@ -69,9 +69,9 @@ x-kf-content-storage: &kf-content-storage
   secure: false
 
 x-common-dotenv: &common-dotenv
-  FRED_POSTGRES_PASSWORD: "Azerty123_"
-  OPENSEARCH_PASSWORD: "FredOpensearch123!!"
-  OPENFGA_API_TOKEN: "Azerty123_"
+  FRED_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
+  OPENSEARCH_PASSWORD: "FredOpensearch123!!" # pragma: allowlist secret
+  OPENFGA_API_TOKEN: "Azerty123_" # pragma: allowlist secret
   AZURE_AD_CLIENT_SECRET: ""
   AZURE_APIM_SUBSCRIPTION_KEY: ""
 

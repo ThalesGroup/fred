@@ -71,7 +71,7 @@ What it is:
 - the simplest authoring model for a useful assistant
 
 How it fits v2:
-- the definition declares role, prompt, and tool requirements
+- the definition declares role, prompt, and declared Fred tool refs
 - the shared `ReActRuntime` owns execution
 
 Best thing to test:
@@ -346,7 +346,7 @@ What to try:
 What you should observe:
 - `execution_category`
 - fields
-- declared tool requirements
+- declared tool refs
 - preview
 - default MCP servers when relevant
 

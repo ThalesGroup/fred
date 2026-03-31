@@ -10,7 +10,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from agentic_backend.core.agents.agent_spec import FieldSpec
-from agentic_backend.core.agents.v2.models import (
+from agentic_backend.core.agents.v2.contracts.models import (
     GuardrailDefinition,
     ToolRefRequirement,
 )
@@ -37,7 +37,7 @@ class PrometheusExpertV2Definition(BasicReActDefinition):
         else field.model_copy(deep=True)
         for field in BasicReActDefinition().fields
     )
-    tool_requirements: tuple[ToolRefRequirement, ...] = (
-        PROMETHEUS_PROFILE.tool_requirements
+    declared_tool_refs: tuple[ToolRefRequirement, ...] = (
+        PROMETHEUS_PROFILE.declared_tool_refs
     )
     guardrails: tuple[GuardrailDefinition, ...] = PROMETHEUS_PROFILE.guardrails

@@ -74,7 +74,7 @@ export const AgentInspectionModal = ({ agent, open, onClose }: AgentInspectionMo
 
   const tags = inspection?.tags ?? [];
   const fields = inspection?.fields ?? [];
-  const tools = inspection?.tool_requirements ?? [];
+  const tools = inspection?.declared_tool_refs ?? [];
   const defaultMcpServers = inspection?.default_mcp_servers ?? [];
 
   return (

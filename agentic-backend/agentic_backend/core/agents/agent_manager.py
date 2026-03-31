@@ -36,7 +36,7 @@ from agentic_backend.core.agents.agent_spec import (
 from agentic_backend.core.agents.store.base_agent_store import (
     BaseAgentStore,
 )
-from agentic_backend.core.agents.v2.catalog import (
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
     definition_to_agent_tuning,
     instantiate_definition_class,
 )

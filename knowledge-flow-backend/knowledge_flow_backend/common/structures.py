@@ -309,6 +309,14 @@ class ProcessingConfig(BaseModel):
             default=False,
             description="Enable OCR in the standard Docling PDF pipeline.",
         )
+        ocr_backend: Optional[Literal["onnxruntime", "openvino", "paddle", "torch"]] = Field(
+            default="openvino",
+            description="Override RapidOCR inference backend when OCR is enabled.",
+        )
+        force_full_page_ocr: Optional[bool] = Field(
+            default=None,
+            description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
+        )
 
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")

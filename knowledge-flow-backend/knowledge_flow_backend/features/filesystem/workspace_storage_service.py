@@ -37,8 +37,7 @@ import mimetypes
 from fastapi import UploadFile
 from fred_core import KeycloakUser
 
-from knowledge_flow_backend.application_context import get_app_context
-from knowledge_flow_backend.features.filesystem.mcp_fs_service import McpFilesystemService
+from knowledge_flow_backend.application_context import ApplicationContext, get_app_context
 from knowledge_flow_backend.features.filesystem.workspace_filesystem import WorkspaceFilesystem
 
 
@@ -46,9 +45,27 @@ class WorkspaceStorageService:
     """Thin service that routes scoped file operations to ``UserStorage``."""
 
     def __init__(self, *, namespace: str = "users") -> None:
-        fs_service = McpFilesystemService()
+        """
+        Build the scoped workspace storage facade from the configured filesystem backend.
+
+        Why this exists:
+        - workspace storage only needs the raw filesystem backend, not the higher-level
+          MCP virtual filesystem service
+        - resolving it directly removes coupling to unrelated service internals
+
+        How to use:
+        - instantiate once and call the scope-specific helpers on this service
+
+        Example:
+        - `service = WorkspaceStorageService(namespace="users")`
+        """
+
+        filesystem = ApplicationContext.get_instance().get_filesystem()
         # Default namespace retained for user scope; root_prefix can override per call.
-        self.storage: WorkspaceFilesystem = WorkspaceFilesystem(fs_service.fs, prefix=namespace)
+        self.storage: WorkspaceFilesystem = WorkspaceFilesystem(
+            filesystem,
+            prefix=namespace,
+        )
         self.namespace = namespace
         self.layout = get_app_context().configuration.workspace_layout
 

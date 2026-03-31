@@ -587,19 +587,25 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
-    listFiles: build.query<ListFilesApiResponse, ListFilesApiArg>({
+    ls: build.query<LsApiResponse, LsApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/list`,
         params: {
-          prefix: queryArg.prefix,
+          path: queryArg.path,
         },
       }),
     }),
     statFileOrDirectory: build.query<StatFileOrDirectoryApiResponse, StatFileOrDirectoryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/stat/${queryArg.path}` }),
     }),
-    catFile: build.query<CatFileApiResponse, CatFileApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/cat/${queryArg.path}` }),
+    readFile: build.query<ReadFileApiResponse, ReadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/cat/${queryArg.path}`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
     }),
     writeFile: build.mutation<WriteFileApiResponse, WriteFileApiArg>({
       query: (queryArg) => ({
@@ -611,19 +617,32 @@ const injectedRtkApi = api.injectEndpoints({
     deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
     }),
-    grepFileRegex: build.query<GrepFileRegexApiResponse, GrepFileRegexApiArg>({
+    editFile: build.mutation<EditFileApiResponse, EditFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/edit/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.editFileRequest,
+      }),
+    }),
+    glob: build.query<GlobApiResponse, GlobApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/glob`,
+        params: {
+          pattern: queryArg.pattern,
+          path: queryArg.path,
+        },
+      }),
+    }),
+    grep: build.query<GrepApiResponse, GrepApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/grep`,
         params: {
           pattern: queryArg.pattern,
-          prefix: queryArg.prefix,
+          path: queryArg.path,
         },
       }),
     }),
-    printRootDirectory: build.query<PrintRootDirectoryApiResponse, PrintRootDirectoryApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/fs/print_root_dir` }),
-    }),
-    createDirectory: build.mutation<CreateDirectoryApiResponse, CreateDirectoryApiArg>({
+    mkdir: build.mutation<MkdirApiResponse, MkdirApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
     }),
     corpusCapabilities: build.query<CorpusCapabilitiesApiResponse, CorpusCapabilitiesApiArg>({
@@ -1501,17 +1520,19 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
 };
-export type ListFilesApiResponse = /** status 200 Successful Response */ any;
-export type ListFilesApiArg = {
-  prefix?: string;
+export type LsApiResponse = /** status 200 Successful Response */ any;
+export type LsApiArg = {
+  path?: string;
 };
 export type StatFileOrDirectoryApiResponse = /** status 200 Successful Response */ any;
 export type StatFileOrDirectoryApiArg = {
   path: string;
 };
-export type CatFileApiResponse = /** status 200 Successful Response */ any;
-export type CatFileApiArg = {
+export type ReadFileApiResponse = /** status 200 Successful Response */ any;
+export type ReadFileApiArg = {
   path: string;
+  offset?: number;
+  limit?: number;
 };
 export type WriteFileApiResponse = /** status 200 Successful Response */ any;
 export type WriteFileApiArg = {
@@ -1522,15 +1543,23 @@ export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
 export type DeleteFileApiArg = {
   path: string;
 };
-export type GrepFileRegexApiResponse = /** status 200 Successful Response */ any;
-export type GrepFileRegexApiArg = {
-  pattern: string;
-  prefix?: string;
+export type EditFileApiResponse = /** status 200 Successful Response */ any;
+export type EditFileApiArg = {
+  path: string;
+  editFileRequest: EditFileRequest;
 };
-export type PrintRootDirectoryApiResponse = /** status 200 Successful Response */ any;
-export type PrintRootDirectoryApiArg = void;
-export type CreateDirectoryApiResponse = /** status 200 Successful Response */ any;
-export type CreateDirectoryApiArg = {
+export type GlobApiResponse = /** status 200 Successful Response */ any;
+export type GlobApiArg = {
+  pattern: string;
+  path?: string;
+};
+export type GrepApiResponse = /** status 200 Successful Response */ any;
+export type GrepApiArg = {
+  pattern: string;
+  path?: string;
+};
+export type MkdirApiResponse = /** status 200 Successful Response */ any;
+export type MkdirApiArg = {
   path: string;
 };
 export type CorpusCapabilitiesApiResponse = /** status 200 Successful Response */ CorpusCapabilitiesV1;
@@ -2533,6 +2562,11 @@ export type ResourceUpdate = {
 export type BodyWriteFile = {
   data: string;
 };
+export type EditFileRequest = {
+  old_string: string;
+  new_string: string;
+  replace_all?: boolean;
+};
 export type ToolSpecV1 = {
   name: string;
   summary: string;
@@ -2936,19 +2970,20 @@ export const {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
-  useListFilesQuery,
-  useLazyListFilesQuery,
+  useLsQuery,
+  useLazyLsQuery,
   useStatFileOrDirectoryQuery,
   useLazyStatFileOrDirectoryQuery,
-  useCatFileQuery,
-  useLazyCatFileQuery,
+  useReadFileQuery,
+  useLazyReadFileQuery,
   useWriteFileMutation,
   useDeleteFileMutation,
-  useGrepFileRegexQuery,
-  useLazyGrepFileRegexQuery,
-  usePrintRootDirectoryQuery,
-  useLazyPrintRootDirectoryQuery,
-  useCreateDirectoryMutation,
+  useEditFileMutation,
+  useGlobQuery,
+  useLazyGlobQuery,
+  useGrepQuery,
+  useLazyGrepQuery,
+  useMkdirMutation,
   useCorpusCapabilitiesQuery,
   useLazyCorpusCapabilitiesQuery,
   useCorpusBuildTocMutation,

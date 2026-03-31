@@ -12,6 +12,9 @@ Short version:
 
 The goal is not to expose LangGraph directly to every agent author.
 The goal is to expose a stable Fred SDK above the runtime engine.
+Authoring happens in Fred terms first; runtime execution is delegated later to
+the appropriate engine such as the LangChain/LangGraph ReAct stack or the deep
+agent runtime.
 
 Useful reading order:
 
@@ -30,6 +33,8 @@ Fred now has two authoring worlds:
 For new work, prefer:
 
 - `ReActAgentDefinition` for most conversational or tool-using agents
+- `DeepAgentDefinition` when you still want a conversational assistant but need
+  a deeper planner/executor than basic ReAct
 - `GraphAgentDefinition` for richer deterministic workflows with explicit state and branching
 
 Concrete examples already present in the repo:
@@ -52,10 +57,14 @@ In v2, the author owns the pure declaration of the agent:
 
 - metadata: `agent_id`, `role`, `description`, `tags`
 - editable fields
-- declared tool requirements
 - execution description:
   - ReAct policy
   - or graph topology + node handlers
+
+Tool-aware families such as ReAct and Graph additionally own:
+
+- declared Fred tool refs
+- optional default MCP servers
 
 The author does not own:
 
@@ -126,7 +135,7 @@ What inspection gives:
 - metadata
 - fields
 - execution category
-- tool requirements
+- declared tool refs
 - a safe preview artifact
 
 What inspection must not do:
@@ -173,12 +182,25 @@ For v2 authors, MCP should appear as a platform capability, not as hand-managed 
 
 Current shapes:
 
-- declared tool refs through `tool_requirements`
-- runtime-provided MCP tools through Fred runtime/tool provider
+- declared Fred tool refs through `declared_tool_refs`
+- attached MCP tool providers through `default_mcp_servers` and Fred runtime/tool provider
+- local Python `@tool(...)` authoring, which Fred turns into declared tool refs automatically
 - built-in v2 tools such as:
   - `knowledge.search`
   - `logs.query`
+  - `traces.summarize_conversation`
   - `geo.render_points`
+  - `artifacts.publish_text`
+  - `resources.fetch_text`
+
+Short meaning of the native built-ins:
+
+- `knowledge.search`: native Fred RAG retrieval against current libraries, corpus, and attachments
+- `logs.query`: recent backend log triage
+- `traces.summarize_conversation`: recent conversation trace summary
+- `geo.render_points`: return a rendered map payload from points
+- `artifacts.publish_text`: create a downloadable text artifact
+- `resources.fetch_text`: load a Fred-managed text resource by key and scope
   - `traces.summarize_conversation`
 
 The important rule is:
@@ -186,11 +208,19 @@ The important rule is:
 - declare what the agent needs
 - let Fred bind how the tools are actually provided
 
+Runtime intent:
+
+- the authoring contract has two input paths for tools:
+  - declared Fred tool refs
+  - attached MCP servers
+- local `@tool(...)` authoring is only a convenience path that produces declared Fred tool refs
+- the model should still see one final runtime tool surface
+
 More precisely:
 
-- agent definitions should declare a stable business capability such as
+- tool-aware agent families should declare a stable business capability such as
   `knowledge.search`
-- agent definitions should not hard-code a specific MCP endpoint or server id
+- tool-aware agent families should not hard-code a specific MCP endpoint or server id
   when Fred already exposes that capability through a first-class tool ref
 - MCP server ids and endpoint wiring are platform/infrastructure concerns, not
   the primary authoring contract for product agents

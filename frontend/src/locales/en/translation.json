@@ -451,6 +451,19 @@
       "creationModeLegacyV1Note": "This mode creates the agent with the v1 BasicReAct runtime class (legacy path).",
       "creationModeClass": "Custom class",
       "creationModeClassHelp": "Reserved for workflow agents or backend-specific implementations that do not fit the standard model.",
+      "agentVersion": "Agent version",
+      "agentVersionV2": "v2",
+      "agentVersionV2Help": "Recommended for all new agents. Fully configurable — set the role, tools and behaviour to match any use case.",
+      "agentVersionV1": "v1",
+      "agentVersionV1Help": "Legacy format. Use only if specifically instructed. All new agents should use V2.",
+      "v2ModeReact": "Custom",
+      "v2ModeReactHelp": "A blank-slate agent you configure entirely yourself — role, tools and instructions from scratch.",
+      "v2ModeProfile": "From template",
+      "v2ModeProfileHelp": "Start from a ready-made configuration. Faster to set up when a predefined template fits your needs.",
+      "v2ModeDefinition": "Specialist",
+      "v2ModeDefinitionHelp": "A purpose-built agent delivered by the platform team with a fixed, non-editable behaviour (e.g. Archie, Corpus Investigator).",
+      "definitionRef": "Definition ref",
+      "definitionRefHelp": "Fixed-behaviour v2 agent. Its behaviour is defined in code.",
       "base_prompt": "Base Prompt",
       "agent_type": "Agent Type",
       "profile": "Starting profile",
@@ -1291,47 +1304,6 @@
     "noAppTitle": "No app",
     "noAppDescription": "The team owners have not configured any applications for this group at this time."
   },
-  "teamSettingsPage": {
-    "teamBanner": {
-      "label": "Team banner",
-      "buttonLabel": "Upload image...",
-      "alt": "Team banner image",
-      "noImage": "No banner image uploaded",
-      "uploadSuccess": "Banner uploaded successfully",
-      "uploadError": "Failed to upload banner image",
-      "invalidType": "Invalid file type. Please use JPEG, PNG, or WebP format.",
-      "tooLarge": "File is too large. Maximum size is 5MB."
-    },
-    "description": {
-      "label": "Team description",
-      "placeholder": "Describe here the purpose of your team and its key challenges."
-    },
-    "private": {
-      "label": "Private team"
-    }
-  },
-  "teamMembersPage": {
-    "tableHeader": {
-      "username": "Username",
-      "firstName": "First name",
-      "lastName": "Last name",
-      "role": "Role",
-      "actions": "Actions"
-    },
-    "headerTitle": "Team members",
-    "headerInfoTooltip": "Here are the members of this team. A member can belong to multiple teams at the same time.",
-    "teamRole": {
-      "member": "Member",
-      "manager": "Manager",
-      "owner": "Owner"
-    },
-    "addUserInputPlaceholder": "Add a user...",
-    "removeMemberConfonfirmationDialog": {
-      "title": "Confirm deletion ?",
-      "message": "You're about to remove this user from the team. Do you want to continue?",
-      "confirmButtonLabel": "Delete"
-    }
-  },
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Cancel",
     "defaultConfirmButtonLabel": "Confirm"
@@ -1343,18 +1315,30 @@
       "manager": "Manager",
       "owner": "Owner"
     },
+    "teamCard": {
+      "memberCount": "{{count}} members"
+    },
     "sidebar": {
-      "title": "FRED.AI",
+      "title": "Fred",
       "team": {
         "avatarAlt": "Team {{teamName}}",
         "bannerAlt": "Team's banner",
         "userTeam": "Personal space",
-        "allTeams": "Marketplace"
+        "marketplace": "Marketplace",
+        "menu": {
+          "agents": "Agents",
+          "resources": "Resources",
+          "apps": "Apps"
+        }
       },
-      "menu": {
-        "agents": "Agents",
-        "resources": "Resources",
-        "apps": "Apps"
+      "marketplace": {
+        "title": "Marketplace",
+        "menu": {
+          "teams": "Teams",
+          "agents": "Agents",
+          "tools": "Tools",
+          "apps": "Apps"
+        }
       },
       "newChat": "New chat",
       "chatList": {
@@ -1416,6 +1400,13 @@
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
         }
+      }
+    },
+    "marketplace": {
+      "teams": {
+        "title": "Community teams",
+        "yourTeams": "Your teams",
+        "otherTeams": "Discover other teams"
       }
     }
   }

@@ -27,7 +27,7 @@ from deepeval.metrics import (
 from deepeval.test_case import LLMTestCase
 from langchain_core.messages import HumanMessage
 
-from agentic_backend.agents.rags.rag_expert import Rico
+from agentic_backend.agents.v1.production.rags.rag_expert import Rico
 from agentic_backend.tests.agents.base_deepeval_test import BaseEvaluator
 
 
