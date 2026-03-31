@@ -549,7 +549,8 @@ const getDebugLabel = (payload: unknown): string => {
 
   const role = typeof message.role === "string" ? message.role : "message";
   const channel = typeof message.channel === "string" ? message.channel : "event";
-  const partial = message.streaming_delta === true ? " (delta)" : "";
+  const extras = isRecord(message.metadata) && isRecord(message.metadata.extras) ? message.metadata.extras : {};
+  const partial = extras.streaming_delta === true ? " (delta)" : "";
   return `${role}/${channel}${partial}`;
 };
 
