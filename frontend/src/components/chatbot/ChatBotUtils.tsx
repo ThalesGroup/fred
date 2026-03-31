@@ -41,12 +41,13 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
     const updated = [...base];
     if (hasStreamingDeltaFlag(m)) {
       // Accumulate delta text onto the existing message's first text part.
+      // Delta frames always carry a TextPart — construct it explicitly to satisfy the discriminated union.
       const existing = updated[idx];
       const deltaText = (m.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
       const existingText = (existing.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
       updated[idx] = {
         ...m,
-        parts: [{ ...m.parts![0], text: existingText + deltaText }],
+        parts: [{ type: "text" as const, text: existingText + deltaText }],
       };
     } else {
       updated[idx] = m; // authoritative frame — replace entirely
