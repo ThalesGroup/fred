@@ -1092,10 +1092,7 @@ applications:
       backend: false
     configuration:
       config_json:
-        backend_url_api: "http://{YOUR-URL}"          
-        backend_url_knowledge: "https://{YOUR-URL}"   
-        websocket_url: "ws://{YOUR-URL}/fred/chatbot/query"  
-        frontend_basename : "/"
+        frontend_basename: "/"
 
   # ── 3.3 Knowledge Flow Backend ─────────────────────────────────────
   knowledge-flow-backend:

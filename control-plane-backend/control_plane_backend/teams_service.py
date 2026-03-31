@@ -18,6 +18,7 @@ from fred_core import (
     Relation,
     RelationType,
     Resource,
+    SessionSchema,
     TeamPermission,
     create_keycloak_admin,
 )
@@ -25,7 +26,6 @@ from fred_core.common import TeamId
 from fred_core.scheduler import SchedulerBackend
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
-from pydantic import BaseModel, Field, ValidationError
 
 from control_plane_backend.application_context import ApplicationContext
 from control_plane_backend.scheduler.memory import run_lifecycle_manager_once_in_memory
@@ -68,11 +68,6 @@ _BANNER_EXTENSION_BY_MIME = {
     "image/png": ".png",
     "image/webp": ".webp",
 }
-
-
-class _SessionPayload(BaseModel):
-    id: str = Field(..., min_length=1)
-    team_id: str | None = None
 
 
 def _utcnow() -> datetime:
@@ -331,23 +326,15 @@ async def remove_team_member(
 
     session_store = app_context.get_session_store()
     queue_store = app_context.get_purge_queue_store()
-    payloads = await session_store.get_payloads_for_user(user_id)
+    sessions: list[SessionSchema] = await session_store.get_for_user(user_id)
 
     sessions_enqueued = 0
-    for payload in payloads:
-        try:
-            session_payload = _SessionPayload.model_validate(payload)
-        except ValidationError:
-            logger.debug(
-                "Skipping invalid session payload for user %s: %r", user_id, payload
-            )
-            continue
-
-        if session_payload.team_id != team_id:
+    for session in sessions:
+        if session.team_id != team_id:
             continue
 
         await queue_store.enqueue(
-            session_id=session_payload.id,
+            session_id=session.id,
             team_id=team_id,
             user_id=user_id,
             due_at=scheduled_delete_at,

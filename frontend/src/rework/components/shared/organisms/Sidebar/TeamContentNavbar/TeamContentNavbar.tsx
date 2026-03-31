@@ -1,6 +1,6 @@
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
-import { useLocation, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
@@ -15,54 +15,25 @@ export default function TeamContentNavbar() {
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
-  const { pathname } = useLocation();
 
-  const { data: team } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
+  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || teamId === 'personal'});
   const selectedTeam = teamId ? team : undefined;
-  const canOpenTeamSettings = selectedTeam?.permissions?.includes("can_administer_owners") || false;
+  const canOpenTeamSettings = teamId !== 'personal' || selectedTeam?.permissions?.includes("can_administer_owners") || false;
 
-  const teamsNavigationItems: NavigationMenuItemProps[] = [
+  const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: t("rework.sidebar.menu.agents"),
+      label: t("rework.sidebar.team.menu.agents"),
       icon: { category: "outlined", type: "Person" },
-      selected: pathname.startsWith(`/team/${teamId}/agents`),
       linkProps: { to: `/team/${teamId}/agents` },
     },
     {
       type: "link",
-      label: t("rework.sidebar.menu.resources"),
+      label: t("rework.sidebar.team.menu.resources"),
       icon: { category: "outlined", type: "Folder" },
-      selected: pathname.startsWith(`/team/${teamId}/resources`),
-      linkProps: { to: `/team/${teamId}/resources` },
-    },
-    {
-      type: "link",
-      label: t("rework.sidebar.menu.apps"),
-      icon: { category: "outlined", type: "Widgets" },
-      selected: pathname.startsWith(`/team/${teamId}/apps`),
-      linkProps: { to: `/team/${teamId}/apps` },
-    },
-  ];
-
-  const userNavigationItems: NavigationMenuItemProps[] = [
-    {
-      type: "link",
-      label: t("rework.sidebar.menu.agents"),
-      icon: { category: "outlined", type: "Person" },
-      selected: pathname.startsWith(`/team/${teamId}/agents`),
-      linkProps: { to: `/team/${teamId}/agents` },
-    },
-    {
-      type: "link",
-      label: t("rework.sidebar.menu.resources"),
-      icon: { category: "outlined", type: "Folder" },
-      selected: pathname.startsWith(`/team/${teamId}/resources`),
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
-
-  const isUserSpace = pathname.startsWith(`/team/user`);
 
   const bannerStyle = {
     "--banner-img": selectedTeam?.banner_image_url
@@ -76,7 +47,7 @@ export default function TeamContentNavbar() {
         <div className={styles["banner-container"]} style={bannerStyle}>
           <div className={styles["team-name-container"]}>
             <span className={styles["team-name"]}>
-              {teamId == "user" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+              {teamId == "personal" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
             </span>
             {canOpenTeamSettings && (
               <span className={styles["user-settings-button-container"]}>
@@ -94,7 +65,7 @@ export default function TeamContentNavbar() {
           </div>
         </div>
         <div className={styles["navigation-container"]}>
-          <NavigationMenu items={isUserSpace ? userNavigationItems : teamsNavigationItems} />
+          <NavigationMenu items={navigationItems} />
           <Separator margin={"var(--spacing-m)"} />
           <ChatList />
         </div>

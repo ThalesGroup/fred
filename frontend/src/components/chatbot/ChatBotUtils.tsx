@@ -62,10 +62,9 @@ export const mergeAuthoritative = (existing: ChatMessage[], finals: ChatMessage[
 };
 
 // Convert http(s) API base to ws(s) chat endpoint reliably
-export const toWsUrl = (base: string | undefined, path: string) => {
-  const url = new URL((base || "http://localhost") + path);
-  if (url.protocol === "http:") url.protocol = "ws:";
-  if (url.protocol === "https:") url.protocol = "wss:";
+export const toWsUrl = (path: string) => {
+  const url = new URL(path, window.location.origin);
+  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 };
 
