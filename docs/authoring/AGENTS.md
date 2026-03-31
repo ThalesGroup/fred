@@ -128,6 +128,132 @@ Import them from `agentic_backend.core.agents.v2` and pass as `MCPServerRef(id=.
 
 ---
 
+---
+
+## Shape 4 — Graph agent (explicit workflow with HITL)
+
+**Use this when:** the business process has multiple steps, conditional branches,
+external tool calls, or requires the user to confirm an action before it is
+committed. The workflow is expressed as a typed directed graph. The SDK handles
+streaming, checkpointing, and human-in-the-loop interrupts.
+
+This is the most expressive authoring shape. It is the right choice when you
+need the agent's control flow to be auditable and testable independently of any
+LLM call.
+
+### Anatomy of a graph agent
+
+A graph agent is split across three files:
+
+| File | Responsibility |
+|---|---|
+| `graph_state.py` | Pydantic input and state schemas |
+| `graph_steps.py` | One function per node — pure business logic |
+| `graph_agent.py` | Wires everything together: nodes, edges, routes, MCP servers |
+
+### Minimal example
+
+```python
+# graph_state.py
+from pydantic import BaseModel
+
+class MyInput(BaseModel):
+    message: str
+
+class MyState(BaseModel):
+    latest_user_text: str
+    result: str | None = None
+```
+
+```python
+# graph_steps.py
+from agentic_backend.core.agents.v2.graph.authoring import (
+    StepResult, typed_node, model_text_step, intent_router_step, finalize_step,
+)
+from agentic_backend.core.agents.v2 import GraphNodeContext, GraphNodeResult
+
+@typed_node
+async def classify_step(ctx: GraphNodeContext, state: MyState) -> StepResult:
+    # Use intent_router_step for LLM-based branching
+    return await intent_router_step(ctx, state, ...)
+
+@typed_node
+async def do_work_step(ctx: GraphNodeContext, state: MyState) -> StepResult:
+    # Call an MCP tool, run business logic, update state
+    result = await ctx.invoke_runtime_tool("my_tool", {"input": state.latest_user_text})
+    return StepResult(route_key="done", state_update={"result": result})
+```
+
+```python
+# graph_agent.py
+from agentic_backend.core.agents.v2.graph.authoring import GraphAgent, GraphWorkflow
+from agentic_backend.core.agents.agent_spec import MCPServerRef
+
+class MyGraphAgent(GraphAgent):
+    agent_id: str = "my.graph.v1"
+    role: str = "My Graph Agent"
+    description: str = "Does something step by step."
+
+    input_schema = MyInput
+    state_schema = MyState
+    input_to_state = {"message": "latest_user_text"}
+    output_state_field = "result"
+
+    workflow = GraphWorkflow(
+        entry="classify",
+        nodes={
+            "classify": classify_step,
+            "do_work": do_work_step,
+            "finalize": finalize_step,
+        },
+        edges={"do_work": "finalize"},
+        routes={
+            "classify": {"work": "do_work", "conversational": "finalize"},
+        },
+    )
+```
+
+### Key SDK helpers
+
+| Helper | What it does |
+|---|---|
+| `intent_router_step` | LLM-based intent classification with typed routing |
+| `model_text_step` | Single LLM call that returns text into a state field |
+| `structured_model_step` | LLM call with a Pydantic output schema |
+| `choice_step` | Pauses execution and surfaces a choice to the user (HITL) |
+| `finalize_step` | Standard terminal node — emits `output_state_field` and ends |
+
+### HITL confirmation gates
+
+`choice_step` pauses graph execution and sends an `awaiting_human` event to the
+UI. When the user responds, the graph resumes at the next node. No special
+infrastructure is required — checkpointing and resume are handled by the SDK.
+
+```python
+@typed_node
+async def confirm_action_step(ctx: GraphNodeContext, state: MyState) -> StepResult:
+    return await choice_step(
+        ctx,
+        question="Proceed with the action?",
+        choices=[
+            HumanChoiceOption(id="confirmed", label="Yes, proceed"),
+            HumanChoiceOption(id="cancelled", label="Cancel"),
+        ],
+    )
+```
+
+### Complete working sample
+
+The **bank transfer sample** is a full graph agent with two MCP servers, two HITL
+confirmation gates, KYC and risk validation steps, and conditional routing at
+every stage. Read it before writing your first graph agent.
+
+- [`agentic_backend/agents/v2/samples/bank_transfer/graph_agent.py`](../agentic-backend/agentic_backend/agents/v2/samples/bank_transfer/graph_agent.py) — workflow wiring
+- [`agentic_backend/agents/v2/samples/bank_transfer/graph_steps.py`](../agentic-backend/agentic_backend/agents/v2/samples/bank_transfer/graph_steps.py) — all step implementations
+- [`agentic_backend/agents/v2/samples/bank_transfer/graph_state.py`](../agentic-backend/agentic_backend/agents/v2/samples/bank_transfer/graph_state.py) — state schema
+
+---
+
 ## Where does my file go?
 
 | Stage | Folder |
