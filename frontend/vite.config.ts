@@ -27,7 +27,7 @@ export default defineConfig({
     port: parseInt(process.env.VITE_PORT || "5173"),
     allowedHosts: (process.env.VITE_ALLOWED_HOSTS || "").split(",").filter(Boolean),
     proxy: {
-      "/agentic": process.env.VITE_BACKEND_URL || "http://localhost:8000",
+      "/agentic": { target: process.env.VITE_BACKEND_URL || "http://localhost:8000", ws: true },
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
       "/control-plane": process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
     },
