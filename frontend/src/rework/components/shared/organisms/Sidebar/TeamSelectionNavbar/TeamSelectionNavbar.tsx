@@ -17,9 +17,9 @@ export default function TeamSelectionNavbar() {
       <div>
         <span className={styles.title}>{t("rework.sidebar.title")}</span>
         <TeamSelectionItem
-          redirection={"/team/" + userDetails?.personalTeamId}
+          redirection={`/team/${userDetails?.personalTeamId}/agents`}
           teamName={t("rework.sidebar.team.userTeam")}
-          selected={pathname.startsWith(`/team/user`)}
+          selected={pathname.startsWith(`/team/personal`)}
           icon={{ category: "outlined", type: "Person", filled: true }}
         />
         <TeamSelectionItem
@@ -35,7 +35,7 @@ export default function TeamSelectionNavbar() {
           return (
             <TeamSelectionItem
               key={team.id}
-              redirection={"/team/" + team.id}
+              redirection={`/team/${team.id}/agents`}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
               imgUrl={"/images/default-team-banner.png"}

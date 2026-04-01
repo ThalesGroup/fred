@@ -1,8 +1,7 @@
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
-import ConversationButton from "@shared/atoms/ConversationButton/ConversationButton.tsx";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -15,12 +14,11 @@ import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPag
 export default function TeamContentNavbar() {
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const { teamId } = useParams<{ teamId: string }>();
 
-  const { data: team } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
+  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || teamId === 'personal'});
   const selectedTeam = teamId ? team : undefined;
-  const canOpenTeamSettings = selectedTeam?.permissions?.includes("can_administer_owners") || false;
+  const canOpenTeamSettings = teamId !== 'personal' || selectedTeam?.permissions?.includes("can_administer_owners") || false;
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -37,10 +35,6 @@ export default function TeamContentNavbar() {
     },
   ];
 
-  const newChatHandler = () => {
-    navigate(`/new-chat`);
-  };
-
   const bannerStyle = {
     "--banner-img": selectedTeam?.banner_image_url
       ? `url(${selectedTeam.banner_image_url})`
@@ -53,7 +47,7 @@ export default function TeamContentNavbar() {
         <div className={styles["banner-container"]} style={bannerStyle}>
           <div className={styles["team-name-container"]}>
             <span className={styles["team-name"]}>
-              {teamId == "user" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+              {teamId == "personal" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
             </span>
             {canOpenTeamSettings && (
               <span className={styles["user-settings-button-container"]}>
@@ -69,11 +63,6 @@ export default function TeamContentNavbar() {
               </span>
             )}
           </div>
-          <span className={styles["conversation-button-container"]}>
-            <ConversationButton icon={{ category: "outlined", type: "Add" }} onClick={newChatHandler}>
-              {t("rework.sidebar.newChat")}
-            </ConversationButton>
-          </span>
         </div>
         <div className={styles["navigation-container"]}>
           <NavigationMenu items={navigationItems} />

@@ -50,6 +50,9 @@ export type MaterialIconType =
   | "more_vert"
   | "more_horiz"
   | "storefront"
+  | "edit"
+  | "visibility"
+  | "reviews"
   | "delete_forever";
 
 export type CustomIconType = (typeof customIcons)[number];

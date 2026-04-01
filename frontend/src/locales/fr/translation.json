@@ -1311,6 +1311,9 @@
   },
   "rework": {
     "back": "Retour",
+    "agentCard": {
+      "startChat": "Nouveau chat"
+    },
     "teamRoles": {
       "member": "Membre",
       "manager": "Manager",
@@ -1341,7 +1344,6 @@
           "apps": "Apps"
         }
       },
-      "newChat": "Nouvelle conversation",
       "chatList": {
         "title": "Conversations"
       }
@@ -1400,6 +1402,12 @@
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
         }
+      }
+    },
+    "teams":{
+      "agents":{
+        "title": "Sollicitez vos Agents",
+        "create": "Créer un Agent"
       }
     },
     "marketplace": {

@@ -78,7 +78,11 @@ class PostgresAgentStore(BaseAgentStore):
         self, session: AsyncSession | None = None
     ) -> List[AgentSettings]:
         async with use_session(self._sessions, session) as s:
-            rows = (await s.execute(select(AgentRow))).scalars().all()
+            rows = (
+                (await s.execute(select(AgentRow).order_by(AgentRow.name)))
+                .scalars()
+                .all()
+            )
 
         out: List[AgentSettings] = []
         for row in rows:

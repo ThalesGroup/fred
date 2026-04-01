@@ -1310,6 +1310,9 @@
   },
   "rework": {
     "back": "Back",
+    "agentCard": {
+      "startChat": "New chat"
+    },
     "teamRoles": {
       "member": "Member",
       "manager": "Manager",
@@ -1400,6 +1403,12 @@
           "label": "Team context (prompt)",
           "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
         }
+      }
+    },
+    "teams": {
+      "agents": {
+        "title": "Engage your Agents",
+        "create": "Create an Agent"
       }
     },
     "marketplace": {

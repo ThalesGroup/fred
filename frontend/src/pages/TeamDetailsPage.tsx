@@ -2,18 +2,13 @@ import { Box } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
-import { TeamAgentHub } from "../components/teamDetails/TeamAgentHub";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
-import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
-import { capitalize } from "../utils/capitalize";
 import { KnowledgeHub } from "./KnowledgeHub.tsx";
-import { AgentHub } from "./AgentHub.tsx";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
-  const { agentsNicknamePlural } = useFrontendProperties();
 
   const { teamId } = useParams<{ teamId: string }>();
   const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
@@ -25,16 +20,6 @@ export function TeamDetailsPage() {
   }
 
   const tabs: TabConfig[] = [
-    {
-      label: capitalize(agentsNicknamePlural || "..."),
-      path: `/team/${teamId}/${agentsNicknamePlural}`,
-      component:
-        teamId === "user" ? (
-          <AgentHub />
-        ) : (
-          <TeamAgentHub teamId={teamId} canCreateAgents={team?.permissions?.includes("can_update_agents")} />
-        ),
-    },
     {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
