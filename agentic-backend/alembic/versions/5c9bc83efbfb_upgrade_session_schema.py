@@ -20,8 +20,10 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "5c9bc83efbfb"
-down_revision: Union[str, Sequence[str], None] = "bb94940fde0c"
+revision: str = "5c9bc83efbfb"  # pragma: allowlist secret
+down_revision: Union[str, Sequence[str], None] = (
+    "bb94940fde0c"  # pragma: allowlist secret
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

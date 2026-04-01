@@ -2,15 +2,36 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Agentic + Knowledge + Frontend + kf worker + control-plane",
+      "label": "All Services",
       "dependsOn": [
         "agentic-backend",
         "knowledge-flow-backend",
         "frontend",
-        "kf worker",
+        "kf-worker",
         "control-plane"
       ],
-      "dependsOrder": "parallel"
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "rocket",
+        "color": "terminal.ansiRed"
+      }
+    },
+    {
+      "label": "All Services PROD",
+      "dependsOn": [
+        "agentic-backend-prod",
+        "knowledge-flow-backend-prod",
+        "frontend",
+        "kf-worker-prod",
+        "control-plane-prod"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "flame",
+        "color": "terminal.ansiRed"
+      }
     },
     {
       "label": "agentic-backend",
@@ -18,11 +39,41 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8000 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8000"
       ],
-      "options": { "cwd": "${workspaceFolder}/agentic-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/agentic-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "hubot",
+        "color": "terminal.ansiMagenta"
+      }
+    },
+    {
+      "label": "agentic-backend-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8000 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8000"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/agentic-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "hubot",
+        "color": "terminal.ansiMagenta"
+      }
     },
     {
       "label": "knowledge-flow-backend",
@@ -30,31 +81,119 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8111 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8111 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8111"
       ],
-      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "database",
+        "color": "terminal.ansiCyan"
+      }
     },
-        {
+    {
+      "label": "knowledge-flow-backend-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8111 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8111"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "database",
+        "color": "terminal.ansiCyan"
+      }
+    },
+    {
       "label": "control-plane",
       "type": "shell",
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:8222 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8222 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run PORT=8222"
       ],
-      "options": { "cwd": "${workspaceFolder}/control-plane-backend" },
+      "options": {
+        "cwd": "${workspaceFolder}/control-plane-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "settings-gear",
+        "color": "terminal.ansiYellow"
+      }
     },
     {
-      "label": "kf worker",
+      "label": "control-plane-prod",
       "type": "shell",
-      "command": "make run-worker",
-      "options": { "cwd": "${workspaceFolder}/knowledge-flow-backend" },
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:8222 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make rrun-prod PORT=8222"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/control-plane-backend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "settings-gear",
+        "color": "terminal.ansiYellow"
+      }
+    },
+    {
+      "label": "kf-worker",
+      "type": "shell",
+      "command": "bash",
+      "args": ["-lc", "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker"],
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "filter",
+        "color": "terminal.ansiBlue"
+      }
+    },
+    {
+      "label": "kf-worker-prod",
+      "type": "shell",
+      "command": "bash",
+      "args": ["-lc", "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker-prod"],
+      "options": {
+        "cwd": "${workspaceFolder}/knowledge-flow-backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "filter",
+        "color": "terminal.ansiBlue"
+      }
     },
     {
       "label": "frontend",
@@ -62,11 +201,20 @@
       "command": "bash",
       "args": [
         "-lc",
-        "if command -v lsof >/dev/null 2>&1; then pids=$(lsof -tiTCP:5173 -sTCP:LISTEN); if [ -n \"$pids\" ]; then kill $pids; fi; fi; make run"
+        "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; pids=$(lsof -tiTCP:5173 -sTCP:LISTEN 2>/dev/null); [ -n \"$pids\" ] && kill $pids; make run"
       ],
-      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
       "problemMatcher": [],
-      "presentation": { "panel": "new", "reveal": "always" }
+      "presentation": {
+        "panel": "new",
+        "reveal": "always"
+      },
+      "icon": {
+        "id": "browser",
+        "color": "terminal.ansiGreen"
+      }
     }
   ]
 }

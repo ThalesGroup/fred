@@ -15,7 +15,6 @@
 import { createBrowserRouter, Navigate, RouteObject } from "react-router-dom";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
-import { AgentHub } from "../pages/AgentHub";
 import Chat from "../pages/Chat";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
@@ -25,12 +24,13 @@ import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
 import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
-import { TeamsPage } from "../pages/TeamsPage.tsx";
 import { getConfig } from "./config";
 import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import LoadingWithProgress from "../components/LoadingWithProgress";
+import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -74,20 +74,20 @@ export const routes: RouteObject[] = [
         element: <Chat />,
       },
       {
-        path: "agents",
-        element: <AgentHub />,
-      },
-      {
         path: "knowledge",
         element: <KnowledgeHub />,
       },
       {
-        path: "teams",
-        element: <TeamsPage />,
+        path: "team/:teamId/agents",
+        element: <TeamAgentsPage />,
       },
       {
         path: "team/:teamId/*",
         element: <TeamDetailsPage />,
+      },
+      {
+        path: "marketplace/teams",
+        element: <MarketplaceTeams />,
       },
       {
         path: "monitoring/kpis",

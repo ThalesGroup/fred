@@ -1,7 +1,7 @@
 @use "sass:map";
 @use "src/index.scss" as *;
 
-.button-group-item {
+.buttonGroupItem {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -13,7 +13,7 @@
 
   @include typography("label", "large");
 
-  .state-layer {
+  .stateLayer {
     corner-shape: round;
     display: flex;
     justify-content: center;
@@ -39,7 +39,7 @@
     height: 1.5rem;
     --lateral-padding: var(--spacing-xs);
 
-    .state-layer {
+    .stateLayer {
       gap: var(--spacing-3xs);
     }
 
@@ -52,7 +52,7 @@
     height: 2rem;
     --lateral-padding: var(--spacing-s);
 
-    .state-layer {
+    .stateLayer {
       gap: var(--spacing-2xs);
     }
 
@@ -65,7 +65,7 @@
     height: 2.5rem;
     --lateral-padding: var(--spacing-m);
 
-    .state-layer {
+    .stateLayer {
       gap: var(--spacing-xs);
     }
 
@@ -76,11 +76,11 @@
 
   @each $name, $scheme in $color-schemes {
     &[data-color="#{$name}"] {
-      &:active .state-layer:not([data-selected="true"]) {
+      &:active .stateLayer:not([data-selected="true"]) {
         --item-background-color: #{map.get($scheme, "on-container-pressed")};
       }
 
-      &:hover:not(:active) .state-layer:not([data-selected="true"]) {
+      &:hover:not(:active) .stateLayer:not([data-selected="true"]) {
         --item-background-color: #{map.get($scheme, "on-container-hover")};
       }
 

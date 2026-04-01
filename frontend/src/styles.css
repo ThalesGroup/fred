@@ -25,12 +25,13 @@
 
 * {
   box-sizing: border-box;
+  corner-shape: squircle;
 }
 
 body {
   margin: 0;
-  background-color: #f0f0f0;
   padding: 0;
+  background-color: var(--surface-container-lowest) !important;
   font-size: 12px;
   font-family: "Roboto", sans-serif;
 }

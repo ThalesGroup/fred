@@ -38,6 +38,7 @@ DVA_RISK_VALIDATOR_QA_DEFINITION_REF = "v2.production.dva_risk_validator.qa"
 SLIDE_MAKER_SAMPLE_DEFINITION_REF = "v2.sample.slide_maker"
 SQL_ANALYST_DEFINITION_REF = "v2.production.sql_analyst"
 ARCHIE_DEFINITION_REF = "v2.production.archie"
+BANK_TRANSFER_SAMPLE_DEFINITION_REF = "v2.sample.bank_transfer"
 
 _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
     {
@@ -67,6 +68,9 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
         ),
         ARCHIE_DEFINITION_REF: (
             "agentic_backend.agents.v2.production.archie.ArchieV2Definition"
+        ),
+        BANK_TRANSFER_SAMPLE_DEFINITION_REF: (
+            "agentic_backend.agents.v2.samples.bank_transfer.BankTransferGraphAgent"
         ),
     }
 )

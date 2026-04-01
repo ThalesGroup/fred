@@ -258,6 +258,14 @@ class AIConfig(BaseModel):
         description="Number of past exchanges to restore when initializing an agent session.",
     )
 
+    stream_flush_interval_ms: int = Field(
+        100,
+        description=(
+            "Interval in milliseconds between partial-stream WebSocket frames. "
+            "Tokens arriving faster than this are buffered and sent as a single delta. "
+            "Raise to 200 on high-concurrency deployments to reduce write frequency."
+        ),
+    )
     max_concurrent_agents: int = Field(
         1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
