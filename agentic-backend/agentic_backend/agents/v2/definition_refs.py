@@ -68,6 +68,10 @@ _CLASS_PATH_BY_DEFINITION_REF = MappingProxyType(
         ARCHIE_DEFINITION_REF: (
             "agentic_backend.agents.v2.production.archie.ArchieV2Definition"
         ),
+        RAG_EXPERT_DEFINITION_REF: (
+            "agentic_backend.agents.v2.production.basic_react.BasicReActDefinition"
+        ),
+
     }
 )
 

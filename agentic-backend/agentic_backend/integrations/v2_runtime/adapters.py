@@ -25,10 +25,12 @@ import logging
 import os
 import re
 import uuid
+import base64
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
+from fred_core.store import VectorSearchHit
 
 import httpx
 from fred_core import (
@@ -45,6 +47,8 @@ from langfuse import Langfuse
 from agentic_backend.application_context import get_app_context, get_default_chat_model
 from agentic_backend.common.kf_logs_client import KfLogsClient
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.rags_utils import select_visual_evidence_hits
+from agentic_backend.common.kf_vectorsearch_client import PreviewArtifactBlob
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
@@ -229,6 +233,28 @@ def build_langfuse_tracer() -> TracerPort | None:
         logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
         _LANGFUSE_TRACER = None
     return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
+
+def _visual_asset_payload_from_hit(hit: VectorSearchHit) -> dict[str, object] | None:
+    if not hit.has_visual_evidence or not hit.slide_image_uri:
+        return None
+
+    return {
+        "document_uid": hit.uid,
+        "slide_id": hit.slide_id,
+        "slide_image_uri": hit.slide_image_uri,
+        "title": hit.title,
+        "section": hit.section,
+    }
+def _image_tool_block_from_blob(
+    *,
+    blob: PreviewArtifactBlob,
+) -> ToolContentBlock:
+    return ToolContentBlock(
+        kind=ToolContentKind.IMAGE,
+        mime_type=blob.content_type,
+        image_base64=base64.b64encode(blob.bytes).decode("utf-8"),
+        file_name=blob.filename,
+    )
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
@@ -426,25 +452,60 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             include_session_scope=include_session_scope,
             include_corpus_scope=include_corpus_scope,
         )
+        visual_evidence_hits = select_visual_evidence_hits(hits, max_images=3)
+        visual_evidence_assets = [
+            asset
+            for hit in visual_evidence_hits
+            if (asset := _visual_asset_payload_from_hit(hit)) is not None
+        ]
+    
+        image_blocks: list[ToolContentBlock] = []
+        for asset in visual_evidence_assets:
+            document_uid = asset.get("document_uid")
+            slide_image_uri = asset.get("slide_image_uri")
+            if not isinstance(document_uid, str) or not isinstance(slide_image_uri, str):
+                continue
 
+            try:
+                blob = await self._search_client.fetch_preview_artifact(
+                    document_uid=document_uid,
+                    artifact_path=slide_image_uri,
+                )
+            except Exception:
+                logger.warning(
+                    "[V2][RICH] Failed to fetch preview artifact document_uid=%s artifact=%s",
+                    document_uid,
+                    slide_image_uri,
+                    exc_info=True,
+                )
+                continue
+            image_blocks.append(_image_tool_block_from_blob(blob=blob))          
+        
+        json_block = ToolContentBlock(
+            kind=ToolContentKind.JSON,
+            data={
+                "query": query,
+                "hits": [
+                    hit.model_dump(mode="json")
+                    if hasattr(hit, "model_dump")
+                    else hit
+                    for hit in hits
+                ],
+                "visual_evidence_hits": [
+                    hit.model_dump(mode="json")
+                    if hasattr(hit, "model_dump")
+                    else hit
+                    for hit in visual_evidence_hits
+                ],
+                "visual_evidence_assets": visual_evidence_assets,
+            },
+        )
         return ToolInvocationResult(
             tool_ref=request.tool_ref,
-            blocks=(
-                ToolContentBlock(
-                    kind=ToolContentKind.JSON,
-                    data={
-                        "query": query,
-                        "hits": [
-                            hit.model_dump(mode="json")
-                            if hasattr(hit, "model_dump")
-                            else hit
-                            for hit in hits
-                        ],
-                    },
-                ),
-            ),
+            blocks=(json_block, *tuple(image_blocks)),
             sources=tuple(hits),
         )
+          
 
     async def _invoke_logs_query(
         self, request: ToolInvocationRequest

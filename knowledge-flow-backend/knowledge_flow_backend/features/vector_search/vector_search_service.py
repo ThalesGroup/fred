@@ -226,6 +226,9 @@ class VectorSearchService:
             page=md.get("page"),
             section=md.get("section"),
             viewer_fragment=md.get("viewer_fragment"),
+            slide_id=md.get("slide_id"),
+            has_visual_evidence=md.get("has_visual_evidence"),
+            slide_image_uri=md.get("slide_image_uri"),
             # identity
             uid=uid,
             title=md.get("title") or md.get("document_name") or "Unknown",

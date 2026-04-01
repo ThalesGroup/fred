@@ -364,5 +364,6 @@ class ModelSelection(FrozenModel):
     capability: ModelCapability
     profile_id: str
     model: ModelConfiguration
+    supports_image_input: bool = False
     rule_id: str | None = None
     matched_criteria: int = Field(default=0, ge=0)

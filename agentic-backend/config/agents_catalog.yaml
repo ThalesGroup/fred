@@ -32,6 +32,12 @@ agents:
     class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
     enabled: true
 
+  - id: "RAG Expert V2"
+    name: "RAG Expert V2"
+    type: "agent"
+    definition_ref: "v2.react.rag_expert"
+
+
   - id: "Spot"
     name: "Spot"
     type: "agent"

@@ -166,9 +166,22 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             purpose=purpose,
             operation=operation,
         )
-        model = self._provider.build_model(
-            selection.model, capability=selection.capability
+        model_config = selection.model.model_copy(deep=True)
+        model_settings = dict(model_config.settings or {})
+        supports_image_input = bool(model_settings.pop("supports_image_input", False))
+        model_config.settings = model_settings
+
+        selection = selection.model_copy(
+            update={
+                "model": model_config,
+                "supports_image_input": supports_image_input,
+            }
         )
+
+        model = self._provider.build_model(
+            model_config, capability=selection.capability
+        )
+
         if not isinstance(model, BaseChatModel):
             raise TypeError(
                 "RoutedChatModelFactory expected a BaseChatModel for capability='chat'."

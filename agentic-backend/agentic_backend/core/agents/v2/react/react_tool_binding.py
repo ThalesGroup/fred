@@ -184,7 +184,7 @@ class ReActToolBinder:
 
         async def _invoke_bound_tool(
             **payload: object,
-        ) -> tuple[str, ToolInvocationResult | None]:
+        ) -> tuple[str | list[dict[str, object]], ToolInvocationResult | None]:
             normalized_payload = cast(
                 dict[str, object],
                 normalize_payload(dict(payload)),

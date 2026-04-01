@@ -64,6 +64,7 @@ from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
     render_tool_result,
     stringify_tool_output,
+    render_tool_result_for_model,
 )
 from .react_tool_utils import sanitize_tool_name
 
@@ -71,9 +72,20 @@ logger = logging.getLogger(__name__)
 
 RuntimeToolInvoke = Callable[
     [dict[str, object]],
-    Awaitable[tuple[str, ToolInvocationResult | None]],
+    Awaitable[tuple[str | list[dict[str, object]], ToolInvocationResult | None]],
 ]
 RuntimeToolTraceAttrs = Callable[[dict[str, object]], Mapping[str, object]]
+
+def _render_result_content(
+    result: ToolInvocationResult,
+) -> str | list[dict[str, object]]:
+    model_parts = render_tool_result_for_model(result)
+
+    has_non_text_part = any(part.get("type") != "text" for part in model_parts)
+    if has_non_text_part:
+        return model_parts
+
+    return render_tool_result(result)
 
 
 class ToolPayloadModel(BaseModel):
@@ -370,7 +382,7 @@ class ReActRuntimeToolResolver:
 
             async def _invoke(
                 payload: dict[str, object],
-            ) -> tuple[str, ToolInvocationResult]:
+            ) -> tuple[str | list[dict[str, object]], ToolInvocationResult]:
                 file_name = str(payload["file_name"])
                 artifact = await artifact_publisher.publish(
                     ArtifactPublishRequest(
@@ -393,7 +405,7 @@ class ReActRuntimeToolResolver:
                     ),
                     ui_parts=(artifact.to_link_part(),),
                 )
-                return (render_tool_result(result), result)
+                return (_render_result_content(result), result)
 
             return FredRuntimeToolSpec(
                 runtime_name=tool_name,
@@ -416,7 +428,7 @@ class ReActRuntimeToolResolver:
 
             async def _invoke(
                 payload: dict[str, object],
-            ) -> tuple[str, ToolInvocationResult]:
+            ) -> tuple[str | list[dict[str, object]], ToolInvocationResult]:
                 scope = self._resource_scope_from_payload(payload.get("scope"))
                 resource = await resource_reader.fetch(
                     ResourceFetchRequest(
@@ -436,7 +448,7 @@ class ReActRuntimeToolResolver:
                         ),
                     ),
                 )
-                return (render_tool_result(result), result)
+                return (_render_result_content(result), result)
 
             return FredRuntimeToolSpec(
                 runtime_name=tool_name,
@@ -484,7 +496,7 @@ class ReActRuntimeToolResolver:
 
         async def _invoke(
             payload: dict[str, object],
-        ) -> tuple[str, ToolInvocationResult]:
+        ) -> tuple[str | list[dict[str, object]], ToolInvocationResult]:
             result = await tool_invoker.invoke(
                 ToolInvocationRequest(
                     tool_ref=requirement.tool_ref,
@@ -492,7 +504,7 @@ class ReActRuntimeToolResolver:
                     context=self._binding.portable_context,
                 )
             )
-            return (render_tool_result(result), result)
+            return (_render_result_content(result), result)
 
         return FredRuntimeToolSpec(
             runtime_name=tool_name,
@@ -526,17 +538,17 @@ class ReActRuntimeToolResolver:
 
         async def _invoke(
             payload: dict[str, object],
-        ) -> tuple[str, ToolInvocationResult | None]:
+        ) -> tuple[str | list[dict[str, object]], ToolInvocationResult | None]:
             raw_result = await runtime_tool.ainvoke(payload)
             if isinstance(raw_result, ToolInvocationResult):
-                return (render_tool_result(raw_result), raw_result)
+                return (_render_result_content(raw_result), raw_result)
             if isinstance(raw_result, tuple) and len(raw_result) == 2:
                 artifact = normalize_runtime_provider_artifact(raw_result[1])
                 rendered_content = stringify_tool_output(raw_result[0]).strip()
                 if rendered_content:
                     return (rendered_content, artifact)
                 if artifact is not None:
-                    return (render_tool_result(artifact), artifact)
+                    return (_render_result_content(artifact), artifact)
                 return (stringify_tool_output(raw_result[0]), None)
             return (stringify_tool_output(raw_result), None)
 

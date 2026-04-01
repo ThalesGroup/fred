@@ -16,45 +16,67 @@ common_model_settings:
 default_profile_by_capability:
   chat: default.chat.openai.prod
   language: default.language.openai.prod
-
+  
+# Optional:
+# - supports_image_input: true for multimodal chat models
+# - if omitted, Fred treats the model as text-only
 profiles:
   - profile_id: default.chat.openai.prod
     capability: chat
-    description: "Default balanced chat model for production conversations."
+    description: "Default chat model via Mistral with image input support."
     model:
       provider: openai
-      name: gpt-5.1
-      settings: {}
+      name: mistral-medium-latest
+      settings:
+        supports_image_input: true
+        base_url: "https://api.mistral.ai/v1"
 
   - profile_id: default.language.openai.prod
     capability: language
-    description: "Default balanced language model for structured text tasks."
+    description: "Default language model via Mistral."
     model:
       provider: openai
-      name: gpt-5.1
-      settings: {}
+      name: mistral-medium-latest
+      settings:
+        base_url: "https://api.mistral.ai/v1"
+
 
   - profile_id: default.chat.local
     capability: chat
-    description: "Local default chat profile with retries and shorter timeout."
+    description: "Local default chat profile via Ollama."
     model:
-      provider: openai
-      name: gpt-5.1
+      provider: ollama
+      name: "gpt-oss:120b-cloud"
       settings:
+        base_url: "http://localhost:11434"
+        temperature: 0
         max_retries: 2
-        request_timeout: 90
-        temperature: 0.0
+        timeout:
+          connect: 10.0
+          read: 60.0
+        http_client_limits:
+          max_connections: 500
+          max_keepalive_connections: 0
+          keepalive_expiry_seconds: 10
 
   - profile_id: default.language.local
     capability: language
-    description: "Local default language profile with retries and shorter timeout."
+    description: "Local default language profile via Ollama."
     model:
-      provider: openai
-      name: gpt-5.1
+      provider: ollama
+      name: "gpt-oss:120b-cloud"
       settings:
+        base_url: "http://localhost:11434"
+        temperature: 0
         max_retries: 2
-        request_timeout: 90
-        temperature: 0.0
+        timeout:
+          connect: 10.0
+          read: 60.0
+        http_client_limits:
+          max_connections: 500
+          max_keepalive_connections: 0
+          keepalive_expiry_seconds: 10
+
 
   - profile_id: chat.openai.gpt52
     capability: chat

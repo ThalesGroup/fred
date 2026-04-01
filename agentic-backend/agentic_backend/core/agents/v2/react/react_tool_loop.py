@@ -24,6 +24,8 @@ Why this module exists:
 from __future__ import annotations
 
 import json
+import copy
+from langchain_core.messages import BaseMessage
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
@@ -229,6 +231,7 @@ def build_tool_loop_compiled_react_agent(
     - `build_tool_loop_compiled_react_agent(..., available_tool_names={"ls", "read_file"})`
     """
     bound_models_by_operation: dict[str, object] = {}
+    image_support_by_operation: dict[str, bool] = {}
 
     def _system_builder(state: object) -> str:
         state_messages = state.get("messages", []) if isinstance(state, dict) else []
@@ -251,7 +254,7 @@ def build_tool_loop_compiled_react_agent(
         cached = bound_models_by_operation.get(operation)
         if cached is not None:
             return cached
-        resolved_model, _ = chat_model_factory.build_for_chat(
+        resolved_model, selection = chat_model_factory.build_for_chat(
             definition=definition,
             binding=binding,
             purpose="chat",
@@ -259,6 +262,7 @@ def build_tool_loop_compiled_react_agent(
         )
         bound = resolved_model.bind_tools(tools)
         bound_models_by_operation[operation] = bound
+        image_support_by_operation[operation] = bool(selection.supports_image_input)
         return bound
 
     def _requires_human_approval(tool_name: str) -> bool:
@@ -308,6 +312,55 @@ def build_tool_loop_compiled_react_agent(
         if _is_cancelled_human_decision(decision):
             return {"cancel": True}
         return {}
+    
+    def _supports_images_for_state(state: object) -> bool:
+        if not isinstance(chat_model_factory, RoutedChatModelFactory):
+            return False
+        messages = state.get("messages", []) if isinstance(state, dict) else []
+        operation = (
+            infer_operation_from_messages(messages)
+            if isinstance(messages, list)
+            else default_operation
+        )
+        return bool(image_support_by_operation.get(operation, False))
+    
+    def _strip_image_parts_from_messages(messages: list[object]) -> list[object]:
+        sanitized: list[object] = []
+
+        for message in messages:
+            if not isinstance(message, BaseMessage):
+                sanitized.append(message)
+                continue
+
+            content = getattr(message, "content", None)
+            if not isinstance(content, list):
+                sanitized.append(message)
+                continue
+
+            filtered = [
+                item
+                for item in content
+                if not (
+                    isinstance(item, dict)
+                    and item.get("type") == "image_url"
+                )
+            ]
+
+            cloned = copy.deepcopy(message)
+            cloned.content = filtered
+            sanitized.append(cloned)
+
+        return sanitized
+
+    def _preprocess_messages_for_model(
+        state: MessagesState,
+        messages: list[object],
+        _: object,
+    ) -> list[object]:
+        if _supports_images_for_state(state):
+            return messages
+        return _strip_image_parts_from_messages(messages)
+
 
     graph = build_tool_loop(
         model=model.bind_tools(tools),
@@ -318,5 +371,7 @@ def build_tool_loop_compiled_react_agent(
         requires_hitl=_requires_human_approval,
         hitl_callback=_hitl_callback,
         rewrite_tool_call=_rewrite_tool_call,
+        preprocess_messages=_preprocess_messages_for_model,
+
     )
     return graph.compile(checkpointer=checkpointer)

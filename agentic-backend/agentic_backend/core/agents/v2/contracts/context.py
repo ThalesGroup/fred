@@ -99,12 +99,18 @@ class ToolInvocationRequest(FrozenModel):
 class ToolContentKind(str, Enum):
     TEXT = "text"
     JSON = "json"
+    IMAGE = "image"
+
 
 
 class ToolContentBlock(FrozenModel):
     kind: ToolContentKind
     text: str | None = None
     data: dict[str, object] | None = None
+    mime_type: str | None = None
+    image_base64: str | None = None
+    file_name: str | None = None
+
 
 
 UiPart = Annotated[LinkPart | GeoPart, Field(discriminator="type")]

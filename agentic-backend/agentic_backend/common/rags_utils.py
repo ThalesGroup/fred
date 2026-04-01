@@ -44,6 +44,53 @@ def ensure_ranks(hits: List[VectorSearchHit]) -> None:
             h.rank = i
         i += 1
 
+def _visual_evidence_key(hit: VectorSearchHit) -> str | None:
+    if hit.slide_image_uri:
+        return f"image:{hit.slide_image_uri}"
+    if hit.slide_id is not None:
+        return f"slide:{hit.slide_id}"
+    return None
+
+
+def select_visual_evidence_hits(
+    hits: List[VectorSearchHit],
+    max_images: int = 3,
+) -> List[VectorSearchHit]:
+    if max_images <= 0:
+        return []
+
+    best_by_asset: dict[str, VectorSearchHit] = {}
+
+    for hit in hits:
+        if not hit.has_visual_evidence:
+            continue
+
+        key = _visual_evidence_key(hit)
+        if key is None:
+            continue
+
+        existing = best_by_asset.get(key)
+        if existing is None:
+            best_by_asset[key] = hit
+            continue
+
+        existing_rank = existing.rank if existing.rank is not None else 10**9
+        hit_rank = hit.rank if hit.rank is not None else 10**9
+
+        if hit_rank < existing_rank:
+            best_by_asset[key] = hit
+        elif hit_rank == existing_rank and (hit.score or 0.0) > (existing.score or 0.0):
+            best_by_asset[key] = hit
+
+    selected = sorted(
+        best_by_asset.values(),
+        key=lambda hit: (
+            hit.rank if hit.rank is not None else 10**9,
+            -(hit.score or 0.0),
+        ),
+    )
+
+    return selected[:max_images]      
 
 def format_sources_for_prompt(
     hits: List[VectorSearchHit], snippet_chars: int = 500

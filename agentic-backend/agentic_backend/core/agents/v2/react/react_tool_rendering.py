@@ -53,6 +53,46 @@ def render_tool_result(result: ToolInvocationResult) -> str:
         return "Tool error:\n" + "\n".join(rendered_blocks)
     return "\n".join(rendered_blocks)
 
+def render_tool_result_for_model(result: ToolInvocationResult) -> list[dict[str, object]]:
+    parts: list[dict[str, object]] = []
+
+    for block in result.blocks:
+        if block.kind == ToolContentKind.TEXT and block.text is not None:
+            parts.append({"type": "text", "text": block.text})
+            continue
+
+        if block.kind == ToolContentKind.JSON and block.data is not None:
+            parts.append(
+                {
+                    "type": "text",
+                    "text": json.dumps(block.data, ensure_ascii=False, indent=2),
+                }
+            )
+            continue
+
+        if (
+            block.kind == ToolContentKind.IMAGE
+            and block.image_base64 is not None
+            and block.mime_type is not None
+        ):
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{block.mime_type};base64,{block.image_base64}"
+                    },
+                }
+            )
+            continue
+
+        fallback = _render_fallback_tool_block(block)
+        if fallback:
+            parts.append({"type": "text", "text": fallback})
+
+    if not parts:
+        parts.append({"type": "text", "text": ""})
+
+    return parts
 
 def stringify_tool_output(value: object) -> str:
     """
@@ -129,4 +169,6 @@ def _render_fallback_tool_block(block: ToolContentBlock) -> str:
         return block.text
     if block.data is not None:
         return json.dumps(block.data, ensure_ascii=False, indent=2)
+    if block.kind == ToolContentKind.IMAGE:
+        return block.file_name or "[image]"
     return ""

@@ -38,6 +38,9 @@ def build_tool_loop(
     model,
     tools: List[BaseTool],
     system_builder: Callable[[MessagesState], str],
+    preprocess_messages: Optional[
+        Callable[[MessagesState, List[Any], Any], List[Any]]
+    ] = None,
     model_resolver: Optional[Callable[[MessagesState], Any]] = None,
     model_call_wrapper: Optional[
         Callable[[MessagesState, Any, Callable[[], Awaitable[Any]]], Awaitable[Any]]
@@ -79,9 +82,14 @@ def build_tool_loop(
         sys_text = system_builder(state)
         msgs = [SystemMessage(content=sys_text)] + state["messages"]
         current_model = model_resolver(state) if model_resolver is not None else model
+        prepared_msgs = (
+            preprocess_messages(state, msgs, current_model)
+            if preprocess_messages is not None
+            else msgs
+        )
 
         async def _invoke_model() -> Any:
-            return await current_model.ainvoke(msgs)
+            return await current_model.ainvoke(prepared_msgs)
 
         response = (
             await model_call_wrapper(state, current_model, _invoke_model)
