@@ -8,7 +8,9 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field
 
-from agentic_backend.agents.contrib.jira.helpers import ensure_pydantic_model
+from agentic_backend.agents.v1.production.contrib.jira.helpers import (
+    ensure_pydantic_model,
+)
 from agentic_backend.application_context import get_default_chat_model
 
 logger = logging.getLogger(__name__)
