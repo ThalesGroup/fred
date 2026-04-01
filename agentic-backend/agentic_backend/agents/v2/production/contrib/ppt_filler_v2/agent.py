@@ -11,19 +11,19 @@ from pathlib import Path
 import httpx
 from pydantic import Field, ValidationError
 
-from agentic_backend.agents.v2.production.ppt_filler_v2.export_utils import (
+from agentic_backend.agents.v2.production.contrib.ppt_filler_v2.export_utils import (
     convert_maitrise_to_emoji,
 )
-from agentic_backend.agents.v2.production.ppt_filler_v2.powerpoint_template_util import (
+from agentic_backend.agents.v2.production.contrib.ppt_filler_v2.powerpoint_template_util import (
     fill_slide_from_structured_response,
 )
-from agentic_backend.agents.v2.production.ppt_filler_v2.pydantic_models import (
+from agentic_backend.agents.v2.production.contrib.ppt_filler_v2.pydantic_models import (
     CV,
     EnjeuxBesoins,
     PrestationFinanciere,
     schema_without_max_length,
 )
-from agentic_backend.agents.v2.production.ppt_filler_v2.skill_mastery import (
+from agentic_backend.agents.v2.production.contrib.ppt_filler_v2.skill_mastery import (
     extract_mastery_from_image,
     inject_mastery_alt_text,
     is_raster_image,
