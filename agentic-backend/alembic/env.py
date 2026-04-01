@@ -21,7 +21,6 @@ import fred_core.session.stores.session_models  # noqa: F401
 # fred-core ORM models (session table) — included so Alembic manages them here.
 from fred_core.models.base import Base as FredCoreBase
 from fred_core.sql import make_alembic_env
-from sqlalchemy import MetaData
 
 import agentic_backend.core.agents.store.agent_models  # noqa: F401
 import agentic_backend.core.feedback.store.feedback_models  # noqa: F401
