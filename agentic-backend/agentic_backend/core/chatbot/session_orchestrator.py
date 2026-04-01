@@ -298,7 +298,9 @@ class SessionOrchestrator:
         self.attachement_processing = AttachementProcessing()
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
-        self.transcoder = StreamTranscoder()
+        self.transcoder = StreamTranscoder(
+            stream_flush_interval_ms=configuration.ai.stream_flush_interval_ms
+        )
         cfg_max_sessions_per_user = configuration.ai.max_concurrent_sessions_per_user
         self.max_sessions_per_user = (
             20 if cfg_max_sessions_per_user is None else cfg_max_sessions_per_user

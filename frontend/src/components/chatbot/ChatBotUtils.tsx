@@ -10,22 +10,23 @@ const isOptimisticUserMessage = (m: ChatMessage) =>
   m.channel === "final" &&
   (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
 
-const hasStreamingPartialFlag = (m: ChatMessage) =>
+const hasStreamingDeltaFlag = (m: ChatMessage) =>
   m.role === "assistant" &&
   m.channel === "final" &&
-  (m.metadata?.extras as { streaming_partial?: unknown } | undefined)?.streaming_partial === true;
+  (m.metadata?.extras as { streaming_delta?: unknown } | undefined)?.streaming_delta === true;
 
-const shouldClearStreamingPartials = (m: ChatMessage) =>
+const shouldClearStreamingDeltas = (m: ChatMessage) =>
   exchangeKeyOf(m) &&
   (m.channel === "tool_call" ||
     m.channel === "tool_result" ||
-    (m.role === "assistant" && m.channel === "final" && !hasStreamingPartialFlag(m)));
+    (m.role === "assistant" && m.channel === "final" && !hasStreamingDeltaFlag(m)));
 
-// Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
+// Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker).
+// For streaming_delta frames, text is accumulated onto the existing message rather than replaced.
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
   const exchangeKey = exchangeKeyOf(m);
-  const base = shouldClearStreamingPartials(m)
-    ? all.filter((x) => !(exchangeKeyOf(x) === exchangeKey && hasStreamingPartialFlag(x)))
+  const base = shouldClearStreamingDeltas(m)
+    ? all.filter((x) => !(exchangeKeyOf(x) === exchangeKey && hasStreamingDeltaFlag(x)))
     : all;
   const k = keyOf(m);
   const stableConversationKey = stableConversationKeyOf(m);
@@ -38,7 +39,19 @@ export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
   });
   if (idx >= 0) {
     const updated = [...base];
-    updated[idx] = m; // overwrite (most recent wins)
+    if (hasStreamingDeltaFlag(m)) {
+      // Accumulate delta text onto the existing message's first text part.
+      // Delta frames always carry a TextPart — construct it explicitly to satisfy the discriminated union.
+      const existing = updated[idx];
+      const deltaText = (m.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
+      const existingText = (existing.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
+      updated[idx] = {
+        ...m,
+        parts: [{ type: "text" as const, text: existingText + deltaText }],
+      };
+    } else {
+      updated[idx] = m; // authoritative frame — replace entirely
+    }
     return sortMessages(updated);
   }
   return sortMessages([...base, m]);

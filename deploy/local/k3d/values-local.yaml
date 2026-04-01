@@ -69,11 +69,12 @@ x-kf-content-storage: &kf-content-storage
   secure: false
 
 x-common-dotenv: &common-dotenv
+  OPENAI_API_KEY: "" # pragma: allowlist secret
   FRED_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
   OPENSEARCH_PASSWORD: "FredOpensearch123!!" # pragma: allowlist secret
   OPENFGA_API_TOKEN: "Azerty123_" # pragma: allowlist secret
-  AZURE_AD_CLIENT_SECRET: ""
-  AZURE_APIM_SUBSCRIPTION_KEY: ""
+  AZURE_AD_CLIENT_SECRET: "" # pragma: allowlist secret
+  AZURE_APIM_SUBSCRIPTION_KEY: "" # pragma: allowlist secret
 
 x-kf-filesystem: &kf-filesystem
   type: minio
@@ -279,40 +280,10 @@ applications:
           api_url: "http://openfga:9080"
 
       ai:
-        knowledge_flow_url: "http://knowledge-flow-backend:8111/knowledge-flow/v1"
+        knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
           connect: 20
           read: 60
-        default_chat_model:
-          provider: "openai"
-          name: "gpt-4o-mini"
-          settings:
-            max_retries: 0
-            timeout:
-              connect: 10.0
-              read: 30.0
-              write: 30.0
-              pool: 5.0
-            http_client_limits:
-              max_connections: 500
-              max_keepalive_connections: 200
-              keepalive_expiry_seconds: 10
-            temperature: 0.0
-        default_language_model:
-          provider: "openai"
-          name: "gpt-4o-mini"
-          settings:
-            max_retries: 0
-            timeout:
-              connect: 10.0
-              read: 30.0
-              write: 30.0
-              pool: 5.0
-            http_client_limits:
-              max_connections: 500
-              max_keepalive_connections: 200
-              keepalive_expiry_seconds: 10
-            temperature: 0.0
         recursion:
           recursion_limit: 40
         agents:
@@ -340,6 +311,11 @@ applications:
             type: "agent"
             class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
             enabled: true
+          - id: "Spot"
+            name: "Spot"
+            type: "agent"
+            class_path: "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
+            enabled: true
 
       mcp:
         servers:
@@ -347,28 +323,28 @@ applications:
             name: "mcp.servers.search_documents.name"
             description: "mcp.servers.search_documents.description"
             transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-text"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           - id: "mcp-knowledge-flow-mcp-tabular"
             name: "mcp.servers.tabular.name"
             description: "mcp.servers.tabular.description"
             transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-tabular"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           - id: "mcp-knowledge-flow-opensearch-ops"
             name: "mcp.servers.search_opensearch.name"
             description: "mcp.servers.search_opensearch.description"
             transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-opensearch-ops"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           - id: "mcp-knowledge-flow-prometheus-ops"
             name: "mcp.servers.prometheus.name"
             description: "mcp.servers.prometheus.description"
             transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-prometheus-ops"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-prometheus-ops"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           - id: "mcp-knowledge-flow-fs"
@@ -376,7 +352,7 @@ applications:
             description: "mcp.servers.filesystem.description"
             enabled: true
             transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-fs"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
             sse_read_timeout: 2000
             auth_mode: "user_token"
           - id: "mcp-knowledge-flow-corpus"
@@ -384,7 +360,7 @@ applications:
             description: "mcp.servers.corpus.description"
             enabled: true
             transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8111/knowledge-flow/v1/mcp-corpus"
+            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
             sse_read_timeout: 2000
             auth_mode: "user_token"
 
@@ -428,7 +404,7 @@ applications:
     # -------------------------------------------------------------------------
     dotenv:
       <<: *common-dotenv
-      KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_"
+      KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
 
     # -------------------------------------------------------------------------
     # Agentic Backend — Agent catalog (overrides default: only Georges)
@@ -592,15 +568,14 @@ applications:
 
     dotenv: &kf-dotenv
       <<: *common-dotenv
-      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_"
-      MINIO_SECRET_KEY: "Azerty123_"
-      OPENAI_API_KEY: "123"                     # <-- fill with your OpenAI key
-      OPENSEARCH_PASSWORD: "FredDemo_2026!"
-      OPENFGA_API_TOKEN: "Azerty123_"
-      FRED_POSTGRES_PASSWORD: "Azerty123_"
-      TABULAR_POSTGRES_PASSWORD: "Azerty123_"
-      PROMETHEUS_PASSWORD: ""
-      PROMETHEUS_BEARER_TOKEN: ""
+      KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
+      MINIO_SECRET_KEY: "Azerty123_" # pragma: allowlist secret
+      OPENSEARCH_PASSWORD: "FredOpensearch123!!" # pragma: allowlist secret
+      OPENFGA_API_TOKEN: "Azerty123_" # pragma: allowlist secret
+      FRED_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
+      TABULAR_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
+      PROMETHEUS_PASSWORD: "" # pragma: allowlist secret
+      PROMETHEUS_BEARER_TOKEN: "" # pragma: allowlist secret
 
   # ===========================================================================
   # KNOWLEDGE FLOW WORKER — disabled for now
@@ -642,8 +617,8 @@ applications:
       storage:   *cp-storage
     dotenv: &cp-dotenv
       <<: *common-dotenv
-      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_"
-      MINIO_SECRET_KEY: "Azerty123_"
+      KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
+      MINIO_SECRET_KEY: "Azerty123_" # pragma: allowlist secret
 
   # ===========================================================================
   # CONTROL PLANE WORKER

@@ -5,20 +5,19 @@ Before you even know what fred is about, there are two key references to know:
 - [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
 
 
-Fred is both:
+Fred is a production-ready platform for building and operating multi-agent AI applications. It is designed around two complementary goals:
 
-- An innovation lab — helping developers rapidly explore agentic patterns, domain-specific logic, and custom tools.
-- A production-ready platform — already integrated with real enterprise constraints: auth, security, document lifecycle, and deployment best practices.
+- **A complete runtime platform** — auth, session management, document ingestion, team access control, observability, and Kubernetes-ready deployment, all integrated and ready to use.
+- **A structured agent authoring SDK** — a constrained, typed authoring model (v2 SDK) that lets domain engineers write reliable agents without having to design a distributed runtime from scratch.
 
-It is composed of:
+Fred is composed of four components:
 
-- a **Python agentic backend** (FastAPI + LangGraph)
-- a **Python knowledge flow backend** (FastAPI) for document ingestion and vector search
-- a **React frontend**
+- a **Python agentic backend** (`agentic-backend`) — multi-agent runtime, session orchestration, streaming, MCP tool integration
+- a **Python knowledge flow backend** (`knowledge-flow-backend`) — document ingestion, vectorization, and retrieval
+- a **Python control plane backend** (`control-plane-backend`) — team and user management, access policy, agent registry
+- a **React frontend** (`frontend`) — chat interface and agent management UI
 
-Fred provides a number of easy examples to start with. These are provided in so-called 'academy' folders for you to play with mcp server or agent development.
-
-Fred is not a development framework, rather a full reference implementation that shows how to build practical multi-agent applications with LangChain and LangGraph. Agents cooperate to answer technical, context-aware questions.
+The repository also includes an [academy](./academy/README.md) with sample MCP servers and agents to get started quickly.
 
 See the project site: <https://fredk8.dev>
 
@@ -34,6 +33,7 @@ Contents:
   - [Head for the Fred UI!](#head-for-the-fred-ui)
 - [k3d Local Deployment](#k3d-local-deployment)
 - [Production mode](#production-mode)
+- [Agent authoring (v2 SDK)](#agent-authoring-v2-sdk)
 - [Agent coding academy](#agent-coding-academy)
 - [Advanced configuration](#advanced-configuration)
 - [Core Architecture and Licensing Clarity](#core-architecture-and-licensing-clarity)
@@ -222,50 +222,47 @@ This ensures that as soon as you open a Python file under agentic_backend/ (or k
 
 ### Model configuration
 
-#### Default Chat Models (Agentic Backend)
+#### Model configuration (Agentic Backend)
 
-Within the **agentic backend**, Fred uses **default models** that serve as the primary AI components for agents. These models determine how agents handle both conversational and general AI tasks.
+Model configuration for the agentic backend lives in **`agentic-backend/config/models_catalog.yaml`**. This file is separate from `configuration.yaml` and owns the full model setup: named profiles, provider settings, shared HTTP client limits, and routing rules.
 
-##### Key Concepts
+**Profiles** are named model configurations. Each profile declares a provider, a model name, and optional settings (temperature, timeouts, retries). Profiles are referenced by `profile_id`.
 
-- **Default Chat Model**  
-  This is the model used for all conversational tasks within the agentic backend. Every agent relies on this model unless a specific agent configuration overrides it. It includes configurable options such as temperature, retry limits, and request timeouts.
-
-- **Default Language Model**  
-  This model is used for non-chat AI tasks. If it is not explicitly defined, the agentic backend automatically falls back to the default chat model. This ensures consistent behavior and prevents runtime errors when a separate language model is not set.
-
-In the agentic-backend configuration these can be set as is:
+**Defaults** declare which profile to use per capability when no rule matches:
 
 ```yaml
-ai:
-  default_chat_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
-    provider: "openai"
-    name: "gpt-4o"
-    settings: {}
-  default_language_model:
-    # Required in .env:
-    # - OPENAI_API_KEY
-    provider: "openai"
-    name: "gpt-4o"
-    settings: {}
+default_profile_by_capability:
+  chat: default.chat.openai.prod
+  language: default.language.openai.prod
 ```
 
-⚠️ `default_language_model` overrides `default_chat_model` if set.
+**Routing rules** allow policy-based model selection based on team, agent, or operation context. Rules are evaluated in order; the first match wins:
 
-##### Notes
+```yaml
+rules:
+  - rule_id: team-a-uses-ollama
+    capability: chat
+    team_id: team-a
+    operation: routing
+    target_profile_id: chat.ollama.mistral
 
-- Credentials for the chosen model provider (OpenAI, Azure OpenAI, Ollama, etc.) must be provided in the agentic backend’s environment files.
-- These default models form the base of all AI capabilities within the agentic backend, and all agents leverage them unless explicitly configured otherwise.
-- Updating the default models in the configuration changes the behavior of all agents, so it is a central point for tuning the system.
+  - rule_id: graph-g1-json-validation
+    capability: chat
+    agent_id: internal.graph.g1
+    operation: json_validation_fc
+    target_profile_id: chat.azure_apim.gpt4o
+```
+
+This makes it possible to route different teams, agents, or operation types to different models — including mixing providers — without changing any agent code.
+
+For details on all supported match criteria (`team_id`, `agent_id`, `user_id`, `operation`, `purpose`) see [`docs/platform/LLM_ROUTING_FRED.md`](./docs/platform/LLM_ROUTING_FRED.md).
 
 #### Set it up according to your development environment
 
-No matter which development environment you choose, both backends rely on two pairs of `.env`/`configuration.yaml` files for credentials and model settings:
+No matter which development environment you choose, both backends rely on `.env` files for secrets and `configuration.yaml` / `models_catalog.yaml` for settings:
 
-- Agentic backend: `agentic-backend/config/.env` and `agentic-backend/config/configuration.yaml`
-- Knowledge Flow backend: `knowledge-flow-backend/config/.env` and `knowledge-flow-backend/config/configuration.yaml`
+- Agentic backend: `agentic-backend/config/.env`, `configuration.yaml`, and `models_catalog.yaml`
+- Knowledge Flow backend: `knowledge-flow-backend/config/.env` and `configuration.yaml`
 
 1. **Copy the templates (skip if they already exist).**
 
@@ -608,29 +605,44 @@ For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 
+## Agent authoring (v2 SDK)
+
+Fred includes a structured agent authoring SDK designed for domain engineers and platform teams who need to write reliable, testable agents without re-implementing execution infrastructure.
+
+The v2 SDK provides two authoring styles:
+
+- **ReAct / profile agents** — for focused, tool-driven agents with a small state surface. Declare a role, a tool set, and a few instructions. The SDK owns the execution loop.
+- **Graph agents** — for multi-step business workflows with explicit state, conditional routing, and human-in-the-loop confirmation gates. The business flow is expressed as a typed graph; the SDK handles streaming, checkpointing, and HITL interrupts.
+
+Both styles support MCP tool integration and run on the same runtime.
+
+Start with the [agent authoring guide (v2)](./docs/authoring/AGENTS.md). For the design philosophy behind the SDK, see [SDK V2 positioning](./docs/authoring/SDK-V2-POSITIONING.md).
+
 ## Agent coding academy
 
-Refer to the sample third-party applications in [academy samples](./academy/README.md).
-Refer to the [academy agents](./agentic-backend/agentic_backend/academy/ACADEMY.md) for a number of sample agents.
+The [academy](./academy/README.md) contains sample MCP servers and standalone applications to experiment with agent development outside the main platform. The [academy agents](./agentic-backend/agentic_backend/academy/ACADEMY.md) provide ready-to-run agent examples inside the agentic backend.
 
 ## Advanced configuration
 
 ### System Architecture
 
-| Component              | Location                   | Role                                                                  |
-| ---------------------- | -------------------------- | --------------------------------------------------------------------- |
-| Frontend UI            | `./frontend`               | React-based chatbot                                                   |
-| Agentic backend        | `./agentic-backend`        | Multi-agent API server                                                |
-| Knowledge Flow backend | `./knowledge-flow-backend` | **Optional** knowledge management component (document ingestion & Co) |
+| Component              | Location                    | Role                                                                 |
+| ---------------------- | --------------------------- | -------------------------------------------------------------------- |
+| Frontend UI            | `./frontend`                | React chat interface and agent management UI                         |
+| Agentic backend        | `./agentic-backend`         | Multi-agent runtime, session orchestration, streaming, MCP tools     |
+| Knowledge Flow backend | `./knowledge-flow-backend`  | Document ingestion, vectorization, and retrieval                     |
+| Control Plane backend  | `./control-plane-backend`   | Team and user management, access policy, agent registry              |
 
 ### Configuration Files
 
-| File                                               | Purpose                                                 | Tip                                                                 |
-| -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
-| `agentic-backend/config/.env`                      | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and then fill in any missing values. |
-| `knowledge-flow-backend/config/.env`               | Same as above                                           | Same as above                                                       |
-| `agentic-backend/config/configuration.yaml`        | Functional settings (providers, agents, feature flags). | -                                                                   |
-| `knowledge-flow-backend/config/configuration.yaml` | Same as above                                           | -                                                                   |
+| File                                                | Purpose                                                 | Tip                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
+| `agentic-backend/config/.env`                       | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and fill in any missing values.      |
+| `knowledge-flow-backend/config/.env`                | Same as above                                           | Same as above                                                       |
+| `control-plane-backend/config/.env`                 | Same as above                                           | Same as above                                                       |
+| `agentic-backend/config/configuration.yaml`         | Functional settings (providers, agents, feature flags). | -                                                                   |
+| `knowledge-flow-backend/config/configuration.yaml`  | Same as above                                           | -                                                                   |
+| `control-plane-backend/config/configuration.yaml`   | Team/user policy settings.                              | -                                                                   |
 
 ### Supported Model Providers
 
@@ -652,7 +664,7 @@ See `agentic-backend/config/configuration.yaml` (section `ai:`) and `knowledge-f
 
 ## Core Architecture and Licensing Clarity
 
-The three components just described form the _entirety of the Fred platform_. By default they run self-contained on a laptop using **SQLite + ChromaDB** (no external services).
+The four components described above form the _entirety of the Fred platform_. By default they run self-contained on a laptop using **SQLite + ChromaDB** (no external services).
 
 Fred is modular: you can optionally add Keycloak/OpenFGA, MinIO/S3, OpenSearch, and PostgreSQL/pgvector for production-grade persistence.
 
@@ -674,6 +686,17 @@ Persistence options:
   - [Agentic Architecture](./agentic-backend/docs/RUNTIME_ARCHITECTURE.md)
   - [Agentic backend agentic design](./agentic-backend/docs/AGENTS.md)
   - [MCP capabilities for agent](./agentic-backend/docs/MCP.md)
+
+- Agent authoring (v2 SDK)
+
+  - [Agent authoring guide (v2)](./docs/authoring/AGENTS.md)
+  - [SDK V2 positioning — design philosophy](./docs/authoring/SDK-V2-POSITIONING.md)
+  - [V2 agent creation — React vs Graph](./docs/platform/V2_AGENT_CREATION.md)
+
+- Architecture RFCs
+
+  - [SDK V2 for industrial-grade agents](./docs/rfc/SDK-V2-RFC.md)
+  - [Distributed agent architecture](./docs/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md)
 
 - Knowledge Flow backend
 

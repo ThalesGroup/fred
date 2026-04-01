@@ -310,8 +310,8 @@ const summarizeChatMessageForDebug = (message: unknown): Record<string, unknown>
     channel: message.channel,
   };
 
-  if (extras.streaming_partial === true) {
-    summary.streaming_partial = true;
+  if (extras.streaming_delta === true) {
+    summary.streaming_delta = true;
   }
   if (typeof metadata.finish_reason === "string") {
     summary.finish_reason = metadata.finish_reason;
@@ -353,7 +353,7 @@ const summarizeChatMessageForDebug = (message: unknown): Record<string, unknown>
   }
 
   if (text) {
-    summary.text = extras.streaming_partial === true ? ellipsizeDebug(text, DEBUG_TEXT_PREVIEW_MAX) : text;
+    summary.text = extras.streaming_delta === true ? ellipsizeDebug(text, DEBUG_TEXT_PREVIEW_MAX) : text;
   }
 
   return stripNullish(summary) as Record<string, unknown>;
@@ -434,7 +434,7 @@ const getDebugCollapseKey = (payload: unknown): string | undefined => {
 
   const metadata = isRecord(payload.message.metadata) ? payload.message.metadata : {};
   const extras = isRecord(metadata.extras) ? metadata.extras : {};
-  if (extras.streaming_partial !== true) {
+  if (extras.streaming_delta !== true) {
     return undefined;
   }
 
@@ -549,7 +549,8 @@ const getDebugLabel = (payload: unknown): string => {
 
   const role = typeof message.role === "string" ? message.role : "message";
   const channel = typeof message.channel === "string" ? message.channel : "event";
-  const partial = message.streaming_partial === true ? " (partial)" : "";
+  const extras = isRecord(message.metadata) && isRecord(message.metadata.extras) ? message.metadata.extras : {};
+  const partial = extras.streaming_delta === true ? " (delta)" : "";
   return `${role}/${channel}${partial}`;
 };
 
