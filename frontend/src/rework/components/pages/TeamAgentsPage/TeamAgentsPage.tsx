@@ -24,7 +24,7 @@ export default function TeamAgentsPage() {
   }, [team]);
 
   const handleToggleEnabled = async (agent: AnyAgent) => {
-    const isEnabled = agent.enabled !== false;
+    const isEnabled = agent.enabled;
     await updateEnabled(agent, !isEnabled);
     await refetch();
   };
