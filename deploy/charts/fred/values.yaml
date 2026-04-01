@@ -1319,6 +1319,8 @@ applications:
     ports:
       - name: worker
         containerPort: 8112
+      - name: metrics
+        containerPort: 9112
     service:
       enabled: false
       annotations: {}
@@ -1330,12 +1332,12 @@ applications:
           targetPort: 8112
           protocol: TCP
     metricsService:
-      enabled: false
+      enabled: true
       annotations: {}
       extraLabels: {}
       type: ClusterIP
-      port: 9111
-      targetPort: 9111
+      port: 9112
+      targetPort: 9112
       serviceMonitor:
         enabled: false
         annotations: {}
@@ -1400,7 +1402,7 @@ applications:
       frontend: false
     # ── Application configuration (rendered as ConfigMap) ───────────────
     # Most sections are shared with knowledge-flow-backend via YAML anchors.
-    # Only app (port 8112, metrics disabled) and processing.rich.generate_summary differ.
+    # Only app (port 8112) and processing.rich.generate_summary differ.
     configuration:
       app:
         name: "Knowledge Flow Backend"
@@ -1410,9 +1412,9 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        metrics_enabled: false # Do not export metrics since its a worker pod
+        metrics_enabled: true # Prometheus exporter
         metrics_address: "0.0.0.0"
-        metrics_port: 9111
+        metrics_port: 9112
         kpi_process_metrics_interval_sec: 0
         kpi_log_summary_interval_sec: 0.0
         kpi_log_summary_top_n: 0
