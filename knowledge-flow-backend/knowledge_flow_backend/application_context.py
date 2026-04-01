@@ -777,11 +777,7 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.metadata_store
         if isinstance(store_config, PostgresTableConfig):
-            self._metadata_store_instance = PostgresMetadataStore(
-                engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._metadata_store_instance = PostgresMetadataStore(engine=self.get_pg_async_engine())
             return self._metadata_store_instance
         raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
 
@@ -795,11 +791,7 @@ class ApplicationContext:
                 PostgresWorkflowTaskStore,
             )
 
-            self._task_store_instance = PostgresWorkflowTaskStore(
-                engine=self.get_async_sql_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._task_store_instance = PostgresWorkflowTaskStore(engine=self.get_async_sql_engine())
             return self._task_store_instance
         raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
 
@@ -906,11 +898,7 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.tag_store
         if isinstance(store_config, PostgresTableConfig):
-            self._tag_store_instance = PostgresTagStore(
-                engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._tag_store_instance = PostgresTagStore(engine=self.get_pg_async_engine())
             return self._tag_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
@@ -920,11 +908,7 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.resource_store
         if isinstance(store_config, PostgresTableConfig):
-            self._resource_store_instance = PostgresResourceStore(
-                engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._resource_store_instance = PostgresResourceStore(engine=self.get_pg_async_engine())
             return self._resource_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 

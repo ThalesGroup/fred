@@ -17,6 +17,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from knowledge_flow_backend.features.scheduler.store.task_structures import (
     WorkflowTaskRecord,
     WorkflowTaskStatus,
@@ -35,6 +37,7 @@ class BaseWorkflowTaskStore(ABC):
         workflow_id: str,
         document_uid: Optional[str],
         filename: Optional[str],
+        session: AsyncSession | None = None,
     ) -> WorkflowTaskRecord:
         raise NotImplementedError
 
@@ -45,9 +48,10 @@ class BaseWorkflowTaskStore(ABC):
         workflow_id: str,
         status: WorkflowTaskStatus,
         last_error: Optional[str] = None,
+        session: AsyncSession | None = None,
     ) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    async def get(self, workflow_id: str) -> WorkflowTaskRecord:
+    async def get(self, workflow_id: str, session: AsyncSession | None = None) -> WorkflowTaskRecord:
         raise NotImplementedError
