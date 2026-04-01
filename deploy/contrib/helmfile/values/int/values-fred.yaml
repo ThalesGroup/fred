@@ -283,58 +283,30 @@ applications:
     agents_catalog:
       version: v1
       agents:
-        - id: "Rico"
-          name: "Rico"
-          type: "agent"
-          class_path: "agentic_backend.agents.v1.production.rags.rag_expert.Rico"
-          enabled: true
-          chat_options:
-            search_policy_selection: true
-            libraries_selection: true
-            search_rag_scoping: true
-            deep_search_delegate: false
-            attach_files: true
-            include_corpus_in_search: true
+      - id: "Luigi"
+        name: "Luigi"
+        type: "agent"
+        class_path: "agentic_backend.agents.v1.production.contrib.ppt_filler.ppt_filler_agent.PptFillerAgent"
+        enabled: true
+        chat_options:
+          libraries_selection: true
+          attach_files: true
 
-        # - id: "Archie"
-        #   name: "Archie"
-        #   type: "agent"
-        #   class_path: "agentic_backend.agents.v1.production.rags.archie.Archie"
-        #   enabled: true
-        #   chat_model: {}
-        #   chat_options:
-        #     search_policy_selection: true
-        #     libraries_selection: true
-        #     search_rag_scoping: true
-        #     attach_files: true
+      - id: "Raph"
+        name: "Raph"
+        type: "agent"
+        class_path: "agentic_backend.agents..v1.production.contrib.reference_editor.reference_editor.ReferenceEditor"
+        enabled: true
 
-        # - id: "SlideMaker"
-        #   name: "SlideMaker"
-        #   type: "agent"
-        #   definition_ref: "v2.sample.slide_maker"
-
-        - id: "Corpus Investigator Deep"
-          name: "Corpus Investigator Deep"
-          type: "agent"
-          definition_ref: "v2.deep.corpus_investigator"
-
-        - id: "DVARiskValidatorGraph"
-          name: "DVA Risk Validator"
-          type: "agent"
-          definition_ref: "v2.production.dva_risk_validator.graph"
-
-        - id: "DVARiskValidatorQA"
-          name: "DVA Risk Validator QA"
-          type: "agent"
-          definition_ref: "v2.production.dva_risk_validator.qa"
-
-      react_profiles:
-        - profile_id: "custodian"
-          enabled: true
-        - profile_id: "rag_expert"
-          enabled: true
-        - profile_id: "sentinel"
-          enabled: true
+      - id: "Jim"
+        name: "Jim"
+        type: "agent"
+        class_path: "agentic_backend.agents..v1.production.contrib.jira.jira_agent.JiraAgent"
+        enabled: true
+        chat_options:
+          libraries_selection: true
+          attach_files: true
+      react_profiles: []
 
     # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
     models_catalog:
