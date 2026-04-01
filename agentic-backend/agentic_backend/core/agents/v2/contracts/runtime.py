@@ -289,6 +289,7 @@ class RuntimeServices:
     resource_reader: ResourceReaderPort | None = None
     kpi: BaseKPIWriter | None = None
     checkpointer: CheckpointHandle | None = None
+    langchain_callbacks: tuple[object, ...] = ()
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

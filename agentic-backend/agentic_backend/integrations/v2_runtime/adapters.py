@@ -231,6 +231,37 @@ def build_langfuse_tracer() -> TracerPort | None:
     return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
 
 
+def build_langfuse_callbacks() -> tuple[object, ...]:
+    """
+    Return a Langfuse LangChain CallbackHandler when credentials are configured.
+
+    Why this exists:
+    - V2 graph/ReAct runtimes call LangChain ainvoke() directly, bypassing the
+      automatic Langfuse callback that V1 agents inject via run_config.
+    - Passing this handler in the ainvoke() config restores full LLM-level tracing:
+      prompts, completions, token usage, and model name appear in Langfuse exactly
+      as they do for V1 agents.
+
+    How to use it:
+    - call once at session-agent build time and store in RuntimeServices.langchain_callbacks
+    - the runtime passes it to every LangChain ainvoke() call automatically
+
+    Example:
+    - `services = RuntimeServices(langchain_callbacks=build_langfuse_callbacks(), ...)`
+    """
+    has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+    has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
+    if not (has_public and has_secret):
+        return ()
+    try:
+        from langfuse.langchain import CallbackHandler
+
+        return (CallbackHandler(),)
+    except Exception:
+        logger.exception("[V2][TRACING] Failed to initialize Langfuse CallbackHandler.")
+        return ()
+
+
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
     """
     Thin adapter over Fred's current global default chat model.

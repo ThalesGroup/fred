@@ -65,6 +65,7 @@ from agentic_backend.integrations.v2_runtime.adapters import (
     FredKnowledgeSearchToolInvoker,
     FredMcpToolProvider,
     FredResourceReader,
+    build_langfuse_callbacks,
     build_langfuse_tracer,
 )
 
@@ -115,6 +116,7 @@ def build_v2_session_agent(
     )
     services = RuntimeServices(
         tracer=build_langfuse_tracer(),
+        langchain_callbacks=build_langfuse_callbacks(),
         chat_model_factory=chat_model_factory,
         tool_invoker=_build_v2_tool_invoker(
             definition=definition,

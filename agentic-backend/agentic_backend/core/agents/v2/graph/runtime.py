@@ -329,8 +329,13 @@ class _GraphNodeExecutionContext:
                 "model_name": model_name,
             },
         ):
+            lc_callbacks = list(self.services.langchain_callbacks)
+            lc_config = RunnableConfig(callbacks=lc_callbacks) if lc_callbacks else None
             try:
-                response = cast(BaseMessage, await resolved_model.ainvoke(messages))
+                response = cast(
+                    BaseMessage,
+                    await resolved_model.ainvoke(messages, config=lc_config),
+                )
                 if span is not None:
                     span.set_attribute("status", "ok")
                 return response
@@ -394,8 +399,10 @@ class _GraphNodeExecutionContext:
                 "output_model": output_model.__name__,
             },
         ):
+            lc_callbacks = list(self.services.langchain_callbacks)
+            lc_config = RunnableConfig(callbacks=lc_callbacks) if lc_callbacks else None
             try:
-                response = await structured_model.ainvoke(messages)
+                response = await structured_model.ainvoke(messages, config=lc_config)
                 if isinstance(response, output_model):
                     validated = response
                 elif isinstance(response, BaseModel):
