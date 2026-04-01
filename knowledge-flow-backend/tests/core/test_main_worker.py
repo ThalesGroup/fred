@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend import main_worker as main_worker_module
+from knowledge_flow_backend.application_context import ApplicationContext
 
 
 @pytest.mark.asyncio
