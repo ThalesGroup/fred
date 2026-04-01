@@ -118,9 +118,10 @@ async def main() -> None:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-            exc = task.exception()
-            if exc is not None:
-                logger.error("Background KPI task %r failed during shutdown", task, exc_info=exc)
+            if not task.cancelled():
+                exc = task.exception()
+                if exc is not None:
+                    logger.error("Background KPI task %r failed during shutdown", task, exc_info=exc)
         await app_context.shutdown()
 
 
