@@ -14,7 +14,7 @@
 
 """Reference Editor Agent for generating reference PowerPoint and Word documents."""
 
-from agentic_backend.agents.contrib.reference_editor.reference_editor import (
+from agentic_backend.agents.v1.production.contrib.reference_editor.reference_editor import (
     ReferenceEditor,
 )
 
