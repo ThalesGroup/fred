@@ -34,49 +34,52 @@ export default function TeamAgentsPage() {
     setEditOpen(true);
   };
 
-    const handleEdit = (agent: AnyAgent) => {
-      setSelected(agent);
-      setEditOpen(true);
-    };
+  const handleEdit = (agent: AnyAgent) => {
+    setSelected(agent);
+    setEditOpen(true);
+  };
 
-    return (
-      <div className={styles.teamAgentContainer}>
-        <div className={styles.title}>
-          {t("rework.teams.agents.title")}
-          {canUpdateAgents && (
-            <Button
-              color={"primary"}
-              variant={"filled"}
-              size={"medium"}
-              icon={{ category: "outlined", type: "add" }}
-              onClick={handleOpenCreateAgent}
-            >
-              {t("rework.teams.agents.create")}
-            </Button>
-          )}
-        </div>
-        <div className={styles.agentList}>
-          {agents?.map((agent) => (
-            <>
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                readOnly={canUpdateAgents}
-                onToggleEnabled={handleToggleEnabled}
-                onEditAgent={handleEdit}
-              />
-            </>
-          ))}
-        </div>
-        <AgentCreateEditDrawer
-          canDelete={canUpdateAgents}
-          open={editOpen}
-          agent={selected}
-          teamId={teamId}
-          onClose={() => setEditOpen(false)}
-          onSaved={refetch}
-          onDeleted={refetch}
-        />
+  return (
+    <div className={styles.teamAgentContainer}>
+      <div className={styles.title}>
+        {t("rework.teams.agents.title")}
+        {canUpdateAgents && (
+          <Button
+            color={"primary"}
+            variant={"filled"}
+            size={"medium"}
+            icon={{ category: "outlined", type: "add" }}
+            onClick={handleOpenCreateAgent}
+          >
+            {t("rework.teams.agents.create")}
+          </Button>
+        )}
       </div>
-    );
+      <div className={styles.agentList}>
+        {/*
+            todo: in future, rely on direct `update` and `delete` permissions from agent (when they are returned by backend)
+         */}
+        {agents?.map((agent) => (
+          <>
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              readOnly={canUpdateAgents}
+              onToggleEnabled={handleToggleEnabled}
+              onEditAgent={handleEdit}
+            />
+          </>
+        ))}
+      </div>
+      <AgentCreateEditDrawer
+        canDelete={canUpdateAgents}
+        open={editOpen}
+        agent={selected}
+        teamId={teamId}
+        onClose={() => setEditOpen(false)}
+        onSaved={refetch}
+        onDeleted={refetch}
+      />
+    </div>
+  );
 }

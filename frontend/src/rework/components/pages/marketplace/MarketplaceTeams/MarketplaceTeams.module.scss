@@ -1,7 +1,7 @@
 @use "src/index.scss" as *;
 
 .marketplace-teams-container {
-  padding: 0 var(--spacing-m);
+  padding: 0 var(--spacing-l);
   height: 100%;
 }
 
@@ -38,4 +38,5 @@
   flex-direction: row;
   flex-wrap: wrap;
   gap: var(--spacing-m);
+  padding-bottom: var(--spacing-m);
 }
