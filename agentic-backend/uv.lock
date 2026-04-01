@@ -899,6 +899,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
+    { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.18.4" },
+    { name = "alembic", marker = "extra == 'migration'", specifier = ">=1.18.4" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "authzed", specifier = ">=1.22.1" },
     { name = "azure-identity", specifier = ">=1.25.0" },
@@ -932,7 +934,7 @@ requires-dist = [
     { name = "temporalio", specifier = ">=1.14.1" },
     { name = "uv", specifier = ">=0.9.15" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["migration", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
