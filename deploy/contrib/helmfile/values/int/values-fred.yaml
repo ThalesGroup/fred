@@ -1,0 +1,526 @@
+# =============================================================================
+# values-fred.yaml — Integration environment overrides (PRISM)
+# =============================================================================
+#
+# This file overrides the defaults from deploy/charts/fred/values.yaml
+# for the PRISM integration environment. It contains environment-specific
+# configuration: Carma registry images, SSL certificates, TGS models,
+# Thales URLs, and production storage backends.
+#
+# Note: YAML anchors defined in values.yaml are NOT available in this file
+# (each values file is parsed independently by Helm).
+# Lists (e.g. input_processors) are fully replaced during merge — partial
+# list overrides are not possible in Helm.
+# =============================================================================
+
+# ── Shared anchors (reused across applications) ─────────────────────────────
+
+x-common-security: &common-security
+  m2m:
+    realm_url: &realm-url "https://prism-idp-int.six.cloud.thales/realms/app"
+  user:
+    realm_url: *realm-url
+  authorized_origins:
+    - "http://prism-ui-int.six.cloud.thales"
+    - "https://prism-ui-int.six.cloud.thales"
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://openfga:8080"
+
+x-kf-scheduler: &kf-scheduler
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "temporal-frontend:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_id_prefix: "pipeline"
+    connect_timeout_seconds: 5
+
+x-kf-content-storage: &kf-content-storage
+  type: minio
+  endpoint: http://minio:9000
+  access_key: "admin"
+  bucket_name: "knowledge-flow-content"
+  secure: false
+  public_endpoint: https://prism-minio-int.six.cloud.thales
+  public_secure: true
+
+x-kf-filesystem: &kf-filesystem
+  type: minio
+  endpoint: http://minio:9000
+  access_key: "admin"
+  bucket_name: "filesystem"
+  secure: false
+
+x-kf-embedding-model: &kf-embedding-model
+  provider: "openai"
+  name: bge-m3
+  settings:
+    base_url: "https://api.corp.thales/corp/genai-embedding/v2"
+
+x-kf-chat-model: &kf-chat-model
+  provider: "openai"
+  name: "mistral"
+  settings:
+    base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+    request_timeout: 300
+    stream_usage: false
+
+x-kf-storage: &kf-storage
+  postgres: &int-postgres
+    host: "postgresql"
+    port: 5432
+    database: fred
+    username: fred
+  opensearch:
+    host: https://prism-opensearch-int.six.cloud.thales
+  catalog_store:
+    type: "postgres"
+    table: catalog
+  prompt_store:
+    type: "postgres"
+    table: prompt
+  resource_store:
+    type: "postgres"
+    table: resource
+  tag_store:
+    type: "postgres"
+    table: tag
+  metadata_store:
+    type: "postgres"
+    table: metadata
+  kpi_store:
+    type: "opensearch"
+    index: kpi-index
+  vector_store:
+    type: "opensearch"
+    index: vector-index-3-large
+    bulk_size: 1000
+  log_store:
+    type: "opensearch"
+    index: log-index
+  task_store:
+    type: "postgres"
+    table: workflow-tasks
+  tabular_stores:
+    base_database:
+      <<: *int-postgres
+      type: "sql"
+      mode: read_and_write
+      driver: "postgresql+psycopg2"
+      path: null
+
+x-kf-mcp: &kf-mcp
+  reports_enabled: false
+  kpi_enabled: false
+  tabular_enabled: false
+  statistic_enabled: false
+  text_enabled: true
+  templates_enabled: false
+  resources_enabled: false
+  opensearch_ops_enabled: false
+  neo4j_enabled: false
+  filesystem_enabled: false
+
+x-cp-scheduler: &cp-scheduler
+  enabled: true
+  backend: "temporal"
+  temporal:
+    host: "temporal-frontend:7233"
+    namespace: "default"
+    task_queue: "control-plane-lifecycle"
+    workflow_id_prefix: "control-plane"
+    connect_timeout_seconds: 5
+
+x-cp-storage: &cp-storage
+  postgres:
+    host: "postgresql"
+    port: 5432
+    database: fred
+    username: fred
+  session_store:
+    type: postgres
+    table: session
+  purge_queue_table: session_purge_queue
+  content_storage:
+    type: minio
+    endpoint: http://minio:9000
+    access_key: "admin"
+    bucket_name: "control-plane-content"
+    secure: false
+
+x-ssl-extra-env-vars: &ssl-extra-env-vars
+  - name: SSL_CERT_FILE
+    value: "/etc/ssl/certs/thales.pem"
+  - name: REQUESTS_CA_BUNDLE
+    value: "/etc/ssl/certs/thales.pem"
+
+x-ssl-extra-volumes: &ssl-extra-volumes
+  - name: thales-certificate
+    secret:
+      secretName: "thales-secret-chain"
+
+x-ssl-extra-volume-mounts: &ssl-extra-volume-mounts
+  - name: thales-certificate
+    mountPath: /etc/ssl/certs/thales.pem
+    subPath: tls.crt
+    readOnly: true
+
+x-carma-pull-secret: &carma-pull-secret
+  - name: "carma-pull-secret"
+
+x-disable-service-account: &disable-service-account
+  rbac:
+    enabled: false
+
+# =============================================================================
+
+global:
+  create_index:
+    enabled: false
+    image: "carma.corp.thales/proxy-docker-internal-c2/fred/opensearchproject/opensearch:2.19.3"
+  persistence:
+    accessModes: "ReadWriteMany"
+    storageClass: "ontap-nfs"
+
+# =============================================================================
+
+applications:
+
+  # ===========================================================================
+  # AGENTIC BACKEND
+  # ===========================================================================
+  agentic-backend:
+    replicaCount: 2
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
+      tag: &prism-tag "dev-prism"
+      pullPolicy: &prism-pullPolicy Always
+    imagePullSecrets: *carma-pull-secret
+    serviceAccount: *disable-service-account
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    # ── Application Configuration ─────────────────────────────────────────────
+    configuration:
+      app:
+        log_level: "info"
+
+      security: *common-security
+
+      frontend_settings:
+        properties:
+          logoName: "logo_PRISM_light"
+          logoNameDark: "logo_PRISM_dark"
+          logoHeight: "24px"
+          logoWidth: "129px"
+          faviconName: "favicon_PRISM_light"
+          faviconNameDark: "favicon_PRISM_dark"
+          siteDisplayName: "PRISM.AI"
+          agentsNicknameSingular: "Lumi"
+          agentsNicknamePlural: "Lumis"
+          contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
+          agentIconName: "icon_lumi"
+          showAgentRegisterA2A: false
+          showAgentRestoreFromConfiguration: false
+          showAgentCode: false
+          allowAgentSwitchInOneConversation: false
+          showAgentDisableButton: false
+
+      scheduler:
+        backend: "temporal"
+        temporal:
+          host: "temporal-frontend:7233"
+          namespace: "default"
+          task_queue: "agents"
+          workflow_id_prefix: "task"
+          connect_timeout_seconds: 5
+
+      ai:
+        max_concurrent_sessions_per_user: 9999
+        knowledge_flow_url: "https://prism-ui-int.six.cloud.thales/knowledge-flow/v1"
+
+      storage:
+        postgres:
+          host: "postgresql"
+          port: 5432
+          database: fred
+          username: fred
+        opensearch:
+          host: https://prism-opensearch-int.six.cloud.thales
+        feedback_store:
+          type: "postgres"
+          table: feedbacks
+        agent_store:
+          type: "postgres"
+          table: agent
+        mcp_servers_store:
+          type: "postgres"
+          table: mcp-server
+        session_store:
+          type: "postgres"
+          table: session
+        attachments_store:
+          type: "postgres"
+          table: session_attachments
+        history_store:
+          type: "postgres"
+          table: session_history
+        kpi_store:
+          type: "opensearch"
+          index: kpi-index
+        log_store:
+          type: "opensearch"
+          index: log-index
+        task_store:
+          type: "postgres"
+          table: agentic-tasks
+
+    # ── Agent catalog ─────────────────────────────────────────────────────────
+    agents_catalog:
+      version: v1
+      agents: []
+      react_profiles: []
+
+    # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
+    models_catalog:
+      version: v1
+      common_model_settings:
+        max_retries: 0
+        timeout:
+          connect: 10.0
+          read: 300.0
+        temperature: 0.0
+      default_profile_by_capability:
+        chat: chat.tgs.mistral-medium
+        language: language.tgs.mistral-medium
+      profiles:
+        - profile_id: chat.tgs.mistral-medium
+          capability: chat
+          description: "Mistral Medium via TGS for chat"
+          model:
+            provider: openai
+            name: mistral
+            settings:
+              base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+              request_timeout: 300
+              stream_usage: false
+        - profile_id: language.tgs.mistral-medium
+          capability: language
+          description: "Mistral Medium via TGS for language tasks"
+          model:
+            provider: openai
+            name: mistral
+            settings:
+              base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
+              request_timeout: 300
+              stream_usage: false
+      rules: []
+
+    # ── MCP catalog (text search only) ────────────────────────────────────────
+    mcp_catalog:
+      version: v1
+      servers:
+        - id: "mcp-knowledge-flow-mcp-text"
+          name: "mcp.servers.search_documents.name"
+          description: "mcp.servers.search_documents.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
+
+  # ===========================================================================
+  # FRONTEND
+  # ===========================================================================
+  frontend:
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+    serviceAccount: *disable-service-account
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    ingress:
+      annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: 150m
+        nginx.org/proxy-connect-timeout: 300s
+        nginx.org/proxy-read-timeout: 300s
+      hosts:
+        - host: prism-ui-int.six.cloud.thales
+          paths:
+            - path: /
+              pathType: Prefix
+              service:
+                name: frontend
+                port: 80
+            - path: /agentic
+              pathType: Prefix
+              service:
+                name: agentic-backend
+                port: 80
+            - path: /knowledge-flow
+              pathType: Prefix
+              service:
+                name: knowledge-flow-backend
+                port: 8000
+            - path: /control-plane
+              pathType: Prefix
+              service:
+                name: control-plane-backend
+                port: 8222
+      tls:
+        - hosts:
+            - "prism-ui-int.six.cloud.thales"
+          secretName: "tls-dc2-wd1-six-int-kns-pri"
+
+    configuration:
+      config_json:
+        backend_url_api: "https://prism-ui-int.six.cloud.thales"
+        backend_url_knowledge: "https://prism-ui-int.six.cloud.thales"
+        websocket_url: "ws://prism-ui-int.six.cloud.thales/fred/chatbot/query"
+
+  # ===========================================================================
+  # KNOWLEDGE FLOW BACKEND
+  # ===========================================================================
+  knowledge-flow-backend:
+    replicaCount: 1 # todo: set back to 2 once MCP bug is resolved
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+    serviceAccount: *disable-service-account
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration:
+      app:
+        log_level: "info"
+
+      processing:
+        profiles:
+          fast:
+            use_gpu: false
+          medium:
+            use_gpu: false
+          rich:
+            use_gpu: false
+
+      security:        *common-security
+      scheduler:       *kf-scheduler
+      content_storage: *kf-content-storage
+      embedding_model: *kf-embedding-model
+      chat_model:      *kf-chat-model
+      storage:         *kf-storage
+      mcp:             *kf-mcp
+      filesystem:      *kf-filesystem
+
+    probes:
+      livenessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 600
+          failureThreshold: 20
+      readinessProbe:
+        data:
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 600
+          failureThreshold: 20
+
+  # ===========================================================================
+  # KNOWLEDGE FLOW WORKER
+  # ===========================================================================
+  knowledge-flow-worker:
+    enabled: true
+    deployment:
+      enabled: true
+    replicaCount: 2
+    configurationFileName: configuration.yaml
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+    serviceAccount: *disable-service-account
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+    env:
+      - name: LOG_LEVEL
+        value: "WARNING"
+      - name: CONFIG_FILE
+        value: "/app/config/configuration.yaml"
+
+    configuration:
+      app:
+        metrics_enabled: false
+
+      processing:
+        profiles:
+          fast:
+            use_gpu: false
+          medium:
+            use_gpu: false
+          rich:
+            use_gpu: false
+
+      security:        *common-security
+      scheduler:       *kf-scheduler
+      content_storage: *kf-content-storage
+      embedding_model: *kf-embedding-model
+      chat_model:      *kf-chat-model
+      storage:         *kf-storage
+      mcp:             *kf-mcp
+      filesystem:      *kf-filesystem
+
+  # ===========================================================================
+  # CONTROL PLANE BACKEND
+  # ===========================================================================
+  control-plane-backend:
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/control-plane-backend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+    serviceAccount: *disable-service-account
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration:
+      security:  *common-security
+      scheduler: *cp-scheduler
+      storage:   *cp-storage
+
+  # ===========================================================================
+  # CONTROL PLANE WORKER
+  # ===========================================================================
+  control-plane-worker:
+    enabled: true
+    deployment:
+      enabled: true
+    image:
+      repository: carma.corp.thales/proxy-docker-internal-c2/fred/control-plane-backend
+      tag: *prism-tag
+      pullPolicy: *prism-pullPolicy
+    imagePullSecrets: *carma-pull-secret
+    serviceAccount: *disable-service-account
+    extraEnvVars: *ssl-extra-env-vars
+    extraVolumes: *ssl-extra-volumes
+    extraVolumeMounts: *ssl-extra-volume-mounts
+
+    configuration:
+      security:  *common-security
+      scheduler: *cp-scheduler
+      storage:   *cp-storage
+ 
