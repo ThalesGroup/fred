@@ -99,7 +99,7 @@ def make_alembic_env(
         version_table
     }
 
-    def _include_name(name: str, type_: str, _parent_names: object) -> bool:
+    def _include_name(name: str | None, type_: str, _parent_names: object) -> bool:
         if type_ == "table":
             return name in _owned_tables
         return True
