@@ -105,6 +105,10 @@ x-profile-fast: &profile-fast
   use_gpu: true
   generate_summary: false
   process_images: false
+  text_splitter:
+    chunk_size: 1500
+    chunk_overlap: 150
+    preserve_tables: true
   pdf:
     backend: pypdfium2
     images_scale: 1.0
@@ -119,6 +123,10 @@ x-profile-medium: &profile-medium
   use_gpu: true
   generate_summary: false
   process_images: false
+  text_splitter:
+    chunk_size: 1500
+    chunk_overlap: 150
+    preserve_tables: true
   pdf:
     backend: docling_parse
     images_scale: 1.5
@@ -135,6 +143,10 @@ x-profile-rich-backend: &profile-rich-backend
   use_gpu: true
   generate_summary: false
   process_images: true
+  text_splitter:
+    chunk_size: 1500
+    chunk_overlap: 150
+    preserve_tables: true
   pdf:
     backend: docling_parse
     images_scale: 2.0
