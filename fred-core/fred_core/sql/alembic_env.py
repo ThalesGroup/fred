@@ -71,6 +71,7 @@ def _build_url(get_postgres_config: Callable[[], PostgresStoreConfig]) -> str:
 def make_alembic_env(
     target_metadata: MetaData | Sequence[MetaData],
     get_postgres_config: Callable[[], PostgresStoreConfig],
+    version_table: str = "alembic_version",
 ) -> tuple[Callable[[], None], Callable[[], None]]:
     """Return ``(run_migrations_offline, run_migrations_online)`` for *env.py*.
 
@@ -80,10 +81,26 @@ def make_alembic_env(
         get_postgres_config: Zero-argument callable that returns the backend's
             ``PostgresStoreConfig``.  Called lazily so config loading only
             happens when migrations actually run.
+        version_table: Name of the Alembic version table.  Set a unique name
+            per backend when multiple backends share the same database so their
+            migration histories don't collide.
     """
     # Import here to keep alembic an optional dependency of fred_core
     # (only needed in migration contexts, not at application runtime).
     from alembic import context
+
+    # Build the set of table names owned by this backend so that autogenerate
+    # and `alembic check` ignore tables that belong to other backends sharing
+    # the same database.
+    metas = target_metadata if isinstance(target_metadata, Sequence) else [target_metadata]
+    _owned_tables: frozenset[str] = frozenset(
+        t for m in metas for t in m.tables
+    ) | {version_table}
+
+    def _include_name(name: str, type_: str, _parent_names: object) -> bool:
+        if type_ == "table":
+            return name in _owned_tables
+        return True
 
     def _is_postgres(url: str) -> bool:
         return url.startswith("postgresql")
@@ -96,6 +113,8 @@ def make_alembic_env(
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=not is_postgres,
+            version_table=version_table,
+            include_name=_include_name,
         )
         with context.begin_transaction():
             context.run_migrations()
@@ -116,6 +135,8 @@ def make_alembic_env(
             target_metadata=target_metadata,
             literal_binds=True,
             dialect_opts={"paramstyle": "named"},
+            version_table=version_table,
+            include_name=_include_name,
         )
         with context.begin_transaction():
             context.run_migrations()

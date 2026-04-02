@@ -47,6 +47,7 @@ run_migrations_offline, run_migrations_online = make_alembic_env(
     # All agentic-backend tables (+ fred-core session table) are captured here.
     target_metadata=[Base.metadata, FredCoreBase.metadata],
     get_postgres_config=lambda: load_configuration().storage.postgres,
+    version_table="alembic_version_agentic",
 )
 
 if context.is_offline_mode():
