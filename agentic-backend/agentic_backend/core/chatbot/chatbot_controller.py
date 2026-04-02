@@ -857,7 +857,9 @@ async def get_sessions(
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[SessionWithFiles]:
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("[CHATBOT] get_sessions start user=%s, team_id=%s", user.uid, team_id)
+        logger.debug(
+            "[CHATBOT] get_sessions start user=%s, team_id=%s", user.uid, team_id
+        )
     return await session_orchestrator.get_sessions(user, team_id)
 
 
