@@ -38,7 +38,7 @@ export default function TeamSelectionNavbar() {
               redirection={`/team/${team.id}/agents`}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
-              imgUrl={"/images/default-team-banner.png"}
+              imgUrl={team.banner_image_url ?? "/images/default-team-banner.png"}
             />
           );
         })}

@@ -16,7 +16,7 @@ export default function TeamCard({ team, withDescription }: TeamCardProps) {
     <div className={styles["team-card-container"]}>
       <img
         className={styles["team-banner"]}
-        src={team.banner_image_url ? `url(${team.banner_image_url})` : "/images/default-team-banner.png"}
+        src={team.banner_image_url ?? "/images/default-team-banner.png"}
         alt=""
         aria-hidden="true"
       ></img>
