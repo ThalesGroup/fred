@@ -1557,7 +1557,7 @@ class SessionOrchestrator:
     @authorize(action=Action.READ, resource=Resource.SESSIONS)
     async def get_runtime_summary(self, user: KeycloakUser) -> ChatbotRuntimeSummary:
         """Return a simple per-user snapshot: sessions, active agents, attachments."""
-        sessions = await self.session_store.get_for_user(user.uid)
+        sessions = await self.session_store.get_for_user(user.uid, None)
         session_ids = {s.id for s in sessions}
         sessions_total = len(session_ids)
 
