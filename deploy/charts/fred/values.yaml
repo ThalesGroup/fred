@@ -1006,6 +1006,12 @@ applications:
     env:
       - name: VITE_ALLOWED_HOSTS
         value: "fred.dev"
+      - name: FRONTEND_AGENTIC_UPSTREAM
+        value: "http://agentic-backend"
+      - name: FRONTEND_KNOWLEDGE_FLOW_UPSTREAM
+        value: "http://knowledge-flow-backend:8000"
+      - name: FRONTEND_CONTROL_PLANE_UPSTREAM
+        value: "http://control-plane-backend:8222"
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "{YOUR-KF-URL}"
       - name: VITE_USE_AUTH
