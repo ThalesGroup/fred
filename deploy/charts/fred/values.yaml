@@ -378,6 +378,13 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false           # Run Alembic migrations via Helm hooks on deploy
+      scaleDown: true         # Scale deployment to 0 before migrating (safe, downtime acceptable)
+      backoffLimit: 3         # Retry count on migration failure
+      # command: ["alembic"]  # Override migration command (default: alembic)
+      # args: ["upgrade", "head"]  # Override migration args (default: upgrade head)
+      # resources: {}         # Override resource limits for migration job
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1110,6 +1117,10 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false    # Enable when knowledge-flow-backend gets Alembic migrations
+      scaleDown: true
+      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1468,6 +1479,10 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false    # Enable when control-plane-backend gets Alembic migrations
+      scaleDown: true
+      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
