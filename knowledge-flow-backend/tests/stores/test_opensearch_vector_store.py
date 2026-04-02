@@ -277,3 +277,147 @@ def test_opensearch_vector_store_add_documents_rejects_mismatched_ids(monkeypatc
 
     with pytest.raises(RuntimeError, match="Unexpected error during vector indexing"):
         store.add_documents(docs, ids=["cid-1", "cid-2"])
+
+
+def test_opensearch_vector_store_add_documents_splits_embedding_batches_on_provider_limit(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    class FakeEmbeddingBatchLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider rejected embedding batch")
+            self.status_code = 400
+            self.code = "3210"
+            self.type = "invalid_request_prompt"
+            self.body = {
+                "code": "3210",
+                "type": "invalid_request_prompt",
+                "raw_status_code": 400,
+            }
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls: list[tuple[int, list[str]]] = []
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls.append((len(documents), list(ids)))
+            if len(documents) > 2:
+                raise FakeEmbeddingBatchLimitError()
+            return list(ids)
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=5,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(5)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(5)]
+    assert len(FakeVectorSearch.created) == 1
+    assert FakeVectorSearch.created[0].calls == [
+        (5, ["cid-0", "cid-1", "cid-2", "cid-3", "cid-4"]),
+        (2, ["cid-0", "cid-1"]),
+        (3, ["cid-2", "cid-3", "cid-4"]),
+        (1, ["cid-2"]),
+        (2, ["cid-3", "cid-4"]),
+    ]
+
+
+def test_opensearch_vector_store_retries_transient_embedding_failure_without_splitting(monkeypatch):
+    fake_client = FakeOpenSearchClient(index_name="fred-vectors")
+    monkeypatch.setattr(ovs, "OpenSearch", lambda *args, **kwargs: fake_client)
+
+    class FakeEmbeddingBatchLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider rejected embedding batch")
+            self.status_code = 400
+            self.code = "3210"
+            self.type = "invalid_request_prompt"
+            self.body = {
+                "code": "3210",
+                "type": "invalid_request_prompt",
+                "raw_status_code": 400,
+            }
+
+    class FakeTransientEmbeddingError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("provider temporarily overloaded")
+            self.status_code = 503
+            self.type = "server_error"
+            self.body = {
+                "type": "server_error",
+                "raw_status_code": 503,
+            }
+
+    class FakeVectorSearch:
+        created: list["FakeVectorSearch"] = []
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls: list[tuple[int, list[str]]] = []
+            self.attempts = 0
+            FakeVectorSearch.created.append(self)
+
+        def add_documents(self, documents: list[Document], ids: list[str] | None = None) -> list[str]:
+            assert ids is not None
+            self.calls.append((len(documents), list(ids)))
+            if self.attempts == 0:
+                self.attempts += 1
+                try:
+                    raise FakeEmbeddingBatchLimitError()
+                except FakeEmbeddingBatchLimitError as limit_error:
+                    raise FakeTransientEmbeddingError() from limit_error
+            return list(ids)
+
+    sleep_calls: list[float] = []
+
+    monkeypatch.setattr(ovs, "OpenSearchVectorSearch", FakeVectorSearch)
+    monkeypatch.setattr(ovs.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    store = ovs.OpenSearchVectorStoreAdapter(
+        embedding_model=DummyEmbeddings(size=8),
+        embedding_model_name="custom-model",
+        kpi=None,
+        host="http://localhost:9200",
+        index="fred-vectors",
+        username="admin",
+        password=TEST_OPENSEARCH_PASSWORD,
+        bulk_size=4,
+    )
+
+    docs = [
+        Document(
+            page_content=f"chunk {i}",
+            metadata={ovs.CHUNK_ID_FIELD: f"cid-{i}", "document_uid": "doc-1"},
+        )
+        for i in range(4)
+    ]
+
+    assigned_ids = store.add_documents(docs)
+
+    assert assigned_ids == [f"cid-{i}" for i in range(4)]
+    assert len(FakeVectorSearch.created) == 1
+    assert FakeVectorSearch.created[0].calls == [
+        (4, ["cid-0", "cid-1", "cid-2", "cid-3"]),
+        (4, ["cid-0", "cid-1", "cid-2", "cid-3"]),
+    ]
+    assert sleep_calls == [ovs.EMBEDDING_RETRY_BASE_DELAY_SECONDS]
