@@ -67,7 +67,10 @@ class PostgresSessionStore(BaseSessionStore):
                 await s.delete(row)
 
     async def get_for_user(
-        self, user_id: str, team_id: Optional[str], db_session: AsyncSession | None = None
+        self,
+        user_id: str,
+        team_id: Optional[str],
+        db_session: AsyncSession | None = None,
     ) -> list[SessionSchema]:
         async with use_session(self._sessions, db_session) as s:
             stmt = select(SessionRow).where(SessionRow.user_id == user_id)

@@ -39,7 +39,10 @@ class NoOpSessionStore(BaseSessionStore):
         pass
 
     async def get_for_user(
-        self, user_id: str, team_id: Optional[str], db_session: AsyncSession | None = None
+        self,
+        user_id: str,
+        team_id: Optional[str],
+        db_session: AsyncSession | None = None,
     ) -> list[SessionSchema]:
         """No-op get_for_user method that always returns an empty list."""
         return []

@@ -11,8 +11,10 @@ from typing import Sequence, Union
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "e89ab9e7ca5f"
-down_revision: Union[str, Sequence[str], None] = "5c9bc83efbfb"
+revision: str = "e89ab9e7ca5f"  # pragma: allowlist secret
+down_revision: Union[str, Sequence[str], None] = (
+    "5c9bc83efbfb"  # pragma: allowlist secret
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
