@@ -1061,14 +1061,15 @@ class SessionOrchestrator:
     async def get_sessions(
         self,
         user: KeycloakUser,
+        team_id: str,
     ) -> List[SessionWithFiles]:
         """
-        Get all sessions for a user, enriched with the list of uploaded files.
+        Get all sessions for a user filtered by a team, enriched with the list of uploaded files.
         This method is only used by the UI to list sessions. It is not part of the
         chat exchange flow.
         """
         async with phase_timer(self.kpi, "session_list"):
-            sessions = await self.session_store.get_for_user(user.uid)
+            sessions = await self.session_store.get_for_user(user.uid, team_id)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
             # Retrieve all agents

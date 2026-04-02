@@ -3,9 +3,7 @@ import { Agent } from "../../../../../slices/agentic/agenticOpenApi.ts";
 import Icon from "@components/shared/atoms/Icon/Icon.tsx";
 import IconButton from "@components/shared/atoms/IconButton/IconButton.tsx";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import { AnyAgent } from "../../../../../common/agent.ts";
-import { useMemo } from "react";
 
 interface AgentCardProps {
   agent: Agent;
@@ -17,7 +15,6 @@ interface AgentCardProps {
 export default function AgentCard({ agent, readOnly, onToggleEnabled, onEditAgent }: AgentCardProps) {
   const { t } = useTranslation();
 
-  const cardContent = useMemo(() => {
     return (
       <div className={styles.agentCard} data-enabled={agent.enabled}>
         <div className={styles.stateLayer}>
@@ -66,7 +63,4 @@ export default function AgentCard({ agent, readOnly, onToggleEnabled, onEditAgen
         </div>
       </div>
     );
-  }, [agent, readOnly]);
-
-  return agent.enabled ? <Link to={`/new-chat/${agent.id}`}>{cardContent}</Link> : cardContent;
 }

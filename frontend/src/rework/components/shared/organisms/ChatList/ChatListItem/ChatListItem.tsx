@@ -10,11 +10,12 @@ import { useTranslation } from "react-i18next";
 import React from "react";
 
 interface ChatListItemProps {
+  teamId: string;
   chat: SessionWithFiles;
   onDelete: () => void;
 }
 
-export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
+export default function ChatListItem({ teamId, chat, onDelete }: ChatListItemProps) {
   const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   const { showError } = useToast();
@@ -22,7 +23,7 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const isSelected = location.pathname === `/chat/${chat.id}`;
+  const isSelected = location.pathname.endsWith(`/chat/${chat.id}`);
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -42,19 +43,19 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
   };
 
   return (
-    <Link to={`/chat/${chat.id}`}>
-      <div className={styles["chat-item-container"]} title={chat.title}>
-        <div className={styles["chat-description"]}>
-          <div className={styles["title"]}>{chat.title}</div>
-          <div className={styles["metadata"]}>
-            <span className={styles["agent"]}>
-              <div className={styles["agent-name"]}>{chat.agents.length !== 0 ? chat.agents[0].name : ""}</div>
+    <Link to={`team/${teamId}/chat/${chat.id}`}>
+      <div className={styles.chatItemContainer} title={chat.title}>
+        <div className={styles.chatDescription}>
+          <div className={styles.title}>{chat.title}</div>
+          <div className={styles.metadata}>
+            <span className={styles.agent}>
+              <div className={styles.agentName}>{chat.agents.length !== 0 ? chat.agents[0].name : ""}</div>
             </span>
-            <span className={styles["separator"]}>•</span>
-            <span className={styles["date"]}>{new Intl.DateTimeFormat().format(new Date(chat.updated_at))}</span>
+            <span className={styles.separator}>•</span>
+            <span className={styles.date}>{new Intl.DateTimeFormat().format(new Date(chat.updated_at))}</span>
           </div>
         </div>
-        <span className={styles["chat-actions"]}>
+        <span className={styles.chatActions}>
           <IconButton
             color={"error"}
             variant={"icon"}

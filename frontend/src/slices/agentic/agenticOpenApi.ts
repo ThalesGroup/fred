@@ -190,7 +190,12 @@ const injectedRtkApi = api.injectEndpoints({
       GetSessionsAgenticV1ChatbotSessionsGetApiResponse,
       GetSessionsAgenticV1ChatbotSessionsGetApiArg
     >({
-      query: () => ({ url: `/agentic/v1/chatbot/sessions` }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/sessions`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     createSessionAgenticV1ChatbotSessionPost: build.mutation<
       CreateSessionAgenticV1ChatbotSessionPostApiResponse,
@@ -457,7 +462,9 @@ export type GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetAp
 };
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
-export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
+export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = {
+  teamId: string;
+};
 export type CreateSessionAgenticV1ChatbotSessionPostApiResponse = /** status 200 Successful Response */ SessionSchema;
 export type CreateSessionAgenticV1ChatbotSessionPostApiArg = {
   createSessionPayload: CreateSessionPayload;

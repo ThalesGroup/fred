@@ -20,6 +20,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
   const userEmail = KeyCloakService.GetUserMail();
+  const userRoles = KeyCloakService.GetUserRoles();
 
   return (
     <div className={styles["user-settings-page"]}>
@@ -50,7 +51,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
           <span className={styles["user-settings-identity-name"]}>{username}</span>
           <span className={styles["user-settings-identity-fullname"]}>{userFullName}</span>
           <span className={styles["user-settings-identity-email"]}>{userEmail}</span>
-          <span className={styles["user-settings-identity-role"]}>{"role"}</span>
+          <span className={styles["user-settings-identity-role"]}>{userRoles.join(", ")}</span>
         </div>
       </div>
       <div className={styles["user-settings-application"]}>
@@ -96,6 +97,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
       </div>
       <div className={styles["user-settings-conversation"]}>
         <TextArea
+            disabled={true}
           label={t("rework.userSettings.conversationProfile.title")}
           placeholder={t("rework.userSettings.conversationProfile.placeholder")}
           maxLength={300}

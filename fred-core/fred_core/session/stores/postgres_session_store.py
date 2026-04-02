@@ -65,12 +65,13 @@ class PostgresSessionStore(BaseSessionStore):
                 await s.delete(row)
 
     async def get_for_user(
-        self, user_id: str, db_session: AsyncSession | None = None
+        self, user_id: str, team_id: str, db_session: AsyncSession | None = None
     ) -> list[SessionSchema]:
         async with use_session(self._sessions, db_session) as s:
             result = await s.execute(
                 select(SessionRow)
                 .where(SessionRow.user_id == user_id)
+                .where(SessionRow.team_id == team_id)
                 .order_by(SessionRow.updated_at.desc())
             )
             rows = result.scalars().all()

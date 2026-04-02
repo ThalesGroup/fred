@@ -257,7 +257,7 @@
         "tags": [
           "Users"
         ],
-        "summary": "Temporary bouchon endpoint to get a user.",
+        "summary": "Temporary mock endpoint to get a user.",
         "operationId": "get_user_details_control_plane_v1_user_get",
         "responses": {
           "200": {
@@ -265,11 +265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Get User Details Control Plane V1 User Get"
+                  "$ref": "#/components/schemas/UserDetails"
                 }
               }
             }
@@ -1314,6 +1310,18 @@
         },
         "type": "object",
         "title": "UpdateTeamRequest"
+      },
+      "UserDetails": {
+        "properties": {
+          "personalTeam": {
+            "$ref": "#/components/schemas/TeamWithPermissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personalTeam"
+        ],
+        "title": "UserDetails"
       },
       "UserSummary": {
         "properties": {

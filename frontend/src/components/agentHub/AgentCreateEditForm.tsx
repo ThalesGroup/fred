@@ -12,31 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import DeleteIcon from "@mui/icons-material/Delete";
-import {Autocomplete, Box, Button, Divider, Stack, TextField, Typography} from "@mui/material";
-import {useCallback, useEffect, useState} from "react";
-import {useTranslation} from "react-i18next";
-import {useAgentUpdater} from "../../hooks/useAgentUpdater";
-import {useFrontendProperties} from "../../hooks/useFrontendProperties";
-import {KeyCloakService} from "../../security/KeycloakService";
+import { Autocomplete, Box, Button, Divider, Stack, TextField, Typography } from "@mui/material";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useAgentUpdater } from "../../hooks/useAgentUpdater";
+import { useFrontendProperties } from "../../hooks/useFrontendProperties";
+import { KeyCloakService } from "../../security/KeycloakService";
 import {
-    FieldSpec,
-    McpServerRef,
-    ReActProfileSummary,
-    useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
-    useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
-    useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
-    useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
-    useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
-    useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
-    useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
+  FieldSpec,
+  McpServerRef,
+  ReActProfileSummary,
+  useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
+  useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
+  useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
+  useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery as useLazyGetClassPathTuningQuery,
+  useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery as useListDeclaredAgentClassPathsQuery,
+  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery as useListReactProfilesQuery,
+  useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery as useListV2DefinitionRefsQuery,
 } from "../../slices/agentic/agenticOpenApi";
-import {useConfirmationDialog} from "../ConfirmationDialogProvider";
-import {useToast} from "../ToastProvider";
-import {AgentPrivateResourcesManager} from "./AgentConfigWorkspaceManagerDrawer";
-import {AgentCreateEditDrawerProps} from "./AgentCreateEditDrawer";
-import {AgentToolsSelection} from "./AgentToolsSelection";
-import {TuningForm} from "./TuningForm";
+import { useConfirmationDialog } from "../ConfirmationDialogProvider";
+import { useToast } from "../ToastProvider";
+import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
+import { AgentCreateEditDrawerProps } from "./AgentCreateEditDrawer";
+import { AgentToolsSelection } from "./AgentToolsSelection";
+import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 type TopLevelTuningState = {
   role: string;
@@ -63,6 +64,7 @@ export function AgentCreateEditForm({
   const { agentsNicknameSingular } = useFrontendProperties();
   const [createV2Agent] = useCreateV2AgentAgenticV1AgentsV2CreatePostMutation();
   const [createV1Agent] = useCreateV1AgentAgenticV1AgentsV1CreatePostMutation();
+  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -198,14 +200,14 @@ export function AgentCreateEditForm({
           ? await createV1Agent({
               createV1AgentRequest: {
                 name: trimmedName,
-                team_id: teamId,
+                team_id: teamId === userDetails.personalTeam.id ? undefined : teamId,
                 class_path: classPath!,
               },
             }).unwrap()
           : await createV2Agent({
               createV2AgentRequest: {
                 name: trimmedName,
-                team_id: teamId,
+                team_id: teamId === userDetails.personalTeam.id ? undefined : teamId,
                 profile_id: v2CreateMode === "profile" ? profileId || undefined : undefined,
                 definition_ref: v2CreateMode === "definition_ref" ? definitionRef || undefined : undefined,
               },
@@ -275,7 +277,6 @@ export function AgentCreateEditForm({
 
   // Derived booleans for JSX clarity
   const showTuningFields = !isCreateMode || (agentVersion === "v2" && v2CreateMode === "react");
-
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>

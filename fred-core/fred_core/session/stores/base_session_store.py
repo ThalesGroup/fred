@@ -44,7 +44,7 @@ class BaseSessionStore(ABC):
 
     @abstractmethod
     async def get_for_user(
-        self, user_id: str, db_session: AsyncSession | None = None
+        self, user_id: str, team_id: str, db_session: AsyncSession | None = None
     ) -> list[SessionSchema]:
         """Retrieve all sessions for a user."""
 

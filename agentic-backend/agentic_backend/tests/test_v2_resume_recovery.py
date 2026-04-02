@@ -95,27 +95,27 @@ class InMemorySessionStore(BaseSessionStore):
         self.sessions: dict[str, SessionSchema] = {}
 
     async def save(
-        self, session: SessionSchema, db_session: AsyncSession | None = None
+            self, session: SessionSchema, db_session: AsyncSession | None = None
     ) -> None:
         self.sessions[session.id] = session
 
     async def get(
-        self, session_id: str, db_session: AsyncSession | None = None
+            self, session_id: str, db_session: AsyncSession | None = None
     ) -> SessionSchema | None:
         return self.sessions.get(session_id)
 
     async def delete(
-        self, session_id: str, db_session: AsyncSession | None = None
+            self, session_id: str, db_session: AsyncSession | None = None
     ) -> None:
         self.sessions.pop(session_id, None)
 
     async def get_for_user(
-        self, user_id: str, db_session: AsyncSession | None = None
+        self, user_id: str, team_id: str, db_session: AsyncSession | None = None
     ) -> list[SessionSchema]:
-        return [s for s in self.sessions.values() if s.user_id == user_id]
+        return [s for s in self.sessions.values() if s.user_id == user_id and s.team_id == team_id]
 
     async def count_for_user(
-        self, user_id: str, db_session: AsyncSession | None = None
+            self, user_id: str, db_session: AsyncSession | None = None
     ) -> int:
         return len(await self.get_for_user(user_id))
 
@@ -125,11 +125,11 @@ class InMemoryHistoryStore(NoOpHistoryStore):
         self.messages: dict[str, list[ChatMessage]] = {}
 
     async def save(
-        self,
-        session_id: str,
-        messages: list[ChatMessage],
-        user_id: str,
-        session: AsyncSession | None = None,
+            self,
+            session_id: str,
+            messages: list[ChatMessage],
+            user_id: str,
+            session: AsyncSession | None = None,
     ) -> None:
         self.messages[session_id] = list(messages)
 
@@ -142,21 +142,21 @@ class FreshV2AgentFactory(BaseAgentFactory):
         self.agent = agent
 
     async def create_and_init(
-        self,
-        user: KeycloakUser,
-        agent_id: str,
-        runtime_context: RuntimeContext,
-        session_id: str,
+            self,
+            user: KeycloakUser,
+            agent_id: str,
+            runtime_context: RuntimeContext,
+            session_id: str,
     ):
         self.agent.rebind(_binding(session_id, agent_id=agent_id))
         return self.agent, False
 
     async def create_and_init_internal_profile(
-        self,
-        user: KeycloakUser,
-        profile_id: str,
-        runtime_context: RuntimeContext,
-        session_id: str,
+            self,
+            user: KeycloakUser,
+            profile_id: str,
+            runtime_context: RuntimeContext,
+            session_id: str,
     ):
         raise NotImplementedError
 
@@ -193,10 +193,10 @@ def _user_input(text: str) -> ReActInput:
 
 
 def _build_runtime(
-    *,
-    model: ToolFriendlyFakeChatModel,
-    checkpointer: FredSqlCheckpointer,
-    session_id: str,
+        *,
+        model: ToolFriendlyFakeChatModel,
+        checkpointer: FredSqlCheckpointer,
+        session_id: str,
 ) -> ReActRuntime:
     definition = BasicReActDefinition(
         enable_tool_approval=True, system_prompt_template="Be a good agent"
@@ -215,7 +215,7 @@ def _build_runtime(
 
 @pytest.mark.asyncio
 async def test_v2_react_resume_survives_backend_restart_without_agent_cache(
-    minimal_generalist_config: Configuration, tmp_path
+        minimal_generalist_config: Configuration, tmp_path
 ) -> None:
     session_id = "resume-sql-session"
     exchange_id = "exchange-resume-1"

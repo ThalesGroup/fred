@@ -1,6 +1,6 @@
 @use "src/index.scss" as *;
 
-.team-content-navbar-container {
+.teamContentNavbarContainer {
   display: flex;
   flex-direction: column;
   width: 240px;
@@ -9,17 +9,21 @@
   --banner-img: url("/images/default-team-banner.png");
 }
 
-.banner-container {
+.bannerContainer {
   display: flex;
   align-items: flex-end;
   border-radius: 0 0 var(--radius-s) var(--radius-s);
-  background: var(--banner-img) center;
-  background-size: cover;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--secondary-container), transparent 50%),
+      color-mix(in srgb, var(--secondary-container), transparent 50%)
+    ),
+    var(--banner-img) center / cover;
   padding: 0 var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
   height: 88px;
 }
 
-.team-name-container {
+.teamNameContainer {
   display: flex;
   justify-content: space-between;
   align-items: end;
@@ -29,7 +33,7 @@
   @include typography("title", "medium");
 }
 
-.navigation-container {
+.navigationContainer {
   display: flex;
   flex-direction: column;
   height: 100%;

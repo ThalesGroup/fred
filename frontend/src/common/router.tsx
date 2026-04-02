@@ -19,7 +19,6 @@ import Chat from "../pages/Chat";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { McpHub } from "../pages/McpHub";
-import { NewChatAgentSelection } from "../pages/NewChatAgentSelection.tsx";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
@@ -55,22 +54,18 @@ export const routes: RouteObject[] = [
     children: [
       {
         index: true,
-        element: <Navigate to="/new-chat" replace />,
-      },
-      {
-        path: "/new-chat",
-        element: <NewChatAgentSelection />,
+        element: <Navigate to="/team/personal/agents" replace />,
       },
       {
         path: "/design-system",
         element: <DesignSystemPage />,
       },
       {
-        path: "/new-chat/:agent-id",
+        path: "team/:teamId/new-chat/:agent-id",
         element: <Chat />,
       },
       {
-        path: "chat/:sessionId",
+        path: "team/:teamId/chat/:sessionId",
         element: <Chat />,
       },
       {

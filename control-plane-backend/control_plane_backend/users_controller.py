@@ -21,6 +21,12 @@ from control_plane_backend.users_structures import (
     UserSummary,
 )
 
+from control_plane_backend.teams_structures import (
+    TeamWithPermissions,
+)
+
+from pydantic import BaseModel
+
 router = APIRouter(tags=["Users"])
 
 
@@ -85,12 +91,23 @@ async def delete_user(
     """Delete a user in Keycloak for temporary bootstrap and testing flows."""
     await delete_user_from_service(user, user_id)
 
+class UserDetails(BaseModel):
+    personalTeam: TeamWithPermissions
 
 @router.get(
     "/user",
-    summary="Temporary bouchon endpoint to get a user.",
+    summary="Temporary mock endpoint to get a user.",
 )
 async def get_user_details(
     user: KeycloakUser = Depends(get_current_user),
-) -> dict[str, str]:
-    return {"personalTeamId": "personal"}
+) -> UserDetails:
+    return UserDetails (
+        personalTeam=TeamWithPermissions(
+            id="personal",
+            name="Equipe personnelle",
+            member_count=1,
+            is_private=True,
+            owners=[],
+            permissions=["can_read", "can_update_resources", "can_update_agents"]
+        )
+    )

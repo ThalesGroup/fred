@@ -10,15 +10,21 @@ import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import React, { useState } from "react";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 export default function TeamContentNavbar() {
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
+  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
 
-  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || teamId === 'personal'});
-  const selectedTeam = teamId ? team : undefined;
-  const canOpenTeamSettings = teamId !== 'personal' || selectedTeam?.permissions?.includes("can_administer_owners") || false;
+  const { data: team } = useGetTeamQuery(
+    { teamId: teamId },
+    { skip: !teamId || teamId === userDetails?.personalTeam.id },
+  );
+  const selectedTeam = teamId === userDetails?.personalTeam.id ? userDetails?.personalTeam : team;
+  const canOpenTeamSettings =
+    selectedTeam?.permissions?.includes("can_administer_owners") || false;
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -43,11 +49,11 @@ export default function TeamContentNavbar() {
 
   return (
     <>
-      <div className={styles["team-content-navbar-container"]}>
-        <div className={styles["banner-container"]} style={bannerStyle}>
-          <div className={styles["team-name-container"]}>
-            <span className={styles["team-name"]}>
-              {teamId == "personal" ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+      <div className={styles.teamContentNavbarContainer}>
+        <div className={styles.bannerContainer} style={bannerStyle}>
+          <div className={styles.teamNameContainer}>
+            <span className={styles.teamName}>
+              {teamId == userDetails?.personalTeam.id ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
             </span>
             {canOpenTeamSettings && (
               <span className={styles["user-settings-button-container"]}>
@@ -64,10 +70,10 @@ export default function TeamContentNavbar() {
             )}
           </div>
         </div>
-        <div className={styles["navigation-container"]}>
+        <div className={styles.navigationContainer}>
           <NavigationMenu items={navigationItems} />
           <Separator margin={"var(--spacing-m)"} />
-          <ChatList />
+          <ChatList teamId={teamId} />
         </div>
       </div>
       <FullPageModal
