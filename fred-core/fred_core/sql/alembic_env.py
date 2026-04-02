@@ -92,10 +92,12 @@ def make_alembic_env(
     # Build the set of table names owned by this backend so that autogenerate
     # and `alembic check` ignore tables that belong to other backends sharing
     # the same database.
-    metas = target_metadata if isinstance(target_metadata, Sequence) else [target_metadata]
-    _owned_tables: frozenset[str] = frozenset(
-        t for m in metas for t in m.tables
-    ) | {version_table}
+    metas = (
+        target_metadata if isinstance(target_metadata, Sequence) else [target_metadata]
+    )
+    _owned_tables: frozenset[str] = frozenset(t for m in metas for t in m.tables) | {
+        version_table
+    }
 
     def _include_name(name: str, type_: str, _parent_names: object) -> bool:
         if type_ == "table":

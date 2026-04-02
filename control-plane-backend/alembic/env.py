@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+from fred_core.sql import make_alembic_env
+
+import control_plane_backend.models.purge_queue_models  # noqa: F401
+import control_plane_backend.models.team_metadata_models  # noqa: F401
+from alembic import context
+from control_plane_backend.common.config_loader import load_configuration
+
 # Import Base and every ORM model so they all register with Base.metadata
 # before autogenerate inspects it.  These imports must stay here (not in
 # control_plane_backend/models/__init__.py) to avoid circular imports at runtime.
 from control_plane_backend.models.base import Base
-import control_plane_backend.models.team_metadata_models  # noqa: F401
-import control_plane_backend.models.purge_queue_models  # noqa: F401
-from control_plane_backend.common.config_loader import load_configuration
-from alembic import context
-from fred_core.sql import make_alembic_env
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
