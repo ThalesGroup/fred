@@ -14,9 +14,10 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "bb94940fde0c"
-down_revision: Union[str, Sequence[str], None] = "73a8607a014a"
-branch_labels: Union[str, Sequence[str], None] = None
+revision: str = "bb94940fde0c"  # pragma: allowlist secret
+down_revision: Union[str, Sequence[str], None] = (
+    "73a8607a014a"  # pragma: allowlist secret
+)
 depends_on: Union[str, Sequence[str], None] = None
 
 

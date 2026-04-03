@@ -1,0 +1,147 @@
+@use "src/index.scss" as *;
+
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.agentCard[data-enabled="true"] {
+  --agent-name-color: var(--secondary);
+  --agent-role-color: var(--on-surface);
+  --agent-description-color: var(--on-surface-retreat);
+  --agent-icon-background-color: var(--secondary-container);
+  --agent-icon-color: var(--on-secondary-container);
+  --agent-icon-opacity: 1;
+  --agent-card-cursor: pointer;
+}
+
+.agentCard[data-enabled="false"] {
+  --agent-name-color: var(--on-surface-retreat);
+  --agent-role-color: var(--on-surface-muted);
+  --agent-description-color: var(--on-surface-muted);
+  --agent-icon-background-color: var(--surface-container-lowest);
+  --agent-icon-color: var(--on-surface-retreat);
+  --agent-icon-opacity: 0.2;
+  --agent-card-cursor: default;
+}
+
+.agentCard {
+  position: relative;
+  gap: var(--spacing-xs);
+  animation: rotate-gradient 2s linear infinite;
+  animation-play-state: paused;
+  cursor: var(--agent-card-cursor);
+  border: 2px solid transparent;
+  border-radius: var(--spacing-m);
+  background-color: var(--surface-container);
+  padding: var(--spacing-m) var(--spacing-m) var(--spacing-s) var(--spacing-m);
+  width: 280px;
+  height: 100%;
+  --blur: 0px;
+  --newChatDisplay: none;
+
+  &:hover:not([data-enabled="false"]) {
+    --blur: 5px;
+    --newChatDisplay: flex;
+    animation-play-state: running;
+    background:
+      linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
+      conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;
+  }
+}
+
+@keyframes rotate-gradient {
+  to {
+    --angle: 360deg;
+  }
+}
+
+.stateLayer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  justify-content: space-between;
+  height: 100%;
+}
+
+.agentInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  filter: blur(var(--blur));
+  padding-bottom: var(--spacing-2xs);
+}
+
+.agentPresentation {
+  display: flex;
+  gap: 16px;
+}
+
+.agentIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: var(--agent-icon-opacity);
+  border-radius: var(--radius-m);
+  background-color: var(--agent-icon-background-color);
+  min-width: 4rem;
+  height: 4rem;
+  color: var(--agent-icon-color);
+  font-size: 1.875rem;
+}
+
+.agentIdentity {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.agentName {
+  color: var(--agent-name-color);
+
+  @include typography("body", "large", true);
+}
+
+.agentRole {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--agent-role-color);
+  -webkit-box-orient: vertical;
+
+  @include typography("label", "large");
+}
+.agentDescription {
+  min-width: 0;
+  color: var(--agent-description-color);
+
+  @include typography("body", "medium");
+}
+
+.newChat {
+  display: var(--newChatDisplay);
+  position: absolute;
+  top: 0;
+  left: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--on-surface);
+
+  @include typography("title", "medium");
+}
+
+.newChatIcon {
+  font-size: 1.25rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}

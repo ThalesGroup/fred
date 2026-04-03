@@ -1,0 +1,99 @@
+{{- define "common-library.hook-migration" -}}
+
+{{- if and .app.migration .app.migration.enabled }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .app.applicationName }}-migration-{{ .root.Release.Revision }}
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ default 3 .app.migration.backoffLimit }}
+  template:
+    metadata:
+      annotations:
+        {{- if .app.podAnnotations }}
+{{ toYaml .app.podAnnotations | nindent 8 }}
+        {{- end }}
+        {{- if .app.configuration }}
+        configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
+        {{- end }}
+      labels:
+        app: {{ .app.applicationName }}
+        type: migration
+    spec:
+      {{- if .app.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .app.imagePullSecrets | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.podSecurityContext }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      restartPolicy: Never
+      automountServiceAccountToken: false
+
+      containers:
+        - name: {{ .app.applicationName }}-migration
+          image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
+          imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
+
+          {{- with .app.securityContext }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+          command:
+{{ toYaml (default (list "alembic") .app.migration.command) | nindent 12 }}
+          args:
+{{ toYaml (default (list "upgrade" "head") .app.migration.args) | nindent 12 }}
+
+          {{- if or .app.env .app.extraEnvVars }}
+          env:
+            {{- if .app.env }}
+{{ toYaml .app.env | nindent 12 }}
+            {{- end }}
+            {{- if .app.extraEnvVars }}
+{{ toYaml .app.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- end }}
+
+          {{- if .app.envFrom }}
+          envFrom:
+{{ toYaml .app.envFrom | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+{{ toYaml .app.volumeMounts | nindent 12 }}
+
+          {{- with .app.migration.resources }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+      volumes:
+{{ toYaml .app.volumes | nindent 8 }}
+
+      {{- with .app.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .app.tolerations }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+{{- end }}
+
+{{ end -}}

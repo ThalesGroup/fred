@@ -6,7 +6,8 @@ Purpose:
 - stay out of the default product catalog unless explicitly adopted
 """
 
+from .bank_transfer import BankTransferGraphAgent
 from .slide_maker import Definition
 from .tutorial_tools import TutorialToolsSampleDefinition
 
-__all__ = ["Definition", "TutorialToolsSampleDefinition"]
+__all__ = ["BankTransferGraphAgent", "Definition", "TutorialToolsSampleDefinition"]

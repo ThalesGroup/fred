@@ -4,6 +4,10 @@ app:
   address: 0.0.0.0
   port: 8222
   log_level: info
+  # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
 
 scheduler:
   enabled: true

@@ -93,4 +93,4 @@ async def delete_user(
 async def get_user_details(
     user: KeycloakUser = Depends(get_current_user),
 ) -> dict[str, str]:
-    return {"personalTeamId": "user"}
+    return {"personalTeamId": "personal"}

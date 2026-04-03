@@ -63,6 +63,11 @@ agents:
     type: "agent"
     definition_ref: "v2.production.dva_risk_validator.qa"
 
+  - id: "BankTransfer"
+    name: "Bank Transfer"
+    type: "agent"
+    definition_ref: "v2.sample.bank_transfer"
+
 react_profiles:
   - profile_id: "custodian"
     enabled: true

@@ -128,7 +128,7 @@ x-profile-medium: &profile-medium
     do_table_structure: true
     do_ocr: true
     ocr_backend: openvino
-    force_full_page_ocr: false
+    force_full_page_ocr: true
   input_processors: *rich-input-processors
 
 x-profile-rich-backend: &profile-rich-backend
@@ -374,6 +374,13 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false           # Run Alembic migrations via Helm hooks on deploy
+      scaleDown: true         # Scale deployment to 0 before migrating (safe, downtime acceptable)
+      backoffLimit: 3         # Retry count on migration failure
+      # command: ["alembic"]  # Override migration command (default: alembic)
+      # args: ["upgrade", "head"]  # Override migration args (default: upgrade head)
+      # resources: {}         # Override resource limits for migration job
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -611,6 +618,10 @@ applications:
         # that is loaded into the agent at the beginning of a session. It typically occur after a restart of the application
         # or when an agent session is re-initialized for any reason.
         restore_max_exchanges: 20
+
+        # Interval in milliseconds between partial-stream WebSocket frames (delta protocol).
+        # Raise to 200 on high-concurrency deployments to reduce write frequency.
+        stream_flush_interval_ms: 100
 
         # Maximum number of agents that cached in memory for faster access (uses LRU eviction policy)
         max_concurrent_agents: 1024
@@ -1088,10 +1099,7 @@ applications:
       backend: false
     configuration:
       config_json:
-        backend_url_api: "http://{YOUR-URL}"          
-        backend_url_knowledge: "https://{YOUR-URL}"   
-        websocket_url: "ws://{YOUR-URL}/fred/chatbot/query"  
-        frontend_basename : "/"
+        frontend_basename: "/"
 
   # ── 3.3 Knowledge Flow Backend ─────────────────────────────────────
   knowledge-flow-backend:
@@ -1105,6 +1113,10 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false    # Enable when knowledge-flow-backend gets Alembic migrations
+      scaleDown: true
+      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1314,6 +1326,8 @@ applications:
     ports:
       - name: worker
         containerPort: 8112
+      - name: metrics
+        containerPort: 9112
     service:
       enabled: false
       annotations: {}
@@ -1325,12 +1339,12 @@ applications:
           targetPort: 8112
           protocol: TCP
     metricsService:
-      enabled: false
+      enabled: true
       annotations: {}
       extraLabels: {}
       type: ClusterIP
-      port: 9111
-      targetPort: 9111
+      port: 9112
+      targetPort: 9112
       serviceMonitor:
         enabled: false
         annotations: {}
@@ -1395,7 +1409,7 @@ applications:
       frontend: false
     # ── Application configuration (rendered as ConfigMap) ───────────────
     # Most sections are shared with knowledge-flow-backend via YAML anchors.
-    # Only app (port 8112, metrics disabled) and processing.rich.generate_summary differ.
+    # Only app (port 8112) and processing.rich.generate_summary differ.
     configuration:
       app:
         name: "Knowledge Flow Backend"
@@ -1405,9 +1419,9 @@ applications:
         log_level: "info"
         reload: false
         reload_dir: "."
-        metrics_enabled: false # Do not export metrics since its a worker pod
+        metrics_enabled: true # Prometheus exporter
         metrics_address: "0.0.0.0"
-        metrics_port: 9111
+        metrics_port: 9112
         kpi_process_metrics_interval_sec: 0
         kpi_log_summary_interval_sec: 0.0
         kpi_log_summary_top_n: 0
@@ -1461,6 +1475,10 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false    # Enable when control-plane-backend gets Alembic migrations
+      scaleDown: true
+      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0

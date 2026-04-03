@@ -1,0 +1,28 @@
+@use "src/index.scss" as *;
+
+.teamAgentContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  height: 100%;
+}
+
+.title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-m);
+  width: 100%;
+  color: var(--on-surface);
+
+  @include typography("title", "large");
+}
+
+.agentList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 280px);
+  justify-content: center;
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-l) var(--spacing-l) var(--spacing-l);
+}

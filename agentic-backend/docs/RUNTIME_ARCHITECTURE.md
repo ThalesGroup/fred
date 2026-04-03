@@ -52,7 +52,15 @@ Runtime semantics live below it.
   - `agentic_backend/common/mcp_runtime.py`
   - `agentic_backend/integrations/v2_runtime/adapters.py`
 
-## 3. Authoring vs Runtime Boundary
+## 3. Streaming Protocol
+
+`StreamTranscoder` emits partial assistant frames using a **delta protocol**: each frame carries only the new text fragment since the previous frame (`metadata.extras.streaming_delta = true`). The frontend accumulates deltas; the final authoritative frame (no flag) replaces the buffer as a consistency checkpoint.
+
+The flush interval controls how often buffered tokens are sent. It is tunable via `ai.stream_flush_interval_ms` in `configuration.yaml` (default: 100 ms). Raise to 200 ms on high-concurrency deployments to reduce WebSocket write frequency at no perceptible cost to streaming smoothness.
+
+See `docs/PROTOCOL.md` for the full wire format.
+
+## 4. Authoring vs Runtime Boundary
 
 This is the most important split.
 
@@ -101,9 +109,9 @@ Context-binding note:
 - new runtime code should prefer portable context and explicit ports over growing
   direct dependency on legacy runtime context
 
-## 4. Two Executable v2 Categories Today
+## 5. Two Executable v2 Categories Today
 
-### 4.1 ReActRuntime
+### 5.1 ReActRuntime
 
 Used for:
 
@@ -119,7 +127,7 @@ Runtime responsibilities:
 - stream tool activity and final answer
 - propagate structured outputs such as sources, `GeoPart`, `LinkPart`
 
-### 4.2 GraphRuntime
+### 5.2 GraphRuntime
 
 Used for:
 
@@ -136,7 +144,7 @@ Runtime responsibilities:
 
 This runtime is the main proof that `GraphAgentDefinition` is not only an inspection toy.
 
-## 5. Session Bridge
+## 6. Session Bridge
 
 The current chat pipeline still expects a legacy `astream_updates(...)` surface.
 
@@ -152,7 +160,7 @@ Important consequence:
 
 - the chat stack does not need to know whether the v2 runtime underneath is ReAct or Graph
 
-## 6. Inspection
+## 7. Inspection
 
 Inspection is now separate from execution.
 
@@ -173,7 +181,7 @@ Preview shape depends on agent category:
 
 The old “graph endpoint” is no longer the conceptual model.
 
-## 7. MCP and Runtime Tools
+## 8. MCP and Runtime Tools
 
 Fred currently uses two complementary tool paths:
 
@@ -187,7 +195,7 @@ Current adapters:
 
 This is already close to the kind of capability split a `genai_sdk`-style substrate would want.
 
-## 8. Structured UI Capabilities
+## 9. Structured UI Capabilities
 
 The runtime can now transport structured output parts directly:
 
@@ -198,7 +206,7 @@ The runtime can now transport structured output parts directly:
 These are no longer tied to bespoke legacy agents.
 They are runtime capabilities that both ReAct and Graph can emit.
 
-## 9. HITL
+## 10. HITL
 
 Two HITL modes now exist in practice:
 
@@ -212,7 +220,7 @@ The runtime target remains:
 - author requests human interaction through Fred contracts
 - Fred owns pause, checkpoint, resume, and UI payload shape
 
-## 10. Current Limitations
+## 11. Current Limitations
 
 The v2 architecture is real, but not finished.
 
@@ -224,7 +232,7 @@ Still open:
 - eventual reduction of legacy `AgentFlow` usage
 - a cleaner future bridge toward `genai_sdk` contracts below the runtime layer
 
-## 11. Architectural Direction
+## 12. Architectural Direction
 
 The intended direction is now:
 

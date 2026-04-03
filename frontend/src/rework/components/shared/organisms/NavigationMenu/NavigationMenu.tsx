@@ -12,7 +12,7 @@ export default function NavigationMenu({ items }: NavigationMenuProps) {
     <div className={styles["navigation-menu-container"]}>
       {items.map((item) => {
         const key = item.type === "link" ? String(item.linkProps.to) : item.label;
-        return <NavigationMenuItem key={key} selected={item.selected} {...item} />;
+        return <NavigationMenuItem key={key} {...item} />;
       })}
     </div>
   );
