@@ -283,7 +283,8 @@ export type TeamPermission =
   | "can_read_members"
   | "can_administer_members"
   | "can_administer_managers"
-  | "can_administer_owners";
+  | "can_administer_owners"
+  | "can_read_conversations";
 export type TeamWithPermissions = {
   id: string;
   name: string;
