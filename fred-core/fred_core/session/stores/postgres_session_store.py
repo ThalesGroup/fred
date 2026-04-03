@@ -38,16 +38,22 @@ class PostgresSessionStore(BaseSessionStore):
     async def save(
         self, session: SessionSchema, db_session: AsyncSession | None = None
     ) -> None:
-        row = SessionRow(
-            session_id=session.id,
-            user_id=session.user_id,
-            team_id=session.team_id,
-            agent_id=session.agent_id,
-            session_data=session.model_dump(mode="json"),
-            updated_at=session.updated_at,
-        )
         async with use_session(self._sessions, db_session) as s:
-            await s.merge(row)
+            existing_row = await s.get(SessionRow, session.id)
+
+            if existing_row:
+                existing_row.session_data = session.model_dump(mode="json")
+                existing_row.updated_at = session.updated_at
+            else:
+                new_row = SessionRow(
+                    session_id=session.id,
+                    user_id=session.user_id,
+                    team_id=session.team_id,
+                    agent_id=session.agent_id,
+                    session_data=session.model_dump(mode="json"),
+                    updated_at=session.updated_at,
+                )
+                s.add(new_row)
 
     async def get(
         self, session_id: str, db_session: AsyncSession | None = None
