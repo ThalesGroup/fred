@@ -25,6 +25,7 @@ from typing import Protocol, cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import VectorSearchHit
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
@@ -329,7 +330,9 @@ class _GraphNodeExecutionContext:
                 "model_name": model_name,
             },
         ):
-            lc_callbacks = list(self.services.langchain_callbacks)
+            lc_callbacks = cast(
+                list[BaseCallbackHandler], list(self.services.langchain_callbacks)
+            )
             lc_config = RunnableConfig(callbacks=lc_callbacks) if lc_callbacks else None
             try:
                 response = cast(
@@ -399,7 +402,9 @@ class _GraphNodeExecutionContext:
                 "output_model": output_model.__name__,
             },
         ):
-            lc_callbacks = list(self.services.langchain_callbacks)
+            lc_callbacks = cast(
+                list[BaseCallbackHandler], list(self.services.langchain_callbacks)
+            )
             lc_config = RunnableConfig(callbacks=lc_callbacks) if lc_callbacks else None
             try:
                 response = await structured_model.ainvoke(messages, config=lc_config)
