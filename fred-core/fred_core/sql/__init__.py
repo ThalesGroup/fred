@@ -6,6 +6,7 @@ Usage:
     from fred_core.sql import SeedMarkerMixin, PydanticJsonMixin
 """
 
+from fred_core.sql.alembic_env import make_alembic_env
 from fred_core.sql.async_session import make_session_factory, use_session
 from fred_core.sql.base_sql import (
     AsyncBaseSqlStore,
@@ -19,6 +20,7 @@ from fred_core.sql.base_sql import (
 from fred_core.sql.mixin import PydanticJsonMixin, SeedMarkerMixin
 
 __all__ = [
+    "make_alembic_env",
     "make_session_factory",
     "use_session",
     "BaseSqlStore",

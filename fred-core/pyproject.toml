@@ -49,7 +49,11 @@ dev = [
 ]
 
 [project.optional-dependencies]
+migration = [
+    "alembic>=1.18.4",
+]
 dev = [
+    "alembic>=1.18.4",
     "bandit>=1.8.6",
     "basedpyright==1.31.0",
     "detect-secrets>=1.5.0",

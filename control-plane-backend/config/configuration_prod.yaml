@@ -38,17 +38,12 @@ security:
     type: openfga
     api_url: "http://localhost:9080"
 
-
 storage:
   postgres:
     host: localhost
     port: 5432
     database: fred
     username: fred
-  session_store:
-    type: postgres
-    table: session
-  purge_queue_table: session_purge_queue
   content_storage:
     type: minio
     endpoint: http://localhost:9000

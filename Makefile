@@ -161,6 +161,51 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	cd frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
 
+##@ Database Migrations (combined)
+
+MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
+PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
+SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
+AGENTIC_UV           := agentic-backend/.venv/bin/uv
+CP_UV                := control-plane-backend/.venv/bin/uv
+
+.PHONY: db-check-combined-postgres-up
+db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
+	docker compose -f $(MIGRATION_COMPOSE) up -d --wait
+
+.PHONY: db-check-combined-postgres-down
+db-check-combined-postgres-down: ## stop and wipe the PostgreSQL container for combined migration checks
+	docker compose -f $(MIGRATION_COMPOSE) down -v
+
+.PHONY: db-check-combined-sqlite
+db-check-combined-sqlite: ## upgrade both backends against the same SQLite DB, check for drift, then downgrade
+	@echo "=== Combined SQLite migration check: upgrade ==="
+	@rm -f $(SQLITE_COMBINED_DB)
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	@echo "=== Combined SQLite migration check: drift check ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic check
+	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
+	@rm -f $(SQLITE_COMBINED_DB)
+	@echo "=== Combined SQLite migration check passed ==="
+
+.PHONY: db-check-combined-postgres
+db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade both backends against the same DB, check for drift, then downgrade
+	@echo "=== Combined migration check: upgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	@echo "=== Combined migration check: drift check ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic check
+	@echo "=== Combined migration check: downgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
+	@echo "=== Combined migration check passed ==="
+	$(MAKE) db-check-combined-postgres-down
+
 include scripts/makefiles/help.mk
 
 # =============================================================================
