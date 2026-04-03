@@ -505,6 +505,22 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     patch_launch_json(wt, ports)
     ok("VSCode config patched")
 
+    # Hide worktree-local patches from git status (skip-worktree per worktree)
+    skip_paths = [
+        *[f"{svc}/config/configuration_prod.yaml" for svc in PYTHON_SERVICES],
+        "agentic-backend/config/mcp_catalog.yaml",
+        "agentic-backend/config/models_catalog.yaml",
+        "knowledge-flow-backend/config/configuration_worker.yaml",
+        "deploy/local/k3d/values-local.yaml",
+        ".vscode/tasks.json",
+        ".vscode/launch.json",
+        ".vscode/fred.code-workspace",
+    ]
+    existing_skip = [p for p in skip_paths if (wt / p).exists()]
+    if existing_skip:
+        run_quiet(["git", "update-index", "--skip-worktree", *existing_skip], cwd=wt)
+        ok("Patched files hidden from git status (skip-worktree)")
+
     # Open VSCode
     step("Opening VSCode...")
     workspace_file = wt / ".vscode" / "fred.code-workspace"

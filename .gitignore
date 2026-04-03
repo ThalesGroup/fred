@@ -221,3 +221,6 @@ knowledge-flow-backend/openapi.json
 /developer_tools/evaluation_results/
 
 **/.deepeval
+
+# wtf worktree port allocations
+PORTS.md
