@@ -32,6 +32,7 @@ from fred_core import (
     KeycloakUser,
     Resource,
     SessionSchema,
+    TeamPermission,
     authorize,
 )
 from fred_core.kpi import (
@@ -48,7 +49,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-from agentic_backend.application_context import get_default_model, pg_async_session
+from agentic_backend.application_context import get_default_model, get_rebac_engine, pg_async_session
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -295,6 +296,7 @@ class SessionOrchestrator:
         # Side services
         self.history_store = history_store
         self.kpi: BaseKPIWriter = kpi
+        self.rebac = get_rebac_engine()
         self.attachement_processing = AttachementProcessing()
         self.restore_max_exchanges = configuration.ai.restore_max_exchanges
         # Stateless worker that knows how to turn LangGraph events into ChatMessage[]
@@ -1068,14 +1070,13 @@ class SessionOrchestrator:
         This method is only used by the UI to list sessions. It is not part of the
         chat exchange flow.
         """
+        await self.rebac.check_user_team_permission_or_raise(
+            user=user,
+            permission=TeamPermission.CAN_READ_CONVERSATIONS,
+            team_id=team_id,
+        )
+
         async with phase_timer(self.kpi, "session_list"):
-            if team_id not in user.groups:
-                raise AuthorizationError(
-                    user.uid,
-                    Action.READ,
-                    Resource.SESSIONS,
-                    f"Not authorized to read sessions for team {team_id}",
-                )
             sessions = await self.session_store.get_for_user(user.uid, team_id)
         enriched: List[SessionWithFiles] = []
         for session in sessions:
