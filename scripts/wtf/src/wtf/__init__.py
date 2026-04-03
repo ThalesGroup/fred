@@ -43,6 +43,18 @@ TITLEBAR_COLORS = [
     "#1565C0",  # blue
     "#F9A825",  # yellow
     "#4E342E",  # brown
+    "#00695C",  # dark teal
+    "#C62828",  # dark red
+    "#4527A0",  # deep purple
+    "#558B2F",  # light green
+    "#E65100",  # deep orange
+    "#0277BD",  # light blue
+    "#6D4C41",  # dark brown
+    "#283593",  # indigo
+    "#00796B",  # teal 700
+    "#7B1FA2",  # purple 700
+    "#1B5E20",  # green 900
+    "#880E4F",  # pink 900
 ]
 
 
@@ -139,8 +151,24 @@ def find_free_port(used: set[int]) -> int:
 
 
 def pick_color() -> str:
-    idx = len(existing_worktree_dirs())
-    return TITLEBAR_COLORS[idx % len(TITLEBAR_COLORS)]
+    """Pick a random color not already used by another worktree."""
+    used: set[str] = set()
+    for wt in existing_worktree_dirs():
+        workspace_file = wt / ".vscode" / "fred.code-workspace"
+        if workspace_file.exists():
+            try:
+                content = workspace_file.read_text()
+                clean = re.sub(r",\s*([}\]])", r"\1", content)
+                settings = json.loads(clean).get("settings", {})
+                color = settings.get("workbench.colorCustomizations", {}).get("titleBar.activeBackground")
+                if color:
+                    used.add(color)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+    available = [c for c in TITLEBAR_COLORS if c not in used]
+    pool = available if available else TITLEBAR_COLORS
+    return random.choice(pool)
 
 
 def complete_worktree_branch(ctx, param, incomplete: str) -> list[CompletionItem]:
