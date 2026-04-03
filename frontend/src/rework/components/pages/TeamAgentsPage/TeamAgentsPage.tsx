@@ -1,24 +1,30 @@
 import Button from "@components/shared/atoms/Button/Button";
-import styles from "./TeamAgentsPage.module.scss";
-import { useTranslation } from "react-i18next";
-import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic/agenticOpenApi.ts";
-import { Link, useParams } from "react-router-dom";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
-import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApi.ts";
 import { useMemo, useState } from "react";
-import { useAgentUpdater } from "../../../../hooks/useAgentUpdater.ts";
+import { useTranslation } from "react-i18next";
+import { Link, useParams } from "react-router-dom";
 import { AnyAgent } from "../../../../common/agent.ts";
 import { AgentCreateEditDrawer } from "../../../../components/agentHub/AgentCreateEditDrawer.tsx";
+import { useAgentUpdater } from "../../../../hooks/useAgentUpdater.ts";
+import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic/agenticOpenApi.ts";
+import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApi.ts";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import styles from "./TeamAgentsPage.module.scss";
 
 export default function TeamAgentsPage() {
   const { t } = useTranslation();
+
   const { teamId } = useParams();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
-  const ownerFilter = teamId === userDetails?.personalTeam.id ? "personal" : "team";
-  const { data: agents, refetch } = useListAgentsAgenticV1AgentsGetQuery({ ownerFilter: ownerFilter, teamId });
-  const { data: team } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
+  const isPersonalTeam = teamId === userDetails?.personalTeam.id;
+
+  const ownerFilter = isPersonalTeam ? "personal" : "team";
+  const { data: agents, refetch } = useListAgentsAgenticV1AgentsGetQuery({ ownerFilter, teamId });
+  const { data: noPersonalTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: isPersonalTeam });
+  const team = isPersonalTeam ? userDetails?.personalTeam : noPersonalTeam;
+
   const { updateEnabled } = useAgentUpdater();
+
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
