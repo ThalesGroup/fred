@@ -2,7 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Path, status
 from fastapi.responses import JSONResponse
+
 from fred_core import KeycloakUser, get_current_user
+from fred_core import TeamPermission
+from fred_core.common import TeamId
 
 from control_plane_backend.users_service import (
     create_user as create_user_from_service,
@@ -91,8 +94,10 @@ async def delete_user(
     """Delete a user in Keycloak for temporary bootstrap and testing flows."""
     await delete_user_from_service(user, user_id)
 
+
 class UserDetails(BaseModel):
     personalTeam: TeamWithPermissions
+
 
 @router.get(
     "/user",
@@ -101,13 +106,17 @@ class UserDetails(BaseModel):
 async def get_user_details(
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserDetails:
-    return UserDetails (
+    return UserDetails(
         personalTeam=TeamWithPermissions(
-            id="personal",
+            id=TeamId("personal"),
             name="Equipe personnelle",
             member_count=1,
             is_private=True,
             owners=[],
-            permissions=["can_read", "can_update_resources", "can_update_agents"]
+            permissions=[
+                TeamPermission("can_read"),
+                TeamPermission("can_update_resources"),
+                TeamPermission("can_update_agents"),
+            ],
         )
     )

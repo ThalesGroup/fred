@@ -1069,6 +1069,13 @@ class SessionOrchestrator:
         chat exchange flow.
         """
         async with phase_timer(self.kpi, "session_list"):
+            if team_id not in user.groups:
+                raise AuthorizationError(
+                    user.uid,
+                    Action.READ,
+                    Resource.SESSIONS,
+                    f"Not authorized to read sessions for team {team_id}",
+                )
             sessions = await self.session_store.get_for_user(user.uid, team_id)
         enriched: List[SessionWithFiles] = []
         for session in sessions:

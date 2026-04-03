@@ -6,12 +6,18 @@ import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
 import { KnowledgeHub } from "./KnowledgeHub.tsx";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../slices/controlPlane/controlPlaneOpenApi.ts";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
 
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: team, isLoading } = useGetTeamQuery({ teamId: teamId !== "user" ? teamId : "" }, { skip: !teamId });
+  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const { data: fetchedTeam, isLoading } = useGetTeamQuery(
+    { teamId: teamId },
+    { skip: !teamId || teamId === userDetails?.personalTeam.id },
+  );
+  const team = fetchedTeam ?? userDetails?.personalTeam;
   // todo: handle error (404)
 
   if (teamId === undefined) {

@@ -23,8 +23,7 @@ export default function TeamContentNavbar() {
     { skip: !teamId || teamId === userDetails?.personalTeam.id },
   );
   const selectedTeam = teamId === userDetails?.personalTeam.id ? userDetails?.personalTeam : team;
-  const canOpenTeamSettings =
-    selectedTeam?.permissions?.includes("can_administer_owners") || false;
+  const canOpenTeamSettings = selectedTeam?.permissions?.includes("can_administer_owners") || false;
 
   const navigationItems: NavigationMenuItemProps[] = [
     {

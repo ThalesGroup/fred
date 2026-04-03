@@ -19,7 +19,7 @@ export default function TeamSelectionNavbar() {
         <TeamSelectionItem
           redirection={`/team/${userDetails?.personalTeam.id}/agents`}
           teamName={t("rework.sidebar.team.userTeam")}
-          selected={pathname.startsWith(`/team/personal`)}
+          selected={pathname.startsWith(`/team/${userDetails?.personalTeam.id}`)}
           icon={{ category: "outlined", type: "Person", filled: true }}
         />
         <TeamSelectionItem

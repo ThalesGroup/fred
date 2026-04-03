@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useAgentUpdater } from "../../../../hooks/useAgentUpdater.ts";
 import { AnyAgent } from "../../../../common/agent.ts";
 import { AgentCreateEditDrawer } from "../../../../components/agentHub/AgentCreateEditDrawer.tsx";
-import {useGetUserDetailsControlPlaneV1UserGetQuery} from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 export default function TeamAgentsPage() {
   const { t } = useTranslation();

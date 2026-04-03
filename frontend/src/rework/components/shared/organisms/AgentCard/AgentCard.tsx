@@ -15,52 +15,52 @@ interface AgentCardProps {
 export default function AgentCard({ agent, readOnly, onToggleEnabled, onEditAgent }: AgentCardProps) {
   const { t } = useTranslation();
 
-    return (
-      <div className={styles.agentCard} data-enabled={agent.enabled}>
-        <div className={styles.stateLayer}>
-          <div className={styles.agentInfo}>
-            <div className={styles.agentPresentation}>
-              <div className={styles.agentIcon}>
-                <Icon category={"outlined"} type={"person"} />
-              </div>
-              <div className={styles.agentIdentity}>
-                <div className={styles.agentName}>{agent.name}</div>
-                <div className={styles.agentRole}>{agent.tuning.role}</div>
-              </div>
+  return (
+    <div className={styles.agentCard} data-enabled={agent.enabled}>
+      <div className={styles.stateLayer}>
+        <div className={styles.agentInfo}>
+          <div className={styles.agentPresentation}>
+            <div className={styles.agentIcon}>
+              <Icon category={"outlined"} type={"person"} />
             </div>
-            <div className={styles.agentDescription}>{agent.tuning.description}</div>
+            <div className={styles.agentIdentity}>
+              <div className={styles.agentName}>{agent.name}</div>
+              <div className={styles.agentRole}>{agent.tuning.role}</div>
+            </div>
           </div>
-          {readOnly && (
-            <div className={styles.actions}>
-              <IconButton
-                color={"on-surface"}
-                variant={"icon"}
-                size={"medium"}
-                icon={{ category: "outlined", type: agent.enabled ? "visibility" : "visibility_off" }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  onToggleEnabled(agent);
-                }}
-              />
-              <IconButton
-                color={"on-surface"}
-                variant={"icon"}
-                size={"medium"}
-                icon={{ category: "outlined", type: "edit" }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  onEditAgent(agent);
-                }}
-              />
-            </div>
-          )}
+          <div className={styles.agentDescription}>{agent.tuning.description}</div>
         </div>
-        <div className={styles.newChat}>
-          <span className={styles.newChatIcon}>
-            <Icon category={"outlined"} type={"reviews"} />
-          </span>
-          {t("rework.agentCard.startChat")}
-        </div>
+        {readOnly && (
+          <div className={styles.actions}>
+            <IconButton
+              color={"on-surface"}
+              variant={"icon"}
+              size={"medium"}
+              icon={{ category: "outlined", type: agent.enabled ? "visibility" : "visibility_off" }}
+              onClick={(e) => {
+                e.preventDefault();
+                onToggleEnabled(agent);
+              }}
+            />
+            <IconButton
+              color={"on-surface"}
+              variant={"icon"}
+              size={"medium"}
+              icon={{ category: "outlined", type: "edit" }}
+              onClick={(e) => {
+                e.preventDefault();
+                onEditAgent(agent);
+              }}
+            />
+          </div>
+        )}
       </div>
-    );
+      <div className={styles.newChat}>
+        <span className={styles.newChatIcon}>
+          <Icon category={"outlined"} type={"reviews"} />
+        </span>
+        {t("rework.agentCard.startChat")}
+      </div>
+    </div>
+  );
 }

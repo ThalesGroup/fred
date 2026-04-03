@@ -104,15 +104,6 @@ async def get_team(
     team_id: Annotated[TeamId, Path()],
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
-    if team_id == "personal":
-        return TeamWithPermissions(
-            id="personal",
-            name="Equipe personnelle",
-            member_count=1,
-            is_private=True,
-            owners=[],
-            permissions=["can_read", "can_update_resources", "can_update_agents"]
-        )
     return await get_team_by_id_from_service(user, team_id)
 
 

@@ -40,12 +40,7 @@ interface NavigationTabsProps {
   isLoading?: boolean;
 }
 
-export function NavigationTabs({
-  tabs,
-  defaultPath,
-  contentContainerSx,
-  isLoading,
-}: NavigationTabsProps) {
+export function NavigationTabs({ tabs, defaultPath, contentContainerSx, isLoading }: NavigationTabsProps) {
   // Extract relative paths from absolute paths for nested routing
   const getRelativePath = (absolutePath: string) => {
     const parts = absolutePath.split("/");

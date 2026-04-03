@@ -1039,11 +1039,14 @@ const ChatBot = ({
   // Always prioritize the active routed session id. A stale pending id must
   // never shadow an explicit user-selected session.
   const effectiveSessionId = chatSessionId || pendingSessionIdRef.current || undefined;
-  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery({ teamId }, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(
+    { teamId },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
   const attachmentSessionId = effectiveSessionId;
   const waitResponseForCurrentSession = !waitResponse
     ? false

@@ -97,7 +97,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
       </div>
       <div className={styles["user-settings-conversation"]}>
         <TextArea
-            disabled={true}
+          disabled={true}
           label={t("rework.userSettings.conversationProfile.title")}
           placeholder={t("rework.userSettings.conversationProfile.placeholder")}
           maxLength={300}

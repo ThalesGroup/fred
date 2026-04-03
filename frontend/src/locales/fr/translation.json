@@ -1404,10 +1404,10 @@
         }
       }
     },
-    "teams":{
-      "agents":{
+    "teams": {
+      "agents": {
         "title": "Sollicitez vos Agents",
-        "create": "Créer un Agent"
+        "create": "Créer Agent"
       }
     },
     "marketplace": {

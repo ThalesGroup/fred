@@ -10,12 +10,11 @@ import { useTranslation } from "react-i18next";
 import React from "react";
 
 interface ChatListItemProps {
-  teamId: string;
   chat: SessionWithFiles;
   onDelete: () => void;
 }
 
-export default function ChatListItem({ teamId, chat, onDelete }: ChatListItemProps) {
+export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
   const [deleteSessionMutation] = useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation();
 
   const { showError } = useToast();
@@ -43,7 +42,7 @@ export default function ChatListItem({ teamId, chat, onDelete }: ChatListItemPro
   };
 
   return (
-    <Link to={`team/${teamId}/chat/${chat.id}`}>
+    <Link to={`team/${chat.team_id}/chat/${chat.id}`}>
       <div className={styles.chatItemContainer} title={chat.title}>
         <div className={styles.chatDescription}>
           <div className={styles.title}>{chat.title}</div>

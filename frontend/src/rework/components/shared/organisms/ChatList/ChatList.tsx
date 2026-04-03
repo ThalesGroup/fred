@@ -1,7 +1,7 @@
 import ChatListItem from "@shared/organisms/ChatList/ChatListItem/ChatListItem.tsx";
 import styles from "./ChatList.module.scss";
 import { useTranslation } from "react-i18next";
-import {useGetSessionsAgenticV1ChatbotSessionsGetQuery} from "../../../../../slices/agentic/agenticOpenApi.ts";
+import { useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../../../../slices/agentic/agenticOpenApi.ts";
 
 interface ChatListProps {
   teamId: string;
@@ -27,9 +27,7 @@ export default function ChatList({ teamId }: ChatListProps) {
     <div className={styles["chat-list-container"]}>
       <div className={styles["chat-list-header"]}>{t("rework.sidebar.chatList.title")}</div>
       <div className={styles["chat-list-items"]}>
-        {sortedSessions?.map((session) => (
-          <ChatListItem key={session.id} chat={session} onDelete={refetchSessions} teamId={teamId} />
-        ))}
+        {sortedSessions?.map((session) => <ChatListItem key={session.id} chat={session} onDelete={refetchSessions} />)}
       </div>
     </div>
   );
