@@ -164,7 +164,8 @@ def pick_color() -> str:
                 if color:
                     used.add(color)
             except (json.JSONDecodeError, KeyError):
-                pass
+                # Workspace file is malformed or missing expected keys — skip it
+                click.echo(f"[DEBUG] Skipping unreadable workspace file: {workspace_file}", err=True)
 
     available = [c for c in TITLEBAR_COLORS if c not in used]
     pool = available if available else TITLEBAR_COLORS
