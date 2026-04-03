@@ -131,10 +131,12 @@ class PostgresTableConfig(BaseModel):
     # Allow reusing the same table-oriented config for local SQLite runs.
     type: Literal["postgres"]
     table: Optional[str] = Field(
-        default=None, description="Table name used by the store. Deprecated: stores now use fixed table names."
+        default=None,
+        description="Table name used by the store. Deprecated: stores now use fixed table names.",
     )
     prefix: Optional[str] = Field(
-        default=None, description="Optional prefix applied to the table name. Deprecated: stores now use fixed table names."
+        default=None,
+        description="Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
     )
 
 

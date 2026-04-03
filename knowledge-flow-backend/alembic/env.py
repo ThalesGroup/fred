@@ -18,17 +18,17 @@ from logging.config import fileConfig
 
 from fred_core.sql import make_alembic_env
 
+import knowledge_flow_backend.core.stores.metadata.metadata_models  # noqa: F401
+import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401
+import knowledge_flow_backend.core.stores.tags.tag_models  # noqa: F401
+import knowledge_flow_backend.features.scheduler.store.task_models  # noqa: F401
+from alembic import context
+from knowledge_flow_backend.common.config_loader import load_configuration
+
 # Import Base and every ORM model so they all register with Base.metadata
 # before autogenerate inspects it.  These imports must stay here (not in
 # knowledge_flow_backend/models/__init__.py) to avoid circular imports at runtime.
 from knowledge_flow_backend.models.base import Base
-import knowledge_flow_backend.core.stores.resources.resource_models  # noqa: F401
-import knowledge_flow_backend.core.stores.tags.tag_models  # noqa: F401
-import knowledge_flow_backend.core.stores.metadata.metadata_models  # noqa: F401
-import knowledge_flow_backend.features.scheduler.store.task_models  # noqa: F401
-
-from knowledge_flow_backend.common.config_loader import load_configuration
-from alembic import context
 
 # Alembic Config object — provides access to values in alembic.ini.
 config = context.config
