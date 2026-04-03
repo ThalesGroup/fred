@@ -46,6 +46,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true'
     strategy:
+      fail-fast: false
       matrix:
         directory: [agentic-backend, knowledge-flow-backend, fred-core, control-plane-backend]
         check:
