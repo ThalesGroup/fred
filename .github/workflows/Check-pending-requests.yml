@@ -7,7 +7,7 @@ on:
 jobs:
   # Job to detect changes
   detect-changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Those outputs are variables that will be shared to the check
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
@@ -42,7 +42,7 @@ jobs:
 
   # Job to run code quality checks on the entire repository
   code-quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true'
     strategy:
@@ -92,7 +92,7 @@ jobs:
           UV: uv
 
   backend-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.control-plane == 'true'
     strategy:
@@ -160,7 +160,7 @@ jobs:
 
   # Job to check the frontend
   frontend-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'
 
@@ -187,7 +187,7 @@ jobs:
 
   # Job to check helm charts
   deploy-charts-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.deploy-chart == 'true'
 
@@ -203,7 +203,7 @@ jobs:
 
   # Job to check agentic backend
   agentic-backend-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.fred-core == 'true'
 
@@ -230,7 +230,7 @@ jobs:
 
   # Job for knownledge-flow
   knowledge-flow-backend-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
 
@@ -257,7 +257,7 @@ jobs:
 
   # Job to check control-plane backend
   control-plane-backend-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true'
 
@@ -284,7 +284,7 @@ jobs:
 
   # Job to check OpenAPI spec drift when backends or frontend change
   openapi-drift-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect-changes
     if: needs.detect-changes.outputs.agentic == 'true' || needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true'
     strategy:
