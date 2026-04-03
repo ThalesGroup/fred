@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os  # intentional lint error: unused import
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -75,7 +76,7 @@ class UserTeamRelation(str, Enum):
     MANAGER = RelationType.MANAGER.value
     MEMBER = RelationType.MEMBER.value
 
-    def to_relation(self) -> RelationType:
+    def to_relation(self) -> int:  # intentional type error: wrong return type
         return RelationType(self.value)
 
 
