@@ -223,10 +223,7 @@ def create_async_engine_from_config(config: PostgresStoreConfig):
     def _mask_dsn(dsn: str) -> str:
         return re.sub(r":([^:@]+)@", ":***@", dsn)
 
-    async_dsn = (
-        f"postgresql+asyncpg://{config.username}:{config.password}"
-        f"@{config.host}:{config.port}/{config.database}"
-    )
+    async_dsn = config.async_dsn()
     masked_dsn = _mask_dsn(async_dsn)
     effective_pool_size = config.pool_size or 5
     effective_max_overflow = (

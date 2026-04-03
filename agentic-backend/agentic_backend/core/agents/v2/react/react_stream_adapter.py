@@ -192,7 +192,12 @@ def assistant_delta_from_stream_event(raw_event: object) -> str | None:
     - `delta = assistant_delta_from_stream_event(raw_event)`
     """
 
-    chunk = raw_event[0] if isinstance(raw_event, tuple) and raw_event else raw_event
+    if isinstance(raw_event, tuple) and len(raw_event) == 2:
+        chunk, chunk_meta = raw_event
+        if isinstance(chunk_meta, dict) and chunk_meta.get("langgraph_node") == "tools":
+            return None
+    else:
+        chunk = raw_event
     if not isinstance(chunk, AIMessageChunk):
         return None
     if chunk.tool_calls or chunk.tool_call_chunks:
