@@ -111,6 +111,10 @@ def create_app() -> FastAPI:
     async def healthz() -> HealthResponse:
         return HealthResponse()
 
+    @router.get("/version", summary="intentional drift endpoint", response_model=HealthResponse)
+    async def version() -> HealthResponse:  # intentional: causes openapi drift
+        return HealthResponse()
+
     @router.get("/ready", summary="Readiness probe", response_model=ReadyResponse)
     async def ready() -> ReadyResponse:
         state = AppState(
