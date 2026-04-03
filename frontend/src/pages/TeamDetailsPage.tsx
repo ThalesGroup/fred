@@ -5,19 +5,21 @@ import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
-import { KnowledgeHub } from "./KnowledgeHub.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../slices/controlPlane/controlPlaneOpenApi.ts";
+import { KnowledgeHub } from "./KnowledgeHub.tsx";
 
 export function TeamDetailsPage() {
   const { t } = useTranslation();
 
   const { teamId } = useParams<{ teamId: string }>();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const isPersonalTeam = teamId === userDetails?.personalTeam.id;
   const { data: fetchedTeam, isLoading } = useGetTeamQuery(
-    { teamId: teamId },
-    { skip: !teamId || teamId === userDetails?.personalTeam.id },
+    { teamId: teamId || "" },
+    { skip: !teamId || isPersonalTeam },
   );
-  const team = fetchedTeam ?? userDetails?.personalTeam;
+  const team = isPersonalTeam ? fetchedTeam : userDetails?.personalTeam;
+
   // todo: handle error (404)
 
   if (teamId === undefined) {
