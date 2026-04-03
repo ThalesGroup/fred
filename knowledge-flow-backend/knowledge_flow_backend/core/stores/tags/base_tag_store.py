@@ -15,6 +15,8 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 
@@ -49,11 +51,11 @@ class BaseTagStore(ABC):
     """
 
     @abstractmethod
-    async def list_all_tags(self) -> List[Tag]:
+    async def list_all_tags(self, session: AsyncSession | None = None) -> List[Tag]:
         pass
 
     @abstractmethod
-    async def get_tag_by_id(self, tag_id: str) -> Tag:
+    async def get_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> Tag:
         """
         Retrieve a tag by its ID.
         Raises:
@@ -62,17 +64,17 @@ class BaseTagStore(ABC):
         pass
 
     @abstractmethod
-    async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
+    async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
         pass
 
     @abstractmethod
-    async def create_tag(self, tag: Tag) -> Tag:
+    async def create_tag(self, tag: Tag, session: AsyncSession | None = None) -> Tag:
         pass
 
     @abstractmethod
-    async def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
+    async def update_tag_by_id(self, tag_id: str, tag: Tag, session: AsyncSession | None = None) -> Tag:
         pass
 
     @abstractmethod
-    async def delete_tag_by_id(self, tag_id: str) -> None:
+    async def delete_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> None:
         pass

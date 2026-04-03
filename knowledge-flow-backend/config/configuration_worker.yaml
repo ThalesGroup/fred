@@ -290,29 +290,16 @@ storage:
   #   secure: false
   #   verify: true
 
-  catalog_store:
-    type: "postgres"
-    table: catalog
-
-  prompt_store:
-    type: "postgres"
-    table: prompt
-
   resource_store:
     type: "postgres"
-    table: resource
 
   tag_store:
     type: "postgres"
-    table: tag
 
   metadata_store:
     type: "postgres"
-    table: metadata
   task_store:
     type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
 
   vector_store:
     type: opensearch
