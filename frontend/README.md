@@ -17,6 +17,30 @@ The Vite server starts on <http://localhost:5173> with hot module reload.
 In standalone mode, frontend backend URLs are overridden at runtime by env vars,
 so `frontend/public/config.json` does not need to be edited manually.
 
+## Run the Production Docker Image
+
+```bash
+make docker-build
+make docker-run
+```
+
+The production container serves static assets with nginx and now proxies
+`/agentic`, `/knowledge-flow`, and `/control-plane` to backend upstreams.
+The image defaults are cluster-friendly service DNS names
+(`agentic-backend`, `knowledge-flow-backend:8000`, `control-plane-backend:8222`).
+`make docker-run` overrides those upstreams for local use and points them to
+services running on the host through `host.docker.internal`.
+
+Override the upstreams when your backends run elsewhere:
+
+```bash
+make docker-run \
+  FRONTEND_DOCKER_NETWORK=fred-shared-network \
+  FRONTEND_AGENTIC_UPSTREAM=http://agentic-backend:8000 \
+  FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=http://knowledge-flow-backend:8111 \
+  FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
+```
+
 You can force the mode with:
 
 ```bash

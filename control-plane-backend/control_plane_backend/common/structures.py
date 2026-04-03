@@ -9,7 +9,6 @@ from fred_core import (
 )
 from fred_core.common import (
     PostgresStoreConfig,
-    PostgresTableConfig,
     TemporalSchedulerConfig,
 )
 from fred_core.scheduler import SchedulerBackend
@@ -58,10 +57,6 @@ def _default_postgres_store() -> PostgresStoreConfig:
     return PostgresStoreConfig(
         sqlite_path="~/.fred/control-plane/control_plane.sqlite3"
     )
-
-
-def _default_session_store() -> PostgresTableConfig:
-    return PostgresTableConfig(type="postgres", table="session")
 
 
 class MinioContentStorageConfig(BaseModel):
@@ -115,8 +110,6 @@ def _default_content_storage() -> LocalContentStorageConfig:
 
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig = Field(default_factory=_default_postgres_store)
-    session_store: PostgresTableConfig = Field(default_factory=_default_session_store)
-    purge_queue_table: str = "session_purge_queue"
     content_storage: ContentStorageConfig = Field(
         default_factory=_default_content_storage
     )

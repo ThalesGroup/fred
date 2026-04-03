@@ -9,11 +9,8 @@ on:
       - develop
 
 jobs:
-  check-migrations:
+  check-migrations-sqlite:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: agentic-backend
 
     steps:
       - name: Check out the repo
@@ -24,5 +21,42 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run migration checks
-        run: make db-check-migrations
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (agentic-backend)
+        run: uv sync
+        working-directory: agentic-backend
+
+      - name: Install dependencies (control-plane-backend)
+        run: uv sync
+        working-directory: control-plane-backend
+
+      - name: Run combined SQLite migration checks
+        run: make db-check-combined-sqlite
+
+  check-migrations-postgres:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (agentic-backend)
+        run: uv sync
+        working-directory: agentic-backend
+
+      - name: Install dependencies (control-plane-backend)
+        run: uv sync
+        working-directory: control-plane-backend
+
+      - name: Run combined PostgreSQL migration checks
+        run: make db-check-combined-postgres

@@ -25,7 +25,6 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
-
 processing:
   default_profile: fast
   profiles:
@@ -33,6 +32,10 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: pypdfium2
         images_scale: 1.0
@@ -76,6 +79,10 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 1.5
@@ -121,6 +128,10 @@ processing:
       use_gpu: false
       generate_summary: false
       process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 2.0
