@@ -19,5 +19,8 @@
   {{- include "common-library.deployment" $ctx }}
   {{- include "common-library.secrets-env" $ctx }}
   {{- include "common-library.job" $ctx }}
+  {{- include "common-library.hook-migration-rbac" $ctx }}
+  {{- include "common-library.hook-scale-down" $ctx }}
+  {{- include "common-library.hook-migration" $ctx }}
   {{- end }}
 {{- end }}

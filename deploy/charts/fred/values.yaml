@@ -105,6 +105,10 @@ x-profile-fast: &profile-fast
   use_gpu: true
   generate_summary: false
   process_images: false
+  text_splitter:
+    chunk_size: 1500
+    chunk_overlap: 150
+    preserve_tables: true
   pdf:
     backend: pypdfium2
     images_scale: 1.0
@@ -119,6 +123,10 @@ x-profile-medium: &profile-medium
   use_gpu: true
   generate_summary: false
   process_images: false
+  text_splitter:
+    chunk_size: 1500
+    chunk_overlap: 150
+    preserve_tables: true
   pdf:
     backend: docling_parse
     images_scale: 1.5
@@ -135,6 +143,10 @@ x-profile-rich-backend: &profile-rich-backend
   use_gpu: true
   generate_summary: false
   process_images: true
+  text_splitter:
+    chunk_size: 1500
+    chunk_overlap: 150
+    preserve_tables: true
   pdf:
     backend: docling_parse
     images_scale: 2.0
@@ -378,6 +390,13 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false           # Run Alembic migrations via Helm hooks on deploy
+      scaleDown: true         # Scale deployment to 0 before migrating (safe, downtime acceptable)
+      backoffLimit: 3         # Retry count on migration failure
+      # command: ["alembic"]  # Override migration command (default: alembic)
+      # args: ["upgrade", "head"]  # Override migration args (default: upgrade head)
+      # resources: {}         # Override resource limits for migration job
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1006,6 +1025,12 @@ applications:
     env:
       - name: VITE_ALLOWED_HOSTS
         value: "fred.dev"
+      - name: FRONTEND_AGENTIC_UPSTREAM
+        value: "http://agentic-backend"
+      - name: FRONTEND_KNOWLEDGE_FLOW_UPSTREAM
+        value: "http://knowledge-flow-backend:8000"
+      - name: FRONTEND_CONTROL_PLANE_UPSTREAM
+        value: "http://control-plane-backend:8222"
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "{YOUR-KF-URL}"
       - name: VITE_USE_AUTH
@@ -1110,6 +1135,10 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false    # Enable when knowledge-flow-backend gets Alembic migrations
+      scaleDown: true
+      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -1468,6 +1497,10 @@ applications:
       enabled: false
     job:
       enabled: false
+    migration:
+      enabled: false    # Enable when control-plane-backend gets Alembic migrations
+      scaleDown: true
+      backoffLimit: 3
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
