@@ -2,11 +2,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Path, status
 from fastapi.responses import JSONResponse
-
-from fred_core import KeycloakUser, get_current_user
-from fred_core import TeamPermission
+from fred_core import KeycloakUser, TeamPermission, get_current_user
 from fred_core.common import TeamId
+from pydantic import BaseModel
 
+from control_plane_backend.teams_structures import (
+    TeamWithPermissions,
+)
 from control_plane_backend.users_service import (
     create_user as create_user_from_service,
 )
@@ -23,12 +25,6 @@ from control_plane_backend.users_structures import (
     UserNotFoundError,
     UserSummary,
 )
-
-from control_plane_backend.teams_structures import (
-    TeamWithPermissions,
-)
-
-from pydantic import BaseModel
 
 router = APIRouter(tags=["Users"])
 
