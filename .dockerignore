@@ -26,6 +26,8 @@ pip-wheel-metadata/
 **/Dockerfile*
 **/dockerfiles
 **/.dockerignore
+!frontend/dockerfiles
+!frontend/dockerfiles/docker-entrypoint.sh
 
 # macOS-specific files
 **/.DS_Store

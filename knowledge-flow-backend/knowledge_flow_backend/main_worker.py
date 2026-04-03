@@ -21,8 +21,11 @@ Start with:
 
 import asyncio
 import logging
+from contextlib import suppress
 
+from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.scheduler import SchedulerBackend
+from prometheus_client import start_http_server
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.config_loader import (
@@ -35,7 +38,46 @@ from knowledge_flow_backend.features.scheduler.worker import run_worker
 logger = logging.getLogger(__name__)
 
 
+def _start_worker_kpi_tasks(configuration, app_context: ApplicationContext) -> list[asyncio.Task[None]]:
+    """
+    Start optional worker-side KPI tasks from the YAML configuration.
+
+    Why:
+        `kpi_process_metrics_interval_sec` should affect worker processes too, not
+        only the API process, so worker KPI settings are consistent across runtime entrypoints.
+    How:
+        When the configured interval is positive, create background tasks for
+        process KPIs and shared SQL pool KPIs and return them for shutdown cleanup.
+    """
+    interval_s = float(configuration.app.kpi_process_metrics_interval_sec)
+    if interval_s <= 0:
+        return []
+
+    kpi_writer = app_context.get_kpi_writer()
+    return [
+        asyncio.create_task(emit_process_kpis(interval_s, kpi_writer)),
+        asyncio.create_task(
+            emit_sql_pool_kpis(
+                interval_s,
+                kpi_writer,
+                app_context.get_pg_async_engine(),
+                pool_name="knowledge-flow-postgres",
+            )
+        ),
+    ]
+
+
 async def main() -> None:
+    """
+    Run the Knowledge Flow Temporal worker with worker-side observability enabled.
+
+    Why:
+        Enabling worker metrics in configuration should have a real runtime effect,
+        otherwise Helm and config changes would not expose any telemetry.
+    How:
+        Load the worker configuration, initialize the application context, start the
+        optional Prometheus exporter and KPI background tasks, then run the Temporal worker.
+    """
     configuration = load_configuration()
     ApplicationContext(configuration)
     app_context = ApplicationContext.get_instance()
@@ -59,7 +101,28 @@ async def main() -> None:
     if scheduler_backend != SchedulerBackend.TEMPORAL:
         raise ValueError(f"Scheduler backend '{scheduler_backend}' not supported; expected 'temporal'.")
 
-    await run_worker(configuration.scheduler.temporal)
+    # Unlike the API entrypoints, the Temporal worker has no FastAPI app to pass
+    # to `Instrumentator().instrument(app)`. We still expose Prometheus metrics
+    # on the dedicated metrics port using the same toggle and exporter startup.
+    if configuration.app.metrics_enabled:
+        start_http_server(
+            configuration.app.metrics_port,
+            addr=configuration.app.metrics_address,
+        )
+    kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
+
+    try:
+        await run_worker(configuration.scheduler.temporal)
+    finally:
+        for task in kpi_tasks:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            if not task.cancelled():
+                exc = task.exception()
+                if exc is not None:
+                    logger.error("Background KPI task %r failed during shutdown", task, exc_info=exc)
+        await app_context.shutdown()
 
 
 if __name__ == "__main__":

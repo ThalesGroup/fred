@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import time
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
@@ -190,6 +191,18 @@ def build_vector_index_mapping(dim: int) -> Dict[str, Any]:
 
 
 T = TypeVar("T", bound=BaseVectorHit)
+
+EMBEDDING_RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})
+EMBEDDING_RETRY_BASE_DELAY_SECONDS = 0.5
+EMBEDDING_RETRY_MAX_ATTEMPTS = 3
+
+
+@dataclass(frozen=True)
+class EmbeddingRequestFailure:
+    status_code: int | None
+    provider_code: str | None
+    provider_type: str | None
+    exception_type: str
 
 
 class OpenSearchVectorStoreAdapter(BaseVectorStore):
@@ -370,10 +383,205 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
 
     # ---------- BaseVectorStore: ingestion ----------
 
+    def _get_embedding_request_failure(self, error: Exception) -> EmbeddingRequestFailure | None:
+        """
+        Why:
+            Embedding provider errors are sometimes wrapped by LangChain or by retry
+            machinery. We need a single normalized view of the nearest provider failure
+            to decide whether to split a batch or retry it as-is.
+
+        How to use:
+            Pass the exception raised while adding documents. The helper walks the
+            exception chain breadth-first and returns the first provider-like failure
+            carrying structured status/type/code information.
+        """
+        pending: list[BaseException] = [error]
+        seen: set[int] = set()
+
+        while pending:
+            current = pending.pop(0)
+            marker = id(current)
+            if marker in seen:
+                continue
+            seen.add(marker)
+
+            status_code = getattr(current, "status_code", None)
+            provider_code = getattr(current, "code", None)
+            provider_type = getattr(current, "type", None)
+            body = getattr(current, "body", None)
+            exception_type = type(current).__name__
+
+            if isinstance(body, dict):
+                provider_code = provider_code or body.get("code")
+                provider_type = provider_type or body.get("type")
+                status_code = status_code or body.get("raw_status_code")
+
+            normalized_code = str(provider_code) if provider_code is not None else None
+            normalized_type = str(provider_type) if provider_type is not None else None
+
+            if (
+                status_code is not None
+                or normalized_code is not None
+                or normalized_type is not None
+                or exception_type
+                in {
+                    "APIConnectionError",
+                    "APITimeoutError",
+                }
+            ):
+                return EmbeddingRequestFailure(
+                    status_code=int(status_code) if status_code is not None else None,
+                    provider_code=normalized_code,
+                    provider_type=normalized_type,
+                    exception_type=exception_type,
+                )
+
+            cause = getattr(current, "__cause__", None)
+            context = getattr(current, "__context__", None)
+            if cause is not None:
+                pending.append(cause)
+            if context is not None:
+                pending.append(context)
+
+        return None
+
+    def _is_embedding_batch_too_large_error(self, error: Exception) -> bool:
+        """
+        Why:
+            OpenSearch ingestion delegates embedding generation to the embedding backend.
+            Some providers reject a request when it contains too many inputs, even when the
+            OpenSearch bulk size itself is valid.
+
+        How to use:
+            Pass the exception raised by the embedding/vector stack. The helper walks the
+            exception chain and returns True only for the known "too many inputs" provider
+            failure so callers can retry with smaller batches instead of failing the whole
+            document ingestion.
+        """
+        failure = self._get_embedding_request_failure(error)
+        if failure is None:
+            return False
+        return failure.status_code == 400 and failure.provider_code == "3210" and failure.provider_type == "invalid_request_prompt"
+
+    def _is_retryable_embedding_error(self, error: Exception) -> bool:
+        """
+        Why:
+            Remote embedding providers can temporarily fail with overload, timeout, or
+            rate-limit responses. These cases should be retried before we fail the whole
+            document ingestion.
+
+        How to use:
+            Pass the exception raised by the embedding/vector stack. The helper returns
+            True only for transient provider failures that are safe to retry as-is.
+        """
+        failure = self._get_embedding_request_failure(error)
+        if failure is None:
+            return False
+        if failure.exception_type in {"APIConnectionError", "APITimeoutError"}:
+            return True
+        if failure.status_code in EMBEDDING_RETRYABLE_STATUS_CODES:
+            return True
+        return failure.status_code is not None and failure.status_code >= 500
+
+    def _embedding_retry_delay_seconds(self, attempt: int) -> float:
+        """
+        Why:
+            Short exponential backoff gives remote embedding services time to recover from
+            transient overload without delaying ingestion for too long.
+
+        How to use:
+            Pass a 1-based retry attempt number. The returned delay is bounded by the
+            configured retry count and is intended for transient embedding failures only.
+
+        Example:
+            `time.sleep(self._embedding_retry_delay_seconds(attempt=2))`
+        """
+        return EMBEDDING_RETRY_BASE_DELAY_SECONDS * (2 ** max(0, attempt - 1))
+
+    def _add_documents_with_adaptive_batching(
+        self,
+        documents: List[Document],
+        ids: List[str],
+        retry_attempt: int = 0,
+    ) -> List[str]:
+        """
+        Why:
+            A single ingestion batch can be acceptable for OpenSearch while still exceeding
+            the embedding provider input-count limit, or it can fail transiently because
+            the provider is overloaded. Handling both cases here keeps ingestion working
+            for large files without changing higher-level pipeline logic.
+
+        How to use:
+            Call this helper with one ordered batch of documents and their matching ids.
+            It first tries the batch as-is. If the embedding backend reports a
+            structured batch-limit error, the helper splits the batch in half and retries
+            recursively until each sub-batch is accepted or only one document remains.
+            If the backend reports a transient server-side failure, the helper retries the
+            same batch with exponential backoff before giving up.
+        """
+        try:
+            return list(self._lc.add_documents(documents, ids=ids))
+        except Exception as error:
+            failure = self._get_embedding_request_failure(error)
+
+            if self._is_embedding_batch_too_large_error(error):
+                if len(documents) <= 1:
+                    raise
+
+                split_index = max(1, len(documents) // 2)
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] embedding batch exceeds provider limit for index=%s batch_size=%s; splitting into sub-batches %s and %s",
+                    self._index,
+                    len(documents),
+                    split_index,
+                    len(documents) - split_index,
+                )
+                left_ids = self._add_documents_with_adaptive_batching(
+                    documents=documents[:split_index],
+                    ids=ids[:split_index],
+                )
+                right_ids = self._add_documents_with_adaptive_batching(
+                    documents=documents[split_index:],
+                    ids=ids[split_index:],
+                )
+                return left_ids + right_ids
+
+            if self._is_retryable_embedding_error(error) and retry_attempt < EMBEDDING_RETRY_MAX_ATTEMPTS:
+                next_attempt = retry_attempt + 1
+                delay_seconds = self._embedding_retry_delay_seconds(next_attempt)
+                logger.warning(
+                    "[VECTOR][OPENSEARCH] transient embedding failure for index=%s batch_size=%s status=%s type=%s attempt=%s/%s; retrying same batch in %.2fs",
+                    self._index,
+                    len(documents),
+                    failure.status_code if failure else None,
+                    failure.exception_type if failure else type(error).__name__,
+                    next_attempt,
+                    EMBEDDING_RETRY_MAX_ATTEMPTS,
+                    delay_seconds,
+                )
+                time.sleep(delay_seconds)
+                return self._add_documents_with_adaptive_batching(
+                    documents=documents,
+                    ids=ids,
+                    retry_attempt=next_attempt,
+                )
+
+            raise
+
     def add_documents(self, documents: List[Document], *, ids: Optional[List[str]] = None) -> List[str]:
         """
-        Idempotent upsert with stable ids (prefer metadata[chunk_uid]).
-        Returns the assigned ids.
+        Why:
+            Fred stores chunk vectors idempotently with stable ids so re-ingestion of the
+            same logical chunk updates the existing vector instead of creating duplicates.
+
+        How to use:
+            Pass the chunk documents produced by the ingestion pipeline. If ids are omitted,
+            the adapter derives them from `metadata["chunk_uid"]`. The adapter writes the
+            documents in OpenSearch-sized batches and automatically re-splits a batch when
+            the embedding provider rejects too many inputs in one request.
+
+        Example:
+            `store.add_documents([Document(page_content="...", metadata={"chunk_uid": "c1"})])`
         """
         try:
             if not documents:
@@ -399,7 +607,12 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 end = start + self._bulk_size
                 batch_documents = documents[start:end]
                 batch_ids = ids[start:end]
-                assigned_ids.extend(list(self._lc.add_documents(batch_documents, ids=batch_ids)))
+                assigned_ids.extend(
+                    self._add_documents_with_adaptive_batching(
+                        documents=batch_documents,
+                        ids=batch_ids,
+                    )
+                )
 
             if len(assigned_ids) != len(documents):
                 raise RuntimeError("Vector store returned an unexpected number of assigned ids")
