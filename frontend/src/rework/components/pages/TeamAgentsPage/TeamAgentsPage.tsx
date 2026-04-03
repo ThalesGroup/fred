@@ -53,6 +53,7 @@ export default function TeamAgentsPage() {
       <AgentCard
         key={withKey ? agent.id : undefined}
         agent={agent}
+        // todo: in future, rely on direct `update` and `delete` permissions from agent (when they are returned by backend)
         readOnly={canUpdateAgents}
         onToggleEnabled={handleToggleEnabled}
         onEditAgent={handleEdit}
@@ -77,9 +78,6 @@ export default function TeamAgentsPage() {
         )}
       </div>
       <div className={styles.agentList}>
-        {/*
-            todo: in future, rely on direct `update` and `delete` permissions from agent (when they are returned by backend)
-         */}
         {agents?.map((agent) => (
           <>
             {!agent.enabled ? (
