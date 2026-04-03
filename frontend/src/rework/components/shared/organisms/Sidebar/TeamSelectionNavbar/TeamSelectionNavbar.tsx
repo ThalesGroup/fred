@@ -1,4 +1,4 @@
-import { useListTeamsQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
+import { useListTeamsQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TeamSelectionItem from "@shared/organisms/Sidebar/TeamSelectionNavbar/TeamSelectionItem/TeamSelectionItem.tsx";
 import styles from "./TeamSelectionNavbar.module.scss";
 import Separator from "@shared/atoms/Separator/Separator.tsx";

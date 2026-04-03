@@ -2,13 +2,12 @@ import TeamSettingsMembersTable from "@components/pages/TeamSettingsPage/TeamSet
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TeamWithPermissions, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  TeamWithPermissions,
   useAddTeamMemberMutation,
   useListTeamMembersQuery,
   useListUsersQuery,
-  UserSummary,
-} from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {

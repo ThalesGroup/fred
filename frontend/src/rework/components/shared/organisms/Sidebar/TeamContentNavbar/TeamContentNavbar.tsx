@@ -1,7 +1,7 @@
 import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
-import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApi";
+import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";

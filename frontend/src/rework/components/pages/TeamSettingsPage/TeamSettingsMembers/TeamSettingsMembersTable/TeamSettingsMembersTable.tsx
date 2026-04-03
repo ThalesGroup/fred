@@ -20,14 +20,12 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import DataTable, { DataTableColumn } from "@shared/organisms/DataTable/DataTable.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { TeamMember, TeamWithPermissions, UserTeamRelation } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  TeamMember,
-  TeamWithPermissions,
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,
-  UserTeamRelation,
   useUpdateTeamMemberMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApi.ts";
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {

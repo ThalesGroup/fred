@@ -2,7 +2,7 @@ import styles from "./TeamSettingsNavbar.module.scss";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { useTranslation } from "react-i18next";
-import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { TeamSettingsMenuPanels } from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 

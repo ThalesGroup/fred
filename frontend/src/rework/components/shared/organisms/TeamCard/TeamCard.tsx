@@ -1,5 +1,5 @@
 import styles from "./TeamCard.module.scss";
-import { Team } from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { useTranslation } from "react-i18next";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";

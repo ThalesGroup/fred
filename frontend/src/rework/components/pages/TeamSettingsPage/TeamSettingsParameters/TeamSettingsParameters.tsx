@@ -5,11 +5,11 @@ import Switch from "@shared/atoms/Switch/Switch.tsx";
 import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
+import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  TeamWithPermissions,
   useUpdateTeamMutation,
   useUploadTeamBannerMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
@@ -86,7 +86,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     try {
       await uploadBanner({
         teamId: team.id,
-        file,
+        bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: { file },
       }).unwrap();
 
       console.log("Banner uploaded successfully");

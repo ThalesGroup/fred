@@ -7,7 +7,7 @@ import { AnyAgent } from "../../../../common/agent.ts";
 import { AgentCreateEditDrawer } from "../../../../components/agentHub/AgentCreateEditDrawer.tsx";
 import { useAgentUpdater } from "../../../../hooks/useAgentUpdater.ts";
 import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic/agenticOpenApi.ts";
-import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApi.ts";
+import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./TeamAgentsPage.module.scss";
 

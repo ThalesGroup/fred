@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { NavigationTabs, TabConfig } from "../components/NavigationTabs";
 import { TeamAppsPage } from "../components/teamDetails/TeamAppsPage";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
-import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApi";
+import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../slices/controlPlane/controlPlaneOpenApi.ts";
 import { KnowledgeHub } from "./KnowledgeHub.tsx";
 
