@@ -34,6 +34,10 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: pypdfium2
         images_scale: 1.0
@@ -78,6 +82,10 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 1.5
@@ -124,6 +132,10 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 2.0

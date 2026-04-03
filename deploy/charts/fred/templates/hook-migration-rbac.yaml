@@ -1,0 +1,64 @@
+{{- define "common-library.hook-migration-rbac" -}}
+
+{{- if and .app.migration .app.migration.enabled .app.migration.scaleDown }}
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .app.applicationName }}-migration-sa
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: migration
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .app.applicationName }}-migration-role
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: migration
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .app.applicationName }}-migration-rolebinding
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: migration
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ .app.applicationName }}-migration-sa
+    namespace: {{ .root.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .app.applicationName }}-migration-role
+  apiGroup: rbac.authorization.k8s.io
+
+{{- end }}
+
+{{ end -}}

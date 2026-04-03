@@ -51,11 +51,15 @@ docker-push: ## Push the Docker image
 	docker push $(IMAGE_FULL)
 
 .PHONY: run-docker
-run-docker: ## Run frontend in Docker (maps host port 5173 to container port 8080 by default)
+run-docker: ## Run frontend in Docker and proxy backend prefixes to local services by default
 	@echo "🚀 Running frontend in Docker..."
 	docker run --rm -it \
 		--name $(FRONTEND_CONTAINER_NAME) \
 		--network $(FRONTEND_DOCKER_NETWORK) \
+		--add-host=host.docker.internal:host-gateway \
+		-e FRONTEND_AGENTIC_UPSTREAM=$(FRONTEND_AGENTIC_UPSTREAM) \
+		-e FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=$(FRONTEND_KNOWLEDGE_FLOW_UPSTREAM) \
+		-e FRONTEND_CONTROL_PLANE_UPSTREAM=$(FRONTEND_CONTROL_PLANE_UPSTREAM) \
 		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
 		$(IMAGE_FULL)
 
@@ -94,6 +98,8 @@ update-knowledge-flow-api: ## update the generated hooks used in UI based on kno
 
 .PHONY: update-control-plane-api
 update-control-plane-api: ## update the generated hooks used in UI based on control-plane backend openApi spec
+	@echo "🔧 Installing frontend dependencies..."
+	npm ci
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
 	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
@@ -133,3 +139,6 @@ FRONTEND_CONTAINER_NAME ?= frontend
 FRONTEND_DOCKER_NETWORK ?= bridge
 FRONTEND_HOST_PORT ?= 5173
 FRONTEND_CONTAINER_PORT ?= 8080
+FRONTEND_AGENTIC_UPSTREAM ?= http://host.docker.internal:8000
+FRONTEND_KNOWLEDGE_FLOW_UPSTREAM ?= http://host.docker.internal:8111
+FRONTEND_CONTROL_PLANE_UPSTREAM ?= http://host.docker.internal:8222

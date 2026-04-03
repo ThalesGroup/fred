@@ -188,7 +188,7 @@ async def test_update_team_checks_can_update_info_permission(
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, object]]] = []
 
-        async def upsert(self, team_id: str, patch) -> TeamMetadata:
+        async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
             self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
             return TeamMetadata(id=TeamId(team_id))
 
@@ -262,7 +262,7 @@ async def test_enrich_groups_uses_team_metadata_store(
 
     class _FakeMetadataStore:
         async def get_by_team_ids(
-            self, _team_ids: list[TeamId]
+            self, _team_ids: list[TeamId], session=None
         ) -> dict[TeamId, TeamMetadata]:
             return {
                 TeamId("team-1"): TeamMetadata(
@@ -341,7 +341,7 @@ async def test_upload_team_banner_checks_can_update_info_permission(
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, object]]] = []
 
-        async def upsert(self, team_id: str, patch) -> TeamMetadata:
+        async def upsert(self, team_id: str, patch, session=None) -> TeamMetadata:
             self.calls.append((team_id, patch.model_dump(exclude_unset=True)))
             return TeamMetadata(id=TeamId(team_id))
 
@@ -550,6 +550,7 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
             team_id: str,
             user_id: str,
             due_at: datetime,
+            session=None,
         ) -> None:
             self.enqueued.append((session_id, team_id, user_id, due_at))
 
@@ -650,6 +651,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
             team_id: str,
             user_id: str,
             due_at: datetime,
+            session=None,
         ) -> None:
             _ = (session_id, team_id, user_id, due_at)
 

@@ -123,6 +123,9 @@ class PostgresStoreConfig(BaseModel):
     def dsn(self) -> str:
         return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
 
+    def async_dsn(self) -> str:
+        return f"postgresql+asyncpg://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+
 
 class PostgresTableConfig(BaseModel):
     # Allow reusing the same table-oriented config for local SQLite runs.
