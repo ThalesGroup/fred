@@ -72,11 +72,29 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 run: check-node node_modules ## Run frontend locally (Vite proxy handles backend routing)
 	npm run dev
 
-##@ Dev
+##@ Code quality
 
-.PHONY: format
-format: ## Use prettier to format all codebase
+.PHONY: type-check
+type-check: node_modules ## Run TypeScript compiler check (no emit)
+	npx tsc --noEmit
+
+.PHONY: format-check
+format-check: node_modules ## Check formatting with prettier (no write)
+	npx prettier . --check
+
+.PHONY: format-fix
+format-fix: node_modules ## Fix formatting with prettier
 	npx prettier . --write
+
+.PHONY: knip
+knip: node_modules ## Find unused exports, files and dependencies
+	npx knip
+
+.PHONY: code-quality
+code-quality: type-check format-check knip ## Run all code quality checks
+	@echo "All frontend code quality checks completed"
+
+##@ Dev
 
 .PHONY: update-agentic-api
 update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec

@@ -13,6 +13,8 @@ code-quality: ## Run code quality checks in all submodules
 		echo "************ Running code-quality in $$dir ************"; \
 		$(MAKE) -C $$dir code-quality; \
 	done
+	@echo "************ Running code-quality in frontend ************"
+	$(MAKE) -C frontend code-quality
 
 .PHONY: code-quality-fix
 code-quality-fix: ## Auto-fix formatting/imports/linting in all submodules
@@ -21,6 +23,8 @@ code-quality-fix: ## Auto-fix formatting/imports/linting in all submodules
 		echo "************ Running code-quality fixes in $$dir ************"; \
 		$(MAKE) -C $$dir lint-fix import-order-fix format-fix; \
 	done
+	@echo "************ Running code-quality fixes in frontend ************"
+	$(MAKE) -C frontend format-fix
 
 .PHONY: clean
 clean: ## Clean all submodules
