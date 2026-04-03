@@ -1,4 +1,5 @@
 import { Stack, Typography } from "@mui/material";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { McpServerRef, useListMcpServersAgenticV1AgentsMcpServersGetQuery } from "../../slices/agentic/agenticOpenApi";
 import { AgentOptionSelectionCard } from "./AgentOptionSelectionCard";
@@ -8,7 +9,7 @@ export interface AgentToolsSelectionProps {
   onMcpServerRefsChange: (newMcpServerRefs: McpServerRef[]) => void;
 }
 
-export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
+export const AgentToolsSelection = memo(function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
   const { data: mcpServersData, isLoading: isLoadingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
   const refIds = new Set(mcpServerRefs.map((ref) => ref.id));
@@ -55,4 +56,4 @@ export function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: Ag
       </Stack>
     </Stack>
   );
-}
+});
