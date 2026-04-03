@@ -170,6 +170,12 @@ AGENTIC_UV           := agentic-backend/.venv/bin/uv
 CP_UV                := control-plane-backend/.venv/bin/uv
 KF_UV                := knowledge-flow-backend/.venv/bin/uv
 
+.PHONY: db-check-combined-heads
+db-check-combined-heads: ## assert each backend has exactly one Alembic head (no branch conflicts)
+	$(MAKE) -C agentic-backend db-check-heads
+	$(MAKE) -C control-plane-backend db-check-heads
+	$(MAKE) -C knowledge-flow-backend db-check-heads
+
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
 	docker compose -f $(MIGRATION_COMPOSE) up -d --wait

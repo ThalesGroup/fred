@@ -9,6 +9,36 @@ on:
       - develop
 
 jobs:
+  check-migrations-heads:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (agentic-backend)
+        run: uv sync
+        working-directory: agentic-backend
+
+      - name: Install dependencies (control-plane-backend)
+        run: uv sync
+        working-directory: control-plane-backend
+
+      - name: Install dependencies (knowledge-flow-backend)
+        run: uv sync
+        working-directory: knowledge-flow-backend
+
+      - name: Check single Alembic head per backend
+        run: make db-check-combined-heads
+
   check-migrations-sqlite:
     runs-on: ubuntu-latest
 
@@ -31,6 +61,10 @@ jobs:
       - name: Install dependencies (control-plane-backend)
         run: uv sync
         working-directory: control-plane-backend
+
+      - name: Install dependencies (knowledge-flow-backend)
+        run: uv sync
+        working-directory: knowledge-flow-backend
 
       - name: Run combined SQLite migration checks
         run: make db-check-combined-sqlite
@@ -57,6 +91,10 @@ jobs:
       - name: Install dependencies (control-plane-backend)
         run: uv sync
         working-directory: control-plane-backend
+
+      - name: Install dependencies (knowledge-flow-backend)
+        run: uv sync
+        working-directory: knowledge-flow-backend
 
       - name: Run combined PostgreSQL migration checks
         run: make db-check-combined-postgres
