@@ -49,7 +49,11 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-from agentic_backend.application_context import get_default_model, get_rebac_engine, pg_async_session
+from agentic_backend.application_context import (
+    get_default_model,
+    get_rebac_engine,
+    pg_async_session,
+)
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
