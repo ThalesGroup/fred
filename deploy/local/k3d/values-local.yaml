@@ -50,6 +50,7 @@ x-kf-security: &kf-security
     enabled: true
     type: openfga
     api_url: "http://openfga:9080"
+
 x-kf-scheduler: &kf-scheduler
   enabled: true
   backend: "temporal"
@@ -59,12 +60,14 @@ x-kf-scheduler: &kf-scheduler
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+
 x-kf-content-storage: &kf-content-storage
   type: minio
   endpoint: http://minio:9000
   access_key: "admin"
   bucket_name: "app-content"
   secure: false
+
 x-common-dotenv: &common-dotenv
   OPENAI_API_KEY: "" # pragma: allowlist secret
   FRED_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
@@ -72,18 +75,21 @@ x-common-dotenv: &common-dotenv
   OPENFGA_API_TOKEN: "Azerty123_" # pragma: allowlist secret
   AZURE_AD_CLIENT_SECRET: "" # pragma: allowlist secret
   AZURE_APIM_SUBSCRIPTION_KEY: "" # pragma: allowlist secret
+
 x-kf-filesystem: &kf-filesystem
   type: minio
   endpoint: http://minio:9000
   access_key: "admin"
   bucket_name: "filesystem"
   secure: false
+
 x-azure-apim-settings: &azure-apim-settings
   azure_apim_base_url: ""
   azure_openai_api_version: ""
   azure_tenant_id: ""
   azure_ad_client_id: ""
   azure_ad_client_scope: ""
+
 x-kf-embedding-model: &kf-embedding-model
   provider: azure-apim
   name: text-embedding-3-large
@@ -98,6 +104,7 @@ x-kf-embedding-model: &kf-embedding-model
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
+
 x-kf-chat-model: &kf-chat-model
   provider: azure-apim
   name: gpt-4o
@@ -113,6 +120,7 @@ x-kf-chat-model: &kf-chat-model
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
+
 x-kf-vision-model: &kf-vision-model
   provider: azure-apim
   name: gpt-4o
@@ -128,6 +136,7 @@ x-kf-vision-model: &kf-vision-model
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
+
 x-kf-crossencoder-model: &kf-crossencoder-model
   settings:
     online: true
@@ -140,6 +149,7 @@ x-kf-crossencoder-model: &kf-crossencoder-model
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
+
 x-kf-storage: &kf-storage
   postgres:
     host: postgres
@@ -194,8 +204,10 @@ x-kf-storage: &kf-storage
       database: "data"
       path: null
       username: "tabular"
+
 x-kf-mcp: &kf-mcp
   prometheus_ops_enabled: true
+
 x-cp-scheduler: &cp-scheduler
   enabled: true
   backend: "temporal"
@@ -205,6 +217,7 @@ x-cp-scheduler: &cp-scheduler
     task_queue: "control-plane-lifecycle"
     workflow_id_prefix: "control-plane"
     connect_timeout_seconds: 5
+
 x-cp-storage: &cp-storage
   postgres:
     host: postgres
@@ -226,19 +239,22 @@ x-cp-storage: &cp-storage
     access_key: "admin"
     bucket_name: "control-plane-content"
     secure: false
+
 global:
   kubeconfig: ""
   create_index:
     enabled: false
   persistence:
     enabled: false
+
 applications:
+
   # ===========================================================================
   # AGENTIC BACKEND
   # ===========================================================================
   agentic-backend:
     image:
-      tag: "0.1"
+      tag: "0.1" 
     # -------------------------------------------------------------------------
     # Agentic Backend — Application Configuration
     # -------------------------------------------------------------------------
@@ -250,6 +266,7 @@ applications:
         backend: temporal
         temporal:
           host: "temporal:7233"
+
       security:
         m2m:
           realm_url: "http://keycloak:8080/realms/app"
@@ -261,6 +278,7 @@ applications:
           enabled: true
           type: openfga
           api_url: "http://openfga:9080"
+
       ai:
         knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
@@ -298,6 +316,7 @@ applications:
             type: "agent"
             class_path: "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
             enabled: true
+
       mcp:
         servers:
           - id: "mcp-knowledge-flow-mcp-text"
@@ -344,6 +363,7 @@ applications:
             url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
             sse_read_timeout: 2000
             auth_mode: "user_token"
+
       storage:
         postgres:
           host: postgres
@@ -378,12 +398,14 @@ applications:
           level: "DEBUG"
         log_store:
           type: "in_memory"
+
     # -------------------------------------------------------------------------
     # Agentic Backend — Secrets (.env)
     # -------------------------------------------------------------------------
     dotenv:
-      !!merge <<: *common-dotenv
+      <<: *common-dotenv
       KEYCLOAK_AGENTIC_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
+
     # -------------------------------------------------------------------------
     # Agentic Backend — Agent catalog (overrides default: only Georges)
     # -------------------------------------------------------------------------
@@ -397,6 +419,7 @@ applications:
           enabled: true
           chat_options:
             attach_files: false
+
     # -------------------------------------------------------------------------
     # Agentic Backend — Models catalog (overrides default: only default profile)
     # -------------------------------------------------------------------------
@@ -425,7 +448,7 @@ applications:
             provider: azure-apim
             name: gpt-4o
             settings:
-              !!merge <<: *azure-apim-settings
+              <<: *azure-apim-settings
               azure_apim_resource_path: ""
         - profile_id: language.azure_apim.gpt4o
           capability: language
@@ -434,9 +457,10 @@ applications:
             provider: azure-apim
             name: gpt-4o
             settings:
-              !!merge <<: *azure-apim-settings
+              <<: *azure-apim-settings
               azure_apim_resource_path: ""
       rules: []
+
     # -------------------------------------------------------------------------
     # Agentic Backend — MCP catalog (overrides default: only text search)
     # -------------------------------------------------------------------------
@@ -459,6 +483,7 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
+
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
@@ -511,6 +536,7 @@ applications:
         backend_url_knowledge: "http://localhost:8088"
         websocket_url: "ws://localhost:8088/fred/chatbot/query"
         frontend_basename: "/"
+
   # ===========================================================================
   # KNOWLEDGE FLOW BACKEND
   # ===========================================================================
@@ -521,24 +547,27 @@ applications:
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
     configuration:
-      security: *kf-security
-      scheduler: *kf-scheduler
+      security:        *kf-security
+      scheduler:       *kf-scheduler
       content_storage: *kf-content-storage
-      embedding_model: *kf-embedding-model
-      chat_model: *kf-chat-model
-      vision_model: *kf-vision-model
+
+      embedding_model:    *kf-embedding-model
+      chat_model:         *kf-chat-model
+      vision_model:       *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
-      storage: *kf-storage
+
+      storage:         *kf-storage
       integrations:
         prometheus:
           base_url: "http://prometheus:9090"
           verify_ssl: false
           timeout_seconds: 15.0
           username: "admin"
-      mcp: *kf-mcp
-      filesystem: *kf-filesystem
+      mcp:             *kf-mcp
+      filesystem:      *kf-filesystem
+
     dotenv: &kf-dotenv
-      !!merge <<: *common-dotenv
+      <<: *common-dotenv
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
       MINIO_SECRET_KEY: "Azerty123_" # pragma: allowlist secret
       OPENSEARCH_PASSWORD: "FredOpensearch123!!" # pragma: allowlist secret
@@ -547,6 +576,7 @@ applications:
       TABULAR_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
       PROMETHEUS_PASSWORD: "" # pragma: allowlist secret
       PROMETHEUS_BEARER_TOKEN: "" # pragma: allowlist secret
+
   # ===========================================================================
   # KNOWLEDGE FLOW WORKER — disabled for now
   # ===========================================================================
@@ -557,23 +587,24 @@ applications:
     image:
       tag: "0.1"
     configuration:
-      security: *kf-security
-      scheduler: *kf-scheduler
-      content_storage: *kf-content-storage
-      embedding_model: *kf-embedding-model
-      chat_model: *kf-chat-model
-      vision_model: *kf-vision-model
+      security:           *kf-security
+      scheduler:          *kf-scheduler
+      content_storage:    *kf-content-storage
+      embedding_model:    *kf-embedding-model
+      chat_model:         *kf-chat-model
+      vision_model:       *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
-      storage: *kf-storage
+      storage:            *kf-storage
       integrations:
         prometheus:
           base_url: "http://prometheus:9090"
           verify_ssl: false
           timeout_seconds: 15.0
           username: "admin"
-      mcp: *kf-mcp
-      filesystem: *kf-filesystem
+      mcp:                *kf-mcp
+      filesystem:         *kf-filesystem
     dotenv: *kf-dotenv
+
   # ===========================================================================
   # CONTROL PLANE BACKEND
   # ===========================================================================
@@ -581,13 +612,14 @@ applications:
     image:
       tag: "0.1"
     configuration:
-      security: *kf-security
+      security:  *kf-security
       scheduler: *cp-scheduler
-      storage: *cp-storage
+      storage:   *cp-storage
     dotenv: &cp-dotenv
-      !!merge <<: *common-dotenv
+      <<: *common-dotenv
       KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET: "Azerty123_" # pragma: allowlist secret
       MINIO_SECRET_KEY: "Azerty123_" # pragma: allowlist secret
+
   # ===========================================================================
   # CONTROL PLANE WORKER
   # ===========================================================================
@@ -598,7 +630,7 @@ applications:
     image:
       tag: "0.1"
     configuration:
-      security: *kf-security
+      security:  *kf-security
       scheduler: *cp-scheduler
-      storage: *cp-storage
+      storage:   *cp-storage
     dotenv: *cp-dotenv
