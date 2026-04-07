@@ -308,16 +308,22 @@ class _GraphNodeExecutionContext:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
         model_name = _resolve_model_name(resolved_model)
+        span_name = (
+            f"model:{self.node_id}:{operation}"
+            if operation != "default"
+            else f"model:{self.node_id}"
+        )
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.model",
+            name=span_name,
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
                 "operation": operation,
                 "model_name": model_name,
             },
+            trace_id=self.execution_trace_id,
         )
         if span is not None:
             span.set_input({"messages": _serialize_messages(messages)})
@@ -389,10 +395,15 @@ class _GraphNodeExecutionContext:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
 
         model_name = _resolve_model_name(resolved_model)
+        structured_span_name = (
+            f"structured_model:{self.node_id}:{operation}"
+            if operation != "default"
+            else f"structured_model:{self.node_id}"
+        )
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.structured_model",
+            name=structured_span_name,
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
@@ -400,6 +411,7 @@ class _GraphNodeExecutionContext:
                 "model_name": model_name,
                 "output_model": output_model.__name__,
             },
+            trace_id=self.execution_trace_id,
         )
         structured_model = resolved_model.with_structured_output(
             output_model,
@@ -465,14 +477,17 @@ class _GraphNodeExecutionContext:
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.tool",
+            name=f"tool:{tool_ref}@{self.node_id}",
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
                 "tool_ref": tool_ref,
                 "call_id": call_id,
             },
+            trace_id=self.execution_trace_id,
         )
+        if span is not None:
+            span.set_input(payload)
         try:
             with _graph_phase_timer(
                 kpi=self.services.kpi,
@@ -496,8 +511,10 @@ class _GraphNodeExecutionContext:
                     kpi_dims["status"] = "error"
                     if span is not None:
                         span.set_attribute("status", "error")
-                elif span is not None:
-                    span.set_attribute("status", "ok")
+                else:
+                    if span is not None:
+                        span.set_output(_safe_json(result.blocks[0].text if result.blocks else ""))
+                        span.set_attribute("status", "ok")
         except Exception:
             if span is not None:
                 span.set_attribute("status", "error")
@@ -537,14 +554,17 @@ class _GraphNodeExecutionContext:
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.runtime_tool",
+            name=f"runtime_tool:{tool_name}@{self.node_id}",
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
                 "tool_name": tool_name,
                 "call_id": call_id,
             },
+            trace_id=self.execution_trace_id,
         )
+        if span is not None:
+            span.set_input(arguments)
         with _graph_phase_timer(
             kpi=self.services.kpi,
             binding=self.binding,
@@ -569,6 +589,7 @@ class _GraphNodeExecutionContext:
                     )
                 )
                 if span is not None:
+                    span.set_output(normalized)
                     span.set_attribute("status", "ok")
                 return normalized
             except Exception as exc:
@@ -628,14 +649,22 @@ class _GraphNodeExecutionContext:
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.publish_artifact",
+            name=f"publish_artifact:{file_name}@{self.node_id}",
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
                 "file_name": file_name,
                 "scope": scope.value,
             },
+            trace_id=self.execution_trace_id,
         )
+        if span is not None:
+            span.set_input({
+                "file_name": file_name,
+                "scope": scope.value,
+                "content_type": content_type,
+                "size_bytes": len(content_bytes),
+            })
         try:
             artifact = await artifact_publisher.publish(
                 ArtifactPublishRequest(
@@ -649,6 +678,7 @@ class _GraphNodeExecutionContext:
                 )
             )
             if span is not None:
+                span.set_output({"href": artifact.href, "file_name": artifact.file_name, "size": artifact.size})
                 span.set_attribute("status", "ok")
             return artifact
         except Exception:
@@ -674,14 +704,17 @@ class _GraphNodeExecutionContext:
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.fetch_resource",
+            name=f"fetch_resource:{key}@{self.node_id}",
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
                 "resource_key": key,
                 "scope": scope.value,
             },
+            trace_id=self.execution_trace_id,
         )
+        if span is not None:
+            span.set_input({"key": key, "scope": scope.value})
         try:
             resource = await resource_reader.fetch(
                 ResourceFetchRequest(
@@ -691,6 +724,11 @@ class _GraphNodeExecutionContext:
                 )
             )
             if span is not None:
+                try:
+                    preview = resource.as_text()[:_MAX_CONTENT_LEN]
+                except Exception:
+                    preview = None
+                span.set_output({"content": preview, "size": resource.size})
                 span.set_attribute("status", "ok")
             return resource
         except Exception:
@@ -724,14 +762,16 @@ class _GraphNodeExecutionContext:
         span = _start_runtime_span(
             services=self.services,
             binding=self.binding,
-            name="v2.graph.await_human",
+            name=f"await_human:{request.stage or 'unspecified'}@{self.node_id}",
             attributes={
                 "agent_id": self.graph_agent_id,
                 "node_id": self.node_id,
                 "stage": request.stage or "unspecified",
             },
+            trace_id=self.execution_trace_id,
         )
         if span is not None:
+            span.set_input({"stage": request.stage, "question": request.question, "choices": [c.label for c in request.choices]})
             span.set_attribute("status", "awaiting_human")
             span.end()
         raise _AwaitHumanInterrupt(request)
@@ -851,6 +891,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         config: ExecutionConfig,
         emit_event: Callable[[RuntimeEvent], None] | None,
     ) -> BaseModel:
+        execution_trace_id = uuid.uuid4().hex
         root_span = _start_runtime_span(
             services=self._services,
             binding=self._binding,
@@ -859,6 +900,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 "agent_id": self._definition.agent_id,
                 "graph": _graph_to_mermaid(self._graph),
             },
+            trace_id=execution_trace_id,
         )
         if root_span is not None:
             root_span.set_input(_safe_json(input_model))
@@ -877,6 +919,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 steps=steps,
                 config=config,
                 emit_event=emit_event,
+                execution_trace_id=execution_trace_id,
             )
             if root_span is not None:
                 root_span.set_output(_safe_json(result))
@@ -908,6 +951,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         steps: int,
         config: ExecutionConfig,
         emit_event: Callable[[RuntimeEvent], None] | None,
+        execution_trace_id: str | None = None,
     ) -> BaseModel:
         while node_id is not None:
             if steps >= config.max_steps:
@@ -926,6 +970,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 node_id=node_id,
                 allowed_tool_refs=self._allowed_tool_refs,
                 runtime_tools=self._runtime_tools,
+                execution_trace_id=execution_trace_id,
                 _resume_payload=resume_payload,
             )
             with _graph_phase_timer(
