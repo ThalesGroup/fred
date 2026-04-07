@@ -1139,8 +1139,7 @@ export type Properties = {
   releaseBrand?: string | null;
   agentsNicknameSingular?: string;
   agentsNicknamePlural?: string;
-  /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
-  agentIconName?: string | null;
+  agentIconName?: string;
   contactSupportLink?: string | null;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentDisableButton?: boolean;
