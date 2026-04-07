@@ -1133,18 +1133,20 @@ export type Properties = {
   faviconName?: string | null;
   faviconNameDark?: string | null;
   siteDisplayName?: string;
+  siteTitle?: string;
+  siteSubtitle?: string | null;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;
   agentsNicknameSingular?: string;
   agentsNicknamePlural?: string;
-  agentIconPath?: string | null;
+  agentIconName?: string;
   contactSupportLink?: string | null;
-  /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
-  agentIconName?: string | null;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentDisableButton?: boolean;
   showAgentCode?: boolean;
   allowAgentSwitchInOneConversation?: boolean;
+  defaultTeamBannerFile?: string;
+  defaultTeamAvatarFile?: string;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

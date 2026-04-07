@@ -49,34 +49,34 @@ export default function DesignSystemPage() {
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
-        <Button color={buttonColor} variant={"filled"} size={"small"} icon={{ category: "outlined", type: "Add" }}>
+        <Button color={buttonColor} variant={"filled"} size={"small"} icon={{ category: "outlined", type: "add" }}>
           Button
         </Button>
       </div>
       <div className={styles.componentCard}>
-        <Button color={buttonColor} variant={"outlined"} size={"small"} icon={{ category: "outlined", type: "Add" }}>
+        <Button color={buttonColor} variant={"outlined"} size={"small"} icon={{ category: "outlined", type: "add" }}>
           Button
         </Button>
       </div>
       <div className={styles.componentCard}>
-        <Button color={buttonColor} variant={"text"} size={"small"} icon={{ category: "outlined", type: "Add" }}>
+        <Button color={buttonColor} variant={"text"} size={"small"} icon={{ category: "outlined", type: "add" }}>
           Button
         </Button>
       </div>
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
-        <Button color={buttonColor} variant={"filled"} size={"medium"} icon={{ category: "outlined", type: "Add" }}>
+        <Button color={buttonColor} variant={"filled"} size={"medium"} icon={{ category: "outlined", type: "add" }}>
           Button
         </Button>
       </div>
       <div className={styles.componentCard}>
-        <Button color={buttonColor} variant={"outlined"} size={"medium"} icon={{ category: "outlined", type: "Add" }}>
+        <Button color={buttonColor} variant={"outlined"} size={"medium"} icon={{ category: "outlined", type: "add" }}>
           Button
         </Button>
       </div>
       <div className={styles.componentCard}>
-        <Button color={buttonColor} variant={"text"} size={"medium"} icon={{ category: "outlined", type: "Add" }}>
+        <Button color={buttonColor} variant={"text"} size={"medium"} icon={{ category: "outlined", type: "add" }}>
           Button
         </Button>
       </div>
@@ -122,7 +122,7 @@ export default function DesignSystemPage() {
           color={buttonColor}
           variant={"filled"}
           size={"small"}
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
         >
           Button
         </Button>
@@ -133,42 +133,7 @@ export default function DesignSystemPage() {
           color={buttonColor}
           variant={"outlined"}
           size={"small"}
-          icon={{ category: "outlined", type: "Add" }}
-        >
-          Button
-        </Button>
-      </div>
-      <div className={styles.componentCard}>
-        <Button
-          disabled
-          color={buttonColor}
-          variant={"text"}
-          size={"small"}
-          icon={{ category: "outlined", type: "Add" }}
-        >
-          Button
-        </Button>
-      </div>
-      <div className={styles.componentCard}></div>
-      <div className={styles.componentCard}></div>
-      <div className={styles.componentCard}>
-        <Button
-          disabled
-          color={buttonColor}
-          variant={"filled"}
-          size={"medium"}
-          icon={{ category: "outlined", type: "Add" }}
-        >
-          Button
-        </Button>
-      </div>
-      <div className={styles.componentCard}>
-        <Button
-          disabled
-          color={buttonColor}
-          variant={"outlined"}
-          size={"medium"}
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
         >
           Button
         </Button>
@@ -178,8 +143,43 @@ export default function DesignSystemPage() {
           disabled
           color={buttonColor}
           variant={"text"}
+          size={"small"}
+          icon={{ category: "outlined", type: "add" }}
+        >
+          Button
+        </Button>
+      </div>
+      <div className={styles.componentCard}></div>
+      <div className={styles.componentCard}></div>
+      <div className={styles.componentCard}>
+        <Button
+          disabled
+          color={buttonColor}
+          variant={"filled"}
           size={"medium"}
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
+        >
+          Button
+        </Button>
+      </div>
+      <div className={styles.componentCard}>
+        <Button
+          disabled
+          color={buttonColor}
+          variant={"outlined"}
+          size={"medium"}
+          icon={{ category: "outlined", type: "add" }}
+        >
+          Button
+        </Button>
+      </div>
+      <div className={styles.componentCard}>
+        <Button
+          disabled
+          color={buttonColor}
+          variant={"text"}
+          size={"medium"}
+          icon={{ category: "outlined", type: "add" }}
         >
           Button
         </Button>
@@ -188,7 +188,7 @@ export default function DesignSystemPage() {
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           color={buttonColor}
           variant={"filled"}
           size={"small"}
@@ -196,7 +196,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           color={buttonColor}
           variant={"outlined"}
           size={"small"}
@@ -204,7 +204,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           color={buttonColor}
           variant={"icon"}
           size={"small"}
@@ -214,7 +214,7 @@ export default function DesignSystemPage() {
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           color={buttonColor}
           variant={"filled"}
           size={"medium"}
@@ -222,7 +222,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           color={buttonColor}
           variant={"outlined"}
           size={"medium"}
@@ -230,7 +230,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           color={buttonColor}
           variant={"icon"}
           size={"medium"}
@@ -240,7 +240,7 @@ export default function DesignSystemPage() {
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           disabled
           color={buttonColor}
           variant={"filled"}
@@ -249,7 +249,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           disabled
           color={buttonColor}
           variant={"outlined"}
@@ -258,7 +258,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           disabled
           color={buttonColor}
           variant={"icon"}
@@ -269,7 +269,7 @@ export default function DesignSystemPage() {
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           disabled
           color={buttonColor}
           variant={"filled"}
@@ -278,7 +278,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           disabled
           color={buttonColor}
           variant={"outlined"}
@@ -287,7 +287,7 @@ export default function DesignSystemPage() {
       </div>
       <div className={styles.componentCard}>
         <IconButton
-          icon={{ category: "outlined", type: "Add" }}
+          icon={{ category: "outlined", type: "add" }}
           disabled
           color={buttonColor}
           variant={"icon"}
@@ -336,7 +336,7 @@ export default function DesignSystemPage() {
         <Breadcrumb
           items={[
             {
-              label: "Home",
+              label: "home",
             },
             {
               label: "Design System",
@@ -374,14 +374,14 @@ export default function DesignSystemPage() {
             },
             {
               label: "Button 2",
-              icon: { category: "outlined", type: "Add" },
+              icon: { category: "outlined", type: "add" },
             },
             {
               label: "Button 3",
             },
             {
               label: "Button 4",
-              icon: { category: "outlined", type: "Home" },
+              icon: { category: "outlined", type: "home" },
             },
             {
               label: "Button 5",
@@ -399,14 +399,14 @@ export default function DesignSystemPage() {
             },
             {
               label: "Button 2",
-              icon: { category: "outlined", type: "Add" },
+              icon: { category: "outlined", type: "add" },
             },
             {
               label: "Button 3",
             },
             {
               label: "Button 4",
-              icon: { category: "outlined", type: "Home" },
+              icon: { category: "outlined", type: "home" },
             },
             {
               label: "Button 5",
@@ -423,7 +423,7 @@ export default function DesignSystemPage() {
             {
               value: 1,
               label: "Button 1",
-              icon: { category: "outlined", type: "Add" },
+              icon: { category: "outlined", type: "add" },
               key: "1",
             },
             { value: 2, label: "Button 2", key: "2" },
@@ -431,7 +431,7 @@ export default function DesignSystemPage() {
             {
               value: 4,
               label: "Button 4",
-              icon: { category: "outlined", type: "Home" },
+              icon: { category: "outlined", type: "home" },
               key: "4",
             },
             { value: 5, label: "Button 5", key: "5" },
@@ -446,7 +446,7 @@ export default function DesignSystemPage() {
             {
               value: 1,
               label: "Button 1",
-              icon: { category: "outlined", type: "Add" },
+              icon: { category: "outlined", type: "add" },
               key: "1",
             },
             { value: 2, label: "Button 2", key: "2" },
@@ -454,7 +454,7 @@ export default function DesignSystemPage() {
             {
               value: 4,
               label: "Button 4",
-              icon: { category: "outlined", type: "Home" },
+              icon: { category: "outlined", type: "home" },
               key: "4",
             },
             { value: 5, label: "Button 5", key: "5" },
@@ -473,7 +473,7 @@ export default function DesignSystemPage() {
             {
               value: 1,
               label: "Button 1",
-              icon: { category: "outlined", type: "Add" },
+              icon: { category: "outlined", type: "add" },
               key: "1",
             },
             { value: 2, label: "Button 2", key: "2" },
@@ -481,7 +481,7 @@ export default function DesignSystemPage() {
             {
               value: 4,
               label: "Button 4",
-              icon: { category: "outlined", type: "Home" },
+              icon: { category: "outlined", type: "home" },
               key: "4",
             },
             { value: 5, label: "Button 5", key: "5" },

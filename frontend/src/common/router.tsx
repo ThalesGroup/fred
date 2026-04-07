@@ -22,7 +22,7 @@ import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
-import { TeamDetailsPage } from "../pages/TeamDetailsPage.tsx";
+import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { getConfig } from "./config";
 import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
@@ -78,7 +78,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "team/:teamId/*",
-        element: <TeamDetailsPage />,
+        element: <KnowledgePage />,
       },
       {
         path: "marketplace/teams",

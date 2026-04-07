@@ -1322,14 +1322,12 @@
       "memberCount": "{{count}} members"
     },
     "sidebar": {
-      "title": "Fred",
       "team": {
         "avatarAlt": "Team {{teamName}}",
         "bannerAlt": "Team's banner",
         "userTeam": "Personal space",
         "marketplace": "Marketplace",
         "menu": {
-          "agents": "Agents",
           "resources": "Resources",
           "apps": "Apps"
         }
@@ -1338,7 +1336,6 @@
         "title": "Marketplace",
         "menu": {
           "teams": "Teams",
-          "agents": "Agents",
           "tools": "Tools",
           "apps": "Apps"
         }
@@ -1361,7 +1358,7 @@
       },
       "conversationProfile": {
         "title": "Conversation profile",
-        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your agents."
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}."
       }
     },
     "teamSettings": {
@@ -1401,13 +1398,13 @@
         "privateTeam": "Private team",
         "teamPrompt": {
           "label": "Team context (prompt)",
-          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
+          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
         }
       }
     },
     "teams": {
       "agents": {
-        "title": "Engage your Agents",
+        "title": "Engage your {{agentsNicknamePlural}}",
         "create": "Create Agent"
       }
     },

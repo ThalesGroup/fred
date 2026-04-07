@@ -11,8 +11,11 @@ import React, { useState } from "react";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
+import { IconType } from "@shared/utils/Type.ts";
 
 export default function TeamContentNavbar() {
+  const { defaultTeamBannerFile, agentIconName, agentsNicknamePlural } = useFrontendProperties();
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
@@ -28,14 +31,14 @@ export default function TeamContentNavbar() {
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: t("rework.sidebar.team.menu.agents"),
-      icon: { category: "outlined", type: "Person" },
+      label: agentsNicknamePlural.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
+      icon: { category: "outlined", type: agentIconName as IconType },
       linkProps: { to: `/team/${teamId}/agents` },
     },
     {
       type: "link",
       label: t("rework.sidebar.team.menu.resources"),
-      icon: { category: "outlined", type: "Folder" },
+      icon: { category: "outlined", type: "folder" },
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
@@ -43,7 +46,7 @@ export default function TeamContentNavbar() {
   const bannerStyle = {
     "--banner-img": selectedTeam?.banner_image_url
       ? `url(${selectedTeam.banner_image_url})`
-      : 'url("/images/default-team-banner.png")',
+      : `url("/images/${defaultTeamBannerFile}")`,
   } as React.CSSProperties;
 
   return (
@@ -60,7 +63,7 @@ export default function TeamContentNavbar() {
                   size={"small"}
                   color={"on-surface"}
                   variant={"icon"}
-                  icon={{ category: "outlined", type: "Settings", filled: true }}
+                  icon={{ category: "outlined", type: "settings", filled: true }}
                   onClick={() => {
                     setIsTeamSettingsOpen(true);
                   }}

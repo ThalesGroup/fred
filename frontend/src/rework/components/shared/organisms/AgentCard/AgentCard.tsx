@@ -4,6 +4,8 @@ import Icon from "@components/shared/atoms/Icon/Icon.tsx";
 import IconButton from "@components/shared/atoms/IconButton/IconButton.tsx";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../../../../common/agent.ts";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
+import { IconType } from "@shared/utils/Type.ts";
 
 interface AgentCardProps {
   agent: Agent;
@@ -13,6 +15,7 @@ interface AgentCardProps {
 }
 
 export default function AgentCard({ agent, readOnly, onToggleEnabled, onEditAgent }: AgentCardProps) {
+  const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
 
   return (
@@ -21,7 +24,7 @@ export default function AgentCard({ agent, readOnly, onToggleEnabled, onEditAgen
         <div className={styles.agentInfo}>
           <div className={styles.agentPresentation}>
             <div className={styles.agentIcon}>
-              <Icon category={"outlined"} type={"person"} />
+              <Icon category={"outlined"} type={agentIconName as IconType} />
             </div>
             <div className={styles.agentIdentity}>
               <div className={styles.agentName}>{agent.name}</div>
