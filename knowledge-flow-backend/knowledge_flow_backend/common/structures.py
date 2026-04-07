@@ -701,9 +701,79 @@ class StorageConfig(BaseModel):
         default=None,
         description="Task store backend (optional; scheduler may fall back to defaults).",
     )
-    tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
+
+
+class TabularQueryConfig(BaseModel):
+    """
+    Runtime settings for dataset-centric SQL queries.
+
+    Why this exists:
+    - Tabular querying now runs on transient Parquet datasets rather than
+      long-lived SQL tables.
+    - These values keep query execution bounded and configurable from YAML.
+
+    How to use:
+    - Keep the default `duckdb` engine.
+    - Tune result limits and presigned URL TTL per deployment.
+    """
+
+    engine: Literal["duckdb"] = Field(
+        default="duckdb",
+        description="Embedded query engine used to read Parquet datasets.",
+    )
+    access_mode: Literal["presigned_url"] = Field(
+        default="presigned_url",
+        description="Primary object-access method for remote tabular artifacts.",
+    )
+    presigned_ttl_seconds: int = Field(
+        default=900,
+        ge=1,
+        description="TTL in seconds for generated object-storage URLs.",
+    )
+    default_max_rows: int = Field(
+        default=200,
+        ge=1,
+        description="Default preview row limit applied when callers omit max_rows.",
+    )
+    max_rows: int = Field(
+        default=1000,
+        ge=1,
+        description="Hard cap applied to query result previews.",
+    )
+
+
+class TabularConfig(BaseModel):
+    """
+    Dataset-centric tabular storage settings.
+
+    Why this exists:
+    - CSV ingestion now persists Parquet artifacts in the shared content store.
+    - One dedicated config block keeps object keys and query limits explicit.
+
+    How to use:
+    - `artifacts_prefix` namespaces Parquet datasets under the shared
+      content-store object area.
+    - `format` is intentionally fixed to `parquet` in this first version.
+    """
+
+    artifacts_prefix: str = Field(
+        default="tabular/datasets",
+        description="Prefix under content_storage objects where Parquet datasets are stored.",
+    )
+    format: Literal["parquet"] = Field(
+        default="parquet",
+        description="Physical storage format used for tabular artifacts.",
+    )
+    compression: str = Field(
+        default="snappy",
+        description="Parquet compression codec used when persisting tabular artifacts.",
+    )
+    query: TabularQueryConfig = Field(
+        default_factory=TabularQueryConfig,
+        description="Runtime limits and access settings for tabular SQL queries.",
+    )
 
 
 # ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
@@ -784,6 +854,10 @@ class Configuration(BaseModel):
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
+    tabular: TabularConfig = Field(
+        default_factory=TabularConfig,
+        description="Dataset-centric tabular artifact and query configuration.",
+    )
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
     # Workspace storage layout (paths for user/agent config/agent-user storage).

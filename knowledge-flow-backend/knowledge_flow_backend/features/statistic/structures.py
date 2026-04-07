@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 
 class SetDatasetRequest(BaseModel):
-    dataset_name: str
+    document_uid: str
 
 
 class DetectOutliersRequest(BaseModel):

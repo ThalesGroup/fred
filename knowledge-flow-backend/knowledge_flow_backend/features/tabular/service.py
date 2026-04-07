@@ -1,4 +1,4 @@
-# Copyright Thales 2025
+# Copyright Thales 2026
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,167 +12,459 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import asyncio
+import hashlib
 import logging
-from typing import Any, Dict, List
+import time
+from dataclasses import dataclass
+from datetime import timedelta
 
-from fred_core import Action, KeycloakUser, Resource, authorize
-from fred_core.store import StoreInfo
+import duckdb
+import pandas as pd
+from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, Resource, authorize
 
-from knowledge_flow_backend.features.tabular.structures import (
-    DTypes,
-    GetSchemaResponse,
-    ListTablesResponse,
-    RawSQLResponse,
-    TabularColumnSchema,
+from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.document_structures import DocumentMetadata
+from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
+from knowledge_flow_backend.features.tabular.artifacts import (
+    TabularArtifactV1,
+    build_default_query_alias,
+    read_tabular_artifact,
 )
-from knowledge_flow_backend.features.tabular.utils import check_read_query, check_write_query
+from knowledge_flow_backend.features.tabular.structures import (
+    RawSQLResponse,
+    TabularDatasetResponse,
+    TabularDatasetSchemaResponse,
+    TabularQueryRequest,
+)
+from knowledge_flow_backend.features.tabular.utils import validate_read_query
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ResolvedDataset:
+    """
+    Authorized dataset ready to be exposed or mounted in DuckDB.
+
+    Why this exists:
+    - The service needs one internal structure carrying the metadata record, the
+      stored tabular artifact, and the stable SQL alias at the same time.
+
+    How to use:
+    - Build these with `_resolve_authorized_datasets(...)`.
+    - Convert them to API payloads or mount them in DuckDB for one query.
+    """
+
+    metadata: DocumentMetadata
+    artifact: TabularArtifactV1
+    query_alias: str
+
+
 class TabularService:
     """
-    Service pour la gestion tabulaire multi-base.
+    Dataset-centric tabular service backed by document metadata and content storage.
 
-    Désormais, un store doit être explicitement chargé via `load_store(db_name)`
-    avant d'exécuter des opérations. Si aucun store n'est chargé, les méthodes
-    lèvent une erreur invitant à appeler `load_store()` d'abord.
+    Why this exists:
+    - Read-only SQL access must now follow document-level ReBAC rather than
+      exposing every ingested table globally.
+
+    How to use:
+    - The controller calls `list_datasets`, `describe_dataset`, `read_dataset_frame`,
+      and `query_read`.
+    - Every method filters datasets through document-level permissions before
+      exposing schema or data.
     """
 
-    def __init__(self, stores_info: Dict[str, StoreInfo]):
-        self.stores_info = stores_info
-
-    def _check_write_allowed(self, db_name: str):
-        store_info = self.stores_info.get(db_name)
-        if store_info and store_info.mode != "read_and_write":
-            raise PermissionError(f"Write operations are not allowed on database '{db_name}'")
-
-    def _sanitize_table_name(self, name: str) -> str:
-        return name.replace("-", "_")
-
-    def _map_sql_type_to_literal(self, duckdb_type: str) -> DTypes:
-        duckdb_type = duckdb_type.lower()
-        if any(x in duckdb_type for x in ["varchar", "string", "text"]):
-            return "string"
-        if "boolean" in duckdb_type:
-            return "boolean"
-        if any(x in duckdb_type for x in ["timestamp", "date", "time"]):
-            return "datetime"
-        if any(x in duckdb_type for x in ["double", "real", "float"]):
-            return "float"
-        if "int" in duckdb_type:
-            return "integer"
-        return "unknown"
-
-    # -------------------------------------------------------------------------
-    # Main functions
-    # -------------------------------------------------------------------------
-
-    @authorize(action=Action.READ, resource=Resource.TABLES_DATABASES)
-    def list_databases(self, user: KeycloakUser) -> List[str]:
-        return list(self.stores_info.keys())
-
-    @authorize(action=Action.READ, resource=Resource.TABLES)
-    def describe_table(self, user: KeycloakUser, db_name: str, table_name: str) -> GetSchemaResponse:
-        store = self.stores_info[db_name].store
-        table_name = self._sanitize_table_name(table_name)
-        schema = store.get_table_schema(table_name)
-        columns = [TabularColumnSchema(name=col, dtype=self._map_sql_type_to_literal(dtype)) for col, dtype in schema]
-        count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table_name}"')
-        row_count = int(count_df["count"].iloc[0])
-        return GetSchemaResponse(db_name=db_name, table_name=table_name, columns=columns, row_count=row_count)
-
-    @authorize(action=Action.READ, resource=Resource.TABLES)
-    def list_tables(self, user: KeycloakUser, db_name: str) -> ListTablesResponse:
-        store = self.stores_info[db_name].store
-        table_names = store.list_tables()
-        return ListTablesResponse(db_name=db_name, tables=table_names)
-
-    @authorize(action=Action.READ, resource=Resource.TABLES)
-    def list_tables_with_schema(self, user: KeycloakUser, db_name: str) -> List[GetSchemaResponse]:
-        store = self.stores_info[db_name].store
-        responses = []
-        table_names = store.list_tables()
-        for table in table_names:
-            try:
-                schema_info = store.get_table_schema(table)
-                columns = [TabularColumnSchema(name=col_name, dtype=self._map_sql_type_to_literal(col_type)) for col_name, col_type in schema_info]
-                count_df = store.execute_sql_query(f'SELECT COUNT(*) AS count FROM "{table}"')
-                row_count = int(count_df["count"].iloc[0])
-                responses.append(
-                    GetSchemaResponse(
-                        db_name=db_name,
-                        table_name=table,
-                        columns=columns,
-                        row_count=row_count,
-                    )
-                )
-            except Exception as e:
-                logger.warning(f"[{db_name}] Failed to load schema for {table}: {e}")
-                continue
-        return responses
-
-    def get_context(self, user: KeycloakUser) -> Dict[str, Any]:
+    def __init__(self):
         """
-        Returns the context of all databases and tables with schema info.
-        This can be used by LLM agents to understand the available datasets.
+        Wire the shared stores needed by the dataset-centric tabular runtime.
+
+        Why this exists:
+        - Tabular listing and querying now depend on metadata, ReBAC, content
+          storage, and runtime query configuration at the same time.
+
+        How to use:
+        - Instantiate once inside `TabularController`.
         """
-        context = {}
-        try:
-            databases = self.list_databases(user)
-            for db_name in databases:
-                n_tables = len(self.list_tables(user, db_name).tables)
-                tables_info = self.list_tables_with_schema(user, db_name)
-                context[db_name] = []
-                for table in tables_info:
-                    table_info = {
-                        "table_name": table.table_name,
-                        "columns": [{"name": col.name, "dtype": col.dtype} for col in table.columns] if n_tables < 5 else len(table.columns),
-                        "row_count": table.row_count,
-                    }
-                    context[db_name].append(table_info)
-        except Exception as e:
-            logger.warning(f"Failed to get context: {e}")
-        return context
 
-    @authorize(action=Action.READ, resource=Resource.TABLES)
-    def query_read(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
-        sql = query.strip().lower()
-        sql = check_read_query(sql)
-        store = self.stores_info[db_name].store
-        df = store.execute_sql_query(query)
+        context = ApplicationContext.get_instance()
+        self.metadata_store = context.get_metadata_store()
+        self.content_store = context.get_content_store()
+        self.rebac = context.get_rebac_engine()
+        self.tabular_config = context.get_config().tabular
 
-        return RawSQLResponse(
-            db_name=db_name,
-            sql_query=query,
-            rows=df.to_dict(orient="records"),
-            error=None,
+    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
+    async def list_datasets(self, user: KeycloakUser) -> list[TabularDatasetResponse]:
+        """
+        List every tabular dataset the current user is allowed to read.
+
+        Why this exists:
+        - The SQL agent and the API both need one document-scoped inventory of
+          queryable datasets.
+
+        How to use:
+        - Call from `GET /tabular/datasets`.
+        """
+
+        datasets = await self._resolve_authorized_datasets(user)
+        return [self._dataset_to_response(dataset) for dataset in datasets]
+
+    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
+    async def describe_dataset(self, user: KeycloakUser, document_uid: str) -> TabularDatasetSchemaResponse:
+        """
+        Return the schema of one authorized dataset.
+
+        Why this exists:
+        - Dataset schema exposure must follow the same document-level access
+          checks as query execution.
+
+        How to use:
+        - Call from `GET /tabular/datasets/{document_uid}/schema`.
+        """
+
+        dataset = await self._get_dataset_or_raise(user=user, document_uid=document_uid)
+        return TabularDatasetSchemaResponse(
+            document_uid=dataset.metadata.document_uid,
+            document_name=dataset.metadata.document_name,
+            query_alias=dataset.query_alias,
+            columns=dataset.artifact.columns,
+            row_count=dataset.artifact.row_count,
+            source_tag=dataset.metadata.source_tag,
+            generated_at=dataset.artifact.generated_at,
         )
 
-    # -------------------------------------------------------------------------
-    # "read_and_write" functions
-    # -------------------------------------------------------------------------
+    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
+    async def read_dataset_frame(self, user: KeycloakUser, document_uid: str) -> pd.DataFrame:
+        """
+        Load one authorized dataset into a pandas DataFrame.
 
-    @authorize(action=Action.UPDATE, resource=Resource.TABLES)
-    @authorize(action=Action.CREATE, resource=Resource.TABLES)
-    @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    def query_write(self, user: KeycloakUser, db_name: str, query: str) -> RawSQLResponse:
-        sql = query.strip()
-        if not sql:
-            raise ValueError("Empty SQL string provided")
-        store = self.stores_info[db_name].store
-        self._check_write_allowed(db_name)
-        sql = check_write_query(sql)
-        store.execute_update_query(sql)
-        return RawSQLResponse(db_name=db_name, sql_query=sql, rows=[], error=None)
+        Why this exists:
+        - The statistic feature still operates on in-memory pandas DataFrames.
+        - Reusing the dataset-centric resolver keeps those reads aligned with
+          the same document-level permissions as SQL queries.
 
-    @authorize(action=Action.DELETE, resource=Resource.TABLES)
-    def delete_table(self, user: KeycloakUser, db_name: str, table_name: str) -> None:
-        self._check_write_allowed(db_name)
+        How to use:
+        - Pass the current user and the dataset `document_uid` selected from
+          `list_datasets`.
+        """
+
+        dataset = await self._get_dataset_or_raise(user=user, document_uid=document_uid)
+        connection = duckdb.connect(database=":memory:")
         try:
-            store = self.stores_info[db_name].store
-            store.delete_table(table_name)
-            logger.info(f"Table '{table_name}' deleted from database '{db_name}'")
-        except Exception as e:
-            logger.error(f"Failed to delete table '{table_name}' from '{db_name}': {e}")
-            raise
+            location = self._resolve_dataset_location(dataset.artifact.object_key)
+            if self._requires_httpfs(location):
+                self._ensure_httpfs_ready(connection)
+            return connection.from_parquet(location).df()
+        finally:
+            connection.close()
+
+    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
+    async def query_read(
+        self,
+        user: KeycloakUser,
+        *,
+        request: TabularQueryRequest,
+    ) -> RawSQLResponse:
+        """
+        Execute one read-only SQL query against authorized datasets only.
+
+        Why this exists:
+        - The runtime must mount only the caller's readable datasets in a fresh
+          DuckDB session and keep every query read-only.
+
+        How to use:
+        - Provide a validated `TabularQueryRequest`.
+        """
+
+        available_datasets = await self._resolve_authorized_datasets(user)
+        selected_datasets = await self._select_query_datasets(
+            user=user,
+            request=request,
+            available_datasets=available_datasets,
+        )
+        if not selected_datasets:
+            raise ValueError("No authorized tabular datasets are available for this query")
+
+        allowed_aliases = {dataset.query_alias for dataset in selected_datasets}
+        sql_query = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
+
+        started_at = time.perf_counter()
+        sql_hash = hashlib.sha256(sql_query.encode("utf-8")).hexdigest()
+        effective_max_rows = min(
+            request.max_rows or self.tabular_config.query.default_max_rows,
+            self.tabular_config.query.max_rows,
+        )
+
+        connection = duckdb.connect(database=":memory:")
+        try:
+            await self._mount_datasets(connection=connection, datasets=selected_datasets)
+            limited_query = f"SELECT * FROM ({sql_query}) AS fred_result LIMIT {effective_max_rows}"
+            rows_df = connection.execute(limited_query).df()
+            rows = rows_df.to_dict(orient="records")
+        finally:
+            connection.close()
+
+        duration_ms = (time.perf_counter() - started_at) * 1000
+        logger.info(
+            "[TABULAR] user=%s datasets=%s aliases=%s sql_sha256=%s rows=%s duration_ms=%.2f",
+            user.uid,
+            [dataset.metadata.document_uid for dataset in selected_datasets],
+            [dataset.query_alias for dataset in selected_datasets],
+            sql_hash,
+            len(rows),
+            duration_ms,
+        )
+
+        return RawSQLResponse(
+            sql_query=sql_query,
+            rows=rows,
+            error=None,
+            dataset_uids=[dataset.metadata.document_uid for dataset in selected_datasets],
+            query_aliases=[dataset.query_alias for dataset in selected_datasets],
+        )
+
+    async def _resolve_authorized_datasets(self, user: KeycloakUser) -> list[ResolvedDataset]:
+        """
+        Resolve every readable document that has a tabular artifact.
+
+        Why this exists:
+        - Dataset listing, schema lookup, and query execution all need the same
+          filtered, alias-stable view of authorized tabular documents.
+
+        How to use:
+        - Call once per request and reuse the resulting list for downstream
+          selection or API formatting.
+        """
+
+        authorized_document_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
+        documents = await self.metadata_store.get_all_metadata({})
+
+        if isinstance(authorized_document_ref, RebacDisabledResult):
+            visible_documents = documents
+        else:
+            authorized_ids = {document.id for document in authorized_document_ref}
+            visible_documents = [document for document in documents if document.document_uid in authorized_ids]
+
+        resolved_datasets: list[ResolvedDataset] = []
+        used_aliases: set[str] = set()
+        for metadata in visible_documents:
+            artifact = read_tabular_artifact(metadata)
+            if artifact is None:
+                continue
+
+            base_alias = build_default_query_alias(metadata.document_uid, metadata.document_name)
+            query_alias = base_alias
+            suffix = 2
+            while query_alias in used_aliases:
+                query_alias = f"{base_alias}_{suffix}"
+                suffix += 1
+            used_aliases.add(query_alias)
+
+            resolved_datasets.append(
+                ResolvedDataset(
+                    metadata=metadata,
+                    artifact=artifact,
+                    query_alias=query_alias,
+                )
+            )
+
+        return resolved_datasets
+
+    async def _get_dataset_or_raise(self, *, user: KeycloakUser, document_uid: str) -> ResolvedDataset:
+        """
+        Return one authorized dataset or raise the appropriate access/not-found error.
+
+        Why this exists:
+        - Schema lookup and explicit query scoping need one clear path that does
+          not leak unauthorized datasets.
+
+        How to use:
+        - Pass the current user and target document uid.
+        """
+
+        datasets = await self._resolve_authorized_datasets(user)
+        dataset_by_uid = {dataset.metadata.document_uid: dataset for dataset in datasets}
+        if document_uid in dataset_by_uid:
+            return dataset_by_uid[document_uid]
+
+        if not await self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid):
+            raise PermissionError(f"Not authorized to read dataset '{document_uid}'")
+        raise FileNotFoundError(f"Tabular dataset '{document_uid}' was not found")
+
+    async def _select_query_datasets(
+        self,
+        *,
+        user: KeycloakUser,
+        request: TabularQueryRequest,
+        available_datasets: list[ResolvedDataset],
+    ) -> list[ResolvedDataset]:
+        """
+        Resolve the dataset subset requested for one SQL query.
+
+        Why this exists:
+        - Query callers may scope execution to a subset of readable datasets.
+        - Explicitly requested datasets must return `403` when the user is not
+          allowed to read them.
+
+        How to use:
+        - Pass the full readable dataset list from `_resolve_authorized_datasets`.
+        """
+
+        if not request.dataset_uids:
+            return available_datasets
+
+        requested_uids = list(dict.fromkeys(request.dataset_uids))
+        dataset_by_uid = {dataset.metadata.document_uid: dataset for dataset in available_datasets}
+
+        missing_uids = [document_uid for document_uid in requested_uids if document_uid not in dataset_by_uid]
+        if missing_uids:
+            permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
+            forbidden_uids = [document_uid for document_uid, allowed in zip(missing_uids, permission_checks) if not allowed]
+            if forbidden_uids:
+                logger.warning("[TABULAR] user=%s requested forbidden datasets=%s", user.uid, forbidden_uids)
+                raise PermissionError(f"Not authorized to read datasets: {', '.join(forbidden_uids)}")
+            raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
+
+        return [dataset_by_uid[document_uid] for document_uid in requested_uids]
+
+    async def _mount_datasets(
+        self,
+        *,
+        connection: duckdb.DuckDBPyConnection,
+        datasets: list[ResolvedDataset],
+    ) -> None:
+        """
+        Mount authorized Parquet datasets as temporary DuckDB views.
+
+        Why this exists:
+        - DuckDB is not the security boundary; only the views registered in the
+          session are visible to the query.
+
+        How to use:
+        - Call on a fresh in-memory connection before executing one SQL query.
+        """
+
+        dataset_locations: list[tuple[ResolvedDataset, str]] = []
+        for dataset in datasets:
+            location = self._resolve_dataset_location(dataset.artifact.object_key)
+            dataset_locations.append((dataset, location))
+
+        if any(self._requires_httpfs(location) for _, location in dataset_locations):
+            self._ensure_httpfs_ready(connection)
+
+        for dataset, location in dataset_locations:
+            connection.from_parquet(location).create_view(dataset.query_alias)
+
+    def _resolve_dataset_location(self, object_key: str) -> str:
+        """
+        Resolve one content-store object to a DuckDB-readable location.
+
+        Why this exists:
+        - Remote object stores use presigned URLs through DuckDB `httpfs`.
+        - The local filesystem content store used in local development and
+          offline tests should expose a direct file path instead of emulating a
+          remote download flow.
+
+        How to use:
+        - Call while mounting the per-query DuckDB session.
+        """
+
+        try:
+            return self.content_store.get_presigned_url(
+                object_key,
+                expires=timedelta(seconds=self.tabular_config.query.presigned_ttl_seconds),
+            )
+        except NotImplementedError:
+            return self._resolve_local_dataset_path(object_key)
+
+    def _resolve_local_dataset_path(self, object_key: str) -> str:
+        """
+        Resolve one dataset artifact to its real local filesystem path.
+
+        Why this exists:
+        - The local filesystem content store does not expose presigned URLs.
+        - Local development and test setups should still query tabular
+          artifacts directly from disk.
+
+        How to use:
+        - Called only when the content store does not support presigned URLs.
+        """
+
+        if isinstance(self.content_store, FileSystemContentStore):
+            local_path = self.content_store.object_root / object_key.lstrip("/")
+            if not local_path.exists():
+                raise FileNotFoundError(f"Tabular artifact '{object_key}' was not found in local content storage")
+            return str(local_path)
+
+        raise RuntimeError("Tabular querying requires presigned URLs or a local filesystem content store")
+
+    def _ensure_httpfs_ready(self, connection: duckdb.DuckDBPyConnection) -> None:
+        """
+        Ensure DuckDB `httpfs` is available for remote Parquet access.
+
+        Why this exists:
+        - The S3-compatible runtime is intentionally `httpfs`-based.
+        - Kubernetes/offline deployments preinstall the extension in the image,
+          while connected environments may still need one best-effort
+          `INSTALL httpfs` before the query can proceed.
+
+        How to use:
+        - Call before executing `from_parquet(...)` on HTTP(S) locations.
+        """
+
+        try:
+            connection.execute("LOAD httpfs")
+            return
+        except Exception as load_exc:  # noqa: BLE001
+            logger.info(
+                "[TABULAR] DuckDB httpfs not yet available, trying INSTALL+LOAD: %s",
+                load_exc,
+            )
+        try:
+            connection.execute("INSTALL httpfs")
+            connection.execute("LOAD httpfs")
+        except Exception as install_exc:  # noqa: BLE001
+            raise RuntimeError(
+                "DuckDB httpfs is required for remote tabular dataset access. Preinstall it in the runtime image for offline/containerized deployments, or allow DuckDB to install extensions at startup in connected environments."
+            ) from install_exc
+
+    def _requires_httpfs(self, location: str) -> bool:
+        """
+        Return whether one dataset location points to an HTTP(S) resource.
+
+        Why this exists:
+        - The tabular runtime needs one small predicate to decide when DuckDB
+          `httpfs` must be loaded.
+
+        How to use:
+        - Pass the location returned by `_resolve_dataset_location(...)`.
+        """
+
+        return location.startswith(("http://", "https://"))
+
+    def _dataset_to_response(self, dataset: ResolvedDataset) -> TabularDatasetResponse:
+        """
+        Convert one resolved dataset into the REST response model.
+
+        Why this exists:
+        - The list endpoint should expose one stable, serializable view of
+          authorized datasets without leaking the internal content-store key.
+
+        How to use:
+        - Use for `GET /tabular/datasets`.
+        """
+
+        return TabularDatasetResponse(
+            document_uid=dataset.metadata.document_uid,
+            document_name=dataset.metadata.document_name,
+            query_alias=dataset.query_alias,
+            row_count=dataset.artifact.row_count,
+            columns=dataset.artifact.columns,
+            tag_ids=list(dataset.metadata.tags.tag_ids or []),
+            tag_names=list(dataset.metadata.tags.tag_names or []),
+            source_tag=dataset.metadata.source_tag,
+            generated_at=dataset.artifact.generated_at,
+        )

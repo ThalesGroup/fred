@@ -16,7 +16,8 @@
 Tabular helpers used by the SQL agent.
 
 These functions keep the SQL steps focused on business flow: discover the
-available databases, list tables in one database, and read query rows.
+available datasets, list query aliases in one logical collection, and read
+query rows.
 """
 
 from __future__ import annotations
@@ -26,10 +27,12 @@ from collections.abc import Mapping
 
 from agentic_backend.core.agents.v2 import GraphNodeContext
 
+_DATASET_COLLECTION_NAME = "tabular"
+
 
 async def get_database_context(context: GraphNodeContext) -> dict[str, object]:
     """
-    Load the current database and table context for the SQL agent.
+    Load the current dataset context for the SQL agent.
 
     Example:
     ```python
@@ -37,17 +40,17 @@ async def get_database_context(context: GraphNodeContext) -> dict[str, object]:
     ```
     """
 
-    raw_context = await context.invoke_runtime_tool("get_context", {})
+    raw_context = await context.invoke_runtime_tool("list_tabular_datasets", {})
     return normalize_database_context(raw_context)
 
 
 def normalize_database_context(raw_context: object) -> dict[str, object]:
     """
-    Normalize raw tabular context into one predictable mapping.
+    Normalize dataset-centric payloads into the legacy SQL-agent mapping shape.
 
     Example:
     ```python
-    context_map = normalize_database_context('{"sales": []}')
+    context_map = normalize_database_context('[{"query_alias": "sales"}]')
     ```
     """
 
@@ -56,7 +59,24 @@ def normalize_database_context(raw_context: object) -> dict[str, object]:
             decoded = json.loads(raw_context)
         except Exception:
             return {}
-        return decoded if isinstance(decoded, dict) else {}
+        raw_context = decoded
+
+    if isinstance(raw_context, list):
+        return {
+            _DATASET_COLLECTION_NAME: [
+                {
+                    "table_name": item.get("query_alias"),
+                    "columns": item.get("columns", []),
+                    "row_count": item.get("row_count"),
+                    "document_uid": item.get("document_uid"),
+                    "document_name": item.get("document_name"),
+                    "source_tag": item.get("source_tag"),
+                }
+                for item in raw_context
+                if isinstance(item, dict) and isinstance(item.get("query_alias"), str)
+            ]
+        }
+
     return raw_context if isinstance(raw_context, dict) else {}
 
 
@@ -99,16 +119,18 @@ async def read_query_rows(
     ```python
     rows = await read_query_rows(
         context,
-        db_name="analytics",
+        db_name="tabular",
         query="SELECT * FROM sales LIMIT 20",
         maximum=20,
     )
     ```
     """
 
+    del db_name
+
     raw_result = await context.invoke_runtime_tool(
         "read_query",
-        {"db_name": db_name, "query": query},
+        {"sql": query},
     )
     return extract_query_rows(raw_result, maximum=maximum)
 
