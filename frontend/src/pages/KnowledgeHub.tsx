@@ -82,7 +82,7 @@ export const KnowledgeHub = () => {
                 {t("knowledge.viewSelector.userAssets", "My Files (agents & me)")}
               </Button>
             </InvisibleLink>
-       {/*     <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=operations`}>
+            {/*     <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=operations`}>
               <Button variant={selectedView === "operations" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.operations")}
               </Button>

@@ -9,10 +9,7 @@ export function KnowledgePage() {
   const { teamId } = useParams<{ teamId: string }>();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const isPersonalTeam = teamId === userDetails?.personalTeam.id;
-  const { data: fetchedTeam } = useGetTeamQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId || isPersonalTeam },
-  );
+  const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? fetchedTeam : userDetails?.personalTeam;
 
   // todo: handle error (404)
