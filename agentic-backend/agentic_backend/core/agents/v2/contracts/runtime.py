@@ -184,6 +184,14 @@ class SpanPort(ABC):
         """Attach a scalar attribute to the current span."""
 
     @abstractmethod
+    def set_input(self, value: object) -> None:
+        """Set the input payload shown in the trace UI (any JSON-serialisable object)."""
+
+    @abstractmethod
+    def set_output(self, value: object) -> None:
+        """Set the output payload shown in the trace UI (any JSON-serialisable object)."""
+
+    @abstractmethod
     def end(self) -> None:
         """Finish the span."""
 
@@ -196,8 +204,15 @@ class TracerPort(ABC):
         name: str,
         context: PortableContext,
         attributes: Mapping[str, JsonScalar] | None = None,
+        trace_id: str | None = None,
     ) -> SpanPort:
-        """Start a span bound to the portable execution context."""
+        """Start a span bound to the portable execution context.
+
+        When *trace_id* is provided, the span is attached to that specific
+        trace instead of deriving one from the context seed. Pass the same
+        value to every span that belongs to the same logical execution so they
+        never bleed into a neighbouring execution's trace.
+        """
 
 
 class TokenProviderPort(ABC):

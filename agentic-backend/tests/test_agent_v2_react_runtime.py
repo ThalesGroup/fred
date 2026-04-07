@@ -273,6 +273,12 @@ class RecordingSpan(SpanPort):
     def set_attribute(self, key: str, value: object) -> None:
         self._record["attributes"][key] = value
 
+    def set_input(self, value: object) -> None:
+        self._record["input"] = value
+
+    def set_output(self, value: object) -> None:
+        self._record["output"] = value
+
     def end(self) -> None:
         self._sink.append(self._record)
 

@@ -25,7 +25,6 @@ from typing import Protocol, cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import VectorSearchHit
-from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
@@ -51,6 +50,7 @@ from ..contracts.models import (
     GraphAgentDefinition,
     GraphConditionalDefinition,
     GraphDefinition,
+    GraphNodeShape,
 )
 from ..contracts.runtime import (
     AgentRuntime,
@@ -277,6 +277,7 @@ class _GraphNodeExecutionContext:
     node_id: str
     allowed_tool_refs: frozenset[str]
     runtime_tools: Mapping[str, BaseTool]
+    execution_trace_id: str | None = None
     _events: list[RuntimeEvent] = field(default_factory=list)
     _resume_payload: object | None = None
 
@@ -318,6 +319,8 @@ class _GraphNodeExecutionContext:
                 "model_name": model_name,
             },
         )
+        if span is not None:
+            span.set_input({"messages": _serialize_messages(messages)})
         with _graph_phase_timer(
             kpi=self.services.kpi,
             binding=self.binding,
@@ -330,16 +333,29 @@ class _GraphNodeExecutionContext:
                 "model_name": model_name,
             },
         ):
-            lc_callbacks = cast(
-                list[BaseCallbackHandler], list(self.services.langchain_callbacks)
-            )
-            lc_config = RunnableConfig(callbacks=lc_callbacks) if lc_callbacks else None
             try:
                 response = cast(
                     BaseMessage,
-                    await resolved_model.ainvoke(messages, config=lc_config),
+                    await resolved_model.ainvoke(messages),
                 )
                 if span is not None:
+                    content = response.content
+                    if not isinstance(content, str):
+                        content = str(content)
+                    span.set_output({"content": content[:_MAX_CONTENT_LEN]})
+                    usage_meta = getattr(response, "response_metadata", {}) or {}
+                    token_usage = (
+                        usage_meta.get("token_usage")
+                        or usage_meta.get("usage")
+                        or {}
+                    )
+                    if isinstance(token_usage, dict):
+                        in_tok = token_usage.get("prompt_tokens") or token_usage.get("input_tokens")
+                        out_tok = token_usage.get("completion_tokens") or token_usage.get("output_tokens")
+                        if in_tok is not None:
+                            span.set_attribute("input_tokens", int(in_tok))
+                        if out_tok is not None:
+                            span.set_attribute("output_tokens", int(out_tok))
                     span.set_attribute("status", "ok")
                 return response
             except Exception:
@@ -389,6 +405,8 @@ class _GraphNodeExecutionContext:
             output_model,
             method="json_schema",
         )
+        if span is not None:
+            span.set_input({"messages": _serialize_messages(messages)})
         with _graph_phase_timer(
             kpi=self.services.kpi,
             binding=self.binding,
@@ -402,12 +420,8 @@ class _GraphNodeExecutionContext:
                 "output_model": output_model.__name__,
             },
         ):
-            lc_callbacks = cast(
-                list[BaseCallbackHandler], list(self.services.langchain_callbacks)
-            )
-            lc_config = RunnableConfig(callbacks=lc_callbacks) if lc_callbacks else None
             try:
-                response = await structured_model.ainvoke(messages, config=lc_config)
+                response = await structured_model.ainvoke(messages)
                 if isinstance(response, output_model):
                     validated = response
                 elif isinstance(response, BaseModel):
@@ -417,6 +431,7 @@ class _GraphNodeExecutionContext:
                 else:
                     validated = output_model.model_validate(dict(response))
                 if span is not None:
+                    span.set_output(_safe_json(validated))
                     span.set_attribute("status", "ok")
                 return validated
             except Exception:
@@ -836,6 +851,17 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         config: ExecutionConfig,
         emit_event: Callable[[RuntimeEvent], None] | None,
     ) -> BaseModel:
+        root_span = _start_runtime_span(
+            services=self._services,
+            binding=self._binding,
+            name="v2.graph.execution",
+            attributes={
+                "agent_id": self._definition.agent_id,
+                "graph": _graph_to_mermaid(self._graph),
+            },
+        )
+        if root_span is not None:
+            root_span.set_input(_safe_json(input_model))
         state, node_id, resume_payload = await self._starting_point(
             input_model=input_model,
             config=config,
@@ -843,7 +869,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         checkpoint_key = self._checkpoint_key(config)
         steps = 0
         try:
-            return await self._execute_loop(
+            result = await self._execute_loop(
                 state=state,
                 node_id=node_id,
                 resume_payload=resume_payload,
@@ -852,16 +878,25 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 config=config,
                 emit_event=emit_event,
             )
+            if root_span is not None:
+                root_span.set_output(_safe_json(result))
+                root_span.set_attribute("status", "ok")
+            return result
         except Exception as exc:
             logger.exception(
                 "[V2][GRAPH] Unhandled exception in graph agent=%s",
                 self._definition.agent_id,
             )
+            if root_span is not None:
+                root_span.set_attribute("status", "error")
             error_content = f"An error occurred: {exc}"
             if emit_event is not None:
                 emit_event(FinalRuntimeEvent(sequence=0, content=error_content))
                 return GraphExecutionOutput(content=error_content)
             raise
+        finally:
+            if root_span is not None:
+                root_span.end()
 
     async def _execute_loop(
         self,
@@ -893,16 +928,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 runtime_tools=self._runtime_tools,
                 _resume_payload=resume_payload,
             )
-            node_span = _start_runtime_span(
-                services=self._services,
-                binding=self._binding,
-                name="v2.graph.node",
-                attributes={
-                    "agent_id": self._definition.agent_id,
-                    "node_id": node_id,
-                    "step_index": steps,
-                },
-            )
             with _graph_phase_timer(
                 kpi=self._services.kpi,
                 binding=self._binding,
@@ -919,12 +944,8 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                         else cast(GraphNodeResult, raw_result)
                     )
                     result = GraphNodeResult.model_validate(result)
-                    if node_span is not None:
-                        node_span.set_attribute("status", "ok")
                 except _AwaitHumanInterrupt as interrupt:
                     kpi_dims["status"] = "awaiting_human"
-                    if node_span is not None:
-                        node_span.set_attribute("status", "awaiting_human")
                     pending_checkpoint = _PendingGraphCheckpoint(
                         state=state,
                         node_id=node_id,
@@ -951,13 +972,6 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                     raise RuntimeError(
                         "Graph execution is awaiting human input. Use stream() to surface the request."
                     ) from interrupt
-                except Exception:
-                    if node_span is not None:
-                        node_span.set_attribute("status", "error")
-                    raise
-                finally:
-                    if node_span is not None:
-                        node_span.end()
 
             if emit_event is not None:
                 for event in node_context.events:
@@ -1446,12 +1460,60 @@ def _graph_phase_timer(
     )
 
 
+_MAX_CONTENT_LEN = 2000
+
+
+def _safe_json(obj: object) -> object:
+    """Return a JSON-compatible representation of *obj* without raising."""
+    try:
+        if isinstance(obj, BaseModel):
+            return obj.model_dump(mode="json")
+        if isinstance(obj, (dict, list, str, int, float, bool)) or obj is None:
+            return obj
+        return str(obj)
+    except Exception:
+        return str(obj)
+
+
+def _serialize_messages(messages: list[BaseMessage]) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for msg in messages:
+        content = msg.content
+        if isinstance(content, list):
+            content = "[multimodal]"
+        elif not isinstance(content, str):
+            content = str(content)
+        result.append({"role": msg.type, "content": content[:_MAX_CONTENT_LEN]})
+    return result
+
+
+def _graph_to_mermaid(graph: GraphDefinition) -> str:
+    lines = ["flowchart TD"]
+    for node in graph.nodes:
+        label = node.title.replace('"', "'")
+        if node.shape == GraphNodeShape.DIAMOND:
+            lines.append(f'    {node.node_id}{{"{label}"}}')
+        elif node.shape == GraphNodeShape.ROUND:
+            lines.append(f'    {node.node_id}("{label}")')
+        else:
+            lines.append(f'    {node.node_id}["{label}"]')
+    for edge in graph.edges:
+        label_part = f'|"{edge.label}"|' if edge.label else ""
+        lines.append(f"    {edge.source} -->{label_part} {edge.target}")
+    for conditional in graph.conditionals:
+        for route in conditional.routes:
+            label = (route.label or route.route_key).replace('"', "'")
+            lines.append(f'    {conditional.source} -->|"{label}"| {route.target}')
+    return "\n".join(lines)
+
+
 def _start_runtime_span(
     *,
     services: RuntimeServices,
     binding: BoundRuntimeContext,
     name: str,
     attributes: Mapping[str, str | int | float | bool | None] | None = None,
+    trace_id: str | None = None,
 ):
     tracer = services.tracer
     if tracer is None:
@@ -1461,6 +1523,7 @@ def _start_runtime_span(
             name=name,
             context=binding.portable_context,
             attributes=attributes,
+            trace_id=trace_id,
         )
     except Exception:
         return None

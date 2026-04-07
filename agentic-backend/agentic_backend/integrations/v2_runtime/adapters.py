@@ -128,6 +128,8 @@ class LangfuseSpanAdapter(SpanPort):
     def __init__(self, span: "_LangfuseSpanLike"):
         self._span = span
         self._metadata: dict[str, object] = {}
+        self._input: object | None = None
+        self._output: object | None = None
         self._ended = False
 
     def set_attribute(self, key: str, value: JsonScalar) -> None:
@@ -135,12 +137,27 @@ class LangfuseSpanAdapter(SpanPort):
             return
         self._metadata[key] = value
 
+    def set_input(self, value: object) -> None:
+        if not self._ended:
+            self._input = value
+
+    def set_output(self, value: object) -> None:
+        if not self._ended:
+            self._output = value
+
     def end(self) -> None:
         if self._ended:
             return
         try:
+            update_kwargs: dict[str, object] = {}
             if self._metadata:
-                self._span.update(metadata=dict(self._metadata))
+                update_kwargs["metadata"] = dict(self._metadata)
+            if self._input is not None:
+                update_kwargs["input"] = self._input
+            if self._output is not None:
+                update_kwargs["output"] = self._output
+            if update_kwargs:
+                self._span.update(**update_kwargs)
             self._span.end()
         finally:
             self._ended = True
@@ -160,15 +177,17 @@ class LangfuseTracerAdapter(TracerPort):
         name: str,
         context: PortableContext,
         attributes: Mapping[str, JsonScalar] | None = None,
+        trace_id: str | None = None,
     ) -> SpanPort:
-        trace_seed = (
-            context.trace_id
-            or context.correlation_id
-            or context.request_id
-            or context.session_id
-            or context.actor
-        )
-        trace_id = self._client.create_trace_id(seed=trace_seed)
+        if trace_id is None:
+            trace_seed = (
+                context.trace_id
+                or context.correlation_id
+                or context.request_id
+                or context.session_id
+                or context.actor
+            )
+            trace_id = self._client.create_trace_id(seed=trace_seed)
         metadata: dict[str, object] = {
             "agent_id": context.agent_id,
             "agent_name": context.agent_name,
