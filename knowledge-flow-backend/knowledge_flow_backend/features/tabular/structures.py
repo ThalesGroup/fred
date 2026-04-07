@@ -14,6 +14,7 @@
 
 from typing import Literal, Optional
 
+from fred_core.common import OwnerFilter
 from pydantic import BaseModel, Field
 
 # -- Constants for consistent types --
@@ -80,13 +81,19 @@ class TabularQueryRequest(BaseModel):
 
     How to use:
     - Send `sql` and an optional `dataset_uids` subset.
-    - Leave `dataset_uids` empty to query every readable dataset.
+    - Leave `dataset_uids` empty to query every readable dataset in the active
+      tabular scope.
+    - Optionally pass `owner_filter`, `team_id`, and
+      `document_library_tags_ids` so SQL execution stays inside the current
+      personal/team area and selected libraries.
 
     Example:
     ```python
     request = TabularQueryRequest(
         sql="SELECT city, COUNT(*) FROM d_doc_sales GROUP BY city",
         dataset_uids=["doc-sales"],
+        owner_filter=OwnerFilter.TEAM,
+        team_id="team-a",
         max_rows=50,
     )
     ```
@@ -94,6 +101,18 @@ class TabularQueryRequest(BaseModel):
 
     sql: str = Field(..., min_length=1)
     dataset_uids: Optional[list[str]] = None
+    document_library_tags_ids: Optional[list[str]] = Field(
+        default=None,
+        description="Optional list of library tag IDs used to keep the query inside selected libraries.",
+    )
+    owner_filter: Optional[OwnerFilter] = Field(
+        default=None,
+        description="Optional ownership scope: 'personal' or 'team'.",
+    )
+    team_id: Optional[str] = Field(
+        default=None,
+        description="Team ID required when owner_filter is 'team'.",
+    )
     max_rows: Optional[int] = Field(default=None, ge=1)
 
     @property

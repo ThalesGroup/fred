@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from fred_core import KeycloakUser
+from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import (
@@ -14,8 +15,10 @@ from knowledge_flow_backend.common.document_structures import (
     Identity,
     SourceInfo,
     SourceType,
+    Tagging,
 )
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
@@ -35,11 +38,18 @@ def _user() -> KeycloakUser:
     )
 
 
-def _metadata(*, document_uid: str, file_name: str) -> DocumentMetadata:
+def _metadata(
+    *,
+    document_uid: str,
+    file_name: str,
+    tag_ids: list[str] | None = None,
+    tag_names: list[str] | None = None,
+) -> DocumentMetadata:
     return DocumentMetadata(
         identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+        tags=Tagging(tag_ids=tag_ids or [], tag_names=tag_names or []),
     )
 
 
@@ -50,12 +60,19 @@ async def _ingest_csv(
     document_uid: str,
     file_name: str,
     content: str,
+    tag_ids: list[str] | None = None,
+    tag_names: list[str] | None = None,
 ) -> DocumentMetadata:
     csv_path = tmp_path / file_name
     csv_path.write_text(content, encoding="utf-8")
 
     processor = TabularProcessor()
-    metadata = _metadata(document_uid=document_uid, file_name=file_name)
+    metadata = _metadata(
+        document_uid=document_uid,
+        file_name=file_name,
+        tag_ids=tag_ids,
+        tag_names=tag_names,
+    )
     processed_metadata = processor.process(str(csv_path), metadata)
     await metadata_store.save_metadata(processed_metadata)
     return processed_metadata
@@ -72,6 +89,41 @@ class _FakeRebac:
     async def has_user_permission(self, user, permission, resource_id):
         del user, permission
         return resource_id in self.readable_document_uids
+
+
+class _FakeTagService:
+    """
+    Minimal tag service stub used to emulate team/personal tabular scope.
+
+    Why this exists:
+    - Tabular tests need deterministic scope resolution without booting full tag
+      ReBAC fixtures.
+
+    How to use:
+    - Configure readable tags globally and optional team-specific subsets.
+    - Assign the instance to `service.tag_service`.
+    """
+
+    def __init__(
+        self,
+        *,
+        readable_tag_ids: set[str],
+        team_scopes: dict[str, set[str]] | None = None,
+        personal_scope: set[str] | None = None,
+    ) -> None:
+        self.readable_tag_ids = readable_tag_ids
+        self.team_scopes = team_scopes or {}
+        self.personal_scope = personal_scope or set()
+
+    async def list_authorized_tags_ids(self, user, owner_filter, team_id):
+        del user
+        if owner_filter is None:
+            return set(self.readable_tag_ids)
+        if owner_filter == OwnerFilter.TEAM:
+            if not team_id:
+                raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
+            return set(self.team_scopes.get(team_id, set()))
+        return set(self.personal_scope)
 
 
 class _PresignedLocalContentStore:
@@ -275,6 +327,84 @@ async def test_tabular_service_requires_httpfs_for_remote_locations(tmp_path, me
 
     with pytest.raises(RuntimeError, match="DuckDB httpfs is required"):
         await service.read_dataset_frame(_user(), "doc-sales")
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_scopes_datasets_to_active_team_and_libraries(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-team-a",
+        file_name="sales-team-a.csv",
+        content="city,amount\nParis,10\n",
+        tag_ids=["tag-team-a"],
+        tag_names=["Team A"],
+    )
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-team-b",
+        file_name="sales-team-b.csv",
+        content="city,amount\nLyon,20\n",
+        tag_ids=["tag-team-b"],
+        tag_names=["Team B"],
+    )
+
+    service = TabularService()
+    service.tag_service = _FakeTagService(
+        readable_tag_ids={"tag-team-a", "tag-team-b"},
+        team_scopes={"team-a": {"tag-team-a"}, "team-b": {"tag-team-b"}},
+    )
+
+    team_a_datasets = await service.list_datasets(
+        _user(),
+        owner_filter=OwnerFilter.TEAM,
+        team_id="team-a",
+    )
+    assert [dataset.document_uid for dataset in team_a_datasets] == ["doc-team-a"]
+
+    scoped_schema = await service.describe_dataset(
+        _user(),
+        "doc-team-a",
+        owner_filter=OwnerFilter.TEAM,
+        team_id="team-a",
+    )
+    assert scoped_schema.document_uid == "doc-team-a"
+
+    assert (
+        await service.list_datasets(
+            _user(),
+            owner_filter=OwnerFilter.TEAM,
+            team_id="team-a",
+            document_library_tags_ids=["tag-team-b"],
+        )
+    ) == []
+
+    all_datasets = await service.list_datasets(_user())
+    alias_by_uid = {dataset.document_uid: dataset.query_alias for dataset in all_datasets}
+
+    scoped_rows = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(
+            sql=f"SELECT city, amount FROM {alias_by_uid['doc-team-a']}",
+            owner_filter=OwnerFilter.TEAM,
+            team_id="team-a",
+        ),
+    )
+    assert scoped_rows.rows == [{"city": "Paris", "amount": 10}]
+
+    with pytest.raises(ValueError, match="unauthorized datasets"):
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(
+                sql=f"SELECT city, amount FROM {alias_by_uid['doc-team-b']}",
+                owner_filter=OwnerFilter.TEAM,
+                team_id="team-a",
+            ),
+        )
 
 
 def test_tabular_service_httpfs_install_is_attempted_after_load_failure():

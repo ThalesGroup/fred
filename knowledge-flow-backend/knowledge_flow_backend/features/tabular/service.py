@@ -24,10 +24,12 @@ from datetime import timedelta
 import duckdb
 import pandas as pd
 from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledResult, Resource, authorize
+from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
+from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
     build_default_query_alias,
@@ -94,38 +96,72 @@ class TabularService:
         self.metadata_store = context.get_metadata_store()
         self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
+        self.tag_service: TagService | None = None
         self.tabular_config = context.get_config().tabular
 
     @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
-    async def list_datasets(self, user: KeycloakUser) -> list[TabularDatasetResponse]:
+    async def list_datasets(
+        self,
+        user: KeycloakUser,
+        *,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> list[TabularDatasetResponse]:
         """
         List every tabular dataset the current user is allowed to read.
 
         Why this exists:
         - The SQL agent and the API both need one document-scoped inventory of
           queryable datasets.
+        - Team/personal area scoping must stay aligned with the rest of the
+          corpus features, not only with raw document readability.
 
         How to use:
         - Call from `GET /tabular/datasets`.
+        - Optionally pass `owner_filter`, `team_id`, and
+          `document_library_tags_ids` to stay inside one active area/library
+          scope.
         """
 
-        datasets = await self._resolve_authorized_datasets(user)
+        datasets = await self._resolve_authorized_datasets(
+            user,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
         return [self._dataset_to_response(dataset) for dataset in datasets]
 
     @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
-    async def describe_dataset(self, user: KeycloakUser, document_uid: str) -> TabularDatasetSchemaResponse:
+    async def describe_dataset(
+        self,
+        user: KeycloakUser,
+        document_uid: str,
+        *,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> TabularDatasetSchemaResponse:
         """
         Return the schema of one authorized dataset.
 
         Why this exists:
         - Dataset schema exposure must follow the same document-level access
           checks as query execution.
+        - Team/personal scope selection must hide datasets outside the active
+          area even when the user can read them elsewhere.
 
         How to use:
         - Call from `GET /tabular/datasets/{document_uid}/schema`.
         """
 
-        dataset = await self._get_dataset_or_raise(user=user, document_uid=document_uid)
+        dataset = await self._get_dataset_or_raise(
+            user=user,
+            document_uid=document_uid,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
         return TabularDatasetSchemaResponse(
             document_uid=dataset.metadata.document_uid,
             document_name=dataset.metadata.document_name,
@@ -137,7 +173,15 @@ class TabularService:
         )
 
     @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
-    async def read_dataset_frame(self, user: KeycloakUser, document_uid: str) -> pd.DataFrame:
+    async def read_dataset_frame(
+        self,
+        user: KeycloakUser,
+        document_uid: str,
+        *,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> pd.DataFrame:
         """
         Load one authorized dataset into a pandas DataFrame.
 
@@ -145,13 +189,22 @@ class TabularService:
         - The statistic feature still operates on in-memory pandas DataFrames.
         - Reusing the dataset-centric resolver keeps those reads aligned with
           the same document-level permissions as SQL queries.
+        - Team/personal scoping must also apply to these DataFrame reads.
 
         How to use:
         - Pass the current user and the dataset `document_uid` selected from
           `list_datasets`.
+        - Optionally pass `owner_filter`, `team_id`, and selected library tag
+          ids when the caller is bound to one active area.
         """
 
-        dataset = await self._get_dataset_or_raise(user=user, document_uid=document_uid)
+        dataset = await self._get_dataset_or_raise(
+            user=user,
+            document_uid=document_uid,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
         connection = duckdb.connect(database=":memory:")
         try:
             location = self._resolve_dataset_location(dataset.artifact.object_key)
@@ -174,12 +227,21 @@ class TabularService:
         Why this exists:
         - The runtime must mount only the caller's readable datasets in a fresh
           DuckDB session and keep every query read-only.
+        - Team/personal area scoping must flow through SQL execution exactly as
+          it does for corpus retrieval.
 
         How to use:
         - Provide a validated `TabularQueryRequest`.
+        - Set `owner_filter`, `team_id`, and `document_library_tags_ids` in the
+          request when the caller is bound to one active area/library scope.
         """
 
-        available_datasets = await self._resolve_authorized_datasets(user)
+        available_datasets = await self._resolve_authorized_datasets(
+            user,
+            document_library_tags_ids=request.document_library_tags_ids,
+            owner_filter=request.owner_filter,
+            team_id=request.team_id,
+        )
         selected_datasets = await self._select_query_datasets(
             user=user,
             request=request,
@@ -226,13 +288,22 @@ class TabularService:
             query_aliases=[dataset.query_alias for dataset in selected_datasets],
         )
 
-    async def _resolve_authorized_datasets(self, user: KeycloakUser) -> list[ResolvedDataset]:
+    async def _resolve_authorized_datasets(
+        self,
+        user: KeycloakUser,
+        *,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> list[ResolvedDataset]:
         """
         Resolve every readable document that has a tabular artifact.
 
         Why this exists:
         - Dataset listing, schema lookup, and query execution all need the same
           filtered, alias-stable view of authorized tabular documents.
+        - Active team/personal/library scope must be applied before aliases are
+          exposed or mounted in DuckDB.
 
         How to use:
         - Call once per request and reuse the resulting list for downstream
@@ -241,6 +312,12 @@ class TabularService:
 
         authorized_document_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
         documents = await self.metadata_store.get_all_metadata({})
+        scoped_tag_ids = await self._resolve_scope_tag_ids(
+            user,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
 
         if isinstance(authorized_document_ref, RebacDisabledResult):
             visible_documents = documents
@@ -251,6 +328,8 @@ class TabularService:
         resolved_datasets: list[ResolvedDataset] = []
         used_aliases: set[str] = set()
         for metadata in visible_documents:
+            if scoped_tag_ids is not None and not (set(metadata.tags.tag_ids or []) & scoped_tag_ids):
+                continue
             artifact = read_tabular_artifact(metadata)
             if artifact is None:
                 continue
@@ -273,19 +352,34 @@ class TabularService:
 
         return resolved_datasets
 
-    async def _get_dataset_or_raise(self, *, user: KeycloakUser, document_uid: str) -> ResolvedDataset:
+    async def _get_dataset_or_raise(
+        self,
+        *,
+        user: KeycloakUser,
+        document_uid: str,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> ResolvedDataset:
         """
         Return one authorized dataset or raise the appropriate access/not-found error.
 
         Why this exists:
         - Schema lookup and explicit query scoping need one clear path that does
           not leak unauthorized datasets.
+        - Active team/personal/library scope must be enforced consistently for
+          direct dataset access.
 
         How to use:
         - Pass the current user and target document uid.
         """
 
-        datasets = await self._resolve_authorized_datasets(user)
+        datasets = await self._resolve_authorized_datasets(
+            user,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
         dataset_by_uid = {dataset.metadata.document_uid: dataset for dataset in datasets}
         if document_uid in dataset_by_uid:
             return dataset_by_uid[document_uid]
@@ -329,6 +423,56 @@ class TabularService:
             raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
 
         return [dataset_by_uid[document_uid] for document_uid in requested_uids]
+
+    async def _resolve_scope_tag_ids(
+        self,
+        user: KeycloakUser,
+        *,
+        document_library_tags_ids: list[str] | None,
+        owner_filter: OwnerFilter | None,
+        team_id: str | None,
+    ) -> set[str] | None:
+        """
+        Resolve the active tabular scope to one authorized tag-id set.
+
+        Why this exists:
+        - Tabular access must follow the same library and team/personal scope
+          rules as vector search.
+
+        How to use:
+        - Call before filtering document metadata.
+        - Returns `None` when no extra tabular scope is active, so callers can
+          keep the simpler document-level ReBAC behavior.
+        """
+
+        if owner_filter is None and not document_library_tags_ids:
+            return None
+
+        authorized_tag_ids = await self._get_tag_service().list_authorized_tags_ids(
+            user,
+            owner_filter,
+            team_id,
+        )
+        if document_library_tags_ids:
+            return set(document_library_tags_ids) & authorized_tag_ids
+        return authorized_tag_ids
+
+    def _get_tag_service(self) -> TagService:
+        """
+        Return the tag service only when tabular scope resolution needs it.
+
+        Why this exists:
+        - Default tabular reads should still work in lightweight/offline test
+          environments that do not bootstrap the full tag backend.
+
+        How to use:
+        - Call from helpers that resolve `owner_filter`, `team_id`, or library
+          tag ids.
+        """
+
+        if self.tag_service is None:
+            self.tag_service = TagService()
+        return self.tag_service
 
     async def _mount_datasets(
         self,
