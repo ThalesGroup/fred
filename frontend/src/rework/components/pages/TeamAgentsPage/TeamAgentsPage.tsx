@@ -10,8 +10,10 @@ import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./TeamAgentsPage.module.scss";
+import { useFrontendProperties } from "src/hooks/useFrontendProperties.ts";
 
 export default function TeamAgentsPage() {
+  const { agentsNicknameSingular, agentsNicknamePlural } = useFrontendProperties();
   const { t } = useTranslation();
 
   const { teamId } = useParams();
@@ -64,7 +66,7 @@ export default function TeamAgentsPage() {
   return (
     <div className={styles.teamAgentContainer}>
       <div className={styles.title}>
-        {t("rework.teams.agents.title")}
+        {t("rework.teams.agents.title", { agentsNicknamePlural })}
         {canUpdateAgents && (
           <Button
             color={"primary"}
@@ -73,7 +75,7 @@ export default function TeamAgentsPage() {
             icon={{ category: "outlined", type: "add" }}
             onClick={handleOpenCreateAgent}
           >
-            {t("rework.teams.agents.create")}
+            {t("rework.teams.agents.create", { agentsNicknameSingular })}
           </Button>
         )}
       </div>

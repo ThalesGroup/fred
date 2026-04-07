@@ -1323,14 +1323,12 @@
       "memberCount": "{{count}} membres"
     },
     "sidebar": {
-      "title": "Fred",
       "team": {
         "avatarAlt": "Équipe {{teamName}}",
         "bannerAlt": "Bannière de l'équipe",
         "userTeam": "Espace personel",
         "marketplace": "Marketplace",
         "menu": {
-          "agents": "Agents",
           "resources": "Ressources",
           "apps": "Apps"
         }
@@ -1339,7 +1337,6 @@
         "title": "Marketplace",
         "menu": {
           "teams": "Equipe",
-          "agents": "Agents",
           "tools": "Tools",
           "apps": "Apps"
         }
@@ -1360,7 +1357,7 @@
       },
       "conversationProfile": {
         "title": "Profil de conversation",
-        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos agents doivent s’adresser à vous."
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
       }
     },
     "teamSettings": {
@@ -1400,14 +1397,14 @@
         "privateTeam": "Equipe privé",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
-          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d’équipe."
         }
       }
     },
     "teams": {
       "agents": {
-        "title": "Sollicitez vos Agents",
-        "create": "Créer Agent"
+        "title": "Sollicitez vos {{agentsNicknamePlural}}",
+        "create": "Créer {{agentsNicknameSingular}}"
       }
     },
     "marketplace": {

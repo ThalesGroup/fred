@@ -6,12 +6,14 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 
 interface UserSettingsPageProps {
   modalInteraction: ModalInteractionProps;
 }
 
 export default function UserSettingsPage({ modalInteraction }: UserSettingsPageProps) {
+  const { agentsNicknamePlural } = useFrontendProperties();
   const { t } = useTranslation();
   // TODO Enable when Light mode is complete
   // const { themeMode, setThemeMode } = useContext(ApplicationContext);
@@ -99,7 +101,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
         <TextArea
           disabled={true}
           label={t("rework.userSettings.conversationProfile.title")}
-          placeholder={t("rework.userSettings.conversationProfile.placeholder")}
+          placeholder={t("rework.userSettings.conversationProfile.placeholder", { agentsNicknamePlural })}
           maxLength={300}
         ></TextArea>
       </div>
