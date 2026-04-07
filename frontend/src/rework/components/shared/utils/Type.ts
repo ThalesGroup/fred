@@ -54,9 +54,11 @@ export type MaterialIconType =
   | "visibility"
   | "visibility_off"
   | "reviews"
-  | "delete_forever";
+  | "delete_forever"
+  | "lock";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;
 
-export const isCustomIcon = (icon: IconType): icon is CustomIconType => customIcons.includes(icon);
+export const isCustomIcon = (icon: IconType): icon is CustomIconType =>
+  (customIcons as readonly string[]).includes(icon);
