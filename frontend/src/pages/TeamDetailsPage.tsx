@@ -32,7 +32,7 @@ export function TeamDetailsPage() {
       label: t("teamDetails.tabs.resources"),
       path: `/team/${teamId}/resources`,
       component:
-        teamId === "user" ? (
+        teamId === userDetails.personalTeam.id ? (
           <KnowledgeHub />
         ) : (
           <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />
