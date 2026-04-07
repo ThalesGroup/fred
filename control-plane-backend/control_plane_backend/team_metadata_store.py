@@ -98,7 +98,6 @@ class TeamMetadataStore:
             if existing_row is None:
                 row = TeamMetadataRow(
                     id=str(team_id),
-                    is_private=True,
                     **update_values,
                 )
             else:
