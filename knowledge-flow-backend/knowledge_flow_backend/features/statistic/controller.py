@@ -19,8 +19,8 @@ from knowledge_flow_backend.features.statistic.structures import (
     TrainModelRequest,
 )
 from knowledge_flow_backend.features.statistic.utils import clean_json
-from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 from knowledge_flow_backend.features.tabular.service import TabularService
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 logger = logging.getLogger(__name__)
 

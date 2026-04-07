@@ -18,7 +18,6 @@ from knowledge_flow_backend.common.document_structures import (
     Tagging,
 )
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
-from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
@@ -26,6 +25,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
 )
 from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 
 def _user() -> KeycloakUser:

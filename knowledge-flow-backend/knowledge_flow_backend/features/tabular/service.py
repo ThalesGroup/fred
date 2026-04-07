@@ -29,7 +29,6 @@ from fred_core.common import OwnerFilter
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
-from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
     build_default_query_alias,
@@ -42,6 +41,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     TabularQueryRequest,
 )
 from knowledge_flow_backend.features.tabular.utils import validate_read_query
+from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
 from fred_core.common import OwnerFilter
 
-from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
@@ -13,6 +12,7 @@ from knowledge_flow_backend.features.tabular.structures import (
     TabularDatasetSchemaResponse,
     TabularQueryRequest,
 )
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 logger = logging.getLogger(__name__)
 
