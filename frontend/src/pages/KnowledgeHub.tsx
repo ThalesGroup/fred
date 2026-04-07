@@ -24,6 +24,7 @@ import InvisibleLink from "../components/InvisibleLink";
 import ResourceLibraryList from "../components/resources/ResourceLibraryList";
 import { usePermissions } from "../security/usePermissions";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../slices/controlPlane/controlPlaneOpenApi.ts";
 
 const knowledgeHubViews = ["operations", "documents", "chatContexts", "userAssets"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
@@ -38,6 +39,7 @@ export const KnowledgeHub = () => {
   const { t } = useTranslation();
   const { can } = usePermissions();
   const canCreateTag = can("tag", "create");
+  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get("view");
@@ -55,36 +57,36 @@ export const KnowledgeHub = () => {
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
-            <InvisibleLink to="/knowledge?view=chatContexts">
+            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=chatContexts`}>
               <Button variant={selectedView === "chatContexts" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.chatContexts")}
               </Button>
             </InvisibleLink>
-            {/* <InvisibleLink to="/knowledge?view=templates">
+            {/* <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=templates`}>
               <Button variant={selectedView === "templates" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.templates")}
               </Button>
             </InvisibleLink>
-            <InvisibleLink to="/knowledge?view=prompts">
+            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=prompts`}>
               <Button variant={selectedView === "prompts" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.prompts")}
               </Button>
             </InvisibleLink> */}
-            <InvisibleLink to="/knowledge?view=documents">
+            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=documents`}>
               <Button variant={selectedView === "documents" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.documents")}
               </Button>
             </InvisibleLink>
-            <InvisibleLink to="/knowledge?view=userAssets">
+            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=userAssets`}>
               <Button variant={selectedView === "userAssets" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.userAssets", "My Files (agents & me)")}
               </Button>
             </InvisibleLink>
-            <InvisibleLink to="/knowledge?view=operations">
+            {/*     <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=operations`}>
               <Button variant={selectedView === "operations" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.operations")}
               </Button>
-            </InvisibleLink>
+            </InvisibleLink>*/}
           </ButtonGroup>
         </Box>
       </TopBar>

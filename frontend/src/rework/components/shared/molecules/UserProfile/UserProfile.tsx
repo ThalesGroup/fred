@@ -24,7 +24,7 @@ export default function UserProfile() {
             color={"on-surface-retreat"}
             variant={"icon"}
             size={"medium"}
-            icon={{ category: "outlined", type: "Settings", filled: true }}
+            icon={{ category: "outlined", type: "settings", filled: true }}
             onClick={() => setIsUserSettingsOpen(true)}
             aria-label="Open user settings"
           />

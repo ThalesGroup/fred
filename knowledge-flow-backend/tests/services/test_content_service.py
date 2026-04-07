@@ -59,7 +59,7 @@ class _MetadataStoreStub:
     def __init__(self, metadata: DocumentMetadata):
         self._metadata = metadata
 
-    async def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
+    async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
         if document_uid == self._metadata.document_uid:
             return self._metadata
         return None

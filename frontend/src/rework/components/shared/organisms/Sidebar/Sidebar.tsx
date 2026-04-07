@@ -24,4 +24,4 @@ export default function Sidebar() {
   );
 }
 
-type SidebarMode =  "TEAM" | "MARKETPLACE";
+type SidebarMode = "TEAM" | "MARKETPLACE";

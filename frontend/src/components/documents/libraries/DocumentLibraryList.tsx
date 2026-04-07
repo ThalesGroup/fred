@@ -27,7 +27,7 @@ import { EmptyState } from "../../EmptyState";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { buildTree, findNode, TagNode } from "../../../shared/utils/tagTree";
-import { useListUsersQuery } from "../../../slices/controlPlane/controlPlaneApi";
+import { useListUsersQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
   DocumentMetadata,
   TagWithItemsId,

@@ -27,7 +27,10 @@ import { AnyAgent } from "../../common/agent.ts";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { useAuth } from "../../security/AuthContext.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
-import { AwaitingHumanEvent } from "../../slices/agentic/agenticOpenApi";
+import {
+  AwaitingHumanEvent,
+  useCreateSessionAgenticV1ChatbotSessionPostMutation,
+} from "../../slices/agentic/agenticOpenApi";
 import {
   ChatAskInput,
   ChatMessage,
@@ -35,7 +38,6 @@ import {
   RuntimeContext,
   SessionSchema,
   StreamEvent,
-  useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
@@ -52,6 +54,7 @@ import { useConversationOptionsController } from "./ConversationOptionsControlle
 import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
+import { useParams } from "react-router-dom";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -702,6 +705,7 @@ const ChatBot = ({
   onNewSessionCreated,
   runtimeContext: baseRuntimeContext,
 }: ChatBotProps) => {
+  const { teamId } = useParams();
   const isNewConversation = !chatSessionId;
   const { showInfo, showError } = useToast();
   const { t } = useTranslation();
@@ -1035,11 +1039,14 @@ const ChatBot = ({
   // Always prioritize the active routed session id. A stale pending id must
   // never shadow an explicit user-selected session.
   const effectiveSessionId = chatSessionId || pendingSessionIdRef.current || undefined;
-  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(
+    { teamId },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
   const attachmentSessionId = effectiveSessionId;
   const waitResponseForCurrentSession = !waitResponse
     ? false
@@ -1521,7 +1528,7 @@ const ChatBot = ({
     if (existing) return existing;
     try {
       const session = await createSession({
-        createSessionPayload: { agent_id: currentAgent?.id },
+        createSessionPayload: { agent_id: currentAgent?.id, team_id: teamId },
       }).unwrap();
       try {
         await seedSessionPrefs(session.id, currentAgent?.id);

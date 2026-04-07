@@ -17,7 +17,7 @@ export default function TeamSelectionItem({
   teamName,
   selected,
   imgUrl,
-  icon = { category: "outlined", type: "group", filled: true },
+  icon = { category: "outlined", type: "groups", filled: true },
 }: TeamSelectionItemProps) {
   const { t } = useTranslation();
   const [isLoaded, setIsLoaded] = useState(false);

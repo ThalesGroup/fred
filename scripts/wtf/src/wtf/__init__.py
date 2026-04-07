@@ -43,6 +43,18 @@ TITLEBAR_COLORS = [
     "#1565C0",  # blue
     "#F9A825",  # yellow
     "#4E342E",  # brown
+    "#00695C",  # dark teal
+    "#C62828",  # dark red
+    "#4527A0",  # deep purple
+    "#558B2F",  # light green
+    "#E65100",  # deep orange
+    "#0277BD",  # light blue
+    "#6D4C41",  # dark brown
+    "#283593",  # indigo
+    "#00796B",  # teal 700
+    "#7B1FA2",  # purple 700
+    "#1B5E20",  # green 900
+    "#880E4F",  # pink 900
 ]
 
 
@@ -139,8 +151,25 @@ def find_free_port(used: set[int]) -> int:
 
 
 def pick_color() -> str:
-    idx = len(existing_worktree_dirs())
-    return TITLEBAR_COLORS[idx % len(TITLEBAR_COLORS)]
+    """Pick a random color not already used by another worktree."""
+    used: set[str] = set()
+    for wt in existing_worktree_dirs():
+        workspace_file = wt / ".vscode" / "fred.code-workspace"
+        if workspace_file.exists():
+            try:
+                content = workspace_file.read_text()
+                clean = re.sub(r",\s*([}\]])", r"\1", content)
+                settings = json.loads(clean).get("settings", {})
+                color = settings.get("workbench.colorCustomizations", {}).get("titleBar.activeBackground")
+                if color:
+                    used.add(color)
+            except (json.JSONDecodeError, KeyError):
+                # Workspace file is malformed or missing expected keys — skip it
+                click.echo(f"[DEBUG] Skipping unreadable workspace file: {workspace_file}", err=True)
+
+    available = [c for c in TITLEBAR_COLORS if c not in used]
+    pool = available if available else TITLEBAR_COLORS
+    return random.choice(pool)
 
 
 def complete_worktree_branch(ctx, param, incomplete: str) -> list[CompletionItem]:
@@ -150,6 +179,52 @@ def complete_worktree_branch(ctx, param, incomplete: str) -> list[CompletionItem
         for d in existing_worktree_dirs()
         if d.name.removeprefix("fred-wt-").startswith(incomplete)
     ]
+
+
+def complete_git_branch(_ctx, _param, incomplete: str) -> list[CompletionItem]:
+    """Autocomplete git branch names (local + remote) from the repo."""
+    result = subprocess.run(
+        ["git", "branch", "--all", "--format=%(refname:short)"],
+        cwd=FRED_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    branches = [
+        b.removeprefix("origin/")
+        for b in result.stdout.splitlines()
+        if not b.startswith("HEAD")
+    ]
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique = [b for b in branches if not (b in seen or seen.add(b))]  # type: ignore[func-returns-value]
+    return [CompletionItem(b) for b in unique if b.startswith(incomplete)]
+
+
+def complete_provider(_ctx, _param, incomplete: str) -> list[CompletionItem]:
+    """Autocomplete provider names from use-<provider> targets in the root Makefile."""
+    makefile = FRED_ROOT / "Makefile"
+    if not makefile.exists():
+        return []
+    providers = re.findall(r"^use-([a-z0-9_-]+):", makefile.read_text(), re.MULTILINE)
+    return [CompletionItem(p) for p in providers if p.startswith(incomplete)]
+
+
+def complete_vscode_task(_ctx, _param, incomplete: str) -> list[CompletionItem]:
+    """Autocomplete VSCode task labels from .vscode/tasks.json."""
+    tasks_file = FRED_ROOT / ".vscode" / "tasks.json"
+    if not tasks_file.exists():
+        return []
+    try:
+        tasks = json.loads(tasks_file.read_text())
+        return [
+            CompletionItem(t["label"])
+            for t in tasks.get("tasks", [])
+            if "label" in t and t["label"].startswith(incomplete)
+        ]
+    except (json.JSONDecodeError, KeyError):
+        return []
 
 
 def slugify_issue(issue_num: str) -> str:
@@ -190,6 +265,28 @@ def patch_workspace_file(wt: Path, color: str, branch: str) -> None:
     workspace.setdefault("settings", {}).update(color_customizations(color))
     workspace["settings"]["window.title"] = f"fred [{branch}]${{dirty}}"
     workspace_file.write_text(json.dumps(workspace, indent="\t") + "\n")
+
+
+def patch_launch_json(wt: Path, ports: dict[str, int]) -> None:
+    """Patch .vscode/launch.json: replace default ports with worktree ports in args arrays."""
+    launch_file = wt / ".vscode" / "launch.json"
+    if not launch_file.exists():
+        return
+
+    # Strip trailing commas so standard json can parse it
+    content = launch_file.read_text()
+    clean = re.sub(r",\s*([}\]])", r"\1", content)
+    launch = json.loads(clean)
+
+    port_map = {str(DEFAULT_PORTS[svc]): str(ports[svc]) for svc in PYTHON_SERVICES}
+
+    for config in launch.get("configurations", []):
+        args = config.get("args", [])
+        for i, arg in enumerate(args):
+            if arg == "--port" and i + 1 < len(args) and args[i + 1] in port_map:
+                args[i + 1] = port_map[args[i + 1]]
+
+    launch_file.write_text(json.dumps(launch, indent=2) + "\n")
 
 
 def patch_vscode_tasks(wt: Path, ports: dict[str, int], autorun_task: str | None = None) -> None:
@@ -263,19 +360,16 @@ def cli():
     """Manage git worktrees for parallel Fred development."""
 
 
-PROVIDER_MAKE_TARGETS: dict[str, str] = {
-    "mistral": "use-mistral",
-}
-
 
 @cli.command()
-@click.argument("branch", required=False)
+@click.argument("branch", required=False, shell_complete=complete_git_branch)
 @click.option("--from-issue", type=str, help="Create branch name from a GitHub issue number")
 @click.option(
     "-p",
     "--provider",
-    type=click.Choice(list(PROVIDER_MAKE_TARGETS), case_sensitive=False),
+    type=str,
     default=None,
+    shell_complete=complete_provider,
     help="Configure a specific LLM provider in the worktree (e.g. mistral)",
 )
 @click.option(
@@ -283,6 +377,7 @@ PROVIDER_MAKE_TARGETS: dict[str, str] = {
     "--autorun-task",
     type=str,
     default=None,
+    shell_complete=complete_vscode_task,
     help="VSCode task label to run automatically when the worktree folder is opened (e.g. 'All Services PROD')",
 )
 @click.option(
@@ -290,6 +385,7 @@ PROVIDER_MAKE_TARGETS: dict[str, str] = {
     "--from-branch",
     type=str,
     default=None,
+    shell_complete=complete_git_branch,
     help="Source branch to create the new branch from (defaults to current HEAD)",
 )
 def create(branch: str | None, from_issue: str | None, provider: str | None, autorun_task: str | None, from_branch: str | None):
@@ -348,12 +444,13 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
         src = FRED_ROOT / svc / "config" / ".env"
         dst = wt / svc / "config" / ".env"
         if src.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
             info(f"{svc}/config/.env")
 
     # Configure LLM provider
     if provider:
-        make_target = PROVIDER_MAKE_TARGETS[provider]
+        make_target = f"use-{provider}"
         step(f"Configuring provider {click.style(provider, fg='magenta')} (make {make_target})...")
         # Check if the target exists in the worktree Makefile; if not, use the one from FRED_ROOT
         # so the target runs in the worktree directory (editing worktree files, not FRED_ROOT files)
@@ -382,6 +479,20 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     # Write PORTS.md
     (wt / "PORTS.md").write_text(generate_ports_md(branch, ports))
 
+    # Patch inter-service URLs that reference knowledge-flow-backend by its default port
+    kf_port = str(DEFAULT_PORTS["knowledge-flow-backend"])
+    kf_new_port = str(ports["knowledge-flow-backend"])
+    for cfg_path in [
+        wt / "agentic-backend" / "config" / "configuration_prod.yaml",
+        wt / "agentic-backend" / "config" / "mcp_catalog.yaml",
+    ]:
+        if cfg_path.exists():
+            content = cfg_path.read_text()
+            patched = content.replace(f"localhost:{kf_port}", f"localhost:{kf_new_port}")
+            if patched != content:
+                cfg_path.write_text(patched)
+                info(f"Patched {cfg_path.relative_to(wt)}")
+
     # Copy .vscode from main repo (ensures latest tasks.json) then patch
     vscode_dir = wt / ".vscode"
     vscode_dir.mkdir(exist_ok=True)
@@ -391,7 +502,24 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     color = pick_color()
     patch_workspace_file(wt, color, branch)
     patch_vscode_tasks(wt, ports, autorun_task)
+    patch_launch_json(wt, ports)
     ok("VSCode config patched")
+
+    # Hide worktree-local patches from git status (skip-worktree per worktree)
+    skip_paths = [
+        *[f"{svc}/config/configuration_prod.yaml" for svc in PYTHON_SERVICES],
+        "agentic-backend/config/mcp_catalog.yaml",
+        "agentic-backend/config/models_catalog.yaml",
+        "knowledge-flow-backend/config/configuration_worker.yaml",
+        "deploy/local/k3d/values-local.yaml",
+        ".vscode/tasks.json",
+        ".vscode/launch.json",
+        ".vscode/fred.code-workspace",
+    ]
+    existing_skip = [p for p in skip_paths if (wt / p).exists()]
+    if existing_skip:
+        run_quiet(["git", "update-index", "--skip-worktree", *existing_skip], cwd=wt)
+        ok("Patched files hidden from git status (skip-worktree)")
 
     # Open VSCode
     step("Opening VSCode...")
@@ -468,3 +596,25 @@ def list_worktrees():
             for match in re.findall(r"(http://localhost:\d+\S*)", ports_file.read_text()):
                 click.echo("    " + click.style(match, fg="cyan"))
         click.echo()
+
+
+@cli.command(name="open")
+@click.argument("branch", shell_complete=complete_worktree_branch)
+def open_worktree(branch: str):
+    """Open the VSCode workspace for an existing worktree."""
+    wt = worktree_dir(branch)
+    if not wt.exists():
+        raise click.ClickException(f"Worktree not found: {wt}")
+
+    workspace_file = wt / ".vscode" / "fred.code-workspace"
+    if not workspace_file.exists():
+        raise click.ClickException(f"Workspace file not found: {workspace_file}")
+
+    step(f"Opening VSCode for {click.style(branch, fg='yellow')}...")
+    subprocess.Popen(
+        ["code", str(workspace_file)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    ok(f"VSCode opened: {workspace_file}")

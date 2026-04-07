@@ -4,9 +4,15 @@ import logging
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_user_security, log_setup
+from fred_core import (
+    KeycloakUser,
+    get_current_user,
+    initialize_user_security,
+    log_setup,
+    require_admin,
+)
 from fred_core.common import read_env_bool
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
@@ -124,7 +130,10 @@ def create_app() -> FastAPI:
         )
 
     @router.get("/policies/purge", response_model=PolicySummaryResponse)
-    async def get_purge_policy_summary() -> PolicySummaryResponse:
+    async def get_purge_policy_summary(
+        user: KeycloakUser = Depends(get_current_user),
+    ) -> PolicySummaryResponse:
+        require_admin(user)
         catalog = ctx.get_policy_catalog()
         policy = catalog.conversation_policies.purge
         resolved = evaluate_policy_for_request(PolicyResolutionRequest(), catalog)
@@ -135,7 +144,11 @@ def create_app() -> FastAPI:
         )
 
     @router.post("/policies/purge/resolve", response_model=PolicyEvaluationResult)
-    async def resolve_purge(request: PolicyResolutionRequest) -> PolicyEvaluationResult:
+    async def resolve_purge(
+        request: PolicyResolutionRequest,
+        user: KeycloakUser = Depends(get_current_user),
+    ) -> PolicyEvaluationResult:
+        require_admin(user)
         catalog = ctx.get_policy_catalog()
         return evaluate_policy_for_request(request, catalog)
 
@@ -146,7 +159,9 @@ def create_app() -> FastAPI:
     )
     async def trigger_lifecycle_run_once(
         payload: LifecycleManagerInput,
+        user: KeycloakUser = Depends(get_current_user),
     ) -> WorkflowStartResponse:
+        require_admin(user)
         if not configuration.scheduler.enabled:
             raise HTTPException(
                 status_code=400,

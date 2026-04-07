@@ -47,6 +47,10 @@ type team
     # -> must be member
     define can_read_members: member
 
+    # Can list own conversations within the team
+    # -> must be member (public visibility does not grant access to conversations)
+    define can_read_conversations: member
+
     # --------------- Helpers (not permission to use directly, only to help define them) ---------------
 
     # Can upload/rename/delete team resources (file/folders)
