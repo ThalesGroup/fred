@@ -90,6 +90,10 @@ format-fix: node_modules ## Fix formatting with prettier
 knip: node_modules ## Find unused exports, files and dependencies
 	npx knip
 
+.PHONY: knip-fix
+knip-fix: node_modules ## Auto-fix unused exports and files reported by knip
+	npx knip --fix --allow-remove-files --format
+
 .PHONY: code-quality
 code-quality: type-check format-check knip ## Run all code quality checks
 	@echo "All frontend code quality checks completed"
