@@ -9,7 +9,7 @@ export interface IconProps {
 
 export default function Icon({ category, type, filled }: IconProps) {
   if (isCustomIcon(type)) {
-    const iconPath = `/icons/${type}.svg`;
+    const iconPath = `/images/icons/${type}.svg`;
 
     return (
       <span
