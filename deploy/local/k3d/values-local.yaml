@@ -85,21 +85,49 @@ x-azure-apim-settings: &azure-apim-settings
   azure_ad_client_id: ""
   azure_ad_client_scope: ""
 x-kf-embedding-model: &kf-embedding-model
-  provider: openai
-  name: mistral-embed
+  provider: azure-apim
+  name: text-embedding-3-large
   settings:
-    base_url: https://api.mistral.ai/v1
-    check_embedding_ctx_length: false
+    <<: *azure-apim-settings
+    azure_apim_resource_path: ""
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
 x-kf-chat-model: &kf-chat-model
-  provider: openai
-  name: mistral-medium-latest
+  provider: azure-apim
+  name: gpt-4o
   settings:
-    base_url: https://api.mistral.ai/v1
+    <<: *azure-apim-settings
+    azure_apim_resource_path: ""
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
 x-kf-vision-model: &kf-vision-model
-  provider: openai
-  name: mistral-medium-latest
+  provider: azure-apim
+  name: gpt-4o
   settings:
-    base_url: https://api.mistral.ai/v1
+    <<: *azure-apim-settings
+    azure_apim_resource_path: ""
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 30.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
 x-kf-crossencoder-model: &kf-crossencoder-model
   settings:
     online: true
@@ -149,7 +177,7 @@ x-kf-storage: &kf-storage
     prefix: "sched_"
   vector_store:
     type: opensearch
-    index: vector-index-mistral
+    index: vector-index
     bulk_size: 1000
   kpi_store:
     type: "log"
@@ -387,23 +415,9 @@ applications:
           keepalive_expiry_seconds: 10
         temperature: 0.0
       default_profile_by_capability:
-        chat: default.chat.mistral
-        language: default.language.mistral
+        chat: chat.azure_apim.gpt4o
+        language: language.azure_apim.gpt4o
       profiles:
-        - profile_id: default.chat.mistral
-          capability: chat
-          model:
-            provider: openai
-            name: mistral-medium-latest
-            settings:
-              base_url: https://api.mistral.ai/v1
-        - profile_id: default.language.mistral
-          capability: language
-          model:
-            provider: openai
-            name: mistral-medium-latest
-            settings:
-              base_url: https://api.mistral.ai/v1
         - profile_id: chat.azure_apim.gpt4o
           capability: chat
           description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
