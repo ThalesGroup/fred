@@ -9,7 +9,10 @@ export interface AgentToolsSelectionProps {
   onMcpServerRefsChange: (newMcpServerRefs: McpServerRef[]) => void;
 }
 
-export const AgentToolsSelection = memo(function AgentToolsSelection({ mcpServerRefs, onMcpServerRefsChange }: AgentToolsSelectionProps) {
+export const AgentToolsSelection = memo(function AgentToolsSelection({
+  mcpServerRefs,
+  onMcpServerRefsChange,
+}: AgentToolsSelectionProps) {
   const { t } = useTranslation();
   const { data: mcpServersData, isLoading: isLoadingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
   const refIds = new Set(mcpServerRefs.map((ref) => ref.id));
