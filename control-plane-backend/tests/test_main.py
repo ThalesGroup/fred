@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 import pytest
 from fred_core import RelationType, SessionSchema, TeamPermission
@@ -513,27 +513,20 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
 
     class _FakeSessionStore:
         async def get_for_user(
-            self, _user_id: str, db_session=None
+            self, _user_id: str, team_id: Optional[str], db_session=None
         ) -> list[SessionSchema]:
             return [
                 SessionSchema(
                     id="s-1",
                     user_id=_user_id,
-                    team_id="swiftpost",
-                    title="",
-                    updated_at=datetime.now(),
-                ),
-                SessionSchema(
-                    id="s-2",
-                    user_id=_user_id,
-                    team_id="northbridge",
+                    team_id=team_id,
                     title="",
                     updated_at=datetime.now(),
                 ),
                 SessionSchema(
                     id="s-3",
                     user_id=_user_id,
-                    team_id="swiftpost",
+                    team_id=team_id,
                     title="",
                     updated_at=datetime.now(),
                 ),

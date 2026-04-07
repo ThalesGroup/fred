@@ -26,6 +26,7 @@ const isInternalConversationAgent = (agent: AnyAgent) =>
   agent.metadata?.internal_agent === true || agent.metadata?.deep_search_hidden_in_ui === true;
 
 export default function Chat() {
+  const { teamId } = useParams<{ teamId?: string }>();
   const { sessionId, "agent-id": agentId } = useParams<{ sessionId?: string; "agent-id"?: string }>();
   const navigate = useNavigate();
   const { i18n } = useTranslation();
@@ -77,8 +78,8 @@ export default function Chat() {
 
   // Handle navigation when a new session is created
   const handleNewSessionCreated = (newSessionId: string) => {
-    console.log(`New session created -> redirecting to session page /chat/${newSessionId}`);
-    navigate(`/chat/${newSessionId}`);
+    console.log(`New session created -> redirecting to session page /team/${teamId}/chat/${newSessionId}`);
+    navigate(`/team/${teamId}/chat/${newSessionId}`);
   };
 
   if (flowsLoading) {

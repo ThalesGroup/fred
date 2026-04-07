@@ -98,6 +98,8 @@ update-knowledge-flow-api: ## update the generated hooks used in UI based on kno
 
 .PHONY: update-control-plane-api
 update-control-plane-api: ## update the generated hooks used in UI based on control-plane backend openApi spec
+	@echo "🔧 Installing frontend dependencies..."
+	npm ci
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
 	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."

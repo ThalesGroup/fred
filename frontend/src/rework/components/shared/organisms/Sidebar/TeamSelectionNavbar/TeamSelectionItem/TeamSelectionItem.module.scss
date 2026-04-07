@@ -14,12 +14,7 @@
 
   &:hover,
   &.selected {
-    @supports (corner-shape: squircle) {
-      --corner-shape: squircle;
-    }
-    @supports not (corner-shape: squircle) {
-      --radius: 12px;
-    }
+    --radius: 12px;
     --outline-size: 1px;
     --brightness: 1.1;
     --saturate: 1.3;

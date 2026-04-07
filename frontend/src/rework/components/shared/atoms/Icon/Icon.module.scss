@@ -6,8 +6,15 @@
   font-variation-settings: "FILL" 1;
 }
 
-.custom-icon {
-  fill: currentColor;
+.customIcon {
+  display: inline-block;
+  mask-position: center;
+  -webkit-mask-position: center;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  background-color: currentColor;
   width: 1em;
   height: 1em;
 }

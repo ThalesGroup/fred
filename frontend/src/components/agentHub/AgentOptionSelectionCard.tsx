@@ -14,7 +14,6 @@ export function AgentOptionSelectionCard({
 }: AgentOptionSelectionCardProps) {
   return (
     <Paper
-      elevation={60}
       onClick={() => onSelectedChange(!selected)}
       sx={[
         {

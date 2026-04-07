@@ -25,10 +25,10 @@
 }
 
 .marketplace-teams-list-subtitle {
-  color: var(--on-surface-retreat);
-  height: 2.5rem;
   display: flex;
   align-items: center;
+  height: 2.5rem;
+  color: var(--on-surface-retreat);
 
   @include typography("title", "medium");
 }

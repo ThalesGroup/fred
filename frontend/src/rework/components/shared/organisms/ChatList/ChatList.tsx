@@ -1,14 +1,21 @@
-import { useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../../../../slices/agentic/agenticOpenApi.ts";
 import ChatListItem from "@shared/organisms/ChatList/ChatListItem/ChatListItem.tsx";
 import styles from "./ChatList.module.scss";
 import { useTranslation } from "react-i18next";
+import { useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../../../../slices/agentic/agenticOpenApi.ts";
 
-export default function ChatList() {
-  const { data: sessions, refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
-  });
+interface ChatListProps {
+  teamId: string;
+}
+
+export default function ChatList({ teamId }: ChatListProps) {
+  const { data: sessions, refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(
+    { teamId },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    },
+  );
   const sortedSessions = sessions?.slice().sort((a, b) => {
     const dateA = new Date(a.updated_at).getTime();
     const dateB = new Date(b.updated_at).getTime();

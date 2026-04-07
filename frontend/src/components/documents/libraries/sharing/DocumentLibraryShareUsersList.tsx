@@ -3,7 +3,7 @@ import { alpha, IconButton, List, Typography, useTheme } from "@mui/material";
 import * as React from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useListUsersQuery } from "../../../../slices/controlPlane/controlPlaneApi";
+import { useListUsersQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useListTagMembersKnowledgeFlowV1TagsTagIdMembersGetQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../../ToastProvider";
 import { DocumentLibraryPendingRecipient } from "./DocumentLibraryShareTypes";

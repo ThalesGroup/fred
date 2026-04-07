@@ -133,7 +133,7 @@ class AttachmentService:
         try:
             if max_files_user is not None and self.attachments_store:
                 total_for_user = 0
-                user_sessions = await self.session_store.get_for_user(user.uid)
+                user_sessions = await self.session_store.get_for_user(user.uid, None)
                 if user_sessions:
                     session_ids = [s.id for s in user_sessions]
                     total_for_user = await self.attachments_store.count_for_sessions(

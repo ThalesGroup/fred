@@ -14,19 +14,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, List
+from typing import List
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    PydanticJsonMixin,
-    advisory_lock_key,
-    json_for_engine,
-    run_ddl_with_advisory_lock,
-)
-from sqlalchemy import Column, DateTime, MetaData, String, Table, select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from fred_core.sql.async_session import make_session_factory, use_session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     BaseTagStore,
@@ -34,59 +27,25 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     TagDeserializationError,
     TagNotFoundError,
 )
+from knowledge_flow_backend.core.stores.tags.tag_models import TagRow
 from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 logger = logging.getLogger(__name__)
 
 
-class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
-    """
-    PostgreSQL-backed tag store using JSONB.
-    """
+class PostgresTagStore(BaseTagStore):
+    """PostgreSQL-backed tag store using declarative ORM."""
 
-    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._sessions = make_session_factory(engine)
 
-        json_type = json_for_engine(self.store.engine)
-
-        metadata = MetaData()
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("tag_id", String, primary_key=True),
-            Column("created_at", DateTime(timezone=True)),
-            Column("updated_at", DateTime(timezone=True), index=True),
-            Column("owner_id", String, index=True),
-            Column("name", String, index=True),
-            Column("path", String, index=True),
-            Column("description", String),
-            Column("type", String, index=True),
-            Column("doc", json_type),
-            keep_existing=True,
-        )
-
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_create())
-        except RuntimeError:
-            asyncio.run(_create())
-        logger.info("[TAGS][PG][ASYNC] Table ready: %s", self.table_name)
+    # --- helpers ---
 
     @staticmethod
-    def _from_dict(data: Any) -> Tag:
+    def _row_to_tag(row: TagRow) -> Tag:
         try:
-            return Tag.model_validate(data or {})
-        except Exception as e:  # keep broad to mirror metadata store behavior
+            return Tag.model_validate(row.doc or {})
+        except Exception as e:
             raise TagDeserializationError(f"Invalid tag JSON: {e}") from e
 
     @staticmethod
@@ -96,88 +55,88 @@ class PostgresTagStore(BaseTagStore, PydanticJsonMixin):
             raise ValueError("Tag must contain an 'id'")
         return tid
 
-    # CRUD implementation mirroring DuckDB store
+    # --- CRUD ---
 
-    async def list_all_tags(self) -> List[Tag]:
-        return await self.list_all()
+    async def list_all_tags(self, session: AsyncSession | None = None) -> List[Tag]:
+        return await self.list_all(session=session)
 
-    async def get_tag_by_id(self, tag_id: str) -> Tag:
-        async with self.store.begin() as conn:
-            result = await conn.execute(select(self.table.c.doc).where(self.table.c.tag_id == tag_id))
-            row = result.fetchone()
-        if not row:
+    async def get_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> Tag:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TagRow, tag_id)
+        if row is None:
             raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
-        return self._from_dict(row[0])
+        return self._row_to_tag(row)
 
-    async def create_tag(self, tag: Tag) -> Tag:
+    async def create_tag(self, tag: Tag, session: AsyncSession | None = None) -> Tag:
         tid = self._require_id(tag)
-        # fail if exists
-        try:
-            await self.get_tag_by_id(tid)
-            raise TagAlreadyExistsError(f"Tag with id '{tid}' already exists.")
-        except TagNotFoundError:
-            pass
-        values = {
-            "tag_id": tid,
-            "created_at": tag.created_at,
-            "updated_at": tag.updated_at,
-            "owner_id": tag.owner_id,
-            "name": tag.name,
-            "path": tag.path,
-            "description": tag.description,
-            "type": tag.type.value,
-            "doc": tag.model_dump(mode="json"),
-        }
-        async with self.store.begin() as conn:
-            await conn.execute(self.table.insert().values(**values))
-        return tag
-
-    async def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
-        await self.get_tag_by_id(tag_id)
-        values = {
-            "created_at": tag.created_at,
-            "updated_at": tag.updated_at,
-            "owner_id": tag.owner_id,
-            "name": tag.name,
-            "path": tag.path,
-            "description": tag.description,
-            "type": tag.type.value,
-            "doc": tag.model_dump(mode="json"),
-        }
-        async with self.store.begin() as conn:
-            await conn.execute(self.table.update().where(self.table.c.tag_id == tag_id).values(**values))
-        return tag
-
-    async def delete_tag_by_id(self, tag_id: str) -> None:
-        async with self.store.begin() as conn:
-            result = await conn.execute(self.table.delete().where(self.table.c.tag_id == tag_id))
-        if result.rowcount == 0:
-            raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
-
-    async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str) -> Tag | None:
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                select(self.table.c.doc).where(
-                    self.table.c.owner_id == owner_id,
-                    self.table.c.type == tag_type.value,
-                )
+        async with use_session(self._sessions, session) as s:
+            existing = await s.get(TagRow, tid)
+            if existing:
+                raise TagAlreadyExistsError(f"Tag with id '{tid}' already exists.")
+            row = TagRow(
+                tag_id=tid,
+                created_at=tag.created_at,
+                updated_at=tag.updated_at,
+                owner_id=tag.owner_id,
+                name=tag.name,
+                path=tag.path,
+                description=tag.description,
+                type=tag.type.value,
+                doc=tag.model_dump(mode="json"),
             )
-            rows = result.fetchall()
-        for r in rows:
-            t = self._from_dict(r[0])
+            s.add(row)
+        return tag
+
+    async def update_tag_by_id(self, tag_id: str, tag: Tag, session: AsyncSession | None = None) -> Tag:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TagRow, tag_id)
+            if row is None:
+                raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
+            row.created_at = tag.created_at
+            row.updated_at = tag.updated_at
+            row.owner_id = tag.owner_id
+            row.name = tag.name
+            row.path = tag.path
+            row.description = tag.description
+            row.type = tag.type.value
+            row.doc = tag.model_dump(mode="json")
+        return tag
+
+    async def delete_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(TagRow, tag_id)
+            if row is None:
+                raise TagNotFoundError(f"Tag with id '{tag_id}' not found.")
+            await s.delete(row)
+
+    async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(TagRow).where(
+                            TagRow.owner_id == owner_id,
+                            TagRow.type == tag_type.value,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        for row in rows:
+            t = self._row_to_tag(row)
             if t.full_path == full_path and t.type == tag_type:
                 return t
         return None
 
-    # Convenience helpers used elsewhere
-    async def list_all(self) -> List[Tag]:
-        async with self.store.begin() as conn:
-            result = await conn.execute(select(self.table.c.doc))
-            rows = result.fetchall()
-        return [self._from_dict(r[0]) for r in rows]
+    # --- convenience helpers ---
 
-    async def list_by_type(self, tag_type: str) -> List[Tag]:
-        async with self.store.begin() as conn:
-            result = await conn.execute(select(self.table.c.doc).where(self.table.c.type == tag_type))
-            rows = result.fetchall()
-        return [self._from_dict(r[0]) for r in rows]
+    async def list_all(self, session: AsyncSession | None = None) -> List[Tag]:
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(TagRow))).scalars().all()
+        return [self._row_to_tag(row) for row in rows]
+
+    async def list_by_type(self, tag_type: str, session: AsyncSession | None = None) -> List[Tag]:
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(TagRow).where(TagRow.type == tag_type))).scalars().all()
+        return [self._row_to_tag(row) for row in rows]

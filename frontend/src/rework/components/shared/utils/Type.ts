@@ -27,19 +27,19 @@ export type ComponentSize = "medium" | "small" | "xs";
 export type IconButtonVariant = "filled" | "outlined" | "icon";
 export type IconCategory = "outlined" | "rounded" | "sharp";
 
-const customIcons = [];
+const customIcons = ["customAgent"] as const;
 
 export type MaterialIconType =
-  | "Add"
-  | "Home"
-  | "People"
-  | "Groups"
-  | "Settings"
-  | "Widgets"
-  | "Folder"
-  | "Delete"
-  | "Infos"
-  | "Person"
+  | "add"
+  | "home"
+  | "people"
+  | "groups"
+  | "settings"
+  | "widgets"
+  | "folder"
+  | "delete"
+  | "infos"
+  | "person"
   | "arrow_drop_down"
   | "arrow_back"
   | "logout"
@@ -52,10 +52,13 @@ export type MaterialIconType =
   | "storefront"
   | "edit"
   | "visibility"
+  | "visibility_off"
   | "reviews"
-  | "delete_forever";
+  | "delete_forever"
+  | "lock";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;
 
-export const isCustomIcon = (icon: IconType): icon is CustomIconType => customIcons.includes(icon);
+export const isCustomIcon = (icon: IconType): icon is CustomIconType =>
+  (customIcons as readonly string[]).includes(icon);

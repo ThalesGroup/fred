@@ -1,7 +1,7 @@
 import styles from "./TeamSettingsPage.module.scss";
 import { ModalInteractionProps } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import TeamSettingsNavbar from "@components/pages/TeamSettingsPage/TeamSettingsNavbar/TeamSettingsNavbar.tsx";
-import { TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneApi.ts";
+import { TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import TeamSettingsMembers from "@components/pages/TeamSettingsPage/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import { useState } from "react";
 import TeamSettingsParameters from "@components/pages/TeamSettingsPage/TeamSettingsParameters/TeamSettingsParameters.tsx";

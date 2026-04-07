@@ -15,6 +15,8 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from knowledge_flow_backend.features.resources.structures import Resource, ResourceKind
 
 
@@ -43,27 +45,27 @@ class BaseResourceStore(ABC):
     """
 
     @abstractmethod
-    async def get_all_resources(self, kind: ResourceKind) -> list[Resource]:
+    async def get_all_resources(self, kind: ResourceKind, session: AsyncSession | None = None) -> list[Resource]:
         pass
 
     @abstractmethod
-    async def get_resource_by_id(self, resource_id: str) -> Resource:
+    async def get_resource_by_id(self, resource_id: str, session: AsyncSession | None = None) -> Resource:
         pass
 
     @abstractmethod
-    async def create_resource(self, resource: Resource) -> Resource:
+    async def create_resource(self, resource: Resource, session: AsyncSession | None = None) -> Resource:
         pass
 
     @abstractmethod
-    async def update_resource(self, resource_id: str, resource: Resource) -> Resource:
+    async def update_resource(self, resource_id: str, resource: Resource, session: AsyncSession | None = None) -> Resource:
         pass
 
     @abstractmethod
-    async def delete_resource(self, resource_id: str) -> None:
+    async def delete_resource(self, resource_id: str, session: AsyncSession | None = None) -> None:
         pass
 
     @abstractmethod
-    async def get_resources_in_tag(self, tag_id: str) -> List[Resource]:
+    async def get_resources_in_tag(self, tag_id: str, session: AsyncSession | None = None) -> List[Resource]:
         """
         Retrieve all resources associated with a specific tag.
         Raises:
