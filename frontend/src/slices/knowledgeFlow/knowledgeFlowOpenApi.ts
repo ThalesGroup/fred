@@ -730,45 +730,42 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/dev/bench/runs/${queryArg.runId}`, method: "DELETE" }),
     }),
-    listDatabases: build.query<ListDatabasesApiResponse, ListDatabasesApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/databases` }),
-    }),
-    listTables: build.query<ListTablesApiResponse, ListTablesApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables` }),
-    }),
-    getDatabaseSchemas: build.query<GetDatabaseSchemasApiResponse, GetDatabaseSchemasApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/schemas` }),
-    }),
-    describeTable: build.query<DescribeTableApiResponse, DescribeTableApiArg>({
+    listTabularDatasets: build.query<ListTabularDatasetsApiResponse, ListTabularDatasetsApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables/${queryArg.tableName}/descibe_table`,
+        url: `/knowledge-flow/v1/tabular/datasets`,
+        params: {
+          document_library_tags_ids: queryArg.documentLibraryTagsIds,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+        },
       }),
     }),
-    getContext: build.query<GetContextApiResponse, GetContextApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/tabular/context` }),
+    getTabularDatasetSchema: build.query<GetTabularDatasetSchemaApiResponse, GetTabularDatasetSchemaApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/tabular/datasets/${queryArg.documentUid}/schema`,
+        params: {
+          document_library_tags_ids: queryArg.documentLibraryTagsIds,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     readQuery: build.mutation<ReadQueryApiResponse, ReadQueryApiArg>({
       query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/sql/read`,
+        url: `/knowledge-flow/v1/tabular/query`,
         method: "POST",
-        body: queryArg.rawSqlRequest,
-      }),
-    }),
-    executeWriteQuery: build.mutation<ExecuteWriteQueryApiResponse, ExecuteWriteQueryApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/sql/write`,
-        method: "POST",
-        body: queryArg.rawSqlRequest,
-      }),
-    }),
-    deleteTable: build.mutation<DeleteTableApiResponse, DeleteTableApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tabular/databases/${queryArg.dbName}/tables/${queryArg.tableName}`,
-        method: "DELETE",
+        body: queryArg.tabularQueryRequest,
       }),
     }),
     listDatasets: build.query<ListDatasetsApiResponse, ListDatasetsApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/stat/list_datasets` }),
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/stat/list_datasets`,
+        params: {
+          document_library_tags_ids: queryArg.documentLibraryTagsIds,
+          owner_filter: queryArg.ownerFilter,
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     setDataset: build.mutation<SetDatasetApiResponse, SetDatasetApiArg>({
       query: (queryArg) => ({
@@ -1612,52 +1609,39 @@ export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiResponse = /** sta
 export type DeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteApiArg = {
   runId: string;
 };
-export type ListDatabasesApiResponse = /** status 200 Successful Response */ string[];
-export type ListDatabasesApiArg = void;
-export type ListTablesApiResponse = /** status 200 Successful Response */ ListTablesResponse;
-export type ListTablesApiArg = {
-  /** Database name */
-  dbName: string;
+export type ListTabularDatasetsApiResponse = /** status 200 Successful Response */ TabularDatasetResponse[];
+export type ListTabularDatasetsApiArg = {
+  /** Optional library tag IDs used to keep datasets inside selected libraries. */
+  documentLibraryTagsIds?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  teamId?: string | null;
 };
-export type GetDatabaseSchemasApiResponse = /** status 200 Successful Response */ GetSchemaResponse[];
-export type GetDatabaseSchemasApiArg = {
-  /** Database name */
-  dbName: string;
+export type GetTabularDatasetSchemaApiResponse = /** status 200 Successful Response */ TabularDatasetSchemaResponse;
+export type GetTabularDatasetSchemaApiArg = {
+  /** Document UID of the dataset to describe */
+  documentUid: string;
+  /** Optional library tag IDs used to keep datasets inside selected libraries. */
+  documentLibraryTagsIds?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  teamId?: string | null;
 };
-export type DescribeTableApiResponse = /** status 200 Successful Response */ GetSchemaResponse;
-export type DescribeTableApiArg = {
-  /** Database name */
-  dbName: string;
-  /** Table name */
-  tableName: string;
-};
-export type GetContextApiResponse = /** status 200 Successful Response */ {
-  [key: string]: {
-    [key: string]: any;
-  }[];
-};
-export type GetContextApiArg = void;
 export type ReadQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
 export type ReadQueryApiArg = {
-  /** Database name */
-  dbName: string;
-  rawSqlRequest: RawSqlRequest;
-};
-export type ExecuteWriteQueryApiResponse = /** status 200 Successful Response */ RawSqlResponse;
-export type ExecuteWriteQueryApiArg = {
-  /** Database name */
-  dbName: string;
-  rawSqlRequest: RawSqlRequest;
-};
-export type DeleteTableApiResponse = unknown;
-export type DeleteTableApiArg = {
-  /** Database name */
-  dbName: string;
-  /** Table name */
-  tableName: string;
+  tabularQueryRequest: TabularQueryRequest;
 };
 export type ListDatasetsApiResponse = /** status 200 Successful Response */ any;
-export type ListDatasetsApiArg = void;
+export type ListDatasetsApiArg = {
+  /** Optional library tag IDs used to keep datasets inside selected libraries. */
+  documentLibraryTagsIds?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  ownerFilter?: OwnerFilter | null;
+  /** Team ID, required when owner_filter is 'team'. */
+  teamId?: string | null;
+};
 export type SetDatasetApiResponse = /** status 200 Successful Response */ any;
 export type SetDatasetApiArg = {
   setDatasetRequest: SetDatasetRequest;
@@ -2719,35 +2703,55 @@ export type SavedRunSummary = {
   size?: number | null;
   modified?: string | null;
 };
-export type ListTablesResponse = {
-  db_name: string;
-  tables: string[];
-};
 export type TabularColumnSchema = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
 };
-export type GetSchemaResponse = {
-  db_name: string;
-  table_name: string;
-  columns: TabularColumnSchema[];
+export type TabularDatasetResponse = {
+  document_uid: string;
+  document_name: string;
+  query_alias: string;
   row_count?: number | null;
+  columns?: TabularColumnSchema[];
+  tag_ids?: string[];
+  tag_names?: string[];
+  source_tag?: string | null;
+  generated_at?: string | null;
+};
+export type TabularDatasetSchemaResponse = {
+  document_uid: string;
+  document_name: string;
+  query_alias: string;
+  columns?: TabularColumnSchema[];
+  row_count?: number | null;
+  source_tag?: string | null;
+  generated_at?: string | null;
 };
 export type RawSqlResponse = {
-  db_name: string;
   sql_query: string;
-  rows?:
-    | {
-        [key: string]: any;
-      }[]
-    | null;
+  rows?: {
+    [key: string]: any;
+  }[];
   error?: string | null;
+  dataset_uids?: string[];
+  query_aliases?: string[];
 };
-export type RawSqlRequest = {
-  query: string;
+export type TabularQueryRequest = {
+  sql: string;
+  dataset_uids?: string[] | null;
+  /** Optional list of library tag IDs used to keep the query inside selected libraries. */
+  document_library_tags_ids?: string[] | null;
+  /** Optional ownership scope: 'personal' or 'team'. */
+  owner_filter?: OwnerFilter | null;
+  /** Team ID required when owner_filter is 'team'. */
+  team_id?: string | null;
+  max_rows?: number | null;
 };
 export type SetDatasetRequest = {
-  dataset_name: string;
+  document_uid: string;
+  document_library_tags_ids?: string[] | null;
+  owner_filter?: OwnerFilter | null;
+  team_id?: string | null;
 };
 export type DetectOutliersRequest = {
   method?: "zscore" | "iqr";
@@ -3001,19 +3005,11 @@ export const {
   useGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useLazyGetRunKnowledgeFlowV1DevBenchRunsRunIdGetQuery,
   useDeleteRunKnowledgeFlowV1DevBenchRunsRunIdDeleteMutation,
-  useListDatabasesQuery,
-  useLazyListDatabasesQuery,
-  useListTablesQuery,
-  useLazyListTablesQuery,
-  useGetDatabaseSchemasQuery,
-  useLazyGetDatabaseSchemasQuery,
-  useDescribeTableQuery,
-  useLazyDescribeTableQuery,
-  useGetContextQuery,
-  useLazyGetContextQuery,
+  useListTabularDatasetsQuery,
+  useLazyListTabularDatasetsQuery,
+  useGetTabularDatasetSchemaQuery,
+  useLazyGetTabularDatasetSchemaQuery,
   useReadQueryMutation,
-  useExecuteWriteQueryMutation,
-  useDeleteTableMutation,
   useListDatasetsQuery,
   useLazyListDatasetsQuery,
   useSetDatasetMutation,
