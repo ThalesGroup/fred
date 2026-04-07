@@ -5,11 +5,12 @@ import Switch from "@shared/atoms/Switch/Switch.tsx";
 import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
+import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
-  TeamWithPermissions,
   useUpdateTeamMutation,
   useUploadTeamBannerMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;
@@ -24,6 +25,7 @@ const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
+  const { defaultTeamBannerFile, agentsNicknamePlural } = useFrontendProperties();
   const { t } = useTranslation();
   const [updateTeam] = useUpdateTeamMutation();
   const [uploadBanner] = useUploadTeamBannerMutation();
@@ -86,7 +88,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     try {
       await uploadBanner({
         teamId: team.id,
-        file,
+        bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: { file },
       }).unwrap();
 
       console.log("Banner uploaded successfully");
@@ -106,7 +108,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
           <ImageFileInput
             ref={fileInputRef}
-            imageUrl={team.banner_image_url ? team.banner_image_url : "/images/default-team-banner.png"}
+            imageUrl={team.banner_image_url ? team.banner_image_url : `/images/${defaultTeamBannerFile}`}
             alt={""}
             height={"80px"}
             accept={ALLOWED_TYPES.join(",")}
@@ -131,7 +133,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
         <TextArea
           label={t("rework.teamSettings.parameters.teamPrompt.label")}
           maxLength={180}
-          placeholder={t("rework.teamSettings.parameters.teamPrompt.placeholder")}
+          placeholder={t("rework.teamSettings.parameters.teamPrompt.placeholder", { agentsNicknamePlural })}
           disabled={true}
         />
       </div>

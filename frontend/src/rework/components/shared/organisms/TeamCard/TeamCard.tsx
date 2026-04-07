@@ -1,8 +1,9 @@
 import styles from "./TeamCard.module.scss";
-import { Team } from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { useTranslation } from "react-i18next";
 import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
+import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 
 export interface TeamCardProps {
   team: Team;
@@ -10,17 +11,18 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription }: TeamCardProps) {
+  const { defaultTeamBannerFile, defaultTeamAvatarFile } = useFrontendProperties();
   const { t } = useTranslation();
 
   return (
     <div className={styles["team-card-container"]}>
       <img
         className={styles["team-banner"]}
-        src={team.banner_image_url ? `url(${team.banner_image_url})` : "/images/default-team-banner.png"}
+        src={team.banner_image_url ? `url(${team.banner_image_url})` : `/images/${defaultTeamBannerFile}`}
         alt=""
         aria-hidden="true"
       ></img>
-      <img className={styles["team-avatar"]} src="/images/defaultTeamAvatar.png" alt="" aria-hidden="true"></img>
+      <img className={styles["team-avatar"]} src={`/images/${defaultTeamAvatarFile}`} alt="" aria-hidden="true"></img>
       <div className={styles["team-card-details"]}>
         <div className={styles["team-card-detail-name"]}>
           <div className={styles["team-information"]}>
@@ -40,7 +42,7 @@ export default function TeamCard({ team, withDescription }: TeamCardProps) {
         </div>
         {withDescription && <div className={styles["team-card-description"]}>{team.description}</div>}
         <div className={styles["team-card-footer"]}>
-          <AvatarGroup avatars={team.owners.map((o) => ({ name: o.first_name + " " + o.last_name, size: "small" }))} />
+          <AvatarGroup avatars={team.owners.map((o) => ({ name: o.first_name + " " + o.last_name }))} />
         </div>
       </div>
     </div>

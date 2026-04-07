@@ -105,6 +105,7 @@ class TeamPermission(str, Enum):
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
     CAN_ADMINISTER_MANAGERS = "can_administer_managers"
     CAN_ADMINISTER_OWNERS = "can_administer_owners"
+    CAN_READ_CONVERSATIONS = "can_read_conversations"
 
 
 class AgentPermission(str, Enum):
@@ -590,9 +591,6 @@ class RebacEngine(ABC):
         Example:
         - role `admin` becomes `user -> admin -> organization:fred`.
         """
-        if isinstance(self.keycloak_client, KeycloackDisabled):
-            return set()
-
         relations: set[Relation] = set()
 
         # Map Keycloak roles to organization relations based on the schema

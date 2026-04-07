@@ -23,11 +23,13 @@ import { useTranslation } from "react-i18next";
 import {
   TeamMember,
   TeamWithPermissions,
+  UserTeamRelation,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,
-  UserTeamRelation,
   useUpdateTeamMemberMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApi.ts";
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {

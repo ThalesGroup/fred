@@ -257,15 +257,8 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-  catalog_store:
-    type: "postgres"
-    table: catalog
-  prompt_store:
-    type: "postgres"
-    table: prompts
   resource_store:
     type: "postgres"
-    table: resource
   kpi_store:
     type: "log"
     level: "DEBUG"
@@ -273,14 +266,10 @@ storage:
     type: "in_memory"
   tag_store:
     type: "postgres"
-    table: tags
   metadata_store:
     type: "postgres"
-    table: metadata
   task_store:
     type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
   vector_store:
     type: chroma
   tabular_stores:

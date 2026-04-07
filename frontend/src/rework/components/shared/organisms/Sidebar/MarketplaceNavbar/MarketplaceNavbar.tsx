@@ -13,7 +13,7 @@ export default function MarketplaceNavbar() {
       icon: { category: "outlined", type: "groups", filled: true },
       linkProps: { to: "/marketplace/teams" },
     },
-/*
+    /*
     {
       type: "link",
       label: t("rework.sidebar.marketplace.menu.agents"),

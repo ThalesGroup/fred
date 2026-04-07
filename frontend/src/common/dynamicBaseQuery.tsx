@@ -9,7 +9,6 @@ import type { BaseQueryFn } from "@reduxjs/toolkit/query";
 import { KeyCloakService } from "../security/KeycloakService";
 
 export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> => {
-
   const raw = fetchBaseQuery({
     prepareHeaders: (headers) => {
       const token = KeyCloakService.GetToken();

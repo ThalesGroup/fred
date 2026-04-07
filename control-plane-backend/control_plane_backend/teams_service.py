@@ -326,13 +326,10 @@ async def remove_team_member(
 
     session_store = app_context.get_session_store()
     queue_store = app_context.get_purge_queue_store()
-    sessions: list[SessionSchema] = await session_store.get_for_user(user_id)
+    sessions: list[SessionSchema] = await session_store.get_for_user(user_id, team_id)
 
     sessions_enqueued = 0
     for session in sessions:
-        if session.team_id != team_id:
-            continue
-
         await queue_store.enqueue(
             session_id=session.id,
             team_id=team_id,
