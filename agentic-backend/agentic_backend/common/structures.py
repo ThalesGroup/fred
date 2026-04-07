@@ -352,8 +352,8 @@ class Properties(BaseModel):
     showAgentDisableButton: bool = True
     showAgentCode: bool = True
     allowAgentSwitchInOneConversation: bool = True
-    defaultTeamBannerFile: str = 'default-team-banner.png'
-    defaultTeamAvatarFile: str = 'default-team-avatar.png'
+    defaultTeamBannerFile: str = "default-team-banner.png"
+    defaultTeamAvatarFile: str = "default-team-avatar.png"
 
 
 class FrontendSettings(BaseModel):

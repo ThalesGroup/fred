@@ -5,7 +5,7 @@ import IconButton from "@components/shared/atoms/IconButton/IconButton.tsx";
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../../../../common/agent.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
-import {IconType} from "@shared/utils/Type.ts";
+import { IconType } from "@shared/utils/Type.ts";
 
 interface AgentCardProps {
   agent: Agent;

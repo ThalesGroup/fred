@@ -20,7 +20,11 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import DataTable, { DataTableColumn } from "@shared/organisms/DataTable/DataTable.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { TeamMember, TeamWithPermissions, UserTeamRelation } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  TeamMember,
+  TeamWithPermissions,
+  UserTeamRelation,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,

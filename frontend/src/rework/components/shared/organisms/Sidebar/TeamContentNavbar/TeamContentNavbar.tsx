@@ -12,7 +12,7 @@ import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
-import {IconType} from "@shared/utils/Type.ts";
+import { IconType } from "@shared/utils/Type.ts";
 
 export default function TeamContentNavbar() {
   const { defaultTeamBannerFile, agentIconName, agentsNicknamePlural } = useFrontendProperties();
@@ -31,8 +31,7 @@ export default function TeamContentNavbar() {
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: agentsNicknamePlural.toLowerCase()
-          .replace(/\b\w/g, (char) => char.toUpperCase()),
+      label: agentsNicknamePlural.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
       icon: { category: "outlined", type: agentIconName as IconType },
       linkProps: { to: `/team/${teamId}/agents` },
     },
