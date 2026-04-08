@@ -151,6 +151,17 @@ async def update_team(
         patch = TeamMetadataPatch.model_validate(request.model_dump(exclude_unset=True))
         await app_context.get_team_metadata_store().upsert(team_id, patch)
 
+        if "is_private" in request.model_fields_set:
+            public_relation = Relation(
+                subject=RebacReference(Resource.USER, "*"),
+                relation=RelationType.PUBLIC,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+            if request.is_private:
+                await rebac.delete_relations([public_relation])
+            else:
+                await rebac.add_relation(public_relation)
+
     group_summary = KeycloakGroupSummary(
         id=team_id,
         name=raw_group.get("name"),
