@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class SQLTableStore:
-    def __init__(self, driver: str, path: Path):
+    def __init__(self, driver: str, path: str | Path):
         self.driver = driver
         self.path = path
         if driver in ("sqlite", "duckdb"):

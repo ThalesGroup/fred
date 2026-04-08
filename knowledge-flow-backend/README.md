@@ -18,8 +18,16 @@ Knowledge Flow provides two primary services:
    search (e.g., RAG pipelines).
 
 2. **Structured Data Ingestion**  
-   Processes structured files (CSV, XLSX, etc.) into normalized data rows for downstream querying. These are stored in
-   JSON, SQLite, or other formats and can be exposed via custom REST endpoints or MCP APIs.
+   Processes structured files (CSV, XLSX, etc.) into dataset-scoped Parquet artifacts stored in the shared
+   `content_storage` object area. These datasets are then exposed through read-only REST and MCP endpoints and queried
+   on demand with DuckDB, instead of being materialized into one global SQL database.
+
+Knowledge Flow supports two tabular data modes that can be queried with SQL:
+
+| Mode | Main config | Backing storage | Status |
+|------|-------------|-----------------|--------|
+| Dataset-centric runtime | `content_storage` + top-level `tabular` | One Parquet artifact per document + DuckDB at query time | Recommended |
+| SQL-backed tabular store | `storage.tabular_stores` | Persistent SQL tables | Legacy compatibility |
 
 All processing pipelines are defined declaratively in `config/configuration.yaml`.
 
@@ -57,7 +65,11 @@ to use another setup.
 - **Tabular artifacts (`tabular` + `content_storage`)**: CSV/Excel ingestion now writes Parquet artifacts into the shared content store object area.  
   - Runtime query limits come from the top-level `tabular` section in `configuration*.yaml`.  
   - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.  
-  - There is no separate tabular SQL database to provision anymore.
+  - This is the recommended mode for new deployments.
+- **Legacy SQL-backed tabular stores (`storage.tabular_stores`)**: the historical SQL-table contract is still accepted for users who rely on it.  
+  - This mode persists tabular data in SQL stores and may still require SQL credentials such as `TABULAR_POSTGRES_PASSWORD`.  
+  - New repository configs and Helm values remain on the current `content_storage` + top-level `tabular` model.  
+  - Treat this mode as legacy compatibility rather than the default path for new work.
 
 Tip: for S3-compatible deployments, keep `content_storage` pointed to the object bucket and use the `tabular` section only for query/runtime bounds.
 
@@ -84,7 +96,7 @@ instructions.
 ## Features
 
 - Ingests files: PDF, DOCX, PPTX → Markdown
-- Ingests data: CSV, Excel → structured rows
+- Ingests data: CSV, Excel → Parquet datasets queried with DuckDB
 - Vectorizes content using OpenAI, Azure, or Ollama
 - Stores content and metadata in pluggable backends
 - Runs standalone with only an OpenAI key and local file system
