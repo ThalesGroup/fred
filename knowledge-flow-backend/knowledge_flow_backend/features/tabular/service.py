@@ -99,6 +99,26 @@ class TabularService:
         self.tag_service: TagService | None = None
         self.tabular_config = context.get_config().tabular
 
+    def _require_dataset_runtime(self):
+        """
+        Return the dataset-centric tabular configuration when that mode is active.
+
+        Why this exists:
+        - The same codebase still accepts the legacy `storage.tabular_stores`
+          mode, where the dataset-centric DuckDB runtime is intentionally
+          disabled.
+
+        How to use:
+        - Call before accessing `self.tabular_config.query` or artifact-prefix
+          settings.
+        """
+
+        if self.tabular_config is None:
+            raise RuntimeError(
+                "Dataset-centric tabular endpoints require the top-level 'tabular' configuration block. This deployment is running in legacy 'storage.tabular_stores' mode.",
+            )
+        return self.tabular_config
+
     @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def list_datasets(
         self,
@@ -205,6 +225,7 @@ class TabularService:
             owner_filter=owner_filter,
             team_id=team_id,
         )
+        self._require_dataset_runtime()
         connection = duckdb.connect(database=":memory:")
         try:
             location = self._resolve_dataset_location(dataset.artifact.object_key)
@@ -252,12 +273,13 @@ class TabularService:
 
         allowed_aliases = {dataset.query_alias for dataset in selected_datasets}
         sql_query = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
+        tabular_config = self._require_dataset_runtime()
 
         started_at = time.perf_counter()
         sql_hash = hashlib.sha256(sql_query.encode("utf-8")).hexdigest()
         effective_max_rows = min(
-            request.max_rows or self.tabular_config.query.default_max_rows,
-            self.tabular_config.query.max_rows,
+            request.max_rows or tabular_config.query.default_max_rows,
+            tabular_config.query.max_rows,
         )
 
         connection = duckdb.connect(database=":memory:")
@@ -516,10 +538,11 @@ class TabularService:
         - Call while mounting the per-query DuckDB session.
         """
 
+        tabular_config = self._require_dataset_runtime()
         try:
             return self.content_store.get_presigned_url(
                 object_key,
-                expires=timedelta(seconds=self.tabular_config.query.presigned_ttl_seconds),
+                expires=timedelta(seconds=tabular_config.query.presigned_ttl_seconds),
             )
         except NotImplementedError:
             return self._resolve_local_dataset_path(object_key)

@@ -66,9 +66,11 @@ to use another setup.
   - Runtime query limits come from the top-level `tabular` section in `configuration*.yaml`.  
   - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.  
   - This is the recommended mode for new deployments.
+  - If neither tabular mode is declared explicitly, this runtime is enabled with the built-in defaults.
 - **Legacy SQL-backed tabular stores (`storage.tabular_stores`)**: the historical SQL-table contract is still accepted for users who rely on it.  
   - This mode persists tabular data in SQL stores and may still require SQL credentials such as `TABULAR_POSTGRES_PASSWORD`.  
   - New repository configs and Helm values remain on the current `content_storage` + top-level `tabular` model.  
+  - This mode is exclusive with the top-level `tabular` block; when `storage.tabular_stores` is configured, `TabularProcessor` writes SQL tables instead of Parquet artifacts.
   - Treat this mode as legacy compatibility rather than the default path for new work.
 
 Tip: for S3-compatible deployments, keep `content_storage` pointed to the object bucket and use the `tabular` section only for query/runtime bounds.

@@ -94,6 +94,7 @@ Knowledge Flow supports two ways to expose tabular data through SQL:
 - CSV ingestion writes one versioned Parquet artifact per document into the shared `content_storage`.
 - Read-only SQL queries run in ephemeral DuckDB sessions against the datasets authorized for the current user.
 - This is the mode used by the current repository configuration files and Helm values.
+- When neither `tabular` nor `storage.tabular_stores` is declared, Knowledge Flow enables this mode with the built-in defaults.
 
 The two configuration blocks that matter are:
 
@@ -138,6 +139,7 @@ Behavior by storage backend:
 - This mode persists normalized tabular data into SQL tables instead of Parquet artifacts.
 - It can target local file-backed engines such as DuckDB/SQLite or remote engines such as PostgreSQL/MySQL/MariaDB.
 - Use it only when you must preserve an older integration or user workflow.
+- This mode is exclusive with the top-level `tabular` block: when `storage.tabular_stores` is present, dataset-centric defaults are not injected and `TabularProcessor` writes SQL tables again.
 
 Illustrative snippet:
 

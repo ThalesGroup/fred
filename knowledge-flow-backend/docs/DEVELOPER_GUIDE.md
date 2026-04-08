@@ -176,6 +176,7 @@ The legacy mode keeps the historical contract where tabular ingestion writes int
 
 - Configuration lives under `storage.tabular_stores`.
 - `ApplicationContext.get_tabular_stores()` and `ApplicationContext.get_csv_input_store()` support this compatibility path.
+- This mode is exclusive with the top-level `tabular` block; when `storage.tabular_stores` is configured, `TabularProcessor` writes SQL tables instead of Parquet artifacts.
 - Use this mode only when an older caller still expects persistent SQL tables.
 - Prefer the dataset-centric runtime for any new endpoint, agent flow, or deployment.
 
@@ -368,4 +369,3 @@ pytest tests/test_ingestion.py
 - Configure AI backend in the `ai:` block (OpenAI, Azure, Ollama)
 
 ---
-

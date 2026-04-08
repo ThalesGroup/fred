@@ -194,6 +194,35 @@ def test_configuration_accepts_legacy_tabular_mode_without_explicit_tabular(tmp_
 
     assert config.storage.tabular_stores is not None
     assert "legacy" in config.storage.tabular_stores
+    assert config.tabular is None
+
+
+def test_configuration_defaults_to_dataset_tabular_mode_when_no_legacy_store_is_declared(tmp_path):
+    """
+    Ensure the recommended tabular runtime stays the implicit default.
+
+    Why this exists:
+    - Fresh deployments that omit both tabular sections should still get the
+      dataset-centric runtime without having to repeat the default YAML block.
+
+    How to use:
+    - Build a `Configuration` payload without `tabular` and without
+      `storage.tabular_stores`, then assert top-level `tabular` is populated.
+    """
+
+    storage = StorageConfig(
+        postgres=PostgresStoreConfig(host="localhost", database="fred"),
+        resource_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "resource.duckdb")),
+        tag_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "tag.duckdb")),
+        kpi_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "kpi.duckdb")),
+        metadata_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "metadata.duckdb")),
+        vector_store=InMemoryVectorStorage(type="in_memory"),
+    )
+
+    config = _build_minimal_configuration(storage=storage, include_tabular=False)
+
+    assert config.tabular is not None
+    assert config.tabular.artifacts_prefix == "tabular/datasets"
 
 
 def test_application_context_builds_legacy_tabular_stores_and_csv_input_store(tmp_path):

@@ -1269,21 +1269,24 @@ class ApplicationContext:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 
         try:
-            logger.info("  📊 Tabular runtime:")
-            logger.info(
-                "     • prefix=%s  format=%s  compression=%s",
-                self.configuration.tabular.artifacts_prefix,
-                self.configuration.tabular.format,
-                self.configuration.tabular.compression,
-            )
-            logger.info(
-                "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  presigned_ttl_seconds=%s",
-                self.configuration.tabular.query.engine,
-                self.configuration.tabular.query.access_mode,
-                self.configuration.tabular.query.default_max_rows,
-                self.configuration.tabular.query.max_rows,
-                self.configuration.tabular.query.presigned_ttl_seconds,
-            )
+            if self.configuration.tabular is not None:
+                logger.info("  📊 Tabular runtime:")
+                logger.info(
+                    "     • prefix=%s  format=%s  compression=%s",
+                    self.configuration.tabular.artifacts_prefix,
+                    self.configuration.tabular.format,
+                    self.configuration.tabular.compression,
+                )
+                logger.info(
+                    "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  presigned_ttl_seconds=%s",
+                    self.configuration.tabular.query.engine,
+                    self.configuration.tabular.query.access_mode,
+                    self.configuration.tabular.query.default_max_rows,
+                    self.configuration.tabular.query.max_rows,
+                    self.configuration.tabular.query.presigned_ttl_seconds,
+                )
+            else:
+                logger.info("  📊 Tabular runtime: disabled (legacy storage.tabular_stores mode active)")
         except Exception:
             logger.warning("  ⚠️ Failed to read tabular runtime section.")
 

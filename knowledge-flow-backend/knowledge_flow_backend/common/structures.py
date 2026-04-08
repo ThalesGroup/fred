@@ -860,9 +860,9 @@ class Configuration(BaseModel):
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
-    tabular: TabularConfig = Field(
-        default_factory=TabularConfig,
-        description="Dataset-centric tabular artifact and query configuration.",
+    tabular: Optional[TabularConfig] = Field(
+        default=None,
+        description="Dataset-centric tabular artifact and query configuration. Keep unset when using legacy storage.tabular_stores.",
     )
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
@@ -883,22 +883,25 @@ class Configuration(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_mixed_tabular_modes(cls, values: object):
+    def resolve_tabular_mode(cls, values: object):
         """
-        Reject configurations that declare both tabular SQL modes at once.
+        Resolve the effective tabular SQL mode from one configuration payload.
 
         Why this exists:
         - Knowledge Flow now supports two mutually exclusive tabular query
           modes: the recommended dataset-centric runtime and the legacy
           SQL-table runtime.
-        - Allowing both in the same configuration makes the effective runtime
-          ambiguous for users and maintainers.
+        - Older deployments still rely on `storage.tabular_stores`, while new
+          deployments should get the dataset-centric defaults when they do not
+          declare a legacy SQL store section.
 
         How to use:
         - Use top-level `tabular` with `content_storage` for the recommended
           dataset-centric mode.
         - Use `storage.tabular_stores` for the legacy SQL-backed mode.
         - Do not declare both explicitly in the same configuration payload.
+        - Omit both only when you want the recommended dataset-centric defaults
+          to be applied automatically.
 
         Example:
         ```yaml
@@ -928,4 +931,9 @@ class Configuration(BaseModel):
                 "Configuration cannot define both top-level 'tabular' and 'storage.tabular_stores'. Choose exactly one tabular SQL mode.",
             )
 
-        return values
+        if has_explicit_tabular or legacy_tabular_stores:
+            return values
+
+        resolved_values = dict(values)
+        resolved_values["tabular"] = TabularConfig().model_dump()
+        return resolved_values

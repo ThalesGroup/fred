@@ -653,10 +653,13 @@ class MetadataService:
             logger.info("[TABULAR] No %s payload found for '%s'", TABULAR_EXTENSION_KEY, metadata.document_name)
             return
 
-        prefix = document_artifact_prefix(
-            artifacts_prefix=self.config.tabular.artifacts_prefix,
-            document_uid=metadata.document_uid,
-        )
+        if self.config.tabular is not None:
+            prefix = document_artifact_prefix(
+                artifacts_prefix=self.config.tabular.artifacts_prefix,
+                document_uid=metadata.document_uid,
+            )
+        else:
+            prefix = f"{artifact.object_key.rsplit('/', 2)[0]}/"
 
         try:
             for stored_object in self.content_store.list_objects(prefix):
