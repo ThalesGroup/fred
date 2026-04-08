@@ -8,7 +8,7 @@ import { useListTeamsQuery } from "../../../../../../slices/controlPlane/control
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 
 export default function TeamSelectionNavbar() {
-  const { defaultTeamBannerFile, defaultTeamAvatarFile } = useFrontendProperties();
+  const { defaultTeamBannerFile, defaultPersonalBannerFile } = useFrontendProperties();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { data: teams } = useListTeamsQuery();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
@@ -27,7 +27,7 @@ export default function TeamSelectionNavbar() {
           teamName={t("rework.sidebar.team.userTeam")}
           selected={pathname.startsWith(`/team/${userDetails?.personalTeam.id}`)}
           icon={{ category: "outlined", type: "person", filled: true }}
-          imgUrl={`/images/${defaultTeamAvatarFile}`}
+          imgUrl={`/images/${defaultPersonalBannerFile}`}
         />
         <TeamSelectionItem
           redirection={"/marketplace/teams"}

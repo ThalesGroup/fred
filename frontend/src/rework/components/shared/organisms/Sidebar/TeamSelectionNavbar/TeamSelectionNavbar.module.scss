@@ -22,6 +22,12 @@
   @include typography("label", "large", true);
 }
 
+.subTitle {
+  color: var(--on-surface-retreat);
+
+  @include typography("body", "small", true);
+}
+
 .teamContainer {
   margin-bottom: 64px;
   overflow-x: clip;

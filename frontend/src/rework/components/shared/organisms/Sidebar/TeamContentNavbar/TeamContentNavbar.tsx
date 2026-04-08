@@ -15,7 +15,8 @@ import { useFrontendProperties } from "../../../../../../hooks/useFrontendProper
 import { IconType } from "@shared/utils/Type.ts";
 
 export default function TeamContentNavbar() {
-  const { defaultTeamBannerFile, agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const { defaultTeamBannerFile, defaultPersonalBannerFile, agentIconName, agentsNicknamePlural } =
+    useFrontendProperties();
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
@@ -42,11 +43,12 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
-
+console.log(teamId, userDetails?.personalTeam.id);
   const bannerStyle = {
-    "--banner-img": selectedTeam?.banner_image_url
-      ? `url(${selectedTeam.banner_image_url})`
-      : `url("/images/${defaultTeamBannerFile}")`,
+    "--banner-img":
+      teamId === userDetails?.personalTeam.id
+        ? `url("/images/${defaultPersonalBannerFile}")`
+        : `url("${selectedTeam?.banner_image_url ?? `/images/${defaultTeamBannerFile}`}")`,
   } as React.CSSProperties;
 
   return (
