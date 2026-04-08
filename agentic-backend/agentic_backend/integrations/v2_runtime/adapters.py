@@ -28,8 +28,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast, Any
-
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, cast
 
 import httpx
 from fred_core import (
