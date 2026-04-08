@@ -108,7 +108,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
           <ImageFileInput
             ref={fileInputRef}
-            imageUrl={team.banner_image_url ? team.banner_image_url : `/images/${defaultTeamBannerFile}`}
+            imageUrl={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
             alt={""}
             height={"80px"}
             accept={ALLOWED_TYPES.join(",")}

@@ -32,13 +32,13 @@ export default function TeamContentNavbar() {
     {
       type: "link",
       label: agentsNicknamePlural.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
-      icon: { category: "outlined", type: agentIconName as IconType },
+      icon: { category: "outlined", type: agentIconName as IconType, filled: true },
       linkProps: { to: `/team/${teamId}/agents` },
     },
     {
       type: "link",
       label: t("rework.sidebar.team.menu.resources"),
-      icon: { category: "outlined", type: "folder" },
+      icon: { category: "outlined", type: "folder", filled: true },
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];

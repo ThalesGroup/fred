@@ -1,0 +1,22 @@
+@use "src/index.scss" as *;
+
+.title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-xl) 0 var(--spacing-l) 0;
+  width: 100%;
+  color: var(--on-surface);
+
+  @include typography("title", "large");
+}
+
+.agentList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 280px);
+  justify-content: center;
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-l) var(--spacing-l) var(--spacing-l);
+  overflow: auto;
+}

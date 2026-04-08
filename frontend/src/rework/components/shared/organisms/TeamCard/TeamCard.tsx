@@ -18,11 +18,16 @@ export default function TeamCard({ team, withDescription }: TeamCardProps) {
     <div className={styles["team-card-container"]}>
       <img
         className={styles["team-banner"]}
-        src={team.banner_image_url ? `url(${team.banner_image_url})` : `/images/${defaultTeamBannerFile}`}
+        src={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
         alt=""
         aria-hidden="true"
       ></img>
-      <img className={styles["team-avatar"]} src={`/images/${defaultTeamAvatarFile}`} alt="" aria-hidden="true"></img>
+      <img
+        className={styles["team-avatar"]}
+        src={team.banner_image_url ?? `/images/${defaultTeamAvatarFile}`}
+        alt=""
+        aria-hidden="true"
+      ></img>
       <div className={styles["team-card-details"]}>
         <div className={styles["team-card-detail-name"]}>
           <div className={styles["team-information"]}>

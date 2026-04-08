@@ -30,7 +30,7 @@
 
     .switch-handle {
       --switch-handle-background-color: var(--on-primary);
-      left: calc(0px - var(--switch-padding));
+      left: 0;
       transform: translateY(-50%) translateX(100%);
     }
 
