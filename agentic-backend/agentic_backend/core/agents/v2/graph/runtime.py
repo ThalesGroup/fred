@@ -351,13 +351,15 @@ class _GraphNodeExecutionContext:
                     span.set_output({"content": content[:_MAX_CONTENT_LEN]})
                     usage_meta = getattr(response, "response_metadata", {}) or {}
                     token_usage = (
-                        usage_meta.get("token_usage")
-                        or usage_meta.get("usage")
-                        or {}
+                        usage_meta.get("token_usage") or usage_meta.get("usage") or {}
                     )
                     if isinstance(token_usage, dict):
-                        in_tok = token_usage.get("prompt_tokens") or token_usage.get("input_tokens")
-                        out_tok = token_usage.get("completion_tokens") or token_usage.get("output_tokens")
+                        in_tok = token_usage.get("prompt_tokens") or token_usage.get(
+                            "input_tokens"
+                        )
+                        out_tok = token_usage.get(
+                            "completion_tokens"
+                        ) or token_usage.get("output_tokens")
                         if in_tok is not None:
                             span.set_attribute("input_tokens", int(in_tok))
                         if out_tok is not None:
@@ -513,7 +515,9 @@ class _GraphNodeExecutionContext:
                         span.set_attribute("status", "error")
                 else:
                     if span is not None:
-                        span.set_output(_safe_json(result.blocks[0].text if result.blocks else ""))
+                        span.set_output(
+                            _safe_json(result.blocks[0].text if result.blocks else "")
+                        )
                         span.set_attribute("status", "ok")
         except Exception:
             if span is not None:
@@ -659,12 +663,14 @@ class _GraphNodeExecutionContext:
             trace_id=self.execution_trace_id,
         )
         if span is not None:
-            span.set_input({
-                "file_name": file_name,
-                "scope": scope.value,
-                "content_type": content_type,
-                "size_bytes": len(content_bytes),
-            })
+            span.set_input(
+                {
+                    "file_name": file_name,
+                    "scope": scope.value,
+                    "content_type": content_type,
+                    "size_bytes": len(content_bytes),
+                }
+            )
         try:
             artifact = await artifact_publisher.publish(
                 ArtifactPublishRequest(
@@ -678,7 +684,13 @@ class _GraphNodeExecutionContext:
                 )
             )
             if span is not None:
-                span.set_output({"href": artifact.href, "file_name": artifact.file_name, "size": artifact.size})
+                span.set_output(
+                    {
+                        "href": artifact.href,
+                        "file_name": artifact.file_name,
+                        "size": artifact.size,
+                    }
+                )
                 span.set_attribute("status", "ok")
             return artifact
         except Exception:
@@ -771,7 +783,13 @@ class _GraphNodeExecutionContext:
             trace_id=self.execution_trace_id,
         )
         if span is not None:
-            span.set_input({"stage": request.stage, "question": request.question, "choices": [c.label for c in request.choices]})
+            span.set_input(
+                {
+                    "stage": request.stage,
+                    "question": request.question,
+                    "choices": [c.label for c in request.choices],
+                }
+            )
             span.set_attribute("status", "awaiting_human")
             span.end()
         raise _AwaitHumanInterrupt(request)
