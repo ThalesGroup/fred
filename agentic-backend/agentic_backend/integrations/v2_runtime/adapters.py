@@ -28,7 +28,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 
 import httpx
 from fred_core import (
@@ -149,15 +149,16 @@ class LangfuseSpanAdapter(SpanPort):
         if self._ended:
             return
         try:
-            update_kwargs: dict[str, Any] = {}
-            if self._metadata:
-                update_kwargs["metadata"] = dict(self._metadata)
+            extra_kwargs: dict[str, object] = {}
             if self._input is not None:
-                update_kwargs["input"] = self._input
+                extra_kwargs["input"] = self._input
             if self._output is not None:
-                update_kwargs["output"] = self._output
-            if update_kwargs:
-                self._span.update(**update_kwargs)
+                extra_kwargs["output"] = self._output
+            metadata: Mapping[str, object] | None = (
+                dict(self._metadata) if self._metadata else None
+            )
+            if metadata is not None or extra_kwargs:
+                self._span.update(metadata=metadata, **extra_kwargs)
             self._span.end()
         finally:
             self._ended = True
