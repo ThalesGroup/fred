@@ -220,15 +220,19 @@ applications:
           faviconName: "favicon_PRISM_light"
           faviconNameDark: "favicon_PRISM_dark"
           siteDisplayName: "PRISM.AI"
+          siteTitle: "Prism"
+          siteSubtitle: "AI Hub"
           agentsNicknameSingular: "Lumi"
           agentsNicknamePlural: "Lumis"
           contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
-          agentIconName: "icon_lumi"
+          agentIconName: "customAgent"
           showAgentRegisterA2A: false
           showAgentRestoreFromConfiguration: false
           showAgentCode: false
           allowAgentSwitchInOneConversation: false
           showAgentDisableButton: false
+          defaultTeamBannerFile: "default-team-banner-prism.png"
+          defaultTeamAvatarFile: "default-team-avatar-prism.png"
 
       scheduler:
         backend: "temporal"
