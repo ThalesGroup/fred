@@ -917,13 +917,13 @@ class ApplicationContext:
         if self._tabular_stores is not None:
             return self._tabular_stores
 
-        config_map = get_configuration().storage.tabular_stores or {}
-        stores = {}
+        config_map = self.configuration.storage.tabular_stores or {}
+        stores: Dict[str, StoreInfo] = {}
 
         for name, cfg in config_map.items():
             if isinstance(cfg, SQLStorageConfig):
                 try:
-                    database_name = cfg.database
+                    database_name = cfg.database or name
                     if cfg.path is not None:
                         path = Path(cfg.path).expanduser()
                         # ensure the path's parent directory exists

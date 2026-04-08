@@ -880,3 +880,52 @@ class Configuration(BaseModel):
                 "Legacy root field 'input_processors' is no longer supported. Move processors under processing.profiles.<profile>.input_processors.",
             )
         return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_mixed_tabular_modes(cls, values: object):
+        """
+        Reject configurations that declare both tabular SQL modes at once.
+
+        Why this exists:
+        - Knowledge Flow now supports two mutually exclusive tabular query
+          modes: the recommended dataset-centric runtime and the legacy
+          SQL-table runtime.
+        - Allowing both in the same configuration makes the effective runtime
+          ambiguous for users and maintainers.
+
+        How to use:
+        - Use top-level `tabular` with `content_storage` for the recommended
+          dataset-centric mode.
+        - Use `storage.tabular_stores` for the legacy SQL-backed mode.
+        - Do not declare both explicitly in the same configuration payload.
+
+        Example:
+        ```yaml
+        # valid: recommended mode
+        content_storage:
+          type: local
+          root_path: ".fred/data/content"
+        tabular:
+          artifacts_prefix: "tabular/datasets"
+        ```
+        """
+
+        if not isinstance(values, dict):
+            return values
+
+        storage_value = values.get("storage")
+        has_explicit_tabular = "tabular" in values and values.get("tabular") is not None
+
+        legacy_tabular_stores = None
+        if isinstance(storage_value, dict):
+            legacy_tabular_stores = storage_value.get("tabular_stores")
+        elif isinstance(storage_value, StorageConfig):
+            legacy_tabular_stores = storage_value.tabular_stores
+
+        if has_explicit_tabular and legacy_tabular_stores:
+            raise ValueError(
+                "Configuration cannot define both top-level 'tabular' and 'storage.tabular_stores'. Choose exactly one tabular SQL mode.",
+            )
+
+        return values
