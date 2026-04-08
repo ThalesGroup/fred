@@ -701,6 +701,12 @@ class StorageConfig(BaseModel):
         default=None,
         description="Task store backend (optional; scheduler may fall back to defaults).",
     )
+    tabular_stores: Optional[Dict[str, StoreConfig]] = Field(
+        default=None,
+        description=(
+            "Deprecated legacy tabular SQL stores. Still accepted for backward compatibility with older deployments, while the default runtime uses content_storage + top-level tabular settings."
+        ),
+    )
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
 

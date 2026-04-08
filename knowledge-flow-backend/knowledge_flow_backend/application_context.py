@@ -46,6 +46,7 @@ from fred_core.common import (
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
+from fred_core.store import SQLTableStore, StoreInfo
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -289,6 +290,7 @@ class ApplicationContext:
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
+    _tabular_stores: Optional[Dict[str, StoreInfo]] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
@@ -911,6 +913,85 @@ class ApplicationContext:
             return self._resource_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
+    def get_tabular_stores(self) -> Dict[str, StoreInfo]:
+        """
+        Build legacy tabular SQL stores from `storage.tabular_stores`.
+
+        Why this exists:
+        - Older deployments may still rely on the historical SQL-table
+          tabular-store contract.
+        - The dataset-centric Parquet runtime is now the default, but we keep
+          this compatibility accessor to avoid breaking those callers abruptly.
+
+        How to use:
+        - Call only from code paths that explicitly support the legacy
+          `storage.tabular_stores` section.
+        - Returns an empty mapping when no legacy stores are configured.
+
+        Example:
+        ```python
+        stores = ApplicationContext.get_instance().get_tabular_stores()
+        base = stores.get("base_database")
+        ```
+        """
+
+        if self._tabular_stores is not None:
+            return self._tabular_stores
+
+        config_map = self.configuration.storage.tabular_stores or {}
+        stores: Dict[str, StoreInfo] = {}
+
+        for name, cfg in config_map.items():
+            if isinstance(cfg, SQLStorageConfig):
+                try:
+                    database_name = cfg.database or name
+                    if cfg.path is not None:
+                        path = Path(cfg.path).expanduser()
+                        # ensure the path's parent directory exists
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        store = SQLTableStore(driver=cfg.driver, path=path)
+                    else:
+                        raise ValueError("The path must not be None")
+
+                    stores[database_name] = StoreInfo(store=store, mode=cfg.mode)
+                    logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
+                except Exception as e:
+                    logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
+
+        self._tabular_stores = stores
+        return stores
+
+    def get_csv_input_store(self) -> SQLTableStore:
+        """
+        Return the writable legacy tabular SQL store used by older CSV flows.
+
+        Why this exists:
+        - Some callers still expect the historical behavior where CSV ingestion
+          writes into one writable SQL database.
+        - Keeping this helper softens the migration while the default runtime
+          remains dataset-centric and content-store based.
+
+        How to use:
+        - Prefer the dataset-centric tabular runtime for new work.
+        - Use this helper only for backward-compatible legacy flows.
+
+        Example:
+        ```python
+        store = ApplicationContext.get_instance().get_csv_input_store()
+        ```
+        """
+
+        stores = self.get_tabular_stores()
+
+        if "base_database" in stores:
+            return stores["base_database"].store
+
+        for store_info in stores.values():
+            if store_info.mode == "read_and_write":
+                return store_info.store
+
+        raise ValueError("No legacy tabular_stores with mode 'read_and_write' found. Configure storage.tabular_stores for backward-compatible SQL ingestion flows.")
+
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -1201,6 +1282,25 @@ class ApplicationContext:
             _describe("metadata_store", st.metadata_store)
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)
+
+            tabular_map = st.tabular_stores or {}
+            if tabular_map:
+                logger.info("  🗄️  Legacy tabular stores:")
+                for name, cfg in tabular_map.items():
+                    if isinstance(cfg, SQLStorageConfig):
+                        logger.info(
+                            "     • %-14s SQLStorage  driver=%s  mode=%s  database=%s  host=%s",
+                            name,
+                            cfg.driver,
+                            cfg.mode,
+                            cfg.database or "unset",
+                            cfg.host or "unset",
+                        )
+                        secret = cfg.password or os.getenv("TABULAR_POSTGRES_PASSWORD") or os.getenv("SQL_PASSWORD")
+                        logger.info("     ↳ Username: %s", cfg.username or "<unset>")
+                        self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD", secret)
+                    else:
+                        logger.info("     • %-14s %s", name, type(cfg).__name__)
 
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
