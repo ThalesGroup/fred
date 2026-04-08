@@ -914,37 +914,16 @@ class ApplicationContext:
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
     def get_tabular_stores(self) -> Dict[str, StoreInfo]:
-        """
-        Build legacy tabular SQL stores from `storage.tabular_stores`.
-
-        Why this exists:
-        - Older deployments may still rely on the historical SQL-table
-          tabular-store contract.
-        - The dataset-centric Parquet runtime is now the default, but we keep
-          this compatibility accessor to avoid breaking those callers abruptly.
-
-        How to use:
-        - Call only from code paths that explicitly support the legacy
-          `storage.tabular_stores` section.
-        - Returns an empty mapping when no legacy stores are configured.
-
-        Example:
-        ```python
-        stores = ApplicationContext.get_instance().get_tabular_stores()
-        base = stores.get("base_database")
-        ```
-        """
-
         if self._tabular_stores is not None:
             return self._tabular_stores
 
-        config_map = self.configuration.storage.tabular_stores or {}
-        stores: Dict[str, StoreInfo] = {}
+        config_map = get_configuration().storage.tabular_stores or {}
+        stores = {}
 
         for name, cfg in config_map.items():
             if isinstance(cfg, SQLStorageConfig):
                 try:
-                    database_name = cfg.database or name
+                    database_name = cfg.database
                     if cfg.path is not None:
                         path = Path(cfg.path).expanduser()
                         # ensure the path's parent directory exists
@@ -963,24 +942,9 @@ class ApplicationContext:
 
     def get_csv_input_store(self) -> SQLTableStore:
         """
-        Return the writable legacy tabular SQL store used by older CSV flows.
-
-        Why this exists:
-        - Some callers still expect the historical behavior where CSV ingestion
-          writes into one writable SQL database.
-        - Keeping this helper softens the migration while the default runtime
-          remains dataset-centric and content-store based.
-
-        How to use:
-        - Prefer the dataset-centric tabular runtime for new work.
-        - Use this helper only for backward-compatible legacy flows.
-
-        Example:
-        ```python
-        store = ApplicationContext.get_instance().get_csv_input_store()
-        ```
+        Returns the store named 'base_database' if it exists,
+        otherwise returns the first store with mode 'read_and_write'.
         """
-
         stores = self.get_tabular_stores()
 
         if "base_database" in stores:
@@ -989,8 +953,7 @@ class ApplicationContext:
         for store_info in stores.values():
             if store_info.mode == "read_and_write":
                 return store_info.store
-
-        raise ValueError("No legacy tabular_stores with mode 'read_and_write' found. Configure storage.tabular_stores for backward-compatible SQL ingestion flows.")
+        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
 
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """

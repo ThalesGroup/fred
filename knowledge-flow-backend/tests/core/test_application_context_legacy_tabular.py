@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from fred_core.common import DuckdbStoreConfig, PostgresStoreConfig, SQLStorageConfig
@@ -91,3 +92,55 @@ def test_application_context_builds_legacy_tabular_stores_and_csv_input_store(tm
 
     assert list(stores) == ["base_database"]
     assert ApplicationContext.get_csv_input_store(ctx) is stores["base_database"].store
+
+
+def test_application_context_builds_legacy_remote_tabular_store(monkeypatch):
+    """
+    Ensure legacy remote SQL stores are passed as DSN targets, not file paths.
+
+    Why this exists:
+    - `storage.tabular_stores` historically accepted remote SQL engines such as
+      PostgreSQL or MySQL/MariaDB.
+    - The compatibility path must not treat those DSN fragments like local
+      filesystem paths.
+
+    How to use:
+    - Patch `SQLTableStore` with a tiny fake, then build a remote
+      `SQLStorageConfig` and assert the connection target is forwarded as a
+      string.
+    """
+
+    captured: dict[str, object] = {}
+
+    class FakeSQLTableStore:
+        def __init__(self, driver: str, path: str | Path):
+            captured["driver"] = driver
+            captured["path"] = path
+
+    monkeypatch.setattr("knowledge_flow_backend.application_context.SQLTableStore", FakeSQLTableStore)
+
+    ctx = ApplicationContext.__new__(ApplicationContext)
+    ctx.configuration = SimpleNamespace(
+        storage=SimpleNamespace(
+            tabular_stores={
+                "legacy_remote": SQLStorageConfig(
+                    type="sql",
+                    driver="postgresql+psycopg2",
+                    mode="read_only",
+                    host="db.example",
+                    port=5432,
+                    database="analytics",
+                    username="reader",
+                    password="pwd",  # pragma: allowlist secret
+                )
+            }
+        )
+    )
+    ctx._tabular_stores = None
+
+    stores = ApplicationContext.get_tabular_stores(ctx)
+
+    assert list(stores) == ["analytics"]
+    assert captured["driver"] == "postgresql+psycopg2"
+    assert captured["path"] == "reader:pwd@db.example:5432/analytics"
+    assert isinstance(captured["path"], str)
