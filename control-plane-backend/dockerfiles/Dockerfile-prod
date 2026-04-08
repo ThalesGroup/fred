@@ -28,6 +28,9 @@ COPY fred-core /fred-core
 RUN make dev
 
 COPY control-plane-backend/. /app/
+# alembic.ini is a symlink to agentic-backend/alembic.ini in the repo; Docker
+# copies symlinks as broken links, so we override it with the real file here.
+COPY agentic-backend/alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -53,6 +56,9 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 WORKDIR /app
 
 COPY --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
+# alembic.ini is a symlink to agentic-backend/alembic.ini in the repo; Docker
+# copies symlinks as broken links, so we override it with the real file here.
+COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
