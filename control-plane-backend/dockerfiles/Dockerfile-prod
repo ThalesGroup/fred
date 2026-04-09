@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
@@ -27,9 +28,8 @@ COPY fred-core /fred-core
 
 RUN make dev
 
-COPY control-plane-backend/. /app/
-# alembic.ini is a symlink to /alembic.ini in the repo; Docker
-# copies symlinks as broken links, so we override it with the real file here.
+# Exclude alembic.ini symlink; the real file is copied next
+COPY --exclude=alembic.ini control-plane-backend/. /app/
 COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
@@ -55,9 +55,8 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 
 WORKDIR /app
 
-COPY --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
-# alembic.ini is a symlink to /alembic.ini in the repo; Docker
-# copies symlinks as broken links, so we override it with the real file here.
+# Exclude alembic.ini symlink; the real file is copied next
+COPY --exclude=alembic.ini --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
@@ -40,10 +41,8 @@ COPY fred-core /fred-core
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
 
-# Copy projets
-COPY agentic-backend/. /app/
-# alembic.ini is a symlink to /alembic.ini in the repo; Docker
-# copies symlinks as broken links, so we override it with the real file here.
+# Copy projets (exclude alembic.ini symlink; the real file is copied next)
+COPY --exclude=alembic.ini agentic-backend/. /app/
 COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
@@ -88,10 +87,8 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 # Set working directory
 WORKDIR /app
 
-# Copy app source
-COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
-# alembic.ini is a symlink to /alembic.ini in the repo; Docker
-# copies symlinks as broken links, so we override it with the real file here.
+# Copy app source (exclude alembic.ini symlink; the real file is copied next)
+COPY --exclude=alembic.ini --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
