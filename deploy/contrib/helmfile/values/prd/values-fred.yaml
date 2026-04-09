@@ -568,8 +568,8 @@ applications:
         settings:
           base_url: "https://api.corp.thales/corp/genai-embedding/v2"
       # Use mistral medium from TGS as LLM
-      chat_model: *tgs-mistral-medium
-
+      chat_model:   *tgs-mistral-medium
+      vision_model: *tgs-mistral-medium
       storage:
         # Set Postgres connection params
         postgres: *storage-postgres
