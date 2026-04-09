@@ -16,6 +16,7 @@ import logging
 import re
 from datetime import timedelta
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
@@ -68,6 +69,32 @@ def parse_range_header(range_str: Optional[str]) -> Optional[tuple[int | None, i
     start = int(start_s) if start_s else None
     end = int(end_s) if end_s else None
     return start, end
+
+
+def build_content_disposition_header(disposition_type: str, file_name: str) -> str:
+    """
+    Build an ASCII-safe Content-Disposition header for downloads and inline previews.
+
+    Why this exists:
+    Starlette encodes response headers as latin-1. User-provided file names can
+    include typographic punctuation or other Unicode characters that would crash
+    response creation when inserted directly into `filename="..."`.
+
+    How to use it:
+    Pass the desired disposition (`"inline"` or `"attachment"`) and the original
+    file name. The helper returns a header value with:
+    - an ASCII fallback in `filename=...`
+    - the original UTF-8 name in RFC 5987 `filename*=...`
+
+    Example:
+    `build_content_disposition_header("inline", "l’avis.pdf")`
+    returns a safe header such as
+    `inline; filename="l'avis.pdf"; filename*=UTF-8''l%E2%80%99avis.pdf`
+    """
+    fallback_name = file_name.encode("latin-1", errors="replace").decode("latin-1")
+    fallback_name = fallback_name.replace("\\", "_").replace('"', "'")
+    encoded_name = quote(file_name, safe="")
+    return f"{disposition_type}; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_name}"
 
 
 _MEDIA_RE = re.compile(r"knowledge-flow/v1/markdown/([^/]+)/media/([^/?#\s\"']+)")
@@ -209,7 +236,11 @@ class ContentController:
             try:
                 stream, file_name, content_type = await self.service.get_document_media(user, document_uid, media_id)
 
-                return StreamingResponse(content=stream, media_type=content_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})
+                return StreamingResponse(
+                    content=stream,
+                    media_type=content_type,
+                    headers={"Content-Disposition": build_content_disposition_header("attachment", file_name)},
+                )
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
 
@@ -240,7 +271,7 @@ class ContentController:
             return StreamingResponse(
                 content=stream,
                 media_type=media_type,
-                headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+                headers={"Content-Disposition": build_content_disposition_header("attachment", file_name)},
             )
 
         @router.get(
@@ -268,7 +299,7 @@ class ContentController:
 
                 headers = {
                     "Accept-Ranges": "bytes",
-                    "Content-Disposition": f'inline; filename="{file_name}"',
+                    "Content-Disposition": build_content_disposition_header("inline", file_name),
                 }
 
                 rng = parse_range_header(range_header)
