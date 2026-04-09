@@ -32,6 +32,7 @@ body {
   margin: 0;
   background-color: var(--surface-container-lowest) !important;
   padding: 0;
+  overflow: hidden;
   font-size: 12px;
   font-family: "Roboto", sans-serif;
 }

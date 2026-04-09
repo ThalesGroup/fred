@@ -1146,7 +1146,9 @@ export type Properties = {
   showAgentCode?: boolean;
   allowAgentSwitchInOneConversation?: boolean;
   defaultTeamBannerFile?: string;
+  defaultPersonalBannerFile?: string;
   defaultTeamAvatarFile?: string;
+  defaultPersonalAvatarFile?: string;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

@@ -31,6 +31,10 @@ jobs:
             context: ./
             dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
+          - name: control-plane-backend
+            context: ./
+            dockerfile: ./control-plane-backend/dockerfiles/Dockerfile-prod
+            image: control-plane-backend
           - name: frontend
             context: ./
             dockerfile: ./frontend/dockerfiles/Dockerfile-prod

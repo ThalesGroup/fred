@@ -1316,7 +1316,7 @@
     },
     "teamRoles": {
       "member": "Membre",
-      "manager": "Manager",
+      "manager": "Editeur",
       "owner": "Propriétaire"
     },
     "teamCard": {
@@ -1404,7 +1404,9 @@
     "teams": {
       "agents": {
         "title": "Sollicitez vos {{agentsNicknamePlural}}",
-        "create": "Créer {{agentsNicknameSingular}}"
+        "create": "Créer {{agentsNicknameSingular}}",
+        "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
+        "firstCreate": "Créer"
       }
     },
     "marketplace": {

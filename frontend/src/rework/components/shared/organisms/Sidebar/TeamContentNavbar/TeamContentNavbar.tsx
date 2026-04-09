@@ -15,7 +15,8 @@ import { useFrontendProperties } from "../../../../../../hooks/useFrontendProper
 import { IconType } from "@shared/utils/Type.ts";
 
 export default function TeamContentNavbar() {
-  const { defaultTeamBannerFile, agentIconName, agentsNicknamePlural } = useFrontendProperties();
+  const { defaultTeamBannerFile, defaultPersonalBannerFile, agentIconName, agentsNicknamePlural } =
+    useFrontendProperties();
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
@@ -32,21 +33,22 @@ export default function TeamContentNavbar() {
     {
       type: "link",
       label: agentsNicknamePlural.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
-      icon: { category: "outlined", type: agentIconName as IconType },
+      icon: { category: "outlined", type: agentIconName as IconType, filled: true },
       linkProps: { to: `/team/${teamId}/agents` },
     },
     {
       type: "link",
       label: t("rework.sidebar.team.menu.resources"),
-      icon: { category: "outlined", type: "folder" },
+      icon: { category: "outlined", type: "folder", filled: true },
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
 
   const bannerStyle = {
-    "--banner-img": selectedTeam?.banner_image_url
-      ? `url(${selectedTeam.banner_image_url})`
-      : `url("/images/${defaultTeamBannerFile}")`,
+    "--banner-img":
+      teamId === userDetails?.personalTeam.id
+        ? `url("/images/${defaultPersonalBannerFile}")`
+        : `url("${selectedTeam?.banner_image_url ?? `/images/${defaultTeamBannerFile}`}")`,
   } as React.CSSProperties;
 
   return (
