@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
@@ -28,8 +27,10 @@ COPY fred-core /fred-core
 
 RUN make dev
 
-# Exclude alembic.ini symlink; the real file is copied next
-COPY --exclude=alembic.ini control-plane-backend/. /app/
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
+COPY control-plane-backend/. /app/
+RUN rm -f /app/alembic.ini
 COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
@@ -55,8 +56,10 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 
 WORKDIR /app
 
-# Exclude alembic.ini symlink; the real file is copied next
-COPY --exclude=alembic.ini --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
+COPY --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
+RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
