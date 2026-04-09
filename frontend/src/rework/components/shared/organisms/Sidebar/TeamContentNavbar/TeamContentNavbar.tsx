@@ -43,7 +43,7 @@ export default function TeamContentNavbar() {
       linkProps: { to: `/team/${teamId}/resources` },
     },
   ];
-console.log(teamId, userDetails?.personalTeam.id);
+
   const bannerStyle = {
     "--banner-img":
       teamId === userDetails?.personalTeam.id

@@ -1404,7 +1404,7 @@
     },
     "teams": {
       "agents": {
-        "title": "Engage your {{agentsNicknamePlural}}",
+        "title": "Chat with your {{agentsNicknamePlural}}",
         "create": "Create Agent",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
         "firstCreate": "Create"

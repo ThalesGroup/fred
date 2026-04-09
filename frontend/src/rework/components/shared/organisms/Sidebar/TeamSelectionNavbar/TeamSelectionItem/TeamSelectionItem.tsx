@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSelectionItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import React, { useMemo } from "react";
+import React, { useId } from "react";
 import { Link, To } from "react-router-dom";
 
 interface TeamSelectionItemProps {
@@ -20,14 +20,15 @@ export default function TeamSelectionItem({
   icon = { category: "outlined", type: "groups", filled: true },
 }: TeamSelectionItemProps) {
   const { t } = useTranslation();
-  const tooltipId = useMemo(() => `tooltip-${teamName}`.replace(" ", "_"), [teamName]);
+  const id = useId();
+  const safeId = `--anchor-${id.replace(/:/g, "")}`;
 
   return (
     <div
       className={styles.teamAvatarContainer}
       data-selected={selected}
-      popoverTarget={tooltipId}
-      style={{ anchorName: `--${tooltipId}` }}
+      popoverTarget={safeId}
+      style={{ anchorName: `--${safeId}` }}
     >
       <Link to={redirection} className={styles.link}>
         <div className={styles.stateLayer}>
@@ -44,10 +45,10 @@ export default function TeamSelectionItem({
         </div>
       </Link>
       <span
-        id={tooltipId}
+        id={safeId}
         popover={"auto"}
         className={styles.teamTooltip}
-        style={{ positionAnchor: `--${tooltipId}` } as React.CSSProperties}
+        style={{ positionAnchor: `--${safeId}` } as React.CSSProperties}
       >
         {teamName}
       </span>
