@@ -74,3 +74,29 @@ db-check-postgres-full: db-check-postgres-up db-check-postgres ## start containe
 .PHONY: db-check-migrations
 db-check-migrations: db-check-heads db-check-sqlite db-check-postgres-full ## full migration check suite (heads + SQLite + PostgreSQL)
 	@echo "All migration checks passed."
+
+##@ Migration Schema Snapshots
+
+DB_SNAPSHOTS_DIR ?= $(TARGET)/migration-snapshots
+
+.PHONY: db-snapshots
+db-snapshots: dev db-check-postgres-up ## dump the schema after each migration revision into $(TARGET)/migration-snapshots/<backend>_<index>_<rev>.sql
+	@echo "=== Snapshotting migrations for $(PROJECT_NAME) into $(DB_SNAPSHOTS_DIR) ==="
+	@mkdir -p $(DB_SNAPSHOTS_DIR)
+	@oldest_first=$$(DATABASE_URL="$(PG_TEST_URL)" $(UV) run alembic history | awk '{print $$3}' | tr -d ',' | tac); \
+	idx=1; \
+	for rev in $$oldest_first; do \
+		echo "--- Upgrading to $$rev (index $$idx) ---"; \
+		DATABASE_URL="$(PG_TEST_URL)" $(UV) run alembic upgrade $$rev; \
+		out=$(DB_SNAPSHOTS_DIR)/$(PROJECT_NAME)_$$idx\_$$rev.sql; \
+		docker compose -f $(MIGRATION_COMPOSE) exec -T postgres \
+			pg_dump --schema-only --no-owner --no-acl \
+			--exclude-table=alembic_version \
+			-U test test_migrations \
+			> $$out; \
+		echo "  Saved $$out"; \
+		idx=$$((idx + 1)); \
+	done
+	@DATABASE_URL="$(PG_TEST_URL)" $(UV) run alembic downgrade base
+	$(MAKE) db-check-postgres-down
+	@echo "=== Snapshots done. Compare with: diff <actual_dump.sql> $(DB_SNAPSHOTS_DIR)/$(PROJECT_NAME)_<index>_<rev>.sql ==="

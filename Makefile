@@ -161,6 +161,18 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	cd frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
 
+##@ Migration Schema Snapshots
+
+SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
+
+.PHONY: db-snapshots
+db-snapshots: ## Dump schema after each migration for all backends into target/migration-snapshots/
+	@set -e; \
+	for dir in agentic-backend control-plane-backend knowledge-flow-backend; do \
+		echo "************ Snapshotting $$dir ************"; \
+		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
+	done
+
 ##@ Database Migrations (combined)
 
 MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml

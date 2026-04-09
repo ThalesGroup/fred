@@ -174,3 +174,32 @@ make db-check-postgres-down  # stop the PostgreSQL container
 make db-check-postgres-full  # start container, run checks, stop container
 ```
 
+## How to stamp DB created before Alembic
+
+### 1 - Export DB state
+
+For each backend, export the tables schema
+
+```sh
+# Agent
+kubectl exec postgresql-primary-0 -- pg_dump "postgresql://postgres:<PASSWORD>@localhost/fred" --schema-only --no-owner --no-privileges  -t agent -t feedbacks -t '"mcp-server"' -t session -t session_attachments -t session_history -t tasks > fred_prod_agent_schema.sql
+
+# KF
+kubectl exec postgresql-primary-0 -- pg_dump "postgresql://postgres:<PASSWORD>@localhost/fred" --schema-only --no-owner --no-privileges -t tag -t resource -t sched_workflow_tasks > fred_prod_kf_schema.sql
+
+# CONTROL PLANE
+kubectl exec postgresql-primary-0 -- pg_dump "postgresql://postgres:<PASSWORD>@localhost/fred" --schema-only --no-owner --no-privileges -t teammetadata > fred_prod_cp_schema.sql
+```
+
+### 2 - Export table schema for each migration
+
+
+```sh
+ make db-snapshots
+```
+
+### 3 - Find the migration your DB is at
+
+For each backend, compare the dump of your DB vs dump of the migrations:
+- If you have a perfect match -> stamp on the migration id
+- No perfect match -> find the closest one, migrate by hand to the closest one then stamp on the migration id
