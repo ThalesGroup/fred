@@ -1336,8 +1336,8 @@
       "marketplace": {
         "title": "Marketplace",
         "menu": {
-          "teams": "Equipe",
-          "tools": "Tools",
+          "teams": "Équipe",
+          "tools": "Outils",
           "apps": "Apps"
         }
       },
@@ -1394,7 +1394,7 @@
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },
-        "privateTeam": "Equipe privé",
+        "privateTeam": "Équipe privée",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
           "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d’équipe."
@@ -1411,7 +1411,7 @@
     },
     "marketplace": {
       "teams": {
-        "title": "Equipes de la communauté",
+        "title": "Équipes de la communauté",
         "yourTeams": "Vos équipes",
         "otherTeams": "Découvrez d'autres équipes"
       }
