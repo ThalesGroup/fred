@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # -----------------------------------------------------------------------------
 # BUILD STAGE
 # -----------------------------------------------------------------------------
@@ -45,8 +44,10 @@ RUN mkdir -p $TIKTOKEN_CACHE_DIR
 # Download encodings for offline usage
 RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
-# Copy projets (exclude alembic.ini symlink; the real file is copied next)
-COPY --exclude=alembic.ini knowledge-flow-backend/. /app/
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
+COPY knowledge-flow-backend/. /app/
+RUN rm -f /app/alembic.ini
 COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
@@ -132,8 +133,10 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 # Set working directory
 WORKDIR /app
 
-# Copy app source (exclude alembic.ini symlink; the real file is copied next)
-COPY --exclude=alembic.ini --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
+COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
+RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
