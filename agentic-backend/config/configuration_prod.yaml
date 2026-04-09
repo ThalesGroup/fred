@@ -65,7 +65,7 @@ frontend_settings:
     logoWidth: "129px"
     faviconName: "favicon_PRISM_light"
     faviconNameDark: "favicon_PRISM_dark"
-    siteDisplayName: "PRISM.AI"
+    siteDisplayName: "Prism AI Hub"
     siteTitle: "Prism"
     siteSubtitle: "AI Hub"
     agentsNicknameSingular: "Lumi"
@@ -77,6 +77,8 @@ frontend_settings:
     showAgentCode: false
     defaultTeamBannerFile: "default-team-banner-prism.png"
     defaultTeamAvatarFile: "default-team-avatar-prism.png"
+    defaultPersonalBannerFile: "default-personal-banner.png"
+    defaultPersonalAvatarFile: "default-personal-banner.png"
 
 ai:
   # In production  activate the configuration persistence mechanism
