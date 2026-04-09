@@ -24,8 +24,8 @@ import pandas as pd
 from pandas._libs.tslibs.nattype import NaTType
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.structures import TabularParquetModeConfig
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
+from knowledge_flow_backend.common.structures import TabularParquetModeConfig
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
