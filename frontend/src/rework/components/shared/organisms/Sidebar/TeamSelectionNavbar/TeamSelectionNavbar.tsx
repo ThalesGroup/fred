@@ -1,14 +1,14 @@
-import { useListTeamsQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TeamSelectionItem from "@shared/organisms/Sidebar/TeamSelectionNavbar/TeamSelectionItem/TeamSelectionItem.tsx";
 import styles from "./TeamSelectionNavbar.module.scss";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import { useListTeamsQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 
 export default function TeamSelectionNavbar() {
-  const { defaultTeamBannerFile } = useFrontendProperties();
+  const { defaultTeamBannerFile, defaultPersonalBannerFile } = useFrontendProperties();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { data: teams } = useListTeamsQuery();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
@@ -27,6 +27,7 @@ export default function TeamSelectionNavbar() {
           teamName={t("rework.sidebar.team.userTeam")}
           selected={pathname.startsWith(`/team/${userDetails?.personalTeam.id}`)}
           icon={{ category: "outlined", type: "person", filled: true }}
+          imgUrl={`/images/${defaultPersonalBannerFile}`}
         />
         <TeamSelectionItem
           redirection={"/marketplace/teams"}
@@ -36,7 +37,7 @@ export default function TeamSelectionNavbar() {
         />
       </div>
       <Separator margin={"var(--spacing-xs)"} />
-      <div>
+      <div className={styles.teamContainer}>
         {teams?.map((team) => {
           return (
             <TeamSelectionItem
@@ -44,7 +45,7 @@ export default function TeamSelectionNavbar() {
               redirection={`/team/${team.id}/agents`}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
-              imgUrl={`/images/${defaultTeamBannerFile}`}
+              imgUrl={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
             />
           );
         })}

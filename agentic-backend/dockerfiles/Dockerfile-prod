@@ -42,6 +42,9 @@ RUN make dev
 
 # Copy projets
 COPY agentic-backend/. /app/
+# alembic.ini is a symlink to /alembic.ini in the repo; Docker
+# copies symlinks as broken links, so we override it with the real file here.
+COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -87,6 +90,9 @@ WORKDIR /app
 
 # Copy app source
 COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
+# alembic.ini is a symlink to /alembic.ini in the repo; Docker
+# copies symlinks as broken links, so we override it with the real file here.
+COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 

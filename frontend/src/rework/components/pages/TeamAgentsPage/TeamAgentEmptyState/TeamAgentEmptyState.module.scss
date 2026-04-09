@@ -1,0 +1,26 @@
+@use "src/index.scss" as *;
+
+.teamAgentEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-l);
+  padding-bottom: var(--spacing-m);
+}
+
+.teamAgentEmptyStateIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--primary);
+  font-size: 4.5rem;
+}
+
+.teamAgentEmptyStatePresentation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+
+  @include typography("title", "large");
+}
