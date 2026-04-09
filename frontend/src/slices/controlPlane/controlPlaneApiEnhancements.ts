@@ -1,5 +1,8 @@
 // NOT GENERATED. Safe to edit.
-import { controlPlaneApi as api } from "./controlPlaneOpenApi";
+import {
+  controlPlaneApi as api,
+  UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg,
+} from "./controlPlaneOpenApi";
 
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: ["ControlPlaneTeam", "ControlPlaneTeamMember", "ControlPlaneUser"],
@@ -26,6 +29,16 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     uploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost: {
+      query: (queryArg: UploadTeamBannerControlPlaneV1TeamsTeamIdBannerPostApiArg) => {
+        const formData = new FormData();
+        formData.append("file", queryArg.bodyUploadTeamBannerControlPlaneV1TeamsTeamIdBannerPost.file);
+
+        return {
+          url: `/control-plane/v1/teams/${queryArg.teamId}/banner`,
+          method: "POST",
+          body: formData,
+        };
+      },
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },

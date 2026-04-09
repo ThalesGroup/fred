@@ -27,3 +27,9 @@
 
   @include typography("body", "small", true);
 }
+
+.teamContainer {
+  margin-bottom: 64px;
+  overflow-x: clip;
+  overflow-y: auto;
+}

@@ -1,6 +1,6 @@
 @use "src/index.scss" as *;
 
-.team-avatar-container {
+.teamAvatarContainer {
   display: flex;
   position: relative;
   justify-content: center;
@@ -13,23 +13,38 @@
   --background-color: var(--surface-container-highest);
 
   &:hover,
-  &.selected {
+  &[data-selected="true"] {
     --radius: 12px;
-    --outline-size: 1px;
     --brightness: 1.1;
     --saturate: 1.3;
   }
 
-  &:hover {
-    --display-tooltip: flex;
-  }
-
-  &.selected {
+  &[data-selected="true"] {
     --background-color: var(--secondary-container);
+
+    .stateLayer,
+    .teamAvatar {
+      width: 36px;
+      height: 36px;
+    }
+
+    .teamAvatar {
+      transform: scale(calc(40 / 36));
+    }
   }
 }
 
-.state-layer {
+.link {
+  display: block;
+  outline: none;
+}
+
+.link:focus-visible .stateLayer {
+  box-shadow: 0 0 0 2px var(--on-surface);
+  border: 2px solid var(--surface-container-low);
+}
+
+.stateLayer {
   position: relative;
   transition:
     corner-shape 0.125s ease,
@@ -43,8 +58,9 @@
   corner-shape: var(--corner-shape, rounded);
 }
 
-.selected .state-layer {
-  border: 2px solid var(--primary);
+.teamAvatarContainer[data-selected="true"] .stateLayer {
+  box-shadow: 0 0 0 2px var(--primary);
+  border: 2px solid var(--surface-container-low);
 }
 
 .icon {
@@ -59,27 +75,21 @@
   font-size: 1.25rem;
 }
 
-.team-avatar {
+.teamAvatar {
   position: relative;
-  opacity: 0;
   filter: brightness(var(--brightness, 0.9)) saturate(var(--saturate, 0.9));
   width: 40px;
   height: 40px;
   object-fit: cover;
 }
 
-.loaded .team-avatar {
-  opacity: 1;
-}
-
-.team-tooltip {
-  display: var(--display-tooltip, none);
-  position: absolute;
-  bottom: 50%;
-  left: 100%;
+.teamTooltip {
+  inset: auto;
+  top: anchor(top);
+  left: anchor(right);
   align-items: center;
-  transform: translateY(50%);
   z-index: 1;
+  margin: var(--spacing-2xs) 0;
   box-shadow: 0 0 4px rgba(0, 0, 0, 1);
   border: 1px solid var(--outline);
   border-radius: var(--spacing-xs);
@@ -91,4 +101,8 @@
   text-wrap: nowrap;
 
   @include typography("title", "medium");
+}
+
+.teamAvatarContainer:hover .teamTooltip {
+  display: flex;
 }
