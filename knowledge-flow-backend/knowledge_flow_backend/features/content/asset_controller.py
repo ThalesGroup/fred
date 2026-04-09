@@ -9,7 +9,10 @@ from fred_core import KeycloakUser, get_current_user
 from starlette.background import BackgroundTask
 
 from knowledge_flow_backend.features.content.asset_service import AssetListResponse, AssetMeta, AssetService, ScopeType
-from knowledge_flow_backend.features.content.content_controller import parse_range_header  # reuse helper
+from knowledge_flow_backend.features.content.content_controller import (
+    build_content_disposition_header,
+    parse_range_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +253,7 @@ class AssetController:
         content_type = meta.content_type or "application/octet-stream"
         headers = {
             "Accept-Ranges": "bytes",
-            "Content-Disposition": f'inline; filename="{meta.file_name}"',
+            "Content-Disposition": build_content_disposition_header("inline", meta.file_name),
         }
 
         rng = parse_range_header(range_header)
