@@ -130,12 +130,11 @@ implementing the interface.
 
 ## Tabular Pipeline
 
-Knowledge Flow supports two tabular storage modes for SQL querying:
+Knowledge Flow supports one tabular storage runtime for SQL querying:
 
-| Mode | What is stored | Main config | Status |
-|------|----------------|-------------|--------|
-| Dataset-centric runtime | One Parquet artifact per document | `content_storage` + `storage.tabular_store.mode=parquet_object_store` | Recommended |
-| SQL-backed tabular store | Persistent SQL tables | `storage.tabular_store.mode=sql_store` | Legacy compatibility |
+| Runtime | What is stored | Main config | Status |
+|---------|----------------|-------------|--------|
+| Dataset-centric runtime | One Parquet artifact per document | `content_storage` + `storage.tabular_store` | Recommended |
 
 ### Recommended pipeline: dataset-centric runtime
 
@@ -165,20 +164,17 @@ The recommended tabular runtime is document-scoped rather than database-scoped.
 
 Important runtime rules for the recommended mode:
 
-- Each document produces its own Parquet artifact under `storage.tabular_store.parquet_object_store.artifacts_prefix`.
+- Each document produces its own Parquet artifact under `storage.tabular_store.artifacts_prefix`.
 - ReBAC is enforced at document level before a dataset is exposed or mounted.
 - Team/personal/library scope is applied before query aliases are shown to the caller.
 - Remote MinIO/S3-compatible reads use presigned URLs plus DuckDB `httpfs`.
 
 ### Legacy pipeline: SQL-backed tabular stores
 
-The legacy mode keeps the historical contract where tabular ingestion writes into one or more configured SQL stores.
+The historical SQL-backed runtime has been removed.
 
-- Configuration lives under `storage.tabular_store.mode=sql_store`.
-- `ApplicationContext.get_tabular_stores()` and `ApplicationContext.get_csv_input_store()` support this compatibility path.
-- This mode is exclusive with `storage.tabular_store.mode=parquet_object_store`; when `storage.tabular_store.mode=sql_store` is configured, `TabularProcessor` writes SQL tables instead of Parquet artifacts.
-- Use this mode only when an older caller still expects persistent SQL tables.
-- Prefer the dataset-centric runtime for any new endpoint, agent flow, or deployment.
+- Keep the legacy design note only as migration context.
+- Prefer the dataset-centric runtime for any endpoint, agent flow, or deployment.
 
 ---
 

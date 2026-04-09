@@ -13,13 +13,10 @@ from knowledge_flow_backend.common.document_structures import (
     FileInfo,
     FileType,
     Identity,
-    ProcessingStage,
-    ProcessingStatus,
     SourceInfo,
     SourceType,
     Tagging,
 )
-from knowledge_flow_backend.common.structures import TabularSqlStoreModeConfig
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
@@ -152,27 +149,6 @@ class _PresignedLocalContentStore:
         return getattr(self._delegate, name)
 
 
-class _LegacyCSVInputStore:
-    """
-    Minimal writable SQL-store probe used by the legacy tabular processor test.
-
-    Why this exists:
-    - The processor should still support the `storage.tabular_store.mode=sql_store`
-      mode
-      without booting a real SQL backend in offline tests.
-
-    How to use:
-    - Assign an instance to `ApplicationContext.get_csv_input_store`.
-    - Inspect `saved_tables` after calling `TabularProcessor.process(...)`.
-    """
-
-    def __init__(self) -> None:
-        self.saved_tables: list[tuple[str, list[dict[str, object]]]] = []
-
-    def save_table(self, table_name: str, df) -> None:
-        self.saved_tables.append((table_name, df.to_dict(orient="records")))
-
-
 @pytest.mark.asyncio
 async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previous_revision(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
@@ -195,9 +171,8 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
     assert TABULAR_EXTENSION_KEY in metadata.extensions
 
     tabular_config = ApplicationContext.get_instance().get_config().storage.tabular_store
-    assert tabular_config is not None
     object_prefix = document_artifact_prefix(
-        artifacts_prefix=tabular_config.parquet_object_store.artifacts_prefix,
+        artifacts_prefix=tabular_config.artifacts_prefix,
         document_uid="doc-1",
     )
     stored_objects = content_store.list_objects(object_prefix)
@@ -216,45 +191,6 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
     stored_objects = content_store.list_objects(object_prefix)
     assert len(stored_objects) == 1
     assert stored_objects[0].key == updated_artifact.object_key
-
-
-def test_tabular_processor_supports_legacy_sql_storage_mode(tmp_path, app_context):
-    legacy_store = _LegacyCSVInputStore()
-    app_context.configuration.storage.tabular_store = TabularSqlStoreModeConfig(
-        sql_store={
-            "stores": {
-                "legacy": {
-                    "type": "sql",
-                    "driver": "duckdb",
-                    "mode": "read_and_write",
-                    "database": "base_database",
-                    "path": str(tmp_path / "legacy-tabular.duckdb"),
-                }
-            }
-        }
-    )
-    app_context.get_csv_input_store = lambda: legacy_store  # type: ignore[method-assign]
-
-    csv_path = tmp_path / "sales-report.csv"
-    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
-
-    metadata = _metadata(document_uid="doc-legacy", file_name="sales-report.csv")
-    metadata.extensions = {TABULAR_EXTENSION_KEY: {"dataset_uid": "stale"}}
-
-    processed_metadata = TabularProcessor().process(str(csv_path), metadata)
-
-    assert legacy_store.saved_tables == [
-        (
-            "sales_report",
-            [
-                {"city": "Paris", "amount": 10},
-                {"city": "Lyon", "amount": 20},
-            ],
-        )
-    ]
-    assert processed_metadata.file.row_count == 2
-    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
-    assert read_tabular_artifact(processed_metadata) is None
 
 
 @pytest.mark.asyncio

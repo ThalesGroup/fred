@@ -28,7 +28,6 @@ from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
-from knowledge_flow_backend.common.structures import TabularParquetModeConfig
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
@@ -98,28 +97,7 @@ class TabularService:
         self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
         self.tag_service: TagService | None = None
-        raw_tabular_config = context.get_config().storage.tabular_store
-        self.tabular_config = raw_tabular_config.parquet_object_store if isinstance(raw_tabular_config, TabularParquetModeConfig) else None
-
-    def _require_dataset_runtime(self):
-        """
-        Return the dataset-centric tabular configuration when that mode is active.
-
-        Why this exists:
-        - The same codebase still accepts the legacy
-          `storage.tabular_store.mode=sql_store` mode, where the dataset-centric
-          DuckDB runtime is intentionally disabled.
-
-        How to use:
-        - Call before accessing `self.tabular_config.query` or artifact-prefix
-          settings.
-        """
-
-        if self.tabular_config is None:
-            raise RuntimeError(
-                "Dataset-centric tabular endpoints require 'storage.tabular_store.mode=parquet_object_store'. This deployment is running in legacy 'storage.tabular_store.mode=sql_store' mode.",
-            )
-        return self.tabular_config
+        self.tabular_config = context.get_config().storage.tabular_store
 
     @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def list_datasets(
@@ -227,7 +205,6 @@ class TabularService:
             owner_filter=owner_filter,
             team_id=team_id,
         )
-        self._require_dataset_runtime()
         connection = duckdb.connect(database=":memory:")
         try:
             location = self._resolve_dataset_location(dataset.artifact.object_key)
@@ -275,7 +252,7 @@ class TabularService:
 
         allowed_aliases = {dataset.query_alias for dataset in selected_datasets}
         sql_query = validate_read_query(request.sql_text, allowed_relations=allowed_aliases)
-        tabular_config = self._require_dataset_runtime()
+        tabular_config = self.tabular_config
 
         started_at = time.perf_counter()
         sql_hash = hashlib.sha256(sql_query.encode("utf-8")).hexdigest()
@@ -540,7 +517,7 @@ class TabularService:
         - Call while mounting the per-query DuckDB session.
         """
 
-        tabular_config = self._require_dataset_runtime()
+        tabular_config = self.tabular_config
         try:
             return self.content_store.get_presigned_url(
                 object_key,

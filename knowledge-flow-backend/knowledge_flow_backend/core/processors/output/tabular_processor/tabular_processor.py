@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import logging
 import re
 import tempfile
@@ -25,12 +24,10 @@ from pandas._libs.tslibs.nattype import NaTType
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
-from knowledge_flow_backend.common.structures import TabularParquetModeConfig
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor, TabularProcessingError
 from knowledge_flow_backend.features.tabular.artifacts import (
-    TABULAR_EXTENSION_KEY,
     TabularArtifactV1,
     build_tabular_object_key,
     compute_source_revision,
@@ -128,50 +125,22 @@ def is_valid_date(series: pd.Series, threshold: float = 0.7) -> bool:
     return (valid_count / len(values)) >= threshold
 
 
-def safe_table_name(name: str, max_len: int = 63) -> str:
-    """
-    Return one SQL-safe table name that stays under common identifier limits.
-
-    Why this exists:
-    - The legacy `storage.tabular_store.mode=sql_store` mode still persists
-      one table per document in SQL engines that may enforce short identifier
-      lengths.
-
-    How to use:
-    - Pass the document stem or any human-readable table candidate.
-    - The helper keeps readable prefixes and adds a short hash only when the
-      sanitized name would exceed `max_len`.
-
-    Example:
-    ```python
-    table_name = safe_table_name("very-long-file-name.csv")
-    ```
-    """
-
-    sanitized_name = sanitize_sql_name(name)
-    if len(sanitized_name) <= max_len:
-        return sanitized_name
-
-    hash_suffix = hashlib.md5(sanitized_name.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
-    return sanitized_name[: max_len - 9] + "_" + hash_suffix
-
-
 class TabularProcessor(BaseOutputProcessor):
     """
     A pipeline for processing tabular data.
     """
 
-    description = "Loads tabular outputs, cleans column names, detects dates, and persists either document-scoped Parquet artifacts or legacy SQL tables depending on the configured tabular mode."
+    description = "Loads tabular outputs, cleans column names, detects dates, and persists document-scoped Parquet artifacts in the shared content store."
 
     def __init__(self):
         """
         Initialize the tabular processor for the active runtime mode.
 
         Why this exists:
-        - Knowledge Flow supports both the recommended dataset-centric Parquet
-          runtime and the legacy SQL-table runtime.
-        - The processor should choose the correct persistence backend once,
-          then keep the ingestion path identical for callers.
+        - Tabular ingestion now has one single supported runtime backed by
+          Parquet artifacts in the shared content store.
+        - The processor should resolve the shared stores once, then keep the
+          ingestion path identical for callers.
 
         How to use:
         - Instantiate once from the output-processor registry.
@@ -180,9 +149,7 @@ class TabularProcessor(BaseOutputProcessor):
 
         context = ApplicationContext.get_instance()
         self.content_store = context.get_content_store()
-        raw_tabular_config = context.get_config().storage.tabular_store
-        self.tabular_config = raw_tabular_config.parquet_object_store if isinstance(raw_tabular_config, TabularParquetModeConfig) else None
-        self.csv_input_store = context.get_csv_input_store() if self.tabular_config is None else None
+        self.tabular_config = context.get_config().storage.tabular_store
         self.csv_reader = CsvTabularProcessor()
 
         logger.info("Initializing TabularPipeline")
@@ -192,16 +159,13 @@ class TabularProcessor(BaseOutputProcessor):
         Convert one extracted tabular file into the active tabular backend.
 
         Why this exists:
-        - Recommended deployments need one document-scoped Parquet artifact in
-          `content_storage`.
-        - Legacy deployments still need one SQL table materialized into the
-          configured `storage.tabular_store.mode=sql_store` backend.
+        - Each tabular document must produce one document-scoped Parquet
+          artifact in `content_storage`.
 
         How to use:
         - Pass the extracted CSV file path produced by the tabular input stage.
         - The returned metadata always marks `ProcessingStage.SQL_INDEXED` as
-          done.
-        - In dataset-centric mode it also updates `metadata.extensions["tabular_v1"]`.
+          done and updates `metadata.extensions["tabular_v1"]`.
         """
 
         try:
@@ -216,13 +180,9 @@ class TabularProcessor(BaseOutputProcessor):
                     df[col] = df[col].astype(str).map(_parse_date)
 
             metadata.file.row_count = int(len(df))
-            if self.tabular_config is None:
-                self._persist_legacy_sql_table(metadata=metadata, df=df)
-                self._clear_tabular_artifact(metadata)
-            else:
-                artifact = self._persist_parquet_artifact(file_path=file_path, metadata=metadata, df=df)
-                write_tabular_artifact(metadata, artifact)
-                self._cleanup_previous_artifacts(metadata=metadata, keep_key=artifact.object_key)
+            artifact = self._persist_parquet_artifact(file_path=file_path, metadata=metadata, df=df)
+            write_tabular_artifact(metadata, artifact)
+            self._cleanup_previous_artifacts(metadata=metadata, keep_key=artifact.object_key)
 
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return metadata
@@ -249,43 +209,6 @@ class TabularProcessor(BaseOutputProcessor):
             raise ValueError(f"Failed to parse tabular file: {file_path}")
         return df
 
-    def _persist_legacy_sql_table(self, *, metadata: DocumentMetadata, df: pd.DataFrame) -> None:
-        """
-        Persist one DataFrame to the legacy SQL-table backend.
-
-        Why this exists:
-        - Older deployments still materialize one table per document into the
-          legacy SQL-store tabular mode.
-
-        How to use:
-        - Called automatically by `process(...)` when
-          `storage.tabular_store.mode=sql_store` is active.
-        """
-
-        if self.csv_input_store is None:
-            raise RuntimeError("Legacy tabular mode requires one writable csv_input_store")
-
-        table_name = safe_table_name(metadata.document_name.rsplit(".", 1)[0])
-        self.csv_input_store.save_table(table_name, df)
-
-    def _clear_tabular_artifact(self, metadata: DocumentMetadata) -> None:
-        """
-        Remove dataset-centric tabular metadata when the legacy mode is active.
-
-        Why this exists:
-        - Re-ingesting the same document in legacy mode should not leave a
-          stale `tabular_v1` payload behind.
-
-        How to use:
-        - Call after a successful legacy SQL write.
-        """
-
-        if metadata.extensions is None:
-            return
-        metadata.extensions.pop(TABULAR_EXTENSION_KEY, None)
-        if not metadata.extensions:
-            metadata.extensions = None
-
     def _persist_parquet_artifact(self, *, file_path: str, metadata: DocumentMetadata, df: pd.DataFrame) -> TabularArtifactV1:
         """
         Persist one DataFrame as a versioned Parquet artifact in content storage.
@@ -297,9 +220,6 @@ class TabularProcessor(BaseOutputProcessor):
         How to use:
         - Call after the DataFrame has been cleaned and schema-normalized.
         """
-
-        if self.tabular_config is None:
-            raise RuntimeError("Dataset-centric tabular runtime is disabled")
 
         source_revision = compute_source_revision(file_path, metadata)
         object_key = build_tabular_object_key(
@@ -344,9 +264,6 @@ class TabularProcessor(BaseOutputProcessor):
         How to use:
         - Provide the cleaned DataFrame and the temporary target file path.
         """
-
-        if self.tabular_config is None:
-            raise RuntimeError("Dataset-centric tabular runtime is disabled")
 
         connection = duckdb.connect(database=":memory:")
         try:

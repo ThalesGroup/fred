@@ -387,30 +387,15 @@ storage:
   task_store:
     type: "postgres"
   tabular_store:
-    mode: parquet_object_store
-    parquet_object_store:
-      artifacts_prefix: "tabular/datasets"
-      format: "parquet"
-      compression: "snappy"
-      query:
-        engine: "duckdb"
-        access_mode: "presigned_url"
-        presigned_ttl_seconds: 900
-        default_max_rows: 200
-        max_rows: 1000
-    # Legacy example:
-    # mode: sql_store
-    # sql_store:
-    #   stores:
-    #     base_database:
-    #       type: "sql"
-    #       driver: "postgresql+psycopg2"
-    #       mode: "read_and_write"
-    #       host: "localhost"
-    #       port: 5432
-    #       database: "data"
-    #       path: null
-    #       username: "tabular"
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      presigned_ttl_seconds: 900
+      default_max_rows: 200
+      max_rows: 1000
   vector_store:
     type: opensearch
     index: vector-index
