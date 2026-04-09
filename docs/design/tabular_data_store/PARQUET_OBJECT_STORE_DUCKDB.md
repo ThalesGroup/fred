@@ -29,7 +29,7 @@ The core code lives in:
 
 ## Configuration
 
-This mode is enabled by the top-level `tabular` block together with `content_storage`.
+This mode is enabled by `storage.tabular_store` together with `content_storage`.
 
 Example:
 
@@ -41,20 +41,22 @@ content_storage:
   bucket_name: knowledge-flow-content
   secure: false
 
-tabular:
-  artifacts_prefix: "tabular/datasets"
-  format: "parquet"
-  compression: "snappy"
-  query:
-    engine: "duckdb"
-    access_mode: "presigned_url"
-    presigned_ttl_seconds: 900
-    default_max_rows: 200
-    max_rows: 1000
+storage:
+  tabular_store:
+    mode: parquet_object_store
+    parquet_object_store:
+      artifacts_prefix: "tabular/datasets"
+      format: "parquet"
+      compression: "snappy"
+      query:
+        engine: "duckdb"
+        access_mode: "presigned_url"
+        presigned_ttl_seconds: 900
+        default_max_rows: 200
+        max_rows: 1000
 ```
 
-If neither `tabular` nor `storage.tabular_stores` is explicitly set, Knowledge Flow injects the dataset-centric
-defaults automatically.
+If `storage.tabular_store` is omitted, Knowledge Flow injects the dataset-centric defaults automatically.
 
 ## Ingestion Processor Flow
 
@@ -66,7 +68,7 @@ following steps:
 3. detect likely datetime columns and normalize them
 4. set `metadata.file.row_count`
 5. compute a deterministic source revision for this document version
-6. build the canonical object key under `tabular.artifacts_prefix`
+6. build the canonical object key under `storage.tabular_store.parquet_object_store.artifacts_prefix`
 7. write the `DataFrame` to a temporary Parquet file using DuckDB
 8. upload that Parquet file to the configured `content_storage`
 9. build a `TabularArtifactV1` descriptor

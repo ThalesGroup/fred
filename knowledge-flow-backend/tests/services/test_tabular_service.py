@@ -8,6 +8,7 @@ from fred_core import KeycloakUser
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import TabularSqlStoreModeConfig
 from knowledge_flow_backend.common.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -156,7 +157,8 @@ class _LegacyCSVInputStore:
     Minimal writable SQL-store probe used by the legacy tabular processor test.
 
     Why this exists:
-    - The processor should still support the `storage.tabular_stores` mode
+    - The processor should still support the `storage.tabular_store.mode=sql_store`
+      mode
       without booting a real SQL backend in offline tests.
 
     How to use:
@@ -192,10 +194,10 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
     assert metadata.extensions is not None
     assert TABULAR_EXTENSION_KEY in metadata.extensions
 
-    tabular_config = ApplicationContext.get_instance().get_config().tabular
+    tabular_config = ApplicationContext.get_instance().get_config().storage.tabular_store
     assert tabular_config is not None
     object_prefix = document_artifact_prefix(
-        artifacts_prefix=tabular_config.artifacts_prefix,
+        artifacts_prefix=tabular_config.parquet_object_store.artifacts_prefix,
         document_uid="doc-1",
     )
     stored_objects = content_store.list_objects(object_prefix)
@@ -218,7 +220,19 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
 
 def test_tabular_processor_supports_legacy_sql_storage_mode(tmp_path, app_context):
     legacy_store = _LegacyCSVInputStore()
-    app_context.configuration.tabular = None
+    app_context.configuration.storage.tabular_store = TabularSqlStoreModeConfig(
+        sql_store={
+            "stores": {
+                "legacy": {
+                    "type": "sql",
+                    "driver": "duckdb",
+                    "mode": "read_and_write",
+                    "database": "base_database",
+                    "path": str(tmp_path / "legacy-tabular.duckdb"),
+                }
+            }
+        }
+    )
     app_context.get_csv_input_store = lambda: legacy_store  # type: ignore[method-assign]
 
     csv_path = tmp_path / "sales-report.csv"

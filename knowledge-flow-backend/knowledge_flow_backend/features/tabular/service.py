@@ -27,6 +27,7 @@ from fred_core import Action, DocumentPermission, KeycloakUser, RebacDisabledRes
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import TabularParquetModeConfig
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.tabular.artifacts import (
@@ -97,16 +98,17 @@ class TabularService:
         self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
         self.tag_service: TagService | None = None
-        self.tabular_config = context.get_config().tabular
+        raw_tabular_config = context.get_config().storage.tabular_store
+        self.tabular_config = raw_tabular_config.parquet_object_store if isinstance(raw_tabular_config, TabularParquetModeConfig) else None
 
     def _require_dataset_runtime(self):
         """
         Return the dataset-centric tabular configuration when that mode is active.
 
         Why this exists:
-        - The same codebase still accepts the legacy `storage.tabular_stores`
-          mode, where the dataset-centric DuckDB runtime is intentionally
-          disabled.
+        - The same codebase still accepts the legacy
+          `storage.tabular_store.mode=sql_store` mode, where the dataset-centric
+          DuckDB runtime is intentionally disabled.
 
         How to use:
         - Call before accessing `self.tabular_config.query` or artifact-prefix
@@ -115,7 +117,7 @@ class TabularService:
 
         if self.tabular_config is None:
             raise RuntimeError(
-                "Dataset-centric tabular endpoints require the top-level 'tabular' configuration block. This deployment is running in legacy 'storage.tabular_stores' mode.",
+                "Dataset-centric tabular endpoints require 'storage.tabular_store.mode=parquet_object_store'. This deployment is running in legacy 'storage.tabular_store.mode=sql_store' mode.",
             )
         return self.tabular_config
 

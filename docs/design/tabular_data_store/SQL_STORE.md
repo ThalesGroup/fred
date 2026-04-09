@@ -1,7 +1,7 @@
 # Legacy SQL-Backed Tabular Store
 
 This page describes the historical tabular mode where ingested CSV/Excel data is persisted as SQL tables through
-`storage.tabular_stores`.
+`storage.tabular_store.mode=sql_store`.
 
 ## Status
 
@@ -29,25 +29,28 @@ This is supported through:
 
 ## Configuration
 
-The legacy mode is enabled through `storage.tabular_stores`.
+The legacy mode is enabled through `storage.tabular_store.mode=sql_store`.
 
 Illustrative example:
 
 ```yaml
 storage:
-  tabular_stores:
-    base_database:
-      type: "sql"
-      driver: "postgresql+psycopg2"
-      mode: "read_and_write"
-      host: "localhost"
-      port: 5432
-      database: "data"
-      path: null
-      username: "tabular"
+  tabular_store:
+    mode: sql_store
+    sql_store:
+      stores:
+        base_database:
+          type: "sql"
+          driver: "postgresql+psycopg2"
+          mode: "read_and_write"
+          host: "localhost"
+          port: 5432
+          database: "data"
+          path: null
+          username: "tabular"
 ```
 
-The newer top-level `tabular` block must not be declared at the same time.
+The newer `storage.tabular_store` block must not be declared at the same time.
 
 ## Ingestion Process
 
@@ -83,7 +86,7 @@ In this mode, the tabular result is a persistent SQL table, not a Parquet artifa
 
 Use this mode only if at least one of the following is true:
 
-- an older deployment already depends on `storage.tabular_stores`
+- an older deployment already depends on `storage.tabular_store.mode=sql_store`
 - an external integration explicitly expects durable SQL tables
 - migrating to the dataset-centric mode is not yet possible operationally
 

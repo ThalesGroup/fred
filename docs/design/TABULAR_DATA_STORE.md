@@ -5,7 +5,7 @@ This page is the entry point for Fred tabular data storage and query design.
 Fred currently supports two tabular modes:
 
 1. Recommended mode: one Parquet artifact per document in object storage, queried on demand with DuckDB.
-2. Legacy mode: persistent SQL tables behind `storage.tabular_stores`.
+2. Legacy mode: persistent SQL tables behind `storage.tabular_store.mode=sql_store`.
 
 Use the dedicated design pages below:
 

@@ -701,11 +701,9 @@ class StorageConfig(BaseModel):
         default=None,
         description="Task store backend (optional; scheduler may fall back to defaults).",
     )
-    tabular_stores: Optional[Dict[str, StoreConfig]] = Field(
+    tabular_store: Optional["TabularConfig"] = Field(
         default=None,
-        description=(
-            "Deprecated legacy tabular SQL stores. Still accepted for backward compatibility with older deployments, while the default runtime uses content_storage + top-level tabular settings."
-        ),
+        description="Unified tabular runtime configuration. Use `mode` to choose between Parquet object-store runtime and legacy SQL-store runtime.",
     )
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
@@ -750,9 +748,9 @@ class TabularQueryConfig(BaseModel):
     )
 
 
-class TabularConfig(BaseModel):
+class TabularParquetObjectStoreConfig(BaseModel):
     """
-    Dataset-centric tabular storage settings.
+    Dataset-centric tabular storage settings for the Parquet object-store mode.
 
     Why this exists:
     - CSV ingestion now persists Parquet artifacts in the shared content store.
@@ -780,6 +778,70 @@ class TabularConfig(BaseModel):
         default_factory=TabularQueryConfig,
         description="Runtime limits and access settings for tabular SQL queries.",
     )
+
+
+class TabularParquetModeConfig(BaseModel):
+    """
+    Recommended tabular mode backed by Parquet artifacts in object storage.
+
+    Why this exists:
+    - The tabular configuration should live under a single `storage.tabular_store`
+      key while still making the active backend explicit.
+
+    How to use:
+    - Set `mode: parquet_object_store`.
+    - Configure the runtime under `parquet_object_store`.
+    """
+
+    mode: Literal["parquet_object_store"] = "parquet_object_store"
+    parquet_object_store: TabularParquetObjectStoreConfig = Field(
+        default_factory=TabularParquetObjectStoreConfig,
+        description="Settings for the Parquet artifact + DuckDB runtime.",
+    )
+
+
+class TabularSqlStoreRuntimeConfig(BaseModel):
+    """
+    Legacy SQL-store tabular settings.
+
+    Why this exists:
+    - Older deployments still persist tabular data into SQL stores instead of
+      object-store Parquet artifacts.
+
+    How to use:
+    - Define one or more SQL stores under `stores`.
+    """
+
+    stores: Dict[str, StoreConfig] = Field(
+        default_factory=dict,
+        description="Mapping of SQL-backed tabular stores used in the legacy runtime.",
+    )
+
+
+class TabularSqlStoreModeConfig(BaseModel):
+    """
+    Legacy tabular mode backed by persistent SQL tables.
+
+    Why this exists:
+    - The unified `storage.tabular_store` key still needs to expose the historical
+      SQL-backed implementation for compatibility.
+
+    How to use:
+    - Set `mode: sql_store`.
+    - Configure the SQL stores under `sql_store.stores`.
+    """
+
+    mode: Literal["sql_store"] = "sql_store"
+    sql_store: TabularSqlStoreRuntimeConfig = Field(
+        default_factory=TabularSqlStoreRuntimeConfig,
+        description="Settings for the legacy SQL-store runtime.",
+    )
+
+
+TabularConfig = Annotated[
+    Union[TabularParquetModeConfig, TabularSqlStoreModeConfig],
+    Field(discriminator="mode"),
+]
 
 
 # ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
@@ -860,10 +922,6 @@ class Configuration(BaseModel):
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig, description="A collection of feature flags to enable or disable optional functionality.")
     document_sources: Dict[str, DocumentSourceConfig] = Field(default_factory=dict, description="Mapping of source_tag identifiers to push/pull source configurations")
     storage: StorageConfig
-    tabular: Optional[TabularConfig] = Field(
-        default=None,
-        description="Dataset-centric tabular artifact and query configuration. Keep unset when using legacy storage.tabular_stores.",
-    )
     mcp: MCPConfig = Field(default_factory=MCPConfig, description="Feature toggles for MCP-only endpoints and servers.")
     filesystem: FilesystemConfig = Field(..., description="Filesystem backend configuration.")
     # Workspace storage layout (paths for user/agent config/agent-user storage).
@@ -888,19 +946,17 @@ class Configuration(BaseModel):
         Resolve the effective tabular SQL mode from one configuration payload.
 
         Why this exists:
-        - Knowledge Flow now supports two mutually exclusive tabular query
-          modes: the recommended dataset-centric runtime and the legacy
-          SQL-table runtime.
-        - Older deployments still rely on `storage.tabular_stores`, while new
-          deployments should get the dataset-centric defaults when they do not
-          declare a legacy SQL store section.
+        - Knowledge Flow now supports two tabular query modes under one single
+          `storage.tabular_store` key: the recommended dataset-centric runtime and
+          the legacy SQL-table runtime.
+        - Fresh deployments should get the Parquet object-store defaults when
+          they do not declare an explicit tabular mode.
 
         How to use:
-        - Use top-level `tabular` with `content_storage` for the recommended
-          dataset-centric mode.
-        - Use `storage.tabular_stores` for the legacy SQL-backed mode.
-        - Do not declare both explicitly in the same configuration payload.
-        - Omit both only when you want the recommended dataset-centric defaults
+        - Use `storage.tabular_store.mode: parquet_object_store` with
+          `content_storage` for the recommended dataset-centric mode.
+        - Use `storage.tabular_store.mode: sql_store` for the legacy SQL-backed mode.
+        - Omit `storage.tabular_store` only when you want the recommended defaults
           to be applied automatically.
 
         Example:
@@ -909,8 +965,9 @@ class Configuration(BaseModel):
         content_storage:
           type: local
           root_path: ".fred/data/content"
-        tabular:
-          artifacts_prefix: "tabular/datasets"
+        storage:
+          tabular_store:
+            mode: parquet_object_store
         ```
         """
 
@@ -918,22 +975,33 @@ class Configuration(BaseModel):
             return values
 
         storage_value = values.get("storage")
-        has_explicit_tabular = "tabular" in values and values.get("tabular") is not None
 
-        legacy_tabular_stores = None
+        top_level_tabular = values.get("tabular")
+        recommended_tabular = None
         if isinstance(storage_value, dict):
-            legacy_tabular_stores = storage_value.get("tabular_stores")
+            recommended_tabular = storage_value.get("tabular_store")
         elif isinstance(storage_value, StorageConfig):
-            legacy_tabular_stores = storage_value.tabular_stores
+            recommended_tabular = storage_value.tabular_store
 
-        if has_explicit_tabular and legacy_tabular_stores:
+        if top_level_tabular is not None:
             raise ValueError(
-                "Configuration cannot define both top-level 'tabular' and 'storage.tabular_stores'. Choose exactly one tabular SQL mode.",
+                "Top-level 'tabular' is no longer supported. Move the configuration under 'storage.tabular_store'.",
             )
 
-        if has_explicit_tabular or legacy_tabular_stores:
+        if isinstance(storage_value, dict) and "tabular_stores" in storage_value and storage_value.get("tabular_stores") is not None:
+            raise ValueError(
+                "'storage.tabular_stores' is no longer supported. Configure the legacy SQL mode under 'storage.tabular_store.mode: sql_store'.",
+            )
+        if recommended_tabular:
             return values
 
         resolved_values = dict(values)
-        resolved_values["tabular"] = TabularConfig().model_dump()
+        if isinstance(storage_value, dict):
+            resolved_storage = dict(storage_value)
+        elif isinstance(storage_value, StorageConfig):
+            resolved_storage = storage_value.model_dump(mode="python")
+        else:
+            resolved_storage = {}
+        resolved_storage["tabular_store"] = TabularParquetModeConfig().model_dump()
+        resolved_values["storage"] = resolved_storage
         return resolved_values

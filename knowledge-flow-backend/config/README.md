@@ -86,15 +86,15 @@ Knowledge Flow supports two ways to expose tabular data through SQL:
 
 | Mode | Main config | Stores data in | Query engine | Status |
 |------|-------------|----------------|--------------|--------|
-| Dataset-centric runtime | `content_storage` + top-level `tabular` | Versioned Parquet artifacts | DuckDB | Recommended |
-| SQL-backed tabular store | `storage.tabular_stores` | Persistent SQL tables | The backing SQL store | Legacy compatibility |
+| Dataset-centric runtime | `content_storage` + `storage.tabular_store.mode=parquet_object_store` | Versioned Parquet artifacts | DuckDB | Recommended |
+| SQL-backed tabular store | `storage.tabular_store.mode=sql_store` | Persistent SQL tables | The backing SQL store | Legacy compatibility |
 
 ### Recommended mode: dataset-centric runtime
 
 - CSV ingestion writes one versioned Parquet artifact per document into the shared `content_storage`.
 - Read-only SQL queries run in ephemeral DuckDB sessions against the datasets authorized for the current user.
 - This is the mode used by the current repository configuration files and Helm values.
-- When neither `tabular` nor `storage.tabular_stores` is declared, Knowledge Flow enables this mode with the built-in defaults.
+- When `storage.tabular_store` is omitted, Knowledge Flow enables the Parquet object-store mode with the built-in defaults.
 
 The two configuration blocks that matter are:
 
@@ -102,9 +102,10 @@ The two configuration blocks that matter are:
   - Chooses where raw files and tabular Parquet artifacts are stored.
   - `local` works for zero-dependency local development.
   - `minio`/S3-compatible backends are used when you want shared object storage.
-- `tabular`
-  - Tunes tabular artifact layout and query limits.
-  - Does not define a separate SQL backend.
+- `storage.tabular_store`
+  - Uses `mode` to choose the active tabular backend.
+  - `parquet_object_store` tunes artifact layout and query limits.
+  - `sql_store` exposes the legacy SQL-backed tabular runtime.
 
 Example:
 
@@ -113,16 +114,19 @@ content_storage:
   type: local
   root_path: ".fred/data/content"
 
-tabular:
-  artifacts_prefix: "tabular/datasets"
-  format: "parquet"
-  compression: "snappy"
-  query:
-    engine: "duckdb"
-    access_mode: "presigned_url"
-    presigned_ttl_seconds: 900
-    default_max_rows: 200
-    max_rows: 1000
+storage:
+  tabular_store:
+    mode: parquet_object_store
+    parquet_object_store:
+      artifacts_prefix: "tabular/datasets"
+      format: "parquet"
+      compression: "snappy"
+      query:
+        engine: "duckdb"
+        access_mode: "presigned_url"
+        presigned_ttl_seconds: 900
+        default_max_rows: 200
+        max_rows: 1000
 ```
 
 Behavior by storage backend:
@@ -135,32 +139,36 @@ Behavior by storage backend:
 
 ### Legacy mode: SQL-backed tabular stores
 
-- `storage.tabular_stores` remains supported for older deployments that still expect the historical SQL-table contract.
+- `storage.tabular_store.mode=sql_store` remains available for older deployments that still expect the historical SQL-table contract.
 - This mode persists normalized tabular data into SQL tables instead of Parquet artifacts.
 - It can target local file-backed engines such as DuckDB/SQLite or remote engines such as PostgreSQL/MySQL/MariaDB.
 - Use it only when you must preserve an older integration or user workflow.
-- This mode is exclusive with the top-level `tabular` block: when `storage.tabular_stores` is present, dataset-centric defaults are not injected and `TabularProcessor` writes SQL tables again.
+- This mode is exclusive with `storage.tabular_store.mode=parquet_object_store`: when `storage.tabular_store.mode=sql_store` is selected, `TabularProcessor` writes SQL tables again.
 
 Illustrative snippet:
 
 ```yaml
-tabular_stores:
-  base_database:
-    type: "sql"
-    mode: "read_and_write"
-    driver: "postgresql+psycopg2"
-    host: "localhost"
-    port: 5432
-    database: "data"
-    path: null
-    username: "fred"
+storage:
+  tabular_store:
+    mode: sql_store
+    sql_store:
+      stores:
+        base_database:
+          type: "sql"
+          mode: "read_and_write"
+          driver: "postgresql+psycopg2"
+          host: "localhost"
+          port: 5432
+          database: "data"
+          path: null
+          username: "fred"
 
 ```
 
 Guidance:
 
-- Prefer `content_storage` + `tabular` for new deployments and new features.
-- Keep `storage.tabular_stores` only to avoid breaking older callers that still rely on persistent SQL tables.
+- Prefer `content_storage` + `storage.tabular_store` for new deployments and new features.
+- Keep `storage.tabular_store.mode=sql_store` only to avoid breaking older callers that still rely on persistent SQL tables.
 
 ---
 

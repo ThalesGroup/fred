@@ -28,7 +28,8 @@ from knowledge_flow_backend.common.structures import (
     LocalFilesystemConfig,
     SchedulerConfig,
     StorageConfig,
-    TabularConfig,
+    TabularParquetModeConfig,
+    TabularSqlStoreModeConfig,
 )
 
 
@@ -47,9 +48,8 @@ def _build_minimal_configuration(*, storage: StorageConfig, include_tabular: boo
       dataset-centric mode explicitly in the input payload.
     """
 
-    kwargs = {}
     if include_tabular:
-        kwargs["tabular"] = TabularConfig()
+        storage = storage.model_copy(update={"tabular_store": TabularParquetModeConfig()})
 
     return Configuration(
         app=AppConfig(),
@@ -83,21 +83,20 @@ def _build_minimal_configuration(*, storage: StorageConfig, include_tabular: boo
         chat_model=ModelConfiguration(provider="openai", name="gpt-4o", settings={}),
         embedding_model=ModelConfiguration(provider="openai", name="text-embedding-3-large", settings={}),
         filesystem=LocalFilesystemConfig(type="local", root="/tmp/test-fs"),
-        **kwargs,
     )
 
 
-def test_storage_config_accepts_legacy_tabular_stores(tmp_path):
+def test_storage_config_accepts_legacy_sql_store_tabular_mode(tmp_path):
     """
-    Ensure old `storage.tabular_stores` configuration still parses.
+    Ensure the legacy SQL-store tabular mode still parses.
 
     Why this exists:
-    - Older deployments may still pass the legacy tabular SQL-store section in
-      YAML even though the default runtime is now dataset-centric.
+    - Older deployments may still pass the legacy SQL-store tabular mode even
+      though the default runtime is now dataset-centric.
 
     How to use:
-    - Build a `StorageConfig` with `tabular_stores` and assert the field is
-      preserved.
+    - Build a `StorageConfig` with `storage.tabular_store.mode=sql_store` and assert
+      the field is preserved.
     """
 
     legacy_path = tmp_path / "legacy-tabular.duckdb"
@@ -109,32 +108,36 @@ def test_storage_config_accepts_legacy_tabular_stores(tmp_path):
         kpi_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "kpi.duckdb")),
         metadata_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "metadata.duckdb")),
         vector_store=InMemoryVectorStorage(type="in_memory"),
-        tabular_stores={
-            "legacy": SQLStorageConfig(
-                type="sql",
-                driver="duckdb",
-                mode="read_and_write",
-                database="base_database",
-                path=str(legacy_path),
-            )
-        },
+        tabular_store=TabularSqlStoreModeConfig(
+            sql_store={
+                "stores": {
+                    "legacy": SQLStorageConfig(
+                        type="sql",
+                        driver="duckdb",
+                        mode="read_and_write",
+                        database="base_database",
+                        path=str(legacy_path),
+                    )
+                }
+            }
+        ),
     )
 
-    assert storage.tabular_stores is not None
-    assert "legacy" in storage.tabular_stores
+    assert isinstance(storage.tabular_store, TabularSqlStoreModeConfig)
+    assert "legacy" in storage.tabular_store.sql_store.stores
 
 
-def test_configuration_rejects_explicit_mixed_tabular_modes(tmp_path):
+def test_configuration_rejects_legacy_top_level_tabular_field(tmp_path):
     """
-    Ensure recommended and legacy tabular modes cannot be declared together.
+    Ensure the removed top-level `tabular` field is rejected.
 
     Why this exists:
-    - The configuration contract must force users to choose a single tabular
-      SQL mode at a time.
+    - The configuration contract moved tabular settings entirely under
+      `storage.tabular_store`.
 
     How to use:
-    - Build a `StorageConfig` with legacy `tabular_stores`, then explicitly
-      provide top-level `tabular` and assert validation fails.
+    - Build a valid configuration payload, then inject a legacy top-level
+      `tabular` field and assert validation fails.
     """
 
     storage = StorageConfig(
@@ -144,19 +147,13 @@ def test_configuration_rejects_explicit_mixed_tabular_modes(tmp_path):
         kpi_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "kpi.duckdb")),
         metadata_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "metadata.duckdb")),
         vector_store=InMemoryVectorStorage(type="in_memory"),
-        tabular_stores={
-            "legacy": SQLStorageConfig(
-                type="sql",
-                driver="duckdb",
-                mode="read_and_write",
-                database="base_database",
-                path=str(tmp_path / "legacy-tabular.duckdb"),
-            )
-        },
     )
 
-    with pytest.raises(ValueError, match="Choose exactly one tabular SQL mode"):
-        _build_minimal_configuration(storage=storage, include_tabular=True)
+    payload = _build_minimal_configuration(storage=storage, include_tabular=False).model_dump(mode="python")
+    payload["tabular"] = {"mode": "parquet_object_store"}
+
+    with pytest.raises(ValueError, match="Top-level 'tabular' is no longer supported"):
+        Configuration.model_validate(payload)
 
 
 def test_configuration_accepts_legacy_tabular_mode_without_explicit_tabular(tmp_path):
@@ -164,12 +161,12 @@ def test_configuration_accepts_legacy_tabular_mode_without_explicit_tabular(tmp_
     Ensure the legacy tabular mode still works when used on its own.
 
     Why this exists:
-    - The new mutual-exclusion validator must not break older deployments that
-      declare only `storage.tabular_stores`.
+    - The new validator must not break older deployments that declare only the
+      legacy `storage.tabular_store.mode=sql_store` mode.
 
     How to use:
     - Build a `StorageConfig` with legacy stores and omit the explicit
-      top-level `tabular` payload.
+      `storage.tabular_store` payload for the Parquet runtime.
     """
 
     storage = StorageConfig(
@@ -179,22 +176,25 @@ def test_configuration_accepts_legacy_tabular_mode_without_explicit_tabular(tmp_
         kpi_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "kpi.duckdb")),
         metadata_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "metadata.duckdb")),
         vector_store=InMemoryVectorStorage(type="in_memory"),
-        tabular_stores={
-            "legacy": SQLStorageConfig(
-                type="sql",
-                driver="duckdb",
-                mode="read_and_write",
-                database="base_database",
-                path=str(tmp_path / "legacy-tabular.duckdb"),
-            )
-        },
+        tabular_store=TabularSqlStoreModeConfig(
+            sql_store={
+                "stores": {
+                    "legacy": SQLStorageConfig(
+                        type="sql",
+                        driver="duckdb",
+                        mode="read_and_write",
+                        database="base_database",
+                        path=str(tmp_path / "legacy-tabular.duckdb"),
+                    )
+                }
+            }
+        ),
     )
 
     config = _build_minimal_configuration(storage=storage, include_tabular=False)
 
-    assert config.storage.tabular_stores is not None
-    assert "legacy" in config.storage.tabular_stores
-    assert config.tabular is None
+    assert isinstance(config.storage.tabular_store, TabularSqlStoreModeConfig)
+    assert "legacy" in config.storage.tabular_store.sql_store.stores
 
 
 def test_configuration_defaults_to_dataset_tabular_mode_when_no_legacy_store_is_declared(tmp_path):
@@ -206,8 +206,8 @@ def test_configuration_defaults_to_dataset_tabular_mode_when_no_legacy_store_is_
       dataset-centric runtime without having to repeat the default YAML block.
 
     How to use:
-    - Build a `Configuration` payload without `tabular` and without
-      `storage.tabular_stores`, then assert top-level `tabular` is populated.
+    - Build a `Configuration` payload without `storage.tabular_store`, then assert
+      the Parquet runtime default is populated.
     """
 
     storage = StorageConfig(
@@ -221,8 +221,8 @@ def test_configuration_defaults_to_dataset_tabular_mode_when_no_legacy_store_is_
 
     config = _build_minimal_configuration(storage=storage, include_tabular=False)
 
-    assert config.tabular is not None
-    assert config.tabular.artifacts_prefix == "tabular/datasets"
+    assert isinstance(config.storage.tabular_store, TabularParquetModeConfig)
+    assert config.storage.tabular_store.parquet_object_store.artifacts_prefix == "tabular/datasets"
 
 
 def test_application_context_builds_legacy_tabular_stores_and_csv_input_store(tmp_path):
@@ -235,22 +235,27 @@ def test_application_context_builds_legacy_tabular_stores_and_csv_input_store(tm
 
     How to use:
     - Build a lightweight `ApplicationContext` shell with one legacy
-      `storage.tabular_stores` entry and call the compatibility helpers.
+      `storage.tabular_store.mode=sql_store` entry and call the compatibility
+      helpers.
     """
 
     legacy_path = tmp_path / "base_database.duckdb"
     ctx = ApplicationContext.__new__(ApplicationContext)
     ctx.configuration = SimpleNamespace(
         storage=SimpleNamespace(
-            tabular_stores={
-                "legacy": SQLStorageConfig(
-                    type="sql",
-                    driver="duckdb",
-                    mode="read_and_write",
-                    database="base_database",
-                    path=str(legacy_path),
-                )
-            }
+            tabular_store=TabularSqlStoreModeConfig(
+                sql_store={
+                    "stores": {
+                        "legacy": SQLStorageConfig(
+                            type="sql",
+                            driver="duckdb",
+                            mode="read_and_write",
+                            database="base_database",
+                            path=str(legacy_path),
+                        )
+                    }
+                }
+            )
         )
     )
     ctx._tabular_stores = None

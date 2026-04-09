@@ -263,19 +263,20 @@ storage:
     type: "postgres"
   task_store:
     type: "postgres"
+  tabular_store:
+    mode: parquet_object_store
+    parquet_object_store:
+      artifacts_prefix: "tabular/datasets"
+      format: "parquet"
+      compression: "snappy"
+      query:
+        engine: "duckdb"
+        access_mode: "presigned_url"
+        presigned_ttl_seconds: 900
+        default_max_rows: 200
+        max_rows: 1000
   vector_store:
-    type: in_memory
-
-tabular:
-  artifacts_prefix: "tabular/datasets"
-  format: "parquet"
-  compression: "snappy"
-  query:
-    engine: "duckdb"
-    access_mode: "presigned_url"
-    presigned_ttl_seconds: 900
-    default_max_rows: 200
-    max_rows: 1000
+    type: chroma
 
 # integrations:
 #   prometheus:

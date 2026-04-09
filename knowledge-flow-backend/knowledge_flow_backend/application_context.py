@@ -66,6 +66,8 @@ from knowledge_flow_backend.common.structures import (
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
+    TabularParquetModeConfig,
+    TabularSqlStoreModeConfig,
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
@@ -917,7 +919,9 @@ class ApplicationContext:
         if self._tabular_stores is not None:
             return self._tabular_stores
 
-        config_map = self.configuration.storage.tabular_stores or {}
+        config_map = {}
+        if isinstance(self.configuration.storage.tabular_store, TabularSqlStoreModeConfig):
+            config_map = self.configuration.storage.tabular_store.sql_store.stores
         stores: Dict[str, StoreInfo] = {}
 
         for name, cfg in config_map.items():
@@ -953,7 +957,7 @@ class ApplicationContext:
         for store_info in stores.values():
             if store_info.mode == "read_and_write":
                 return store_info.store
-        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
+        raise ValueError("No storage.tabular_store.sql_store.stores entry with mode 'read_and_write' found. Please check the knowledge flow configuration.")
 
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
@@ -1246,10 +1250,9 @@ class ApplicationContext:
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)
 
-            tabular_map = st.tabular_stores or {}
-            if tabular_map:
+            if isinstance(st.tabular_store, TabularSqlStoreModeConfig):
                 logger.info("  🗄️  Legacy tabular stores:")
-                for name, cfg in tabular_map.items():
+                for name, cfg in st.tabular_store.sql_store.stores.items():
                     if isinstance(cfg, SQLStorageConfig):
                         logger.info(
                             "     • %-14s SQLStorage  driver=%s  mode=%s  database=%s  host=%s",
@@ -1269,24 +1272,26 @@ class ApplicationContext:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
 
         try:
-            if self.configuration.tabular is not None:
+            if isinstance(self.configuration.storage.tabular_store, TabularParquetModeConfig):
                 logger.info("  📊 Tabular runtime:")
                 logger.info(
                     "     • prefix=%s  format=%s  compression=%s",
-                    self.configuration.tabular.artifacts_prefix,
-                    self.configuration.tabular.format,
-                    self.configuration.tabular.compression,
+                    self.configuration.storage.tabular_store.parquet_object_store.artifacts_prefix,
+                    self.configuration.storage.tabular_store.parquet_object_store.format,
+                    self.configuration.storage.tabular_store.parquet_object_store.compression,
                 )
                 logger.info(
                     "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  presigned_ttl_seconds=%s",
-                    self.configuration.tabular.query.engine,
-                    self.configuration.tabular.query.access_mode,
-                    self.configuration.tabular.query.default_max_rows,
-                    self.configuration.tabular.query.max_rows,
-                    self.configuration.tabular.query.presigned_ttl_seconds,
+                    self.configuration.storage.tabular_store.parquet_object_store.query.engine,
+                    self.configuration.storage.tabular_store.parquet_object_store.query.access_mode,
+                    self.configuration.storage.tabular_store.parquet_object_store.query.default_max_rows,
+                    self.configuration.storage.tabular_store.parquet_object_store.query.max_rows,
+                    self.configuration.storage.tabular_store.parquet_object_store.query.presigned_ttl_seconds,
                 )
+            elif isinstance(self.configuration.storage.tabular_store, TabularSqlStoreModeConfig):
+                logger.info("  📊 Tabular runtime: legacy SQL-store mode active")
             else:
-                logger.info("  📊 Tabular runtime: disabled (legacy storage.tabular_stores mode active)")
+                logger.info("  📊 Tabular runtime: unavailable")
         except Exception:
             logger.warning("  ⚠️ Failed to read tabular runtime section.")
 

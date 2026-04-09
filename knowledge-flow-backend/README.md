@@ -26,8 +26,8 @@ Knowledge Flow supports two tabular data modes that can be queried with SQL:
 
 | Mode | Main config | Backing storage | Status |
 |------|-------------|-----------------|--------|
-| Dataset-centric runtime | `content_storage` + top-level `tabular` | One Parquet artifact per document + DuckDB at query time | Recommended |
-| SQL-backed tabular store | `storage.tabular_stores` | Persistent SQL tables | Legacy compatibility |
+| Dataset-centric runtime | `content_storage` + `storage.tabular_store.mode=parquet_object_store` | One Parquet artifact per document + DuckDB at query time | Recommended |
+| SQL-backed tabular store | `storage.tabular_store.mode=sql_store` | Persistent SQL tables | Legacy compatibility |
 
 All processing pipelines are defined declaratively in `config/configuration.yaml`.
 
@@ -62,18 +62,18 @@ to use another setup.
 - **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.  
   - User/host/db come from `storage.postgres` in `configuration*.yaml`.  
   - Password comes from `FRED_POSTGRES_PASSWORD` (or an explicit `password:` in the YAML).
-- **Tabular artifacts (`tabular` + `content_storage`)**: CSV/Excel ingestion now writes Parquet artifacts into the shared content store object area.  
-  - Runtime query limits come from the top-level `tabular` section in `configuration*.yaml`.  
+- **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV/Excel ingestion now writes Parquet artifacts into the shared content store object area.  
+  - Runtime query limits come from `storage.tabular_store.parquet_object_store` in `configuration*.yaml`.  
   - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.  
   - This is the recommended mode for new deployments.
   - If neither tabular mode is declared explicitly, this runtime is enabled with the built-in defaults.
-- **Legacy SQL-backed tabular stores (`storage.tabular_stores`)**: the historical SQL-table contract is still accepted for users who rely on it.  
+- **Legacy SQL-backed tabular stores (`storage.tabular_store.mode=sql_store`)**: the historical SQL-table contract is still accepted for users who rely on it.  
   - This mode persists tabular data in SQL stores and may still require SQL credentials such as `TABULAR_POSTGRES_PASSWORD`.  
-  - New repository configs and Helm values remain on the current `content_storage` + top-level `tabular` model.  
-  - This mode is exclusive with the top-level `tabular` block; when `storage.tabular_stores` is configured, `TabularProcessor` writes SQL tables instead of Parquet artifacts.
+  - New repository configs and Helm values remain on the current `content_storage` + `storage.tabular_store` model.  
+  - This mode is exclusive with `storage.tabular_store.mode=parquet_object_store`; when `storage.tabular_store.mode=sql_store` is configured, `TabularProcessor` writes SQL tables instead of Parquet artifacts.
   - Treat this mode as legacy compatibility rather than the default path for new work.
 
-Tip: for S3-compatible deployments, keep `content_storage` pointed to the object bucket and use the `tabular` section only for query/runtime bounds.
+Tip: for S3-compatible deployments, keep `content_storage` pointed to the object bucket and use `storage.tabular_store` only for query/runtime bounds.
 
 ```bash
 git clone https://github.com/ThalesGroup/knowledge-flow.git

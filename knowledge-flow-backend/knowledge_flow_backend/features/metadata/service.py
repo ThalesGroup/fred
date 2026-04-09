@@ -33,6 +33,7 @@ from knowledge_flow_backend.common.structures import (
     ClickHouseVectorStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
+    TabularParquetModeConfig,
 )
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
 from knowledge_flow_backend.features.tabular.artifacts import (
@@ -653,9 +654,9 @@ class MetadataService:
             logger.info("[TABULAR] No %s payload found for '%s'", TABULAR_EXTENSION_KEY, metadata.document_name)
             return
 
-        if self.config.tabular is not None:
+        if isinstance(self.config.storage.tabular_store, TabularParquetModeConfig):
             prefix = document_artifact_prefix(
-                artifacts_prefix=self.config.tabular.artifacts_prefix,
+                artifacts_prefix=self.config.storage.tabular_store.parquet_object_store.artifacts_prefix,
                 document_uid=metadata.document_uid,
             )
         else:

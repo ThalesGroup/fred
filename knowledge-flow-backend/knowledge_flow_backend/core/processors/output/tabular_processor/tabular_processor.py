@@ -24,6 +24,7 @@ import pandas as pd
 from pandas._libs.tslibs.nattype import NaTType
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.structures import TabularParquetModeConfig
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage
 from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
@@ -132,8 +133,9 @@ def safe_table_name(name: str, max_len: int = 63) -> str:
     Return one SQL-safe table name that stays under common identifier limits.
 
     Why this exists:
-    - The legacy `tabular_stores` mode still persists one table per document in
-      SQL engines that may enforce short identifier lengths.
+    - The legacy `storage.tabular_store.mode=sql_store` mode still persists
+      one table per document in SQL engines that may enforce short identifier
+      lengths.
 
     How to use:
     - Pass the document stem or any human-readable table candidate.
@@ -178,7 +180,8 @@ class TabularProcessor(BaseOutputProcessor):
 
         context = ApplicationContext.get_instance()
         self.content_store = context.get_content_store()
-        self.tabular_config = context.get_config().tabular
+        raw_tabular_config = context.get_config().storage.tabular_store
+        self.tabular_config = raw_tabular_config.parquet_object_store if isinstance(raw_tabular_config, TabularParquetModeConfig) else None
         self.csv_input_store = context.get_csv_input_store() if self.tabular_config is None else None
         self.csv_reader = CsvTabularProcessor()
 
@@ -192,7 +195,7 @@ class TabularProcessor(BaseOutputProcessor):
         - Recommended deployments need one document-scoped Parquet artifact in
           `content_storage`.
         - Legacy deployments still need one SQL table materialized into the
-          configured `tabular_stores` backend.
+          configured `storage.tabular_store.mode=sql_store` backend.
 
         How to use:
         - Pass the extracted CSV file path produced by the tabular input stage.
@@ -251,12 +254,12 @@ class TabularProcessor(BaseOutputProcessor):
         Persist one DataFrame to the legacy SQL-table backend.
 
         Why this exists:
-        - Older deployments still materialize one table per document into
-          `storage.tabular_stores`.
+        - Older deployments still materialize one table per document into the
+          legacy SQL-store tabular mode.
 
         How to use:
-        - Called automatically by `process(...)` when top-level `tabular` is
-          disabled and the legacy mode is active.
+        - Called automatically by `process(...)` when
+          `storage.tabular_store.mode=sql_store` is active.
         """
 
         if self.csv_input_store is None:
