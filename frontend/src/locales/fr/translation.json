@@ -1311,6 +1311,9 @@
   },
   "rework": {
     "back": "Retour",
+    "create": "Créer",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
     "agentCard": {
       "startChat": "Nouveau chat"
     },
@@ -1407,6 +1410,15 @@
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
         "firstCreate": "Créer"
+      },
+      "formAgent": {
+        "title": "Céer un nouveal {{agentsNicknameSingular}}",
+        "fields": {
+          "name": {
+            "placeholder": "Entrez un nom original",
+            "label": "Nom"
+          }
+        }
       }
     },
     "marketplace": {

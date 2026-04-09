@@ -11,8 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import DeleteIcon from "@mui/icons-material/Delete";
-import { Autocomplete, Box, Button, Divider, Stack, TextField, Typography } from "@mui/material";
+import { Autocomplete, Box, Divider, Stack, TextField, Typography } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
@@ -38,6 +37,7 @@ import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
+import Button from "@components/shared/atoms/Button/Button.tsx";
 
 type TopLevelTuningState = {
   role: string;
@@ -280,17 +280,7 @@ export function AgentCreateEditForm({
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {/* Header */}
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6">
-          {isCreateMode
-            ? t("agentEditDrawer.headerTitleCreate", { agentsNicknameSingular })
-            : t("agentEditDrawer.headerTitle", { agentsNicknameSingular })}
-        </Typography>
-      </Box>
-      <Divider />
 
-      {/* Body (scrollable) */}
       <Box sx={{ p: 2, flex: 1, overflow: "auto" }}>
         <Stack spacing={3}>
           {/* ── Version toggle (create mode, team admin only) ── */}
@@ -513,22 +503,16 @@ export function AgentCreateEditForm({
       >
         <Stack direction="row" justifyContent="flex-start">
           {!isCreateMode && (
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={handleDelete}
-              disabled={!canDelete}
-            >
+            <Button color={"error"} variant={"filled"} size={"medium"} onClick={handleDelete} disabled={!canDelete}>
               {t("common.delete")}
             </Button>
           )}
         </Stack>
         <Stack direction="row" gap={1} justifyContent="flex-end">
-          <Button variant="outlined" onClick={onClose}>
+          <Button color={"primary"} variant={"outlined"} size={"medium"} onClick={onClose}>
             {t("dialogs.cancel")}
           </Button>
-          <Button variant="contained" disabled={isSaveDisabled} onClick={handleSave}>
+          <Button color={"primary"} variant={"filled"} size={"medium"} disabled={isSaveDisabled} onClick={handleSave}>
             {isCreateMode ? t("common.create") : t("common.save")}
           </Button>
         </Stack>

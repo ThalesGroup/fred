@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 @property --angle {
   syntax: "<angle>";
   initial-value: 0deg;
@@ -100,8 +98,7 @@
 
 .agentName {
   color: var(--agent-name-color);
-
-  @include typography("body", "large", true);
+  font: var(--font-body-large-emphasized);
 }
 
 .agentRole {
@@ -110,8 +107,7 @@
   overflow: hidden;
   color: var(--agent-role-color);
   -webkit-box-orient: vertical;
-
-  @include typography("label", "large");
+  font: var(--font-label-large);
 }
 
 .agentDescription {
@@ -121,7 +117,7 @@
   color: var(--agent-description-color);
   -webkit-box-orient: vertical;
   overflow: hidden;
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .newChat {
@@ -137,8 +133,7 @@
   height: 100%;
   pointer-events: none;
   color: var(--on-surface);
-
-  @include typography("title", "medium");
+  font: var(--font-title-medium);
 }
 
 .newChatIcon {

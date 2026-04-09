@@ -1,14 +1,17 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AnyAgent } from "../../../../common/agent.ts";
-import { AgentCreateEditDrawer } from "../../../../components/agentHub/AgentCreateEditDrawer.tsx";
 import { useAgentUpdater } from "../../../../hooks/useAgentUpdater.ts";
 import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic/agenticOpenApi.ts";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import styles from "./TeamAgentsPage.module.scss";
+import styles from "./TeamAgentsPage.module.css";
 import TeamAgentContent from "@components/pages/TeamAgentsPage/TeamAgentContent/TeamAgentContent.tsx";
 import TeamAgentEmptyState from "@components/pages/TeamAgentsPage/TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
+import AgentCreateEditModal from "@components/pages/TeamAgentsPage/AgentCreateEditModal/AgentCreateEditModal.tsx";
+import { AgentCreateEditForm } from "../../../../components/agentHub/AgentCreateEditForm.tsx";
+import Button from "@shared/atoms/Button/Button.tsx";
 
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
@@ -24,6 +27,7 @@ export default function TeamAgentsPage() {
 
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [editOldOpen, setEditOldOpen] = useState(false);
 
   const canUpdateAgents = useMemo(() => {
     return team?.permissions?.includes("can_update_agents");
@@ -47,6 +51,7 @@ export default function TeamAgentsPage() {
 
   return (
     <div className={styles.teamAgentContainer}>
+        <Button color={"primary"} variant={"text"} size={"medium"} onClick={() => setEditOldOpen(true)}>open</Button>
       {agents?.length !== 0 ? (
         <TeamAgentContent
           agents={agents}
@@ -57,15 +62,24 @@ export default function TeamAgentsPage() {
       ) : (
         <TeamAgentEmptyState onCreateAgent={handleOpenCreateAgent} />
       )}
-      <AgentCreateEditDrawer
-        canDelete={canUpdateAgents}
-        open={editOpen}
-        agent={selected}
-        teamId={teamId}
-        onClose={() => setEditOpen(false)}
-        onSaved={refetch}
-        onDeleted={refetch}
-      />
+      <FullPageModal isOpen={editOpen} onClose={() => setEditOpen(false)} id={"create-edit-agent-modal"}>
+        <AgentCreateEditModal
+          modalInteraction={{ close: () => setEditOpen(false) }}
+          teamName={team?.name}
+          agent={selected}
+          canDelete={canUpdateAgents}
+        ></AgentCreateEditModal>
+      </FullPageModal>
+        <FullPageModal isOpen={editOldOpen} onClose={() => setEditOldOpen(false)} id={"create-edit-agent-modal"}>
+        <AgentCreateEditForm
+          agent={selected}
+          canDelete={canUpdateAgents}
+          teamId={teamId}
+          onClose={() => setEditOpen(false)}
+          onSaved={refetch}
+          onDeleted={refetch}
+        />
+      </FullPageModal>
     </div>
   );
 }

@@ -11,7 +11,7 @@
   cursor: pointer;
   border-radius: var(--spacing-xs);
   padding: 0 var(--spacing-xs);
-  @include typography("label", "large");
+  font: var(--font-label-large);
   height: 2rem;
   color: var(--on-surface-retreat);
 

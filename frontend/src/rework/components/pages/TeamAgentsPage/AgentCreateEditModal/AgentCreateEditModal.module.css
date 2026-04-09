@@ -1,0 +1,48 @@
+.agentCreateEditModalContainer {
+  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-m) var(--spacing-m);
+  margin: var(--spacing-m);
+  width: 800px;
+  height: 100%;
+}
+
+.agentCreateEditModalHeader {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) 0 var(--spacing-xs) var(--spacing-xs);
+}
+
+.agentCreateEditModalPresentation {
+  display: flex;
+  gap: var(--spacing-s);
+
+  .icon {
+    font-size: 2rem;
+    color: var(--on-surface);
+  }
+}
+
+.agentCreateEditModalPresentationTitle {
+  display: flex;
+  flex-direction: column;
+}
+
+.agentCreateEditModalTitle {
+  font: var(--font-title-large);
+  color: var(--on-surface);
+}
+
+.agentCreateEditModalTeam {
+  font: var(--font-title-small);
+  color: var(--primary);
+}
+
+.agentCreateEditModalActions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.agentCreateEditModalContent {
+  display: flex;
+  width: 100%;
+}
