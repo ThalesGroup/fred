@@ -417,7 +417,7 @@ applications:
   # KNOWLEDGE FLOW BACKEND
   # ===========================================================================
   knowledge-flow-backend:
-    replicaCount: 1 # todo: set back to 2 once MCP bug is resolved
+    replicaCount: 2
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
       tag: *prism-tag
@@ -446,6 +446,7 @@ applications:
       content_storage: *kf-content-storage
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
+      vision_model:    *kf-chat-model
       storage:         *kf-storage
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
@@ -506,6 +507,7 @@ applications:
       content_storage: *kf-content-storage
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
+      vision_model:    *kf-chat-model
       storage:         *kf-storage
       mcp:             *kf-mcp
       filesystem:      *kf-filesystem
