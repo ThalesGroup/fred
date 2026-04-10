@@ -33,7 +33,7 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
       onDelete();
 
       if (isSelected) {
-        navigate("/");
+        navigate(`/team/${chat.team_id}/agents`);
       }
     } catch (error) {
       console.error("Failed to delete conversation: ", error);
@@ -43,7 +43,7 @@ export default function ChatListItem({ chat, onDelete }: ChatListItemProps) {
 
   return (
     <Link to={`team/${chat.team_id}/chat/${chat.id}`}>
-      <div className={styles.chatItemContainer} title={chat.title}>
+      <div className={styles.chatItemContainer} title={chat.title} data-selected={isSelected}>
         <div className={styles.chatDescription}>
           <div className={styles.title}>{chat.title}</div>
           <div className={styles.metadata}>

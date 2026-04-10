@@ -35,10 +35,6 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: false
-      text_splitter:
-        chunk_size: 1500
-        chunk_overlap: 150
-        preserve_tables: true
       pdf:
         backend: pypdfium2
         images_scale: 1.0
@@ -83,10 +79,6 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: false
-      text_splitter:
-        chunk_size: 1500
-        chunk_overlap: 150
-        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 1.5
@@ -133,10 +125,6 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: true
-      text_splitter:
-        chunk_size: 1500
-        chunk_overlap: 150
-        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 2.0
@@ -220,8 +208,9 @@ document_sources:
 
 chat_model:
   provider: openai
-  name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  name: gpt-4o # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
   settings:
+    base_url: http://localhost:8383/v1
     temperature: 0
     max_retries: 0
     timeout:
@@ -233,8 +222,9 @@ chat_model:
       keepalive_expiry_seconds: 10
 embedding_model:
   provider: openai
-  name: text-embedding-3-large # or text-embedding-3-small
+  name: text-embedding-ada-002 # or text-embedding-3-small
   settings:
+    base_url: http://localhost:8383/v1
     max_retries: 0
     timeout:
       connect: 10.0
@@ -246,8 +236,9 @@ embedding_model:
 
 vision_model:
   provider: openai
-  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  name: gpt-4o # or gpt-4o if you want higher fidelity
   settings:
+    base_url: http://localhost:8383/v1
     max_retries: 0
     timeout:
       connect: 10.0
@@ -260,6 +251,7 @@ vision_model:
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
+    base_url: http://localhost:8383/v1
     online: true
     local_path: ~/.cache/huggingface/hub
     max_retries: 0
@@ -399,17 +391,30 @@ storage:
   #   secure: false
   #   verify: true
 
+  catalog_store:
+    type: "postgres"
+    table: catalog
+
+  prompt_store:
+    type: "postgres"
+    table: prompt
+
   resource_store:
     type: "postgres"
+    table: resource
 
   tag_store:
     type: "postgres"
+    table: tag
 
   metadata_store:
     type: "postgres"
+    table: metadata
 
   task_store:
     type: "postgres"
+    table: workflow_tasks
+    prefix: "sched_"
 
   vector_store:
     type: opensearch
