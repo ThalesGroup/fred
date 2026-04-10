@@ -31,6 +31,7 @@ from agentic_backend.application_context import (
     get_configuration,
     get_default_model,
 )
+from agentic_backend.common.catalog_overrides import apply_external_catalog_overrides
 from agentic_backend.common.structures import Configuration
 from agentic_backend.common.utils import parse_server_configuration
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -101,6 +102,7 @@ class BaseEvaluator(ABC):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
         config = parse_server_configuration(str(config_path))
+        config = apply_external_catalog_overrides(config)
         ApplicationContext(config)
         self.config = config
         return config
@@ -144,9 +146,13 @@ class BaseEvaluator(ABC):
                 temperature=langchain_model.temperature or 0.0,
             )
         if isinstance(langchain_model, ChatOpenAI):
+            base_url = getattr(langchain_model, "openai_api_base", None)
+            api_key = getattr(langchain_model, "openai_api_key", None)
             return GPTModel(
                 model=langchain_model.model_name,
                 temperature=langchain_model.temperature or 0.0,
+                base_url=base_url or None,
+                api_key=api_key.get_secret_value() if api_key else None,
             )
 
     def load_dataset(self):
@@ -313,7 +319,7 @@ class BaseEvaluator(ABC):
 
         try:
             doc_lib_ids = None
-            if args.doc_libs:
+            if getattr(args, "doc_libs", None):
                 doc_lib_ids = [id.strip() for id in args.doc_libs.split(",")]
                 self.logger.info(f"📚 Document libraries: {doc_lib_ids}")
             if args.configuration_file:

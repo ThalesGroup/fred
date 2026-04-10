@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# eval_config.yaml — Default evaluation configuration for any V2 agent.
+#
+# HOW TO USE
+#   This file is picked up automatically by eval.sh.
+#   You can also pass it explicitly:
+#     python generic_v2_evaluation.py --config agentic_backend/tests/agents/eval_config.yaml
+#
+# WHAT YOU CAN SET HERE
+#   configuration_file  — which app config YAML to load (LLM provider, storage…)
+#   judge_model         — which LLM scores the agent answers (can differ from agent LLM)
+#   dataset_path        — optional default dataset; overridden by --dataset on CLI
+#   agent_id            — optional default agent;   overridden by --agent   on CLI
+#
+# DATASET FORMAT (reminder)
+#   [{"question": "...", "expect": "optional substring"}]
+#   Place your dataset anywhere and pass its path via --dataset or dataset_path below.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── App config ────────────────────────────────────────────────────────────────
+# Loads LLM provider, storage backends, MCP catalog, agents catalog, etc.
+configuration_file: "configuration.yaml"
+
+# ── Judge model ───────────────────────────────────────────────────────────────
+# The LLM DeepEval uses to score answers ("Is this relevant?", "Is this correct?").
+# This is independent from the model the agent itself uses.
+#
+# Auto-detection order when judge_model is not set:
+#   1. OPENAI_API_KEY in config/.env  → gpt-4o-mini
+#   2. Default model in configuration.yaml → reused as judge
+#
+# Examples:
+#   judge_model: "gpt-4o"
+#   judge_model: "mistral-large-latest"   ← requires Mistral API key in OPENAI_API_KEY
+#   judge_model: "llama3.1:70b"           ← requires Ollama running locally
+judge_model: "mistral-large-latest"

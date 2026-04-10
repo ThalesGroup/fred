@@ -33,4 +33,4 @@ configuration_file: "configuration.yaml"
 #   Example for OpenAI:  judge_model: "gpt-4o"
 #   Example for Ollama:  judge_model: "llama3.1:70b"
 #
-# judge_model: ""
+judge_model: "mistral-large-latest"

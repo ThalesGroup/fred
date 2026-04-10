@@ -164,6 +164,12 @@ class SqlAgentEvaluator(BaseEvaluator):
             help="App configuration YAML (default: configuration.yaml).",
         )
         parser.add_argument("--doc_libs", help=argparse.SUPPRESS)
+        parser.add_argument(
+            "--agent_id",
+            default=cfg.get("agent_id", _DEFAULT_CATALOG_AGENT_ID),
+            metavar="AGENT",
+            help=f"Catalog agent id to evaluate (default: {_DEFAULT_CATALOG_AGENT_ID}).",
+        )
 
         args = parser.parse_args()
         if not args.dataset_path:
@@ -179,12 +185,17 @@ class SqlAgentEvaluator(BaseEvaluator):
         Build the LLM judge with automatic provider detection.
 
         Priority (first match wins):
-          1. OPENAI_API_KEY in environment → ChatOpenAI (default: gpt-4o-mini)
-          2. Default model in configuration.yaml → reused as judge
+          1. judge_model explicitly set in eval_config.yaml → use default model
+             from configuration.yaml (preserves base_url, api_key, provider)
+          2. OPENAI_API_KEY in environment, no explicit judge_model → gpt-4o-mini
+          3. Default model in configuration.yaml → reused as judge
         """
         openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key:
-            judge_model = self.chat_model or "gpt-4o-mini"
+        # Only use the raw OPENAI_API_KEY shortcut when no explicit judge_model
+        # is configured — otherwise the key may belong to a different provider
+        # (e.g. Mistral stored in OPENAI_API_KEY for OpenAI-compat reasons).
+        if openai_key and not self.chat_model:
+            judge_model = "gpt-4o-mini"
             llm = ChatOpenAI(model=judge_model, temperature=0.0)
             self.chat_model = judge_model
             self.deepeval_llm = self.mapping_langchain_deepeval(llm)
@@ -359,7 +370,11 @@ class SqlAgentEvaluator(BaseEvaluator):
 
 def main() -> None:
     evaluator = SqlAgentEvaluator()
-    exit_code = asyncio.run(evaluator.main(agent_id=_DEFAULT_CATALOG_AGENT_ID))
+    # agent_id can be overridden via --agent_id CLI flag; fall back to catalog default.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--agent_id", default=_DEFAULT_CATALOG_AGENT_ID)
+    pre_args, _ = pre.parse_known_args()
+    exit_code = asyncio.run(evaluator.main(agent_id=pre_args.agent_id))
     sys.exit(exit_code)
 
 
