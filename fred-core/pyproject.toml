@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "1.4.0"
+version = "1.4.0+post"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -1039,7 +1039,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "1.4.0"
+version = "1.4.0+post"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite", marker = "sys_platform == 'linux'" },
@@ -1775,7 +1775,7 @@ wheels = [
 
 [[package]]
 name = "knowledge-flow-backend"
-version = "1.4.0"
+version = "1.4.0+post"
 source = { editable = "." }
 dependencies = [
     { name = "alembic", marker = "sys_platform == 'linux'" },

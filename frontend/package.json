@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "fred-ui",
-  "version": "1.4.0",
+  "version": "1.4.0-post",
   "type": "module",
   "overrides": {
     "pdfjs-dist": "4.3.136",
