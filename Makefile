@@ -157,6 +157,9 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- knowledge-flow-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' knowledge-flow-backend/pyproject.toml
 	cd knowledge-flow-backend && uv lock
+	@echo "--- control-plane-backend ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' control-plane-backend/pyproject.toml
+	cd control-plane-backend && uv lock
 	@echo "--- frontend ---"
 	cd frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."

@@ -366,7 +366,7 @@ wheels = [
 
 [[package]]
 name = "control-plane-backend"
-version = "0.1.0"
+version = "1.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -566,7 +566,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "1.3.0.post0"
+version = "1.4.0"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },
