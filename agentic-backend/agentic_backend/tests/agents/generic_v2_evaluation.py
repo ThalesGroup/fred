@@ -98,7 +98,6 @@ from textwrap import fill
 from typing import Any, Optional
 
 import yaml
-from deepeval.evaluate import AsyncConfig
 from deepeval.metrics import AnswerRelevancyMetric, GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from langchain_core.messages import AIMessage, HumanMessage
