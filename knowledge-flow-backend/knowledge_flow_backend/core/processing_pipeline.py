@@ -213,9 +213,24 @@ class ProcessingPipeline:
         if not any(output_dir.glob("*.*")):
             raise ValueError(f"Output directory {output_dir} does not contain output files")
 
-        file_to_process = next(output_dir.glob("*.*"))
-        if file_to_process.suffix.lower() not in [".md", ".csv", ".duckdb"]:
-            raise ValueError(f"Output file {file_to_process} is not a markdown, csv or duckdb file")
+        preferred_output_names = ("output.md", "table.csv", "output.txt", "output.duckdb")
+        file_to_process = None
+
+        for candidate_name in preferred_output_names:
+            candidate = output_dir / candidate_name
+            if candidate.exists() and candidate.is_file():
+                file_to_process = candidate
+                break
+
+        if file_to_process is None:
+            generated_files = sorted(item.name for item in output_dir.iterdir() if item.is_file())
+            raise ValueError(
+                f"Output directory {output_dir} does not contain a supported primary output file. "
+                f"Expected one of {preferred_output_names}, found {generated_files}"
+            )
+
+        if file_to_process.suffix.lower() not in [".md", ".csv", ".txt", ".duckdb"]:
+            raise ValueError(f"Output file {file_to_process} is not a markdown, csv, txt or duckdb file")
         if file_to_process.stat().st_size == 0:
             raise ValueError(f"Output file {file_to_process} is empty")
 

@@ -28,6 +28,7 @@ from deepeval.test_case import LLMTestCase
 
 from agentic_backend.agents.v1.production.rags.advanced_rag_expert import AdvancedRico
 from agentic_backend.tests.agents.base_deepeval_test import BaseEvaluator
+from typing import Any
 
 
 class RAGEvaluator(BaseEvaluator):
@@ -35,7 +36,9 @@ class RAGEvaluator(BaseEvaluator):
         self,
         agent_id: str,
         doc_lib_ids: list[str] | None = None,
-    ):
+    ) -> Any:
+        pass
+
         """
         This method runs the evaluation of an agent by generating test cases from the dataset
         and evaluating them using the defined metrics.
