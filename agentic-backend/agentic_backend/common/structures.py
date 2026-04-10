@@ -353,7 +353,9 @@ class Properties(BaseModel):
     showAgentCode: bool = True
     allowAgentSwitchInOneConversation: bool = True
     defaultTeamBannerFile: str = "default-team-banner.png"
+    defaultPersonalBannerFile: str = "default-team-banner.png"
     defaultTeamAvatarFile: str = "default-team-avatar.png"
+    defaultPersonalAvatarFile: str = "default-team-avatar.png"
 
 
 class FrontendSettings(BaseModel):

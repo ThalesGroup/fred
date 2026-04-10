@@ -20,14 +20,18 @@ ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
 
-COPY control-plane-backend/pyproject.toml /app/
+COPY control-plane-backend/pyproject.toml control-plane-backend/uv.lock* /app/
 COPY control-plane-backend/Makefile /app/
 COPY scripts /scripts
 COPY fred-core /fred-core
 
 RUN make dev
 
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY control-plane-backend/. /app/
+RUN rm -f /app/alembic.ini
+COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -52,7 +56,11 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 
 WORKDIR /app
 
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
+RUN rm -f /app/alembic.ini
+COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
