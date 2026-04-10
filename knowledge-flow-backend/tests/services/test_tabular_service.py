@@ -251,6 +251,44 @@ async def test_tabular_service_lists_context_and_queries_datasets(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_tabular_service_rejects_duckdb_table_functions_outside_authorized_datasets(tmp_path):
+    """
+    Verify read-only tabular queries cannot bypass dataset scoping with DuckDB functions.
+
+    Why this exists:
+    - Bare table functions such as `read_parquet(...)` are not mounted Fred
+      datasets and must be blocked by the dataset allowlist before execution.
+
+    How to use:
+    - Ingest one valid dataset, then assert that a query using
+      `read_parquet(...)` is rejected.
+    """
+
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
+    metadata_store = app_context.get_metadata_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+    )
+
+    service = TabularService()
+
+    with pytest.raises(ValueError, match="unauthorized datasets: read_parquet"):
+        await service.query_read(
+            _user(),
+            request=TabularQueryRequest(
+                sql="SELECT * FROM read_parquet('/tmp/forbidden.parquet')",
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_access(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()

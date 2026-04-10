@@ -292,11 +292,28 @@ def _collect_relation_names_after_keyword(tokens: list[sql.Token], start_index: 
 
 
 def _relation_names_from_token(token: sql.Token) -> set[str]:
+    """
+    Extract relation-like names from one token found after `FROM` or `JOIN`.
+
+    Why this exists:
+    - Relation allowlisting must cover plain table aliases, subqueries, and
+      DuckDB table functions used in relation position.
+    - Bare table functions such as `read_parquet(...)` would otherwise bypass
+      the dataset allowlist because sqlparse exposes them as `Function` tokens.
+
+    How to use:
+    - Call only for tokens that syntactically appear in a relation position.
+    """
+
     if isinstance(token, sql.IdentifierList):
         identifier_names: set[str] = set()
         for identifier in token.get_identifiers():
             identifier_names.update(_relation_names_from_token(identifier))
         return identifier_names
+
+    if isinstance(token, sql.Function):
+        function_name = token.get_name() or token.get_real_name()
+        return {_normalize_identifier(function_name)} if function_name else set()
 
     if isinstance(token, sql.Identifier):
         if any(isinstance(child, sql.Parenthesis) and _token_contains_select(child) for child in token.tokens):
