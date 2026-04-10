@@ -5,15 +5,17 @@ Revises: e89ab9e7ca5f
 Create Date: 2026-04-10 08:13:59.051649
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '82d43cf766d9'
-down_revision: Union[str, Sequence[str], None] = 'e89ab9e7ca5f'
+revision: str = "82d43cf766d9"  # pragma: allowlist secret
+down_revision: Union[str, Sequence[str], None] = (
+    "e89ab9e7ca5f"  # pragma: allowlist secret
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -22,12 +24,12 @@ def upgrade() -> None:
     """Upgrade schema."""
     bind = op.get_bind()
 
-    if bind.dialect.name == 'postgresql':
+    if bind.dialect.name == "postgresql":
         op.execute("""
             UPDATE session
             SET session_data = session_data || jsonb_build_object('team_id', team_id)
         """)
-    elif bind.dialect.name == 'sqlite':
+    elif bind.dialect.name == "sqlite":
         op.execute("""
             UPDATE session
             SET session_data = json_set(session_data, '$.team_id', team_id)
