@@ -52,19 +52,11 @@ from agentic_backend.core.agents.v2.graph.authoring import (
     typed_node,
 )
 
-from .prompt_loader import load_sql_analyst_graph_prompt
 from .sql_agent_state import SqlAgentState
 from .tabular_capabilities import (
     get_database_context,
     read_query_rows,
     tables_for_database,
-)
-
-_INTENT_ROUTER_SYSTEM_PROMPT = load_sql_analyst_graph_prompt(
-    "sql_agent_intent_router_system_prompt.md"
-)
-_SUMMARIZE_RESULT_SYSTEM_PROMPT = load_sql_analyst_graph_prompt(
-    "sql_agent_summarize_result_system_prompt.md"
 )
 
 
@@ -151,7 +143,19 @@ async def analyze_intent_step(
         await context.invoke_structured_model(
             IntentDecision,
             messages=[
-                SystemMessage(content=_build_intent_router_system_prompt(summary)),
+                SystemMessage(
+                    content=(
+                        "You are a routing assistant for a SQL analyst agent.\n\n"
+                        "This agent can:\n"
+                        "- Answer questions by running SQL queries on tabular datasets\n"
+                        "- Explore data: counts, aggregations, filters, joins, trends\n"
+                        "- Describe available datasets and their columns\n"
+                        "- Help users understand what data is available and what questions they can ask\n\n"
+                        f"Available datasets:\n{summary}\n\n"
+                        "Route 'show_metadata' for any question about capabilities, tools, available data, "
+                        "or what the agent can do. Route 'query_data' only when data retrieval is needed."
+                    )
+                ),
                 HumanMessage(content=state.latest_user_text),
             ],
             operation="analyze_intent",
@@ -370,8 +374,8 @@ async def synthesize_answer_step(
     answer = await model_text_step(
         context,
         operation="synthesize_answer",
-        system_prompt=_build_synthesis_system_prompt(content),
-        user_prompt=state.latest_user_text or "Summarize the answer for the user.",
+        system_prompt=content,
+        user_prompt="Summarize the answer for the user.",
     )
 
     return StepResult(
@@ -408,48 +412,6 @@ async def finalize_sql_agent_step(
 
 
 # ── Private helpers ────────────────────────────────────────────────────────
-
-
-def _build_intent_router_system_prompt(database_summary: str) -> str:
-    """
-    Build the intent-router system prompt with live dataset context.
-
-    Why this exists:
-    - The router needs stable business instructions plus the current dataset
-      inventory so it can distinguish metadata questions from real data queries.
-
-    How to use:
-    - Pass the summary produced by `_format_database_summary(...)`.
-    - Use the returned text as the system prompt for `IntentDecision`.
-
-    Example:
-    ```python
-    prompt = _build_intent_router_system_prompt("Available Databases:\n- Database: analytics")
-    ```
-    """
-
-    return f"{_INTENT_ROUTER_SYSTEM_PROMPT}\n\nAvailable datasets:\n{database_summary}"
-
-
-def _build_synthesis_system_prompt(execution_context: str) -> str:
-    """
-    Build the result-synthesis system prompt with live query context.
-
-    Why this exists:
-    - The answer model needs explicit analyst instructions plus the executed SQL,
-      result rows, and any error details in one deterministic prompt.
-
-    How to use:
-    - Pass the assembled execution context from `synthesize_answer_step`.
-    - Use the returned text as the system prompt for the final answer model.
-
-    Example:
-    ```python
-    prompt = _build_synthesis_system_prompt("User Question: How many rows?")
-    ```
-    """
-
-    return f"{_SUMMARIZE_RESULT_SYSTEM_PROMPT}\n\n{execution_context}"
 
 
 def _tables_schema_for_drafting(
