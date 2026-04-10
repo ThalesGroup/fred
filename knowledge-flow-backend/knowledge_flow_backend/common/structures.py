@@ -488,6 +488,15 @@ class SchedulerConfig(BaseModel):
 class AppConfig(BaseModel):
     name: Optional[str] = "Knowledge Flow Backend"
     base_url: str = "/knowledge-flow/v1"
+    public_base_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Public base URL of this service as seen by browsers (e.g. 'http://localhost:8088'). "
+            "When set, download URLs are built from this value instead of the incoming request's "
+            "host, which is required when the service is called internally (pod-to-pod) and the "
+            "resulting URLs must be reachable from outside the cluster."
+        ),
+    )
     address: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
