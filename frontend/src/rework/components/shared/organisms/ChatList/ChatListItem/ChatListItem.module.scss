@@ -13,6 +13,10 @@
     --display-action: block;
     background-color: var(--state-on-surface-hover);
   }
+
+  &[data-selected="true"] {
+    background-color: color-mix(in srgb, var(--secondary), transparent 84%);
+  }
 }
 
 .chatDescription {
