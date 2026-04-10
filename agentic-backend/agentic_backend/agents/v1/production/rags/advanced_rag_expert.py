@@ -42,13 +42,13 @@ from agentic_backend.common.conversation_exporter import (
     format_conversation_from_messages,
 )
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
-from agentic_backend.common.structures import AgentChatOptions, AgentSettings
-from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     format_visual_evidence_for_prompt,
 )
+from agentic_backend.common.structures import AgentChatOptions, AgentSettings
+from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, UIHints
 from agentic_backend.core.agents.runtime_context import (
     RuntimeContext,
     get_document_library_tags_ids,
@@ -66,9 +66,11 @@ from agentic_backend.core.runtime_source import expose_runtime_source
 
 logger = logging.getLogger(__name__)
 
+
 def _log_visual_hits(stage: str, hits: list) -> None:
     visual_hits = [
-        h for h in hits
+        h
+        for h in hits
         if getattr(h, "has_visual_evidence", False)
         and getattr(h, "slide_image_uri", None)
     ]
@@ -80,6 +82,7 @@ def _log_visual_hits(stage: str, hits: list) -> None:
         [getattr(h, "slide_id", None) for h in visual_hits],
         [getattr(h, "slide_image_uri", None) for h in visual_hits],
     )
+
 
 def mk_thought(*, label: str, node: str, task: str, content: str) -> AIMessage:
     """
@@ -691,7 +694,9 @@ class AdvancedRico(AgentFlow):
             for doc in documents
         )
         visual_context = format_visual_evidence_for_prompt(documents)
-        visual_hits = [d for d in documents if d.has_visual_evidence and d.slide_image_uri]
+        visual_hits = [
+            d for d in documents if d.has_visual_evidence and d.slide_image_uri
+        ]
         logger.info(
             "[RICH][V1] visual_hits=%d slide_ids=%s",
             len(visual_hits),

@@ -1,11 +1,11 @@
 # app/common/vectorization_utils.py
 
 import hashlib
+import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-import json
-import re
 
 from langchain_core.documents import Document
 
@@ -130,7 +130,6 @@ _ALLOWED_CHUNK_KEYS = {
     "slide_id",
     "has_visual_evidence",
     "slide_image_uri",
-
 }
 _BOOL_KEYS = {"has_visual_evidence"}
 
@@ -203,7 +202,7 @@ def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[s
                 proj.pop(k, None)
             else:
                 proj[k] = iv
-    
+
     for k in _BOOL_KEYS:
         if k in proj:
             proj[k] = bool(proj[k])
@@ -231,7 +230,8 @@ def make_stable_chunk_id(base_flat: Dict[str, Any], proj: Dict[str, Any]) -> str
     ]
     key = "|".join(str(x) for x in parts)
     return _stable_id16_from_str(key)
-    
+
+
 def load_pptx_slide_assets(output_file_path: str) -> dict[int, dict[str, Any]]:
     manifest_path = Path(output_file_path).with_name("pptx_slide_assets.json")
     if not manifest_path.exists():
@@ -248,7 +248,9 @@ def load_pptx_slide_assets(output_file_path: str) -> dict[int, dict[str, Any]]:
         if entry.get("slide_number") is not None and entry.get("slide_image_path")
     }
 
+
 _SLIDE_SECTION_RE = re.compile(r"(?:^| / )Slide\s+(\d+)(?:$|\b)")
+
 
 def slide_number_from_chunk_metadata(raw: Dict[str, Any]) -> int | None:
     section = raw.get("section")
@@ -266,5 +268,3 @@ def slide_number_from_chunk_metadata(raw: Dict[str, Any]) -> int | None:
             return int(match.group(1))
 
     return None
-
-

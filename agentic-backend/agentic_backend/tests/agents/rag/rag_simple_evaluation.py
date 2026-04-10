@@ -14,6 +14,7 @@
 
 import asyncio
 import sys
+from typing import Any
 
 from deepeval import evaluate
 from deepeval.evaluate import AsyncConfig
@@ -29,7 +30,6 @@ from langchain_core.messages import HumanMessage
 
 from agentic_backend.agents.v1.production.rags.rag_expert import Rico
 from agentic_backend.tests.agents.base_deepeval_test import BaseEvaluator
-from typing import Any
 
 
 class RAGEvaluator(BaseEvaluator):

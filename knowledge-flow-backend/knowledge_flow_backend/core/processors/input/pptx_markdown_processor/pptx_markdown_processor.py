@@ -20,6 +20,7 @@ extraction reusable for future vision-enriched PPTX processing.
 """
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,6 @@ from knowledge_flow_backend.application_context import get_configuration
 from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
-from enum import Enum
 from knowledge_flow_backend.core.processors.input.common.image_describer import (
     PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1,
     build_image_describer,
@@ -40,6 +40,9 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
     extract_native_slide_content,
 )
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_asset_manifest import (
+    write_slide_asset_manifest,
+)
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import (
     format_slide_markdown,
 )
@@ -49,17 +52,15 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_visual_preanalysis import (
     preanalyze_presentation,
 )
-from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_asset_manifest import (
-    write_slide_asset_manifest,
-)
-
 
 logger = logging.getLogger(__name__)
+
 
 class PptxProcessingMode(str, Enum):
     NATIVE_ONLY = "native_only"
     VISION_TEXT = "vision_text"
     VISION_TEXT_PLUS_ASSETS = "vision_text_plus_assets"
+
 
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PPTX slide decks into Markdown sections, slide by slide."
@@ -73,7 +74,7 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
         processing = get_configuration().processing
         current_profile = get_current_processing_profile()
         active_profile = processing.normalize_profile(current_profile)
-        
+
         if active_profile == IngestionProcessingProfile.FAST:
             mode = PptxProcessingMode.NATIVE_ONLY
         elif active_profile == IngestionProcessingProfile.MEDIUM:
@@ -84,7 +85,6 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             mode = PptxProcessingMode.NATIVE_ONLY
 
         return active_profile, mode
-
 
     def _resolve_image_describer(self, mode: PptxProcessingMode):
         if mode == PptxProcessingMode.NATIVE_ONLY:
@@ -193,7 +193,6 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 bool(image_describer),
             )
 
-
             presentation = Presentation(str(file_path))
 
             _, native_contents = self._build_native_markdown(presentation)
@@ -216,14 +215,14 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                 )
 
                 vision_result = enrich_slides_with_vision(
-                        pptx_path=file_path,
-                        slide_numbers=slides_to_enrich,
-                        output_dir=output_dir,
-                        image_describer=image_describer,
-                    )
+                    pptx_path=file_path,
+                    slide_numbers=slides_to_enrich,
+                    output_dir=output_dir,
+                    image_describer=image_describer,
+                )
                 visual_enrichments = vision_result.visual_enrichments
                 rendered_slides = vision_result.rendered_slides
-            
+
             if processing_mode == PptxProcessingMode.VISION_TEXT_PLUS_ASSETS and rendered_slides:
                 manifest_path = write_slide_asset_manifest(
                     output_dir=output_dir,

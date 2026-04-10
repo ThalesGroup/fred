@@ -224,10 +224,7 @@ class ProcessingPipeline:
 
         if file_to_process is None:
             generated_files = sorted(item.name for item in output_dir.iterdir() if item.is_file())
-            raise ValueError(
-                f"Output directory {output_dir} does not contain a supported primary output file. "
-                f"Expected one of {preferred_output_names}, found {generated_files}"
-            )
+            raise ValueError(f"Output directory {output_dir} does not contain a supported primary output file. Expected one of {preferred_output_names}, found {generated_files}")
 
         if file_to_process.suffix.lower() not in [".md", ".csv", ".txt", ".duckdb"]:
             raise ValueError(f"Output file {file_to_process} is not a markdown, csv, txt or duckdb file")

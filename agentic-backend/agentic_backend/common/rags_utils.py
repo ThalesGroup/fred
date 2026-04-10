@@ -25,6 +25,7 @@ def trim_snippet(text: Optional[str], limit: int = 500) -> str:
     t = text.strip()
     return t if len(t) <= limit else (t[:limit] + "…")
 
+
 def extract_visual_hits(hits: List[VectorSearchHit]) -> List[VectorSearchHit]:
     """
     Keep only retrieval hits that have an associated rich slide image.

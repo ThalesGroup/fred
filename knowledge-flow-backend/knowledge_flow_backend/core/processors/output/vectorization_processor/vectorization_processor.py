@@ -110,7 +110,7 @@ class VectorizationProcessor(BaseOutputProcessor):
             logger.debug(f"Document loaded: {document}")
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
-            
+
             slide_assets = load_pptx_slide_assets(file_path)
 
             # Ensure keywords is always defined

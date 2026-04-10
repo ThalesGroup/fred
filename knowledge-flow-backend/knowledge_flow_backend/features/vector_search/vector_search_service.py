@@ -21,12 +21,9 @@ from knowledge_flow_backend.features.vector_search.vector_search_structures impo
 
 logger = logging.getLogger(__name__)
 
+
 def _log_visual_search_hits(stage: str, hits: list) -> None:
-    visual_hits = [
-        h for h in hits
-        if getattr(h, "has_visual_evidence", False)
-        and getattr(h, "slide_image_uri", None)
-    ]
+    visual_hits = [h for h in hits if getattr(h, "has_visual_evidence", False) and getattr(h, "slide_image_uri", None)]
     logger.info(
         "[RICH][KFB][%s] total_hits=%d visual_hits=%d slide_ids=%s image_uris=%s",
         stage,
@@ -364,12 +361,9 @@ class VectorSearchService:
                 sample,
             )
 
-        results = await asyncio.gather(
-            *[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)]
-        )
+        results = await asyncio.gather(*[self._to_hit(h.document, h.score, rank, user) for rank, h in enumerate(ann_hits, start=1)])
         _log_visual_search_hits("SEMANTIC", results)
         return results
-
 
     async def _strict(
         self,
@@ -434,12 +428,9 @@ class VectorSearchService:
 
         hits_count = len(hits)
         self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
-        results = await asyncio.gather(
-            *[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)]
-        )
+        results = await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
         _log_visual_search_hits("STRICT", results)
         return results
-
 
     async def _hybrid(
         self,
@@ -504,12 +495,9 @@ class VectorSearchService:
 
         hits_count = len(hits)
         self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
-        results = await asyncio.gather(
-            *[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)]
-        )
+        results = await asyncio.gather(*[self._to_hit(hit.document, hit.score, rank, user) for rank, hit in enumerate(hits, start=1)])
         _log_visual_search_hits("HYBRID", results)
         return results
-
 
     # ---------- unified public API -------------------------------------------
 

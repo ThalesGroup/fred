@@ -893,7 +893,7 @@ class Rico(AgentFlow):
                     "prompts.with_sources",
                     question=question,
                     sources=rich_sources,
-                ) 
+                )
                 + guardrails
             )
             logger.debug(

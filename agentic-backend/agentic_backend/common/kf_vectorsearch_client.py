@@ -15,12 +15,12 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
 from pydantic import TypeAdapter
-from dataclasses import dataclass
 
 from agentic_backend.common.kf_base_client import (
     KfBaseClient,
@@ -30,6 +30,7 @@ from agentic_backend.common.kf_base_client import (
 logger = logging.getLogger(__name__)
 
 _HITS = TypeAdapter(List[VectorSearchHit])
+
 
 @dataclass(frozen=True)
 class PreviewArtifactBlob:
@@ -130,7 +131,7 @@ class VectorSearchClient(KfBaseClient):
             logger.warning("Unexpected vector search payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
-        
+
     async def fetch_preview_artifact(
         self,
         *,
@@ -154,7 +155,6 @@ class VectorSearchClient(KfBaseClient):
             filename=filename,
             size=len(content),
         )
-
 
     async def rerank(
         self,

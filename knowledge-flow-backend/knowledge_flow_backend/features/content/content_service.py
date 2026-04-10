@@ -102,7 +102,7 @@ class ContentService:
             raise FileNotFoundError(f"No media found for document {document_uid} with media ID {media_id}")
 
         return stream, media_id, content_type
-        
+
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_preview_artifact(
         self,
@@ -115,17 +115,12 @@ class ContentService:
             raise FileNotFoundError("Preview artifact path is empty.")
 
         try:
-            data = self.content_store.get_preview_bytes(
-                f"{document_uid}/output/{artifact_name}"
-            )
+            data = self.content_store.get_preview_bytes(f"{document_uid}/output/{artifact_name}")
         except FileNotFoundError:
-            raise FileNotFoundError(
-                f"No preview artifact found for document {document_uid} at path {artifact_name}"
-            )
+            raise FileNotFoundError(f"No preview artifact found for document {document_uid} at path {artifact_name}")
 
         content_type = mimetypes.guess_type(artifact_name)[0] or "application/octet-stream"
         return BytesIO(data), artifact_name.split("/")[-1], content_type
-
 
     @authorize(Action.READ, Resource.DOCUMENTS)
     async def get_markdown_preview(self, user: KeycloakUser, document_uid: str) -> str:

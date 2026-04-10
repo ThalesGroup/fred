@@ -273,7 +273,7 @@ class ContentController:
                 media_type=media_type,
                 headers={"Content-Disposition": build_content_disposition_header("attachment", file_name)},
             )
-        
+
         @router.get(
             "/markdown/{document_uid}/artifact/{artifact_path:path}",
             tags=["Content"],
@@ -297,7 +297,6 @@ class ContentController:
                 )
             except FileNotFoundError as e:
                 raise HTTPException(status_code=404, detail=str(e))
-
 
         @router.get(
             "/raw_content/stream/{document_uid}",
