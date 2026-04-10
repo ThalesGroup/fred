@@ -6,6 +6,8 @@ from agentic_backend.agents.v2.production.sql_analyst_graph.sql_agent_state impo
     SqlAgentState,
 )
 from agentic_backend.agents.v2.production.sql_analyst_graph.sql_agent_steps import (
+    _build_intent_router_system_prompt,
+    _build_synthesis_system_prompt,
     _choose_database_from_request,
 )
 from agentic_backend.core.agents.v2 import (
@@ -66,6 +68,39 @@ def test_sql_agent_definition_has_expected_agent_id() -> None:
     definition = SqlAgentDefinition()
 
     assert definition.agent_id == "production.sql_analyst.graph.v2"
+
+
+def test_sql_agent_default_prompt_keeps_tessa_style_sql_guardrails() -> None:
+    definition = SqlAgentDefinition()
+
+    assert "LOWER(...)" in definition.draft_sql_system_prompt
+    assert (
+        "Do not invent tables, columns, values, or business facts"
+        in definition.draft_sql_system_prompt
+    )
+    assert "LIMIT 20" in definition.draft_sql_system_prompt
+
+
+def test_sql_agent_intent_router_prompt_includes_runtime_summary() -> None:
+    summary = "Available Databases:\n- Database: analytics"
+
+    prompt = _build_intent_router_system_prompt(summary)
+
+    assert "routing assistant" in prompt
+    assert "Available datasets:" in prompt
+    assert summary in prompt
+
+
+def test_sql_agent_synthesis_prompt_keeps_no_hallucination_guidance() -> None:
+    execution_context = (
+        'User Question: How many rows?\n\nQuery Results:\n[{"count": 2}]'
+    )
+
+    prompt = _build_synthesis_system_prompt(execution_context)
+
+    assert "Do not invent values" in prompt
+    assert "Markdown table" in prompt
+    assert execution_context in prompt
 
 
 def test_sql_agent_auto_selects_database_from_table_name() -> None:
