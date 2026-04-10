@@ -32,7 +32,6 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     build_tabular_object_key,
     compute_source_revision,
     dataframe_schema,
-    document_artifact_prefix,
     utc_now_iso,
     write_tabular_artifact,
 )
@@ -182,7 +181,6 @@ class TabularProcessor(BaseOutputProcessor):
             metadata.file.row_count = int(len(df))
             artifact = self._persist_parquet_artifact(file_path=file_path, metadata=metadata, df=df)
             write_tabular_artifact(metadata, artifact)
-            self._cleanup_previous_artifacts(metadata=metadata, keep_key=artifact.object_key)
 
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return metadata
@@ -273,31 +271,3 @@ class TabularProcessor(BaseOutputProcessor):
             connection.execute(f"COPY dataset_df TO '{quoted_path}' (FORMAT PARQUET, COMPRESSION '{compression}')")
         finally:
             connection.close()
-
-    def _cleanup_previous_artifacts(self, *, metadata: DocumentMetadata, keep_key: str) -> None:
-        """
-        Remove stale Parquet revisions for the current document on re-ingestion.
-
-        Why this exists:
-        - The metadata should point to exactly one active dataset artifact.
-        - Old revisions are no longer needed once the new artifact is available.
-
-        How to use:
-        - Call after the new artifact has been written successfully.
-        - Cleanup is best-effort and never blocks ingestion success.
-        """
-
-        if self.tabular_config is None:
-            return
-
-        prefix = document_artifact_prefix(
-            artifacts_prefix=self.tabular_config.artifacts_prefix,
-            document_uid=metadata.document_uid,
-        )
-
-        try:
-            for stored_object in self.content_store.list_objects(prefix):
-                if stored_object.key != keep_key:
-                    self.content_store.delete_object(stored_object.key)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to cleanup stale tabular artifacts for %s: %s", metadata.document_uid, exc)

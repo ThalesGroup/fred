@@ -18,6 +18,7 @@ from knowledge_flow_backend.common.document_structures import (
     Tagging,
 )
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
+from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
     document_artifact_prefix,
@@ -74,7 +75,7 @@ async def _ingest_csv(
         tag_names=tag_names,
     )
     processed_metadata = processor.process(str(csv_path), metadata)
-    await metadata_store.save_metadata(processed_metadata)
+    await MetadataService().save_document_metadata(_user(), processed_metadata)
     return processed_metadata
 
 
@@ -187,6 +188,14 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
     updated_artifact = read_tabular_artifact(updated_metadata)
     assert updated_artifact is not None
     assert updated_artifact.object_key != artifact.object_key
+
+    stored_objects = content_store.list_objects(object_prefix)
+    assert {stored_object.key for stored_object in stored_objects} == {
+        artifact.object_key,
+        updated_artifact.object_key,
+    }
+
+    await MetadataService().save_document_metadata(_user(), updated_metadata)
 
     stored_objects = content_store.list_objects(object_prefix)
     assert len(stored_objects) == 1

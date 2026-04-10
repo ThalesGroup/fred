@@ -713,8 +713,18 @@ class MetadataService:
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
-        Save document metadata and update tag timestamps for any assigned tags.
-        This is an internal method only called by other services
+        Save document metadata, then finalize follow-up document maintenance.
+
+        Why this exists:
+        - Ingestion and document updates need one shared persistence path for
+          metadata, ReBAC parent links, and tag timestamps.
+        - Tabular re-ingestion must only prune superseded Parquet revisions
+          after the new metadata payload has been saved successfully.
+
+        How to use:
+        - Call from services that create or update one document metadata record.
+        - The method persists metadata first, then runs best-effort cleanup for
+          stale tabular artifacts linked to the saved document.
         """
         # Check if user has permissions to add document in all specified tags
         if metadata.tags:
@@ -730,10 +740,45 @@ class MetadataService:
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
                 await self._update_tag_timestamps(user, metadata.tags.tag_ids)
+            await self._prune_stale_tabular_artifacts(metadata)
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to save metadata: {e}")
+
+    async def _prune_stale_tabular_artifacts(self, metadata: DocumentMetadata) -> None:
+        """
+        Keep only the saved tabular artifact revision for one document.
+
+        Why this exists:
+        - Re-ingestion should not delete the previous dataset revision before
+          the new metadata record has been persisted successfully.
+        - Running the cleanup after `save_metadata(...)` preserves the previous
+          readable dataset if metadata persistence fails mid-request.
+
+        How to use:
+        - Call only after the latest document metadata has been durably saved.
+        - Cleanup is best-effort and logs warnings instead of failing the save.
+        """
+
+        artifact = read_tabular_artifact(metadata)
+        if artifact is None:
+            return
+
+        prefix = document_artifact_prefix(
+            artifacts_prefix=self.config.storage.tabular_store.artifacts_prefix,
+            document_uid=metadata.document_uid,
+        )
+        try:
+            for stored_object in self.content_store.list_objects(prefix):
+                if stored_object.key != artifact.object_key:
+                    self.content_store.delete_object(stored_object.key)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Could not prune stale tabular artifacts for '%s': %s",
+                metadata.document_uid,
+                exc,
+            )
 
     async def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
         """
