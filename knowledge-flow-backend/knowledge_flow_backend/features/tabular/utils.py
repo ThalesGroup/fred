@@ -14,74 +14,10 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+import json
+from typing import Any, Iterable
 
-import sqlparse
-from sqlparse import sql
-from sqlparse import tokens as T
-
-_FORBIDDEN_KEYWORDS = {
-    "ALTER",
-    "ANALYZE",
-    "ATTACH",
-    "BEGIN",
-    "CALL",
-    "COMMIT",
-    "COPY",
-    "CREATE",
-    "DELETE",
-    "DETACH",
-    "DO",
-    "DROP",
-    "EXEC",
-    "EXECUTE",
-    "EXPORT",
-    "IMPORT",
-    "INSERT",
-    "LOAD",
-    "MERGE",
-    "PRAGMA",
-    "REINDEX",
-    "RELEASE",
-    "RENAME",
-    "REPLACE",
-    "ROLLBACK",
-    "SAVEPOINT",
-    "SET",
-    "TRUNCATE",
-    "UPDATE",
-    "USE",
-    "VACUUM",
-}
-
-_FROM_OR_JOIN_KEYWORDS = {
-    "FROM",
-    "JOIN",
-    "INNER JOIN",
-    "LEFT JOIN",
-    "LEFT OUTER JOIN",
-    "RIGHT JOIN",
-    "RIGHT OUTER JOIN",
-    "FULL JOIN",
-    "FULL OUTER JOIN",
-    "CROSS JOIN",
-}
-
-_CLAUSE_END_KEYWORDS = {
-    "WHERE",
-    "GROUP",
-    "ORDER",
-    "HAVING",
-    "LIMIT",
-    "UNION",
-    "EXCEPT",
-    "INTERSECT",
-    "QUALIFY",
-    "WINDOW",
-    "SAMPLE",
-    "USING",
-    "ON",
-}
+import duckdb
 
 
 def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None = None) -> str:
@@ -110,21 +46,7 @@ def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None =
     if not normalized:
         raise ValueError("Empty SQL string provided")
 
-    statements = [statement for statement in sqlparse.parse(normalized) if str(statement).strip()]
-    if len(statements) != 1:
-        raise ValueError("Exactly one SQL statement is allowed")
-
-    statement = statements[0]
-    first_keyword = _first_keyword(statement)
-    if first_keyword not in {"SELECT", "WITH"}:
-        raise ValueError("Only SELECT or WITH statements are allowed in read-only mode")
-
-    for token in statement.flatten():
-        if token.ttype in T.Comment:
-            continue
-        token_value = token.normalized.upper()
-        if token_value in _FORBIDDEN_KEYWORDS:
-            raise ValueError(f"Forbidden SQL keyword in read-only mode: {token_value}")
+    statement = _parse_read_statement(normalized)
 
     if allowed_relations is not None:
         allowed_names = {_normalize_identifier(name) for name in allowed_relations}
@@ -137,82 +59,55 @@ def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None =
     return normalized
 
 
-def collect_cte_names(statement: sql.Statement | sql.TokenList) -> set[str]:
+def collect_cte_names(statement: dict[str, Any]) -> set[str]:
     """
-    Collect common-table-expression names declared in one SQL statement.
+    Collect common-table-expression names declared in one DuckDB AST statement.
 
     Why this exists:
     - Read-only validation must allow references to local CTE names while still
       blocking unknown dataset aliases.
 
     How to use:
-    - Call this on the parsed statement before checking relation references.
+    - Call this on the parsed statement returned by `_parse_read_statement(...)`
+      before checking relation references.
+
+    Example:
+    ```python
+    statement = _parse_read_statement("WITH scoped AS (SELECT * FROM d_sales) SELECT * FROM scoped")
+    cte_names = collect_cte_names(statement)
+    ```
     """
 
     names: set[str] = set()
-    saw_with = False
-
-    for token in statement.tokens:
-        if token.is_whitespace or token.ttype in T.Comment:
-            continue
-        if not saw_with:
-            if token.normalized.upper() == "WITH" or token.ttype is T.Keyword.CTE:
-                saw_with = True
-            else:
-                break
-            continue
-
-        if token.normalized.upper() == "RECURSIVE":
-            continue
-
-        if token.ttype in T.Keyword.DML and token.normalized.upper() == "SELECT":
-            break
-
-        if isinstance(token, sql.IdentifierList):
-            for identifier in token.get_identifiers():
-                name = identifier.get_name() or identifier.get_real_name()
-                if name:
-                    names.add(_normalize_identifier(name))
-            continue
-
-        if isinstance(token, sql.Identifier):
-            name = token.get_name() or token.get_real_name()
-            if name:
-                names.add(_normalize_identifier(name))
+    for cte_entry in _cte_entries(statement):
+        cte_name = cte_entry.get("key")
+        if isinstance(cte_name, str) and cte_name.strip():
+            names.add(_normalize_identifier(cte_name))
 
     return names
 
 
-def collect_relation_names(statement: sql.Statement | sql.TokenList) -> set[str]:
+def collect_relation_names(statement: dict[str, Any]) -> set[str]:
     """
-    Collect relation names referenced after `FROM` and `JOIN` clauses.
+    Collect relation names referenced anywhere in one DuckDB AST statement.
 
     Why this exists:
-    - Authorization is enforced by the aliases mounted in DuckDB.
-    - We still want a cheap allowlist check before execution to reject clearly
-      out-of-scope relation names.
+    - Authorization is enforced by the aliases mounted in DuckDB, but read
+      validation must reject any other relation source before execution.
+    - Walking the DuckDB AST closes gaps left by token-based checks, including
+      `NATURAL JOIN`, schema-qualified system tables, and nested subqueries.
 
     How to use:
-    - Pass the parsed statement returned by `sqlparse.parse(...)`.
+    - Pass the parsed statement returned by `_parse_read_statement(...)`.
+
+    Example:
+    ```python
+    statement = _parse_read_statement("SELECT * FROM d_sales JOIN d_targets USING (city)")
+    relation_names = collect_relation_names(statement)
+    ```
     """
 
-    names: set[str] = set()
-    tokens = list(statement.tokens)
-
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-
-        if _is_relation_keyword(token):
-            index = _collect_relation_names_after_keyword(tokens, index + 1, names)
-            continue
-
-        if isinstance(token, sql.TokenList):
-            names.update(collect_relation_names(token))
-
-        index += 1
-
-    return names
+    return _collect_relation_names_from_ast(statement, visible_cte_names=frozenset())
 
 
 def quote_identifier(identifier: str) -> str:
@@ -252,97 +147,240 @@ def quote_string_literal(value: str) -> str:
     return f"'{escaped}'"
 
 
-def _first_keyword(statement: sql.Statement | sql.TokenList) -> str | None:
-    for token in statement.tokens:
-        if token.is_whitespace or token.ttype in T.Comment:
-            continue
-        if token.ttype in T.Keyword or token.ttype in T.Keyword.DML or token.ttype is T.Keyword.CTE:
-            return token.normalized.upper()
-        if isinstance(token, sql.TokenList):
-            return _first_keyword(token)
-        return token.normalized.upper()
-    return None
-
-
-def _is_relation_keyword(token: sql.Token) -> bool:
-    return token.ttype in T.Keyword and token.normalized.upper() in _FROM_OR_JOIN_KEYWORDS
-
-
-def _collect_relation_names_after_keyword(tokens: list[sql.Token], start_index: int, names: set[str]) -> int:
-    index = start_index
-
-    while index < len(tokens):
-        token = tokens[index]
-
-        if token.is_whitespace or token.ttype in T.Comment:
-            index += 1
-            continue
-
-        if token.ttype in T.Keyword and token.normalized.upper() in _CLAUSE_END_KEYWORDS:
-            return index
-
-        if token.ttype in T.Punctuation and token.value == ",":
-            index += 1
-            continue
-
-        names.update(_relation_names_from_token(token))
-        return index + 1
-
-    return index
-
-
-def _relation_names_from_token(token: sql.Token) -> set[str]:
+def _parse_read_statement(query: str) -> dict[str, Any]:
     """
-    Extract relation-like names from one token found after `FROM` or `JOIN`.
+    Parse one read-only SQL statement with DuckDB and return its AST node.
 
     Why this exists:
-    - Relation allowlisting must cover plain table aliases, subqueries, and
-      DuckDB table functions used in relation position.
-    - Bare table functions such as `read_parquet(...)` would otherwise bypass
-      the dataset allowlist because sqlparse exposes them as `Function` tokens.
+    - DuckDB is the engine that will execute the query, so using its own parser
+      keeps validation aligned with the grammar actually accepted at runtime.
+    - The AST is needed to inspect every relation source structurally instead of
+      relying on keyword heuristics.
 
     How to use:
-    - Call only for tokens that syntactically appear in a relation position.
+    - Pass the normalized SQL text from `validate_read_query(...)`.
+    - Use the returned node with `collect_cte_names(...)` and
+      `collect_relation_names(...)`.
+
+    Example:
+    ```python
+    statement = _parse_read_statement("SELECT * FROM d_sales")
+    ```
     """
 
-    if isinstance(token, sql.IdentifierList):
-        identifier_names: set[str] = set()
-        for identifier in token.get_identifiers():
-            identifier_names.update(_relation_names_from_token(identifier))
-        return identifier_names
+    try:
+        statements = [statement for statement in duckdb.extract_statements(query) if statement.query.strip()]
+    except duckdb.Error as exc:
+        raise ValueError(f"Invalid SQL query: {exc}") from exc
 
-    if isinstance(token, sql.Function):
-        function_name = token.get_name() or token.get_real_name()
-        return {_normalize_identifier(function_name)} if function_name else set()
+    if len(statements) != 1:
+        raise ValueError("Exactly one SQL statement is allowed")
 
-    if isinstance(token, sql.Identifier):
-        if any(isinstance(child, sql.Parenthesis) and _token_contains_select(child) for child in token.tokens):
-            subquery_names: set[str] = set()
-            for child in token.tokens:
-                if isinstance(child, sql.Parenthesis):
-                    subquery_names.update(collect_relation_names(child))
-            return subquery_names
+    if statements[0].type.name != "SELECT":
+        raise ValueError("Only SELECT or WITH statements are allowed in read-only mode")
 
-        real_name = token.get_real_name() or token.get_name()
-        return {_normalize_identifier(real_name)} if real_name else set()
+    parser_connection = duckdb.connect(database=":memory:")
+    try:
+        serialized = parser_connection.execute("SELECT json_serialize_sql(?)", [query]).fetchone()
+    finally:
+        parser_connection.close()
 
-    if isinstance(token, sql.Parenthesis):
-        return collect_relation_names(token)
+    if not serialized or serialized[0] is None:
+        raise ValueError("Unable to parse SQL query")
 
-    if token.ttype in T.Name:
-        return {_normalize_identifier(token.value)}
+    payload = json.loads(serialized[0])
+    if payload.get("error"):
+        error_message = payload.get("error_message") or "Unable to parse SQL query"
+        raise ValueError(error_message)
+
+    serialized_statements = payload.get("statements", [])
+    if len(serialized_statements) != 1:
+        raise ValueError("Exactly one SQL statement is allowed")
+
+    statement = serialized_statements[0].get("node")
+    if not isinstance(statement, dict):
+        raise ValueError("Unable to parse SQL query")
+
+    return statement
+
+
+def _cte_entries(statement: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Return normalized CTE entries from one DuckDB AST statement.
+
+    Why this exists:
+    - DuckDB stores CTE declarations under `cte_map.map`, and callers need one
+      safe helper so malformed payloads do not break validation.
+
+    How to use:
+    - Pass the parsed statement returned by `_parse_read_statement(...)`.
+    """
+
+    cte_map = statement.get("cte_map")
+    if not isinstance(cte_map, dict):
+        return []
+
+    cte_entries = cte_map.get("map")
+    if not isinstance(cte_entries, list):
+        return []
+
+    return [entry for entry in cte_entries if isinstance(entry, dict)]
+
+
+def _collect_relation_names_from_ast(node: Any, *, visible_cte_names: frozenset[str]) -> set[str]:
+    """
+    Walk one DuckDB AST fragment and collect every referenced relation source.
+
+    Why this exists:
+    - Queries can hide relation reads inside joins, scalar subqueries, `EXISTS`,
+      or CTE definitions, so validation must recurse through the whole AST.
+
+    How to use:
+    - Pass the parsed statement node or any nested child node.
+    - Provide the CTE names visible in the current scope.
+    """
+
+    if isinstance(node, dict):
+        node_type = node.get("type")
+
+        if node_type == "SELECT_NODE":
+            local_cte_names = frozenset(collect_cte_names(node))
+            scoped_cte_names = visible_cte_names | local_cte_names
+            names: set[str] = set()
+
+            for cte_entry in _cte_entries(node):
+                cte_query = _cte_query_node(cte_entry)
+                if cte_query is not None:
+                    names.update(_collect_relation_names_from_ast(cte_query, visible_cte_names=scoped_cte_names))
+
+            for key, value in node.items():
+                if key == "cte_map":
+                    continue
+                names.update(_collect_relation_names_from_ast(value, visible_cte_names=scoped_cte_names))
+            return names
+
+        if node_type == "BASE_TABLE":
+            return _relation_names_from_base_table(node, visible_cte_names=visible_cte_names)
+
+        if node_type == "TABLE_FUNCTION":
+            return _relation_names_from_table_function(node)
+
+        names: set[str] = set()
+        for value in node.values():
+            names.update(_collect_relation_names_from_ast(value, visible_cte_names=visible_cte_names))
+        return names
+
+    if isinstance(node, list):
+        names: set[str] = set()
+        for item in node:
+            names.update(_collect_relation_names_from_ast(item, visible_cte_names=visible_cte_names))
+        return names
 
     return set()
 
 
-def _token_contains_select(token: sql.TokenList) -> bool:
-    for child in token.tokens:
-        if child.ttype in T.Keyword.DML and child.normalized.upper() == "SELECT":
-            return True
-        if isinstance(child, sql.TokenList) and _token_contains_select(child):
-            return True
-    return False
+def _cte_query_node(cte_entry: dict[str, Any]) -> dict[str, Any] | None:
+    """
+    Return the parsed query node stored inside one CTE entry.
+
+    Why this exists:
+    - DuckDB nests each CTE definition under `value.query.node`, and relation
+      validation needs one reusable extractor for that shape.
+
+    How to use:
+    - Pass one mapping from `_cte_entries(...)`.
+    """
+
+    cte_value = cte_entry.get("value")
+    if not isinstance(cte_value, dict):
+        return None
+
+    query = cte_value.get("query")
+    if not isinstance(query, dict):
+        return None
+
+    node = query.get("node")
+    return node if isinstance(node, dict) else None
+
+
+def _relation_names_from_base_table(node: dict[str, Any], *, visible_cte_names: frozenset[str]) -> set[str]:
+    """
+    Return one canonical relation name for a DuckDB `BASE_TABLE` node.
+
+    Why this exists:
+    - Dataset allowlisting should match only the Fred-mounted aliases, while
+      schema-qualified tables must stay distinguishable and rejectable.
+
+    How to use:
+    - Call for AST nodes whose `type` is `BASE_TABLE`.
+    """
+
+    table_name = node.get("table_name")
+    if not isinstance(table_name, str) or not table_name.strip():
+        return set()
+
+    normalized_table = _normalize_identifier(table_name)
+    schema_name = _optional_identifier(node.get("schema_name"))
+    catalog_name = _optional_identifier(node.get("catalog_name"))
+
+    if schema_name is None and catalog_name is None and normalized_table in visible_cte_names:
+        return set()
+
+    parts = [part for part in (catalog_name, schema_name, normalized_table) if part]
+    return {".".join(parts)}
+
+
+def _relation_names_from_table_function(node: dict[str, Any]) -> set[str]:
+    """
+    Return one canonical relation name for a DuckDB `TABLE_FUNCTION` node.
+
+    Why this exists:
+    - Table functions such as `read_parquet(...)` are external relation sources
+      and must never be mistaken for mounted dataset aliases.
+
+    How to use:
+    - Call for AST nodes whose `type` is `TABLE_FUNCTION`.
+    """
+
+    function = node.get("function")
+    if not isinstance(function, dict):
+        return {"table_function()"}
+
+    function_name = function.get("function_name")
+    if not isinstance(function_name, str) or not function_name.strip():
+        return {"table_function()"}
+
+    return {f"{_normalize_identifier(function_name)}()"}
+
+
+def _optional_identifier(value: object) -> str | None:
+    """
+    Normalize one optional AST identifier when it is present.
+
+    Why this exists:
+    - DuckDB AST fields such as `schema_name` and `catalog_name` can be empty,
+      and relation validation needs one helper to normalize or skip them.
+
+    How to use:
+    - Pass any raw AST field value and use the returned normalized identifier or
+      `None` when the field is empty.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return _normalize_identifier(value)
 
 
 def _normalize_identifier(value: str) -> str:
+    """
+    Normalize one SQL identifier for allowlist comparisons.
+
+    Why this exists:
+    - Dataset aliases and AST identifiers can arrive quoted or mixed-case, and
+      validation should compare them using one canonical representation.
+
+    How to use:
+    - Pass a raw identifier extracted from user SQL or the DuckDB AST.
+    """
+
     return value.strip().strip('"').strip("`").strip("[").strip("]").lower()

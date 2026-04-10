@@ -288,7 +288,7 @@ async def test_tabular_service_rejects_duckdb_table_functions_outside_authorized
 
     service = TabularService()
 
-    with pytest.raises(ValueError, match="unauthorized datasets: read_parquet"):
+    with pytest.raises(ValueError, match=r"unauthorized datasets: read_parquet\(\)"):
         await service.query_read(
             _user(),
             request=TabularQueryRequest(
