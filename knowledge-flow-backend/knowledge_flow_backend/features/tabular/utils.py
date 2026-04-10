@@ -246,18 +246,18 @@ def _collect_relation_names_from_ast(node: Any, *, visible_cte_names: frozenset[
         if node_type == "SELECT_NODE":
             local_cte_names = frozenset(collect_cte_names(node))
             scoped_cte_names = visible_cte_names | local_cte_names
-            names: set[str] = set()
+            collected_names: set[str] = set()
 
             for cte_entry in _cte_entries(node):
                 cte_query = _cte_query_node(cte_entry)
                 if cte_query is not None:
-                    names.update(_collect_relation_names_from_ast(cte_query, visible_cte_names=scoped_cte_names))
+                    collected_names.update(_collect_relation_names_from_ast(cte_query, visible_cte_names=scoped_cte_names))
 
             for key, value in node.items():
                 if key == "cte_map":
                     continue
-                names.update(_collect_relation_names_from_ast(value, visible_cte_names=scoped_cte_names))
-            return names
+                collected_names.update(_collect_relation_names_from_ast(value, visible_cte_names=scoped_cte_names))
+            return collected_names
 
         if node_type == "BASE_TABLE":
             return _relation_names_from_base_table(node, visible_cte_names=visible_cte_names)
@@ -265,16 +265,16 @@ def _collect_relation_names_from_ast(node: Any, *, visible_cte_names: frozenset[
         if node_type == "TABLE_FUNCTION":
             return _relation_names_from_table_function(node)
 
-        names: set[str] = set()
+        child_names: set[str] = set()
         for value in node.values():
-            names.update(_collect_relation_names_from_ast(value, visible_cte_names=visible_cte_names))
-        return names
+            child_names.update(_collect_relation_names_from_ast(value, visible_cte_names=visible_cte_names))
+        return child_names
 
     if isinstance(node, list):
-        names: set[str] = set()
+        list_names: set[str] = set()
         for item in node:
-            names.update(_collect_relation_names_from_ast(item, visible_cte_names=visible_cte_names))
-        return names
+            list_names.update(_collect_relation_names_from_ast(item, visible_cte_names=visible_cte_names))
+        return list_names
 
     return set()
 
