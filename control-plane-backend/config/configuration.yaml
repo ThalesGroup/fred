@@ -33,10 +33,6 @@ security:
 storage:
   postgres:
     sqlite_path: "~/.fred/control-plane/control_plane.sqlite3"
-  session_store:
-    type: postgres
-    table: session
-  purge_queue_table: session_purge_queue
   content_storage:
     type: local
     root_path: "~/.fred/control-plane/content-storage"

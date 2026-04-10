@@ -46,7 +46,7 @@ async def test_sqlite_store_save_get_count_delete(tmp_path) -> None:
 
     assert await store.count_for_user("u1") == 1
 
-    sessions = await store.get_for_user("u1")
+    sessions = await store.get_for_user("u1", "t1")
     assert len(sessions) == 1
     assert sessions[0].id == "s1"
 

@@ -15,6 +15,8 @@
 from abc import abstractmethod
 from typing import List
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 
 
@@ -33,7 +35,7 @@ class BaseMetadataStore:
     """
 
     @abstractmethod
-    async def get_all_metadata(self, filters: dict) -> List[DocumentMetadata]:
+    async def get_all_metadata(self, filters: dict, session: AsyncSession | None = None) -> List[DocumentMetadata]:
         """
         Return all metadata documents matching the given filters.
 
@@ -42,33 +44,36 @@ class BaseMetadataStore:
         - Values are filter values (exact match). Lists are interpreted as 'terms'.
 
         :param filters: dict of metadata field filters.
+        :param session: optional SQLAlchemy async session.
         :return: list of metadata documents matching the query.
         """
         pass
 
     @abstractmethod
-    async def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
+    async def get_metadata_by_uid(self, document_uid: str, session: AsyncSession | None = None) -> DocumentMetadata | None:
         """
         Retrieve a metadata document by its UID.
 
         :param document_uid: the unique identifier of the document.
+        :param session: optional SQLAlchemy async session.
         :return: the metadata if found, or None.
         :raises MetadataDeserializationError: if stored data is malformed.
         """
         pass
 
     @abstractmethod
-    async def get_metadata_in_tag(self, tag_id: str) -> List[DocumentMetadata]:
+    async def get_metadata_in_tag(self, tag_id: str, session: AsyncSession | None = None) -> List[DocumentMetadata]:
         """
         Return all metadata entries that are tagged with a specific tag ID.
 
         :param tag_id: tag to filter by (exact match).
+        :param session: optional SQLAlchemy async session.
         :return: list of matching metadata documents.
         :raises MetadataDeserializationError: if any document is malformed.
         """
         pass
 
-    async def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50) -> tuple[List[DocumentMetadata], int]:
+    async def browse_metadata_in_tag(self, tag_id: str, offset: int = 0, limit: int = 50, session: AsyncSession | None = None) -> tuple[List[DocumentMetadata], int]:
         """
         Return a paginated list of metadata entries tagged with a specific tag ID.
 
@@ -76,22 +81,23 @@ class BaseMetadataStore:
         the tag (ignoring pagination).
         """
         # Default fallback implementation: load all then slice.
-        all_docs = await self.get_metadata_in_tag(tag_id)
+        all_docs = await self.get_metadata_in_tag(tag_id, session=session)
         total = len(all_docs)
         return all_docs[offset : offset + limit], total
 
     @abstractmethod
-    async def list_by_source_tag(self, source_tag: str) -> List[DocumentMetadata]:
+    async def list_by_source_tag(self, source_tag: str, session: AsyncSession | None = None) -> List[DocumentMetadata]:
         """
         Return all metadata entries originating from a specific pull source.
 
         :param source_tag: source identifier used during ingestion (e.g., "github", "fred").
+        :param session: optional SQLAlchemy async session.
         :return: list of metadata entries associated with that source.
         """
         pass
 
     @abstractmethod
-    async def save_metadata(self, metadata: DocumentMetadata) -> None:
+    async def save_metadata(self, metadata: DocumentMetadata, session: AsyncSession | None = None) -> None:
         """
         Create or update a metadata entry.
 
@@ -99,32 +105,32 @@ class BaseMetadataStore:
         - Adds a new entry otherwise.
 
         :param metadata: metadata to save.
+        :param session: optional SQLAlchemy async session.
         :raises ValueError: if 'document_uid' is missing.
         :raises RuntimeError: if the save operation fails.
         """
         pass
 
     @abstractmethod
-    async def delete_metadata(self, document_uid: str) -> None:
+    async def delete_metadata(self, document_uid: str, session: AsyncSession | None = None) -> None:
         """
-        Create or update a metadata entry.
+        Delete a metadata entry by its UID.
 
-        - Overwrites existing metadata if the same UID already exists.
-        - Adds a new entry otherwise.
-
-        :param metadata: metadata to save.
+        :param document_uid: the unique identifier of the document.
+        :param session: optional SQLAlchemy async session.
         :raises ValueError: if 'document_uid' is missing.
-        :raises RuntimeError: if the save operation fails.
+        :raises RuntimeError: if the delete operation fails.
         """
         pass
 
     @abstractmethod
-    async def clear(self) -> None:
+    async def clear(self, session: AsyncSession | None = None) -> None:
         """
         Delete all metadata records from the store.
 
         ⚠️ This operation is destructive and typically only used in test or dev mode.
 
+        :param session: optional SQLAlchemy async session.
         :raises Exception: if the operation fails.
         """
         pass

@@ -1,7 +1,7 @@
 import styles from "./MarketplaceTeams.module.scss";
 import { useTranslation } from "react-i18next";
 import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
-import { useListTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApi.ts";
+import { useListTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 export default function () {
   const { t } = useTranslation();

@@ -65,3 +65,9 @@ def authorize_or_raise(
     """Authorize user to perform action on resource, raising AuthorizationError if denied."""
     if not is_authorized(user, action, resource):
         raise AuthorizationError(user.uid, action.value, resource)
+
+
+def require_admin(user: KeycloakUser) -> None:
+    """Raise AuthorizationError if the user does not have the admin role."""
+    if "admin" not in user.roles:
+        raise AuthorizationError(user.uid, "admin", Resource.ORGANIZATION)

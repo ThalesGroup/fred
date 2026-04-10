@@ -91,6 +91,22 @@ use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: m
 	@echo "--- knowledge-flow-backend: configuration_prod.yaml ---"
 	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
 	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_prod.yaml
+	yq -i '.vision_model.name = "mistral-medium-latest" | .vision_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
+	yq -i '.storage.vector_store.index = "vector-index-mistral"' knowledge-flow-backend/config/configuration_prod.yaml
+	@echo "--- knowledge-flow-backend: configuration_worker.yaml ---"
+	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_worker.yaml
+	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_worker.yaml
+	yq -i '.vision_model.name = "mistral-medium-latest" | .vision_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_worker.yaml
+	yq -i '.storage.vector_store.index = "vector-index-mistral"' knowledge-flow-backend/config/configuration_worker.yaml
+	@echo "--- deploy/local/k3d: values-local.yaml ---"
+	yq -i '.applications."agentic-backend".models_catalog.default_profile_by_capability.chat = "default.chat.mistral"' deploy/local/k3d/values-local.yaml
+	yq -i '.applications."agentic-backend".models_catalog.default_profile_by_capability.language = "default.language.mistral"' deploy/local/k3d/values-local.yaml
+	yq -i 'del(.applications."agentic-backend".models_catalog.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' deploy/local/k3d/values-local.yaml
+	yq -i '.applications."agentic-backend".models_catalog.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .applications."agentic-backend".models_catalog.profiles' deploy/local/k3d/values-local.yaml
+	yq -i '."x-kf-chat-model".provider = "openai" | ."x-kf-chat-model".name = "mistral-medium-latest" | ."x-kf-chat-model".settings = {"base_url": "https://api.mistral.ai/v1"}' deploy/local/k3d/values-local.yaml
+	yq -i '."x-kf-embedding-model".provider = "openai" | ."x-kf-embedding-model".name = "mistral-embed" | ."x-kf-embedding-model".settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' deploy/local/k3d/values-local.yaml
+	yq -i '."x-kf-vision-model".provider = "openai" | ."x-kf-vision-model".name = "mistral-medium-latest" | ."x-kf-vision-model".settings = {"base_url": "https://api.mistral.ai/v1"}' deploy/local/k3d/values-local.yaml
+	yq -i '."x-kf-storage".vector_store.index = "vector-index-mistral"' deploy/local/k3d/values-local.yaml
 	@if [ -n "$(MISTRAL_API_KEY)" ]; then \
 		echo "--- .env files: setting OPENAI_API_KEY to Mistral API key ---"; \
 		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env control-plane-backend/config/.env; do \
@@ -144,6 +160,76 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- frontend ---"
 	cd frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
+
+##@ Migration Schema Snapshots
+
+SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
+
+.PHONY: db-snapshots
+db-snapshots: ## Dump schema after each migration for all backends into target/migration-snapshots/
+	@set -e; \
+	for dir in agentic-backend control-plane-backend knowledge-flow-backend; do \
+		echo "************ Snapshotting $$dir ************"; \
+		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
+	done
+
+##@ Database Migrations (combined)
+
+MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
+PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
+SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
+AGENTIC_UV           := agentic-backend/.venv/bin/uv
+CP_UV                := control-plane-backend/.venv/bin/uv
+KF_UV                := knowledge-flow-backend/.venv/bin/uv
+
+.PHONY: db-check-combined-heads
+db-check-combined-heads: ## assert each backend has exactly one Alembic head (no branch conflicts)
+	$(MAKE) -C agentic-backend db-check-heads
+	$(MAKE) -C control-plane-backend db-check-heads
+	$(MAKE) -C knowledge-flow-backend db-check-heads
+
+.PHONY: db-check-combined-postgres-up
+db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
+	docker compose -f $(MIGRATION_COMPOSE) up -d --wait
+
+.PHONY: db-check-combined-postgres-down
+db-check-combined-postgres-down: ## stop and wipe the PostgreSQL container for combined migration checks
+	docker compose -f $(MIGRATION_COMPOSE) down -v
+
+.PHONY: db-check-combined-sqlite
+db-check-combined-sqlite: ## upgrade all backends against the same SQLite DB, check for drift, then downgrade
+	@echo "=== Combined SQLite migration check: upgrade ==="
+	@rm -f $(SQLITE_COMBINED_DB)
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
+	@echo "=== Combined SQLite migration check: drift check ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic check
+	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
+	@rm -f $(SQLITE_COMBINED_DB)
+	@echo "=== Combined SQLite migration check passed ==="
+
+.PHONY: db-check-combined-postgres
+db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade all backends against the same DB, check for drift, then downgrade
+	@echo "=== Combined migration check: upgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
+	@echo "=== Combined migration check: drift check ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic check
+	@echo "=== Combined migration check: downgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
+	@echo "=== Combined migration check passed ==="
+	$(MAKE) db-check-combined-postgres-down
 
 include scripts/makefiles/help.mk
 

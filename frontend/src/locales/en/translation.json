@@ -870,7 +870,7 @@
     "upload": "Upload a document",
     "uploadAndProcess": "Upload and Process document",
     "refresh": "Refresh",
-    "uploadInLibrary": "Add document to library",
+    "uploadInLibrary": "Add files",
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
     "maxSize": "or click to select (max 200Mb per file)",
@@ -1092,7 +1092,7 @@
     "noLibrariesFoundDescription": "Get started by creating your first document library to organize and manage your documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Create Document Library",
+    "createLibrary": "Create folder",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "emptyFoldersTitle": "No libraries yet",
@@ -1315,21 +1315,19 @@
     },
     "teamRoles": {
       "member": "Member",
-      "manager": "Manager",
+      "manager": "Editor",
       "owner": "Owner"
     },
     "teamCard": {
       "memberCount": "{{count}} members"
     },
     "sidebar": {
-      "title": "Fred",
       "team": {
         "avatarAlt": "Team {{teamName}}",
         "bannerAlt": "Team's banner",
         "userTeam": "Personal space",
         "marketplace": "Marketplace",
         "menu": {
-          "agents": "Agents",
           "resources": "Resources",
           "apps": "Apps"
         }
@@ -1338,7 +1336,6 @@
         "title": "Marketplace",
         "menu": {
           "teams": "Teams",
-          "agents": "Agents",
           "tools": "Tools",
           "apps": "Apps"
         }
@@ -1361,7 +1358,7 @@
       },
       "conversationProfile": {
         "title": "Conversation profile",
-        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your agents."
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}."
       }
     },
     "teamSettings": {
@@ -1401,14 +1398,16 @@
         "privateTeam": "Private team",
         "teamPrompt": {
           "label": "Team context (prompt)",
-          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team agents."
+          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
         }
       }
     },
     "teams": {
       "agents": {
-        "title": "Engage your Agents",
-        "create": "Create an Agent"
+        "title": "Chat with your {{agentsNicknamePlural}}",
+        "create": "Create Agent",
+        "firstTitle": "Create your first {{agentsNicknameSingular}} !",
+        "firstCreate": "Create"
       }
     },
     "marketplace": {

@@ -15,6 +15,7 @@ dependencies = [
   "pydantic>=2.10.0,<3.0.0",
   "temporalio>=1.11.1,<2.0.0",
   "fred-core",
+  "alembic>=1.18.4",
 ]
 
 [project.optional-dependencies]
@@ -48,6 +49,10 @@ dev = [
   "detect-secrets>=1.5.0",
   "ruff>=0.12.5",
 ]
+
+[tool.alembic]
+script_location = "%(here)s/alembic"
+prepend_sys_path = ["."]
 
 [tool.uv]
 config-settings = { editable_mode = "compat" }

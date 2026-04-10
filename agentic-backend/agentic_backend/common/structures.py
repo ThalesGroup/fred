@@ -338,22 +338,24 @@ class Properties(BaseModel):
     faviconName: str | None = None
     faviconNameDark: str | None = None
     siteDisplayName: str = "Fred"
+    siteTitle: str = "Fred"
+    siteSubtitle: str | None = None
     releaseBrand: Optional[str] = Field(
         default="fred",
         description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
     )
     agentsNicknameSingular: str = "agent"
     agentsNicknamePlural: str = "agents"
-    agentIconPath: str | None = None
+    agentIconName: str = "person"
     contactSupportLink: str | None = None
-    agentIconName: str | None = Field(
-        default=None,
-        description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
-    )
     showAgentRestoreFromConfiguration: bool = True
     showAgentDisableButton: bool = True
     showAgentCode: bool = True
     allowAgentSwitchInOneConversation: bool = True
+    defaultTeamBannerFile: str = "default-team-banner.png"
+    defaultPersonalBannerFile: str = "default-team-banner.png"
+    defaultTeamAvatarFile: str = "default-team-avatar.png"
+    defaultPersonalAvatarFile: str = "default-team-avatar.png"
 
 
 class FrontendSettings(BaseModel):

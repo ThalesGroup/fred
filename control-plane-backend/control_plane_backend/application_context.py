@@ -121,7 +121,6 @@ class ApplicationContext:
         if self._purge_queue_store is None:
             self._purge_queue_store = PurgeQueueStore(
                 engine=self.get_pg_async_engine(),
-                table_name=self.configuration.storage.purge_queue_table,
             )
         return self._purge_queue_store
 

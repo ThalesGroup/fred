@@ -1,0 +1,81 @@
+{{- define "common-library.hook-scale-down" -}}
+
+{{- if and .app.migration .app.migration.enabled .app.migration.scaleDown .app.deployment.enabled }}
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .app.applicationName }}-scale-down-{{ .root.Release.Revision }}
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: migration
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: {{ .app.applicationName }}
+        type: migration-scale-down
+    spec:
+      serviceAccountName: {{ .app.applicationName }}-migration-sa
+      restartPolicy: Never
+
+      {{- with .app.podSecurityContext }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: scale-down
+          image: "{{ .app.image.repository }}:{{ .app.image.tag | default .root.Chart.AppVersion }}"
+          imagePullPolicy: {{ default "IfNotPresent" .app.image.pullPolicy }}
+
+          {{- with .app.securityContext }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+
+          command: ["python3", "-c"]
+          args:
+            - |
+              import json, ssl, sys, time, urllib.request
+
+              TOKEN  = open("/var/run/secrets/kubernetes.io/serviceaccount/token").read()
+              NS     = open("/var/run/secrets/kubernetes.io/serviceaccount/namespace").read()
+              CA     = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              NAME   = "{{ .app.applicationName }}"
+              BASE   = f"https://kubernetes.default.svc/apis/apps/v1/namespaces/{NS}/deployments/{NAME}"
+
+              ctx = ssl.create_default_context(cafile=CA)
+
+              def k8s(url, method="GET", data=None):
+                  req = urllib.request.Request(url, data=data, method=method)
+                  req.add_header("Authorization", f"Bearer {TOKEN}")
+                  if data:
+                      req.add_header("Content-Type", "application/strategic-merge-patch+json")
+                  return json.load(urllib.request.urlopen(req, context=ctx))
+
+              print(f"Scaling down {NAME} to 0 replicas...")
+              k8s(f"{BASE}/scale", "PATCH", json.dumps({"spec": {"replicas": 0}}).encode())
+
+              for _ in range(60):
+                  status  = k8s(BASE).get("status", {})
+                  running = (status.get("replicas") or 0) + (status.get("readyReplicas") or 0)
+                  print(f"  replicas={status.get('replicas', 0)}  ready={status.get('readyReplicas', 0)}")
+                  if running == 0:
+                      print("Scale-down complete.")
+                      sys.exit(0)
+                  time.sleep(2)
+
+              print("Timeout waiting for scale-down.", file=sys.stderr)
+              sys.exit(1)
+
+{{- end }}
+
+{{ end -}}

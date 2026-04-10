@@ -28,6 +28,10 @@ jobs:
             context: ./
             dockerfile: ./knowledge-flow-backend/dockerfiles/Dockerfile-prod
             image: knowledge-flow-backend
+          - name: control-plane-backend
+            context: ./
+            dockerfile: ./control-plane-backend/dockerfiles/Dockerfile-prod
+            image: control-plane-backend
           - name: frontend
             context: ./
             dockerfile: ./frontend/dockerfiles/Dockerfile-prod
@@ -95,6 +99,7 @@ jobs:
             ```
             oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/agentic-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/knowledge-flow-backend:${{ steps.meta.outputs.version }}
+            oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/control-plane-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/thalesgroup/fred-agent/frontend:${{ steps.meta.outputs.version }}
             ```
           draft: false

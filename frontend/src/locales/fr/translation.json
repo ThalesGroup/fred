@@ -871,7 +871,7 @@
     "upload": "Ajouter un document",
     "uploadAndProcess": "Ajouter et traiter le document",
     "refresh": "Rafraîchir",
-    "uploadInLibrary": "Ajouter un document à la bibliothèque",
+    "uploadInLibrary": "Ajouter fichiers",
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
@@ -1093,7 +1093,7 @@
     "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Créer une bibliothèque de documents",
+    "createLibrary": "Créer dossier",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
@@ -1316,21 +1316,19 @@
     },
     "teamRoles": {
       "member": "Membre",
-      "manager": "Manager",
+      "manager": "Editeur",
       "owner": "Propriétaire"
     },
     "teamCard": {
       "memberCount": "{{count}} membres"
     },
     "sidebar": {
-      "title": "Fred",
       "team": {
         "avatarAlt": "Équipe {{teamName}}",
         "bannerAlt": "Bannière de l'équipe",
         "userTeam": "Espace personel",
         "marketplace": "Marketplace",
         "menu": {
-          "agents": "Agents",
           "resources": "Ressources",
           "apps": "Apps"
         }
@@ -1338,9 +1336,8 @@
       "marketplace": {
         "title": "Marketplace",
         "menu": {
-          "teams": "Equipe",
-          "agents": "Agents",
-          "tools": "Tools",
+          "teams": "Équipe",
+          "tools": "Outils",
           "apps": "Apps"
         }
       },
@@ -1360,7 +1357,7 @@
       },
       "conversationProfile": {
         "title": "Profil de conversation",
-        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos agents doivent s’adresser à vous."
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
       }
     },
     "teamSettings": {
@@ -1397,22 +1394,24 @@
           "label": "Description de l'équipe",
           "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
         },
-        "privateTeam": "Equipe privé",
+        "privateTeam": "Équipe privée",
         "teamPrompt": {
           "label": "Contexte de l'équipe (prompt)",
-          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos Agents d’équipe."
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d’équipe."
         }
       }
     },
-    "teams":{
-      "agents":{
-        "title": "Sollicitez vos Agents",
-        "create": "Créer un Agent"
+    "teams": {
+      "agents": {
+        "title": "Sollicitez vos {{agentsNicknamePlural}}",
+        "create": "Créer {{agentsNicknameSingular}}",
+        "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
+        "firstCreate": "Créer"
       }
     },
     "marketplace": {
       "teams": {
-        "title": "Equipes de la communauté",
+        "title": "Équipes de la communauté",
         "yourTeams": "Vos équipes",
         "otherTeams": "Découvrez d'autres équipes"
       }

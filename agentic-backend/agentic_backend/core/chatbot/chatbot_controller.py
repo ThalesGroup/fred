@@ -848,16 +848,19 @@ async def websocket_chatbot_openai_baseline(websocket: WebSocket):
 
 @router.get(
     "/chatbot/sessions",
-    description="Get the list of active chatbot sessions.",
-    summary="Get the list of active chatbot sessions.",
+    description="Get the list of active chatbot sessions filtered by team.",
+    summary="Get the list of active chatbot sessions filtered by team.",
 )
 async def get_sessions(
+    team_id: str,
     user: KeycloakUser = Depends(get_current_user),
     session_orchestrator: SessionOrchestrator = Depends(get_session_orchestrator),
 ) -> list[SessionWithFiles]:
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("[CHATBOT] get_sessions start user=%s", user.uid)
-    return await session_orchestrator.get_sessions(user)
+        logger.debug(
+            "[CHATBOT] get_sessions start user=%s, team_id=%s", user.uid, team_id
+        )
+    return await session_orchestrator.get_sessions(user, team_id)
 
 
 @router.post(

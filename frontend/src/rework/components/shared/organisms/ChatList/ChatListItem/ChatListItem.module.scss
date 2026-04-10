@@ -1,20 +1,25 @@
 @use "src/index.scss" as *;
 
-.chat-item-container {
+.chatItemContainer {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
   border-radius: var(--spacing-xs);
   padding: var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-xs);
+  height: 3rem;
 
   &:hover {
     --display-action: block;
     background-color: var(--state-on-surface-hover);
   }
+
+  &[data-selected="true"] {
+    background-color: color-mix(in srgb, var(--secondary), transparent 84%);
+  }
 }
 
-.chat-description {
+.chatDescription {
   display: flex;
   flex-direction: column;
   margin-right: auto;
@@ -23,7 +28,7 @@
 }
 
 .title,
-.agent-name {
+.agentName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -48,7 +53,7 @@
   min-width: 0;
 }
 
-.agent-name {
+.agentName {
   color: var(--secondary);
 }
 
@@ -68,7 +73,7 @@
   color: var(--on-surface-muted);
 }
 
-.chat-actions {
+.chatActions {
   display: var(--display-action, none);
   color: var(--error);
 }

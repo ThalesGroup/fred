@@ -140,9 +140,16 @@ class InMemorySessionStore(BaseSessionStore):
         self.sessions.pop(session_id, None)
 
     async def get_for_user(
-        self, user_id: str, db_session: AsyncSession | None = None
+        self,
+        user_id: str,
+        team_id: Optional[str],
+        db_session: AsyncSession | None = None,
     ) -> list[SessionSchema]:
-        return [s for s in self.sessions.values() if s.user_id == user_id]
+        return [
+            s
+            for s in self.sessions.values()
+            if s.user_id == user_id and (team_id is None or s.team_id == team_id)
+        ]
 
     async def count_for_user(
         self, user_id: str, db_session: AsyncSession | None = None

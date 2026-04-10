@@ -160,9 +160,7 @@ export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
 };
-export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ {
-  [key: string]: string;
-};
+export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
@@ -277,16 +275,6 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
-export type Team = {
-  id: string;
-  name: string;
-  member_count?: number | null;
-  owners?: UserSummary[];
-  is_member?: boolean;
-  description?: string | null;
-  is_private?: boolean;
-  banner_image_url?: string | null;
-};
 export type TeamPermission =
   | "can_read"
   | "can_update_info"
@@ -295,7 +283,8 @@ export type TeamPermission =
   | "can_read_members"
   | "can_administer_members"
   | "can_administer_managers"
-  | "can_administer_owners";
+  | "can_administer_owners"
+  | "can_read_conversations";
 export type TeamWithPermissions = {
   id: string;
   name: string;
@@ -306,6 +295,19 @@ export type TeamWithPermissions = {
   is_private?: boolean;
   banner_image_url?: string | null;
   permissions?: TeamPermission[];
+};
+export type UserDetails = {
+  personalTeam: TeamWithPermissions;
+};
+export type Team = {
+  id: string;
+  name: string;
+  member_count?: number | null;
+  owners?: UserSummary[];
+  is_member?: boolean;
+  description?: string | null;
+  is_private?: boolean;
+  banner_image_url?: string | null;
 };
 export type UpdateTeamRequest = {
   description?: string | null;

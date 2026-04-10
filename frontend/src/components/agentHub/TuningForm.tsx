@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { FieldSpec } from "../../slices/agentic/agenticOpenApi";
 import { AgentOptionSelectionCard } from "./AgentOptionSelectionCard";
@@ -22,7 +23,7 @@ type Props = {
   onChange: (index: number, next: any) => void;
 };
 
-export function TuningForm({ fields, onChange }: Props) {
+export const TuningForm = memo(function TuningForm({ fields, onChange }: Props) {
   const { t } = useTranslation();
   // optional grouping by ui.group
   const filedsToShow = fields.filter((f) => !f.ui?.hide);
@@ -114,7 +115,7 @@ export function TuningForm({ fields, onChange }: Props) {
       ))}
     </Stack>
   );
-}
+});
 
 function groupBy<T>(arr: T[], key: (t: T) => string) {
   return arr.reduce<Record<string, T[]>>((acc, v) => {

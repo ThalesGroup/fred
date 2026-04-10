@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSelectionItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import { useState } from "react";
+import React, { useId } from "react";
 import { Link, To } from "react-router-dom";
 
 interface TeamSelectionItemProps {
@@ -17,28 +17,41 @@ export default function TeamSelectionItem({
   teamName,
   selected,
   imgUrl,
-  icon = { category: "outlined", type: "group", filled: true },
+  icon = { category: "outlined", type: "groups", filled: true },
 }: TeamSelectionItemProps) {
   const { t } = useTranslation();
-  const [isLoaded, setIsLoaded] = useState(false);
+  const id = useId();
+  const safeId = `--anchor-${id.replace(/:/g, "")}`;
+
   return (
     <div
-      className={`${styles["team-avatar-container"]} ${selected ? styles["selected"] : ""} ${isLoaded ? styles["loaded"] : ""}`}
+      className={styles.teamAvatarContainer}
+      data-selected={selected}
+      popoverTarget={safeId}
+      style={{ anchorName: `--${safeId}` }}
     >
-      <Link to={redirection}>
-        <div className={styles["state-layer"]}>
+      <Link to={redirection} className={styles.link}>
+        <div className={styles.stateLayer}>
           <span className={styles.icon}>
             <Icon {...icon} />
           </span>
-          <img
-            className={styles["team-avatar"]}
-            src={imgUrl ? imgUrl : ""}
-            alt={t("rework.sidebar.team.avatarAlt", { teamName: teamName })}
-            onLoad={() => setIsLoaded(true)}
-          />
+          {imgUrl && (
+            <img
+              className={styles.teamAvatar}
+              src={imgUrl}
+              alt={t("rework.sidebar.team.avatarAlt", { teamName: teamName })}
+            />
+          )}
         </div>
       </Link>
-      <span className={styles["team-tooltip"]}>{teamName}</span>
+      <span
+        id={safeId}
+        popover={"auto"}
+        className={styles.teamTooltip}
+        style={{ positionAnchor: `--${safeId}` } as React.CSSProperties}
+      >
+        {teamName}
+      </span>
     </div>
   );
 }

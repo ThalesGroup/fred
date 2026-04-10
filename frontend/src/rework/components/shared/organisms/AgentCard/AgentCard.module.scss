@@ -60,8 +60,8 @@
 .stateLayer {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2xs);
   justify-content: space-between;
+  gap: var(--spacing-2xs);
   height: 100%;
 }
 
@@ -113,10 +113,14 @@
 
   @include typography("label", "large");
 }
-.agentDescription {
-  min-width: 0;
-  color: var(--agent-description-color);
 
+.agentDescription {
+  display: -webkit-box;
+  min-width: 0;
+  -webkit-line-clamp: 3;
+  color: var(--agent-description-color);
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   @include typography("body", "medium");
 }
 

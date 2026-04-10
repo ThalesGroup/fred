@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
+
 from fred_core import BaseSessionStore, SessionSchema
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +39,10 @@ class NoOpSessionStore(BaseSessionStore):
         pass
 
     async def get_for_user(
-        self, user_id: str, db_session: AsyncSession | None = None
+        self,
+        user_id: str,
+        team_id: Optional[str],
+        db_session: AsyncSession | None = None,
     ) -> list[SessionSchema]:
         """No-op get_for_user method that always returns an empty list."""
         return []

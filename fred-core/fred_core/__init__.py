@@ -42,6 +42,7 @@ from fred_core.security.authorization import (
     Resource,
     authorize_or_raise,
     is_authorized,
+    require_admin,
 )
 from fred_core.security.authorization_decorator import authorize
 from fred_core.security.backend_to_backend_auth import (
@@ -121,6 +122,7 @@ __all__ = [
     "FilesystemResourceInfoResult",
     "FilesystemResourceInfo",
     "RBACProvider",
+    "require_admin",
     "Action",
     "Resource",
     "AuthorizationError",

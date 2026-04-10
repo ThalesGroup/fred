@@ -9,6 +9,7 @@ include ../scripts/makefiles/python-code-quality.mk
 include ../scripts/makefiles/python-security.mk
 include ../scripts/makefiles/python-test.mk
 include ../scripts/makefiles/python-clean.mk
+include ../scripts/makefiles/alembic.mk
 include ../scripts/makefiles/help.mk
 
 ENV_FILE := $(ROOT_DIR)/config/.env
@@ -46,7 +47,7 @@ run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
 
 .PHONY: run-worker-prod
-run-worker-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
+run-worker-prod: export CONFIG_FILE = ./config/configuration_worker.yaml
 run-worker-prod: run-worker ## run the Temporal agent worker with production config
 
 .PHONY: run-worker-docker

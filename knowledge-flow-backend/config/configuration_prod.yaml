@@ -35,6 +35,10 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: pypdfium2
         images_scale: 1.0
@@ -79,6 +83,10 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 1.5
@@ -125,6 +133,10 @@ processing:
       generate_summary: false
       input_activity_timeout: 1h
       process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: docling_parse
         images_scale: 2.0
@@ -387,30 +399,17 @@ storage:
   #   secure: false
   #   verify: true
 
-  catalog_store:
-    type: "postgres"
-    table: catalog
-
-  prompt_store:
-    type: "postgres"
-    table: prompt
-
   resource_store:
     type: "postgres"
-    table: resource
 
   tag_store:
     type: "postgres"
-    table: tag
 
   metadata_store:
     type: "postgres"
-    table: metadata
 
   task_store:
     type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
 
   vector_store:
     type: opensearch
