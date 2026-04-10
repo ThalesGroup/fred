@@ -162,4 +162,5 @@ profiles:
       name: "mistral:latest"
       settings:
         base_url: "http://host.docker.internal:11434"
+
 rules: []

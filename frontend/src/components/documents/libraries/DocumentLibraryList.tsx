@@ -461,16 +461,15 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
           ))}
         </Breadcrumbs>
 
-        {/* Search */}
-        <TextField
-          size="small"
-          placeholder={t("documentLibrary.searchPlaceholder") || "Search documents…"}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          sx={{ minWidth: 260 }}
-        />
-
         <Box display="flex" gap={1}>
+          {/* Search */}
+          <TextField
+            size="small"
+            placeholder={t("documentLibrary.searchPlaceholder") || "Search documents…"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ minWidth: 260, mr: 2 }}
+          />
           <Button
             variant="outlined"
             startIcon={<AddIcon />}
@@ -546,6 +545,8 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
             flex: 1,
             minHeight: 0,
             overflow: "hidden",
+            backgroundColor: "var(--surface-container)",
+            backgroundImage: "inherit",
           }}
         >
           {/* Tree header */}
