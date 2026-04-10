@@ -702,7 +702,7 @@ class StorageConfig(BaseModel):
         description="Task store backend (optional; scheduler may fall back to defaults).",
     )
     tabular_store: "TabularStoreConfig" = Field(
-        default_factory=lambda: TabularStoreConfig(),  # type: ignore
+        default_factory=TabularStoreConfig,  # type: ignore
         description="Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage.",
     )
     vector_store: VectorStorageConfig
