@@ -42,13 +42,15 @@ class WorkspaceStorageController:
     Single controller exposing three clear scopes while reusing the same service.
     """
 
-    @staticmethod
-    def _build_download_url(request: Request, suffix: str) -> str:
+    def _build_download_url(self, request: Request, suffix: str) -> str:
         """
-        Compose a full download URL for the given path suffix (e.g. 'storage/user/foo.txt')
-        based on the incoming request host + API prefix.
+        Compose a full download URL for the given path suffix (e.g. 'storage/user/foo.txt').
+
+        When ``public_base_url`` is configured (required when the service receives
+        internal pod-to-pod calls whose host is not reachable from the browser),
+        that value is used as the base instead of ``request.base_url``.
         """
-        base = str(request.base_url).rstrip("/")
+        base = (self._public_base_url or str(request.base_url)).rstrip("/")
         segments = [p for p in request.url.path.split("/") if p]
         # Expect path like knowledge-flow/v1/...
         api_prefix = "/".join(segments[:2]) if len(segments) >= 2 else ""
@@ -93,8 +95,9 @@ class WorkspaceStorageController:
 
         return [item for item in items if not is_dir(item)]
 
-    def __init__(self, router: APIRouter):
+    def __init__(self, router: APIRouter, public_base_url: Optional[str] = None):
         self.service = WorkspaceStorageService()
+        self._public_base_url = public_base_url
         self._register_routes(router)
 
     # ------------------------------------------------------------------ #
