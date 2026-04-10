@@ -14,8 +14,8 @@ common_model_settings:
   temperature: 0.0
 
 default_profile_by_capability:
-  chat: chat.mock.gpt4o
-  language: language.mock.gpt4o
+  chat: default.chat.openai.prod
+  language: default.language.openai.prod
 
 profiles:
   - profile_id: default.chat.openai.prod
@@ -24,7 +24,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5.1
-      settings: { }
+      settings: {}
 
   - profile_id: default.language.openai.prod
     capability: language
@@ -32,7 +32,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5.1
-      settings: { }
+      settings: {}
 
   - profile_id: default.chat.local
     capability: chat
@@ -62,7 +62,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5.2
-      settings: { }
+      settings: {}
 
   - profile_id: language.openai.gpt52
     capability: language
@@ -70,7 +70,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5.2
-      settings: { }
+      settings: {}
 
   - profile_id: chat.openai.gpt5
     capability: chat
@@ -78,7 +78,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5
-      settings: { }
+      settings: {}
 
   - profile_id: language.openai.gpt5
     capability: language
@@ -86,7 +86,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5
-      settings: { }
+      settings: {}
 
   - profile_id: chat.openai.gpt5mini
     capability: chat
@@ -94,7 +94,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5-mini
-      settings: { }
+      settings: {}
 
   - profile_id: language.openai.gpt5mini
     capability: language
@@ -102,7 +102,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5-mini
-      settings: { }
+      settings: {}
 
   - profile_id: chat.openai.gpt5nano
     capability: chat
@@ -110,7 +110,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5-nano
-      settings: { }
+      settings: {}
 
   - profile_id: language.openai.gpt5nano
     capability: language
@@ -118,7 +118,7 @@ profiles:
     model:
       provider: openai
       name: gpt-5-nano
-      settings: { }
+      settings: {}
 
   - profile_id: chat.openai.gpt41
     capability: chat
@@ -126,7 +126,7 @@ profiles:
     model:
       provider: openai
       name: gpt-4.1
-      settings: { }
+      settings: {}
 
   - profile_id: language.openai.gpt41
     capability: language
@@ -134,7 +134,7 @@ profiles:
     model:
       provider: openai
       name: gpt-4.1
-      settings: { }
+      settings: {}
 
   - profile_id: chat.openai.gpt41mini
     capability: chat
@@ -142,7 +142,7 @@ profiles:
     model:
       provider: openai
       name: gpt-4.1-mini
-      settings: { }
+      settings: {}
 
   - profile_id: language.openai.gpt41mini
     capability: language
@@ -150,7 +150,7 @@ profiles:
     model:
       provider: openai
       name: gpt-4.1-mini
-      settings: { }
+      settings: {}
 
   - profile_id: chat.azure_apim.gpt4o
     capability: chat
@@ -184,22 +184,4 @@ profiles:
       settings:
         base_url: "http://host.docker.internal:11434"
 
-  - profile_id: chat.mock.gpt4o
-    capability: chat
-    description: "Mock OpenAI server (Docker) for local testing"
-    model:
-      provider: openai
-      name: gpt-4o
-      settings:
-        base_url: "http://localhost:8383/v1"
-
-  - profile_id: language.mock.gpt4o
-    capability: language
-    description: "Mock OpenAI server (Docker) for local testing"
-    model:
-      provider: openai
-      name: gpt-4o
-      settings:
-        base_url: "http://localhost:8383/v1"
-
-rules: [ ]
+rules: []
