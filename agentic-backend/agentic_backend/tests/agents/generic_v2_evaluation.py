@@ -338,8 +338,6 @@ class GenericV2Evaluator(BaseEvaluator):
         agent_id: str,
         doc_lib_ids: Optional[list[str]] = None,
     ):
-        n = len(self.dataset)
-
         # ── Phase 1 : ask the agent ───────────────────────────────────────────
         records: list[dict] = []
         test_cases: list[LLMTestCase] = []
