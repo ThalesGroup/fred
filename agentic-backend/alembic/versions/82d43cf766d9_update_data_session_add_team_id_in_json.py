@@ -20,11 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.execute("""
-        UPDATE session
-        SET session_data = session_data || jsonb_build_object('team_id', team_id)
-    """)
-    # ### end Alembic commands ###
+    bind = op.get_bind()
+
+    if bind.dialect.name == 'postgresql':
+        op.execute("""
+            UPDATE session
+            SET session_data = session_data || jsonb_build_object('team_id', team_id)
+        """)
+    elif bind.dialect.name == 'sqlite':
+        op.execute("""
+            UPDATE session
+            SET session_data = json_set(session_data, '$.team_id', team_id)
+        """)
 
 
 def downgrade() -> None:
