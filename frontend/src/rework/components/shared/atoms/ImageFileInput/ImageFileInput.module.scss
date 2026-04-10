@@ -1,0 +1,39 @@
+.image-file-input-container {
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+
+  .native-input {
+    position: absolute;
+    margin: -1px;
+    padding: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border-width: 0;
+    white-space: nowrap;
+
+    &:focus-visible + .image-wrapper {
+      outline: 2px solid var(--primary);
+      outline-offset: var(--spacing-2xs);
+    }
+  }
+
+  .image-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: var(--radius-s);
+    width: var(--image-width);
+    height: var(--image-height);
+    overflow: hidden;
+  }
+
+  .image-file-input-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+  }
+}

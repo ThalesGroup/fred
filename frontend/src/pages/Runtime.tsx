@@ -25,8 +25,14 @@ export default function Runtime() {
             <Metric label={t("runtime.sessions", "Sessions")} value={data.sessions_total} />
             <Metric label={t("runtime.activeAgents", "Active agents")} value={data.agents_active_total} />
             <Metric label={t("runtime.attachments", "Attachments")} value={data.attachments_total} />
-            <Metric label={t("runtime.sessionsWithAttachments", "Sessions with attachments")} value={data.attachments_sessions} />
-            <Metric label={t("runtime.maxAttachmentsPerSession", "Max attachments/session")} value={data.max_attachments_per_session} />
+            <Metric
+              label={t("runtime.sessionsWithAttachments", "Sessions with attachments")}
+              value={data.attachments_sessions}
+            />
+            <Metric
+              label={t("runtime.maxAttachmentsPerSession", "Max attachments/session")}
+              value={data.max_attachments_per_session}
+            />
           </Stack>
         )}
       </Paper>
@@ -44,4 +50,3 @@ function Metric({ label, value }: { label: string; value: number }) {
     </Paper>
   );
 }
-

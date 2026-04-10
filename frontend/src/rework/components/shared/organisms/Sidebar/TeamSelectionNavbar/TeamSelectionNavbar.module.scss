@@ -1,0 +1,35 @@
+@use "src/index.scss" as *;
+
+.teamNavbarContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  background-color: var(--surface-container-lowest);
+  height: 100%;
+}
+
+.titleContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 3rem;
+}
+
+.title {
+  color: var(--on-surface);
+
+  @include typography("label", "large", true);
+}
+
+.subTitle {
+  color: var(--on-surface-retreat);
+
+  @include typography("body", "small", true);
+}
+
+.teamContainer {
+  margin-bottom: 64px;
+  overflow-x: clip;
+  overflow-y: auto;
+}

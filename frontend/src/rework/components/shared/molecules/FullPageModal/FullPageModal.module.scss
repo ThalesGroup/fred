@@ -1,0 +1,12 @@
+.modal {
+  display: flex;
+  position: fixed;
+  flex-direction: column;
+  align-items: center;
+  //TODO REMOVE WHEN DELETE MUI
+  z-index: 2000;
+  inset: 0;
+  background: var(--surface-main);
+  width: 100%;
+  height: 100%;
+}

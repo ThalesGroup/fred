@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Button, Typography } from "@mui/material";
+import { Box, Button, SxProps, Theme, Typography } from "@mui/material";
 import React from "react";
 
 interface EmptyStateProps {
@@ -31,7 +31,7 @@ interface EmptyStateProps {
 export const EmptyState = ({ icon, title, description, actionButton, descriptionMaxWidth = 400 }: EmptyStateProps) => {
   return (
     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={8} gap={1}>
-      {React.cloneElement(icon as React.ReactElement, {
+      {React.cloneElement(icon as React.ReactElement<{ sx?: SxProps<Theme> }>, {
         sx: { fontSize: 48, color: "text.secondary", ...(icon as any)?.props?.sx },
       })}
       <Typography variant="h6" color="text.secondary">

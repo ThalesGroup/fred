@@ -21,7 +21,7 @@ from typing import Optional
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from fred_core.common.structures import TemporalSchedulerConfig
+from fred_core.common import TemporalSchedulerConfig
 
 logger = logging.getLogger(__name__)
 

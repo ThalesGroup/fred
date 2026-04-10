@@ -13,8 +13,7 @@
 // limitations under the License.
 
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import { Box, Button, Chip, Paper, Typography } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
+import { Box, Button, Chip, Grid, Paper, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import FoldableChatSection from "./FoldableChatSection";
 import { VectorSearchHit } from "../../slices/agentic/agenticOpenApi";
@@ -79,8 +78,8 @@ function SourceRow({
       }}
       aria-label={`Open details for ${title}`}
     >
-      <Grid2 container alignItems="center" spacing={1}>
-        <Grid2 size={{ xs: "auto" }}>
+      <Grid container alignItems="center" spacing={1}>
+        <Grid size={{ xs: "auto" }}>
           <Box
             sx={{
               minWidth: 44,
@@ -98,9 +97,9 @@ function SourceRow({
           >
             {bestPct}%
           </Box>
-        </Grid2>
+        </Grid>
 
-        <Grid2 size={{ xs: 8 }}>
+        <Grid size={{ xs: 8 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" noWrap title={title} sx={{ fontWeight: 600, maxWidth: "60%" }}>
               {title}
@@ -118,14 +117,14 @@ function SourceRow({
             ))}
             {extra > 0 && <Chip size="small" label={`+${extra}`} sx={{ borderRadius: 1.5 }} />}
           </Box>
-        </Grid2>
+        </Grid>
 
-        <Grid2 size={{ xs: "auto" }}>
+        <Grid size={{ xs: "auto" }}>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {mime || "—"} {lang ? `• ${lang}` : ""} {pageCount ? `• ${pageCount} page(s)` : ""}
           </Typography>
-        </Grid2>
-      </Grid2>
+        </Grid>
+      </Grid>
     </Paper>
   );
 }

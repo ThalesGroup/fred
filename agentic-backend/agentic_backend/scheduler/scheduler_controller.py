@@ -17,7 +17,8 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from fred_core import KeycloakUser, get_current_user, raise_internal_error
+from fred_core import KeycloakUser, get_current_user
+from fred_core.common import raise_internal_error
 from fred_core.scheduler import TemporalClientProvider
 
 from agentic_backend.application_context import get_task_store

@@ -1,0 +1,79 @@
+:root {
+  --state-text-disabled: color-mix(in srgb, var(--on-surface), transparent 62%);
+
+  --state-on-surface-hover: color-mix(in srgb, var(--on-surface), transparent 92%);
+  --state-on-surface-pressed: color-mix(in srgb, var(--on-surface), transparent 88%);
+  --state-on-surface-focused: color-mix(in srgb, var(--on-surface), transparent 84%);
+  --state-on-surface-selected: color-mix(in srgb, var(--on-surface), transparent 84%);
+  --state-on-surface-disabled: color-mix(in srgb, var(--on-surface), transparent 90%);
+
+  --state-surface-main-hover: color-mix(in srgb, var(--surface-main), transparent 92%);
+  --state-surface-main-pressed: color-mix(in srgb, var(--surface-main), transparent 88%);
+  --state-surface-main-focused: color-mix(in srgb, var(--surface-main), transparent 84%);
+  --state-surface-main-selected: color-mix(in srgb, var(--surface-main), transparent 84%);
+  --state-surface-main-disabled: color-mix(in srgb, var(--surface-main), transparent 90%);
+
+  --state-on-primary-hover: color-mix(in srgb, var(--on-primary), transparent 92%);
+  --state-on-primary-pressed: color-mix(in srgb, var(--on-primary), transparent 88%);
+  --state-on-primary-focused: color-mix(in srgb, var(--on-primary), transparent 84%);
+  --state-on-primary-selected: color-mix(in srgb, var(--on-primary), transparent 84%);
+  --state-on-primary-container-hover: color-mix(in srgb, var(--on-primary-container), transparent 92%);
+  --state-on-primary-container-pressed: color-mix(in srgb, var(--on-primary-container), transparent 88%);
+  --state-on-primary-container-focused: color-mix(in srgb, var(--on-primary-container), transparent 84%);
+  --state-on-primary-container-selected: color-mix(in srgb, var(--on-primary-container), transparent 84%);
+
+  --state-secondary-selected: color-mix(in srgb, var(--secondary), transparent 84%);
+  --state-on-secondary-hover: color-mix(in srgb, var(--on-secondary), transparent 92%);
+  --state-on-secondary-pressed: color-mix(in srgb, var(--on-secondary), transparent 88%);
+  --state-on-secondary-focused: color-mix(in srgb, var(--on-secondary), transparent 84%);
+  --state-on-secondary-selected: color-mix(in srgb, var(--on-secondary), transparent 84%);
+  --state-on-secondary-container-hover: color-mix(in srgb, var(--on-secondary-container), transparent 92%);
+  --state-on-secondary-container-pressed: color-mix(in srgb, var(--on-secondary-container), transparent 88%);
+  --state-on-secondary-container-focused: color-mix(in srgb, var(--on-secondary-container), transparent 84%);
+  --state-on-secondary-container-selected: color-mix(in srgb, var(--on-secondary-container), transparent 84%);
+
+  --state-on-tertiary-hover: color-mix(in srgb, var(--on-tertiary), transparent 92%);
+  --state-on-tertiary-pressed: color-mix(in srgb, var(--on-tertiary), transparent 88%);
+  --state-on-tertiary-focused: color-mix(in srgb, var(--on-tertiary), transparent 84%);
+  --state-on-tertiary-selected: color-mix(in srgb, var(--on-tertiary), transparent 84%);
+  --state-on-tertiary-container-hover: color-mix(in srgb, var(--on-tertiary-container), transparent 92%);
+  --state-on-tertiary-container-pressed: color-mix(in srgb, var(--on-tertiary-container), transparent 88%);
+  --state-on-tertiary-container-focused: color-mix(in srgb, var(--on-tertiary-container), transparent 84%);
+  --state-on-tertiary-container-selected: color-mix(in srgb, var(--on-tertiary-container), transparent 84%);
+
+  --state-on-success-hover: color-mix(in srgb, var(--on-success), transparent 92%);
+  --state-on-success-pressed: color-mix(in srgb, var(--on-success), transparent 88%);
+  --state-on-success-focused: color-mix(in srgb, var(--on-success), transparent 84%);
+  --state-on-success-selected: color-mix(in srgb, var(--on-success), transparent 84%);
+  --state-on-success-container-hover: color-mix(in srgb, var(--on-success-container), transparent 92%);
+  --state-on-success-container-pressed: color-mix(in srgb, var(--on-success-container), transparent 88%);
+  --state-on-success-container-focused: color-mix(in srgb, var(--on-success-container), transparent 84%);
+  --state-on-success-container-selected: color-mix(in srgb, var(--on-success-container), transparent 84%);
+
+  --state-on-error-hover: color-mix(in srgb, var(--on-error), transparent 92%);
+  --state-on-error-pressed: color-mix(in srgb, var(--on-error), transparent 88%);
+  --state-on-error-focused: color-mix(in srgb, var(--on-error), transparent 84%);
+  --state-on-error-selected: color-mix(in srgb, var(--on-error), transparent 84%);
+  --state-on-error-container-hover: color-mix(in srgb, var(--on-error-container), transparent 92%);
+  --state-on-error-container-pressed: color-mix(in srgb, var(--on-error-container), transparent 88%);
+  --state-on-error-container-focused: color-mix(in srgb, var(--on-error-container), transparent 84%);
+  --state-on-error-container-selected: color-mix(in srgb, var(--on-error-container), transparent 84%);
+
+  --state-on-warning-hover: color-mix(in srgb, var(--on-warning), transparent 92%);
+  --state-on-warning-pressed: color-mix(in srgb, var(--on-warning), transparent 88%);
+  --state-on-warning-focused: color-mix(in srgb, var(--on-warning), transparent 84%);
+  --state-on-warning-selected: color-mix(in srgb, var(--on-warning), transparent 84%);
+  --state-on-warning-container-hover: color-mix(in srgb, var(--on-warning-container), transparent 92%);
+  --state-on-warning-container-pressed: color-mix(in srgb, var(--on-warning-container), transparent 88%);
+  --state-on-warning-container-focused: color-mix(in srgb, var(--on-warning-container), transparent 84%);
+  --state-on-warning-container-selected: color-mix(in srgb, var(--on-warning-container), transparent 84%);
+
+  --state-on-info-hover: color-mix(in srgb, var(--on-info), transparent 92%);
+  --state-on-info-pressed: color-mix(in srgb, var(--on-info), transparent 88%);
+  --state-on-info-focused: color-mix(in srgb, var(--on-info), transparent 84%);
+  --state-on-info-selected: color-mix(in srgb, var(--on-info), transparent 84%);
+  --state-on-info-container-hover: color-mix(in srgb, var(--on-info-container), transparent 92%);
+  --state-on-info-container-pressed: color-mix(in srgb, var(--on-info-container), transparent 88%);
+  --state-on-info-container-focused: color-mix(in srgb, var(--on-info-container), transparent 84%);
+  --state-on-info-container-selected: color-mix(in srgb, var(--on-info-container), transparent 84%);
+}

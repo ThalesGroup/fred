@@ -5,7 +5,7 @@ import logging
 from typing import Any, Callable, Optional
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
-from fred_core import OwnerFilter
+from fred_core.common import OwnerFilter
 from fred_core.kpi import KPIActor
 from langchain_core.tools import BaseTool
 from pydantic import Field

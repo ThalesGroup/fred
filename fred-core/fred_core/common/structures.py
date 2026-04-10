@@ -50,7 +50,10 @@ class ModelConfiguration(BaseModel):
     name: Optional[str] = Field(None, description="Model name, e.g., gpt-4o, llama2.")
     settings: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
-        description="Additional provider-specific settings, e.g., Azure deployment name.",
+        description=(
+            "Additional provider-specific settings, "
+            "e.g. Azure endpoint/API version or Vertex AI project/location."
+        ),
     )
 
 
@@ -120,13 +123,20 @@ class PostgresStoreConfig(BaseModel):
     def dsn(self) -> str:
         return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
 
+    def async_dsn(self) -> str:
+        return f"postgresql+asyncpg://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+
 
 class PostgresTableConfig(BaseModel):
     # Allow reusing the same table-oriented config for local SQLite runs.
     type: Literal["postgres"]
-    table: str = Field(..., description="Table name used by the store.")
+    table: Optional[str] = Field(
+        default=None,
+        description="Table name used by the store. Deprecated: stores now use fixed table names.",
+    )
     prefix: Optional[str] = Field(
-        default=None, description="Optional prefix applied to the table name."
+        default=None,
+        description="Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
     )
 
 

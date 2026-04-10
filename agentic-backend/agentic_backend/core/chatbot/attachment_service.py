@@ -21,16 +21,14 @@ from typing import Awaitable, Callable, Optional
 
 import httpx
 from fastapi import HTTPException, UploadFile
-from fred_core import KeycloakUser
+from fred_core import BaseSessionStore, KeycloakUser, SessionSchema
 
 from agentic_backend.common.kf_fast_text_client import KfFastTextClient
-from agentic_backend.core.chatbot.chat_schema import SessionSchema
 from agentic_backend.core.session.session_cache import CachedSession, SessionCache
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
     SessionAttachmentRecord,
 )
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +133,7 @@ class AttachmentService:
         try:
             if max_files_user is not None and self.attachments_store:
                 total_for_user = 0
-                user_sessions = await self.session_store.get_for_user(user.uid)
+                user_sessions = await self.session_store.get_for_user(user.uid, None)
                 if user_sessions:
                     session_ids = [s.id for s in user_sessions]
                     total_for_user = await self.attachments_store.count_for_sessions(

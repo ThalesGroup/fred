@@ -25,10 +25,7 @@ import {
   useProcessDocumentsProgressKnowledgeFlowV1ProcessDocumentsProgressPostMutation,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useToast } from "../../ToastProvider";
-import {
-  createBulkProcessSyncAction,
-  createProcessAction,
-} from "../operations/DocumentOperationsActions";
+import { createBulkProcessSyncAction, createProcessAction } from "../operations/DocumentOperationsActions";
 
 export const useDocumentActions = (onRefreshData?: () => void) => {
   const { t } = useTranslation();
@@ -152,7 +149,10 @@ export const useDocumentActions = (onRefreshData?: () => void) => {
 
   const handleProcess = async (files: DocumentMetadata[]) => {
     try {
-      console.log("[useDocumentActions] handleProcess called for files:", files.map((f) => f.identity.document_uid));
+      console.log(
+        "[useDocumentActions] handleProcess called for files:",
+        files.map((f) => f.identity.document_uid),
+      );
       const payload: ProcessDocumentsRequest = {
         files: files.map((f) => {
           const isPull = f.source.source_type === "pull";

@@ -16,26 +16,20 @@ import Editor from "@monaco-editor/react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { Box, Button, CardContent, Drawer, Fade, IconButton, Typography, useTheme } from "@mui/material";
-import Grid2 from "@mui/material/Grid2";
+import { Box, Button, CardContent, Drawer, Fade, Grid, IconButton, Typography, useTheme } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AnyAgent, isLeader } from "../../common/agent";
+import { AnyAgent } from "../../common/agent";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { Leader } from "../../slices/agentic/agenticOpenApi";
 import { useLazyGetRuntimeSourceTextQuery } from "../../slices/agentic/agenticSourceApi";
 import { LoadingSpinner } from "../../utils/loadingSpinner";
 import { useToast } from "../ToastProvider";
 
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
-import { A2aCardDialog } from "./A2aCardDialog";
 import { AgentCard } from "./AgentCard";
-import { AgentConfigWorkspaceManagerDrawer } from "./AgentConfigWorkspaceManagerDrawer";
-import { AgentEditDrawer } from "./AgentEditDrawer";
-import { AgentGraphModal } from "./AgentGraphModal";
-import { CreateAgentModal } from "./CreateAgentModal";
-import { CrewEditor } from "./CrewEditor";
+import { AgentCreateEditDrawer } from "./AgentCreateEditDrawer";
+import { AgentInspectionModal } from "./AgentInspectionModal";
 
 interface AgentGridManagerProps {
   // Data
@@ -58,9 +52,6 @@ interface AgentGridManagerProps {
   onRestore?: () => void;
   isRestoring?: boolean;
 
-  // Feature flags
-  showA2ACard?: boolean;
-
   // Customization
   emptyStateMessage?: string;
 }
@@ -76,7 +67,6 @@ export const AgentGridManager = ({
   showRestoreButton = false,
   onRestore,
   isRestoring = false,
-  showA2ACard = true,
   emptyStateMessage,
 }: AgentGridManagerProps) => {
   const theme = useTheme();
@@ -86,18 +76,8 @@ export const AgentGridManager = ({
   // State for drawers/modals
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [crewOpen, setCrewOpen] = useState(false);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createModalType, setCreateModalType] = useState<"basic" | "a2a_proxy">("basic");
-  const [assetManagerOpen, setAssetManagerOpen] = useState(false);
-  const [agentForAssetManagement, setAgentForAssetManagement] = useState<AnyAgent | null>(null);
-  const [graphModalOpen, setGraphModalOpen] = useState(false);
-  const [agentForGraph, setAgentForGraph] = useState<AnyAgent | null>(null);
-  const [a2aCardView, setA2aCardView] = useState<{ open: boolean; card: any | null; agentName: string | null }>({
-    open: false,
-    card: null,
-    agentName: null,
-  });
+  const [inspectionModalOpen, setInspectionModalOpen] = useState(false);
+  const [agentForInspection, setAgentForInspection] = useState<AnyAgent | null>(null);
   const [codeDrawer, setCodeDrawer] = useState<{
     open: boolean;
     title: string;
@@ -107,13 +87,11 @@ export const AgentGridManager = ({
   const { updateEnabled } = useAgentUpdater();
   const [triggerGetSource] = useLazyGetRuntimeSourceTextQuery();
 
-  // Handlers for create modal
+  // Handler for create: open the edit drawer with no agent (create mode)
   const handleOpenCreateAgent = () => {
-    setCreateModalType("basic");
-    setCreateModalOpen(true);
+    setSelected(null);
+    setEditOpen(true);
   };
-
-  const handleCloseCreateAgent = () => setCreateModalOpen(false);
 
   // Code inspector handler
   const handleCloseCodeDrawer = () => {
@@ -146,19 +124,6 @@ export const AgentGridManager = ({
     }
   };
 
-  // A2A card handler
-  const handleViewA2ACard = (agent: AnyAgent) => {
-    const card = (agent as any)?.metadata?.a2a_card;
-    if (!card) {
-      showError({
-        summary: t("agentHub.noA2ACardSummary"),
-        detail: t("agentHub.noA2ACardDetail"),
-      });
-      return;
-    }
-    setA2aCardView({ open: true, card, agentName: agent.id });
-  };
-
   // Action handlers wired to card
   const handleEdit = (agent: AnyAgent) => {
     setSelected(agent);
@@ -173,29 +138,14 @@ export const AgentGridManager = ({
     }
   };
 
-  const handleManageCrew = (leader: Leader & { type: "leader" }) => {
-    setSelected(leader);
-    setCrewOpen(true);
+  const handleInspectAgent = (agent: AnyAgent) => {
+    setAgentForInspection(agent);
+    setInspectionModalOpen(true);
   };
 
-  const handleManageAssets = (agent: AnyAgent) => {
-    setAgentForAssetManagement(agent);
-    setAssetManagerOpen(true);
-  };
-
-  const handleCloseAssetManager = () => {
-    setAssetManagerOpen(false);
-    setAgentForAssetManagement(null);
-  };
-
-  const handleInspectGraph = (agent: AnyAgent) => {
-    setAgentForGraph(agent);
-    setGraphModalOpen(true);
-  };
-
-  const handleCloseGraphModal = () => {
-    setGraphModalOpen(false);
-    setAgentForGraph(null);
+  const handleCloseInspectionModal = () => {
+    setInspectionModalOpen(false);
+    setAgentForInspection(null);
   };
 
   const handleRefetch = async () => {
@@ -241,26 +191,23 @@ export const AgentGridManager = ({
 
             {/* Grid */}
             {agents.length > 0 ? (
-              <Grid2 container spacing={2}>
+              <Grid container spacing={2}>
                 {agents.map((agent) => (
-                  <Grid2 key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
+                  <Grid key={agent.id} size={{ xs: 12, sm: 6, md: 4, lg: 4, xl: 4 }} sx={{ display: "flex" }}>
                     <Fade in timeout={500}>
                       <Box sx={{ width: "100%" }}>
                         <AgentCard
                           agent={agent}
                           onEdit={canEdit ? handleEdit : undefined}
                           onToggleEnabled={canEdit ? handleToggleEnabled : undefined}
-                          onManageCrew={canEdit && isLeader(agent) ? handleManageCrew : undefined}
-                          onManageAssets={canEdit ? handleManageAssets : undefined}
                           onInspectCode={handleInspectCode}
-                          onViewA2ACard={showA2ACard ? handleViewA2ACard : undefined}
-                          onInspectGraph={handleInspectGraph}
+                          onInspectAgent={handleInspectAgent}
                         />
                       </Box>
                     </Fade>
-                  </Grid2>
+                  </Grid>
                 ))}
-              </Grid2>
+              </Grid>
             ) : (
               <Box
                 display="flex"
@@ -279,55 +226,20 @@ export const AgentGridManager = ({
                 </Typography>
               </Box>
             )}
-
-            {/* Create modal */}
-            {createModalOpen && (
-              <CreateAgentModal
-                open={createModalOpen}
-                onClose={handleCloseCreateAgent}
-                onCreated={() => {
-                  handleCloseCreateAgent();
-                  handleRefetch();
-                }}
-                initialType={createModalType}
-                disableTypeToggle
-                teamId={teamId}
-              />
-            )}
-
-            <A2aCardDialog
-              open={a2aCardView.open}
-              onClose={() => setA2aCardView({ open: false, card: null, agentName: null })}
-              card={a2aCardView.card}
-            />
           </>
         )}
       </CardContent>
 
       {/* Drawers / Modals */}
-      <AgentEditDrawer
+      <AgentCreateEditDrawer
         canDelete={canDelete}
         open={editOpen}
         agent={selected}
+        teamId={teamId}
         onClose={() => setEditOpen(false)}
         onSaved={handleRefetch}
         onDeleted={handleRefetch}
       />
-      <CrewEditor
-        open={crewOpen}
-        leader={selected && isLeader(selected) ? (selected as Leader & { type: "leader" }) : null}
-        allAgents={agents}
-        onClose={() => setCrewOpen(false)}
-        onSaved={handleRefetch}
-      />
-      {agentForAssetManagement && (
-        <AgentConfigWorkspaceManagerDrawer
-          isOpen={assetManagerOpen}
-          onClose={handleCloseAssetManager}
-          agentId={agentForAssetManagement.id}
-        />
-      )}
-
       {/* Code Inspector Drawer */}
       <Box
         component={Drawer}
@@ -396,7 +308,11 @@ export const AgentGridManager = ({
           </Box>
         </Box>
       </Box>
-      <AgentGraphModal agent={agentForGraph} open={graphModalOpen} onClose={handleCloseGraphModal} />
+      <AgentInspectionModal
+        agent={agentForInspection}
+        open={inspectionModalOpen}
+        onClose={handleCloseInspectionModal}
+      />
     </>
   );
 };

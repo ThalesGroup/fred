@@ -1,14 +1,155 @@
-/* Bootstrap */
-@import "bootstrap/dist/css/bootstrap.min.css";
-
 /* React RRule Generator */
-@import "react-rrule-generator/build/styles.css";
+@use "sass:map";
+@import "react-rrule-generator/build/styles.css" layer(react-rrule);
 
-.btn-group {
-  position: relative;
-  display: block;
+$color-schemes: (
+  "primary": (
+    "main": var(--primary),
+    "on-main": var(--on-primary),
+    "container": var(--primary-container),
+    "on-container": var(--on-primary-container),
+    "hover": var(--state-on-primary-hover),
+    "pressed": var(--state-on-primary-pressed),
+    "focused": var(--state-on-primary-focused),
+    "selected": var(--state-on-primary-selected),
+    "on-container-hover": var(--state-on-primary-container-hover),
+    "on-container-pressed": var(--state-on-primary-container-pressed),
+    "on-container-focused": var(--state-on-primary-container-focused),
+    "on-container-selected": var(--state-on-primary-container-selected),
+  ),
+  "secondary": (
+    "main": var(--secondary),
+    "on-main": var(--on-secondary),
+    "container": var(--secondary-container),
+    "on-container": var(--on-secondary-container),
+    "hover": var(--state-on-secondary-hover),
+    "pressed": var(--state-on-secondary-pressed),
+    "focused": var(--state-on-secondary-focused),
+    "selected": var(--state-on-secondary-selected),
+    "on-container-hover": var(--state-on-secondary-container-hover),
+    "on-container-pressed": var(--state-on-secondary-container-pressed),
+    "on-container-focused": var(--state-on-secondary-container-focused),
+    "on-container-selected": var(--state-on-secondary-container-selected),
+  ),
+  "tertiary": (
+    "main": var(--tertiary),
+    "on-main": var(--on-tertiary),
+    "container": var(--tertiary-container),
+    "on-container": var(--on-tertiary-container),
+    "hover": var(--state-on-tertiary-hover),
+    "pressed": var(--state-on-tertiary-pressed),
+    "focused": var(--state-on-tertiary-focused),
+    "selected": var(--state-on-tertiary-selected),
+    "on-container-hover": var(--state-on-tertiary-container-hover),
+    "on-container-pressed": var(--state-on-tertiary-container-pressed),
+    "on-container-focused": var(--state-on-tertiary-container-focused),
+    "on-container-selected": var(--state-on-tertiary-container-selected),
+  ),
+  "error": (
+    "main": var(--error),
+    "on-main": var(--on-error),
+    "container": var(--error-container),
+    "on-container": var(--on-error-container),
+    "hover": var(--state-on-error-hover),
+    "pressed": var(--state-on-error-pressed),
+    "focused": var(--state-on-error-focused),
+    "selected": var(--state-on-error-selected),
+    "on-container-hover": var(--state-on-error-container-hover),
+    "on-container-pressed": var(--state-on-error-container-pressed),
+    "on-container-focused": var(--state-on-error-container-focused),
+    "on-container-selected": var(--state-on-error-container-selected),
+  ),
+  "success": (
+    "main": var(--success),
+    "on-main": var(--on-success),
+    "container": var(--success-container),
+    "on-container": var(--on-success-container),
+    "hover": var(--state-on-success-hover),
+    "pressed": var(--state-on-success-pressed),
+    "focused": var(--state-on-success-focused),
+    "selected": var(--state-on-success-selected),
+    "on-container-hover": var(--state-on-success-container-hover),
+    "on-container-pressed": var(--state-on-success-container-pressed),
+    "on-container-focused": var(--state-on-success-container-focused),
+    "on-container-selected": var(--state-on-success-container-selected),
+  ),
+  "warning": (
+    "main": var(--warning),
+    "on-main": var(--on-warning),
+    "container": var(--warning-container),
+    "on-container": var(--on-warning-container),
+    "hover": var(--state-on-warning-hover),
+    "pressed": var(--state-on-warning-pressed),
+    "focused": var(--state-on-warning-focused),
+    "selected": var(--state-on-warning-selected),
+    "on-container-hover": var(--state-on-warning-container-hover),
+    "on-container-pressed": var(--state-on-warning-container-pressed),
+    "on-container-focused": var(--state-on-warning-container-focused),
+    "on-container-selected": var(--state-on-warning-container-selected),
+  ),
+  "info": (
+    "main": var(--info),
+    "on-main": var(--on-info),
+    "container": var(--info-container),
+    "on-container": var(--on-info-container),
+    "hover": var(--state-on-info-hover),
+    "pressed": var(--state-on-info-pressed),
+    "focused": var(--state-on-info-focused),
+    "selected": var(--state-on-info-selected),
+    "on-container-hover": var(--state-on-info-container-hover),
+    "on-container-pressed": var(--state-on-info-container-pressed),
+    "on-container-focused": var(--state-on-info-container-focused),
+    "on-container-selected": var(--state-on-info-container-selected),
+  ),
+  "on-surface": (
+    "main": var(--on-surface),
+    "on-main": var(--surface-main),
+    "container": var(--surface-container),
+    "on-container": var(--on-surface),
+    "hover": var(--state-on-surface-hover),
+    "pressed": var(--state-on-surface-pressed),
+    "focused": var(--state-on-surface-focused),
+    "selected": var(--state-on-surface-selected),
+    "on-container-hover": var(--state-on-surface-container-hover),
+    "on-container-pressed": var(--state-on-surface-container-pressed),
+    "on-container-focused": var(--state-on-surface-container-focused),
+    "on-container-selected": var(--state-on-surface-container-selected),
+  ),
+  "on-surface-retreat": (
+    "main": var(--on-surface-retreat),
+    "on-main": var(--surface-main),
+    "container": var(--surface-container),
+    "on-container": var(--on-surface-retreat),
+    "hover": var(--state-on-surface-hover),
+    "pressed": var(--state-on-surface-pressed),
+    "focused": var(--state-on-surface-focused),
+    "selected": var(--state-on-surface-selected),
+    "on-container-hover": var(--state-on-surface-container-hover),
+    "on-container-pressed": var(--state-on-surface-container-pressed),
+    "on-container-focused": var(--state-on-surface-container-focused),
+    "on-container-selected": var(--state-on-surface-container-selected),
+  ),
+);
+
+@mixin use-scheme($name) {
+  $scheme: map.get($color-schemes, $name);
+
+  --current-bg: #{map.get($scheme, "main")};
+  --current-text: #{map.get($scheme, "on-main")};
+  --current-hover: #{map.get($scheme, "hover")};
+  --current-pressed: #{map.get($scheme, "pressed")};
 }
-// Use this to override the default theme
-.default-text-color {
-  color: white;
+
+@mixin typography($style, $size, $emphasized: false) {
+  $suffix: "";
+  @if $emphasized {
+    $suffix: "-emphasized";
+  }
+  $token-base: "--font-#{$style}-#{$size}#{$suffix}";
+  font-weight: var(#{$token-base}-weight);
+  font-size: var(#{$token-base}-size);
+  line-height: var(#{$token-base}-line-height);
+
+  font-family: var(#{$token-base}-family);
+  letter-spacing: var(#{$token-base}-letter-spacing);
 }

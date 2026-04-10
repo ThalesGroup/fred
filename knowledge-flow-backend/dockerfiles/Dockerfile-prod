@@ -36,6 +36,7 @@ COPY fred-core /fred-core
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
+RUN python /scripts/patch_docling_rapidocr_openvino.py
 
 # Prepare local encodings directory
 RUN mkdir -p $TIKTOKEN_CACHE_DIR
@@ -43,8 +44,11 @@ RUN mkdir -p $TIKTOKEN_CACHE_DIR
 # Download encodings for offline usage
 RUN python /scripts/download_encodings.py https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken
 
-# Copy projets
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY knowledge-flow-backend/. /app/
+RUN rm -f /app/alembic.ini
+COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -64,12 +68,8 @@ RUN apt-get update && \
     inkscape \
     libgl1 \
     libmagic1 \
-    poppler-utils \
     ffmpeg \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-fra \
-    tesseract-ocr-osd \
+    libreoffice \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
@@ -107,7 +107,7 @@ from sentence_transformers import CrossEncoder; \
 import os; \
 CrossEncoder(model_name_or_path=os.environ['RERANKER_MODEL'], cache_folder=os.environ['RERANKER_MODEL_CACHE'])"
 
-# Preload Docling artifacts (layout/table + EasyOCR) for offline-friendly runtime
+# Preload Docling artifacts (layout/table + RapidOCR) for offline-friendly runtime
 RUN python -c "\
 from pathlib import Path; \
 import os; \
@@ -117,7 +117,7 @@ output_dir=Path(os.environ['DOCLING_ARTIFACTS_PATH']), \
 progress=False, \
 with_layout=True, \
 with_tableformer=True, \
-with_easyocr=True, \
+with_rapidocr=True, \
 with_code_formula=False, \
 with_picture_classifier=False, \
 with_smolvlm=False, \
@@ -133,8 +133,11 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 # Set working directory
 WORKDIR /app
 
-# Copy app source
+# Remove the broken alembic.ini symlink before copying the real file —
+# Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
+RUN rm -f /app/alembic.ini
+COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 

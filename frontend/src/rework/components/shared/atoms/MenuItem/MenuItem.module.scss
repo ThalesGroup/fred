@@ -1,0 +1,54 @@
+@use "src/index" as *;
+
+.menu-item {
+  display: block;
+  cursor: pointer;
+
+  --item-bg: transparent;
+  --item-color: var(--on-surface);
+  --padding-left: var(--spacing-m);
+
+  &:has(.icon-wrapper) {
+    --padding-left: var(--spacing-xs);
+  }
+
+  &[data-focused="true"]:not([data-disabled="true"]),
+  &:hover:not([data-disabled="true"]) {
+    --item-bg: var(--state-on-surface-hover);
+  }
+
+  &[data-selected="true"]:not([data-disabled="true"]) {
+    --item-bg: var(--state-on-surface-selected);
+  }
+
+  &[data-disabled="true"] {
+    --item-color: var(--on-surface-disabled);
+    --item-bg: var(--state-surface-main-disabled);
+  }
+}
+
+.state-layer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background-color: var(--item-bg);
+  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-xs) var(--padding-left);
+  width: 100%;
+  min-height: 2.5rem;
+  color: var(--item-color);
+}
+
+.icon-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @include typography("body", "large");
+}

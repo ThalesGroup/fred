@@ -22,7 +22,6 @@ from uuid import uuid4
 from fred_core import (
     Action,
     KeycloakUser,
-    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -32,6 +31,7 @@ from fred_core import (
     TeamPermission,
     authorize,
 )
+from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.resources.base_resource_store import ResourceNotFoundError
@@ -161,7 +161,11 @@ class TagService:
 
         # If team_id is provided, check user has permission to manage team resources
         if team_id:
-            await self.rebac.check_user_permission_or_raise(user, TeamPermission.CAN_UPDATE_RESOURCES, team_id)
+            await self.rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_RESOURCES,
+                team_id=team_id,
+            )
 
         # owner_id is the team or user, used for uniqueness scoping
         owner_id = team_id or user.uid

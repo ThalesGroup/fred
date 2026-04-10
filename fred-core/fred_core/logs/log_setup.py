@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 from typing import Any, Optional
 
@@ -155,6 +156,44 @@ class UvicornWebsocketNoiseFilter(logging.Filter):
         return msg not in {"connection open", "connection closed"}
 
 
+_SENSITIVE_QUERY_PARAM_RE = re.compile(
+    r"([?&](?:token|access_token|id_token)=)[^&\s\"]+",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_sensitive_query_params(value: str) -> str:
+    return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1<redacted>", value)
+
+
+class UvicornSensitiveQueryFilter(logging.Filter):
+    """
+    Redact sensitive query parameter values from uvicorn log records.
+
+    Why this exists:
+    - Frontend websocket connections often pass JWT via `?token=...`.
+    - Uvicorn access/error logs would otherwise print raw tokens.
+
+    How to use:
+    - Attach this filter to `uvicorn.access` and `uvicorn.error` loggers.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _sanitize_sensitive_query_params(record.msg)
+
+        if isinstance(record.args, tuple):
+            sanitized_args: list[object] = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    sanitized_args.append(_sanitize_sensitive_query_params(arg))
+                else:
+                    sanitized_args.append(arg)
+            record.args = tuple(sanitized_args)
+
+        return True
+
+
 def log_setup(
     *,
     service_name: str,
@@ -225,6 +264,7 @@ def log_setup(
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)
         lg.handlers.clear()  # their own handlers (if any) → gone
+        lg.addHandler(logging.NullHandler())
         lg.setLevel(logging.WARNING)
         lg.propagate = False  # <-- key: do NOT bubble up to root
     extra_noisy = (
@@ -239,6 +279,7 @@ def log_setup(
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
             lg.handlers.clear()  # remove uvicorn’s own console handlers
+            lg.addFilter(UvicornSensitiveQueryFilter())
             # Access logs are particularly chatty; keep only warnings+
             if name == "uvicorn.access":
                 lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))

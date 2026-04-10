@@ -1,0 +1,42 @@
+@use "src/index.scss" as *;
+
+.marketplace-teams-container {
+  padding: 0 var(--spacing-l);
+  height: 100%;
+}
+
+.marketplace-teams-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 4.5rem;
+}
+
+.marketplace-teams-title {
+  margin: 0;
+  padding: 0;
+  color: var(--on-surface);
+
+  @include typography("title", "large", true);
+}
+
+.marketplace-teams-content {
+  padding-bottom: var(--spacing-s);
+}
+
+.marketplace-teams-list-subtitle {
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  color: var(--on-surface-retreat);
+
+  @include typography("title", "medium");
+}
+
+.marketplace-teams-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+  padding-bottom: var(--spacing-m);
+}

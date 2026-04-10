@@ -13,17 +13,37 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    createAgentAgenticV1AgentsCreatePost: build.mutation<
-      CreateAgentAgenticV1AgentsCreatePostApiResponse,
-      CreateAgentAgenticV1AgentsCreatePostApiArg
+    createV2AgentAgenticV1AgentsV2CreatePost: build.mutation<
+      CreateV2AgentAgenticV1AgentsV2CreatePostApiResponse,
+      CreateV2AgentAgenticV1AgentsV2CreatePostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/create`, method: "POST", body: queryArg.createAgentRequest }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/v2/create`,
+        method: "POST",
+        body: queryArg.createV2AgentRequest,
+      }),
     }),
-    getAgentGraphAgenticV1AgentsAgentIdGraphGet: build.query<
-      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse,
-      GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg
+    createV1AgentAgenticV1AgentsV1CreatePost: build.mutation<
+      CreateV1AgentAgenticV1AgentsV1CreatePostApiResponse,
+      CreateV1AgentAgenticV1AgentsV1CreatePostApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}/graph` }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/v1/create`,
+        method: "POST",
+        body: queryArg.createV1AgentRequest,
+      }),
+    }),
+    listReactAgentProfilesAgenticV1AgentsReactProfilesGet: build.query<
+      ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse,
+      ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/react-profiles` }),
+    }),
+    inspectV2AgentAgenticV1AgentsAgentIdInspectGet: build.query<
+      InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiResponse,
+      InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/agents/${queryArg.agentId}/inspect` }),
     }),
     listDeclaredAgentClassPathsAgenticV1AgentsClassPathsGet: build.query<
       ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse,
@@ -31,11 +51,29 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/agents/class-paths` }),
     }),
+    listV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGet: build.query<
+      ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiResponse,
+      ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiArg
+    >({
+      query: () => ({ url: `/agentic/v1/agents/v2/definition-refs` }),
+    }),
+    getClassPathTuningAgenticV1AgentsClassPathsTuningGet: build.query<
+      GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiResponse,
+      GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/agentic/v1/agents/class-paths/tuning`,
+        params: {
+          class_path: queryArg.classPath,
+          definition_ref: queryArg.definitionRef,
+        },
+      }),
+    }),
     updateAgentAgenticV1AgentsUpdatePut: build.mutation<
       UpdateAgentAgenticV1AgentsUpdatePutApiResponse,
       UpdateAgentAgenticV1AgentsUpdatePutApiArg
     >({
-      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentSettings }),
+      query: (queryArg) => ({ url: `/agentic/v1/agents/update`, method: "PUT", body: queryArg.agentInput }),
     }),
     deleteAgentAgenticV1AgentsAgentIdDelete: build.mutation<
       DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse,
@@ -142,11 +180,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/agentic/v1/config/permissions` }),
     }),
+    getTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGet: build.query<
+      GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiResponse,
+      GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/agentic/v1/config/model-routing/teams/${queryArg.teamId}` }),
+    }),
     getSessionsAgenticV1ChatbotSessionsGet: build.query<
       GetSessionsAgenticV1ChatbotSessionsGetApiResponse,
       GetSessionsAgenticV1ChatbotSessionsGetApiArg
     >({
-      query: () => ({ url: `/agentic/v1/chatbot/sessions` }),
+      query: (queryArg) => ({
+        url: `/agentic/v1/chatbot/sessions`,
+        params: {
+          team_id: queryArg.teamId,
+        },
+      }),
     }),
     createSessionAgenticV1ChatbotSessionPost: build.mutation<
       CreateSessionAgenticV1ChatbotSessionPostApiResponse,
@@ -317,38 +366,42 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as agenticApi };
-export type ListAgentsAgenticV1AgentsGetApiResponse = /** status 200 Successful Response */ (
-  | ({
-      type: "agent";
-    } & Agent)
-  | ({
-      type: "leader";
-    } & Leader)
-)[];
+export type ListAgentsAgenticV1AgentsGetApiResponse = /** status 200 Successful Response */ Agent[];
 export type ListAgentsAgenticV1AgentsGetApiArg = {
   ownerFilter?: OwnerFilter | null;
   teamId?: string | null;
 };
-export type CreateAgentAgenticV1AgentsCreatePostApiResponse = /** status 200 Successful Response */ any;
-export type CreateAgentAgenticV1AgentsCreatePostApiArg = {
-  createAgentRequest: CreateAgentRequest;
+export type CreateV2AgentAgenticV1AgentsV2CreatePostApiResponse = /** status 200 Successful Response */ Agent;
+export type CreateV2AgentAgenticV1AgentsV2CreatePostApiArg = {
+  createV2AgentRequest: CreateV2AgentRequest;
 };
-export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiResponse = /** status 200 Successful Response */ string;
-export type GetAgentGraphAgenticV1AgentsAgentIdGraphGetApiArg = {
+export type CreateV1AgentAgenticV1AgentsV1CreatePostApiResponse = /** status 200 Successful Response */ Agent;
+export type CreateV1AgentAgenticV1AgentsV1CreatePostApiArg = {
+  createV1AgentRequest: CreateV1AgentRequest;
+};
+export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiResponse =
+  /** status 200 Successful Response */ ReActProfileSummary[];
+export type ListReactAgentProfilesAgenticV1AgentsReactProfilesGetApiArg = void;
+export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiResponse =
+  /** status 200 Successful Response */ AgentInspection;
+export type InspectV2AgentAgenticV1AgentsAgentIdInspectGetApiArg = {
   agentId: string;
 };
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiResponse =
   /** status 200 Successful Response */ string[];
 export type ListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetApiArg = void;
+export type ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiResponse =
+  /** status 200 Successful Response */ string[];
+export type ListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetApiArg = void;
+export type GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiResponse =
+  /** status 200 Successful Response */ AgentTuning;
+export type GetClassPathTuningAgenticV1AgentsClassPathsTuningGetApiArg = {
+  classPath?: string | null;
+  definitionRef?: string | null;
+};
 export type UpdateAgentAgenticV1AgentsUpdatePutApiResponse = /** status 200 Successful Response */ any;
 export type UpdateAgentAgenticV1AgentsUpdatePutApiArg = {
-  agentSettings:
-    | ({
-        type: "agent";
-      } & Agent2)
-    | ({
-        type: "leader";
-      } & Leader2);
+  agentInput: Agent2;
 };
 export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiResponse = unknown;
 export type DeleteAgentAgenticV1AgentsAgentIdDeleteApiArg = {
@@ -402,9 +455,16 @@ export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiResponse =
 export type GetFrontendConfigAgenticV1ConfigFrontendSettingsGetApiArg = void;
 export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type GetUserPermissionsAgenticV1ConfigPermissionsGetApiArg = void;
+export type GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiResponse =
+  /** status 200 Successful Response */ TeamModelRoutingConfigDto;
+export type GetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetApiArg = {
+  teamId: string;
+};
 export type GetSessionsAgenticV1ChatbotSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionWithFiles[];
-export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = void;
+export type GetSessionsAgenticV1ChatbotSessionsGetApiArg = {
+  teamId: string;
+};
 export type CreateSessionAgenticV1ChatbotSessionPostApiResponse = /** status 200 Successful Response */ SessionSchema;
 export type CreateSessionAgenticV1ChatbotSessionPostApiArg = {
   createSessionPayload: CreateSessionPayload;
@@ -514,6 +574,7 @@ export type UiHints = {
   markdown?: boolean;
   textarea?: boolean;
   group?: string | null;
+  hide?: boolean;
 };
 export type FieldSpec = {
   key: string;
@@ -622,34 +683,17 @@ export type Agent = {
   team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
+  /** Stable v2 definition identifier (preferred for v2 agents). Example: 'v2.react.basic'. */
+  definition_ref?: string | null;
   tuning?: AgentTuning | null;
   chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  /** Optional arbitrary metadata for integrations. */
   metadata?: {
     [key: string]: any;
   } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
-};
-export type Leader = {
-  id: string;
-  name: string;
-  /** Owning team id when this is a team-owned agent. */
-  team_id?: string | null;
-  enabled?: boolean;
-  class_path?: string | null;
-  tuning?: AgentTuning | null;
-  chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
-  metadata?: {
-    [key: string]: any;
-  } | null;
-  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
-  mcp_servers?: McpServerConfiguration[];
-  type?: "leader";
-  /** IDs of agents in this leader's crew (if any). */
-  crew?: string[];
 };
 export type ValidationError = {
   loc: (string | number)[];
@@ -660,13 +704,49 @@ export type HttpValidationError = {
   detail?: ValidationError[];
 };
 export type OwnerFilter = "personal" | "team";
-export type CreateAgentRequest = {
+export type CreateV2AgentRequest = {
   name: string;
-  type?: string;
   team_id?: string | null;
-  a2a_base_url?: string | null;
-  a2a_token?: string | null;
-  class_path?: string | null;
+  definition_ref?: string | null;
+  profile_id?: string | null;
+};
+export type CreateV1AgentRequest = {
+  name: string;
+  team_id?: string | null;
+  class_path: string;
+};
+export type ReActProfileSummary = {
+  profile_id: string;
+  title: string;
+  description: string;
+  agent_description: string;
+  tags: string[];
+};
+export type ExecutionCategory = "graph" | "react" | "proxy";
+export type ToolRefRequirement = {
+  kind?: "tool_ref";
+  required?: boolean;
+  description?: string | null;
+  tool_ref: string;
+};
+export type PreviewKind = "none" | "mermaid" | "dag" | "text";
+export type AgentPreview = {
+  kind: PreviewKind;
+  content?: string;
+  note?: string | null;
+};
+export type AgentInspection = {
+  agent_id: string;
+  role: string;
+  description: string;
+  tags?: string[];
+  fields?: FieldSpec[];
+  execution_category: ExecutionCategory;
+  /** Exact Fred runtime tools declared by the agent author. This exists so inspection and UIs can explain what the agent expects before runtime binding happens. */
+  declared_tool_refs?: ToolRefRequirement[];
+  /** Default MCP servers Fred should attach for this agent. These are runtime tool providers, not substitutes for first-class Fred declared tool refs. */
+  default_mcp_servers?: McpServerRef[];
+  preview?: AgentPreview;
 };
 export type AgentTuning2 = {
   /** The agent's mandatory role for discovery. */
@@ -684,34 +764,17 @@ export type Agent2 = {
   team_id?: string | null;
   enabled?: boolean;
   class_path?: string | null;
+  /** Stable v2 definition identifier (preferred for v2 agents). Example: 'v2.react.basic'. */
+  definition_ref?: string | null;
   tuning?: AgentTuning2 | null;
   chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
+  /** Optional arbitrary metadata for integrations. */
   metadata?: {
     [key: string]: any;
   } | null;
   /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
   mcp_servers?: McpServerConfiguration[];
   type?: "agent";
-};
-export type Leader2 = {
-  id: string;
-  name: string;
-  /** Owning team id when this is a team-owned agent. */
-  team_id?: string | null;
-  enabled?: boolean;
-  class_path?: string | null;
-  tuning?: AgentTuning2 | null;
-  chat_options?: AgentChatOptions;
-  /** Optional arbitrary metadata for integrations (e.g., A2A proxy config). */
-  metadata?: {
-    [key: string]: any;
-  } | null;
-  /** DEPRECATED: Use the global 'mcp' catalog and the 'mcp_servers' field in AgentTuning with references instead. */
-  mcp_servers?: McpServerConfiguration[];
-  type?: "leader";
-  /** IDs of agents in this leader's crew (if any). */
-  crew?: string[];
 };
 export type SaveMcpServerRequest = {
   server: McpServerConfiguration;
@@ -914,7 +977,9 @@ export type AwaitingHumanEvent = {
       };
 };
 export type ChatAskInput = {
-  agent_id: string;
+  agent_id?: string | null;
+  internal_profile_id?: string | null;
+  internal_capability?: string | null;
   runtime_context?: RuntimeContext | null;
   access_token?: string | null;
   refresh_token?: string | null;
@@ -930,6 +995,7 @@ export type StreamEvent = {
 export type SessionSchema = {
   id: string;
   user_id: string;
+  team_id?: string | null;
   agent_id?: string | null;
   title: string;
   updated_at: string;
@@ -963,6 +1029,7 @@ export type AttachmentRef = {
 export type SessionWithFiles = {
   id: string;
   user_id: string;
+  team_id?: string | null;
   agent_id?: string | null;
   title: string;
   updated_at: string;
@@ -1066,19 +1133,22 @@ export type Properties = {
   faviconName?: string | null;
   faviconNameDark?: string | null;
   siteDisplayName?: string;
+  siteTitle?: string;
+  siteSubtitle?: string | null;
   /** Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'. */
   releaseBrand?: string | null;
   agentsNicknameSingular?: string;
   agentsNicknamePlural?: string;
-  agentIconPath?: string | null;
+  agentIconName?: string;
   contactSupportLink?: string | null;
-  /** Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme. */
-  agentIconName?: string | null;
-  showAgentRegisterA2A?: boolean;
   showAgentRestoreFromConfiguration?: boolean;
   showAgentDisableButton?: boolean;
   showAgentCode?: boolean;
   allowAgentSwitchInOneConversation?: boolean;
+  defaultTeamBannerFile?: string;
+  defaultPersonalBannerFile?: string;
+  defaultTeamAvatarFile?: string;
+  defaultPersonalAvatarFile?: string;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
@@ -1094,9 +1164,40 @@ export type FrontendConfigDto = {
   user_auth: UserSecurity;
   is_rebac_enabled: boolean;
 };
+export type TeamModelRoutingProfileDto = {
+  profile_id: string;
+  capability: string;
+  provider: string;
+  model_name: string;
+  description?: string | null;
+  is_default?: boolean;
+};
+export type TeamModelRoutingRuleDto = {
+  rule_id: string;
+  capability: string;
+  operation?: string | string[] | null;
+  purpose?: string | string[] | null;
+  agent_id?: string | string[] | null;
+  user_id?: string | string[] | null;
+  target_profile_id: string;
+  target_model_name?: string | null;
+  scope: "global" | "team";
+};
+export type TeamModelRoutingConfigDto = {
+  team_id: string;
+  catalog_path: string;
+  catalog_exists: boolean;
+  catalog_version?: string | null;
+  default_profile_by_capability?: {
+    [key: string]: string;
+  };
+  profiles?: TeamModelRoutingProfileDto[];
+  rules?: TeamModelRoutingRuleDto[];
+};
 export type CreateSessionPayload = {
   agent_id?: string | null;
   title?: string | null;
+  team_id?: string | null;
 };
 export type ChatMessage2 = {
   session_id: string;
@@ -1159,9 +1260,9 @@ export type FeedbackRecord = {
 export type FeedbackPayload = {
   rating: number;
   comment?: string | null;
-  messageId: string;
-  sessionId: string;
-  agentName: string;
+  message_id: string;
+  session_id: string;
+  agent_id: string;
 };
 export type LogEventDto = {
   ts: number;
@@ -1242,11 +1343,18 @@ export type AgentTaskRecordV1 = {
 export const {
   useListAgentsAgenticV1AgentsGetQuery,
   useLazyListAgentsAgenticV1AgentsGetQuery,
-  useCreateAgentAgenticV1AgentsCreatePostMutation,
-  useGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
-  useLazyGetAgentGraphAgenticV1AgentsAgentIdGraphGetQuery,
+  useCreateV2AgentAgenticV1AgentsV2CreatePostMutation,
+  useCreateV1AgentAgenticV1AgentsV1CreatePostMutation,
+  useListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
+  useLazyListReactAgentProfilesAgenticV1AgentsReactProfilesGetQuery,
+  useInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
+  useLazyInspectV2AgentAgenticV1AgentsAgentIdInspectGetQuery,
   useListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
   useLazyListDeclaredAgentClassPathsAgenticV1AgentsClassPathsGetQuery,
+  useListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery,
+  useLazyListV2DefinitionRefsAgenticV1AgentsV2DefinitionRefsGetQuery,
+  useGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery,
+  useLazyGetClassPathTuningAgenticV1AgentsClassPathsTuningGetQuery,
   useUpdateAgentAgenticV1AgentsUpdatePutMutation,
   useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation,
   useRestoreAgentsAgenticV1AgentsRestorePostMutation,
@@ -1269,6 +1377,8 @@ export const {
   useLazyGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery,
   useGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
   useLazyGetUserPermissionsAgenticV1ConfigPermissionsGetQuery,
+  useGetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetQuery,
+  useLazyGetTeamModelRoutingConfigAgenticV1ConfigModelRoutingTeamsTeamIdGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useLazyGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useCreateSessionAgenticV1ChatbotSessionPostMutation,

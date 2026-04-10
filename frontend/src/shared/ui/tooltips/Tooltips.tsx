@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { Box, Tooltip, TooltipProps, Typography, useTheme } from "@mui/material";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { HTMLAttributes, useCallback, useEffect, useRef, useState } from "react";
 import { getFloatingSurfaceTokens } from "../surfaces/floatingSurface";
 
 const TOOLTIP_ENTER_DELAY_MS = 800;
@@ -68,7 +68,7 @@ const useDelayedTooltip = () => {
 const attachTooltipHandlers = (child: React.ReactElement, onOpen: (delayMs: number) => void, onClose: () => void) => {
   const childProps = child.props as React.HTMLAttributes<HTMLElement>;
 
-  return React.cloneElement(child, {
+  return React.cloneElement(child as React.ReactElement<HTMLAttributes<HTMLElement>>, {
     onMouseEnter: mergeHandlers(childProps.onMouseEnter, () => onOpen(TOOLTIP_ENTER_DELAY_MS)),
     onMouseLeave: mergeHandlers(childProps.onMouseLeave, () => onClose()),
     onFocus: mergeHandlers(childProps.onFocus, () => onOpen(TOOLTIP_ENTER_DELAY_MS)),

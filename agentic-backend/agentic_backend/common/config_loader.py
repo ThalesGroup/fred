@@ -15,50 +15,31 @@
 from __future__ import annotations
 
 import logging
-import os
 
-from dotenv import load_dotenv
+from fred_core.common import ConfigFiles, load_configuration_with_config_files
 
+from agentic_backend.common.catalog_overrides import apply_external_catalog_overrides
 from agentic_backend.common.structures import Configuration
 from agentic_backend.common.utils import parse_server_configuration
 
-_last_env_file_path: str | None = None
-_last_config_file_path: str | None = None
+_config_files = ConfigFiles(logger=logging.getLogger(__name__))
 
 
-def load_environment(dotenv_path: str | None = None) -> str:
-    env_path = dotenv_path or os.getenv("ENV_FILE", "./config/.env")
-    if load_dotenv(env_path):
-        logging.getLogger().info(
-            "[CONFIG] Loaded environment variables from: %s",
-            env_path,
-        )
-    else:
-        logging.getLogger().warning("No .env file found at: %s", env_path)
-    global _last_env_file_path
-    _last_env_file_path = env_path
-    return env_path
+def _parse_configuration(config_file: str) -> Configuration:
+    configuration = parse_server_configuration(config_file)
+    return apply_external_catalog_overrides(configuration)
 
 
 def load_configuration() -> Configuration:
-    load_environment()
-    default_config_file = "./config/configuration.yaml"
-    config_file = os.environ.get("CONFIG_FILE", default_config_file)
-    if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    configuration: Configuration = parse_server_configuration(config_file)
-    logging.getLogger(__name__).info(
-        "[CONFIG] Loaded configuration from: %s",
-        config_file,
+    return load_configuration_with_config_files(
+        _config_files,
+        _parse_configuration,
     )
-    global _last_config_file_path
-    _last_config_file_path = config_file
-    return configuration
 
 
 def get_loaded_env_file_path() -> str | None:
-    return _last_env_file_path
+    return _config_files.get_loaded_env_file_path()
 
 
 def get_loaded_config_file_path() -> str | None:
-    return _last_config_file_path
+    return _config_files.get_loaded_config_file_path()

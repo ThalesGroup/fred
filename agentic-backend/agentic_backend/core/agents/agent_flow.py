@@ -679,15 +679,13 @@ class AgentFlow:
     def get_id(self) -> str:
         """
         Return the agent's name.
-        This is the primary identifier for the agent. In particular, it is used
-        to identify the agent in a leader's crew.
+        This is the primary identifier for the agent.
         """
         return self.agent_settings.id
 
     def get_description(self) -> str:
         """
-        Return the agent's description. This is key for the leader to decide
-        which agent to delegate to.
+        Return the agent's description.
         """
         return self._tuning.description if self._tuning else ""
 
@@ -701,8 +699,7 @@ class AgentFlow:
     def get_tags(self) -> List[str]:
         """
         Return the agent's tags. Tags are used for categorization and
-        discovery in the UI. It is also used by leaders to select agents
-        for their crew based on required skills.
+        discovery in the UI.
         """
         return self._tuning.tags if self._tuning else []
 
@@ -877,6 +874,11 @@ class AgentFlow:
         Raises:
             AssetUploadError: If the upload fails (e.g., HTTP error).
         """
+        # Scope files under the session so they can be cleaned up on session delete
+        session_id = getattr(self.runtime_context, "session_id", None)
+        if session_id:
+            key = f"{session_id}/{key}"
+
         logger.info(
             "UPLOADING_ASSET: Attempting to upload asset to user store: %s", key
         )

@@ -12,7 +12,7 @@
 }
 
 .rbc-day-slot .rbc-events-container {
-  margin-right: 0px;
+  margin-right: 0;
 }
 
 .rbc-timeslot-group {
@@ -23,10 +23,21 @@
   display: none;
 }
 
+* {
+  box-sizing: border-box;
+  corner-shape: superellipse(1.4);
+}
+
 body {
-  font-family: "Roboto", sans-serif;
-  font-size: 12px;
   margin: 0;
+  background-color: var(--surface-container-lowest) !important;
   padding: 0;
-  background-color: #f0f0f0;
+  overflow: hidden;
+  font-size: 12px;
+  font-family: "Roboto", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }

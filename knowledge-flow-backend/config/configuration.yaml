@@ -21,9 +21,9 @@ app:
   metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9111
-  kpi_process_metrics_interval_sec: 10
-  kpi_log_summary_interval_sec: 10.0
-  kpi_log_summary_top_n: 20
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
 
 processing:
   default_profile: fast
@@ -32,6 +32,10 @@ processing:
       use_gpu: true
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: pypdfium2
         images_scale: 1.0
@@ -53,8 +57,6 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
         - suffix: ".png"
@@ -77,17 +79,23 @@ processing:
       use_gpu: true
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
-        backend: dlparse_v4
-        images_scale: 2.0
+        backend: docling_parse
+        images_scale: 1.5
         generate_picture_images: false
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_processors:
         - suffix: ".pdf"
-          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
         - suffix: ".docx"
           class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
         - suffix: ".pptx"
@@ -98,8 +106,6 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
         - suffix: ".png"
@@ -122,14 +128,20 @@ processing:
       use_gpu: true
       generate_summary: false
       process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
-        backend: dlparse_v4
+        backend: docling_parse
         images_scale: 2.0
         generate_picture_images: true
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
         do_table_structure: true
         do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -143,8 +155,6 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
         - suffix: ".png"
@@ -163,7 +173,6 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-
 security:
   m2m:
     enabled: false
@@ -202,6 +211,7 @@ document_sources:
     provider: local_path
     base_path: ~/Documents/Fred
     description: "Personal local documents available for pull-mode ingestion"
+
 embedding_model:
   provider: openai
   name: text-embedding-3-large
@@ -218,7 +228,7 @@ embedding_model:
 # Configuration for the LLM used for summary, keyword generation
 # and other text generation tasks.
 chat_model:
-  provider: openai # openai | azure | ollama
+  provider: openai # openai | azure | azure-apim | ollama | vertex-ai | vertex-ai-model-garden
   name: "gpt-4o-mini"
   settings:
     temperature: 0
@@ -231,35 +241,6 @@ chat_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
-  # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-# chat_model:
-#   provider: ollama
-#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
-#   settings:
-#     base_url: http://localhost:11434
-#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-
-# chat_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-gpt-4o              # Azure deployment name for your chat model
-#   settings:
-#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     api_version: 2024-05-01-preview
-
-# chat_model:
-#   provider: azure-apim        # openai | azure | ollama
-#   # azure use deployment name instead of a plain model name as openai. The principle
-#   # is the same.
-#   name: fred-gpt-4o       # azure: deployment name, ollama: 'qwen2.5:3b-instruct' etc.
-#   settings:
-#     azure_ad_client_id: "5e5d67c9-22af-4044-bc8e-5df58d7a5e6e"
-#     azure_ad_client_scope: "api://5e5d67c9-22af-4044-bc8e-5df58d7a5e6e/.default"
-#     azure_apim_base_url: "https://tehopenai.openai.azure.com/"
-#     azure_apim_resource_path: "/genai-aoai-inference/v2"
-#     azure_openai_api_version: "2024-06-01"
-#     azure_tenant_id: "737c6905-f186-4bcf-afb3-43e349ee23a3"
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
@@ -288,15 +269,8 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-  catalog_store:
-    type: "postgres"
-    table: catalog
-  prompt_store:
-    type: "postgres"
-    table: prompts
   resource_store:
     type: "postgres"
-    table: resource
   kpi_store:
     type: "log"
     level: "DEBUG"
@@ -304,14 +278,10 @@ storage:
     type: "in_memory"
   tag_store:
     type: "postgres"
-    table: tags
   metadata_store:
     type: "postgres"
-    table: metadata
   task_store:
     type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
   vector_store:
     type: chroma
   tabular_stores:
@@ -322,6 +292,13 @@ storage:
       path: "~/.fred/knowledge-flow/db.duckdb"
       mode: "read_and_write"
 
+integrations:
+  prometheus:
+    base_url: http://localhost:9090
+    verify_ssl: false
+    timeout_seconds: 15.0
+    username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
+
 mcp:
   reports_enabled: true
   kpi_enabled: true
@@ -331,6 +308,7 @@ mcp:
   templates_enabled: true
   resources_enabled: true
   opensearch_ops_enabled: true
+  prometheus_ops_enabled: true
   neo4j_enabled: false
   filesystem_enabled: true
 

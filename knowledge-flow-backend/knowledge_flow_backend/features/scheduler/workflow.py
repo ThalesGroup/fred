@@ -75,6 +75,16 @@ def _wf_profile_value(file: Any) -> str | None:
     return str(raw)
 
 
+def _wf_timeout_seconds(value: Any, *, default_seconds: int = 3600) -> int:
+    try:
+        parsed = int(value)
+        if parsed > 0:
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    return default_seconds
+
+
 async def _wf_run_parent_pipeline(
     *,
     definition: Any,
@@ -153,12 +163,20 @@ class GetPushFileMetadata:
 @workflow.defn
 class PullInputProcess:
     @workflow.run
-    async def run(self, user: Any, metadata: Any, profile: Any = None) -> Any:
+    async def run(
+        self,
+        user: Any,
+        metadata: Any,
+        profile: Any = None,
+        input_activity_timeout_seconds: int = 3600,
+    ) -> Any:
         workflow.logger.info("[SCHEDULER] PullInputProcess")
+        timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "pull_input_process",
             args=[user, metadata, profile],
-            schedule_to_close_timeout=timedelta(hours=1),
+            start_to_close_timeout=timedelta(seconds=timeout_seconds),
+            heartbeat_timeout=timedelta(minutes=1),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
 
@@ -166,12 +184,21 @@ class PullInputProcess:
 @workflow.defn
 class PushInputProcess:
     @workflow.run
-    async def run(self, user: Any, input_file: str, metadata: Any, profile: Any = None) -> Any:
+    async def run(
+        self,
+        user: Any,
+        input_file: str,
+        metadata: Any,
+        profile: Any = None,
+        input_activity_timeout_seconds: int = 3600,
+    ) -> Any:
         workflow.logger.info("[SCHEDULER] PushInputProcess: %s", input_file or "<resolve-on-worker>")
+        timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
         return await workflow.execute_activity(
             "push_input_process",
             args=[user, metadata, input_file, profile],
-            schedule_to_close_timeout=timedelta(hours=1),
+            start_to_close_timeout=timedelta(seconds=timeout_seconds),
+            heartbeat_timeout=timedelta(minutes=1),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
 
@@ -227,7 +254,12 @@ class ProcessPullFile:
         )
         metadata = await workflow.execute_child_workflow(
             PullInputProcess.run,
-            args=[_wf_get(file, "processed_by"), metadata, _wf_profile_value(file)],
+            args=[
+                _wf_get(file, "processed_by"),
+                metadata,
+                _wf_profile_value(file),
+                _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+            ],
             id=_wf_child_id("PullInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
@@ -270,7 +302,13 @@ class ProcessPushFile:
         )
         metadata = await workflow.execute_child_workflow(
             PushInputProcess.run,
-            args=[_wf_get(file, "processed_by"), "", metadata, _wf_profile_value(file)],
+            args=[
+                _wf_get(file, "processed_by"),
+                "",
+                metadata,
+                _wf_profile_value(file),
+                _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+            ],
             id=_wf_child_id("PushInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )

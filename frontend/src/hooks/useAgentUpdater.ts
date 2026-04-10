@@ -3,7 +3,7 @@
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../common/agent";
 import { useToast } from "../components/ToastProvider";
-import { Leader, useUpdateAgentAgenticV1AgentsUpdatePutMutation } from "../slices/agentic/agenticOpenApi";
+import { Agent2, useUpdateAgentAgenticV1AgentsUpdatePutMutation } from "../slices/agentic/agenticOpenApi";
 
 // Helper to normalize the error structure from the API (RTK Query error structure)
 type ApiError = { data?: { detail?: string | string[] } } | Error;
@@ -32,43 +32,24 @@ export function useAgentUpdater() {
   // -------------------------------------
 
   const updateEnabled = async (agent: AnyAgent, enabled: boolean) => {
-    // The cast to AnyAgent is clean here as the type definition ensures correct properties
-    const payload: AnyAgent = { ...agent, enabled };
+    const payload: Agent2 = { ...agent, enabled };
 
     try {
-      // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload }).unwrap();
+      return await mutate({ agentInput: payload }).unwrap();
     } catch (e: unknown) {
       handleUpdateError(e, t("agentHub.errors.updateFailed"));
     }
   };
 
-  const updateTuning = async (
-    agent: AnyAgent,
-    newTuning: NonNullable<AnyAgent["tuning"]>,
-  ) => {
-    // The cast to AnyAgent is clean here as the type definition ensures correct properties
-    const payload: AnyAgent = { ...agent, tuning: newTuning };
+  const updateTuning = async (agent: AnyAgent, newTuning: NonNullable<AnyAgent["tuning"]>) => {
+    const payload: Agent2 = { ...agent, tuning: newTuning };
 
     try {
-      // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload }).unwrap();
+      return await mutate({ agentInput: payload }).unwrap();
     } catch (e: unknown) {
       handleUpdateError(e, t("agentHub.errors.tuningUpdateFailed"));
     }
   };
 
-  const updateLeaderCrew = async (leader: Leader & { type: "leader" }, crew: string[]) => {
-    // The payload is already guaranteed to be a Leader | AnyAgent
-    const payload: AnyAgent = { ...leader, crew };
-
-    try {
-      // The mutation expects a type compatible with Agent | Leader, which AnyAgent is.
-      return await mutate({ agentSettings: payload }).unwrap();
-    } catch (e: unknown) {
-      handleUpdateError(e, t("agentHub.errors.crewUpdateFailed"));
-    }
-  };
-
-  return { updateEnabled, updateTuning, updateLeaderCrew, isLoading: meta.isLoading };
+  return { updateEnabled, updateTuning, isLoading: meta.isLoading };
 }

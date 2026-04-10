@@ -14,7 +14,7 @@
 
 import CloseIcon from "@mui/icons-material/Close";
 import type { BadgeProps, TooltipProps } from "@mui/material";
-import { Badge, Box, Button, ClickAwayListener, IconButton, Paper, Stack, useTheme } from "@mui/material";
+import { Badge, Box, Button, ClickAwayListener, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
 import { DetailedTooltip, SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 
@@ -36,10 +36,11 @@ type ChatWidgetShellProps = {
   tooltipDescription?: string;
   tooltipDisabledReason?: string;
   tooltipPlacement?: TooltipProps["placement"];
-  actionLabel: string;
-  onAction: (event?: MouseEvent<HTMLButtonElement>) => void;
+  actionLabel?: string;
+  onAction?: (event?: MouseEvent<HTMLButtonElement>) => void;
   actionDisabled?: boolean;
   actionStartIcon?: ReactNode;
+  headerTitle?: string;
   headerActions?: ReactNode;
   children: ReactNode;
 };
@@ -66,6 +67,7 @@ const ChatWidgetShell = ({
   onAction,
   actionDisabled,
   actionStartIcon,
+  headerTitle,
   headerActions,
   children,
 }: ChatWidgetShellProps) => {
@@ -77,6 +79,8 @@ const ChatWidgetShell = ({
   const resolvedBadgeColor = badgeColor ?? (disabled ? "default" : "primary");
   const resolvedBadgeVariant = showDot ? "dot" : (badgeVariant ?? "standard");
   const badgeInvisible = !hasCount && !showDot;
+  const hasPrimaryAction = Boolean(actionLabel && onAction);
+  const showHeaderTitle = Boolean(!hasPrimaryAction && headerTitle);
   const resolvedActionDisabled = typeof actionDisabled === "boolean" ? actionDisabled : disabled;
 
   const trigger = (
@@ -131,27 +135,37 @@ const ChatWidgetShell = ({
     >
       <Stack spacing={1} sx={{ pb: 0.5 }}>
         <Box display="flex" alignItems="center" gap={1} sx={{ width: "100%" }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={onAction}
-              disabled={resolvedActionDisabled}
-              startIcon={actionStartIcon}
-              sx={{
-                borderRadius: "8px",
-                textTransform: "none",
-                minHeight: 28,
-                px: 1.5,
-                justifyContent: "flex-start",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {actionLabel}
-            </Button>
-          </Box>
+          {hasPrimaryAction ? (
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onAction}
+                disabled={resolvedActionDisabled}
+                startIcon={actionStartIcon}
+                sx={{
+                  borderRadius: "8px",
+                  textTransform: "none",
+                  minHeight: 28,
+                  px: 1.5,
+                  justifyContent: "flex-start",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {actionLabel}
+              </Button>
+            </Box>
+          ) : (
+            <Box sx={{ flex: 1, minWidth: 0, px: 0.5 }}>
+              {showHeaderTitle ? (
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  {headerTitle}
+                </Typography>
+              ) : null}
+            </Box>
+          )}
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             {headerActions}
             <IconButton size="small" onClick={onClose}>

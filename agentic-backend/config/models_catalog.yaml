@@ -1,0 +1,187 @@
+version: v1
+
+common_model_settings:
+  max_retries: 0
+  timeout:
+    connect: 10.0
+    read: 120.0
+    write: 30.0
+    pool: 5.0
+  http_client_limits:
+    max_connections: 500
+    max_keepalive_connections: 200
+    keepalive_expiry_seconds: 10
+  temperature: 0.0
+
+default_profile_by_capability:
+  chat: default.chat.openai.prod
+  language: default.language.openai.prod
+
+profiles:
+  - profile_id: default.chat.openai.prod
+    capability: chat
+    description: "Default balanced chat model for production conversations."
+    model:
+      provider: openai
+      name: gpt-5.1
+      settings: {}
+
+  - profile_id: default.language.openai.prod
+    capability: language
+    description: "Default balanced language model for structured text tasks."
+    model:
+      provider: openai
+      name: gpt-5.1
+      settings: {}
+
+  - profile_id: default.chat.local
+    capability: chat
+    description: "Local default chat profile with retries and shorter timeout."
+    model:
+      provider: openai
+      name: gpt-5.1
+      settings:
+        max_retries: 2
+        request_timeout: 90
+        temperature: 0.0
+
+  - profile_id: default.language.local
+    capability: language
+    description: "Local default language profile with retries and shorter timeout."
+    model:
+      provider: openai
+      name: gpt-5.1
+      settings:
+        max_retries: 2
+        request_timeout: 90
+        temperature: 0.0
+
+  - profile_id: chat.openai.gpt52
+    capability: chat
+    description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
+    model:
+      provider: openai
+      name: gpt-5.2
+      settings: {}
+
+  - profile_id: language.openai.gpt52
+    capability: language
+    description: "Highest-quality GPT-5.2 profile for demanding language workloads."
+    model:
+      provider: openai
+      name: gpt-5.2
+      settings: {}
+
+  - profile_id: chat.openai.gpt5
+    capability: chat
+    description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
+    model:
+      provider: openai
+      name: gpt-5
+      settings: {}
+
+  - profile_id: language.openai.gpt5
+    capability: language
+    description: "General-purpose GPT-5 language profile with strong overall quality."
+    model:
+      provider: openai
+      name: gpt-5
+      settings: {}
+
+  - profile_id: chat.openai.gpt5mini
+    capability: chat
+    description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
+    model:
+      provider: openai
+      name: gpt-5-mini
+      settings: {}
+
+  - profile_id: language.openai.gpt5mini
+    capability: language
+    description: "Faster and lower-cost GPT-5 Mini profile for lightweight language tasks."
+    model:
+      provider: openai
+      name: gpt-5-mini
+      settings: {}
+
+  - profile_id: chat.openai.gpt5nano
+    capability: chat
+    description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
+    model:
+      provider: openai
+      name: gpt-5-nano
+      settings: {}
+
+  - profile_id: language.openai.gpt5nano
+    capability: language
+    description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple language tasks."
+    model:
+      provider: openai
+      name: gpt-5-nano
+      settings: {}
+
+  - profile_id: chat.openai.gpt41
+    capability: chat
+    description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
+    model:
+      provider: openai
+      name: gpt-4.1
+      settings: {}
+
+  - profile_id: language.openai.gpt41
+    capability: language
+    description: "Reliable GPT-4.1 language profile for stable text generation."
+    model:
+      provider: openai
+      name: gpt-4.1
+      settings: {}
+
+  - profile_id: chat.openai.gpt41mini
+    capability: chat
+    description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
+    model:
+      provider: openai
+      name: gpt-4.1-mini
+      settings: {}
+
+  - profile_id: language.openai.gpt41mini
+    capability: language
+    description: "Cost-efficient GPT-4.1 Mini profile for lightweight language work."
+    model:
+      provider: openai
+      name: gpt-4.1-mini
+      settings: {}
+
+  - profile_id: chat.azure_apim.gpt4o
+    capability: chat
+    description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
+    model:
+      provider: azure-apim
+      name: gpt-4o
+      settings:
+        azure_apim_base_url: "https://trustnest.azure-api.net"
+        azure_apim_resource_path: "/genai-aoai-inference/v2"
+        azure_openai_api_version: "2024-06-01"
+        azure_tenant_id: "${AZURE_TENANT_ID}"
+        azure_ad_client_id: "${AZURE_AD_CLIENT_ID}"
+        azure_ad_client_scope: "${AZURE_AD_CLIENT_SCOPE}"
+
+  - profile_id: chat.ollama.mistral
+    capability: chat
+    description: "Local Ollama Mistral profile for private/offline chat experimentation."
+    model:
+      provider: ollama
+      name: "mistral:latest"
+      settings:
+        base_url: "http://host.docker.internal:11434"
+
+  - profile_id: language.ollama.mistral
+    capability: language
+    description: "Local Ollama Mistral profile for private/offline language tasks."
+    model:
+      provider: ollama
+      name: "mistral:latest"
+      settings:
+        base_url: "http://host.docker.internal:11434"
+
+rules: []

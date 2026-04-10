@@ -16,7 +16,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal, Optional
 
-from fred_core import BaseModelWithId, RelationType, Resource, TagPermission
+from fred_core import RelationType, Resource, TagPermission
+from fred_core.common import BaseModelWithId
 from pydantic import BaseModel, Field, field_validator
 
 from knowledge_flow_backend.features.resources.structures import ResourceKind

@@ -35,6 +35,80 @@ def default_or_unknown(value: str, default="None") -> str:
 class DocxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts DOCX files to Markdown while preserving headings, tables, and basic formatting."
 
+    def _annotate_markdown_tables(self, md_content: str) -> str:
+        """Wrap Markdown tables with TABLE_START/END markers for downstream chunking."""
+
+        def is_pipe_separator(line: str) -> bool:
+            s = line.strip()
+            if "|" not in s or "-" not in s:
+                return False
+            return all(ch in "|-: " for ch in s)
+
+        def is_pipe_row(line: str) -> bool:
+            s = line.strip()
+            return "|" in s and not s.startswith("```")
+
+        def is_grid_border(line: str) -> bool:
+            s = line.strip()
+            return s.startswith("+") and s.endswith("+") and any(ch in s for ch in "-=")
+
+        def is_grid_row(line: str) -> bool:
+            s = line.strip()
+            return s.startswith("|") and s.endswith("|")
+
+        lines = md_content.splitlines()
+        out: list[str] = []
+        i = 0
+        table_idx = 0
+        while i < len(lines):
+            line = lines[i]
+
+            # Preserve existing annotations untouched
+            if line.strip().startswith("<!-- TABLE_START"):
+                out.append(line)
+                i += 1
+                while i < len(lines):
+                    out.append(lines[i])
+                    if lines[i].strip().startswith("<!-- TABLE_END"):
+                        i += 1
+                        break
+                    i += 1
+                continue
+
+            # Pipe table detection: header + separator
+            if i + 1 < len(lines) and is_pipe_row(line) and is_pipe_separator(lines[i + 1]):
+                start = i
+                i += 2
+                while i < len(lines) and lines[i].strip() and is_pipe_row(lines[i]):
+                    i += 1
+                table_md = "\n".join(lines[start:i]).strip()
+                if table_md:
+                    table_idx += 1
+                    out.append(f"<!-- TABLE_START:id=docx_{table_idx} -->")
+                    out.append(table_md)
+                    out.append("<!-- TABLE_END -->")
+                continue
+
+            # Grid table detection (pandoc-style)
+            if is_grid_border(line):
+                start = i
+                i += 1
+                while i < len(lines) and lines[i].strip() and (is_grid_border(lines[i]) or is_grid_row(lines[i])):
+                    i += 1
+                table_md = "\n".join(lines[start:i]).strip()
+                if table_md:
+                    table_idx += 1
+                    out.append(f"<!-- TABLE_START:id=docx_{table_idx} -->")
+                    out.append(table_md)
+                    out.append("<!-- TABLE_END -->")
+                continue
+
+            out.append(line)
+            i += 1
+
+        # Preserve trailing newline behavior
+        return "\n".join(out)
+
     def check_file_validity(self, file_path: Path) -> bool:
         try:
             with zipfile.ZipFile(file_path, "r") as docx_zip:
@@ -79,7 +153,7 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
                 [
                     "pandoc",
                     "--to",
-                    "markdown_strict",
+                    "markdown_strict+pipe_tables",
                     str(file_path),
                     "-o",
                     str(md_path),
@@ -121,6 +195,9 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
 
         # Change media path to use api endpoint
         md_content = md_content.replace(str(output_dir), f"knowledge-flow/v1/markdown/{document_uid}")
+
+        # Annotate tables so chunker keeps them intact
+        md_content = self._annotate_markdown_tables(md_content)
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_content)

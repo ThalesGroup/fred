@@ -13,33 +13,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
-import AttachFileIcon from "@mui/icons-material/AttachFile";
-import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import CodeIcon from "@mui/icons-material/Code";
-import GroupIcon from "@mui/icons-material/Group"; // for crew
-import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
+import EditIcon from "@mui/icons-material/Edit";
+import ManageSearchIcon from "@mui/icons-material/ManageSearch";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-
-import TuneIcon from "@mui/icons-material/Tune";
-import { Box, Card, CardContent, IconButton, Stack, Typography, useTheme } from "@mui/material";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import { Box, Button, Card, IconButton, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
-
 // OpenAPI types
-import { AnyAgent } from "../../common/agent";
+import TryIcon from "@mui/icons-material/Try";
+import { Link } from "react-router-dom";
+import { AnyAgent, isLikelyV2DefinitionAgent } from "../../common/agent";
 import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
-import { Leader } from "../../slices/agentic/agenticOpenApi";
-
 type AgentCardProps = {
   agent: AnyAgent;
   onEdit?: (agent: AnyAgent) => void;
   onToggleEnabled?: (agent: AnyAgent) => void;
-  onManageCrew?: (leader: Leader & { type: "leader" }) => void; // only visible for leaders
-  onManageAssets?: (agent: AnyAgent) => void;
   onInspectCode?: (agent: AnyAgent) => void;
-  onViewA2ACard?: (agent: AnyAgent) => void;
-  onInspectGraph?: (agent: AnyAgent) => void;
+  onInspectAgent?: (agent: AnyAgent) => void;
 };
 
 /**
@@ -49,38 +41,31 @@ type AgentCardProps = {
  * Edit → schema-driven tuning UI
  * Enable/Disable → operational switch
  * Delete → remove the agent
- * Manage Crew → leader-only relation editor (leader owns crew membership)
  */
-export const AgentCard = ({
-  agent,
-  onEdit,
-  onToggleEnabled,
-  onManageCrew,
-  onManageAssets,
-  onInspectCode,
-  onViewA2ACard,
-  onInspectGraph,
-}: AgentCardProps) => {
+export const AgentCard = ({ agent, onEdit, onToggleEnabled, onInspectCode, onInspectAgent }: AgentCardProps) => {
   const { t } = useTranslation();
-  const theme = useTheme();
   const isEnabled = agent.enabled !== false;
-  const hasA2aCard = Boolean(agent.metadata && (agent.metadata as any).a2a_card);
-  const isA2A = Boolean(agent.metadata && (agent.metadata as any).a2a_base_url);
-  const a2aBorder = theme.palette.success.main;
+  const showInspection = Boolean(onInspectAgent && isLikelyV2DefinitionAgent(agent));
 
   const { showAgentCode, showAgentDisableButton } = useFrontendProperties();
 
   return (
     <Card
       sx={{
-        pt: 2,
+        pt: 1.5,
+        pb: 2,
         px: 2,
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        gap: 2,
+        gap: 1.5,
         transition: "border-color 0.2s ease, transform 0.2s ease",
         userSelect: "none",
+        borderRadius: 4,
+        "@supports (corner-shape: squircle)": {
+          borderRadius: 6,
+          cornerShape: "squircle",
+        },
       }}
     >
       {/* Header */}
@@ -102,61 +87,31 @@ export const AgentCard = ({
           }}
         >
           {/* Left: Agent Chip (includes name) */}
-          <Box sx={{ flexShrink: 0 }}>
-            {isA2A ? (
-              <Box
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 0.6,
-                  minWidth: 0,
-                }}
-              >
-                <CloudQueueIcon
-                  sx={{
-                    fontSize: 18,
-                    color: a2aBorder,
-                    flexShrink: 0,
-                  }}
-                />
-                <Typography
-                  variant="body1"
-                  fontWeight={700}
-                  sx={{
-                    color: a2aBorder,
-                    lineHeight: 1.2,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    maxWidth: 180,
-                  }}
-                  title={agent.name}
-                >
-                  {agent.name}
-                </Typography>
-              </Box>
-            ) : (
-              <Typography
-                variant="subtitle1"
-                color="primary"
-                sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
-              >
-                {agent.name}
-              </Typography>
-            )}
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="subtitle1"
+              color="primary"
+              sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "1.125rem" }}
+            >
+              {agent.name}
+            </Typography>
           </Box>
         </Box>
 
         {/* ROW 2: Agent Role (Moved here) */}
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body1" color="textPrimary" sx={{ lineHeight: 1.25 }}>
+          <Typography
+            variant="body1"
+            color="textPrimary"
+            sx={{ lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
             {agent.tuning.role}
           </Typography>
         </Box>
       </Box>
 
       {/* Body */}
-      <CardContent
+      <Box
         sx={{
           p: 0,
           display: "flex",
@@ -183,95 +138,63 @@ export const AgentCard = ({
           {agent.tuning.description}
         </Typography>
         {/* Footer actions (unchanged) */}
-        <Stack direction="row" gap={0.5} sx={{ ml: "auto" }}>
-          {agent.type === "leader" && onManageCrew && (
-            <SimpleTooltip title={t("agentCard.manageCrew", "Manage crew")}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Stack direction="row" gap={0.5}>
+            {onEdit && (
               <IconButton
-                size="small"
-                onClick={() => onManageCrew(agent)}
-                sx={{ color: "text.secondary" }}
-                aria-label="manage crew"
-              >
-                <GroupIcon fontSize="small" />
-              </IconButton>
-            </SimpleTooltip>
-          )}
-          {!isA2A && onManageAssets && (
-            <SimpleTooltip title={t("agentCard.manageAssets")}>
-              <IconButton
-                size="small"
-                onClick={() => onManageAssets(agent)}
-                sx={{ color: "text.secondary" }}
-                aria-label="manage agent assets"
-              >
-                <AttachFileIcon fontSize="small" />
-              </IconButton>
-            </SimpleTooltip>
-          )}
-          {!isA2A && onEdit && (
-            <SimpleTooltip title={t("agentCard.edit")}>
-              <IconButton
-                size="small"
+                size="medium"
                 onClick={() => onEdit(agent)}
                 sx={{ color: "text.secondary" }}
                 aria-label="edit agent"
               >
-                <TuneIcon fontSize="small" />
+                <EditIcon fontSize="medium" />
               </IconButton>
-            </SimpleTooltip>
-          )}
-          {!isA2A && showAgentCode && onInspectCode && (
-            <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
+            )}
+            {showAgentCode && onInspectCode && (
+              <SimpleTooltip title={t("agentCard.inspectCode", "Inspect Source Code")}>
+                <IconButton
+                  size="medium"
+                  // This calls the handler provided by the parent (AgentHub)
+                  onClick={() => onInspectCode(agent)}
+                  sx={{ color: "text.secondary" }}
+                  aria-label="inspect agent source code"
+                >
+                  <CodeIcon fontSize="medium" />
+                </IconButton>
+              </SimpleTooltip>
+            )}
+            {showInspection && (
               <IconButton
-                size="small"
-                // This calls the handler provided by the parent (AgentHub)
-                onClick={() => onInspectCode(agent)}
+                size="medium"
+                onClick={() => onInspectAgent?.(agent)}
                 sx={{ color: "text.secondary" }}
-                aria-label="inspect agent source code"
+                aria-label="inspect agent"
               >
-                <CodeIcon fontSize="small" />
+                <ManageSearchIcon fontSize="medium" />
               </IconButton>
-            </SimpleTooltip>
-          )}
-          {onInspectGraph && (
-            <SimpleTooltip title={t("agentCard.inspectGraph", "Inspect Graph")}>
+            )}
+            {showAgentDisableButton && onToggleEnabled && (
               <IconButton
-                size="small"
-                onClick={() => onInspectGraph(agent)}
-                sx={{ color: "text.secondary" }}
-                aria-label="inspect agent graph"
-              >
-                <AccountTreeIcon fontSize="small" />
-              </IconButton>
-            </SimpleTooltip>
-          )}
-          {onViewA2ACard && hasA2aCard && (
-            <SimpleTooltip title={t("agentCard.viewA2ACard", "View A2A card")}>
-              <IconButton
-                size="small"
-                onClick={() => onViewA2ACard(agent)}
-                sx={{ color: "text.secondary" }}
-                aria-label="view a2a card"
-              >
-                <VisibilityIcon fontSize="small" />
-              </IconButton>
-            </SimpleTooltip>
-          )}
-
-          {showAgentDisableButton && onToggleEnabled && (
-            <SimpleTooltip title={isEnabled ? t("agentCard.disable") : t("agentCard.enable")}>
-              <IconButton
-                size="small"
+                size="medium"
                 onClick={() => onToggleEnabled(agent)}
                 sx={{ color: "text.secondary" }} // Button color is neutral
                 aria-label={isEnabled ? "disable agent" : "enable agent"}
               >
-                <PowerSettingsNewIcon fontSize="small" />
+                {isEnabled ? <VisibilityIcon fontSize="medium" /> : <VisibilityOffIcon fontSize="medium" />}
               </IconButton>
-            </SimpleTooltip>
-          )}
-        </Stack>
-      </CardContent>
+            )}
+          </Stack>
+          <Button
+            size="medium"
+            variant="outlined"
+            startIcon={<TryIcon />}
+            component={Link}
+            to={`/new-chat/${agent.id}`}
+          >
+            Chat
+          </Button>
+        </Box>
+      </Box>
     </Card>
   );
 };

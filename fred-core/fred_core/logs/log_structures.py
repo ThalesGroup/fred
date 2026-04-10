@@ -18,7 +18,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from fred_core.common.structures import OpenSearchIndexConfig
+from fred_core.common import OpenSearchIndexConfig
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 

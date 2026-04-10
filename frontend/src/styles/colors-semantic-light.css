@@ -1,0 +1,43 @@
+/* Colors semantic - Light */
+[data-theme="light"] {
+  --primary: var(--indigo-40);
+  --on-primary: var(--indigo-99);
+  --primary-container: var(--indigo-90);
+  --on-primary-container: var(--indigo-10);
+  --secondary: var(--light-purple-40);
+  --on-secondary: var(--light-purple-99);
+  --secondary-container: var(--light-purple-90);
+  --on-secondary-container: var(--light-purple-10);
+  --tertiary: var(--light-blue-50);
+  --on-tertiary: var(--light-blue-100);
+  --tertiary-container: var(--light-blue-90);
+  --on-tertiary-container: var(--light-blue-10);
+  --on-surface: var(--cold-grey-10);
+  --on-surface-retreat: var(--cold-grey-30);
+  --surface-main: var(--cold-grey-98);
+  --on-surface-muted: var(--cold-grey-40);
+  --surface-container-highest: var(--cold-grey-100);
+  --surface-container-hight: var(--cold-grey-96);
+  --surface-container: var(--cold-grey-94);
+  --surface-container-low: var(--cold-grey-92);
+  --surface-container-lowest: var(--cold-grey-90);
+  --error: var(--red-40);
+  --on-error: var(--red-99);
+  --error-container: var(--red-90);
+  --on-error-container: var(--red-10);
+  --success: var(--cold-green-40);
+  --on-success: var(--cold-green-99);
+  --success-container: var(--cold-green-90);
+  --on-success-container: var(--cold-green-10);
+  --info: var(--light-blue-40);
+  --on-info: var(--light-blue-99);
+  --info-container: var(--light-blue-90);
+  --on-info-container: var(--light-blue-10);
+  --warning: var(--mustard-40);
+  --on-warning: var(--mustard-99);
+  --warning-container: var(--mustard-90);
+  --on-warning-container: var(--mustard-10);
+  --outline: var(--cold-grey-50);
+  --outline-retreat: var(--cold-grey-80);
+  --outline-muted: var(--cold-grey-80);
+}

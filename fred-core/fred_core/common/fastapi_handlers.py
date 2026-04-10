@@ -17,9 +17,33 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from fred_core.security.models import AuthorizationError
+from fred_core.security.models import AuthorizationError, Resource
 
 logger = logging.getLogger(__name__)
+
+_TEAM_PERMISSION_MESSAGES: dict[str, str] = {
+    "can_update_resources": "You are not allowed to manage resources in this team. Ask a team owner or manager.",
+    "can_update_agents": "You are not allowed to manage agents in this team. Ask a team owner or manager.",
+    "can_administer_members": "You are not allowed to manage members in this team.",
+    "can_administer_managers": "You are not allowed to manage managers in this team.",
+    "can_administer_owners": "You are not allowed to manage owners in this team.",
+    "can_read_members": "You are not allowed to view team members.",
+    "can_update_info": "You are not allowed to update this team.",
+}
+
+
+def _humanize_action(action: str) -> str:
+    return action.replace(":", " ").replace("_", " ")
+
+
+def _authorization_detail_for_client(exc: AuthorizationError) -> str:
+    action = str(exc.action)
+    if exc.resource == Resource.TEAM and action in _TEAM_PERMISSION_MESSAGES:
+        return _TEAM_PERMISSION_MESSAGES[action]
+
+    readable_action = _humanize_action(action)
+    readable_resource = exc.resource.value.replace("_", " ")
+    return f"You are not allowed to {readable_action} {readable_resource}."
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -31,7 +55,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         """Handle AuthorizationError by returning a 403 Forbidden response."""
         logger.warning(f"Authorization denied for user {exc.user_id}: {exc}")
-        return JSONResponse(status_code=403, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=403,
+            content={"detail": _authorization_detail_for_client(exc)},
+        )
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(

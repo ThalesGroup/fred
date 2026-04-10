@@ -47,7 +47,9 @@ const ChatDeepSearchWidget = ({
         "Delegates retrieval to a specialized agent for deeper search across your knowledge.",
       )}
       tooltipDisabledReason={
-        disabled ? t("chatbot.deepSearch.tooltipDisabled", "This agent does not support deep search delegation.") : undefined
+        disabled
+          ? t("chatbot.deepSearch.tooltipDisabled", "This agent does not support deep search delegation.")
+          : undefined
       }
       actionLabel={
         enabled

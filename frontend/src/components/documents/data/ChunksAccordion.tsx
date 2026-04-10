@@ -33,7 +33,6 @@ type Props = {
 };
 
 export const ChunksAccordion: React.FC<Props> = ({ vectors, chunks }) => {
-
   const pairs = useMemo(() => {
     const v = vectors ?? [];
     const len = Math.max(v.length, chunks.length);
@@ -46,58 +45,56 @@ export const ChunksAccordion: React.FC<Props> = ({ vectors, chunks }) => {
 
   return (
     <>
-      {
-        pairs.map(({ index, vector, chunk }) => (
-          <Box key={index} sx={{ mb: 1.5 }}>
-            { vector && (
-              <Accordion disableGutters>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle2">Vector #{index + 1}</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <VectorHeatmap vector={vector} />
-                </AccordionDetails>
-              </Accordion>
-            )}
-
+      {pairs.map(({ index, vector, chunk }) => (
+        <Box key={index} sx={{ mb: 1.5 }}>
+          {vector && (
             <Accordion disableGutters>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle2" noWrap>
-                    Chunk #{index + 1}
-                  </Typography>
-                  <Box sx={{ flexGrow: 1 }} />
-                  {chunk?.chunk_uid != null && (
-                    <Typography variant="caption" color="text.secondary" noWrap title={String(chunk.chunk_uid)}>
-                      {String(chunk.chunk_uid)}
-                    </Typography>
-                  )}
-                </Box>
+                <Typography variant="subtitle2">Vector #{index + 1}</Typography>
               </AccordionSummary>
               <AccordionDetails>
-                <Box
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    maxHeight: 240,
-                    overflowX: "auto",
-                    overflowY: "auto",
-                    whiteSpace: "pre", // keep original line breaks without wrapping
-                    fontFamily:
-                      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    wordBreak: "normal",
-                    overflowWrap: "normal",
-                  }}
-                >
-                  {chunk?.text ?? fallbackChunkText(chunk)}
-                </Box>
+                <VectorHeatmap vector={vector} />
               </AccordionDetails>
             </Accordion>
-          </Box>
-        ))
-      }
+          )}
+
+          <Accordion disableGutters>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display: "flex", alignItems: "center", width: "100%", gap: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" noWrap>
+                  Chunk #{index + 1}
+                </Typography>
+                <Box sx={{ flexGrow: 1 }} />
+                {chunk?.chunk_uid != null && (
+                  <Typography variant="caption" color="text.secondary" noWrap title={String(chunk.chunk_uid)}>
+                    {String(chunk.chunk_uid)}
+                  </Typography>
+                )}
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Box
+                component="pre"
+                sx={{
+                  m: 0,
+                  maxHeight: 240,
+                  overflowX: "auto",
+                  overflowY: "auto",
+                  whiteSpace: "pre", // keep original line breaks without wrapping
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  wordBreak: "normal",
+                  overflowWrap: "normal",
+                }}
+              >
+                {chunk?.text ?? fallbackChunkText(chunk)}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+        </Box>
+      ))}
     </>
   );
 };

@@ -3,7 +3,6 @@ import { Box } from "@mui/material";
 import { interpolateTurbo } from "d3-scale-chromatic";
 import { VectorItem } from "./DocumentDataCommon.tsx";
 
-
 function formatVector(v: VectorItem): string {
   try {
     if (v == null) return "(empty)";
@@ -62,7 +61,7 @@ export const VectorHeatmap: React.FC<{
   const rows = Math.ceil(n / columns);
   const width = columns * cellSize + (columns - 1) * gap;
   const height = rows * cellSize + (rows - 1) * gap;
-  const gain = 10  // Amplifying factor for better color distribution
+  const gain = 10; // Amplifying factor for better color distribution
 
   // Map numeric value to [-1,1] => [gain*-1,gain*1] => [0,1] for color interpolation (symmetrically around 0)
   const mapToPalette = (v: number) => {
@@ -98,18 +97,8 @@ export const VectorHeatmap: React.FC<{
           const dotR = Math.max(1, Math.floor(cellSize * 0.18));
           return (
             <g key={i}>
-              <rect
-                x={x}
-                y={y}
-                width={cellSize}
-                height={cellSize}
-                fill={color(v)}
-                rx={1}
-                ry={1}
-              />
-              {v < 0 && (
-                <circle cx={cx} cy={cy} r={dotR} fill="#000" />
-              )}
+              <rect x={x} y={y} width={cellSize} height={cellSize} fill={color(v)} rx={1} ry={1} />
+              {v < 0 && <circle cx={cx} cy={cy} r={dotR} fill="#000" />}
             </g>
           );
         })}

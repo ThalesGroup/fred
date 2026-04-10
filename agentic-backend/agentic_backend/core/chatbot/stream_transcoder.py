@@ -22,8 +22,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
-from fred_core import KeycloakUser, VectorSearchHit
+from fred_core import KeycloakUser
 from fred_core.kpi import BaseKPIWriter
+from fred_core.store import VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
@@ -31,8 +32,12 @@ from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 
 from agentic_backend.common.rags_utils import ensure_ranks
-from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.core.agents.agent_factory import RuntimeAgentInstance
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.v2.runtime_support import (
+    AsyncCheckpointReader,
+    load_checkpoint,
+)
 from agentic_backend.core.chatbot.chat_schema import (
     Channel,
     ChatMessage,
@@ -139,6 +144,24 @@ def _extract_fred_parts_from_tool_content(raw: Any) -> List[MessagePart]:
     if not candidates:
         return []
     return hydrate_fred_parts({"fred_parts": candidates})
+
+
+def _extract_fred_parts_from_tool_payload(
+    raw_content: Any,
+    *,
+    raw_metadata: Any,
+    additional_kwargs: Any,
+) -> List[MessagePart]:
+    parts = _extract_fred_parts_from_tool_content(raw_content)
+    if parts:
+        return parts
+    if isinstance(raw_metadata, dict):
+        parts = hydrate_fred_parts(raw_metadata)
+        if parts:
+            return parts
+    if isinstance(additional_kwargs, dict):
+        return hydrate_fred_parts(additional_kwargs)
+    return []
 
 
 def _normalize_sources_payload(raw: Any) -> List[VectorSearchHit]:
@@ -288,6 +311,9 @@ class StreamTranscoder:
       - Session lifecycle, KPI, persistence (owned by SessionOrchestrator)
     """
 
+    def __init__(self, stream_flush_interval_ms: int) -> None:
+        self._stream_flush_interval_s: float = stream_flush_interval_ms / 1000.0
+
     async def _handle_interrupt(
         self,
         *,
@@ -297,7 +323,7 @@ class StreamTranscoder:
         exchange_id: str,
         agent_id: str,
         interrupt_handler: Optional[InterruptHandler],
-        checkpointer: Optional[Any],
+        checkpointer: AsyncCheckpointReader | None,
     ) -> None:
         """
         Normalize LangGraph interrupt payload, enforce checkpoint presence,
@@ -389,19 +415,10 @@ class StreamTranscoder:
         if checkpoint_obj is None and checkpointer is not None:
             # Attempt to retrieve persisted checkpoint from the checkpointer (best-effort).
             try:
-                retrieved = None
-                if hasattr(checkpointer, "get"):
-                    retrieved = checkpointer.get(
-                        {"configurable": {"thread_id": session_id}}
-                    )
-                elif hasattr(checkpointer, "get_state"):
-                    retrieved = checkpointer.get_state(
-                        {"configurable": {"thread_id": session_id}}
-                    )
-                checkpoint_obj = (
-                    retrieved.get("checkpoint")
-                    if isinstance(retrieved, dict) and "checkpoint" in retrieved
-                    else retrieved
+                checkpoint_obj = await load_checkpoint(
+                    checkpointer,
+                    thread_id=session_id,
+                    checkpoint_id=checkpoint_id,
                 )
                 if checkpoint_id is None and isinstance(checkpoint_obj, dict):
                     checkpoint_id = checkpoint_obj.get("id") or checkpoint_obj.get(
@@ -474,7 +491,7 @@ class StreamTranscoder:
     async def stream_agent_response(
         self,
         *,
-        agent: AgentFlow,
+        agent: RuntimeAgentInstance,
         input_messages: List[AnyMessage],
         session_id: str,
         exchange_id: str,
@@ -521,9 +538,14 @@ class StreamTranscoder:
             "recursion_limit": 100,
         }
 
-        # When resuming, clean up the payload but DO NOT set checkpoint_id in config.
-        # We rely on thread_id to find the latest interrupted state.
+        # When resuming, preserve an explicit checkpoint_id in config when present.
+        # This keeps v2 runtimes transport-agnostic: WebSocket and Temporal can
+        # both resume a durable checkpoint explicitly instead of relying only on
+        # process-local state or "latest by thread_id" semantics.
         if resume_payload and isinstance(resume_payload, dict):
+            checkpoint_id = resume_payload.get("checkpoint_id")
+            if checkpoint_id is not None:
+                config["configurable"]["checkpoint_id"] = str(checkpoint_id)
             resume_payload.pop("checkpoint_id", None)
             resume_payload.pop("checkpoint", None)
 
@@ -539,6 +561,8 @@ class StreamTranscoder:
         pending_assistant_final: Optional[ChatMessage] = None
         partial_stream_rank: Optional[int] = None
         partial_stream_text = ""
+        last_emitted_offset: int = 0
+        last_partial_emit: float = 0.0
         pending_stream_token_usage = None
         token_usage_seen_from_messages = False
         token_usage_seen_from_updates = False
@@ -585,6 +609,11 @@ class StreamTranscoder:
                         # This avoids hardcoded node names and prevents mixed-node chunking.
                         langgraph_node = chunk_meta.get("langgraph_node")
                         if isinstance(langgraph_node, str) and langgraph_node:
+                            # Skip chunks from the tool-execution node. Those come from
+                            # inner LLM calls made *inside* tool functions (e.g. batch
+                            # generation helpers) and must never surface as assistant text.
+                            if langgraph_node == "tools":
+                                continue
                             if post_tool_stream_node is None:
                                 post_tool_stream_node = langgraph_node
                                 if logger.isEnabledFor(logging.DEBUG):
@@ -638,6 +667,23 @@ class StreamTranscoder:
                         continue
                     if partial_stream_rank is None:
                         partial_stream_rank = base_rank + seq
+                    now = time.monotonic()
+                    if now - last_partial_emit < self._stream_flush_interval_s:
+                        continue
+                    last_partial_emit = now
+                    delta_text = partial_stream_text[last_emitted_offset:]
+                    last_emitted_offset = len(partial_stream_text)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "[TRANSCODER][PARTIAL_EMIT][STREAMING_DELTA] "
+                            "session=%s exchange=%s emit_number=%d "
+                            "delta_bytes=%d cumulative_bytes=%d",
+                            session_id,
+                            exchange_id,
+                            emit_count + 1,
+                            len(delta_text.encode()),
+                            len(partial_stream_text.encode()),
+                        )
                     partial_msg = ChatMessage(
                         session_id=session_id,
                         exchange_id=exchange_id,
@@ -645,10 +691,10 @@ class StreamTranscoder:
                         timestamp=_utcnow_dt(),
                         role=Role.assistant,
                         channel=Channel.final,
-                        parts=[TextPart(text=partial_stream_text)],
+                        parts=[TextPart(text=delta_text)],
                         metadata=ChatMetadata(
                             agent_id=agent_id,
-                            extras={"streaming_partial": True},
+                            extras={"streaming_delta": True},
                         ),
                     )
                     emit_start = time.monotonic()
@@ -680,7 +726,9 @@ class StreamTranscoder:
                         exchange_id=exchange_id,
                         agent_id=agent_id,
                         interrupt_handler=interrupt_handler,
-                        checkpointer=getattr(agent, "streaming_memory", None),
+                        checkpointer=cast(
+                            AsyncCheckpointReader | None, agent.streaming_memory
+                        ),
                     )
 
                 # `event` looks like: {'node_name': {'messages': [...]} } or {'end': None}
@@ -734,6 +782,7 @@ class StreamTranscoder:
                         pending_assistant_final = None
                         partial_stream_rank = None
                         partial_stream_text = ""
+                        last_emitted_offset = 0
                         if logger.isEnabledFor(logging.DEBUG):
                             logger.debug(
                                 "[TRANSCODER][TOOL_CALLS] session=%s exchange=%s count=%d calls=%s",
@@ -794,6 +843,7 @@ class StreamTranscoder:
                         pending_assistant_final = None
                         partial_stream_rank = None
                         partial_stream_text = ""
+                        last_emitted_offset = 0
                         call_id = (
                             getattr(msg, "tool_call_id", None)
                             or raw_md.get("tool_call_id")
@@ -809,6 +859,11 @@ class StreamTranscoder:
                             )
                         raw_content = getattr(msg, "content", None)
                         new_hits = _extract_vector_search_hits(raw_content)
+                        if new_hits is None and sources_payload:
+                            # Some runtimes attach normalized sources directly
+                            # on the tool message metadata instead of leaving
+                            # them only in the rendered tool content.
+                            new_hits = sources_payload
                         if new_hits is not None:
                             if logger.isEnabledFor(logging.DEBUG):
                                 logger.debug(
@@ -824,8 +879,10 @@ class StreamTranscoder:
                                     call_id,
                                 )
 
-                        tool_fred_parts = _extract_fred_parts_from_tool_content(
-                            raw_content
+                        tool_fred_parts = _extract_fred_parts_from_tool_payload(
+                            raw_content,
+                            raw_metadata=raw_md,
+                            additional_kwargs=additional_kwargs,
                         )
                         if tool_fred_parts:
                             pending_fred_parts.extend(tool_fred_parts)
@@ -1036,6 +1093,38 @@ class StreamTranscoder:
                             )
                             pending_final_token_source = candidate_token_source
                         continue
+            # Flush any partial text that was buffered by the throttle but not yet sent.
+            end_flush_delta = partial_stream_text[last_emitted_offset:]
+            if end_flush_delta.strip() and partial_stream_rank is not None:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[TRANSCODER][END_FLUSH][STREAMING_DELTA] "
+                        "session=%s exchange=%s total_partial_emits=%d "
+                        "delta_bytes=%d cumulative_bytes=%d",
+                        session_id,
+                        exchange_id,
+                        emit_count,
+                        len(end_flush_delta.encode()),
+                        len(partial_stream_text.encode()),
+                    )
+                flush_msg = ChatMessage(
+                    session_id=session_id,
+                    exchange_id=exchange_id,
+                    rank=partial_stream_rank,
+                    timestamp=_utcnow_dt(),
+                    role=Role.assistant,
+                    channel=Channel.final,
+                    parts=[TextPart(text=end_flush_delta)],
+                    metadata=ChatMetadata(
+                        agent_id=agent_id,
+                        extras={"streaming_delta": True},
+                    ),
+                )
+                emit_start = time.monotonic()
+                await self._emit(callback, flush_msg)
+                emit_time_total += time.monotonic() - emit_start
+                emit_count += 1
+
         except InterruptRaised as ir:
             # Expected control-flow for HITL; let caller handle without logging an error.
             logger.info(

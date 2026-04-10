@@ -21,7 +21,10 @@ import pytest
 from dotenv import load_dotenv
 
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
-from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
+from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
+    PdfMarkdownProcessor,
+    _annotate_markdown_tables,
+)
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
 load_dotenv(dotenv_path)
@@ -42,6 +45,17 @@ def sample_pdf_file():
     return Path(__file__).parent / "assets" / "sample.pdf"
 
 
+def test_annotate_markdown_tables_treats_backslash_digits_as_literal_text():
+    markdown = "| col |\n| --- |\n| \\6 |\n"
+
+    annotated = _annotate_markdown_tables(markdown, ["| col |\n| --- |\n| \\6 |"])
+
+    assert "<!-- TABLE_START:id=0 -->" in annotated
+    assert "| \\6 |" in annotated
+    assert "<!-- TABLE_END -->" in annotated
+
+
+@pytest.mark.integration
 def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_file):
     output_dir = Path("/tmp/knowledge_flow/test/output")
     output_dir.mkdir(exist_ok=True, parents=True)

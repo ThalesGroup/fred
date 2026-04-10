@@ -13,13 +13,10 @@
 // limitations under the License.
 import Editor, { OnMount } from "@monaco-editor/react";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import EditIcon from "@mui/icons-material/Edit";
-import PreviewIcon from "@mui/icons-material/Preview";
 import RestoreIcon from "@mui/icons-material/Restore";
-import { Box, Chip, Divider, IconButton, Stack, Tab, Tabs, Typography, useTheme } from "@mui/material";
+import { Box, Chip, Divider, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import * as monaco from "monaco-editor";
-import { useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { useMemo, useRef } from "react";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 
 type Props = {
@@ -28,10 +25,10 @@ type Props = {
   defaultValue?: string;
   onChange: (next: string) => void;
   tokens?: string[]; // e.g. ["{objective}", "{step_number}", "{step}", "{options}"]
+  required?: boolean;
 };
 
-export function PromptEditor({ label, value, defaultValue = "", onChange, tokens = [] }: Props) {
-  const [tab, setTab] = useState<"edit" | "preview">("edit");
+export function PromptEditor({ label, value, defaultValue = "", onChange, tokens = [], required }: Props) {
   const theme = useTheme();
 
   // keep a ref to monaco editor instance (optional, when Monaco is present)
@@ -41,21 +38,6 @@ export function PromptEditor({ label, value, defaultValue = "", onChange, tokens
   };
 
   const hasChanged = useMemo(() => (value ?? "") !== (defaultValue ?? ""), [value, defaultValue]);
-  const previewStyles = {
-    px: 1.5,
-    py: 1.25,
-    maxHeight: 300,
-    overflow: "auto",
-    fontSize: 13, // 👈 match Monaco’s 13
-    lineHeight: 1.5,
-    // keep headings modest so they don’t look bigger than the editor
-    "& h1, & h2, & h3": { fontSize: 14, marginTop: 8, marginBottom: 4 },
-    // ensure common blocks inherit the same size
-    "& p, & li, & code, & pre, & blockquote": { fontSize: 13 },
-    "& code": { px: 0.5, py: 0.1, borderRadius: 1, bgcolor: "action.hover" },
-    "& pre": { p: 1, borderRadius: 1, bgcolor: "action.hover", overflow: "auto" },
-    "& blockquote": { borderLeft: 2, borderColor: "divider", pl: 1.5, color: "text.secondary" },
-  } as const;
   // insert token either at cursor (Monaco) or append at end
   const insertToken = (tok: string) => {
     const ed = editorRef.current;
@@ -84,7 +66,10 @@ export function PromptEditor({ label, value, defaultValue = "", onChange, tokens
     <Box sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1.5, overflow: "hidden" }}>
       {/* Header */}
       <Box sx={{ px: 1.25, py: 0.75, display: "flex", alignItems: "center", gap: 1, bgcolor: "action.hover" }}>
-        <Typography variant="subtitle2">{label}</Typography>
+        <Typography variant="subtitle2">
+          {label}
+          {required && <Typography component="span">{" *"}</Typography>}
+        </Typography>
         {hasChanged && (
           <Chip
             size="small"
@@ -141,53 +126,25 @@ export function PromptEditor({ label, value, defaultValue = "", onChange, tokens
         </>
       )}
 
-      {/* Tabs */}
-      <Box sx={{ px: 1 }}>
-        <Tabs
-          value={tab}
-          onChange={(_, v) => setTab(v)}
-          sx={{ minHeight: 32, "& .MuiTab-root": { minHeight: 32, textTransform: "none", fontSize: 13 } }}
-        >
-          <Tab icon={<EditIcon fontSize="small" />} iconPosition="start" value="edit" label="Edit" />
-          <Tab icon={<PreviewIcon fontSize="small" />} iconPosition="start" value="preview" label="Preview" />
-        </Tabs>
+      {/* Editor */}
+      <Box sx={{ height: 360 }}>
+        <Editor
+          onMount={onMount}
+          height="100%"
+          language="markdown"
+          defaultValue={value}
+          theme={theme.palette.mode === "dark" ? "vs-dark" : "vs"}
+          onChange={(v) => onChange(v ?? "")}
+          options={{
+            wordWrap: "on",
+            minimap: { enabled: false },
+            fontSize: 13,
+            lineNumbers: "on",
+            renderWhitespace: "selection",
+            scrollBeyondLastLine: false,
+          }}
+        />
       </Box>
-      <Divider />
-
-      {/* Content */}
-      {tab === "edit" ? (
-        <Box sx={{ height: 240 }}>
-          <Editor
-            onMount={onMount}
-            height="100%"
-            language="markdown"
-            value={value}
-            theme={theme.palette.mode === "dark" ? "vs-dark" : "vs"}
-            onChange={(v) => onChange(v ?? "")}
-            options={{
-              wordWrap: "on",
-              minimap: { enabled: false },
-              fontSize: 13,
-              lineNumbers: "on",
-              renderWhitespace: "selection",
-              scrollBeyondLastLine: false,
-            }}
-          />
-        </Box>
-      ) : (
-        <Box sx={previewStyles}>
-          <ReactMarkdown>{value || ""}</ReactMarkdown>
-        </Box>
-      )}
-
-      {hasChanged && (
-        <>
-          <Divider />
-          <Box sx={{ px: 1.5, py: 1.25, maxHeight: 300, overflow: "auto" }}>
-            <ReactMarkdown>{value || ""}</ReactMarkdown>
-          </Box>
-        </>
-      )}
     </Box>
   );
 }

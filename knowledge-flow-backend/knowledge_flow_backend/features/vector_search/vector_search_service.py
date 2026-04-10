@@ -5,20 +5,41 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional, Protocol, Set, cast, runtime_checkable
 
-from fred_core import Action, KeycloakUser, OwnerFilter, Resource, VectorSearchHit, authorize
+from fred_core import Action, KeycloakUser, Resource, authorize
+from fred_core.common import OwnerFilter
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.store import VectorSearchHit
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, FullTextHit, HybridHit, SearchFilter
-from knowledge_flow_backend.core.stores.vector.opensearch_vector_store import OpenSearchVectorStoreAdapter
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class SupportsFullTextSearch(Protocol):
+    def full_text_search(
+        self,
+        query: str,
+        top_k: int,
+        search_filter: Optional[SearchFilter] = None,
+    ) -> List[FullTextHit]: ...
+
+
+@runtime_checkable
+class SupportsHybridSearch(Protocol):
+    def hybrid_search(
+        self,
+        query: str,
+        top_k: int,
+        search_filter: Optional[SearchFilter] = None,
+    ) -> List[HybridHit]: ...
 
 
 def _merge_attachment_and_corpus_hits(
@@ -84,6 +105,22 @@ class VectorSearchService:
     def _kpi_actor(self, *, user: Optional[KeycloakUser] = None) -> KPIActor:
         groups = user.groups if user else None
         return KPIActor(type="system", groups=groups)
+
+    def _phase_timer(
+        self,
+        *,
+        phase: str,
+        user: Optional[KeycloakUser],
+        extra_dims: Optional[dict[str, Optional[str]]] = None,
+    ):
+        dims: dict[str, Optional[str]] = {"phase": phase}
+        if extra_dims:
+            dims.update(extra_dims)
+        return self.kpi.timer(
+            "app.phase_latency_ms",
+            dims=dims,
+            actor=self._kpi_actor(user=user),
+        )
 
     def _record_search_stats(
         self,
@@ -333,10 +370,11 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
 
         Raises:
-            TypeError: If the vector_store is not an instance of OpenSearchVectorStoreAdapter.
+            TypeError: If the vector_store does not expose full_text_search.
         """
-        if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
-            raise TypeError(f"Strict search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
+        if not isinstance(self.vector_store, SupportsFullTextSearch):
+            raise TypeError(f"Strict search requires a backend exposing full_text_search, but vector_store is {type(self.vector_store).__name__}")
+        full_text_store = cast(SupportsFullTextSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
@@ -347,7 +385,7 @@ class VectorSearchService:
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 hits: List[FullTextHit] = await asyncio.to_thread(
-                    self.vector_store.full_text_search,
+                    full_text_store.full_text_search,
                     query=question,
                     top_k=k,
                     search_filter=search_filter,
@@ -397,10 +435,11 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of search hits with relevant metadata.
 
         Raises:
-            TypeError: If the vector store is not an instance of OpenSearchVectorStoreAdapter.
+            TypeError: If the vector store does not expose hybrid_search.
         """
-        if not isinstance(self.vector_store, OpenSearchVectorStoreAdapter):
-            raise TypeError(f"Hybrid search requires Opensearch, but vector_store is of type {type(self.vector_store).__name__}")
+        if not isinstance(self.vector_store, SupportsHybridSearch):
+            raise TypeError(f"Hybrid search requires a backend exposing hybrid_search, but vector_store is {type(self.vector_store).__name__}")
+        hybrid_store = cast(SupportsHybridSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
         if metadata_terms_extra:
@@ -411,7 +450,7 @@ class VectorSearchService:
         with self.kpi.timer("rag.search_latency_ms", dims=base_dims, actor=self._kpi_actor(user=user)) as kpi_dims:
             try:
                 hits: List[HybridHit] = await asyncio.to_thread(
-                    self.vector_store.hybrid_search,
+                    hybrid_store.hybrid_search,
                     query=question,
                     top_k=k,
                     search_filter=search_filter,
@@ -485,14 +524,22 @@ class VectorSearchService:
                 return []
 
             # Resolve the set of tag IDs the user is authorized to search in
-            authorized_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
+            with self._phase_timer(
+                phase="vector_search_authorize_tags",
+                user=user,
+            ):
+                authorized_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
             if document_library_tags_ids:
                 authorized_tag_ids = set(document_library_tags_ids) & authorized_tag_ids
 
             # Validate document_uids against ReBAC permissions
             authorized_document_uids: set[str] = set()
             if document_uids:
-                authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
+                with self._phase_timer(
+                    phase="vector_search_filter_document_uids",
+                    user=user,
+                ):
+                    authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
 
             # Search function dispatch
             policy_key = policy_name or SearchPolicyName.hybrid
@@ -519,13 +566,17 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                attachment_hits = await search_fn(
-                    question=question,
+                with self._phase_timer(
+                    phase="vector_search_scope_attachment",
                     user=user,
-                    k=top_k,
-                    library_tags_ids=None,
-                    metadata_terms_extra=attachment_metadata,
-                )
+                ):
+                    attachment_hits = await search_fn(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=None,
+                        metadata_terms_extra=attachment_metadata,
+                    )
 
             # Corpus/library query (scoped by authorized tags, excludes session vectors)
             if include_corpus_scope and not authorized_tag_ids:
@@ -543,20 +594,28 @@ class VectorSearchService:
                     question,
                     top_k,
                 )
-                corpus_hits = await search_fn(
-                    question=question,
+                with self._phase_timer(
+                    phase="vector_search_scope_corpus",
                     user=user,
-                    k=top_k,
-                    library_tags_ids=list(authorized_tag_ids),
-                    metadata_terms_extra=corpus_metadata,
-                )
+                ):
+                    corpus_hits = await search_fn(
+                        question=question,
+                        user=user,
+                        k=top_k,
+                        library_tags_ids=list(authorized_tag_ids),
+                        metadata_terms_extra=corpus_metadata,
+                    )
 
-            merged = _merge_attachment_and_corpus_hits(
-                attachment_hits=attachment_hits,
-                corpus_hits=corpus_hits,
-                top_k=top_k,
-                attachment_quota=3,
-            )
+            with self._phase_timer(
+                phase="vector_search_merge_results",
+                user=user,
+            ):
+                merged = _merge_attachment_and_corpus_hits(
+                    attachment_hits=attachment_hits,
+                    corpus_hits=corpus_hits,
+                    top_k=top_k,
+                    attachment_quota=3,
+                )
             logger.info(
                 "[VECTOR][SEARCH] merged results attachment=%d corpus=%d forced_attachment=%d returned=%d",
                 len(attachment_hits),

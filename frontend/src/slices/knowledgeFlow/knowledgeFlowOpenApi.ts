@@ -587,19 +587,25 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`, method: "DELETE" }),
     }),
-    listFiles: build.query<ListFilesApiResponse, ListFilesApiArg>({
+    ls: build.query<LsApiResponse, LsApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/list`,
         params: {
-          prefix: queryArg.prefix,
+          path: queryArg.path,
         },
       }),
     }),
     statFileOrDirectory: build.query<StatFileOrDirectoryApiResponse, StatFileOrDirectoryApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/stat/${queryArg.path}` }),
     }),
-    catFile: build.query<CatFileApiResponse, CatFileApiArg>({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/cat/${queryArg.path}` }),
+    readFile: build.query<ReadFileApiResponse, ReadFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/cat/${queryArg.path}`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+        },
+      }),
     }),
     writeFile: build.mutation<WriteFileApiResponse, WriteFileApiArg>({
       query: (queryArg) => ({
@@ -611,19 +617,32 @@ const injectedRtkApi = api.injectEndpoints({
     deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`, method: "DELETE" }),
     }),
-    grepFileRegex: build.query<GrepFileRegexApiResponse, GrepFileRegexApiArg>({
+    editFile: build.mutation<EditFileApiResponse, EditFileApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/edit/${queryArg.path}`,
+        method: "POST",
+        body: queryArg.editFileRequest,
+      }),
+    }),
+    glob: build.query<GlobApiResponse, GlobApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/fs/glob`,
+        params: {
+          pattern: queryArg.pattern,
+          path: queryArg.path,
+        },
+      }),
+    }),
+    grep: build.query<GrepApiResponse, GrepApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/grep`,
         params: {
           pattern: queryArg.pattern,
-          prefix: queryArg.prefix,
+          path: queryArg.path,
         },
       }),
     }),
-    printRootDirectory: build.query<PrintRootDirectoryApiResponse, PrintRootDirectoryApiArg>({
-      query: () => ({ url: `/knowledge-flow/v1/fs/print_root_dir` }),
-    }),
-    createDirectory: build.mutation<CreateDirectoryApiResponse, CreateDirectoryApiArg>({
+    mkdir: build.mutation<MkdirApiResponse, MkdirApiArg>({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`, method: "POST" }),
     }),
     corpusCapabilities: build.query<CorpusCapabilitiesApiResponse, CorpusCapabilitiesApiArg>({
@@ -676,79 +695,6 @@ const injectedRtkApi = api.injectEndpoints({
       QueryLogsKnowledgeFlowV1LogsQueryPostApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/logs/query`, method: "POST", body: queryArg.logQuery }),
-    }),
-    listTeamsKnowledgeFlowV1TeamsGet: build.query<
-      ListTeamsKnowledgeFlowV1TeamsGetApiResponse,
-      ListTeamsKnowledgeFlowV1TeamsGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/teams` }),
-    }),
-    getTeamKnowledgeFlowV1TeamsTeamIdGet: build.query<
-      GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse,
-      GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}` }),
-    }),
-    updateTeamKnowledgeFlowV1TeamsTeamIdPatch: build.mutation<
-      UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse,
-      UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/teams/${queryArg.teamId}`,
-        method: "PATCH",
-        body: queryArg.teamUpdate,
-      }),
-    }),
-    uploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: build.mutation<
-      UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse,
-      UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/banner`,
-        method: "POST",
-        body: queryArg.bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost,
-      }),
-    }),
-    listTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGet: build.query<
-      ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse,
-      ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg
-    >({
-      query: (queryArg) => ({ url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members` }),
-    }),
-    addTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPost: build.mutation<
-      AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiResponse,
-      AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members`,
-        method: "POST",
-        body: queryArg.addTeamMemberRequest,
-      }),
-    }),
-    removeTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDelete: build.mutation<
-      RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiResponse,
-      RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
-        method: "DELETE",
-      }),
-    }),
-    updateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatch: build.mutation<
-      UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiResponse,
-      UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/teams/${queryArg.teamId}/members/${queryArg.userId}`,
-        method: "PATCH",
-        body: queryArg.updateTeamMemberRequest,
-      }),
-    }),
-    listUsersKnowledgeFlowV1UsersGet: build.query<
-      ListUsersKnowledgeFlowV1UsersGetApiResponse,
-      ListUsersKnowledgeFlowV1UsersGetApiArg
-    >({
-      query: () => ({ url: `/knowledge-flow/v1/users` }),
     }),
     listProcessorsKnowledgeFlowV1DevBenchProcessorsGet: build.query<
       ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse,
@@ -1093,6 +1039,70 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     osDiagnostics: build.query<OsDiagnosticsApiResponse, OsDiagnosticsApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/os/diagnostics` }),
+    }),
+    prometheusQuery: build.mutation<PrometheusQueryApiResponse, PrometheusQueryApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/query`,
+        method: "POST",
+        body: queryArg.prometheusQueryRequest,
+      }),
+    }),
+    prometheusQueryRange: build.mutation<PrometheusQueryRangeApiResponse, PrometheusQueryRangeApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/query_range`,
+        method: "POST",
+        body: queryArg.prometheusQueryRangeRequest,
+      }),
+    }),
+    prometheusSeries: build.mutation<PrometheusSeriesApiResponse, PrometheusSeriesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/series`,
+        method: "POST",
+        body: queryArg.prometheusSeriesRequest,
+      }),
+    }),
+    prometheusMetrics: build.query<PrometheusMetricsApiResponse, PrometheusMetricsApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+        },
+      }),
+    }),
+    prometheusMetricsCatalog: build.query<PrometheusMetricsCatalogApiResponse, PrometheusMetricsCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metrics_catalog`,
+        params: {
+          limit: queryArg.limit,
+          search: queryArg.search,
+        },
+      }),
+    }),
+    prometheusMetadata: build.query<PrometheusMetadataApiResponse, PrometheusMetadataApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/metadata`,
+        params: {
+          metric: queryArg.metric,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    prometheusLabels: build.query<PrometheusLabelsApiResponse, PrometheusLabelsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/prometheus/labels` }),
+    }),
+    prometheusLabelValues: build.query<PrometheusLabelValuesApiResponse, PrometheusLabelValuesApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/prometheus/labels/${queryArg.labelName}/values`,
+        params: {
+          start: queryArg.start,
+          end: queryArg.end,
+          match: queryArg.match,
+        },
+      }),
+    }),
+    prometheusTargets: build.query<PrometheusTargetsApiResponse, PrometheusTargetsApiArg>({
+      query: () => ({ url: `/knowledge-flow/v1/prometheus/targets` }),
     }),
     writeReportKnowledgeFlowV1McpReportsWritePost: build.mutation<
       WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse,
@@ -1510,17 +1520,19 @@ export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiResponse =
 export type DeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteApiArg = {
   resourceId: string;
 };
-export type ListFilesApiResponse = /** status 200 Successful Response */ any;
-export type ListFilesApiArg = {
-  prefix?: string;
+export type LsApiResponse = /** status 200 Successful Response */ any;
+export type LsApiArg = {
+  path?: string;
 };
 export type StatFileOrDirectoryApiResponse = /** status 200 Successful Response */ any;
 export type StatFileOrDirectoryApiArg = {
   path: string;
 };
-export type CatFileApiResponse = /** status 200 Successful Response */ any;
-export type CatFileApiArg = {
+export type ReadFileApiResponse = /** status 200 Successful Response */ any;
+export type ReadFileApiArg = {
   path: string;
+  offset?: number;
+  limit?: number;
 };
 export type WriteFileApiResponse = /** status 200 Successful Response */ any;
 export type WriteFileApiArg = {
@@ -1531,15 +1543,23 @@ export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
 export type DeleteFileApiArg = {
   path: string;
 };
-export type GrepFileRegexApiResponse = /** status 200 Successful Response */ any;
-export type GrepFileRegexApiArg = {
-  pattern: string;
-  prefix?: string;
+export type EditFileApiResponse = /** status 200 Successful Response */ any;
+export type EditFileApiArg = {
+  path: string;
+  editFileRequest: EditFileRequest;
 };
-export type PrintRootDirectoryApiResponse = /** status 200 Successful Response */ any;
-export type PrintRootDirectoryApiArg = void;
-export type CreateDirectoryApiResponse = /** status 200 Successful Response */ any;
-export type CreateDirectoryApiArg = {
+export type GlobApiResponse = /** status 200 Successful Response */ any;
+export type GlobApiArg = {
+  pattern: string;
+  path?: string;
+};
+export type GrepApiResponse = /** status 200 Successful Response */ any;
+export type GrepApiArg = {
+  pattern: string;
+  path?: string;
+};
+export type MkdirApiResponse = /** status 200 Successful Response */ any;
+export type MkdirApiArg = {
   path: string;
 };
 export type CorpusCapabilitiesApiResponse = /** status 200 Successful Response */ CorpusCapabilitiesV1;
@@ -1572,46 +1592,6 @@ export type QueryLogsKnowledgeFlowV1LogsQueryPostApiResponse = /** status 200 Su
 export type QueryLogsKnowledgeFlowV1LogsQueryPostApiArg = {
   logQuery: LogQuery;
 };
-export type ListTeamsKnowledgeFlowV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
-export type ListTeamsKnowledgeFlowV1TeamsGetApiArg = void;
-export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
-export type GetTeamKnowledgeFlowV1TeamsTeamIdGetApiArg = {
-  teamId: string;
-};
-export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiResponse =
-  /** status 200 Successful Response */ TeamWithPermissions;
-export type UpdateTeamKnowledgeFlowV1TeamsTeamIdPatchApiArg = {
-  teamId: string;
-  teamUpdate: TeamUpdate;
-};
-export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiResponse = unknown;
-export type UploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostApiArg = {
-  teamId: string;
-  bodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost: BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost;
-};
-export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiResponse =
-  /** status 200 Successful Response */ TeamMember[];
-export type ListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetApiArg = {
-  teamId: string;
-};
-export type AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiResponse = unknown;
-export type AddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostApiArg = {
-  teamId: string;
-  addTeamMemberRequest: AddTeamMemberRequest;
-};
-export type RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiResponse = unknown;
-export type RemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteApiArg = {
-  teamId: string;
-  userId: string;
-};
-export type UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiResponse = unknown;
-export type UpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchApiArg = {
-  teamId: string;
-  userId: string;
-  updateTeamMemberRequest: UpdateTeamMemberRequest;
-};
-export type ListUsersKnowledgeFlowV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
-export type ListUsersKnowledgeFlowV1UsersGetApiArg = void;
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiResponse =
   /** status 200 Successful Response */ ProcessorDescriptor[];
 export type ListProcessorsKnowledgeFlowV1DevBenchProcessorsGetApiArg = void;
@@ -1899,6 +1879,74 @@ export type OsRecoveryApiArg = {
 };
 export type OsDiagnosticsApiResponse = /** status 200 Successful Response */ any;
 export type OsDiagnosticsApiArg = void;
+export type PrometheusQueryApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusQueryApiArg = {
+  prometheusQueryRequest: PrometheusQueryRequest;
+};
+export type PrometheusQueryRangeApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusQueryRangeApiArg = {
+  prometheusQueryRangeRequest: PrometheusQueryRangeRequest;
+};
+export type PrometheusSeriesApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusSeriesApiArg = {
+  prometheusSeriesRequest: PrometheusSeriesRequest;
+};
+export type PrometheusMetricsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsApiArg = {
+  /** Maximum number of metric names to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+};
+export type PrometheusMetricsCatalogApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetricsCatalogApiArg = {
+  /** Maximum number of catalog entries to return. */
+  limit?: number;
+  /** Optional case-insensitive substring filter applied to metric names. */
+  search?: string | null;
+};
+export type PrometheusMetadataApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusMetadataApiArg = {
+  /** Optional metric name filter. */
+  metric?: string | null;
+  /** Maximum number of metadata entries returned by Prometheus. */
+  limit?: number;
+};
+export type PrometheusLabelsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusLabelsApiArg = void;
+export type PrometheusLabelValuesApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusLabelValuesApiArg = {
+  /** Prometheus label name. */
+  labelName: string;
+  /** Optional range start; defaults to a bounded discovery window. */
+  start?: string | null;
+  /** Optional range end; defaults to a bounded discovery window. */
+  end?: string | null;
+  match?: {
+    /** Optional series matchers used to scope label values. */
+    ""?: string[] | null;
+  };
+};
+export type PrometheusTargetsApiResponse = /** status 200 Successful Response */ {
+  [key: string]: any;
+};
+export type PrometheusTargetsApiArg = void;
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiResponse =
   /** status 200 Successful Response */ WriteReportResponse;
 export type WriteReportKnowledgeFlowV1McpReportsWritePostApiArg = {
@@ -2514,6 +2562,11 @@ export type ResourceUpdate = {
 export type BodyWriteFile = {
   data: string;
 };
+export type EditFileRequest = {
+  old_string: string;
+  new_string: string;
+  replace_all?: boolean;
+};
 export type ToolSpecV1 = {
   name: string;
   summary: string;
@@ -2614,58 +2667,6 @@ export type LogQuery = {
   filters?: LogFilter;
   limit?: number;
   order?: "asc" | "desc";
-};
-export type Team = {
-  description?: string | null;
-  is_private?: boolean;
-  id: string;
-  name: string;
-  member_count?: number | null;
-  owners?: UserSummary[];
-  is_member?: boolean;
-  banner_image_url?: string | null;
-};
-export type TeamPermission =
-  | "can_read"
-  | "can_update_info"
-  | "can_update_resources"
-  | "can_update_agents"
-  | "can_read_members"
-  | "can_administer_members"
-  | "can_administer_managers"
-  | "can_administer_owners";
-export type TeamWithPermissions = {
-  description?: string | null;
-  is_private?: boolean;
-  id: string;
-  name: string;
-  member_count?: number | null;
-  owners?: UserSummary[];
-  is_member?: boolean;
-  banner_image_url?: string | null;
-  permissions?: TeamPermission[];
-};
-export type TeamUpdate = {
-  description?: string | null;
-  banner_object_storage_key?: string | null;
-  is_private?: boolean | null;
-};
-export type BodyUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPost = {
-  /** Banner image file (max 5MB, JPEG/PNG/WebP) */
-  file: Blob;
-};
-export type UserTeamRelation = "owner" | "manager" | "member";
-export type TeamMember = {
-  type?: "user";
-  relation: UserTeamRelation;
-  user: UserSummary;
-};
-export type AddTeamMemberRequest = {
-  user_id: string;
-  relation: UserTeamRelation;
-};
-export type UpdateTeamMemberRequest = {
-  relation: UserTeamRelation;
 };
 export type ProcessorDescriptor = {
   id: string;
@@ -2783,6 +2784,34 @@ export type DetectOutliersMlRequest = {
 export type PcaRequest = {
   features: string[];
   n_components?: number;
+};
+export type PrometheusQueryRequest = {
+  /** PromQL expression to evaluate. */
+  query: string;
+  /** Optional evaluation timestamp accepted by the Prometheus HTTP API. */
+  time?: string | number | number | null;
+  /** Optional upstream Prometheus timeout, for example 5s. */
+  timeout?: string | null;
+};
+export type PrometheusQueryRangeRequest = {
+  /** PromQL expression to evaluate over a range. */
+  query: string;
+  /** Range start accepted by the Prometheus HTTP API. */
+  start: string | number | number;
+  /** Range end accepted by the Prometheus HTTP API. */
+  end: string | number | number;
+  /** Range step duration accepted by the Prometheus HTTP API. */
+  step: string | number | number;
+  /** Optional upstream Prometheus timeout, for example 30s. */
+  timeout?: string | null;
+};
+export type PrometheusSeriesRequest = {
+  /** Prometheus series matchers, for example up or http_requests_total{job='api'}. */
+  matchers: string[];
+  /** Optional range start used to bound series discovery. */
+  start?: string | number | number | null;
+  /** Optional range end used to bound series discovery. */
+  end?: string | number | number | null;
 };
 export type WriteReportResponse = {
   document_uid: string;
@@ -2941,19 +2970,20 @@ export const {
   useGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useLazyGetResourceKnowledgeFlowV1ResourcesResourceIdGetQuery,
   useDeleteResourceKnowledgeFlowV1ResourcesResourceIdDeleteMutation,
-  useListFilesQuery,
-  useLazyListFilesQuery,
+  useLsQuery,
+  useLazyLsQuery,
   useStatFileOrDirectoryQuery,
   useLazyStatFileOrDirectoryQuery,
-  useCatFileQuery,
-  useLazyCatFileQuery,
+  useReadFileQuery,
+  useLazyReadFileQuery,
   useWriteFileMutation,
   useDeleteFileMutation,
-  useGrepFileRegexQuery,
-  useLazyGrepFileRegexQuery,
-  usePrintRootDirectoryQuery,
-  useLazyPrintRootDirectoryQuery,
-  useCreateDirectoryMutation,
+  useEditFileMutation,
+  useGlobQuery,
+  useLazyGlobQuery,
+  useGrepQuery,
+  useLazyGrepQuery,
+  useMkdirMutation,
   useCorpusCapabilitiesQuery,
   useLazyCorpusCapabilitiesQuery,
   useCorpusBuildTocMutation,
@@ -2963,19 +2993,6 @@ export const {
   useCorpusTasksResultMutation,
   useCorpusTasksListMutation,
   useQueryLogsKnowledgeFlowV1LogsQueryPostMutation,
-  useListTeamsKnowledgeFlowV1TeamsGetQuery,
-  useLazyListTeamsKnowledgeFlowV1TeamsGetQuery,
-  useGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
-  useLazyGetTeamKnowledgeFlowV1TeamsTeamIdGetQuery,
-  useUpdateTeamKnowledgeFlowV1TeamsTeamIdPatchMutation,
-  useUploadTeamBannerKnowledgeFlowV1TeamsTeamIdBannerPostMutation,
-  useListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
-  useLazyListTeamMembersKnowledgeFlowV1TeamsTeamIdMembersGetQuery,
-  useAddTeamMemberKnowledgeFlowV1TeamsTeamIdMembersPostMutation,
-  useRemoveTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdDeleteMutation,
-  useUpdateTeamMemberKnowledgeFlowV1TeamsTeamIdMembersUserIdPatchMutation,
-  useListUsersKnowledgeFlowV1UsersGetQuery,
-  useLazyListUsersKnowledgeFlowV1UsersGetQuery,
   useListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
   useLazyListProcessorsKnowledgeFlowV1DevBenchProcessorsGetQuery,
   useRunKnowledgeFlowV1DevBenchRunPostMutation,
@@ -3065,6 +3082,21 @@ export const {
   useLazyOsRecoveryQuery,
   useOsDiagnosticsQuery,
   useLazyOsDiagnosticsQuery,
+  usePrometheusQueryMutation,
+  usePrometheusQueryRangeMutation,
+  usePrometheusSeriesMutation,
+  usePrometheusMetricsQuery,
+  useLazyPrometheusMetricsQuery,
+  usePrometheusMetricsCatalogQuery,
+  useLazyPrometheusMetricsCatalogQuery,
+  usePrometheusMetadataQuery,
+  useLazyPrometheusMetadataQuery,
+  usePrometheusLabelsQuery,
+  useLazyPrometheusLabelsQuery,
+  usePrometheusLabelValuesQuery,
+  useLazyPrometheusLabelValuesQuery,
+  usePrometheusTargetsQuery,
+  useLazyPrometheusTargetsQuery,
   useWriteReportKnowledgeFlowV1McpReportsWritePostMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,

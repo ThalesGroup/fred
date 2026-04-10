@@ -1,3 +1,14 @@
 {
-    "files": {}
+    "files": {
+        "./agentic_backend/core/chatbot/stream_transcoder.py": [
+            {
+                "code": "reportGeneralTypeIssues",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 35,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
 }

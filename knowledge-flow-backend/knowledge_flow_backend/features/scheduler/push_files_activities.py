@@ -22,6 +22,10 @@ from temporalio import activity
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
+from knowledge_flow_backend.features.scheduler.activity_utils import (
+    await_with_heartbeat,
+    to_thread_with_heartbeat,
+)
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -102,23 +106,42 @@ async def push_input_process(
                     raise FileNotFoundError(f"Provided push input file does not exist for document {metadata.document_uid}: {resolved_input_file}")
             else:
                 try:
-                    resolved_input_file = await resolve_push_input_file_for_worker(
-                        user=user,
-                        metadata=metadata,
-                        working_dir=working_dir,
+                    resolved_input_file = await await_with_heartbeat(
+                        resolve_push_input_file_for_worker(
+                            user=user,
+                            metadata=metadata,
+                            working_dir=working_dir,
+                        ),
+                        heartbeat_details={
+                            "stage": "push_input_restore",
+                            "document_uid": metadata.document_uid,
+                        },
                     )
                 except Exception as exc:
                     raise FileNotFoundError(f"Push input restore failed for document {metadata.document_uid}.") from exc
 
-            await asyncio.to_thread(
+            await to_thread_with_heartbeat(
                 ingestion_service.process_input,
                 user,
                 resolved_input_file,
                 output_dir,
                 metadata,
                 profile,
+                heartbeat_details={
+                    "stage": "push_input_process",
+                    "document_uid": metadata.document_uid,
+                },
             )
-            await asyncio.to_thread(ingestion_service.save_output, user, metadata, output_dir)
+            await to_thread_with_heartbeat(
+                ingestion_service.save_output,
+                user,
+                metadata,
+                output_dir,
+                heartbeat_details={
+                    "stage": "push_input_save_output",
+                    "document_uid": metadata.document_uid,
+                },
+            )
 
         metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.save_metadata(user, metadata=metadata)

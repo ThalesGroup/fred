@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -14,18 +15,30 @@ from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.structure import KeycloakUser, M2MSecurity
 
 ORGANIZATION_ID = "fred"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class RebacReference:
-    """Identifies a subject or resource within the authorization graph."""
+    """Point to one actor or object in authorization checks.
+
+    Example:
+    - `RebacReference(Resource.USER, "alice-id")`
+    - `RebacReference(Resource.TEAM, "thales-team-id")`
+    """
 
     type: Resource
     id: str
 
 
 class RelationType(str, Enum):
-    """Relationship labels encoded in the graph."""
+    """Named links used to describe who can do what.
+
+    Example:
+    - `owner`: full control on an entity.
+    - `manager`: can manage team content.
+    - `member`: can access team-scoped reads.
+    """
 
     OWNER = "owner"
     MANAGER = "manager"
@@ -39,7 +52,12 @@ class RelationType(str, Enum):
 
 
 class TagPermission(str, Enum):
-    """Tag permissions encoded in the graph."""
+    """Actions allowed on libraries/tags.
+
+    Example:
+    - `read`: list/search content.
+    - `update`: rename tag, edit metadata, attach resources.
+    """
 
     READ = "read"
     UPDATE = "update"
@@ -55,7 +73,7 @@ class TagPermission(str, Enum):
 
 
 class DocumentPermission(str, Enum):
-    """Document permissions encoded in the graph."""
+    """Actions allowed on documents stored in libraries."""
 
     READ = "read"
     UPDATE = "update"
@@ -63,7 +81,7 @@ class DocumentPermission(str, Enum):
 
 
 class ResourcePermission(str, Enum):
-    """Resource permissions encoded in the graph."""
+    """Actions allowed on non-document resources (files, templates, etc.)."""
 
     READ = "read"
     UPDATE = "update"
@@ -72,7 +90,12 @@ class ResourcePermission(str, Enum):
 
 
 class TeamPermission(str, Enum):
-    """Team permissions encoded in the graph."""
+    """Actions allowed at team scope.
+
+    Example:
+    - `can_update_resources`: create/update team libraries.
+    - `can_administer_members`: add/remove team members.
+    """
 
     CAN_READ = "can_read"
     CAN_UPDATE_INFO = "can_update_info"
@@ -82,10 +105,11 @@ class TeamPermission(str, Enum):
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
     CAN_ADMINISTER_MANAGERS = "can_administer_managers"
     CAN_ADMINISTER_OWNERS = "can_administer_owners"
+    CAN_READ_CONVERSATIONS = "can_read_conversations"
 
 
 class AgentPermission(str, Enum):
-    """Agent permissions encoded in the graph."""
+    """Actions allowed on agents."""
 
     READ = "read"
     UPDATE = "update"
@@ -98,7 +122,7 @@ class AgentPermission(str, Enum):
 
 
 class OrganizationPermission(str, Enum):
-    """Organization-level permissions encoded in the graph."""
+    """Actions allowed at global organization scope."""
 
     CAN_EDIT_AGENT_CLASS_PATH = "can_edit_agent_class_path"
 
@@ -114,6 +138,12 @@ RebacPermission = (
 
 
 def _resource_for_permission(permission: RebacPermission) -> Resource:
+    """Map one permission enum value to the resource type it targets.
+
+    Example:
+    - `TeamPermission.CAN_READ` -> `Resource.TEAM`
+    - `TagPermission.UPDATE` -> `Resource.TAGS`
+    """
     if isinstance(permission, TagPermission):
         return Resource.TAGS
     if isinstance(permission, DocumentPermission):
@@ -131,7 +161,12 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
 
 @dataclass(frozen=True)
 class Relation:
-    """Edge connecting a subject (holder) to a resource (target)."""
+    """One authorization statement linking an actor to a target.
+
+    Example:
+    - `user alice` `owner` of `tag invoices`
+    - `team thales` `owner` of `tag cir`
+    """
 
     subject: RebacReference
     relation: RelationType
@@ -140,37 +175,47 @@ class Relation:
 
 class RebacDisabledResult:
     """
-    Class used to represent rebac operation result when rebac has been disabled,
-    to let know the caller it must handle this case.
+    Marker object returned when relationship authorization is disabled.
+
+    Callers can branch on this value and apply fallback behavior.
     """
 
     ...
 
 
 class RebacEngine(ABC):
-    """Abstract base for relationship-based authorization providers."""
+    """Core authorization API used by all Fred backends.
+
+    This class provides the common business operations ("can Alice update team
+    resources?") while each concrete engine (OpenFGA, noop) handles storage.
+    """
 
     def __init__(self, m2m_security: M2MSecurity) -> None:
+        """Initialize engine dependencies used for contextual relations."""
         self.keycloak_client = create_keycloak_admin(m2m_security)
 
     @property
     def enabled(self) -> bool:
+        """Tell whether relationship authorization checks are active."""
         return True
 
     @property
     def need_keycloak_sync(self) -> bool:
+        """Tell whether this backend requires periodic Keycloak graph sync."""
         return False
 
     @abstractmethod
     async def add_relation(self, relation: Relation) -> str | None:
-        """Persist a relationship edge into the underlying store.
+        """Persist one authorization statement.
 
+        Example:
+        - Save `team thales owner tag cir`.
         Returns a backend-specific consistency token when available.
         """
 
     @abstractmethod
     async def delete_relation(self, relation: Relation) -> str | None:
-        """Remove a relationship edge from the underlying store.
+        """Remove one authorization statement.
 
         Returns a backend-specific consistency token when available.
         """
@@ -179,12 +224,17 @@ class RebacEngine(ABC):
     async def delete_all_relations_of_reference(
         self, reference: RebacReference
     ) -> str | None:
-        """Remove all relationships where the reference participates as subject or resource."""
+        """Remove every statement touching the given reference.
+
+        Example:
+        - deleting an agent can remove all `owner`, `viewer`, or parent links.
+        """
 
     async def add_relations(self, relations: Iterable[Relation]) -> str | None:
-        """Convenience helper to persist multiple relationships.
+        """Persist several statements and return the latest consistency token.
 
-        Returns the last non-null consistency token produced.
+        Example:
+        - Add owner and viewer links in one call after resource sharing.
         """
 
         tokens = await asyncio.gather(
@@ -200,6 +250,45 @@ class RebacEngine(ABC):
 
         return token
 
+    async def ensure_team_organization_relations(
+        self,
+        team_ids: Iterable[str],
+    ) -> str | None:
+        """Ensure each team is linked to the singleton organization.
+
+        Team checks in Fred always operate in a team context and require
+        deterministic organization/team graph edges for future policy evolution.
+        This helper maintains the persistent relation:
+        ``organization:fred#organization@team:<team_id>``.
+
+        Example:
+        - Before checking team permissions on `team:<id>`, ensure
+          `organization:fred -> team:<id>` exists.
+
+        This helper is idempotent and returns the write consistency token when
+        available.
+        """
+        unique_team_ids: list[str] = []
+        seen: set[str] = set()
+        for team_id in team_ids:
+            if not team_id or team_id in seen:
+                continue
+            seen.add(team_id)
+            unique_team_ids.append(team_id)
+
+        if not unique_team_ids:
+            return None
+
+        relations = [
+            Relation(
+                subject=RebacReference(Resource.ORGANIZATION, ORGANIZATION_ID),
+                relation=RelationType.ORGANIZATION,
+                resource=RebacReference(Resource.TEAM, team_id),
+            )
+            for team_id in unique_team_ids
+        ]
+        return await self.add_relations(relations)
+
     async def add_user_relation(
         self,
         user: KeycloakUser,
@@ -207,7 +296,11 @@ class RebacEngine(ABC):
         resource_type: Resource,
         resource_id: str,
     ) -> str | None:
-        """Convenience helper to add a relation for a user."""
+        """Create one statement where the subject is a user.
+
+        Example:
+        - Add `user:bob editor tag:finance`.
+        """
         return await self.add_relation(
             Relation(
                 subject=RebacReference(Resource.USER, user.uid),
@@ -217,9 +310,10 @@ class RebacEngine(ABC):
         )
 
     async def delete_relations(self, relations: Iterable[Relation]) -> str | None:
-        """Convenience helper to delete multiple relationships.
+        """Delete several statements and return the latest consistency token.
 
-        Returns the last non-null consistency token produced.
+        Example:
+        - Remove owner/manager/member links when removing a team member.
         """
         tokens = await asyncio.gather(
             *(self.delete_relation(relation) for relation in relations),
@@ -243,7 +337,7 @@ class RebacEngine(ABC):
         subject_type: Resource | None = None,
         consistency_token: str | None = None,
     ) -> list[Relation] | RebacDisabledResult:
-        """Return all relations matching the provided filters."""
+        """List persisted statements matching the given filters."""
 
     async def delete_user_relation(
         self,
@@ -252,7 +346,7 @@ class RebacEngine(ABC):
         resource_type: Resource,
         resource_id: str,
     ) -> str | None:
-        """Convenience helper to delete a relation for a user."""
+        """Delete one statement where the subject is a user."""
         return await self.delete_relation(
             Relation(
                 subject=RebacReference(Resource.USER, user.uid),
@@ -262,7 +356,7 @@ class RebacEngine(ABC):
         )
 
     async def delete_user_relations(self, user: KeycloakUser) -> str | None:
-        """Convenience helper to delete all relationships for a user."""
+        """Delete all statements referencing a user."""
         return await self.delete_all_relations_of_reference(
             RebacReference(Resource.USER, user.uid)
         )
@@ -277,7 +371,11 @@ class RebacEngine(ABC):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
-        """Return resource identifiers the subject can access for a permission."""
+        """List resources a subject can access for one permission.
+
+        Example:
+        - Return all teams a user can read.
+        """
 
     @abstractmethod
     async def lookup_subjects(
@@ -289,7 +387,11 @@ class RebacEngine(ABC):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
-        """Return subjects related to the resource by a given relation."""
+        """List subjects linked to a resource by one relation.
+
+        Example:
+        - List all owners of one team.
+        """
 
     async def lookup_user_resources(
         self,
@@ -298,7 +400,7 @@ class RebacEngine(ABC):
         *,
         consistency_token: str | None = None,
     ) -> list[RebacReference] | RebacDisabledResult:
-        """Convenience helper to lookup resources for a user."""
+        """List resources a user can access for one permission."""
         return await self.lookup_resources(
             subject=RebacReference(Resource.USER, user.uid),
             permission=permission,
@@ -317,7 +419,7 @@ class RebacEngine(ABC):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> bool:
-        """Evaluate whether a subject can perform an action on a resource."""
+        """Return `True` when a subject is authorized for an action."""
 
     async def has_user_permission(
         self,
@@ -327,7 +429,7 @@ class RebacEngine(ABC):
         *,
         consistency_token: str | None = None,
     ) -> bool:
-        """Convenience helper to check if a user has a permission on a resource."""
+        """Check one permission for one user/resource pair."""
         resource_type = _resource_for_permission(permission)
         return await self.has_permission(
             RebacReference(Resource.USER, user.uid),
@@ -346,7 +448,11 @@ class RebacEngine(ABC):
         contextual_relations: Iterable[Relation] | None = None,
         consistency_token: str | None = None,
     ) -> None:
-        """Raise if the subject is not authorized to perform the action on the resource."""
+        """Raise `AuthorizationError` when access is denied.
+
+        Example:
+        - Raises if Bob tries to update a team where he is only a member.
+        """
         if not await self.has_permission(
             subject,
             permission,
@@ -354,8 +460,19 @@ class RebacEngine(ABC):
             contextual_relations=contextual_relations,
             consistency_token=consistency_token,
         ):
+            logger.warning(
+                "ReBAC authorization denied: subject=%s:%s permission=%s resource=%s:%s",
+                subject.type.value,
+                subject.id,
+                permission.value,
+                resource.type.value,
+                resource.id,
+            )
             raise AuthorizationError(
-                subject.id, permission.value, resource.type, resource.id
+                subject.id,
+                permission.value,
+                resource.type,
+                f"Not authorized to {permission.value} {resource.type.value} {resource.id}",
             )
 
     async def check_user_permission_or_raise(
@@ -366,7 +483,7 @@ class RebacEngine(ABC):
         *,
         consistency_token: str | None = None,
     ) -> None:
-        """Convenience helper to check permission for a user, raising if unauthorized."""
+        """User-focused wrapper around `check_permission_or_raise`."""
         resource_type = _resource_for_permission(permission)
         await self.check_permission_or_raise(
             RebacReference(Resource.USER, user.uid),
@@ -376,8 +493,62 @@ class RebacEngine(ABC):
             consistency_token=consistency_token,
         )
 
+    async def check_user_team_permission_or_raise(
+        self,
+        user: KeycloakUser,
+        permission: TeamPermission,
+        team_id: str,
+    ) -> str | None:
+        """Check one team permission with the canonical team workflow.
+
+        This helper always ensures the team is linked to the organization
+        before checking permissions.
+        """
+        return await self.check_user_team_permissions_or_raise(
+            user=user,
+            team_id=team_id,
+            permissions=[permission],
+        )
+
+    async def check_user_team_permissions_or_raise(
+        self,
+        user: KeycloakUser,
+        team_id: str,
+        permissions: Iterable[TeamPermission],
+    ) -> str | None:
+        """Check team permissions with consistent organization-team bootstrap.
+
+        This is the canonical path for team permission checks across services.
+        It ensures ``organization -> team`` exists, propagates the resulting
+        consistency token, and executes all requested checks.
+        """
+        consistency_token = await self.ensure_team_organization_relations([team_id])
+
+        permissions_to_check = list(permissions)
+        if not permissions_to_check:
+            return consistency_token
+
+        await asyncio.gather(
+            *(
+                self.check_user_permission_or_raise(
+                    user=user,
+                    permission=permission,
+                    resource_id=team_id,
+                    consistency_token=consistency_token,
+                )
+                for permission in permissions_to_check
+            ),
+            return_exceptions=False,
+        )
+        return consistency_token
+
     async def _user_contextual_relations(self, user: KeycloakUser) -> set[Relation]:
-        """Resolve group memberships and organization role into contextual relations for a user."""
+        """Build contextual statements derived from the current user identity.
+
+        Example:
+        - user group memberships -> `member` links
+        - global app role -> organization role link
+        """
         group_relations, org_relations = await asyncio.gather(
             self.groups_list_to_relations(user),
             self.user_role_to_organization_relation(user),
@@ -385,7 +556,11 @@ class RebacEngine(ABC):
         return group_relations | org_relations
 
     async def groups_list_to_relations(self, user: KeycloakUser) -> set[Relation]:
-        """Helper to convert user groups to relations."""
+        """Convert token group paths into team membership statements.
+
+        Example:
+        - group `/thales` becomes `user -> member -> team:thales`.
+        """
         if isinstance(self.keycloak_client, KeycloackDisabled):
             return set()
 
@@ -408,14 +583,14 @@ class RebacEngine(ABC):
     async def user_role_to_organization_relation(
         self, user: KeycloakUser
     ) -> set[Relation]:
-        """Helper to convert user role to organization relation.
+        """Convert app roles into organization-level statements.
 
         Creates a relation between the user and the singleton 'fred' organization
         based on the user's Keycloak role (admin, editor, or viewer).
-        """
-        if isinstance(self.keycloak_client, KeycloackDisabled):
-            return set()
 
+        Example:
+        - role `admin` becomes `user -> admin -> organization:fred`.
+        """
         relations: set[Relation] = set()
 
         # Map Keycloak roles to organization relations based on the schema

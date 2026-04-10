@@ -21,6 +21,7 @@ def setup_backend_environment(backend_dir: Path) -> Path:
     app_dir_options = [
         backend_dir / "agentic_backend",
         backend_dir / "knowledge_flow_backend",
+        backend_dir / "control_plane_backend",
     ]
     
     app_dir = None
@@ -33,9 +34,10 @@ def setup_backend_environment(backend_dir: Path) -> Path:
 
     # If neither structure is found, raise the final error
     if not app_dir:
+        checked = ", ".join(str(p) for p in app_dir_options)
         raise FileNotFoundError(
             f"Could not find app/main.py in expected locations within {backend_dir}. "
-            f"Checked: {backend_dir / 'agentic_backend'} and {backend_dir / 'knowledge_flow_backend'}"
+            f"Checked: {checked}"
         )
     # --- End Flexible App Directory Discovery ---
     

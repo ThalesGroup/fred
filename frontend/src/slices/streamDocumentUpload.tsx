@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { getConfig } from "../common/config";
 import { store } from "../common/store";
 import { KeyCloakService } from "../security/KeycloakService";
 import { knowledgeFlowApi, ProcessDocumentsProgressResponse } from "./knowledgeFlow/knowledgeFlowOpenApi";
@@ -38,17 +37,20 @@ async function pollUploadProcessProgress(
   return new Promise<void>((resolve, reject) => {
     const poll = async () => {
       try {
-        const progress = (await store.dispatch(
-          knowledgeFlowApi.endpoints.getUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGet.initiate(
-            { workflowId },
-            { subscribe: false },
-          ),
-        ).unwrap()) as ProcessDocumentsProgressResponse;
+        const progress = (await store
+          .dispatch(
+            knowledgeFlowApi.endpoints.getUploadProcessDocumentsProgressKnowledgeFlowV1UploadProcessDocumentsProgressGet.initiate(
+              { workflowId },
+              { subscribe: false },
+            ),
+          )
+          .unwrap()) as ProcessDocumentsProgressResponse;
         onProgressSummary?.({ filename: fileName, workflowId, summary: progress });
         const hasFailed = progress.documents_failed > 0;
         const hasSucceeded =
           progress.total_documents > 0 &&
-          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >= progress.total_documents;
+          progress.documents_fully_processed + progress.documents_failed + progress.documents_missing >=
+            progress.total_documents;
 
         if (hasSucceeded && hasFailed) {
           resolve();
@@ -90,15 +92,10 @@ export async function streamUploadOrProcessDocument(
 
   formData.append("metadata_json", JSON.stringify(metadata) || "{}");
 
-  const backend_url_knowledge = getConfig().backend_url_knowledge;
-  if (!backend_url_knowledge) {
-    throw new Error("Knowledge backend URL is not defined");
-  }
-
   const endpoint =
     mode === "upload" ? "/knowledge-flow/v1/upload-documents" : "/knowledge-flow/v1/upload-process-documents";
 
-  const response = await fetch(`${backend_url_knowledge}${endpoint}`, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

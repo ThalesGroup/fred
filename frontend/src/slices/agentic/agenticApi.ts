@@ -3,7 +3,7 @@ import { createDynamicBaseQuery } from "../../common/dynamicBaseQuery";
 
 export const agenticApi = createApi({
   reducerPath: "agenticApi",
-  baseQuery: createDynamicBaseQuery({ backend: "api" }),
+  baseQuery: createDynamicBaseQuery(),
 
   // Make cache/invalidation coherent across the app.
   tagTypes: ["McpServers"],
@@ -12,6 +12,7 @@ export const agenticApi = createApi({
   refetchOnFocus: false,
   refetchOnReconnect: false,
 
+  // todo: remove this to improv app performance. Stale data should be handled with cache invalidation, not with timeouts.
   // For chat, stale data causes confusion. .
   keepUnusedDataFor: 0,
 

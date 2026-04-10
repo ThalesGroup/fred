@@ -7,8 +7,7 @@ export interface CatalogBadgeProps extends Omit<ChipProps, "size"> {
 }
 
 export const CatalogBadge = ({ tone = "neutral", sx, ...props }: CatalogBadgeProps) => {
-  const color =
-    tone === "neutral" ? undefined : tone;
+  const color = tone === "neutral" ? undefined : tone;
 
   return (
     <Chip
@@ -29,4 +28,3 @@ export const CatalogBadge = ({ tone = "neutral", sx, ...props }: CatalogBadgePro
     />
   );
 };
-

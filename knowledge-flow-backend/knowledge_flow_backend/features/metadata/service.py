@@ -30,6 +30,7 @@ from knowledge_flow_backend.common.document_structures import (
     ProcessingSummary,
 )
 from knowledge_flow_backend.common.structures import (
+    ClickHouseVectorStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
@@ -406,6 +407,9 @@ class MetadataService:
             elif isinstance(vs_cfg, PgVectorStorageConfig):
                 vector_backend = "pgvector"
                 vector_detail = f"collection={vs_cfg.collection_name}"
+            elif isinstance(vs_cfg, ClickHouseVectorStorageConfig):
+                vector_backend = "clickhouse"
+                vector_detail = f"table={vs_cfg.table}"
             else:
                 vector_backend = type(vs_cfg).__name__
                 vector_detail = None

@@ -15,16 +15,24 @@
 import CloseIcon from "@mui/icons-material/Close";
 import { AppBar, Box, CircularProgress, IconButton, Toolbar, Typography } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page } from "react-pdf";
-import "react-pdf/dist/esm/Page/AnnotationLayer.css";
-import "react-pdf/dist/esm/Page/TextLayer.css";
-import { getConfig } from "./config";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 import { useAuthToken } from "../security/AuthContext";
 
 type Props = {
   document: { document_uid: string; file_name?: string } | null;
   onClose: () => void;
 };
+
+// React-PDF requires workerSrc to be configured in the same module that renders
+// <Document>/<Page>; otherwise its default bare specifier can win at runtime.
+const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
+if (typeof Worker !== "undefined") {
+  pdfjs.GlobalWorkerOptions.workerPort = new Worker(pdfWorkerUrl, { type: "module" });
+} else {
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
+}
 
 const PDF_SCALE = 0.8;
 
@@ -52,20 +60,7 @@ export const PdfStreamingDocumentViewer: React.FC<Props> = ({ document: doc, onC
 
   const pdfUrl = useMemo(() => {
     if (!doc?.document_uid) return null;
-    const streamPath = `/knowledge-flow/v1/raw_content/stream/${doc.document_uid}`;
-    try {
-      const base =
-        (import.meta.env.VITE_BACKEND_URL_KNOWLEDGE as string | undefined) || getConfig().backend_url_knowledge;
-      const trimmedBase = (base || "").replace(/\/+$/, "");
-      if (!trimmedBase) return streamPath;
-      if (trimmedBase.endsWith("/knowledge-flow/v1")) {
-        return `${trimmedBase}/raw_content/stream/${doc.document_uid}`;
-      }
-      return `${trimmedBase}${streamPath}`;
-    } catch {
-      // Config may be unavailable during very early app bootstrap.
-      return streamPath;
-    }
+    return `/knowledge-flow/v1/raw_content/stream/${doc.document_uid}`;
   }, [doc?.document_uid]);
 
   const fileProp = useMemo(() => {

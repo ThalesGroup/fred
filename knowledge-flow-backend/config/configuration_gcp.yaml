@@ -1,0 +1,309 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+app:
+  name: "Knowledge Flow Backend"
+  base_url: "/knowledge-flow/v1"
+  address: "0.0.0.0"
+  port: 8111
+  log_level: "info"
+  reload: false
+  reload_dir: "."
+  metrics_enabled: false
+  metrics_address: "0.0.0.0"
+  metrics_port: 9111
+  kpi_process_metrics_interval_sec: 10
+  kpi_log_summary_interval_sec: 10.0
+  kpi_log_summary_top_n: 20
+
+processing:
+  default_profile: fast
+  profiles:
+    fast:
+      use_gpu: false
+      generate_summary: false
+      process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      pdf:
+        backend: pypdfium2
+        images_scale: 1.0
+        generate_picture_images: false
+        generate_page_images: false
+        generate_table_images: false
+        do_table_structure: false
+        do_ocr: false
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_backend.core.processors.input.lightweight_markdown_processor.lite_pdf_to_md_processor.LitePdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    medium:
+      use_gpu: false
+      generate_summary: false
+      process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      pdf:
+        backend: docling_parse
+        images_scale: 1.5
+        generate_picture_images: false
+        generate_page_images: false
+        generate_table_images: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+    rich:
+      use_gpu: false
+      generate_summary: false
+      process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
+      pdf:
+        backend: docling_parse
+        images_scale: 2.0
+        generate_picture_images: true
+        generate_page_images: false
+        generate_table_images: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
+      input_processors:
+        - suffix: ".pdf"
+          class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
+        - suffix: ".docx"
+          class_path: knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor.DocxMarkdownProcessor
+        - suffix: ".pptx"
+          class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
+        - suffix: ".csv"
+          class_path: knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor.CsvTabularProcessor
+        - suffix: ".txt"
+          class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
+        - suffix: ".md"
+          class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+
+security:
+  m2m:
+    enabled: false
+    client_id: "knowledge-flow"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  user:
+    enabled: false
+    client_id: "app"
+    realm_url: "http://app-keycloak:8080/realms/app"
+  authorized_origins:
+    - "http://localhost:5173"
+  rebac:
+    enabled: false
+    type: openfga
+    api_url: "http://localhost:9080"
+
+scheduler:
+  enabled: true
+  backend: "memory"
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
+    task_queue: "ingestion"
+    workflow_id_prefix: "pipeline"
+    connect_timeout_seconds: 5
+
+content_storage:
+  type: "local"
+  root_path: ~/.fred/knowledge-flow/content-storage
+document_sources:
+  fred:
+    type: push
+    description: "Documents manually uploaded by users"
+  local:
+    type: pull
+    provider: local_path
+    base_path: ~/Documents/Fred
+    description: "Personal local documents available for pull-mode ingestion"
+embedding_model:
+  provider: vertex-ai
+  name: text-embedding-005
+  settings:
+    project: your-gcp-project-id
+    location: europe-west4
+    max_retries: 2
+
+# Configuration for the LLM used for summary, keyword generation
+# and other text generation tasks.
+chat_model:
+  provider: vertex-ai-model-garden
+  name: "mistral-small-2503"
+  settings:
+    model_family: mistral
+    project: your-gcp-project-id
+    location: europe-west4
+    temperature: 0
+    max_retries: 2
+    request_timeout: 90
+
+vision_model:
+  provider: vertex-ai
+  name: gemini-2.5-flash
+  settings:
+    project: your-gcp-project-id
+    location: europe-west4
+    temperature: 0
+    max_retries: 2
+    request_timeout: 90
+
+crossencoder_model:
+  name: cross-encoder/ms-marco-MiniLM-L-12-v2
+  settings:
+    online: true
+    local_path: ~/.cache/huggingface/hub
+
+storage:
+  postgres:
+    sqlite_path: "~/.fred/knowledge-flow/knowledge-flow.db"
+  opensearch:
+    host: https://localhost:9200
+    secure: true
+    verify_certs: false
+    username: admin
+  resource_store:
+    type: "postgres"
+  kpi_store:
+    type: "log"
+    level: "DEBUG"
+  log_store:
+    type: "in_memory"
+  tag_store:
+    type: "postgres"
+  metadata_store:
+    type: "postgres"
+  task_store:
+    type: "postgres"
+  vector_store:
+    type: chroma
+  tabular_stores:
+    base_database: # Minimal configuration to enable CSV document ingestion
+      type: "sql"
+      driver: "duckdb"
+      database: "base_database"
+      path: "~/.fred/knowledge-flow/db.duckdb"
+      mode: "read_and_write"
+
+# integrations:
+#   prometheus:
+#     base_url: http://prometheus:9090
+#     verify_ssl: false
+#     timeout_seconds: 15.0
+#     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
+
+mcp:
+  reports_enabled: true
+  kpi_enabled: true
+  tabular_enabled: true
+  statistic_enabled: true
+  text_enabled: true
+  templates_enabled: true
+  resources_enabled: true
+  opensearch_ops_enabled: true
+  prometheus_ops_enabled: false
+  neo4j_enabled: false
+  filesystem_enabled: true
+
+filesystem:
+  type: local
+
+workspace_layout:
+  user_pattern: "users/{user_id}/{key}"
+  agent_config_pattern: "agents/{agent_id}/config/{key}"
+  agent_user_pattern: "agents/{agent_id}/users/{user_id}/{key}"

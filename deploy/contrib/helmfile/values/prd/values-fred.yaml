@@ -32,6 +32,7 @@ global:
       mathieu.juliensaintamand@thalesgroup.com
       julien.giraud@thalesgroup.com
       stephane.elmabrouk@thalesgroup.com
+      jean-christophe.ayrolles@thalesgroup.com
       thierry.betmont@thalesgroup.com
       fabrice.ciuti@thalesgroup.com
       manon.dupic@thalesgroup.com
@@ -59,6 +60,16 @@ global:
       stephane.thivilier@thalesgroup.com
       nicolas.blachier@thalesgroup.com
       thierry.busca@thalesgroup.com
+      frederic.somat@thalesgroup.com
+      nicola.natale@thalesgroup.com
+      jean-francois.genillier@thalesgroup.com
+      romain.deroux@thalesgroup.com
+      lynda.chillet@thalesgroup.com
+      maxime.vergoby@thalesgroup.com
+      jerome.lasserre@thalesgroup.com
+      alexandre.plaud@thalesgroup.com
+      david.brault@thalesgroup.com
+      cecile.besson@thalesgroup.com
       flavien.bugnot@thalesgroup.com
       philippe.arnaud@thalesgroup.com
       benjamin.deroys@thalesgroup.com
@@ -73,7 +84,7 @@ global:
       nicolas.payneau@thalesgroup.com
       gwenael.didier@thalesgroup.com
       chloe.cugat@thalesgroup.com
-      julia.daumal@thalesgroup.com
+      julia-j.daumal@thalesgroup.com
       berenger.tollitte@thalesgroup.com
       sylvain.hubert@thalesgroup.com
       thierry.busca@thalesgroup.com
@@ -171,7 +182,67 @@ global:
       gabriel.helan@thalesgroup.com
       maxance.demilly-duquesnoy@thalesgroup.com
       alejandro.velez-velasquez@thalesgroup.com
-      
+      karim.ayadi@thalesgroup.com
+      sarah.smith@thalesgroup.com
+      alexandra.vitti@thalesgroup.com
+      stephanie.manibanseng@thalesgroup.com
+      nathalie.peypelut@thalesgroup.com
+      caroline.claudel@thalesgroup.com
+      andre.mechaly@thalesgroup.com
+      thomas.delavallade@thalesgroup.com
+      guilhem.grousset@thalesgroup.com
+      mahmoud.chilali@thalesgroup.com
+      bruno.comont@thalesgroup.com
+      anthony.fernandes@thalesgroup.com
+      arnaud.landry-monchambert@thalesgroup.com
+      nicolas.pencher@thalesgroup.com
+      matthieu.serrano@thalesgroup.com
+      benoit.lang@thalesgroup.com
+      sebastien.colin-cochin@thalesgroup.com
+      florent.le-cointe@thalesgroup.com
+      michael.blancgonnet@thalesgroup.com
+      romain.thevenon@thalesgroup.com
+      johann.brassac@thalesgroup.com
+      raphaelle.le-bris@thalesgroup.com
+      anthony.fernandes@thalesgroup.com
+      nicolas.pencher@thalesgroup.com
+      mathilde.salleyron@thalesgroup.com
+      lea.laborde@thalesgroup.com
+      pierre.cassigneul@fr.thalesgroup.com
+      isabel.bouvier@thalesgroup.com
+      nordine.remili@thalesgroup.com
+      remi.beaur@thalesgroup.com
+      jean-marie.julhes@thalesgroup.com
+      pascal.laine@thalesgroup.com
+      elodie.seguin@thalesgroup.com
+      julie.trojani@thalesgroup.com
+      ophelia.lacour@thalesgroup.com
+      yohann.gallien@thalesgroup.com
+      arnaud.masselin@thalesgroup.com
+      marine.bultel@thalegroup.com
+      philippe.provost@thalesgroup.com
+      antoine.halbaut@thalesgroup.com
+      jamila.ameur@thalesgroup.com
+      loys.thomas@thalesgroup.com
+      armande.sbetta@thalesgroup.com
+      julien.robin@thalesgroup.com
+      pierre.flament@thalesgroup.com
+      hugues.deghorain@thalesgroup.com
+      johann.brassac@thalesgroup.com
+      julien.martinez@thalesgroup.com
+      robert.becart@thalesgroup.com
+      alain.alves@thalesgroup.com
+      estelle.levasseur@thalesgroup.com
+      florian.billat@thalesgroup.com
+      alain.montmory@thalesgroup.com
+      camille.mercadier@thalesgroup.com
+      antoine.thomas@thalesgroup.com
+      colas.prodhomme@thalesgroup.com
+      nicolas.hestin@thalesgroup.com
+      julien.paturel@thalesgroup.com
+      fabien.pourias@thalesgroup.com
+      matthieu.jamin@thalesgroup.com
+      jean-philippe.sante@thalesgroup.com
 
 applications:
   agentic-backend:
@@ -252,6 +323,7 @@ applications:
           provider: "openai"
           name: "mistral"
           settings:
+            stream_usage: false
             base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
         default_language_model: *tgs-mistral-medium
 
@@ -503,8 +575,8 @@ applications:
         settings:
           base_url: "https://api.corp.thales/corp/genai-embedding/v2"
       # Use mistral medium from TGS as LLM
-      chat_model: *tgs-mistral-medium
-
+      chat_model:   *tgs-mistral-medium
+      vision_model: *tgs-mistral-medium
       storage:
         # Set Postgres connection params
         postgres: *storage-postgres

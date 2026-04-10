@@ -19,23 +19,26 @@ app:
   reload: false
   reload_dir: "."
   max_ingestion_workers: 3
-  metrics_enabled: false
+  metrics_enabled: true
   metrics_address: "0.0.0.0"
-  metrics_port: 9111
+  metrics_port: 9112
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
-
 processing:
   default_profile: fast
   profiles:
     fast:
-      use_gpu: true
+      use_gpu: false
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: pypdfium2
-        images_scale: 2.0
+        images_scale: 1.0
         generate_picture_images: false
         generate_page_images: false
         generate_table_images: false
@@ -54,20 +57,42 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
     medium:
-      use_gpu: true
+      use_gpu: false
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
-        backend: pypdfium2
-        images_scale: 2.0
+        backend: docling_parse
+        images_scale: 1.5
         generate_picture_images: false
         generate_page_images: false
         generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -81,20 +106,42 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
     rich:
-      use_gpu: true
+      use_gpu: false
       generate_summary: false
       process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
-        backend: dlparse_v4
+        backend: docling_parse
         images_scale: 2.0
         generate_picture_images: true
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
         do_table_structure: true
         do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -108,8 +155,24 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jsonl"
+          class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
 
 security:
   m2m:
@@ -219,34 +282,31 @@ storage:
     secure: true
     verify_certs: false
     username: admin
-
-  catalog_store:
-    type: "postgres"
-    table: catalog
-
-  prompt_store:
-    type: "postgres"
-    table: prompt
+  # clickhouse:
+  #   host: localhost
+  #   port: 8123
+  #   database: fred
+  #   username: fred
+  #   secure: false
+  #   verify: true
 
   resource_store:
     type: "postgres"
-    table: resource
 
   tag_store:
     type: "postgres"
-    table: tag
 
   metadata_store:
     type: "postgres"
-    table: metadata
   task_store:
     type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
 
   vector_store:
     type: opensearch
     index: vector-index
+    # type: clickhouse
+    # table: fred_vectors
+    # bulk_size: 1000
     # Default bulk size for vector insertions is 500. Increase if you have
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.
@@ -270,6 +330,13 @@ storage:
       path: null # (important: remove the `path` default value)
       username: "tabular"
 
+# integrations:
+#   prometheus:
+#     base_url: http://prometheus:9090
+#     verify_ssl: false
+#     timeout_seconds: 15.0
+#     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
+
 mcp:
   reports_enabled: true
   kpi_enabled: true
@@ -279,6 +346,7 @@ mcp:
   templates_enabled: true
   resources_enabled: true
   opensearch_ops_enabled: true
+  prometheus_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
 

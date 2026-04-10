@@ -14,7 +14,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, status
@@ -37,18 +37,15 @@ router = APIRouter(tags=["Feedback"])
 class FeedbackPayload(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     comment: Optional[str] = None
-    message_id: str = Field(..., alias="messageId")
-    session_id: str = Field(..., alias="sessionId")
-    agent_id: str = Field(..., alias="agentName")
-
-    class Config:
-        populate_by_name = True
+    message_id: str
+    session_id: str
+    agent_id: str
 
 
 # ----------------------------------------------------------------------
 # Dependencies
 # ----------------------------------------------------------------------
-def get_feedback_service() -> FeedbackService:
+async def get_feedback_service() -> FeedbackService:
     """Dependency function to get the feedback service instance."""
     return FeedbackService(get_feedback_store())
 
@@ -73,7 +70,7 @@ async def post_feedback(
         agent_id=payload.agent_id,
         rating=payload.rating,
         comment=payload.comment,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         user_id=user.uid,
     )
     await service.add_feedback(user, feedback_record)

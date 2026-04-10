@@ -5,15 +5,7 @@ import HttpIcon from "@mui/icons-material/Http";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import TerminalRounded from "@mui/icons-material/TerminalRounded";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
-import {
-  Box,
-  CardContent,
-  Divider,
-  IconButton,
-  Stack,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Box, CardContent, Divider, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { CatalogBadge } from "../../shared/ui/catalog/CatalogBadge";
@@ -31,14 +23,7 @@ export interface McpServerCardProps {
   onToggleEnabled?: (server: McpServerConfiguration) => void;
 }
 
-export function McpServerCard({
-  server,
-  onEdit,
-  onDelete,
-  canEdit,
-  canDelete,
-  onToggleEnabled,
-}: McpServerCardProps) {
+export function McpServerCard({ server, onEdit, onDelete, canEdit, canDelete, onToggleEnabled }: McpServerCardProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const transport = (server.transport || "streamable_http").toLowerCase();
@@ -51,11 +36,7 @@ export function McpServerCard({
     : isStdio
       ? [server.command, ...(server.args || [])].filter(Boolean).join(" ") || "—"
       : server.url || "—";
-  const transportIcon = sourceKind === "local" ? (
-    <TerminalRounded fontSize="small" />
-  ) : (
-    <HttpIcon fontSize="small" />
-  );
+  const transportIcon = sourceKind === "local" ? <TerminalRounded fontSize="small" /> : <HttpIcon fontSize="small" />;
   const sourceLabel = t(`mcpHub.source.${sourceKind}`, sourceKind === "local" ? "Local" : "MCP");
   const transportLabel = t(`mcpHub.transport.${transport}`, transport);
   const authModeLabel = server.auth_mode
@@ -134,12 +115,20 @@ export function McpServerCard({
           </Stack>
 
           <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-            <CatalogBadge label={sourceLabel} icon={transportIcon} tone={sourceKind === "local" ? "secondary" : "primary"} />
+            <CatalogBadge
+              label={sourceLabel}
+              icon={transportIcon}
+              tone={sourceKind === "local" ? "secondary" : "primary"}
+            />
             <CatalogBadge label={transportLabel} />
             {!isInprocess && (
               <CatalogBadge
                 label={authModeLabel}
-                icon={server.auth_mode && server.auth_mode !== "no_token" ? <VerifiedUserIcon fontSize="small" /> : undefined}
+                icon={
+                  server.auth_mode && server.auth_mode !== "no_token" ? (
+                    <VerifiedUserIcon fontSize="small" />
+                  ) : undefined
+                }
                 tone={server.auth_mode && server.auth_mode !== "no_token" ? "info" : "neutral"}
               />
             )}
@@ -201,12 +190,7 @@ export function McpServerCard({
               }
             />
 
-            {!isInprocess && (
-              <CatalogMetaRow
-                label={t("mcpHub.fields.auth_mode")}
-                value={authModeLabel}
-              />
-            )}
+            {!isInprocess && <CatalogMetaRow label={t("mcpHub.fields.auth_mode")} value={authModeLabel} />}
           </Stack>
         </Stack>
       </CardContent>

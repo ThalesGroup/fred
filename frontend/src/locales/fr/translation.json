@@ -354,7 +354,7 @@
     }
   },
   "assetManager": {
-    "title": "Gérer les ressources pour {{agentId}}",
+    "title": "Ressources pour {{agentId}}",
     "description": "Téléchargez et gérez les ressources binaires comme les modèles ou les fichiers de configuration pour cet agent. Ces ressources peuvent être référencées par clé dans vos interactions avec l'agent.",
     "listTitle": "Ressources Actuelles",
     "noAssetsFound": "Aucune ressource trouvée. Téléchargez-en une ci-dessous pour commencer.",
@@ -377,20 +377,43 @@
     "deleteFailedSummary": "Échec de la Suppression",
     "unknownDeleteError": "Une erreur inconnue est survenue lors de la suppression.",
     "confirmDeleteTitle": "Confirmer la suppression",
-    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible."
+    "confirmDeleteMessage": "Supprimer cette ressource ? Cette action est irréversible.",
+    "addMoreFiles": "Ajouter plus de fichiers"
+  },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Options de chat"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "Prompt système",
+        "description": "Instructions de comportement principal pour l'assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Autoriser les pièces jointes",
+        "description": "Afficher les contrôles de téléversement/pièces jointes pour cet agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Sélecteur de bibliothèques de documents",
+        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent."
+      }
+    }
   },
   "agentEditDrawer": {
     "nameLabel": "Nom",
-    "nameHelperText": "Le nom d'affichage de l'agent.",
-    "roleHelperText": "Le rôle obligatoire de l'agent pour la découverte (ex. 'Analyste Financier')",
-    "descriptionHelperText": "La description obligatoire de l'agent.",
-    "tagsHelperText": "Tags utilisés pour la catégorisation et le filtrage.",
     "noTunableFields": "Cet agent n'expose aucun champ réglable.",
     "coreFields": "Champs de base",
     "tunableFields": "Champs réglables",
     "tagsLabel": "Tags",
     "selectMcpServers": "Sélectionnez des serveurs MCP",
-    "noMcpServers": "Aucun serveur MCP disponible pour le moment."
+    "noMcpServers": "Aucun serveur MCP disponible pour le moment.",
+    "headerTitle": "Édition d'un {{agentsNicknameSingular}}",
+    "headerTitleCreate": "Créer un {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Échec de la création de l'agent",
+      "updateFailed": "Échec de la mise à jour de l'agent"
+    }
   },
   "agentHub": {
     "title": "Vos {{agentsNicknamePlural}}",
@@ -418,14 +441,39 @@
       "description": "Description",
       "role": "Rôle",
       "agentType": "Type d'agent",
+      "creationMode": "Point de départ",
+      "creationModeHelp": "Choisissez la manière la plus naturelle de créer cet agent. Vous pourrez ensuite affiner sa configuration dans les réglages.",
+      "creationModeBasic": "Agent de base",
+      "creationModeBasicHelp": "Crée un agent ReAct générique, sans profil préchargé. Bon choix si vous voulez partir d'une base neutre.",
+      "creationModeProfile": "Profil ReAct",
+      "creationModeProfileHelp": "Crée un agent de base déjà spécialisé avec un profil backend, par exemple Georges, Custodian, Sentinel ou Geo Demo.",
+      "creationModeLegacyV1": "ReAct legacy (v1)",
+      "creationModeLegacyV1Help": "Crée un agent avec l'ancien runtime BasicReAct v1. À utiliser uniquement si vous avez un besoin explicite de comportement legacy.",
+      "creationModeLegacyV1Note": "Ce mode crée l'agent avec la classe runtime BasicReAct v1 (chemin legacy).",
+      "creationModeClass": "Classe personnalisée",
+      "creationModeClassHelp": "Réservé aux agents workflow ou implémentations backend spécifiques qui ne rentrent pas dans le modèle standard.",
+      "agentVersion": "Version de l'agent",
+      "agentVersionV2": "v2",
+      "agentVersionV2Help": "Recommandé pour tous les nouveaux agents. Entièrement configurable — définissez le rôle, les outils et le comportement selon vos besoins.",
+      "agentVersionV1": "v1",
+      "agentVersionV1Help": "Format legacy. À utiliser uniquement si explicitement demandé. Tous les nouveaux agents devraient utiliser V2.",
+      "v2ModeReact": "Personnalisé",
+      "v2ModeReactHelp": "Un agent entièrement à configurer vous-même — rôle, outils et instructions définis de zéro.",
+      "v2ModeProfile": "Depuis un modèle",
+      "v2ModeProfileHelp": "Partir d'une configuration prête à l'emploi. Plus rapide quand un modèle prédéfini correspond à vos besoins.",
+      "v2ModeDefinition": "Spécialiste",
+      "v2ModeDefinitionHelp": "Un agent à usage fixe livré par l'équipe plateforme, au comportement non modifiable (ex. Archie, Corpus Investigator).",
+      "definitionRef": "Référence de définition",
+      "definitionRefHelp": "Agent v2 à comportement fixe. Son comportement est défini dans le code.",
       "base_prompt": "Prompt",
       "agent_type": "Type d'agent",
-      "a2aProxyToggle": "Proxy A2A",
-      "a2aBaseUrl": "URL de base A2A",
-      "a2aBaseUrlRequired": "L'URL de base A2A est requise pour un agent A2A.",
-      "a2aToken": "Jeton A2A (optionnel)",
+      "profile": "Profil de départ",
+      "profileHelp": "Choisissez un profil défini côté backend. Vous pourrez ensuite affiner le prompt, les outils et la sécurité dans les réglages.",
+      "profileNoOptions": "Aucun profil ReAct n'est disponible actuellement.",
+      "profileRequired": "Un profil de départ est requis pour cet agent.",
       "classPath": "Chemin de classe personnalisé",
       "classPathHelp": "Sélectionnez un chemin de classe déclaré dans la configuration backend. Laisser vide pour le défaut.",
+      "classPathRequired": "Un chemin de classe personnalisé est requis quand on crée un agent depuis une classe.",
       "classPathNoOptions": "Aucun chemin de classe déclaré dans la configuration backend.",
       "optional": "Optionnel",
       "icon": "Icône",
@@ -454,7 +502,6 @@
     },
     "errors": {
       "updateFailed": "Échec de la mise à jour de l'agent",
-      "crewUpdateFailed": "Échec de la mise à jour de l'équipe",
       "tuningUpdateFailed": "Échec de la mise à jour des réglages de l'agent",
       "creationFailedSummary": "Échec de la création de l'agent",
       "creationFailedDetailFallback": "Une erreur inattendue s'est produite lors de la création de l'agent."
@@ -471,17 +518,7 @@
       "title": "Outils"
     },
     "confirmRestoreTitle": "Écraser les agents avec la configuration ?",
-    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible.",
-    "registerA2A": "Enrôler",
-    "noA2ACardSummary": "Aucune carte A2A stockée",
-    "noA2ACardDetail": "Cet agent ne possède pas encore de carte A2A stockée.",
-    "a2aCardTitle": "Carte Agent A2A",
-    "a2aCapabilities": "Capacités",
-    "a2aStreaming": "Streaming",
-    "a2aPush": "Notifications push",
-    "a2aHistory": "Historique d'état",
-    "a2aSkills": "Compétences",
-    "a2aExamples": "Exemples"
+    "confirmRestoreMessage": "Cette action remplacera tous les réglages personnalisés saisis dans l'UI par ceux du YAML. Vous perdrez vos modifications. Cette opération est irréversible."
   },
   "mcpHub": {
     "title": "Outils",
@@ -586,9 +623,14 @@
       "label": "Log Genius",
       "tooltip": "Analyser les logs récents pour un diagnostic rapide",
       "tooltipDescription": "Analysez les logs récents et résumez les problèmes probables avec des prochaines étapes.",
+      "panelTitle": "Assistance",
       "description": "Lance une courte investigation sur les dernières minutes de logs et retourne un diagnostic prêt à l'emploi.",
       "action": "Demander de l'aide ou une analyse",
-      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes."
+      "prompt": "Analysez les 5 dernières minutes de logs et résumez les problèmes probables avec des prochaines étapes.",
+      "incidentAction": "Diagnostic d'incident",
+      "incidentDescription": "Analyse les erreurs récentes et les signaux anormaux, puis propose un diagnostic clair avec des actions de remédiation.",
+      "performanceAction": "Diagnostic de performance",
+      "performanceDescription": "Analyse les traces de conversation pour identifier les goulots d'étranglement (modèle, outils, latence par étape) et les optimisations prioritaires."
     },
     "searchOptions": "Options de recherche",
     "searchOptionsReset": "Réinitialiser",
@@ -735,9 +777,8 @@
     "favorite": "Ajouter l'agent à vos favoris",
     "unfavorite": "Retirer l'agent de vos favoris",
     "manageAssets": "Gérer les ressources",
-    "manageCrew": "Gérer l'équipe",
     "inspectCode": "Inspecter le code source",
-    "viewA2ACard": "Voir la carte A2A",
+    "inspectAgent": "Inspecter la définition de l'agent",
     "enable": "Activer"
   },
   "dialogs": {
@@ -830,7 +871,7 @@
     "upload": "Ajouter un document",
     "uploadAndProcess": "Ajouter et traiter le document",
     "refresh": "Rafraîchir",
-    "uploadInLibrary": "Ajouter un document à la bibliothèque",
+    "uploadInLibrary": "Ajouter fichiers",
     "uploadDrawerTitle": "Ajouter un document",
     "dropFiles": "Déposez vos fichiers ici",
     "maxSize": "ou cliquez pour sélectionner (max 200Mo par fichier)",
@@ -866,6 +907,8 @@
     "emptyLibraryDescription": "Cette bibliothèque est vide. Commencez par ajouter votre premier document pour le rendre consultable par vos assistants IA.",
     "uploadFirstDocument": "Ajouter votre premier document",
     "preview": "Aperçu",
+    "previewNotReadySummary": "Aperçu indisponible",
+    "previewNotReadyDetail": "Ce document n'a pas encore généré d'aperçu. Lancez le traitement pour le créer.",
     "selected": "Sélectionné",
     "clearSelection": "Effacer la sélection",
     "bulkRemove": "Supprimer les documents sélectionnés",
@@ -1050,7 +1093,7 @@
     "noLibrariesFoundDescription": "Commencez par créer votre première bibliothèque pour organiser et gérer vos documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Créer une bibliothèque de documents",
+    "createLibrary": "Créer dossier",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
@@ -1163,6 +1206,10 @@
         "name": "Accès au système de fichiers",
         "description": "Permet à votre agent d'accéder à un filesystem (système de fichiers) (local ou Minio)"
       },
+      "prometheus": {
+        "name": "Accès à Prometheus",
+        "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL"
+      },
       "search_opensearch": {
         "name": "Rechercher dans opensearch",
         "description": "Permet à votre agent de rechercher dans les indices opensearch"
@@ -1258,49 +1305,116 @@
     "noAppDescription": "Les propriétaires de l’équipe n’ont configuré aucune application pour ce groupe pour le moment.",
     "noAppTitle": "Aucune app"
   },
-  "teamSettingsPage": {
-    "teamBanner": {
-      "label": "Bannière de l'équipe",
-      "buttonLabel": "Télécharger une image...",
-      "alt": "Image de bannière de l'équipe",
-      "noImage": "Aucune image de bannière téléchargée",
-      "uploadSuccess": "Bannière téléchargée avec succès",
-      "uploadError": "Échec du téléchargement de l'image de bannière",
-      "invalidType": "Type de fichier invalide. Veuillez utiliser le format JPEG, PNG ou WebP.",
-      "tooLarge": "Le fichier est trop volumineux. La taille maximale est de 5 Mo."
-    },
-    "description": {
-      "label": "Description de l'équipe",
-      "placeholder": "Décrivez ici la raison d'être de votre équipe ainsi que ses enjeux. "
-    },
-    "private": {
-      "label": "Équipe privée"
-    }
-  },
-  "teamMembersPage": {
-    "tableHeader": {
-      "username": "Identifiant",
-      "firstName": "Prénom",
-      "lastName": "Nom de famille",
-      "role": "Rôle",
-      "actions": "Actions"
-    },
-    "headerTitle": "Membres de l'équipe",
-    "headerInfoTooltip": "Voici les membres de cette équipe. Un membre peut faire partie de plusieurs équipes à la fois.",
-    "teamRole": {
-      "member": "Membre",
-      "manager": "Manager",
-      "owner": "Propriétaire"
-    },
-    "addUserInputPlaceholder": "Ajouter un utilisateur...",
-    "removeMemberConfonfirmationDialog": {
-      "title": "Confirmer la suppression ?",
-      "message": "Vous etes sur le point de supprimer cet utilisateur de l'équipe. Êtes-vous certain de vouloir continuer ?",
-      "confirmButtonLabel": "Supprimer"
-    }
-  },
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Annuler",
     "defaultConfirmButtonLabel": "Confirmer"
+  },
+  "rework": {
+    "back": "Retour",
+    "agentCard": {
+      "startChat": "Nouveau chat"
+    },
+    "teamRoles": {
+      "member": "Membre",
+      "manager": "Editeur",
+      "owner": "Propriétaire"
+    },
+    "teamCard": {
+      "memberCount": "{{count}} membres"
+    },
+    "sidebar": {
+      "team": {
+        "avatarAlt": "Équipe {{teamName}}",
+        "bannerAlt": "Bannière de l'équipe",
+        "userTeam": "Espace personel",
+        "marketplace": "Marketplace",
+        "menu": {
+          "resources": "Ressources",
+          "apps": "Apps"
+        }
+      },
+      "marketplace": {
+        "title": "Marketplace",
+        "menu": {
+          "teams": "Équipe",
+          "tools": "Outils",
+          "apps": "Apps"
+        }
+      },
+      "chatList": {
+        "title": "Conversations"
+      }
+    },
+    "userSettings": {
+      "disconnect": "Déconnexion",
+      "title": "Votre profil",
+      "app": {
+        "dark": "Sombre",
+        "system": "Système",
+        "light": "Clair",
+        "french": "Français",
+        "english": "Anglais"
+      },
+      "conversationProfile": {
+        "title": "Profil de conversation",
+        "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Membres",
+        "settings": "Paramètres",
+        "leaveTeam": "Quitter l'équipe"
+      },
+      "members": {
+        "title": "Membres de l'équipe",
+        "addMember": {
+          "placeholder": "Inviter des utilisateurs"
+        },
+        "table": {
+          "deleteAction": "Supprimer",
+          "identifiant": "Identifiant",
+          "firstName": "Prénom",
+          "lastName": "Nom",
+          "role": "Rôle",
+          "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Échec de la mise à jour du rôle",
+          "updateRoleDetail": "Impossible de mettre à jour le rôle du membre.",
+          "removeMemberSummary": "Échec de la suppression du membre",
+          "removeMemberDetail": "Impossible de supprimer ce membre de l'équipe.",
+          "forbiddenDetail": "Vous n'avez pas les droits pour effectuer cette action.",
+          "lastOwnerDetail": "Une équipe doit conserver au moins un propriétaire."
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Bannière de l'équipe",
+        "description": {
+          "label": "Description de l'équipe",
+          "placeholder": "Aidez les autres utilisateurs à comprendre le rôle de votre équipe."
+        },
+        "privateTeam": "Équipe privée",
+        "teamPrompt": {
+          "label": "Contexte de l'équipe (prompt)",
+          "placeholder": "Décrivez ici les enjeux et les objectifs de votre équipe. Ces éléments seront pris en compte par vos {{agentsNicknamePlural}} d’équipe."
+        }
+      }
+    },
+    "teams": {
+      "agents": {
+        "title": "Sollicitez vos {{agentsNicknamePlural}}",
+        "create": "Créer {{agentsNicknameSingular}}",
+        "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
+        "firstCreate": "Créer"
+      }
+    },
+    "marketplace": {
+      "teams": {
+        "title": "Équipes de la communauté",
+        "yourTeams": "Vos équipes",
+        "otherTeams": "Découvrez d'autres équipes"
+      }
+    }
   }
 }

@@ -14,8 +14,7 @@
 
 export const getNodeId = (n: any): string => String(n?.name ?? n?.id ?? "");
 
-export const isAdditiveEvent = (ev: MouseEvent): boolean =>
-  !!(ev.shiftKey || ev.ctrlKey || (ev as any).metaKey);
+export const isAdditiveEvent = (ev: MouseEvent): boolean => !!(ev.shiftKey || ev.ctrlKey || (ev as any).metaKey);
 
 // Create a position key function with given precision for overlap grouping
 export const makePosKey = (overlapPrecision: number) => {

@@ -27,12 +27,16 @@ app:
   max_ingestion_workers: 3
 
 processing:
-  default_profile: medium
+  default_profile: fast
   profiles:
     fast:
       use_gpu: true
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
         backend: pypdfium2
         images_scale: 1.0
@@ -54,22 +58,42 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     medium:
       use_gpu: true
       generate_summary: false
       process_images: false
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
-        backend: dlparse_v4
-        images_scale: 2.0
+        backend: docling_parse
+        images_scale: 1.5
         generate_picture_images: false
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
-        do_table_structure: false
-        do_ocr: false
+        do_table_structure: true
+        do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -83,22 +107,42 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
     rich:
       use_gpu: true
       generate_summary: false
       process_images: true
+      text_splitter:
+        chunk_size: 1500
+        chunk_overlap: 150
+        preserve_tables: true
       pdf:
-        backend: dlparse_v4
+        backend: docling_parse
         images_scale: 2.0
         generate_picture_images: true
-        generate_page_images: true
+        generate_page_images: false
         generate_table_images: false
         do_table_structure: true
         do_ocr: true
+        ocr_backend: openvino
+        force_full_page_ocr: true
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -112,10 +156,24 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.text_markdown_processor.text_markdown_processor.TextMarkdownProcessor
         - suffix: ".md"
           class_path: knowledge_flow_backend.core.processors.input.markdown_markdown_processor.markdown_markdown_processor.MarkdownMarkdownProcessor
-        - suffix: ".xlsm"
-          class_path: knowledge_flow_backend.core.processors.input.pps_tabular_processor.pps_tabular_processor.PpsTabularProcessor
         - suffix: ".jsonl"
           class_path: knowledge_flow_backend.core.processors.input.jsonl.jsonl_markdown_processor.JsonlMarkdownProcessor
+        - suffix: ".png"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".jpeg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".gif"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".bmp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".svg"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".webp"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+        - suffix: ".ico"
+          class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
 
 security:
   m2m:
@@ -209,62 +267,6 @@ crossencoder_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
-# chat_model:
-#   provider: ollama
-#   name: qwen2.5:3b-instruct         # any chat-capable Ollama model you pulled
-#   settings:
-#     base_url: http://localhost:11434
-#     temperature: 0.7                # optional, forwarded to LangChain Ollama wrapper
-
-# embedding_model:
-#   provider: ollama
-#   name: nomic-embed-text            # embedding model served by Ollama
-#   settings:
-#     base_url: http://localhost:11434
-
-# chat_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-gpt-4o              # Azure deployment name for your chat model
-#   settings:
-#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     azure_openai_api_version: 2024-05-01-preview
-# embedding_model:
-#   provider: azure
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-embed-3             # Azure deployment name for your embedding model
-#   settings:
-#     azure_endpoint: https://<your-azure-openai>.openai.azure.com
-#     azure_openai_api_version: 2024-05-01-preview
-
-# embedding_model:
-#   provider: azure-apim
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: fred-text-embedding-3-large
-#   settings:
-#     azure_ad_client_id: "your-client-id"
-#     azure_ad_client_scope: "api://your-client-id/.default"
-#     azure_apim_base_url: "https://trustnest.azure-api.net"
-#     azure_apim_resource_path: "/genai-aoai-inference/v1"
-#     azure_openai_api_version: "2024-06-01"
-#     azure_tenant_id: "your-tenant-id"
-
-# chat_model:
-#   provider: azure-apim        # openai | azure | ollama
-#   # azure use deployment name instead of a plain model name as OpenAI does. The principle
-#   # is the same.
-#   name: gpt-4o
-#   settings:
-#     azure_ad_client_id: "your-client-id"
-#     azure_ad_client_scope: "api://your-client-id/.default"
-#     azure_apim_base_url: "https://trustnest.azure-api.net"
-#     azure_apim_resource_path: "/genai-aoai-inference/v2"
-#     azure_openai_api_version: "2024-06-01"
-#     azure_tenant_id: "your-tenant-id"
-
 storage:
   tabular_stores:
     base_database:
@@ -293,18 +295,17 @@ storage:
     secure: true
     verify_certs: false
     username: admin
+  # clickhouse:
+  #   host: localhost
+  #   port: 8123
+  #   database: fred
+  #   username: fred
+  #   secure: false
+  #   verify: true
 
-  catalog_store:
-    type: "postgres"
-    table: catalog
-
-  prompt_store:
-    type: "postgres"
-    table: prompt
 
   resource_store:
     type: "postgres"
-    table: resource
 
   kpi_store:
     type: "log"
@@ -312,19 +313,17 @@ storage:
 
   tag_store:
     type: "postgres"
-    table: tag
 
   metadata_store:
     type: "postgres"
-    table: metadata
   task_store:
     type: "postgres"
-    table: workflow_tasks
-    prefix: "sched_"
 
   vector_store:
     type: opensearch
     index: vector-index
+    # type: clickhouse
+    # table: fred_vectors
     # Default bulk size for vector insertions is 500. Increase if you have
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.
@@ -332,6 +331,13 @@ storage:
 
   log_store:
     type: "in_memory"
+
+# integrations:
+#   prometheus:
+#     base_url: http://prometheus:9090
+#     verify_ssl: false
+#     timeout_seconds: 15.0
+#     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
 
 mcp:
   reports_enabled: true
@@ -342,6 +348,7 @@ mcp:
   templates_enabled: true
   resources_enabled: true
   opensearch_ops_enabled: true
+  prometheus_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
 

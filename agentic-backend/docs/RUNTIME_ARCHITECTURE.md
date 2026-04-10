@@ -1,162 +1,244 @@
-# Chat Runtime Architecture (Sessions · Agents · MCP)
+# Chat Runtime Architecture (v2-first)
 
-This document explains the new end‑to‑end flow from a user question to an agent’s response, including session restore, agent caching/initialization, streaming, persistence, KPIs, and MCP integration.
+This document describes the runtime architecture as it exists now, with both:
 
-## 1) High‑Level Flow
+- legacy `AgentFlow` support
+- v2 runtimes (`ReActRuntime`, `GraphRuntime`)
 
-1. WebSocket receives `ChatAskInput` and authenticates the user
-2. SessionOrchestrator ensures a session exists (restore or create)
-3. AgentFactory returns a warm agent (cached or freshly initialized)
-4. Minimal LC history is restored when needed (non‑cached agent)
-5. The user message is emitted to the stream
-6. StreamTranscoder runs the agent graph and streams events → ChatMessage[]
-7. Final messages are persisted; KPIs are recorded; FinalEvent sent to client
+The target direction is clear:
 
-Key benefit: the controller stays transport‑only; orchestration and runtime logic are isolated for testability and clarity.
+- authors declare `AgentDefinition`
+- Fred owns runtime lifecycle and execution
+- chat/session infrastructure stays transport-oriented
 
-## 2) Key Components
+## 1. High-Level Flow
 
-- WebSocket Controller — accepts WS, parses input, sends events
+1. WebSocket receives a typed chat event (`ask` or `human_resume`)
+2. `SessionOrchestrator` ensures the session exists
+3. `AgentFactory` returns a warm agent instance:
+   - legacy `AgentFlow`
+   - or `V2SessionAgent` wrapping a v2 runtime
+4. Minimal history is restored when needed
+5. User message is emitted immediately
+6. `StreamTranscoder` runs the agent and converts runtime events into `ChatMessage`
+7. Final exchange messages are persisted and returned
+
+The controller is intentionally thin.
+Runtime semantics live below it.
+
+## 2. Main Components
+
+- WebSocket controller
   - `agentic_backend/core/chatbot/chatbot_controller.py`
-- SessionOrchestrator — session lifecycle, history, KPI, persistence, streaming
+- Session orchestration
   - `agentic_backend/core/chatbot/session_orchestrator.py`
-- AgentFactory — per-(session, agent) cache, initialization, leader crew
+- Agent loading and warm instance caching
   - `agentic_backend/core/agents/agent_factory.py`
-- AgentFlow — base agent class (tuning, graph compile, astream_updates)
-  - `agentic_backend/core/agents/agent_flow.py`
-- StreamTranscoder — turns LangGraph events into Chat Protocol v2 messages
+- v2 runtime contracts
+  - `agentic_backend/core/agents/v2/contracts/models.py`
+  - `agentic_backend/core/agents/v2/contracts/runtime.py`
+- v2 executable runtimes
+  - `agentic_backend/core/agents/v2/react/react_runtime.py`
+  - `agentic_backend/core/agents/v2/graph_runtime.py`
+- v2 legacy bridge
+  - `agentic_backend/core/agents/v2/legacy_bridge/agent_settings_bridge.py`
+  - `agentic_backend/core/agents/v2/legacy_bridge/runtime_context_bridge.py`
+  - `agentic_backend/core/agents/v2/legacy_bridge/runtime_bootstrap.py`
+- v2 compatibility bridge to the current chat stack
+  - `agentic_backend/core/agents/v2/session_agent.py`
+- chat event transcoding
   - `agentic_backend/core/chatbot/stream_transcoder.py`
-- MCPRuntime — token‑aware MCP client + toolkit lifecycle for tools
+- MCP runtime / tool provider layer
   - `agentic_backend/common/mcp_runtime.py`
+  - `agentic_backend/integrations/v2_runtime/adapters.py`
 
-## 3) Detailed Sequence (Single Exchange)
+## 3. Streaming Protocol
 
-1) WebSocket handler accepts and authenticates
-- Reads token from `Authorization` header or `token` query param; decodes via Keycloak
-- Accepts `ChatAskInput`, reconciles access/refresh tokens and injects into `RuntimeContext`
-- References:
-  - `chatbot_controller.py:181` WebSocket route
-  - `chatbot_controller.py:200`–`214` token handling
-  - `chatbot_controller.py:251`–`255` inject tokens into `RuntimeContext`
+`StreamTranscoder` emits partial assistant frames using a **delta protocol**: each frame carries only the new text fragment since the previous frame (`metadata.extras.streaming_delta = true`). The frontend accumulates deltas; the final authoritative frame (no flag) replaces the buffer as a consistency checkpoint.
 
-2) Orchestrator entrypoint
-- `SessionOrchestrator.chat_ask_websocket(...)` orchestrates the whole exchange
-- References:
-  - `session_orchestrator.py:114`–`135` method header and responsibilities
+The flush interval controls how often buffered tokens are sent. It is tunable via `ai.stream_flush_interval_ms` in `configuration.yaml` (default: 100 ms). Raise to 200 ms on high-concurrency deployments to reduce WebSocket write frequency at no perceptible cost to streaming smoothness.
 
-3) Session ensure/restore
-- Get or create session; for new sessions, generate a concise title via the default model
-- References:
-  - `session_orchestrator.py:161`–`164` ensure session
-  - `_get_or_create_session` at `session_orchestrator.py:520+` (title generation)
+See `docs/PROTOCOL.md` for the full wire format.
 
-4) Agent creation/reuse
-- `AgentFactory.create_and_init(...)` returns a warm, per-(session, agent) instance
-- If cached: refresh runtime context; else: instantiate from catalog, apply settings, then run `initialize_runtime(...)` (Leader builds crew)
-- References:
-  - `agent_factory.py:64`–`110` create/reuse
-  - `agent_factory.py:129`–`176` simple vs leader init/crew
+## 4. Authoring vs Runtime Boundary
 
-5) History restore (only when not cached)
-- Rebuilds minimal LangChain history (system/human/assistant + tool calls/results) per exchange, ordered by `rank`, with a window of the last N exchanges
-- References:
-  - `session_orchestrator.py:171`–`180` restore decision and logging
-  - `_restore_history` at `session_orchestrator.py:400+`
+This is the most important split.
 
-6) Emit user message and run agent
-- Emit user message immediately to the stream (rank = current history length)
-- Wrap agent execution with KPI timer and run via `StreamTranscoder.stream_agent_response`
-- References:
-  - Emit: `session_orchestrator.py:186`–`199`
-  - Stream: `session_orchestrator.py:203`–`231`
+### Author-facing layer
 
-7) Streaming and transcoding
-- `StreamTranscoder` executes `agent.astream_updates(...)` with a `RunnableConfig` carrying `thread_id`, `user_id`, `access_token`, `refresh_token`
-- Converts LLM/tool events to ChatMessage parts: `TextPart`, `ToolCallPart`, `ToolResultPart`, and optional `thought`
-- Ensures exactly one assistant `final` per exchange, with intermediate `observation` messages when applicable
-- References:
-  - `stream_transcoder.py:120`–`137` run config and tokens
-  - `stream_transcoder.py:171`–`239` tool calls/results
-  - `stream_transcoder.py:291`–`335` final vs observation channels
+The author provides:
 
-8) Persist + KPIs + FinalEvent
-- Persist session (updated_at) and the union of prior + emitted messages
-- Record `chat.exchange_total` with `status=ok|error`
-- Send `FinalEvent` over WS with the full message batch of the exchange
-- References:
-  - `session_orchestrator.py:236`–`256` KPIs and persistence
-  - `chatbot_controller.py:274`–`278` FinalEvent
+- `AgentDefinition`
+- `ReActPolicy` or `GraphDefinition` plus node handlers
+- tuning fields
 
-## 4) Agent Lifecycle & Caching
+For tool-aware families such as ReAct and Graph, the author also provides:
 
-- Cache key: `(session_id, agent_id)` using a thread‑safe LRU with a bounded size from configuration
-- On reuse, always refresh the runtime context (tokens can change across requests)
-- Fresh builds apply authoritative settings from AgentManager, then call `initialize_runtime(...)`
-- `initialize_runtime(...)` uses the typed lifecycle: `bind_runtime_context(...)` → `build_runtime_structure()` → `activate_runtime()`
-- Legacy agents overriding `async_init(...)` still work via a compatibility path, but new agents should implement the split lifecycle hooks
-- LeaderFlow currently remains a special path/WIP and may still rely on legacy initialization sequencing
-- Session deletion triggers `AgentFactory.teardown_session_agents(session_id)` which sequentially awaits each agent’s `aclose()`
-- References:
-  - `agent_factory.py:51`–`61`, `:76`–`90`, `:92`–`110`, `:129`–`176`, `:179`–`200`
+- declared Fred tool refs
+- optional default MCP servers
 
-## 5) MCP Integration (Tools)
+### Platform-owned layer
 
-- Agents that need tools declare MCP server(s) in their tunings
-- Recommended split:
-  - `build_runtime_structure()` builds the graph topology (no MCP connection)
-  - `activate_runtime()` instantiates `MCPRuntime(agent=self)`, calls `await mcp.init()`, and binds tools to the model
-- `MCPRuntime.init()` creates a `MultiServerMCPClient` using the agent’s `RuntimeContext` tokens
-- Tool binding remains explicit, e.g., `self.model = self.model.bind_tools(self.mcp.get_tools())`
-- Lifecycle guarantees: the MCP client opens and closes in the same asyncio task; `aclose()` is awaited on agent teardown
-- Example: `SentinelExpert` shows end‑to‑end binding of MCP tools in `activate_runtime()` while keeping graph build non-activating
-- References:
-  - `sentinel_expert.py:86`–`103` init + bind tools
-  - `mcp_runtime.py:88`–`123` init; `:124`–`180` lifecycle task; `:181`–`195` tool access; `:196`–`200` aclose signature
+Fred runtime owns:
 
-## 6) Security & Tokens
+- context binding
+- activated clients and models
+- checkpointing
+- executor creation
+- streaming and persistence
+- inspection
 
-- WS handler reconciles access/refresh tokens per message and writes them into `RuntimeContext`
-- Tokens flow via `RunnableConfig.configurable` to the agent graph; tools/LLMs can read them from `agent.run_config`
-- Agents may refresh tokens mid‑run via `AgentFlow.refresh_user_access_token()` which updates the `RuntimeContext`
-- References:
-  - Inject: `chatbot_controller.py:251`–`255`
-  - Pass: `stream_transcoder.py:129`–`137`
-  - Refresh helper: `agent_flow.py:120`–`238`
+This is what moves Fred closer to a platform model instead of a collection of custom LangGraph classes.
 
-## 7) History Model & Restore Rules
+Legacy-bridge note:
 
-- Persistence uses Chat Protocol v2 (`ChatMessage` with `rank`, `exchange_id`, `role`, `channel`, `parts`)
-- Restore is strictly ordered by `rank` (true chronology) and windowed by “last N exchanges” if configured
-- Tool call context is tracked per‑exchange to avoid cross‑leak; a `ToolMessage` is emitted only if a matching call_id exists in the same exchange
-- References:
-  - `session_orchestrator.py:112`–`135` responsibility note
-  - `_restore_history` at `session_orchestrator.py:400+`
+- `v2/legacy_bridge/` is the explicit home for code that still depends on
+  legacy `AgentSettings`, legacy `RuntimeContext`, or the mixed `AgentFactory`
+  world
+- when reviewing pure v2 runtime behavior, start with `contracts/`, `react/`,
+  `support/`, `deep_runtime.py`, and `graph_runtime.py`
+- when removing migration code later, `legacy_bridge/` is the first folder to
+  shrink or delete
 
-## 8) KPIs & Metrics
+Context-binding note:
 
-- KPIs recorded for counts and latency with `agent_id`, `session_id`, `exchange_id`, and `user_id`
-- Outcome (`status=ok|error`) is decided after streaming based on the presence of a single assistant/final
-- Metrics retrieval is delegated to the history store
-- References:
-  - `session_orchestrator.py:147`–`160`, `:203`–`248`, `:338`–`356`
+- `BoundRuntimeContext.portable_context` is the preferred v2-facing context contract
+- `BoundRuntimeContext.runtime_context` still exists as a transitional compatibility
+  bridge for legacy Fred runtime concerns not yet lifted into explicit v2 ports or
+  portable fields
+- new runtime code should prefer portable context and explicit ports over growing
+  direct dependency on legacy runtime context
 
-## 9) Error Handling
+## 5. Two Executable v2 Categories Today
 
-- WS handler distinguishes internal vs external errors and sends `ErrorEvent` if the socket is still connected
-- Orchestrator logs failures during agent execution; KPI timer marks status=error in that case
-- References:
-  - `chatbot_controller.py:280`–`308`
-  - `session_orchestrator.py:232`–`235`
+### 5.1 ReActRuntime
 
-## 10) Extensibility Guidance
+Used for:
 
-- To add a new agent:
-  - Register it in the catalog (YAML/DB) with `class_path` and tuning fields
-  - Implement `build_runtime_structure()` to build the LangGraph structure (no I/O)
-  - Implement `activate_runtime()` to set the model, initialize MCP (when needed), and bind tools
-  - Return a compiled graph via `get_compiled_graph()` and stream with `astream_updates`
-- To enable MCP tools, add MCP servers in the agent’s tuning; ensure `RuntimeContext` carries tokens
+- `Basic ReAct V2`
+- `RAG Expert V2`
+- profile-driven agents such as `custodian`, `sentinel`, `georges`, `log_genius`, `geo_demo`
 
----
+Runtime responsibilities:
 
-This architecture keeps concerns cleanly separated: transport (WS), orchestration (sessions/history/KPIs), agent runtime (graphs/tools), and persistence/metrics. It is token‑aware, safe to cache across exchanges, and friendly to MCP‑enabled agents.
+- resolve chat model
+- merge declared Fred tool refs and runtime MCP tools into one runtime tool surface
+- manage tool approval
+- stream tool activity and final answer
+- propagate structured outputs such as sources, `GeoPart`, `LinkPart`
+
+### 5.2 GraphRuntime
+
+Used for:
+
+- `PostalTrackingDefinition`
+
+Runtime responsibilities:
+
+- build typed initial state
+- execute deterministic node handlers
+- route on explicit graph conditionals
+- call declared and runtime tools
+- pause/resume on HITL
+- emit structured final output with UI parts
+
+This runtime is the main proof that `GraphAgentDefinition` is not only an inspection toy.
+
+## 6. Session Bridge
+
+The current chat pipeline still expects a legacy `astream_updates(...)` surface.
+
+`V2SessionAgent` is the explicit bridge:
+
+- it adapts ReAct input from restored `HumanMessage` / `AIMessage` / `ToolMessage`
+- it adapts graph input from chat state to the graph input model
+- it converts v2 runtime events into the minimal legacy event shapes already understood by `StreamTranscoder`
+
+This keeps migration risk contained.
+
+Important consequence:
+
+- the chat stack does not need to know whether the v2 runtime underneath is ReAct or Graph
+
+## 7. Inspection
+
+Inspection is now separate from execution.
+
+Canonical endpoint:
+
+- `/agentic/v1/agents/{agent_id}/inspect`
+
+Inspection is:
+
+- metadata-first
+- non-activating
+- safe for UI
+
+Preview shape depends on agent category:
+
+- ReAct: text preview
+- Graph: Mermaid preview
+
+The old “graph endpoint” is no longer the conceptual model.
+
+## 8. MCP and Runtime Tools
+
+Fred currently uses two complementary tool paths:
+
+- declared tool refs, invoked through `ToolInvokerPort`
+- runtime-provided tools, typically via MCP, provided by `ToolProviderPort`
+
+Current adapters:
+
+- `FredKnowledgeSearchToolInvoker`
+- `FredMcpToolProvider`
+
+This is already close to the kind of capability split a `genai_sdk`-style substrate would want.
+
+## 9. Structured UI Capabilities
+
+The runtime can now transport structured output parts directly:
+
+- `LinkPart`
+- `GeoPart`
+- sources/citations
+
+These are no longer tied to bespoke legacy agents.
+They are runtime capabilities that both ReAct and Graph can emit.
+
+## 10. HITL
+
+Two HITL modes now exist in practice:
+
+- ReAct tool approval
+- richer graph workflow pauses
+
+Transport-wise, both end up as explicit pause/resume semantics in chat.
+
+The runtime target remains:
+
+- author requests human interaction through Fred contracts
+- Fred owns pause, checkpoint, resume, and UI payload shape
+
+## 11. Current Limitations
+
+The v2 architecture is real, but not finished.
+
+Still open:
+
+- richer graph-node authoring contract beyond the current first slice
+- broader internal capability model
+- UI work for inspection rendering
+- eventual reduction of legacy `AgentFlow` usage
+- a cleaner future bridge toward `genai_sdk` contracts below the runtime layer
+
+## 12. Architectural Direction
+
+The intended direction is now:
+
+- `AgentDefinition` as the authoring SDK
+- Fred runtime as the execution platform
+- LangGraph as an implementation engine
+- optional future `genai_sdk` compatibility as a capability substrate below the runtime
+
+That is the frame in which new work should be evaluated.

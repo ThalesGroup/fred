@@ -1,0 +1,55 @@
+app:
+  name: Control Plane Backend
+  base_url: /control-plane/v1
+  address: 0.0.0.0
+  port: 8222
+  log_level: info
+  # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
+  kpi_process_metrics_interval_sec: 0
+  kpi_log_summary_interval_sec: 0.0
+  kpi_log_summary_top_n: 0
+
+scheduler:
+  enabled: true
+  # temporal: requires Temporal server + run-worker process
+  # memory: execute lifecycle pass in API process (no worker needed)
+  backend: temporal
+  temporal:
+    host: temporal:7233
+    namespace: default
+    task_queue: control-plane-lifecycle
+    workflow_id_prefix: control-plane
+    connect_timeout_seconds: 5
+
+security:
+  m2m:
+    enabled: true
+    realm_url: http://app-keycloak:8080/realms/app
+    client_id: control-plane
+    secret_env_var: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET # pragma: allowlist secret
+  user:
+    enabled: true
+    realm_url: http://app-keycloak:8080/realms/app
+    client_id: app
+  authorized_origins:
+    - http://localhost:5173
+  rebac:
+    enabled: true
+    type: openfga
+    api_url: "http://localhost:9080"
+
+storage:
+  postgres:
+    host: localhost
+    port: 5432
+    database: fred
+    username: fred
+  content_storage:
+    type: minio
+    endpoint: http://localhost:9000
+    access_key: "admin"
+    bucket_name: "control-plane-content"
+    secure: false
+
+policies:
+  purge_catalog_path: ./conversation_policy_catalog.yaml

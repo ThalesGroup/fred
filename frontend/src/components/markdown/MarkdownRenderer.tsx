@@ -17,7 +17,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 // import DownloadIcon from "@mui/icons-material/Download"; // REMOVED: Mermaid Download
 import { Box, IconButton, Typography, useTheme } from "@mui/material";
 import "katex/dist/katex.min.css";
-import { createElement, useEffect, useRef, useState } from "react";
+import React, { ComponentPropsWithoutRef, createElement, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { prism, vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -100,7 +100,9 @@ const extractMediaInfo = (src?: string, fallbackDocumentUid?: string): MediaInfo
   return null;
 };
 
-type AuthenticatedImageProps = JSX.IntrinsicElements["img"] & { documentUidForMedia?: string };
+type AuthenticatedImageProps = ComponentPropsWithoutRef<"img"> & {
+  documentUidForMedia?: string;
+};
 
 const AuthenticatedMarkdownImage: React.FC<AuthenticatedImageProps> = ({ documentUidForMedia, src, ...rest }) => {
   const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(() =>

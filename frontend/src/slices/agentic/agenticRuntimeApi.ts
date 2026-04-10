@@ -18,4 +18,3 @@ export const runtimeApi = api.injectEndpoints({
 });
 
 export const { useGetRuntimeSummaryQuery, useLazyGetRuntimeSummaryQuery } = runtimeApi;
-

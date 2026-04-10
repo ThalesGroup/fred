@@ -15,6 +15,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.agent_spec import AgentTuning
 
@@ -29,6 +31,7 @@ class BaseAgentStore(ABC):
         self,
         settings: AgentSettings,
         tuning: AgentTuning,
+        session: AsyncSession | None = None,
     ) -> None:
         """
         Persist an agent's settings.
@@ -36,7 +39,9 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    async def load_all(self) -> List[AgentSettings]:
+    async def load_all(
+        self, session: AsyncSession | None = None
+    ) -> List[AgentSettings]:
         """
         Retrieve all persisted agent definitions.
         """
@@ -46,6 +51,7 @@ class BaseAgentStore(ABC):
     async def get(
         self,
         agent_id: str,
+        session: AsyncSession | None = None,
     ) -> Optional[AgentSettings]:
         """
         Retrieve a single agent definition by ID.
@@ -56,6 +62,7 @@ class BaseAgentStore(ABC):
     async def delete(
         self,
         agent_id: str,
+        session: AsyncSession | None = None,
     ) -> None:
         """
         Delete an agent's settings.
@@ -65,7 +72,7 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    async def static_seeded(self) -> bool:
+    async def static_seeded(self, session: AsyncSession | None = None) -> bool:
         """
         True when static agents have already been seeded into the persistent store.
         Used to avoid re-seeding deleted static agents after a restart.
@@ -73,7 +80,7 @@ class BaseAgentStore(ABC):
         pass
 
     @abstractmethod
-    async def mark_static_seeded(self) -> None:
+    async def mark_static_seeded(self, session: AsyncSession | None = None) -> None:
         """
         Mark the store as having seeded static agents.
         """

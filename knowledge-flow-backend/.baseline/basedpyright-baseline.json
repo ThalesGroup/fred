@@ -1,15 +1,5 @@
 {
     "files": {
-        "./knowledge_flow_backend/core/processors/input/pps_tabular_processor/pps_tabular_processor.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 70,
-                    "endColumn": 74,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./knowledge_flow_backend/core/stores/vector/weaviate_vector_store.py": [
             {
                 "code": "reportAttributeAccessIssue",

@@ -28,7 +28,7 @@ import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState, 
 import AudioController from "../AudioController.tsx";
 import AudioRecorder from "../AudioRecorder.tsx";
 
-import { Box, Grid2, IconButton, Paper, Stack, TextField, useTheme } from "@mui/material";
+import { Box, Grid, IconButton, Paper, Stack, TextField, useTheme } from "@mui/material";
 
 import { useTranslation } from "react-i18next";
 import { SearchPolicyName } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
@@ -163,7 +163,7 @@ function UserInput(
   const { allowAgentSwitchInOneConversation } = useFrontendProperties();
 
   return (
-    <Grid2 container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
+    <Grid container sx={{ height: "100%", justifyContent: "flex-start", overflow: "hidden" }} size={12} display="flex">
       <Box
         sx={{
           flex: 1,
@@ -204,7 +204,7 @@ function UserInput(
           </>
         )}
 
-        <Grid2 container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
+        <Grid container size={12} alignItems="center" sx={{ p: 0, gap: 0, backgroundColor: "transparent" }}>
           {/* Single rounded input with the "+" inside (bottom-left) */}
           <Box sx={{ position: "relative", width: "100%" }}>
             {/* + anchored inside the input, bottom-left */}
@@ -327,9 +327,9 @@ function UserInput(
               )}
             </Box>
           </Box>
-        </Grid2>
+        </Grid>
       </Box>
-    </Grid2>
+    </Grid>
   );
 }
 

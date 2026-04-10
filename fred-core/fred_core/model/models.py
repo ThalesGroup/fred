@@ -22,3 +22,5 @@ class ModelProvider(Enum):
     AZURE_OPENAI = "azure-openai"
     OLLAMA = "ollama"
     OPENAI = "openai"
+    VERTEX_AI = "vertex-ai"
+    VERTEX_AI_MODEL_GARDEN = "vertex-ai-model-garden"

@@ -14,20 +14,24 @@
 
 
 import os
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
+    TemporalSchedulerConfig,
 )
-from fred_core.common.structures import TemporalSchedulerConfig
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from fred_core.scheduler import SchedulerBackend
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 """
 This module defines the top level data structures used by controllers, processors
@@ -49,6 +53,51 @@ class IngestionProcessingProfile(str, Enum):
     FAST = "fast"
     MEDIUM = "medium"
     RICH = "rich"
+
+
+_DURATION_PATTERN = re.compile(r"^(?P<value>\d+)\s*(?P<unit>[smhd]?)$")
+_DURATION_MULTIPLIER_SECONDS = {
+    "": 1,
+    "s": 1,
+    "m": 60,
+    "h": 3600,
+    "d": 86400,
+}
+
+
+def parse_duration_seconds(value: object, *, field_name: str) -> int:
+    """
+    Parse duration values expressed as:
+      - integer seconds (e.g. 3600)
+      - compact strings (e.g. "45s", "10m", "1h", "2d")
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive duration, got {value!r}")
+
+    if isinstance(value, (int, float)):
+        seconds = int(value)
+        if seconds <= 0:
+            raise ValueError(f"{field_name} must be > 0 seconds")
+        return seconds
+
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{field_name} must be an integer seconds value or a compact duration string like '1h'",
+        )
+
+    token = value.strip().lower()
+    match = _DURATION_PATTERN.fullmatch(token)
+    if not match:
+        raise ValueError(
+            f"{field_name}='{value}' is invalid. Use formats like '45s', '10m', '1h', '2d' or integer seconds.",
+        )
+
+    amount = int(match.group("value"))
+    unit = match.group("unit")
+    seconds = amount * _DURATION_MULTIPLIER_SECONDS[unit]
+    if seconds <= 0:
+        raise ValueError(f"{field_name} must be > 0 seconds")
+    return seconds
 
 
 class OutputProcessorResponse(BaseModel):
@@ -132,6 +181,19 @@ class LocalContentStorageConfig(BaseModel):
 ContentStorageConfig = Annotated[Union[LocalContentStorageConfig, MinioStorageConfig], Field(discriminator="type")]
 
 
+class ClickHouseStoreConfig(BaseModel):
+    host: str = Field(default="localhost", description="ClickHouse host")
+    port: int = Field(default=8123, description="ClickHouse HTTP port")
+    database: str = Field(default="default", description="ClickHouse database")
+    username: str = Field(default="default", description="ClickHouse username")
+    password: Optional[str] = Field(
+        default_factory=lambda: os.getenv("CLICKHOUSE_PASSWORD"),
+        description="ClickHouse password (from CLICKHOUSE_PASSWORD env)",
+    )
+    secure: bool = Field(default=False, description="Use HTTPS for ClickHouse client")
+    verify: bool = Field(default=True, description="Verify TLS certificates for ClickHouse")
+
+
 ###########################################################
 #
 #  --- Vector storage configuration
@@ -179,6 +241,18 @@ class PgVectorStorageConfig(BaseModel):
     collection_name: str = Field("fred_chunks", description="Logical collection name")
 
 
+class ClickHouseVectorStorageConfig(BaseModel):
+    """
+    ClickHouse backend.
+    - Uses shared `storage.clickhouse` connection settings.
+    - Stores vectors in the configured table.
+    """
+
+    type: Literal["clickhouse"]
+    table: str = Field("fred_vectors", description="ClickHouse table name for chunks")
+    bulk_size: int = Field(default=1000, description="Number of rows per insert batch")
+
+
 VectorStorageConfig = Annotated[
     Union[
         InMemoryVectorStorage,
@@ -186,6 +260,7 @@ VectorStorageConfig = Annotated[
         ChromaVectorStorageConfig,
         WeaviateVectorStorage,
         PgVectorStorageConfig,
+        ClickHouseVectorStorageConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -194,11 +269,29 @@ VectorStorageConfig = Annotated[
 class ProcessingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    class TextSplitterConfig(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        chunk_size: int = Field(
+            default=1500,
+            ge=1,
+            description="Maximum number of characters per chunk for text splitting.",
+        )
+        chunk_overlap: int = Field(
+            default=150,
+            ge=0,
+            description="Number of overlapping characters between consecutive chunks.",
+        )
+        preserve_tables: bool = Field(
+            default=True,
+            description="If true, keep annotated markdown tables intact (do not split by size).",
+        )
+
     class PdfPipelineConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
 
-        backend: Literal["dlparse_v4", "pypdfium2"] = Field(
-            default="dlparse_v4",
+        backend: Literal["dlparse_v4", "pypdfium2", "docling_parse"] = Field(
+            default="docling_parse",
             description="PDF backend for Docling conversion.",
         )
         images_scale: float = Field(default=2.0, gt=0.0, description="Docling PDF image scaling factor.")
@@ -215,6 +308,14 @@ class ProcessingConfig(BaseModel):
         do_ocr: bool = Field(
             default=False,
             description="Enable OCR in the standard Docling PDF pipeline.",
+        )
+        ocr_backend: Optional[Literal["onnxruntime", "openvino", "paddle", "torch"]] = Field(
+            default="openvino",
+            description="Override RapidOCR inference backend when OCR is enabled.",
+        )
+        force_full_page_ocr: Optional[bool] = Field(
+            default=None,
+            description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
         )
 
     class ProfileInputProcessorConfig(BaseModel):
@@ -243,14 +344,48 @@ class ProcessingConfig(BaseModel):
             default=False,
             description="Enable/disable human-centric abstract and keyword generation for this profile.",
         )
+        input_activity_timeout: str = Field(
+            default="1h",
+            description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
+        )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
+        )
+        text_splitter: "ProcessingConfig.TextSplitterConfig" = Field(
+            default_factory=lambda: ProcessingConfig.TextSplitterConfig(),
+            description="Text splitter configuration for vectorization and summarization.",
         )
         input_processors: List["ProcessingConfig.ProfileInputProcessorConfig"] = Field(
             default_factory=list,
             description="Input processors selected for this profile (suffix-specific).",
         )
+
+        @field_validator("input_activity_timeout", mode="before")
+        @classmethod
+        def _normalize_input_activity_timeout(cls, value: object) -> str:
+            if value is None:
+                return "1h"
+            if isinstance(value, (int, float)):
+                seconds = parse_duration_seconds(
+                    value,
+                    field_name="processing.profiles.*.input_activity_timeout",
+                )
+                return f"{seconds}s"
+
+            normalized = str(value).strip().lower()
+            parse_duration_seconds(
+                normalized,
+                field_name="processing.profiles.*.input_activity_timeout",
+            )
+            return normalized
+
+        @property
+        def input_activity_timeout_seconds(self) -> int:
+            return parse_duration_seconds(
+                self.input_activity_timeout,
+                field_name="processing.profiles.*.input_activity_timeout",
+            )
 
     class ProfilesConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -330,6 +465,10 @@ class MCPConfig(BaseModel):
         default=False,
         description="Expose OpenSearch operational endpoints and the corresponding MCP server.",
     )
+    prometheus_ops_enabled: bool = Field(
+        default=False,
+        description="Expose Prometheus operational endpoints and the corresponding MCP server.",
+    )
     neo4j_enabled: bool = Field(
         default=False,
         description="Expose Neo4j graph exploration endpoints and the corresponding MCP server.",
@@ -342,7 +481,7 @@ class MCPConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: str = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig
 
 
@@ -369,6 +508,66 @@ class AppConfig(BaseModel):
     kpi_log_summary_top_n: int = Field(
         default=0,
         description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
+    )
+
+
+class PrometheusConfig(BaseModel):
+    base_url: str = Field(
+        ...,
+        description="Base URL of a Prometheus-compatible HTTP API.",
+    )
+    verify_ssl: bool = Field(
+        default=True,
+        description="Verify upstream TLS certificates when querying Prometheus.",
+    )
+    timeout_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        description="HTTP timeout applied to Prometheus API calls.",
+    )
+    bearer_token: Optional[str] = Field(
+        default=None,
+        description="Optional bearer token loaded from PROMETHEUS_BEARER_TOKEN.",
+    )
+    username: Optional[str] = Field(
+        default="admin",
+        description="Basic-auth username configured directly in prometheus.username. Defaults to 'admin'.",
+    )
+    password: Optional[str] = Field(
+        default=None,
+        description="Optional basic-auth password loaded from PROMETHEUS_PASSWORD.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_credentials(cls, values: dict) -> dict:
+        values.setdefault("bearer_token", os.getenv("PROMETHEUS_BEARER_TOKEN"))
+        values.setdefault("password", os.getenv("PROMETHEUS_PASSWORD"))
+        return values
+
+    @field_validator("base_url", mode="after")
+    @classmethod
+    def normalize_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            raise ValueError("prometheus.base_url must not be empty")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_basic_auth_pair(self) -> "PrometheusConfig":
+        if self.password and not self.username:
+            raise ValueError(
+                "prometheus.username must not be empty when prometheus.password is set",
+            )
+        return self
+
+
+class IntegrationsConfig(BaseModel):
+    """Optional upstream service integrations consumed by Knowledge Flow."""
+
+    prometheus: Optional[PrometheusConfig] = Field(
+        default=None,
+        description="Optional Prometheus API configuration for cluster-wide metrics queries.",
     )
 
 
@@ -493,6 +692,7 @@ DocumentSourceConfig = Annotated[Union[PushSourceConfig, PullSourceConfig], Fiel
 class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
+    clickhouse: Optional[ClickHouseStoreConfig] = Field(default=None, description="Optional ClickHouse store")
     resource_store: StoreConfig
     tag_store: StoreConfig
     kpi_store: StoreConfig
@@ -562,6 +762,10 @@ class WorkspaceLayoutConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
+    integrations: Optional[IntegrationsConfig] = Field(
+        default=None,
+        description="Optional third-party service integrations used by the backend.",
+    )
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None

@@ -13,16 +13,7 @@
 // limitations under the License.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-} from "@mui/material";
+import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from "@mui/material";
 import yaml from "js-yaml";
 import { ResourceKind, useKindLabels } from "./resourceLabels";
 
@@ -31,12 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import {
-  buildFrontMatter,
-  buildProfileYaml,
-  looksLikeYamlDoc,
-  splitFrontMatter,
-} from "./resourceYamlUtils";
+import { buildFrontMatter, buildProfileYaml, looksLikeYamlDoc, splitFrontMatter } from "./resourceYamlUtils";
 const profileSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
@@ -166,8 +152,8 @@ export const ChatContextEditorModal: React.FC<ChatContextEditorModalProps> = ({
   const dialogTitle = previewOnly
     ? t("settings.chatContextPreviewTitle", "Chat context preview")
     : initial
-    ? t("resourceLibrary.editResource", { typeOne })
-    : t("resourceLibrary.createResource", { typeOne });
+      ? t("resourceLibrary.editResource", { typeOne })
+      : t("resourceLibrary.createResource", { typeOne });
 
   return (
     <Dialog open={isOpen} onClose={onClose} fullWidth maxWidth="md">

@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Protocol
 
 import httpx
 from fred_core.kpi import KPIActor
@@ -28,7 +28,17 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from agentic_backend.core.agents.agent_flow import AgentFlow
+    from agentic_backend.common.structures import AgentSettings
+    from agentic_backend.core.agents.runtime_context import RuntimeContext
+
+
+class KnowledgeFlowAgentContext(Protocol):
+    runtime_context: "RuntimeContext"
+    agent_settings: "AgentSettings"
+
+    def refresh_user_access_token(self) -> str:
+        raise NotImplementedError()
+
 
 TokenRefreshCallback = Callable[[], str]
 
@@ -42,7 +52,7 @@ class KfBaseClient:
         self,
         allowed_methods: frozenset,
         *,
-        agent: Optional["AgentFlow"] = None,
+        agent: Optional[KnowledgeFlowAgentContext] = None,
         access_token: Optional[str] = None,
         refresh_user_access_token: Optional[Callable[[], str]] = None,
     ):
@@ -106,11 +116,24 @@ class KfBaseClient:
         """Uniform accessor for the access token regardless of mode."""
         if self._agent:
             token = getattr(self._agent.runtime_context, "access_token", None)
-            if not token:
-                raise ValueError("AgentFlow runtime_context has no access_token.")
-            return token
+            if token:
+                return token
+            # Centralized fallback: if token is missing, attempt a refresh once.
+            if self._try_refresh_token():
+                refreshed = getattr(self._agent.runtime_context, "access_token", None)
+                if refreshed:
+                    return refreshed
+            raise ValueError(
+                "AgentFlow runtime_context has no access_token and refresh failed."
+            )
+
+        if not self._static_access_token and self._refresh_cb:
+            if self._try_refresh_token() and self._static_access_token:
+                return self._static_access_token
         if not self._static_access_token:
-            raise ValueError("No access_token provided for session-scoped client.")
+            raise ValueError(
+                "No access_token provided for session-scoped client and refresh failed."
+            )
         return self._static_access_token
 
     def _try_refresh_token(self) -> bool:
@@ -197,8 +220,11 @@ class KfBaseClient:
                 path,
             )
             if self._try_refresh_token():
+                # Drop the stale explicit token so _execute_authenticated_request
+                # falls back to _current_access_token() and picks up the refreshed one.
+                retry_kwargs = {k: v for k, v in kwargs.items() if k != "access_token"}
                 r = await self._execute_authenticated_request(
-                    method=method, path=path, **kwargs
+                    method=method, path=path, **retry_kwargs
                 )
 
             r.raise_for_status()

@@ -11,9 +11,6 @@ const LETTER_SPACING = 0.2; // avoids cramped uppercase
 // --- THEME COLOR MAPPING ---
 // Maps the functional color hints to specific, high-contrast chart colors.
 export const THEME_COLOR_MAP = (theme: Theme): Record<AgentColorHint, string> => ({
-  // Leaders: Use high-contrast purple
-  leader: theme.palette.primary.main,
-
   // Data/Knowledge: Mapped to chart.blue (Information/Context)
   data: theme.palette.primary.main,
 

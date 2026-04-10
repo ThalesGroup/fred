@@ -1,0 +1,23 @@
+version: v1
+
+conversation_policies:
+  purge:
+    default:
+      mode: deferred_delete
+      retention: PT30S
+      cancel_on_rejoin: true
+
+    rules:
+      - rule_id: purge.team.swiftpost
+        match:
+          team_id: swiftpost
+          trigger: member_removed
+        action:
+          retention: PT60S
+
+      - rule_id: purge.team.northbridge
+        match:
+          team_id: northbridge
+          trigger: member_removed
+        action:
+          retention: PT120S

@@ -26,18 +26,15 @@ import type { Properties } from "../slices/agentic/agenticOpenApi";
  * @returns The frontend properties object containing configuration like agentsNickname, etc.
  */
 export function useFrontendProperties(): Properties {
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery(
-    undefined,
-    {
-      // Cache for 1 hour (3600 seconds) since config rarely changes
-      pollingInterval: 0,
-      // Keep unused data in cache for 1 hour
-      refetchOnMountOrArgChange: 3600,
-      // Keep data fresh in cache even when component unmounts
-      refetchOnFocus: false,
-      refetchOnReconnect: false,
-    }
-  );
+  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery(undefined, {
+    // Cache for 1 hour (3600 seconds) since config rarely changes
+    pollingInterval: 0,
+    // Keep unused data in cache for 1 hour
+    refetchOnMountOrArgChange: 3600,
+    // Keep data fresh in cache even when component unmounts
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
+  });
 
   return useMemo(() => {
     return frontendConfig?.frontend_settings?.properties || ({} as Properties);

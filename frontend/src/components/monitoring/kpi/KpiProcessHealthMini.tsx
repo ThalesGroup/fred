@@ -85,9 +85,7 @@ export const KpiProcessHealthMini = ({ cpu, memory, height = 150 }: KpiProcessHe
 
   if (!hasData) {
     return (
-      <Box sx={{ p: 1, fontSize: 12, color: theme.palette.text.secondary, height }}>
-        No data in the selected range.
-      </Box>
+      <Box sx={{ p: 1, fontSize: 12, color: theme.palette.text.secondary, height }}>No data in the selected range.</Box>
     );
   }
 

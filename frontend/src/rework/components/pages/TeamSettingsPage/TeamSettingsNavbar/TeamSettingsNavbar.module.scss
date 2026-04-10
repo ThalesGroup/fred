@@ -1,0 +1,21 @@
+@use "src/index.scss" as *;
+
+.team-settings-navbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  height: 100%;
+}
+
+.team-name {
+  padding-left: var(--spacing-xs);
+  color: var(--on-surface);
+
+  @include typography("title", "medium");
+}
+
+.team-settings-navbar-disconnect {
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+}

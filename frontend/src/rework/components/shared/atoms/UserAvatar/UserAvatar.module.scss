@@ -1,0 +1,39 @@
+@use "src/index.scss" as *;
+
+.user-avatar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  background-color: var(--secondary-container);
+  color: var(--on-secondary-container);
+  corner-shape: unset;
+
+  &[data-size="x-small"] {
+    width: 1.5rem;
+    height: 1.5rem;
+
+    @include typography("label", "small");
+  }
+
+  &[data-size="small"] {
+    width: 2rem;
+    height: 2rem;
+
+    @include typography("label", "medium");
+  }
+
+  &[data-size="medium"] {
+    width: 2.5rem;
+    height: 2.5rem;
+
+    @include typography("label", "large");
+  }
+
+  &[data-size="large"] {
+    width: 3.5rem;
+    height: 3.5rem;
+
+    @include typography("title", "large");
+  }
+}

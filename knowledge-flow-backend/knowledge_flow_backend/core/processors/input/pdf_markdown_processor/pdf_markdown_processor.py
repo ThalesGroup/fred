@@ -15,16 +15,16 @@
 
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Type
 
 import pypdf
 from docling.backend.abstract_backend import AbstractDocumentBackend
+from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
@@ -38,12 +38,39 @@ from knowledge_flow_backend.core.processors.input.common.image_describer import 
 logger = logging.getLogger(__name__)
 
 
+def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> str:
+    """
+    Why:
+        Wrap exported Markdown tables with stable markers for downstream chunking
+        without letting replacement logic reinterpret table text.
+
+    How:
+        Pass the full Markdown content and the ordered table Markdown exports.
+        The first literal match of each table is wrapped with TABLE_START/TABLE_END
+        markers and the updated Markdown string is returned.
+    """
+    for table_id, table_md in enumerate(tables_markdown):
+        if not table_md:
+            logger.warning("[PROCESSOR][PDF] Table export to markdown returned empty despite table having rows : ID %s", table_id)
+            continue
+
+        annotated_table = f"""<!-- TABLE_START:id={table_id} -->\n{table_md}\n<!-- TABLE_END -->"""
+        if table_md not in md_content:
+            logger.warning("[PROCESSOR][PDF] Table %s not found in Markdown content.", table_id)
+            continue
+
+        md_content = md_content.replace(table_md, annotated_table, 1)
+
+    return md_content
+
+
 class PdfMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PDF documents to Markdown with optional image descriptions and table markers."
 
     _BACKEND_BY_NAME: dict[str, Type[AbstractDocumentBackend]] = {
         "dlparse_v4": DoclingParseV4DocumentBackend,
         "pypdfium2": PyPdfiumDocumentBackend,
+        "docling_parse": DoclingParseDocumentBackend,
     }
 
     def __init__(self):
@@ -119,6 +146,16 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return {"document_name": file_path.name, "error": str(e)}
 
     def convert_file_to_markdown(self, file_path: Path, output_dir: Path, document_uid: str | None) -> dict:
+        """
+        Why:
+            Convert an input PDF into the normalized Markdown artifact used by the
+            ingestion pipeline, including table and image annotations needed later.
+
+        How:
+            Call with the source PDF path, a writable output directory, and the
+            current document UID. The method writes `output.md` inside `output_dir`
+            and returns paths for the generated artifacts.
+        """
         output_markdown_path = output_dir / "output.md"
         try:
             active_profile, process_images, pdf_options = self._resolve_effective_options()
@@ -133,6 +170,14 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             pipeline_options.generate_table_images = pdf_options.generate_table_images
             pipeline_options.do_table_structure = pdf_options.do_table_structure
             pipeline_options.do_ocr = pdf_options.do_ocr
+            rapid_ocr_options: RapidOcrOptions | None = None
+            if pdf_options.do_ocr:
+                rapid_ocr_options = RapidOcrOptions()
+                if pdf_options.ocr_backend is not None:
+                    rapid_ocr_options.backend = pdf_options.ocr_backend
+                if pdf_options.force_full_page_ocr is not None:
+                    rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
+                pipeline_options.ocr_options = rapid_ocr_options
             artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
             if artifacts_dir:
                 artifacts_path = Path(artifacts_dir).expanduser()
@@ -148,10 +193,12 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 pipeline_options.force_backend_text = True  # Utilise directement le flux PDF
 
             logger.info(
-                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s",
+                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s",
                 active_profile.value,
                 pdf_options.backend,
                 process_images,
+                getattr(rapid_ocr_options, "backend", None),
+                getattr(rapid_ocr_options, "force_full_page_ocr", None),
             )
             converter = DocumentConverter(
                 format_options={
@@ -190,26 +237,12 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                         description = "Image description not available."
                     pictures_desc.append(description)
 
-            # Generate the markdown file with placeholders for images
-            doc.save_as_markdown(output_markdown_path, image_mode=ImageRefMode.PLACEHOLDER, image_placeholder="%%ANNOTATION%%")
-
-            # Replace placeholders with picture descriptions in the markdown file
-            with open(output_markdown_path, "r", encoding="utf-8") as f:
-                md_content = f.read()
+            md_content = doc.export_to_markdown(image_mode=ImageRefMode.PLACEHOLDER, image_placeholder="%%ANNOTATION%%")
 
             # Add comments to identify tables
             if doc.tables:
-                for i, table in enumerate(doc.tables):
-                    table_id = i
-                    table_md = table.export_to_markdown(doc=doc).strip()
-                    if not table_md:
-                        logger.warning(f"[PROCESSOR][PDF] Table export to markdown returned empty despite table having rows : ID {table_id}")
-                    else:
-                        annotated_table = f"""<!-- TABLE_START:id={table_id} -->\n{table_md}\n<!-- TABLE_END -->"""
-                        pattern = re.escape(table_md)
-                        md_content, count = re.subn(pattern, annotated_table, md_content, count=1)
-                        if count == 0:
-                            logger.warning(f"[PROCESSOR][PDF] Table {table_id} not found in Markdown content.")
+                table_markdown = [table.export_to_markdown(doc=doc).strip() for table in doc.tables]
+                md_content = _annotate_markdown_tables(md_content, table_markdown)
 
             for desc in pictures_desc:
                 md_content = md_content.replace("%%ANNOTATION%%", desc, 1)

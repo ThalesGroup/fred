@@ -26,6 +26,8 @@ pip-wheel-metadata/
 **/Dockerfile*
 **/dockerfiles
 **/.dockerignore
+!frontend/dockerfiles
+!frontend/dockerfiles/docker-entrypoint.sh
 
 # macOS-specific files
 **/.DS_Store
@@ -41,6 +43,7 @@ pip-wheel-metadata/
 # Local development related files
 **/target/
 **/configuration.yaml
+**/configuration_*.yaml
 
 # Byte-compiled files
 __pycache__/

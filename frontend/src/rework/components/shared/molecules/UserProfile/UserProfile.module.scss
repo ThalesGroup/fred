@@ -1,0 +1,27 @@
+@use "src/index.scss" as *;
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-radius: var(--spacing-xs);
+  background-color: var(--surface-container-highest);
+  padding: 0 var(--spacing-xs) 0 var(--spacing-s);
+  height: 3.5rem;
+}
+
+.user-identity {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+}
+
+.user-identity-name {
+  color: var(--on-surface);
+  @include typography("body", "medium");
+}
+
+.user-identity-id {
+  color: var(--on-surface-retreat);
+  @include typography("body", "small");
+}

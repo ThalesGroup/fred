@@ -15,7 +15,7 @@
 from types import SimpleNamespace
 
 import pytest
-from fred_core import ModelConfiguration
+from fred_core.common import ModelConfiguration
 
 import knowledge_flow_backend.application_context as application_context_module
 from knowledge_flow_backend.application_context import ApplicationContext

@@ -1,0 +1,47 @@
+@use "src/index.scss" as *;
+
+.team-settings-parameters-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 720px;
+}
+
+.form-section {
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+.team-images-section {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.team-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.team-banner-title {
+  color: var(--on-surface-retreat);
+
+  @include typography("label", "large");
+}
+
+.team-banner-image {
+  display: flex;
+  border-radius: var(--radius-s);
+  min-width: 0;
+  height: 80px;
+  object-fit: contain;
+}
+
+.private-state {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--on-surface);
+
+  @include typography("body", "large");
+}

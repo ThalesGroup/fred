@@ -15,19 +15,17 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, cast
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    advisory_lock_key,
-    run_ddl_with_advisory_lock,
-)
+from fred_core.sql.async_session import make_session_factory, use_session
 from pydantic import TypeAdapter
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text, select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from agentic_backend.core.feedback.feedback_structures import FeedbackRecord
 from agentic_backend.core.feedback.store.base_feedback_store import BaseFeedbackStore
+from agentic_backend.core.feedback.store.feedback_models import FeedbackRow
 
 logger = logging.getLogger(__name__)
 
@@ -36,83 +34,67 @@ FeedbackAdapter = TypeAdapter(FeedbackRecord)
 
 class PostgresFeedbackStore(BaseFeedbackStore):
     """
-    PostgreSQL-backed feedback store using a single table.
-    Mirrors the DuckDB/OpenSearch variants.
+    PostgreSQL-backed feedback store using SQLAlchemy ORM sessions.
     """
 
-    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str = "feedback_"):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
+    def __init__(self, engine: AsyncEngine):
+        self._sessions = make_session_factory(engine)
 
-        metadata = MetaData()
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("id", String, primary_key=True),
-            Column("session_id", String, nullable=False),
-            Column("message_id", String, nullable=False),
-            Column("agent_id", String, nullable=False),
-            Column("rating", Integer, nullable=False),
-            Column("comment", Text, nullable=True),
-            Column("created_at", DateTime(timezone=True), nullable=False),
-            Column("user_id", String, nullable=False),
-            keep_existing=True,
+    async def list(self, session: AsyncSession | None = None) -> List[FeedbackRecord]:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(FeedbackRow).order_by(FeedbackRow.created_at.desc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return [
+            FeedbackAdapter.validate_python(row, from_attributes=True) for row in rows
+        ]
+
+    async def get(
+        self, feedback_id: str, session: AsyncSession | None = None
+    ) -> Optional[FeedbackRecord]:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(FeedbackRow, feedback_id)
+        if row is None:
+            return None
+        return FeedbackAdapter.validate_python(row, from_attributes=True)
+
+    async def save(
+        self, feedback: FeedbackRecord, session: AsyncSession | None = None
+    ) -> None:
+        row = FeedbackRow(
+            id=feedback.id,
+            session_id=feedback.session_id,
+            message_id=feedback.message_id,
+            agent_id=feedback.agent_id,
+            rating=feedback.rating,
+            comment=feedback.comment,
+            created_at=feedback.created_at,
+            user_id=feedback.user_id,
         )
-
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-    async def list(self) -> List[FeedbackRecord]:
-        async with self.store.begin() as conn:
-            rows = await conn.execute(
-                select(self.table).order_by(self.table.c.created_at.desc())
-            )
-        return [self._row_to_record(row) for row in rows]
-
-    async def get(self, feedback_id: str) -> Optional[FeedbackRecord]:
-        async with self.store.begin() as conn:
-            row = await conn.execute(
-                select(self.table).where(self.table.c.id == feedback_id)
-            )
-        return self._row_to_record(row) if row else None
-
-    async def save(self, feedback: FeedbackRecord) -> None:
-        values = FeedbackAdapter.dump_python(feedback, mode="json", exclude_none=True)
-        async with self.store.begin() as conn:
-            await self.store.upsert(
-                conn,
-                self.table,
-                values=values,
-                pk_cols=["id"],
-            )
+        async with use_session(self._sessions, session) as s:
+            await s.merge(row)
         logger.info("[FEEDBACK][PG] Saved feedback entry '%s'", feedback.id)
 
-    async def delete(self, feedback_id: str) -> None:
-        async with self.store.begin() as conn:
-            result = await conn.execute(
-                self.table.delete().where(self.table.c.id == feedback_id)
+    async def delete(
+        self, feedback_id: str, session: AsyncSession | None = None
+    ) -> None:
+        async with use_session(self._sessions, session) as s:
+            result = cast(
+                CursorResult,
+                await s.execute(
+                    delete(FeedbackRow).where(FeedbackRow.id == feedback_id)
+                ),
             )
-        deleted = getattr(result, "rowcount", None)
+        deleted = result.rowcount
         if deleted:
             logger.info("[FEEDBACK][PG] Deleted feedback entry '%s'", feedback_id)
         else:
             logger.warning(
-                "[FEEDBACK][PG] Feedback entry '%s' not found for deletion",
-                feedback_id,
+                "[FEEDBACK][PG] Feedback entry '%s' not found for deletion", feedback_id
             )
-
-    def _row_to_record(self, row) -> FeedbackRecord:
-        data = dict(row._mapping) if hasattr(row, "_mapping") else dict(row)
-        try:
-            return FeedbackAdapter.validate_python(data)
-        except Exception:
-            logger.exception(
-                "[FEEDBACK][PG] Failed to parse feedback row id=%s", data.get("id")
-            )
-            raise

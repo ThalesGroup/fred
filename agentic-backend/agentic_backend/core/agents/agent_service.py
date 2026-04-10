@@ -13,23 +13,16 @@
 # limitations under the License.
 
 import asyncio
-import importlib
 import logging
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 from uuid import uuid4
 
-import httpx
-from a2a.client import A2ACardResolver
-from a2a.client.errors import A2AClientJSONError
-from a2a.types import AgentCard
-from a2a.utils.constants import EXTENDED_AGENT_CARD_PATH
 from fred_core import (
     ORGANIZATION_ID,
     Action,
     AgentPermission,
     KeycloakUser,
     OrganizationPermission,
-    OwnerFilter,
     RebacDisabledResult,
     RebacReference,
     Relation,
@@ -38,22 +31,34 @@ from fred_core import (
     TeamPermission,
     authorize,
 )
+from fred_core.common import OwnerFilter
 
+from agentic_backend.agents.v2 import BasicReActDefinition
+from agentic_backend.agents.v2.definition_refs import BASIC_REACT_DEFINITION_REF
 from agentic_backend.application_context import get_agent_store, get_rebac_engine
 from agentic_backend.common.structures import (
     Agent,
-    AgentChatOptions,
     AgentSettings,
 )
-from agentic_backend.core.agents.a2a_proxy_agent import A2AProxyAgent
-from agentic_backend.core.agents.agent_flow import AgentFlow
-from agentic_backend.core.agents.agent_manager import (
-    AgentAlreadyExistsException,
-    AgentManager,
+from agentic_backend.core.agents.agent_class_resolver import (
+    ResolvedFlowAgentClass,
+    ResolvedV2AgentClass,
+    resolve_agent_class,
+    resolve_agent_reference,
 )
-from agentic_backend.core.agents.basic_react_agent import (
-    BASIC_REACT_TUNING,
-    BasicReActAgent,
+from agentic_backend.core.agents.agent_manager import AgentManager
+from agentic_backend.core.agents.agent_spec import AgentTuning
+from agentic_backend.core.agents.v2.legacy_bridge.agent_settings_bridge import (
+    apply_profile_defaults_to_settings,
+    apply_react_profile_to_definition,
+    build_definition_from_settings,
+    definition_to_agent_settings,
+    definition_to_agent_tuning,
+    instantiate_definition_class,
+)
+from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
+    get_react_profile,
+    is_react_profile_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,38 +82,20 @@ class ImmutableTeamIdError(Exception):
     pass
 
 
-def _validate_class_path(class_path: str) -> type[AgentFlow]:
-    """Validate that class_path is importable and inherits from AgentFlow.
+def _validate_class_path(class_path: str) -> type[object]:
+    """Validate that class_path is importable and supported by Fred.
 
     Returns the resolved class on success.
     Raises InvalidClassPathError if the path is invalid.
     """
     try:
-        module_name, class_name = class_path.rsplit(".", 1)
-    except ValueError:
+        return resolve_agent_class(class_path).cls
+    except ValueError as exc:
         raise InvalidClassPathError(
             f"Invalid class_path format (expected module.Class): {class_path}"
-        )
-
-    try:
-        module = importlib.import_module(module_name)
-    except Exception as exc:
-        raise InvalidClassPathError(
-            f"Cannot import module '{module_name}': {exc}"
         ) from exc
-
-    if not hasattr(module, class_name):
-        raise InvalidClassPathError(
-            f"Class '{class_name}' not found in module '{module_name}'"
-        )
-
-    cls = getattr(module, class_name)
-    if not isinstance(cls, type) or not issubclass(cls, AgentFlow):
-        raise InvalidClassPathError(
-            f"Class '{class_name}' must be a subclass of AgentFlow"
-        )
-
-    return cls
+    except Exception as exc:
+        raise InvalidClassPathError(str(exc)) from exc
 
 
 def _class_path(obj_or_type: Union[type, object]) -> str:
@@ -131,17 +118,51 @@ class AgentService:
         - add missing tuning fields from class defaults (by key)
         - recompute chat_options from the effective tuning
         """
-        if not agent_settings.class_path:
+        if not agent_settings.class_path and not agent_settings.definition_ref:
             return agent_settings
 
         try:
-            agent_cls = _validate_class_path(agent_settings.class_path)
-        except InvalidClassPathError:
+            resolved = resolve_agent_reference(
+                class_path=agent_settings.class_path,
+                definition_ref=agent_settings.definition_ref,
+            )
+        except Exception:
             return agent_settings
 
-        class_tuning = getattr(agent_cls, "tuning", None)
-        if class_tuning is None:
-            return agent_settings
+        if (
+            agent_settings.definition_ref
+            and agent_settings.class_path != resolved.class_path
+        ):
+            agent_settings = agent_settings.model_copy(update={"class_path": None})
+
+        agent_cls = resolved.cls
+
+        if isinstance(resolved, ResolvedFlowAgentClass):
+            class_tuning = getattr(agent_cls, "tuning", None)
+            if class_tuning is None:
+                return agent_settings
+        else:
+            definition = build_definition_from_settings(
+                definition_class=resolved.cls,
+                settings=agent_settings,
+            )
+            effective_settings = apply_profile_defaults_to_settings(
+                definition=definition,
+                settings=agent_settings,
+            )
+            class_tuning = effective_settings.tuning or definition_to_agent_tuning(
+                definition
+            )
+            if (
+                agent_settings.chat_options != effective_settings.chat_options
+                or agent_settings.tuning != effective_settings.tuning
+            ):
+                agent_settings = agent_settings.model_copy(
+                    update={
+                        "tuning": effective_settings.tuning,
+                        "chat_options": effective_settings.chat_options,
+                    }
+                )
 
         current_tuning = agent_settings.tuning or class_tuning
         current_fields = list(current_tuning.fields or [])
@@ -258,6 +279,28 @@ class AgentService:
         }
         return sorted(class_paths)
 
+    async def list_declared_definition_refs(self, user: KeycloakUser) -> List[str]:
+        """
+        Return v2 definition refs declared in the static catalog.
+
+        Why:
+        - Only refs explicitly listed in agents_catalog.yaml are presented to the UI.
+        - Mirrors list_declared_class_paths: the catalog is the gatekeeper for
+          both v1 class paths and v2 definition refs.
+        - Permissions stay aligned with advanced agent creation.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+        definition_refs = {
+            agent_cfg.definition_ref.strip()
+            for agent_cfg in self.agent_manager.config.ai.agents
+            if agent_cfg.definition_ref and agent_cfg.definition_ref.strip()
+        }
+        return sorted(definition_refs)
+
     async def get_agent_by_id(
         self, user: KeycloakUser, agent_id: str
     ) -> AgentSettings | None:
@@ -270,81 +313,117 @@ class AgentService:
             return None
         return await self._enrich_agent_settings(settings)
 
-    async def create_agent(
+    async def create_v2_agent(
         self,
         user: KeycloakUser,
         name: str,
         *,
-        agent_type: str = "basic",
         team_id: Optional[str] = None,
-        a2a_base_url: Optional[str] = None,
-        a2a_token: Optional[str] = None,
-        class_path: Optional[str] = None,
+        definition_ref: Optional[str] = None,
+        profile_id: Optional[str] = None,
     ):
         """
-        Builds, registers, and stores the MCP agent, including updating app context and saving to DuckDB.
+        Create a v2 agent. Two choices:
+
+        1. ``definition_ref`` — fixed-behaviour agent wired in code, e.g. ``"v2.react.prometheus_expert"``.
+        2. ``profile_id`` only — configurable BasicReAct agent with a starting profile, e.g. ``"custodian"``.
+           Omitting both falls back to a blank BasicReAct agent.
+
+        ``profile_id`` is only valid when ``definition_ref`` is omitted or is ``v2.react.basic``.
         """
-        # If team_id is provided, check user has permission to manage team agents
         if team_id:
-            await self.rebac.check_user_permission_or_raise(
-                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
+            await self.rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
             )
 
-        # If class_path is provided, check permission first (avoid leaking class info), then validate
-        resolved_agent_cls: type[AgentFlow] | None = None
-        if class_path:
-            if agent_type == "a2a_proxy":
+        normalized_profile_id = profile_id.strip() if profile_id else None
+        normalized_definition_ref = (
+            definition_ref.strip() if isinstance(definition_ref, str) else None
+        )
+
+        if normalized_profile_id:
+            if not is_react_profile_allowed(
+                normalized_profile_id,
+                self.agent_manager.config.ai.react_profile_allowlist,
+            ):
                 raise InvalidClassPathError(
-                    "class_path cannot be set for a2a_proxy agents"
+                    f"ReAct profile '{normalized_profile_id}' is not allowed by current configuration."
                 )
-            await self.rebac.check_user_permission_or_raise(
-                user,
-                OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
-                ORGANIZATION_ID,
-            )
-            resolved_agent_cls = _validate_class_path(class_path)
+            try:
+                get_react_profile(normalized_profile_id)
+            except ValueError as exc:
+                raise InvalidClassPathError(str(exc)) from exc
 
         agent_id = str(uuid4())
 
-        if agent_type == "a2a_proxy":
-            if not a2a_base_url:
-                raise AgentAlreadyExistsException(
-                    "A2A base URL is required for an A2A proxy agent."
+        if normalized_definition_ref:
+            # Choice 1: fixed-behaviour v2 agent addressed by stable ref
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=None,
+                    definition_ref=normalized_definition_ref,
                 )
-            tuning = A2AProxyAgent.tuning
-            card_payload = await self._fetch_a2a_card(a2a_base_url, a2a_token)
-            agent_settings = Agent(
-                id=agent_id,
-                name=name,
-                team_id=team_id,
-                class_path=_class_path(A2AProxyAgent),
-                enabled=True,
-                tuning=tuning,
-                metadata={
-                    "a2a_base_url": a2a_base_url,
-                    "a2a_token": a2a_token,
-                    "a2a_card": card_payload,
-                },
+            except Exception as exc:
+                raise InvalidClassPathError(str(exc)) from exc
+
+            if not isinstance(resolved, ResolvedV2AgentClass):
+                raise InvalidClassPathError(
+                    f"definition_ref '{normalized_definition_ref}' does not resolve to a v2 definition."
+                )
+
+            if (
+                normalized_profile_id
+                and resolved.definition_ref != BASIC_REACT_DEFINITION_REF
+            ):
+                raise InvalidClassPathError(
+                    "profile_id is only supported for v2.react.basic."
+                )
+
+            base_definition = instantiate_definition_class(resolved.cls)
+            effective_definition = (
+                apply_react_profile_to_definition(
+                    base_definition, normalized_profile_id
+                )
+                if normalized_profile_id
+                else base_definition
             )
-            await self.agent_manager.create_dynamic_agent(agent_settings, tuning)
+            default_definition_ref = resolved.definition_ref
         else:
-            default_tuning = (
-                resolved_agent_cls.tuning if resolved_agent_cls else BASIC_REACT_TUNING
+            # Choice 2: configurable BasicReAct agent (with optional starting profile)
+            base_definition = instantiate_definition_class(BasicReActDefinition)
+            effective_definition = apply_react_profile_to_definition(
+                base_definition, normalized_profile_id
             )
-            agent_settings = Agent(
-                id=agent_id,
-                name=name,
-                team_id=team_id,
-                class_path=class_path or _class_path(BasicReActAgent),
-                enabled=True,
-                tuning=default_tuning,
-                # Start with all chat options off by default; UI can toggle them later.
-                chat_options=AgentChatOptions(),
-                mcp_servers=[],  # Empty list by default; to be configured later
-            )
-            await self.agent_manager.create_dynamic_agent(
-                agent_settings, default_tuning
-            )
+            default_definition_ref = BASIC_REACT_DEFINITION_REF
+
+        base_settings = definition_to_agent_settings(
+            base_definition,
+            class_path=None,
+            definition_ref=default_definition_ref,
+            enabled=True,
+        )
+        default_settings = apply_profile_defaults_to_settings(
+            definition=effective_definition,
+            settings=base_settings,
+        )
+        default_tuning = default_settings.tuning or definition_to_agent_tuning(
+            effective_definition
+        )
+
+        agent_settings = Agent(
+            id=agent_id,
+            name=name,
+            team_id=team_id,
+            class_path=None,
+            definition_ref=default_definition_ref,
+            enabled=True,
+            tuning=default_tuning,
+            chat_options=default_settings.chat_options,
+            mcp_servers=[],
+        )
+        await self.agent_manager.create_dynamic_agent(agent_settings, default_tuning)
 
         # Create ReBAC ownership: team owns the agent, or user owns the agent (personal agent)
         if team_id:
@@ -363,10 +442,101 @@ class AgentService:
                 resource_id=agent_id,
             )
 
+        return agent_settings
+
+    async def create_v1_agent(
+        self,
+        user: KeycloakUser,
+        name: str,
+        *,
+        team_id: Optional[str] = None,
+        class_path: str,
+    ) -> AgentSettings:
+        """
+        Create a v1 (AgentFlow) agent by explicit class path.
+
+        Admin-only: requires CAN_EDIT_AGENT_CLASS_PATH permission.
+        The class must be a subclass of AgentFlow declared in the static catalog.
+        """
+        await self.rebac.check_user_permission_or_raise(
+            user,
+            OrganizationPermission.CAN_EDIT_AGENT_CLASS_PATH,
+            ORGANIZATION_ID,
+        )
+        if team_id:
+            await self.rebac.check_user_team_permission_or_raise(
+                user=user,
+                permission=TeamPermission.CAN_UPDATE_AGENTS,
+                team_id=team_id,
+            )
+
+        try:
+            resolved = resolve_agent_class(class_path)
+        except Exception as exc:
+            raise InvalidClassPathError(str(exc)) from exc
+
+        if not isinstance(resolved, ResolvedFlowAgentClass):
+            raise InvalidClassPathError(
+                f"'{class_path}' is a v2 definition — use POST /agents/v2/create with a definition_ref instead."
+            )
+
+        agent_id = str(uuid4())
+        agent_settings = Agent(
+            id=agent_id,
+            name=name,
+            team_id=team_id,
+            class_path=class_path,
+            definition_ref=None,
+            enabled=True,
+            tuning=resolved.cls.tuning,
+            mcp_servers=[],
+        )
+        await self.agent_manager.create_dynamic_agent(
+            agent_settings, resolved.cls.tuning
+        )
+
+        if team_id:
+            await self.rebac.add_relation(
+                Relation(
+                    subject=RebacReference(type=Resource.TEAM, id=team_id),
+                    relation=RelationType.OWNER,
+                    resource=RebacReference(type=Resource.AGENT, id=agent_id),
+                )
+            )
+        else:
+            await self.rebac.add_user_relation(
+                user,
+                RelationType.OWNER,
+                resource_type=Resource.AGENT,
+                resource_id=agent_id,
+            )
+
+        return agent_settings
+
     async def update_agent(self, user: KeycloakUser, agent_settings: AgentSettings):
         await self.rebac.check_user_permission_or_raise(
             user, AgentPermission.UPDATE, agent_settings.id
         )
+        if agent_settings.class_path and agent_settings.definition_ref:
+            raise InvalidClassPathError(
+                "Provide either class_path or definition_ref, not both."
+            )
+
+        if agent_settings.definition_ref:
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=None,
+                    definition_ref=agent_settings.definition_ref,
+                )
+            except Exception as exc:
+                raise InvalidClassPathError(str(exc)) from exc
+            agent_settings = agent_settings.model_copy(
+                update={
+                    "class_path": None,
+                    "definition_ref": resolved.definition_ref,
+                }
+            )
+
         current = await self.agent_manager.get_agent_settings(agent_settings.id)
         if current is not None:
             current = await self._enrich_settings_with_authoritative_team_id(current)
@@ -386,6 +556,75 @@ class AgentService:
                 _validate_class_path(agent_settings.class_path)
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
+
+    def get_class_path_tuning(
+        self,
+        class_path: str | None,
+        *,
+        definition_ref: str | None = None,
+    ) -> AgentTuning:
+        """Return the default tuning for a given class_path or definition_ref.
+
+        Resolution order:
+        1. definition_ref  → resolve v2 definition, return its tuning fields
+        2. class_path      → resolve class, return its tuning (v1) or definition fields (v2)
+        3. neither         → return blank BasicReAct defaults
+        """
+        if definition_ref:
+            logger.debug(
+                "[AGENTS][TUNING] resolving tuning for definition_ref=%r",
+                definition_ref,
+            )
+            try:
+                resolved = resolve_agent_reference(
+                    class_path=None, definition_ref=definition_ref
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[AGENTS][TUNING] definition_ref=%r could not be resolved: %s",
+                    definition_ref,
+                    exc,
+                )
+                raise InvalidClassPathError(str(exc)) from exc
+            if not isinstance(resolved, ResolvedV2AgentClass):
+                raise InvalidClassPathError(
+                    f"definition_ref '{definition_ref}' does not resolve to a v2 definition."
+                )
+            definition = instantiate_definition_class(resolved.cls)
+            tuning = definition_to_agent_tuning(definition)
+            logger.debug(
+                "[AGENTS][TUNING] definition_ref=%r → class=%s fields=%d",
+                definition_ref,
+                resolved.cls.__name__,
+                len(tuning.fields or []),
+            )
+            return tuning
+
+        if not class_path:
+            logger.debug(
+                "[AGENTS][TUNING] no class_path/definition_ref → returning BasicReAct defaults"
+            )
+            definition = instantiate_definition_class(BasicReActDefinition)
+            return definition_to_agent_tuning(definition)
+
+        logger.debug("[AGENTS][TUNING] resolving tuning for class_path=%r", class_path)
+        resolved = resolve_agent_class(class_path)
+        if isinstance(resolved, ResolvedFlowAgentClass):
+            logger.debug(
+                "[AGENTS][TUNING] class_path=%r → v1 flow agent fields=%d",
+                class_path,
+                len(resolved.cls.tuning.fields or []),
+            )
+            return resolved.cls.tuning
+
+        definition = instantiate_definition_class(resolved.cls)
+        tuning = definition_to_agent_tuning(definition)
+        logger.debug(
+            "[AGENTS][TUNING] class_path=%r → v2 definition fields=%d",
+            class_path,
+            len(tuning.fields or []),
+        )
+        return tuning
 
     async def delete_agent(self, user: KeycloakUser, agent_id: str):
         await self.rebac.check_user_permission_or_raise(
@@ -444,58 +683,3 @@ class AgentService:
         readable_ids = {ref.id for ref in readable_refs}
         filtered_ids = {ref.id for ref in owned}
         return readable_ids & filtered_ids
-
-    async def _fetch_a2a_card(
-        self, base_url: str, token: Optional[str]
-    ) -> Optional[dict]:
-        """
-        Resolve and return the agent card as a plain dict for persistence.
-        Best-effort: if fetching or validation fails, returns None.
-        """
-        base, card_path = self._split_discovery_url(base_url)
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resolver = A2ACardResolver(httpx_client=client, base_url=base)
-                try:
-                    card = await resolver.get_agent_card(relative_card_path=card_path)
-                except A2AClientJSONError:
-                    # Fallback for agents advertising protocolVersion instead of version
-                    resp = await client.get(f"{base}/{card_path}")
-                    resp.raise_for_status()
-                    data = resp.json()
-                    if "version" not in data and data.get("protocolVersion"):
-                        data["version"] = data["protocolVersion"]
-                    card = AgentCard.model_validate(data)
-
-                if card.supports_authenticated_extended_card and token:
-                    try:
-                        card = await resolver.get_agent_card(
-                            relative_card_path=EXTENDED_AGENT_CARD_PATH,
-                            http_kwargs={
-                                "headers": {"Authorization": f"Bearer {token}"}
-                            },
-                        )
-                    except Exception:
-                        logger.exception(
-                            "[AGENT][A2A] Failed to fetch extended agent card; keeping public card."
-                        )
-                return card.model_dump(exclude_none=True)
-        except Exception:
-            logger.exception("[AGENT][A2A] Failed to fetch agent card during creation.")
-            return None
-
-    @staticmethod
-    def _split_discovery_url(url: str) -> Tuple[str, str]:
-        """
-        Accept either a base URL (http://host:port) or a full discovery URL ending in /.well-known/agent-card.json.
-        Returns (base_url_without_trailing_slash, relative_card_path).
-        """
-        cleaned = url.strip()
-        default_path = ".well-known/agent-card.json"
-        marker = "/.well-known/agent-card.json"
-        if marker in cleaned:
-            idx = cleaned.find(marker)
-            base = cleaned[:idx] or cleaned
-            path = cleaned[idx + 1 :]  # drop leading slash
-            return base.rstrip("/"), path
-        return cleaned.rstrip("/"), default_path

@@ -20,8 +20,10 @@ from typing import Callable, Optional
 from fred_core import LogQuery, LogQueryResult
 from pydantic import TypeAdapter
 
-from agentic_backend.common.kf_base_client import KfBaseClient
-from agentic_backend.core.agents.agent_flow import AgentFlow
+from agentic_backend.common.kf_base_client import (
+    KfBaseClient,
+    KnowledgeFlowAgentContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ class KfLogsClient(KfBaseClient):
 
     def __init__(
         self,
-        agent: Optional[AgentFlow] = None,
+        agent: Optional[KnowledgeFlowAgentContext] = None,
         *,
         access_token: Optional[str] = None,
         refresh_user_access_token: Optional[Callable[[], str]] = None,

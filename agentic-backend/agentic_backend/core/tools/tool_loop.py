@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
@@ -37,20 +38,33 @@ def build_tool_loop(
     model,
     tools: List[BaseTool],
     system_builder: Callable[[MessagesState], str],
+    model_resolver: Optional[Callable[[MessagesState], Any]] = None,
+    model_call_wrapper: Optional[
+        Callable[[MessagesState, Any, Callable[[], Awaitable[Any]]], Awaitable[Any]]
+    ] = None,
     requires_hitl: Optional[Callable[[str], bool]] = None,
     hitl_callback: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
+    rewrite_tool_call: Optional[
+        Callable[[str, Dict[str, Any], MessagesState], Dict[str, Any]]
+    ] = None,
     post_response: Optional[Callable[[AIMessage, MessagesState], AIMessage]] = None,
 ) -> StateGraph:
     """
-    Reusable graph:
-      - reasoner node (LLM) bound to tools
-      - conditional tool execution
-      - optional HITL gating per tool
-      - optional post-processing of AI response
+    Reusable graph for ReAct-style model and tool execution.
 
-    requires_hitl: tool_name -> bool
-    hitl_callback: (tool_name, tool_args) -> raises/interrupts or returns modified args
-    post_response: (ai_message, state) -> ai_message (e.g., attach tool outputs)
+    Why this exists:
+    - Fred needs one small execution loop that can power plain tool use and optional
+      human approval without duplicating graph wiring
+    - path rewrites or tracing hooks should plug in once here instead of forking
+      separate executors
+
+    How to use:
+    - pass the bound model, tool list, and a system-message builder
+    - optionally provide tool-call rewriting, human-approval gating, model-call
+      wrapping, or AI post-processing hooks
+
+    Example:
+    - `build_tool_loop(model=bound_model, tools=tools, system_builder=builder)`
     """
     if requires_hitl is None:
 
@@ -64,7 +78,16 @@ def build_tool_loop(
     async def reasoner(state: MessagesState):
         sys_text = system_builder(state)
         msgs = [SystemMessage(content=sys_text)] + state["messages"]
-        response = await model.ainvoke(msgs)
+        current_model = model_resolver(state) if model_resolver is not None else model
+
+        async def _invoke_model() -> Any:
+            return await current_model.ainvoke(msgs)
+
+        response = (
+            await model_call_wrapper(state, current_model, _invoke_model)
+            if model_call_wrapper is not None
+            else await _invoke_model()
+        )
 
         # Attach latest tool outputs if post_response not provided
         if post_response is None:
@@ -94,6 +117,12 @@ def build_tool_loop(
             name = tc.get("name") if isinstance(tc, dict) else None
             raw_args = tc.get("args") if isinstance(tc, dict) else {}
             args: Dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
+            if name and rewrite_tool_call is not None:
+                rewritten_args = rewrite_tool_call(name, dict(args), state)
+                if rewritten_args != args:
+                    args = rewritten_args
+                    tc["args"] = args
+                    updated = True
             if name and requires_hitl(name):
                 if hitl_callback:
                     result = await hitl_callback(name, args)  # may raise interrupt

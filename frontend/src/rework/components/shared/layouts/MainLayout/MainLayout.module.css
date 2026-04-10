@@ -1,0 +1,15 @@
+.main-layout {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+}
+
+.sidebar {
+  height: 100%;
+  overflow: visible;
+}
+
+.content {
+  width: 100%;
+  overflow: auto;
+}

@@ -1,0 +1,21 @@
+.sidebar-container {
+  display: grid;
+  position: relative;
+  grid-template-rows: auto 64px;
+  grid-template-columns: 1fr auto;
+  background-color: var(--surface-container-low);
+  height: 100%;
+}
+
+.team-selection-container {
+  grid-row: 1 / span 2;
+  height: 100%;
+  min-height: 0;
+}
+
+.user-profile-container {
+  position: absolute;
+  bottom: 0;
+  padding: 0 var(--spacing-xs) var(--spacing-xs);
+  width: 100%;
+}

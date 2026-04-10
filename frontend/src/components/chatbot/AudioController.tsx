@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useEffect, useRef, useState } from "react";
-import { Grid2, IconButton, Slider, Typography } from "@mui/material";
+import { Grid, IconButton, Slider, Typography } from "@mui/material";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import StopIcon from "@mui/icons-material/Stop";
@@ -107,8 +107,8 @@ export default function AudioController({ audioUrl, color }: { audioUrl: string;
   };
 
   return (
-    <Grid2 container>
-      <Grid2 size={12} display="flex" alignItems="center" alignContent="center" justifyContent="center">
+    <Grid container>
+      <Grid size={12} display="flex" alignItems="center" alignContent="center" justifyContent="center">
         <IconButton onClick={isPlaying ? pauseAudio : playAudio}>
           {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
         </IconButton>
@@ -118,9 +118,9 @@ export default function AudioController({ audioUrl, color }: { audioUrl: string;
         <Typography display={{ xs: "none", sm: "block" }} variant="body2">
           {currentTime} / {duration}
         </Typography>
-      </Grid2>
+      </Grid>
       {/* Progress slider */}
-      <Grid2 size={12}>
+      <Grid size={12}>
         <Slider value={progress} onChange={handleSliderChange} sx={{ width: "100%", p: 0, color: color }} />
         <audio
           ref={audioRef}
@@ -129,7 +129,7 @@ export default function AudioController({ audioUrl, color }: { audioUrl: string;
           onEnded={() => setIsPlaying(false)}
           style={{ display: "none" }} // Hide native audio controls
         />
-      </Grid2>
-    </Grid2>
+      </Grid>
+    </Grid>
   );
 }

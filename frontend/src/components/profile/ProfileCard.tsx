@@ -20,7 +20,7 @@ import EmailIcon from "@mui/icons-material/Email";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import LogoutIcon from "@mui/icons-material/Logout";
 import SecurityIcon from "@mui/icons-material/Security";
-import { Box, Button, Card, CardContent, Chip, Divider, Grid2, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Divider, Grid, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { SimpleTooltip } from "../../shared/ui/tooltips/Tooltips";
 import { LanguageSelector } from "../LanguageSelector";
@@ -87,12 +87,7 @@ export function ProfileCard({
 
   return (
     // Right-anchored container
-    <Grid2
-      size={{ xs: 12 }}
-      display="flex"
-      justifyContent={{ xs: "stretch", md: "flex-start" }}
-      px={{ xs: 1.5, md: 3 }}
-    >
+    <Grid size={{ xs: 12 }} display="flex" justifyContent={{ xs: "stretch", md: "flex-start" }} px={{ xs: 1.5, md: 3 }}>
       <Card
         variant="outlined"
         sx={{
@@ -106,9 +101,9 @@ export function ProfileCard({
       >
         <CardContent sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, md: 3 } }}>
           {/* Two-column responsive grid */}
-          <Grid2 container spacing={3}>
+          <Grid container spacing={3}>
             {/* LEFT COLUMN — identity & controls */}
-            <Grid2 size={{ xs: 12, md: 5 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Grid size={{ xs: 12, md: 5 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <Stack direction="row" spacing={1.5} alignItems="center">
                 <UserAvatar />
                 <Box sx={{ minWidth: 0 }}>
@@ -139,34 +134,34 @@ export function ProfileCard({
               >
                 {t("profile.logout")}
               </Button>
-            </Grid2>
+            </Grid>
 
             {/* RIGHT COLUMN — account details & roles */}
-            <Grid2 size={{ xs: 12, md: 7 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Grid size={{ xs: 12, md: 7 }} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <Box>
                 <SectionTitle>{t("profile.title", "Profile")}</SectionTitle>
-                <Grid2 container spacing={2} sx={{ mt: 0.5 }}>
-                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <InfoItem icon={<EmailIcon fontSize="small" />} label={t("profile.email")} value={userEmail} />
-                  </Grid2>
-                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <InfoItem icon={<FingerprintIcon fontSize="small" />} label={t("profile.userId")} value={userId} />
-                  </Grid2>
-                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <InfoItem
                       icon={<AccessTimeIcon fontSize="small" />}
                       label={t("profile.authTime")}
                       value={formatAuthDate()}
                     />
-                  </Grid2>
-                  <Grid2 size={{ xs: 12, sm: 6 }}>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <InfoItem
                       icon={<AccessTimeIcon fontSize="small" />}
                       label={t("profile.expTime")}
                       value={formatExpDate()}
                     />
-                  </Grid2>
-                </Grid2>
+                  </Grid>
+                </Grid>
               </Box>
 
               <Divider />
@@ -215,10 +210,10 @@ export function ProfileCard({
                 <ExternalLink href="https://fredk8.dev" label={t("profile.links.website")} />
                 <ExternalLink href="https://github.com/ThalesGroup/fred" label={t("profile.links.repo")} />
               </Box>
-            </Grid2>
-          </Grid2>
+            </Grid>
+          </Grid>
         </CardContent>
       </Card>
-    </Grid2>
+    </Grid>
   );
 }

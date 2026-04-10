@@ -25,6 +25,14 @@ This will:
 - Use default in-memory and local storage components
 - Let you interact with agents right away — no external dependencies required
 
+## Configuration Contract (All Fred Backends)
+
+Agentic follows the same startup configuration contract as Knowledge Flow and Control Plane.
+
+Read: [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+
+Key point: always use `ENV_FILE` + `CONFIG_FILE` (same names in every backend).
+
 ## 🧰 Temporal Worker (Long Jobs)
 
 For long-running or isolated agent tasks, start the Temporal worker as a separate process:
@@ -93,15 +101,8 @@ If you want to learn how to build agents in Fred, start with the **Academy** sam
 
 - [`agentic_backend/academy/ACADEMY.md`](agentic_backend/academy/ACADEMY.md) – overview of all training steps
 - Each step has its own folder and (for most) a local README:
-  - `agentic_backend/academy/00-echo/README.md` – minimal echo agent
-  - `agentic_backend/academy/01-llm-responder/README.md` – simple LLM responder
-  - `agentic_backend/academy/02-dual-model-responder/README.md` – router/generator pattern
-  - `agentic_backend/academy/03_config_loader/README.md` – agents working with assets
   - `agentic_backend/academy/04_slide_maker/README.md` – slide/outline generator
-  - `agentic_backend/academy/05_gps_agent/README.md` – basic geo/GPS agent
-  - `agentic_backend/academy/06_simple_leader/README.md` – simple leader/orchestrator
-  - `agentic_backend/academy/07_travel_agent/README.md` – OpenStreetMap travel agent
-  - `agentic_backend/academy/08_ecoadviser/README.md` – eco‑advisor using open data
+  - `agentic_backend/agents/v2/demos/artifact_report/agent.py` – v2 downloadable report pattern
 
 On GitHub, these links are clickable and let readers drill down from the top‑level README to any sample.
 

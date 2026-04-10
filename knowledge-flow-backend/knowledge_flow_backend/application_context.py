@@ -22,29 +22,31 @@ from typing import Any, Dict, Optional, Type, Union
 from fred_core import (
     BaseFilesystem,
     BaseLogStore,
-    DuckdbStoreConfig,
     InMemoryLogStorageConfig,
     LocalFilesystem,
-    LogStoreConfig,
     MinioFilesystem,
-    ModelConfiguration,
     ModelProvider,
     OpenFgaRebacConfig,
-    OpenSearchIndexConfig,
     OpenSearchLogStore,
-    PostgresTableConfig,
     RamLogStore,
     RebacEngine,
-    SQLStorageConfig,
-    SQLTableStore,
-    StoreInfo,
     get_embeddings,
     get_model,
     rebac_factory,
     split_realm_url,
 )
+from fred_core.common import (
+    DuckdbStoreConfig,
+    LogStoreConfig,
+    ModelConfiguration,
+    OpenSearchIndexConfig,
+    PostgresTableConfig,
+    SQLStorageConfig,
+)
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
+from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
+from fred_core.store import SQLTableStore, StoreInfo
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -53,6 +55,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.common.structures import (
     ChromaVectorStorageConfig,
+    ClickHouseVectorStorageConfig,
     Configuration,
     FileSystemPullSource,
     InMemoryVectorStorage,
@@ -85,8 +88,6 @@ from knowledge_flow_backend.core.stores.resources.base_resource_store import Bas
 from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
-from knowledge_flow_backend.core.stores.team_metadata.base_team_metadata_store import BaseTeamMetadataStore
-from knowledge_flow_backend.core.stores.team_metadata.postgres_team_metadata_store import PostgresTeamMetadataStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
 from knowledge_flow_backend.core.stores.vector.base_vector_store import BaseVectorStore
 from knowledge_flow_backend.core.stores.vector.in_memory_langchain_vector_store import InMemoryLangchainVectorStore
@@ -284,7 +285,6 @@ class ApplicationContext:
     _vector_store_instance: Optional[BaseVectorStore] = None
     _metadata_store_instance: Optional[BaseMetadataStore] = None
     _tag_store_instance: Optional[BaseTagStore] = None
-    _team_metadata_store_instance: Optional[BaseTeamMetadataStore] = None
     _kpi_store_instance: Optional[BaseKPIStore] = None
     _task_store_instance: Optional["BaseWorkflowTaskStore"] = None
     _log_store_instance: Optional[BaseLogStore] = None
@@ -434,11 +434,11 @@ class ApplicationContext:
         """
         return self.configuration
 
-    def get_scheduler_backend(self) -> str:
+    def get_scheduler_backend(self) -> SchedulerBackend:
         scheduler_cfg = self.configuration.scheduler
         if not scheduler_cfg.enabled:
-            return "memory"
-        return scheduler_cfg.backend.lower()
+            return SchedulerBackend.MEMORY
+        return resolve_scheduler_backend(scheduler_cfg.backend)
 
     def _get_input_processor_class(self, extension: str) -> Optional[Type[BaseInputProcessor]]:
         """
@@ -690,6 +690,7 @@ class ApplicationContext:
             self._vector_store_instance = OpenSearchVectorStoreAdapter(
                 embedding_model=embedding_model,
                 embedding_model_name=embedding_model_name,
+                kpi=self.get_kpi_writer(),
                 host=opensearch_config.host,
                 index=store.index,
                 username=opensearch_config.username,
@@ -698,7 +699,6 @@ class ApplicationContext:
                 verify_certs=opensearch_config.verify_certs,
                 bulk_size=store.bulk_size,
             )
-            self._vector_store_instance.validate_index_or_fail()
             return self._vector_store_instance
         # elif isinstance(store, WeaviateVectorStorage):
         #     if self._vector_store_instance is None:
@@ -729,6 +729,44 @@ class ApplicationContext:
                 "[VECTOR][PGVECTOR] Using postgres collection=%s (default table)",
                 store.collection_name,
             )
+        elif isinstance(store, ClickHouseVectorStorageConfig):
+            try:
+                from knowledge_flow_backend.core.stores.vector.clickhouse_vector_store import ClickHouseVectorStoreAdapter
+            except ModuleNotFoundError as exc:
+                missing_dep = exc.name or "unknown"
+                if missing_dep == "clickhouse_connect" or missing_dep.startswith("clickhouse_connect."):
+                    raise ImportError(
+                        "ClickHouse vector store is configured but required dependency is missing: "
+                        f"'{missing_dep}'. Install ClickHouse dependency "
+                        "`clickhouse-connect` or switch `storage.vector_store.type` to a different backend."
+                    ) from exc
+                raise
+
+            ch = get_configuration().storage.clickhouse
+            if not ch:
+                raise ValueError("Missing ClickHouse configuration")
+            if not ch.password:
+                raise ValueError("Missing ClickHouse credentials: CLICKHOUSE_PASSWORD")
+            self._vector_store_instance = ClickHouseVectorStoreAdapter(
+                embedding_model=embedding_model,
+                embedding_model_name=embedding_model_name,
+                host=ch.host,
+                port=ch.port,
+                database=ch.database,
+                table=store.table,
+                username=ch.username,
+                password=ch.password,
+                secure=ch.secure,
+                verify=ch.verify,
+                bulk_size=store.bulk_size,
+            )
+            self._vector_store_instance.validate_index_or_fail()
+            logger.info(
+                "[VECTOR][CLICKHOUSE] Using host=%s database=%s table=%s",
+                ch.host,
+                ch.database,
+                store.table,
+            )
         else:
             raise ValueError("Unsupported vector store backend")
         return self._vector_store_instance
@@ -739,11 +777,7 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.metadata_store
         if isinstance(store_config, PostgresTableConfig):
-            self._metadata_store_instance = PostgresMetadataStore(
-                engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._metadata_store_instance = PostgresMetadataStore(engine=self.get_pg_async_engine())
             return self._metadata_store_instance
         raise ValueError(f"Unsupported metadata storage backend type: {store_config.type}")
 
@@ -757,11 +791,7 @@ class ApplicationContext:
                 PostgresWorkflowTaskStore,
             )
 
-            self._task_store_instance = PostgresWorkflowTaskStore(
-                engine=self.get_async_sql_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._task_store_instance = PostgresWorkflowTaskStore(engine=self.get_async_sql_engine())
             return self._task_store_instance
         raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
 
@@ -868,23 +898,9 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.tag_store
         if isinstance(store_config, PostgresTableConfig):
-            self._tag_store_instance = PostgresTagStore(
-                engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._tag_store_instance = PostgresTagStore(engine=self.get_pg_async_engine())
             return self._tag_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-
-    def get_team_metadata_store(self) -> BaseTeamMetadataStore:
-        """Get the team metadata store instance."""
-        # No choice, team store only support SQLAlchemy compatible db (Postgres, SQLite...)
-        if self._team_metadata_store_instance is not None:
-            return self._team_metadata_store_instance
-        self._team_metadata_store_instance = PostgresTeamMetadataStore(
-            engine=self.get_pg_async_engine(),
-        )
-        return self._team_metadata_store_instance
 
     def get_resource_store(self) -> BaseResourceStore:
         if self._resource_store_instance is not None:
@@ -892,11 +908,7 @@ class ApplicationContext:
 
         store_config = get_configuration().storage.resource_store
         if isinstance(store_config, PostgresTableConfig):
-            self._resource_store_instance = PostgresResourceStore(
-                engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
+            self._resource_store_instance = PostgresResourceStore(engine=self.get_pg_async_engine())
             return self._resource_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
@@ -967,7 +979,16 @@ class ApplicationContext:
         Factory method to create a text splitter instance based on configuration.
         Currently returns RecursiveSplitter.
         """
-        return SemanticSplitter()
+        from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
+
+        profile = get_current_processing_profile()
+        profile_cfg = self.configuration.processing.get_profile_config(profile)
+        splitter_cfg = profile_cfg.text_splitter
+        return SemanticSplitter(
+            chunk_size=splitter_cfg.chunk_size,
+            chunk_overlap=splitter_cfg.chunk_overlap,
+            preserve_tables=splitter_cfg.preserve_tables,
+        )
 
     def get_pull_provider(self, source_tag: str) -> BaseContentLoader:
         source_config = self.configuration.document_sources.get(source_tag)
@@ -1084,6 +1105,10 @@ class ApplicationContext:
         elif provider == ModelProvider.OLLAMA.value:
             # Usually no secrets; base_url is in settings
             pass
+        elif provider == ModelProvider.VERTEX_AI.value:
+            pass
+        elif provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
+            pass
         else:
             logger.error("     ❌ Unsupported embedding provider: %s", provider)
             raise ValueError(f"Unsupported embedding provider: {provider}")
@@ -1105,6 +1130,8 @@ class ApplicationContext:
             logger.info("     ↳ profile.%s.pdf.generate_table_images: %s", profile_name, profile_cfg.pdf.generate_table_images)
             logger.info("     ↳ profile.%s.pdf.do_table_structure: %s", profile_name, profile_cfg.pdf.do_table_structure)
             logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
+            logger.info("     ↳ profile.%s.pdf.ocr_backend: %s", profile_name, profile_cfg.pdf.ocr_backend)
+            logger.info("     ↳ profile.%s.pdf.force_full_page_ocr: %s", profile_name, profile_cfg.pdf.force_full_page_ocr)
             logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")
@@ -1131,6 +1158,19 @@ class ApplicationContext:
                 logger.info("     ↳ Collection: %s", store.collection_name)
                 logger.info("     ↳ Username: %s", pg.username)
                 self._log_sensitive("FRED_POSTGRES_PASSWORD", os.getenv("FRED_POSTGRES_PASSWORD"))
+            elif isinstance(store, ClickHouseVectorStorageConfig):
+                ch = self.configuration.storage.clickhouse
+                if not ch:
+                    logger.error("     ❌ Missing ClickHouse configuration (required for ClickHouse-backed vector store)")
+                    raise RuntimeError("ClickHouse configuration is required for ClickHouse vector store")
+                _require_env("CLICKHOUSE_PASSWORD")
+                logger.info("     ↳ Backend: clickhouse")
+                logger.info("     ↳ Host: %s  Port: %s  DB: %s", ch.host, ch.port, ch.database)
+                logger.info("     ↳ Table: %s", store.table)
+                logger.info("     ↳ Secure (TLS): %s", ch.secure)
+                logger.info("     ↳ Verify Certs: %s", ch.verify)
+                logger.info("     ↳ Username: %s", ch.username)
+                self._log_sensitive("CLICKHOUSE_PASSWORD", os.getenv("CLICKHOUSE_PASSWORD"))
             elif isinstance(store, WeaviateVectorStorage):
                 _require_env("WEAVIATE_API_KEY")
                 logger.info(f"     ↳ Host: {store.host}")
@@ -1182,6 +1222,12 @@ class ApplicationContext:
                         "     • %-14s pgvector  collection=%s",
                         label,
                         store_cfg.collection_name,
+                    )
+                elif isinstance(store_cfg, ClickHouseVectorStorageConfig):
+                    logger.info(
+                        "     • %-14s ClickHouse table=%s",
+                        label,
+                        store_cfg.table,
                     )
                 elif isinstance(store_cfg, LogStoreConfig):
                     # No-op KPI / log-only store

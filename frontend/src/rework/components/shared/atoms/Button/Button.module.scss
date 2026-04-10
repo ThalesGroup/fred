@@ -1,0 +1,134 @@
+@use "sass:map";
+@use "src/index.scss" as *;
+
+.btn {
+  cursor: var(--btn-cursor, pointer);
+  margin: 0;
+  outline: 2px solid var(--btn-outline, transparent);
+  border: 1px solid var(--btn-border, transparent);
+  border-radius: var(--radius-s);
+  background-color: var(--btn-background, transparent);
+  padding: 0;
+  overflow: hidden;
+}
+
+.state-layer {
+  @include typography("title", "small");
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--gap);
+  background-color: var(--btn-background-surface);
+  padding: 0 var(--spacing-right) 0 var(--spacing-left);
+  height: 100%;
+  color: var(--btn-text-color);
+}
+
+@each $name, $scheme in $color-schemes {
+  .btn-#{$name} {
+    &.btn-filled {
+      --btn-background: #{map.get($scheme, "main")};
+      --btn-text-color: #{map.get($scheme, "on-main")};
+
+      &:hover:not(:disabled) {
+        --btn-background-surface: #{map.get($scheme, "hover")};
+      }
+
+      &:active:not(:disabled) {
+        --btn-background-surface: #{map.get($scheme, "pressed")};
+      }
+    }
+
+    &.btn-outlined {
+      --btn-border: #{map.get($scheme, "main")};
+      --btn-text-color: #{map.get($scheme, "main")};
+
+      &:hover:not(:disabled) {
+        --btn-background-surface: var(--state-on-surface-hover);
+      }
+
+      &:active:not(:disabled) {
+        --btn-background-surface: var(--state-on-surface-pressed);
+      }
+    }
+
+    &.btn-text {
+      --btn-text-color: #{map.get($scheme, "main")};
+
+      &:hover:not(:disabled) {
+        --btn-background-surface: var(--state-on-surface-hover);
+      }
+
+      &:active:not(:disabled) {
+        --btn-background-surface: var(--state-on-surface-pressed);
+      }
+    }
+  }
+}
+
+.btn:focus-visible {
+  --btn-outline: var(--on-surface);
+}
+
+.btn-xs {
+  height: 1.5rem;
+  --gap: var(--spacing-3xs);
+}
+
+.btn-small {
+  height: 2rem;
+  --gap: var(--spacing-2xs);
+}
+
+.btn-medium {
+  height: 2.5rem;
+  --gap: var(--spacing-xs);
+}
+
+.btn-xs .state-layer.icon-none {
+  --spacing-right: var(--spacing-xs);
+  --spacing-left: var(--spacing-xs);
+}
+
+.btn-small .state-layer.icon-none {
+  --spacing-right: var(--spacing-s);
+  --spacing-left: var(--spacing-s);
+}
+
+.btn-medium .state-layer.icon-none {
+  --spacing-right: var(--spacing-m);
+  --spacing-left: var(--spacing-m);
+}
+
+.btn-xs .state-layer.icon-left {
+  --spacing-right: var(--spacing-xs);
+  --spacing-left: var(--spacing-2xs);
+}
+
+.btn-small .state-layer.icon-left {
+  --spacing-right: var(--spacing-s);
+  --spacing-left: var(--spacing-xs);
+}
+
+.btn-medium .state-layer.icon-left {
+  --spacing-right: var(--spacing-m);
+  --spacing-left: var(--spacing-s);
+}
+
+.btn-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+.btn:disabled {
+  --btn-background-surface: transparent;
+  --btn-background: var(--state-on-surface-disabled);
+  --btn-text-color: var(--state-on-surface-text-disabled);
+  --btn-cursor: default;
+
+  &.btn-outlined {
+    --btn-border: var(--state-on-surface-disabled);
+  }
+}

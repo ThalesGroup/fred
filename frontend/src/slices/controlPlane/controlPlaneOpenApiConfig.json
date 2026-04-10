@@ -1,0 +1,8 @@
+{
+  "schemaFile": "../../../../control-plane-backend/openapi.json",
+  "apiFile": "./controlPlaneApi.ts",
+  "apiImport": "controlPlaneApi",
+  "outputFile": "controlPlaneOpenApi.ts",
+  "exportName": "controlPlaneApi",
+  "hooks": { "queries": true, "lazyQueries": true, "mutations": true }
+}

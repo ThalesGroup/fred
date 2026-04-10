@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from fred_core.common import coerce_bool
+
 from agentic_backend.core.agents.agent_spec import FieldSpec, UIHints
 from agentic_backend.core.interrupts.hitl_i18n import (
     hitl_language_for_agent,
@@ -108,11 +110,7 @@ def tool_approval_tuning_fields() -> list[FieldSpec]:
 
 
 def is_truthy(raw: Any) -> bool:
-    if isinstance(raw, bool):
-        return raw
-    if isinstance(raw, str):
-        return raw.strip().lower() in {"1", "true", "yes", "on"}
-    return False
+    return coerce_bool(raw, default=False)
 
 
 def parse_approval_required_tools(raw: Any) -> set[str]:

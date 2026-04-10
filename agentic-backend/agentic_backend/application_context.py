@@ -35,21 +35,25 @@ from typing import Any, Callable, Dict, Optional
 
 from fred_core import (
     BaseLogStore,
+    BaseSessionStore,
     BearerAuth,
     ClientCredentialsProvider,
-    DuckdbStoreConfig,
     InMemoryLogStorageConfig,
-    LogStoreConfig,
     OpenFgaRebacConfig,
-    OpenSearchIndexConfig,
     OpenSearchLogStore,
-    PostgresTableConfig,
+    PostgresSessionStore,
     RamLogStore,
     RebacEngine,
-    SQLStorageConfig,
     get_model,
     rebac_factory,
     split_realm_url,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
+    LogStoreConfig,
+    OpenSearchIndexConfig,
+    PostgresTableConfig,
+    SQLStorageConfig,
 )
 from fred_core.kpi import (
     BaseKPIStore,
@@ -61,7 +65,7 @@ from fred_core.kpi import (
 )
 from fred_core.logs.log_structures import StdoutLogStorageConfig
 from fred_core.logs.null_log_store import NullLogStore
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.sql import create_async_engine_from_config
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -69,6 +73,10 @@ from requests.auth import AuthBase
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from agentic_backend.common.catalog_overrides import (
+    ModelRoutingBootstrapConfig,
+    resolve_model_routing_bootstrap_config,
+)
 from agentic_backend.common.structures import (
     Configuration,
     McpConfiguration,
@@ -88,12 +96,8 @@ from agentic_backend.core.monitoring.postgres_history_store import PostgresHisto
 from agentic_backend.core.session.stores.base_session_attachment_store import (
     BaseSessionAttachmentStore,
 )
-from agentic_backend.core.session.stores.base_session_store import BaseSessionStore
 from agentic_backend.core.session.stores.postgres_session_attachment_store import (
     PostgresSessionAttachmentStore,
-)
-from agentic_backend.core.session.stores.postgres_session_store import (
-    PostgresSessionStore,
 )
 from agentic_backend.scheduler.store.base_task_store import BaseAgentTaskStore
 
@@ -186,6 +190,33 @@ def pg_async_tx():
     return get_app_context().begin_pg_transaction()
 
 
+def pg_async_session():
+    """
+    Convenience helper to open a short async Postgres ORM session using the
+    shared async engine. The caller is responsible for beginning/committing
+    the transaction (or use as an async context manager via async_sessionmaker).
+
+    Usage:
+        async with pg_async_session() as session:
+            async with session.begin():
+                ...
+    """
+    return get_app_context().begin_pg_session()
+
+
+def get_pg_async_engine():
+    """
+    Expose Fred's shared async SQL engine.
+
+    Why this helper exists:
+    - v2 runtime infrastructure such as durable checkpointing should reuse the
+      same engine lifecycle as the rest of Fred's SQL-backed stores
+    - agent code should still stay unaware of SQL infrastructure details
+    """
+
+    return get_app_context().get_pg_async_engine()
+
+
 def get_rebac_engine() -> RebacEngine:
     """Expose the shared ReBAC engine instance."""
 
@@ -248,6 +279,13 @@ def get_default_chat_model() -> BaseChatModel:
         BaseChatModel: The global chat model.
     """
     return get_app_context().get_default_chat_model()
+
+
+def get_model_routing_bootstrap_config() -> ModelRoutingBootstrapConfig:
+    """
+    Retrieves centralized v2 model-routing bootstrap configuration.
+    """
+    return get_app_context().get_model_routing_bootstrap_config()
 
 
 # -------------------------------
@@ -432,6 +470,18 @@ class ApplicationContext:
             )
         return self._default_model_instance
 
+    def get_model_routing_bootstrap_config(self) -> ModelRoutingBootstrapConfig:
+        """
+        Resolve v2 model-routing bootstrap inputs from centralized config helpers.
+
+        This keeps env/path resolution out of runtime factory code so startup
+        wiring remains the single place where configuration sources are defined.
+        """
+        return resolve_model_routing_bootstrap_config(
+            default_presets_enabled=False,
+            catalog_mode_enabled=self.configuration.ai.enable_catalog_mode,
+        )
+
     def get_pg_async_engine(self):
         """
         Lazily create and cache a single async Postgres Engine for all the postgres async stores.
@@ -460,6 +510,12 @@ class ApplicationContext:
         """
         return self.get_pg_async_engine().begin()
 
+    def begin_pg_session(self):
+        from fred_core.sql.async_session import make_session_factory
+
+        factory = make_session_factory(self.get_pg_async_engine())
+        return factory()
+
     def get_session_store(self) -> BaseSessionStore:
         """
         Factory function to create a sessions store instance based on the configuration.
@@ -475,8 +531,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._session_store_instance = PostgresSessionStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._session_store_instance
         raise ValueError("Unsupported sessions storage backend (async-only)")
@@ -497,15 +551,8 @@ class ApplicationContext:
             )
 
         if isinstance(store_config, PostgresTableConfig):
-            table_name = (
-                store_config.table
-                if storage_cfg.attachments_store is not None
-                else f"{store_config.table}_attachments"
-            )
             self._session_attachment_store_instance = PostgresSessionAttachmentStore(
                 engine=self.get_pg_async_engine(),
-                table_name=table_name,
-                prefix=store_config.prefix or "",
             )
             return self._session_attachment_store_instance
 
@@ -569,13 +616,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._history_store_instance = PostgresHistoryStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
-            )
-            logger.info(
-                "[HISTORY][STORE] Using Postgres backend table=%s prefix=%s",
-                store_config.table,
-                store_config.prefix or "",
             )
             return self._history_store_instance
         else:
@@ -621,8 +661,6 @@ class ApplicationContext:
 
             self._task_store_instance = PostgresAgentTaskStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._task_store_instance
         raise ValueError(f"Unsupported tasks storage backend {type(store_config)}")
@@ -632,7 +670,7 @@ class ApplicationContext:
             return self._temporal_provider
 
         cfg = get_configuration().scheduler
-        if cfg.backend.lower() != "temporal":
+        if cfg.backend != SchedulerBackend.TEMPORAL:
             raise RuntimeError(
                 f"Temporal client requested but scheduler backend is {cfg.backend}"
             )
@@ -659,8 +697,6 @@ class ApplicationContext:
 
             self._agent_store_instance = PostgresAgentStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._agent_store_instance
         else:
@@ -684,8 +720,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._mcp_server_store_instance = PostgresMcpServerStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._mcp_server_store_instance
         raise ValueError(
@@ -736,8 +770,6 @@ class ApplicationContext:
         if isinstance(store_config, PostgresTableConfig):
             self._feedback_store_instance = PostgresFeedbackStore(
                 engine=self.get_pg_async_engine(),
-                table_name=store_config.table,
-                prefix=store_config.prefix or "",
             )
             return self._feedback_store_instance
         raise ValueError("Unsupported sessions storage backend")

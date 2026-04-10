@@ -40,8 +40,11 @@ COPY fred-core /fred-core
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
 
-# Copy projets
+# Copy projets; remove the broken alembic.ini symlink before copying the real
+# file — Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY agentic-backend/. /app/
+RUN rm -f /app/alembic.ini
+COPY alembic.ini /app/alembic.ini
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE: PROD IMAGE
@@ -85,8 +88,11 @@ ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
 # Set working directory
 WORKDIR /app
 
-# Copy app source
+# Copy app source; remove the broken alembic.ini symlink before copying the
+# real file — Kaniko preserves symlinks as-is and would fail resolving the target.
 COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
+RUN rm -f /app/alembic.ini
+COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 

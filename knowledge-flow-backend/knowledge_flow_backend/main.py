@@ -25,7 +25,6 @@ import os
 from contextlib import asynccontextmanager, suppress
 
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
@@ -33,19 +32,23 @@ from fred_core import (
     get_current_user,
     initialize_user_security,
     log_setup,
-    register_exception_handlers,
 )
+from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
-from fred_core.scheduler import TemporalClientProvider
+from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
-from sqlmodel import SQLModel
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.application_state import attach_app
+from knowledge_flow_backend.common.config_loader import (
+    get_loaded_config_file_path,
+    get_loaded_env_file_path,
+    load_configuration,
+)
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
 from knowledge_flow_backend.common.structures import Configuration
-from knowledge_flow_backend.common.utils import parse_server_configuration
 from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
@@ -63,6 +66,9 @@ from knowledge_flow_backend.features.kpi.kpi_controller import KPIController
 from knowledge_flow_backend.features.kpi.opensearch_controller import (
     OpenSearchOpsController,
 )
+from knowledge_flow_backend.features.kpi.prometheus_controller import (
+    PrometheusOpsController,
+)
 from knowledge_flow_backend.features.metadata.controller import MetadataController
 from knowledge_flow_backend.features.model.controller import ModelController
 from knowledge_flow_backend.features.neo4j.neo4j_controller import Neo4jController
@@ -71,8 +77,6 @@ from knowledge_flow_backend.features.scheduler.scheduler_controller import Sched
 from knowledge_flow_backend.features.statistic.controller import StatisticController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tag.tag_controller import TagController
-from knowledge_flow_backend.features.teams import teams_controller
-from knowledge_flow_backend.features.users import users_controller
 from knowledge_flow_backend.features.vector_search.vector_search_controller import (
     VectorSearchController,
 )
@@ -94,34 +98,6 @@ def _norm_origin(o) -> str:
     return str(o).rstrip("/")
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    logger.warning("%s Invalid boolean for %s=%r, defaulting to %s", LOG_PREFIX, name, raw, default)
-    return default
-
-
-def load_environment(dotenv_path: str = "./config/.env"):
-    if load_dotenv(dotenv_path):
-        logger.info("%s Loaded environment variables from: %s", LOG_PREFIX, dotenv_path)
-    else:
-        logger.warning("%s No .env file found at: %s", LOG_PREFIX, dotenv_path)
-
-
-def load_configuration():
-    load_environment()
-    config_file = os.environ.get("CONFIG_FILE", "./config/configuration.yaml")
-    configuration: Configuration = parse_server_configuration(config_file)
-    logger.info("%s Loaded configuration from: %s", LOG_PREFIX, config_file)
-    return configuration
-
-
 # -----------------------
 # APP CREATION
 # -----------------------
@@ -129,6 +105,9 @@ def load_configuration():
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
+    env_file = get_loaded_env_file_path() or "<unset>"
+    config_file = get_loaded_config_file_path() or "<unset>"
+    logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
 
@@ -150,18 +129,11 @@ def create_app() -> FastAPI:
     )
     logger.info("%s create_app() called with base_url=%s", LOG_PREFIX, base_url)
     application_context._log_config_summary()
-    docs_enabled = _env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     logger.info("%s FastAPI docs/openapi endpoints enabled=%s", LOG_PREFIX, docs_enabled)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        # Initialize database tables
-        # todo: migration tool like Alembic instead of this
-        engine = application_context.get_async_sql_engine()
-        async with engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
-        logger.info("%s Database tables created/verified", LOG_PREFIX)
-
         async def periodic_reconciliation() -> None:
             while True:
                 try:
@@ -218,6 +190,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) so that
+    # request.base_url uses https:// when behind a TLS-terminating ingress.
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")  # type: ignore[arg-type]
+
     if configuration.app.metrics_enabled:
         Instrumentator().instrument(app)
         start_http_server(
@@ -227,7 +203,6 @@ def create_app() -> FastAPI:
 
     # Register exception handlers
     register_exception_handlers(app)
-    teams_controller.register_exception_handlers(app)
 
     allowed_origins = list({_norm_origin(o) for o in configuration.security.authorized_origins})
     logger.info("%s[CORS] allow_origins=%s", LOG_PREFIX, allowed_origins)
@@ -261,8 +236,6 @@ def create_app() -> FastAPI:
     McpFilesystemController(router)
     CorpusManagerController(router)
     router.include_router(logs_controller.router)
-    router.include_router(teams_controller.router)
-    router.include_router(users_controller.router)
     # Developer benchmarking tools (always mounted; auth-protected)
     BenchmarkController(router)
 
@@ -286,6 +259,12 @@ def create_app() -> FastAPI:
     else:
         logger.warning("%s OpenSearchOpsController disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
 
+    if configuration.mcp.prometheus_ops_enabled:
+        PrometheusOpsController(router)
+        logger.info("%s PrometheusOpsController registered (mcp.prometheus_ops_enabled=true)", LOG_PREFIX)
+    else:
+        logger.warning("%s PrometheusOpsController disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
+
     if configuration.mcp.neo4j_enabled:
         Neo4jController(router)
         logger.info("%s Neo4jController registered (mcp.neo4j_enabled=true)", LOG_PREFIX)
@@ -301,14 +280,21 @@ def create_app() -> FastAPI:
     if configuration.scheduler.enabled:
         logger.info("%s Activating ingestion scheduler controller.", LOG_PREFIX)
         temporal_client_provider = None
+        scheduler_backend = application_context.get_scheduler_backend()
 
-        if configuration.scheduler.backend.lower() == "temporal":
+        if scheduler_backend == SchedulerBackend.TEMPORAL:
             temporal_cfg = configuration.scheduler.temporal
             if not temporal_cfg:
                 raise ValueError("Scheduler enabled with temporal backend but temporal configuration is missing!")
             if not temporal_cfg.task_queue:
                 raise ValueError("Scheduler enabled but Temporal task_queue is not set in configuration!")
             temporal_client_provider = TemporalClientProvider(temporal_cfg)
+        else:
+            logger.info(
+                "%s Standalone scheduler mode active (effective backend=%s).",
+                LOG_PREFIX,
+                scheduler_backend,
+            )
 
         SchedulerController(router, temporal_client_provider=temporal_client_provider)
     else:
@@ -363,6 +349,22 @@ def create_app() -> FastAPI:
         logger.info("%s MCP OpenSearch Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
     else:
         logger.warning("%s MCP OpenSearch Ops disabled via configuration.mcp.opensearch_ops_enabled=false", LOG_PREFIX)
+
+    if configuration.mcp.prometheus_ops_enabled:
+        mcp_prometheus_ops = FastApiMCP(
+            app,
+            name="Knowledge Flow Prometheus Ops MCP",
+            description=("Read-only Prometheus-compatible operational tools for cluster-wide metrics exploration, PromQL queries, and metric discovery across namespaces and pods."),
+            include_tags=["Prometheus"],
+            describe_all_responses=True,
+            describe_full_response_schema=True,
+            auth_config=auth_cfg,
+        )
+        mcp_mount_path = f"{mcp_prefix}/mcp-prometheus-ops"
+        mcp_prometheus_ops.mount_http(mount_path=mcp_mount_path)
+        logger.info("%s MCP Prometheus Ops mounted at %s", LOG_PREFIX, mcp_mount_path)
+    else:
+        logger.warning("%s MCP Prometheus Ops disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.neo4j_enabled:
         mcp_neo4j = FastApiMCP(

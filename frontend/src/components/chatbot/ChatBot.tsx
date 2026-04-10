@@ -24,11 +24,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
-import { getConfig } from "../../common/config.tsx";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
 import { useAuth } from "../../security/AuthContext.tsx";
 import { KeyCloakService } from "../../security/KeycloakService.ts";
-import { AwaitingHumanEvent } from "../../slices/agentic/agenticOpenApi";
+import {
+  AwaitingHumanEvent,
+  useCreateSessionAgenticV1ChatbotSessionPostMutation,
+} from "../../slices/agentic/agenticOpenApi";
 import {
   ChatAskInput,
   ChatMessage,
@@ -36,7 +38,6 @@ import {
   RuntimeContext,
   SessionSchema,
   StreamEvent,
-  useCreateSessionAgenticV1ChatbotSessionPostMutation,
   useGetSessionHistoryAgenticV1ChatbotSessionSessionIdHistoryGetQuery,
   useGetSessionsAgenticV1ChatbotSessionsGetQuery,
   useUploadFileAgenticV1ChatbotUploadPostMutation,
@@ -50,8 +51,10 @@ import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatBotView from "./ChatBotView.tsx";
 import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
+import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
+import { useParams } from "react-router-dom";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -106,6 +109,8 @@ const extractUploadErrorMessage = (err: any): string => {
 type QueryChatOptions = {
   suppressUserMessage?: boolean;
   traceThought?: string;
+  internalProfileId?: string;
+  internalCapability?: string;
 };
 
 const buildLogGeniusContext = (messages: ChatMessage[]): string => {
@@ -185,6 +190,498 @@ type SessionEvent = {
 type DebugEventEntry = {
   timestamp: string;
   payload: unknown;
+  collapseKey?: string;
+};
+
+type DebugGroupEntry = {
+  timestamp: string;
+  label: string;
+  payloadText: string;
+};
+
+type DebugEventGroup = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  entries: DebugGroupEntry[];
+};
+
+const DEBUG_TEXT_PREVIEW_MAX = 220;
+const DEBUG_TOOL_RESULT_PREVIEW_MAX = 220;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const ellipsizeDebug = (value: string, max: number) => (value.length > max ? `${value.slice(0, max)}...` : value);
+
+const stripNullish = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    const next = value.map(stripNullish).filter((item) => item !== undefined);
+    return next;
+  }
+  if (!isRecord(value)) {
+    return value === undefined ? undefined : value;
+  }
+
+  const next: Record<string, unknown> = {};
+  Object.entries(value).forEach(([key, child]) => {
+    const normalized = stripNullish(child);
+    if (normalized === undefined || normalized === null) {
+      return;
+    }
+    if (Array.isArray(normalized) && normalized.length === 0) {
+      return;
+    }
+    if (isRecord(normalized) && Object.keys(normalized).length === 0) {
+      return;
+    }
+    next[key] = normalized;
+  });
+  return next;
+};
+
+const redactSensitive = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitive);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const next: Record<string, unknown> = {};
+  Object.entries(value).forEach(([key, child]) => {
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey === "access_token" ||
+      lowerKey === "refresh_token" ||
+      lowerKey === "id_token" ||
+      lowerKey === "authorization"
+    ) {
+      next[key] = "[redacted]";
+      return;
+    }
+    next[key] = redactSensitive(child);
+  });
+  return next;
+};
+
+const extractTextFromParts = (parts: unknown): string | undefined => {
+  if (!Array.isArray(parts)) return undefined;
+  const texts = parts
+    .filter(isRecord)
+    .filter((part) => part.type === "text" && typeof part.text === "string")
+    .map((part) => String(part.text))
+    .join("\n")
+    .trim();
+  return texts || undefined;
+};
+
+const summarizeRuntimeContext = (runtimeContext: unknown): Record<string, unknown> | undefined => {
+  if (!isRecord(runtimeContext)) return undefined;
+  const summary = stripNullish(
+    redactSensitive({
+      language: runtimeContext.language,
+      session_id: runtimeContext.session_id,
+      selected_document_libraries_ids: runtimeContext.selected_document_libraries_ids,
+      selected_document_uids: runtimeContext.selected_document_uids,
+      selected_chat_context_ids: runtimeContext.selected_chat_context_ids,
+      search_policy: runtimeContext.search_policy,
+      search_rag_scope: runtimeContext.search_rag_scope,
+      deep_search: runtimeContext.deep_search,
+      include_session_scope: runtimeContext.include_session_scope,
+      include_corpus_scope: runtimeContext.include_corpus_scope,
+    }),
+  );
+  return isRecord(summary) && Object.keys(summary).length > 0 ? summary : undefined;
+};
+
+const summarizeChatMessageForDebug = (message: unknown): Record<string, unknown> => {
+  if (!isRecord(message)) return { kind: "unknown_message" };
+
+  const metadata = isRecord(message.metadata) ? message.metadata : {};
+  const extras = isRecord(metadata.extras) ? metadata.extras : {};
+  const text = extractTextFromParts(message.parts);
+  const parts = Array.isArray(message.parts) ? message.parts.filter(isRecord) : [];
+  const toolCallPart = parts.find((part) => part.type === "tool_call");
+  const toolResultPart = parts.find((part) => part.type === "tool_result");
+
+  const summary: Record<string, unknown> = {
+    session_id: message.session_id,
+    exchange_id: message.exchange_id,
+    rank: message.rank,
+    role: message.role,
+    channel: message.channel,
+  };
+
+  if (extras.streaming_delta === true) {
+    summary.streaming_delta = true;
+  }
+  if (typeof metadata.finish_reason === "string") {
+    summary.finish_reason = metadata.finish_reason;
+  }
+  if (typeof metadata.token_usage_source === "string") {
+    summary.token_usage_source = metadata.token_usage_source;
+  }
+  if (Array.isArray(metadata.sources)) {
+    summary.sources_count = metadata.sources.length;
+  }
+
+  const runtimeContext = summarizeRuntimeContext(metadata.runtime_context);
+  if (runtimeContext) {
+    summary.runtime_context = runtimeContext;
+  }
+
+  if (toolCallPart) {
+    summary.tool_call = stripNullish(
+      redactSensitive({
+        call_id: toolCallPart.call_id,
+        name: toolCallPart.name,
+        args: toolCallPart.args,
+      }),
+    );
+    return summary;
+  }
+
+  if (toolResultPart) {
+    summary.tool_result = stripNullish({
+      call_id: toolResultPart.call_id,
+      ok: toolResultPart.ok,
+      latency_ms: toolResultPart.latency_ms,
+      content_preview:
+        typeof toolResultPart.content === "string"
+          ? ellipsizeDebug(toolResultPart.content, DEBUG_TOOL_RESULT_PREVIEW_MAX)
+          : undefined,
+    });
+    return summary;
+  }
+
+  if (text) {
+    summary.text = extras.streaming_delta === true ? ellipsizeDebug(text, DEBUG_TEXT_PREVIEW_MAX) : text;
+  }
+
+  return stripNullish(summary) as Record<string, unknown>;
+};
+
+const summarizeDebugPayload = (payload: unknown): unknown => {
+  if (!isRecord(payload) || typeof payload.type !== "string") {
+    return stripNullish(redactSensitive(payload));
+  }
+
+  if (payload.type === "stream") {
+    return {
+      type: "stream",
+      message: summarizeChatMessageForDebug(payload.message),
+    };
+  }
+
+  if (payload.type === "final") {
+    const session = isRecord(payload.session)
+      ? stripNullish({
+          id: payload.session.id,
+          title: payload.session.title,
+          updated_at: payload.session.updated_at,
+          next_rank: payload.session.next_rank,
+        })
+      : undefined;
+
+    return stripNullish({
+      type: "final",
+      session,
+      messages: Array.isArray(payload.messages)
+        ? payload.messages.map((message) => summarizeChatMessageForDebug(message))
+        : [],
+    });
+  }
+
+  if (payload.type === "session") {
+    return stripNullish({
+      type: "session",
+      session: isRecord(payload.session)
+        ? {
+            id: payload.session.id,
+            title: payload.session.title,
+            agent_id: payload.session.agent_id,
+            updated_at: payload.session.updated_at,
+            next_rank: payload.session.next_rank,
+          }
+        : payload.session,
+    });
+  }
+
+  if (payload.type === "awaiting_human") {
+    return stripNullish(
+      redactSensitive({
+        type: "awaiting_human",
+        session_id: payload.session_id,
+        exchange_id: payload.exchange_id,
+        payload: payload.payload,
+      }),
+    );
+  }
+
+  if (payload.type === "error") {
+    return stripNullish({
+      type: "error",
+      content: payload.content,
+      session_id: payload.session_id,
+    });
+  }
+
+  return stripNullish(redactSensitive(payload));
+};
+
+const getDebugCollapseKey = (payload: unknown): string | undefined => {
+  if (!isRecord(payload) || payload.type !== "stream" || !isRecord(payload.message)) {
+    return undefined;
+  }
+
+  const metadata = isRecord(payload.message.metadata) ? payload.message.metadata : {};
+  const extras = isRecord(metadata.extras) ? metadata.extras : {};
+  if (extras.streaming_delta !== true) {
+    return undefined;
+  }
+
+  return ["stream-partial", payload.message.session_id, payload.message.exchange_id, payload.message.rank].join(":");
+};
+
+const getExchangeIdFromDebugPayload = (payload: unknown): string | undefined => {
+  if (!isRecord(payload) || typeof payload.type !== "string") {
+    return undefined;
+  }
+
+  if (payload.type === "stream" && isRecord(payload.message) && typeof payload.message.exchange_id === "string") {
+    return payload.message.exchange_id;
+  }
+
+  if (payload.type === "final" && Array.isArray(payload.messages)) {
+    const firstWithExchange = payload.messages.find(
+      (message) => isRecord(message) && typeof message.exchange_id === "string",
+    );
+    if (isRecord(firstWithExchange) && typeof firstWithExchange.exchange_id === "string") {
+      return firstWithExchange.exchange_id;
+    }
+  }
+
+  if (payload.type === "awaiting_human" && typeof payload.exchange_id === "string") {
+    return payload.exchange_id;
+  }
+
+  return undefined;
+};
+
+const getSessionIdFromDebugPayload = (payload: unknown): string | undefined => {
+  if (!isRecord(payload) || typeof payload.type !== "string") {
+    return undefined;
+  }
+
+  if (payload.type === "stream" && isRecord(payload.message) && typeof payload.message.session_id === "string") {
+    return payload.message.session_id;
+  }
+
+  if (payload.type === "final") {
+    if (isRecord(payload.session) && typeof payload.session.id === "string") {
+      return payload.session.id;
+    }
+    if (Array.isArray(payload.messages)) {
+      const firstWithSession = payload.messages.find(
+        (message) => isRecord(message) && typeof message.session_id === "string",
+      );
+      if (isRecord(firstWithSession) && typeof firstWithSession.session_id === "string") {
+        return firstWithSession.session_id;
+      }
+    }
+  }
+
+  if (payload.type === "awaiting_human" && typeof payload.session_id === "string") {
+    return payload.session_id;
+  }
+
+  if (payload.type === "error" && typeof payload.session_id === "string") {
+    return payload.session_id;
+  }
+
+  if (payload.type === "session" && isRecord(payload.session) && typeof payload.session.id === "string") {
+    return payload.session.id;
+  }
+
+  return undefined;
+};
+
+const shouldCaptureDebugPayload = (payload: unknown, activeSessionId?: string): boolean => {
+  if (!activeSessionId) {
+    return true;
+  }
+  const payloadSessionId = getSessionIdFromDebugPayload(payload);
+  if (!payloadSessionId) {
+    return true;
+  }
+  return payloadSessionId === activeSessionId;
+};
+
+const getDebugLabel = (payload: unknown): string => {
+  if (!isRecord(payload) || typeof payload.type !== "string") {
+    return "event";
+  }
+
+  if (payload.type === "session") {
+    return "session";
+  }
+  if (payload.type === "awaiting_human") {
+    return "awaiting_human";
+  }
+  if (payload.type === "error") {
+    return "error";
+  }
+  if (payload.type === "final") {
+    return "final snapshot";
+  }
+
+  if (payload.type !== "stream" || !isRecord(payload.message)) {
+    return payload.type;
+  }
+
+  const message = payload.message;
+  if (isRecord(message.tool_call)) {
+    const toolName = typeof message.tool_call.name === "string" ? message.tool_call.name : "tool";
+    return `tool_call ${toolName}`;
+  }
+  if (isRecord(message.tool_result)) {
+    const toolName = typeof message.tool_result.tool_name === "string" ? message.tool_result.tool_name : "tool_result";
+    return `tool_result ${toolName}`;
+  }
+
+  const role = typeof message.role === "string" ? message.role : "message";
+  const channel = typeof message.channel === "string" ? message.channel : "event";
+  const extras = isRecord(message.metadata) && isRecord(message.metadata.extras) ? message.metadata.extras : {};
+  const partial = extras.streaming_delta === true ? " (delta)" : "";
+  return `${role}/${channel}${partial}`;
+};
+
+const buildDebugGroups = (debugEvents: DebugEventEntry[]): DebugEventGroup[] => {
+  const groupsByKey = new Map<string, DebugEventGroup>();
+  const toolNameByCallId = new Map<string, string>();
+  const promptPreviewByExchange = new Map<string, string>();
+
+  const ensureGroup = (groupKey: string, title: string, subtitle?: string): DebugEventGroup => {
+    const existing = groupsByKey.get(groupKey);
+    if (existing) {
+      if (!existing.subtitle && subtitle) {
+        existing.subtitle = subtitle;
+      }
+      return existing;
+    }
+    const created: DebugEventGroup = {
+      id: groupKey,
+      title,
+      subtitle,
+      entries: [],
+    };
+    groupsByKey.set(groupKey, created);
+    return created;
+  };
+
+  debugEvents.forEach((entry) => {
+    const payload = entry.payload;
+    const exchangeId = getExchangeIdFromDebugPayload(payload);
+    const exchangePreview =
+      exchangeId && promptPreviewByExchange.has(exchangeId) ? promptPreviewByExchange.get(exchangeId) : undefined;
+    const groupKey = exchangeId ? `exchange:${exchangeId}` : "transport";
+    const groupTitle = exchangeId ? `Exchange ${exchangeId.slice(0, 8)}` : "Transport & Session";
+    const group = ensureGroup(groupKey, groupTitle, exchangePreview);
+
+    let displayPayload = payload;
+
+    if (isRecord(payload) && payload.type === "stream" && isRecord(payload.message)) {
+      const message = payload.message;
+      if (
+        typeof message.role === "string" &&
+        message.role === "user" &&
+        typeof message.text === "string" &&
+        exchangeId &&
+        !promptPreviewByExchange.has(exchangeId)
+      ) {
+        const preview = ellipsizeDebug(message.text.replace(/\s+/g, " ").trim(), 120);
+        promptPreviewByExchange.set(exchangeId, preview);
+        group.subtitle = preview;
+      }
+
+      if (isRecord(message.tool_call)) {
+        const callId = typeof message.tool_call.call_id === "string" ? message.tool_call.call_id : undefined;
+        const toolName = typeof message.tool_call.name === "string" ? message.tool_call.name : undefined;
+        if (callId && toolName) {
+          toolNameByCallId.set(callId, toolName);
+        }
+      }
+
+      if (isRecord(message.tool_result)) {
+        const callId = typeof message.tool_result.call_id === "string" ? message.tool_result.call_id : undefined;
+        const toolName = callId ? toolNameByCallId.get(callId) : undefined;
+        if (toolName) {
+          displayPayload = {
+            ...payload,
+            message: {
+              ...message,
+              tool_result: {
+                ...message.tool_result,
+                tool_name: toolName,
+              },
+            },
+          };
+        }
+      }
+    }
+
+    if (isRecord(payload) && payload.type === "final" && Array.isArray(payload.messages)) {
+      const enrichedMessages = payload.messages.map((message) => {
+        if (!isRecord(message)) return message;
+        if (
+          typeof message.role === "string" &&
+          message.role === "user" &&
+          typeof message.text === "string" &&
+          exchangeId
+        ) {
+          const preview = ellipsizeDebug(message.text.replace(/\s+/g, " ").trim(), 120);
+          if (!promptPreviewByExchange.has(exchangeId)) {
+            promptPreviewByExchange.set(exchangeId, preview);
+            group.subtitle = preview;
+          }
+        }
+        if (isRecord(message.tool_call)) {
+          const callId = typeof message.tool_call.call_id === "string" ? message.tool_call.call_id : undefined;
+          const toolName = typeof message.tool_call.name === "string" ? message.tool_call.name : undefined;
+          if (callId && toolName) {
+            toolNameByCallId.set(callId, toolName);
+          }
+          return message;
+        }
+        if (isRecord(message.tool_result)) {
+          const callId = typeof message.tool_result.call_id === "string" ? message.tool_result.call_id : undefined;
+          const toolName = callId ? toolNameByCallId.get(callId) : undefined;
+          if (!toolName) return message;
+          return {
+            ...message,
+            tool_result: {
+              ...message.tool_result,
+              tool_name: toolName,
+            },
+          };
+        }
+        return message;
+      });
+      displayPayload = {
+        ...payload,
+        messages: enrichedMessages,
+      };
+    }
+
+    group.entries.push({
+      timestamp: entry.timestamp,
+      label: getDebugLabel(displayPayload),
+      payloadText: JSON.stringify(displayPayload, null, 2),
+    });
+  });
+
+  return Array.from(groupsByKey.values());
 };
 
 // interface TranscriptionResponse {
@@ -194,6 +691,7 @@ type DebugEventEntry = {
 export interface ChatBotProps {
   chatSessionId?: string;
   agents: AnyAgent[];
+  internalAgents?: AnyAgent[];
   initialAgent?: AnyAgent;
   runtimeContext?: RuntimeContext;
   onNewSessionCreated: (chatSessionId: string) => void;
@@ -202,10 +700,12 @@ export interface ChatBotProps {
 const ChatBot = ({
   chatSessionId,
   agents,
+  internalAgents = [],
   initialAgent,
   onNewSessionCreated,
   runtimeContext: baseRuntimeContext,
 }: ChatBotProps) => {
+  const { teamId } = useParams();
   const isNewConversation = !chatSessionId;
   const { showInfo, showError } = useToast();
   const { t } = useTranslation();
@@ -243,9 +743,28 @@ const ChatBot = ({
     () => Object.fromEntries(chatContextResources.map((x) => [x.id, x])),
     [chatContextResources],
   );
-  const logGeniusAgent = useMemo(
-    () => agents.find((agent) => agent.tuning?.role?.toLowerCase() === "log_genius"),
-    [agents],
+  const internalLogGeniusAgent = useMemo<AnyAgent>(
+    () => ({
+      id: "internal.react_profile.log_genius",
+      name: "LogGenius",
+      enabled: true,
+      class_path: null,
+      tuning: {
+        role: "log_genius",
+        description: "Internal log-triage capability for diagnosing the current conversation.",
+        tags: ["internal", "logs"],
+        fields: [],
+        mcp_servers: [],
+      },
+      chat_options: {},
+      metadata: {
+        internal_agent: true,
+        internal_profile_id: "log_genius",
+      },
+      mcp_servers: [],
+      type: "agent",
+    }),
+    [],
   );
   const {
     currentData: history,
@@ -275,10 +794,12 @@ const ChatBot = ({
     onSessionToDraft: () => {
       messagesRef.current = [];
       setAllMessages([]);
+      setDebugEvents([]);
     },
     onSessionSwitch: () => {
       messagesRef.current = [];
       setAllMessages([]);
+      setDebugEvents([]);
     },
   });
 
@@ -413,11 +934,19 @@ const ChatBot = ({
 
   const appendDebugEvent = useCallback((payload: unknown) => {
     setDebugEvents((prev) => {
+      const summarizedPayload = summarizeDebugPayload(payload);
+      const collapseKey = getDebugCollapseKey(payload);
       const entry: DebugEventEntry = {
         timestamp: new Date().toISOString(),
-        payload,
+        payload: summarizedPayload,
+        collapseKey,
       };
-      const next = [...prev, entry];
+      let next: DebugEventEntry[];
+      if (collapseKey && prev.length > 0 && prev[prev.length - 1]?.collapseKey === collapseKey) {
+        next = [...prev.slice(0, -1), entry];
+      } else {
+        next = [...prev, entry];
+      }
       if (next.length > MAX_DEBUG_EVENTS) {
         return next.slice(next.length - MAX_DEBUG_EVENTS);
       }
@@ -429,14 +958,26 @@ const ChatBot = ({
     if (debugEvents.length === 0) {
       return "No WS events captured yet.";
     }
-    return debugEvents
-      .map(
-        (entry) =>
-          `[${entry.timestamp}] ${(entry.payload as { type?: string }).type ?? "unknown"}\n` +
-          JSON.stringify(entry.payload, null, 2),
-      )
+    return buildDebugGroups(debugEvents)
+      .map((group) => {
+        const header = group.subtitle ? `${group.title} - ${group.subtitle}` : group.title;
+        const entries = group.entries
+          .map((entry) => `[${entry.timestamp}] ${entry.label}\n${entry.payloadText}`)
+          .join("\n\n");
+        return `${header}\n${"=".repeat(header.length)}\n${entries}`;
+      })
       .join("\n\n");
   }, [debugEvents]);
+
+  const debugGroups = useMemo(() => buildDebugGroups(debugEvents), [debugEvents]);
+
+  const formatDebugGroupText = useCallback((group: DebugEventGroup): string => {
+    const header = group.subtitle ? `${group.title} - ${group.subtitle}` : group.title;
+    const entries = group.entries
+      .map((entry) => `[${entry.timestamp}] ${entry.label}\n${entry.payloadText}`)
+      .join("\n\n");
+    return `${header}\n${"=".repeat(header.length)}\n${entries}`;
+  }, []);
 
   const handleCopyDebugHistory = useCallback(async () => {
     if (debugEvents.length === 0) {
@@ -464,20 +1005,54 @@ const ChatBot = ({
     copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(null), 2500);
   }, [debugEvents.length, debugHistoryText]);
 
+  const handleCopyDebugGroup = useCallback(
+    async (groupId: string) => {
+      const group = debugGroups.find((candidate) => candidate.id === groupId);
+      if (!group) {
+        setCopyFeedback("Debug group not found");
+        copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(null), 2500);
+        return;
+      }
+
+      if (copyFeedbackTimerRef.current) {
+        clearTimeout(copyFeedbackTimerRef.current);
+      }
+
+      try {
+        if (navigator?.clipboard) {
+          await navigator.clipboard.writeText(formatDebugGroupText(group));
+          setCopyFeedback("Exchange copied!");
+        } else {
+          setCopyFeedback("Clipboard unavailable");
+        }
+      } catch (err) {
+        console.error("Failed to copy debug group", err);
+        setCopyFeedback("Copy failed");
+      }
+
+      copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(null), 2500);
+    },
+    [debugGroups, formatDebugGroupText],
+  );
+
   // --- Session preferences are handled by ConversationOptionsController ---
-  const effectiveSessionId = pendingSessionIdRef.current || chatSessionId || undefined;
-  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(undefined, {
-    refetchOnMountOrArgChange: true,
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
+  // Always prioritize the active routed session id. A stale pending id must
+  // never shadow an explicit user-selected session.
+  const effectiveSessionId = chatSessionId || pendingSessionIdRef.current || undefined;
+  const { data: sessions = [], refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(
+    { teamId },
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
   const attachmentSessionId = effectiveSessionId;
-  const waitResponseForCurrentSession =
-    !waitResponse
-      ? false
-      : !effectiveSessionId
-        ? waitResponse
-        : waitingSessionIdRef.current === effectiveSessionId;
+  const waitResponseForCurrentSession = !waitResponse
+    ? false
+    : !effectiveSessionId
+      ? waitResponse
+      : waitingSessionIdRef.current === effectiveSessionId;
   useEffect(() => {
     if (attachmentSessionId) {
       refetchSessions();
@@ -604,9 +1179,10 @@ const ChatBot = ({
     }
   };
 
-  // Clear pending session once parent propagated the real session
+  // Clear pending session once any explicit routed session is known.
+  // This avoids stale pending ids from hijacking session-scoped prefs/context.
   useEffect(() => {
-    if (chatSessionId && pendingSessionIdRef.current === chatSessionId) {
+    if (chatSessionId && pendingSessionIdRef.current) {
       pendingSessionIdRef.current = null;
     }
   }, [chatSessionId]);
@@ -628,7 +1204,7 @@ const ChatBot = ({
     const connectSeq = ++wsConnectSeqRef.current;
 
     return new Promise((resolve, reject) => {
-      const rawWsUrl = toWsUrl(getConfig().backend_url_api, "/agentic/v1/chatbot/query/ws");
+      const rawWsUrl = toWsUrl("/agentic/v1/chatbot/query/ws");
       const url = new URL(rawWsUrl);
       if (token) url.searchParams.set("token", token); // ⚠️ nécessite WSS en prod + logs sans query
 
@@ -651,8 +1227,9 @@ const ChatBot = ({
         if (connectSeq !== wsConnectSeqRef.current) return;
         try {
           const response = JSON.parse(event.data);
+          const activeSessionId = activeSessionIdRef.current;
 
-          if (isAdmin) {
+          if (isAdmin && shouldCaptureDebugPayload(response, activeSessionId)) {
             appendDebugEvent(response);
           }
 
@@ -662,7 +1239,6 @@ const ChatBot = ({
               const msg = streamed.message as ChatMessage;
 
               // Ignore streams for another session than the one being viewed
-              const activeSessionId = activeSessionIdRef.current;
               if (activeSessionId && msg.session_id !== activeSessionId) {
                 console.warn("Ignoring stream for another session:", msg.session_id);
                 break;
@@ -685,7 +1261,6 @@ const ChatBot = ({
                 finalEvent.messages[0]?.exchange_id;
 
               // Ignore finals for another session than the one being viewed
-              const activeSessionId = activeSessionIdRef.current;
               if (activeSessionId && finalSessionId && finalSessionId !== activeSessionId) {
                 console.warn("Ignoring final for another session:", finalSessionId);
                 endWaiting({ sessionId: finalSessionId, exchangeId: finalExchangeId });
@@ -708,7 +1283,6 @@ const ChatBot = ({
 
             case "session": {
               const sessionEvent = response as SessionEvent;
-              const activeSessionId = activeSessionIdRef.current;
               if (activeSessionId && sessionEvent.session?.id && sessionEvent.session.id !== activeSessionId) {
                 console.warn("Ignoring session update for another session:", sessionEvent.session.id);
                 break;
@@ -719,7 +1293,9 @@ const ChatBot = ({
 
             case "error": {
               const errorSessionId =
-                typeof (response as any)?.session_id === "string" ? ((response as any).session_id as string) : undefined;
+                typeof (response as any)?.session_id === "string"
+                  ? ((response as any).session_id as string)
+                  : undefined;
               showError({ summary: "Error", detail: response.content });
               console.error("[RCV ERROR ChatBot] WebSocket error:", response);
               endWaiting({
@@ -731,7 +1307,6 @@ const ChatBot = ({
 
             case "awaiting_human": {
               const awaiting = response as AwaitingHumanEvent;
-              const activeSessionId = activeSessionIdRef.current;
               if (activeSessionId && awaiting.session_id !== activeSessionId) {
                 console.warn("Ignoring awaiting_human for another session:", awaiting.session_id);
                 endWaiting({ immediate: true, sessionId: awaiting.session_id, exchangeId: awaiting.exchange_id });
@@ -949,11 +1524,11 @@ const ChatBot = ({
   };
 
   const ensureSessionId = useCallback(async (): Promise<string> => {
-    const existing = pendingSessionIdRef.current || chatSessionId;
+    const existing = chatSessionId || pendingSessionIdRef.current;
     if (existing) return existing;
     try {
       const session = await createSession({
-        createSessionPayload: { agent_id: currentAgent?.id },
+        createSessionPayload: { agent_id: currentAgent?.id, team_id: teamId },
       }).unwrap();
       try {
         await seedSessionPrefs(session.id, currentAgent?.id);
@@ -1003,7 +1578,7 @@ const ChatBot = ({
       }
 
       setIsUploadingAttachments(true);
-      let sid = pendingSessionIdRef.current || chatSessionId;
+      let sid = chatSessionId || pendingSessionIdRef.current;
       if (!sid) {
         try {
           sid = await ensureSessionId();
@@ -1056,7 +1631,7 @@ const ChatBot = ({
     options?: QueryChatOptions,
   ) => {
     console.debug(`[CHATBOT] Sending message: ${input}`);
-    let sid = pendingSessionIdRef.current || chatSessionId;
+    let sid = chatSessionId || pendingSessionIdRef.current;
     if (!sid) {
       try {
         sid = await ensureSessionId();
@@ -1078,6 +1653,14 @@ const ChatBot = ({
       parts: [{ type: "text", text: input }],
       metadata: {
         agent_id: agent ? agent.id : currentAgent.id,
+        extras: {
+          optimistic_user: true,
+          ...(options?.internalCapability
+            ? {
+                internal_capability: options.internalCapability,
+              }
+            : {}),
+        },
         runtime_context: runtimeContext ?? null,
       },
     };
@@ -1115,7 +1698,9 @@ const ChatBot = ({
     const eventBase: ChatAskInput = {
       type: "ask",
       message: input,
-      agent_id: agent ? agent.id : currentAgent.id,
+      agent_id: options?.internalProfileId ? undefined : agent ? agent.id : currentAgent.id,
+      internal_profile_id: options?.internalProfileId,
+      internal_capability: options?.internalCapability,
       // Use the already-resolved sid (may come from ensureSessionId()) to avoid any drift
       // between the check above and the payload build here.
       session_id: sid,
@@ -1148,7 +1733,7 @@ const ChatBot = ({
   };
 
   const respondHumanInLoop = useCallback(
-    async (answerOrChoice: string | boolean, freeText?: string, eventOverride?: AwaitingHumanEvent | null) => {
+    async (answerOrChoice?: string | boolean, freeText?: string, eventOverride?: AwaitingHumanEvent | null) => {
       const target = eventOverride || pendingHitl;
       if (!target || !chatSessionId) return;
       try {
@@ -1159,21 +1744,24 @@ const ChatBot = ({
         const refreshToken = KeyCloakService.GetRefreshToken();
         const accessToken = KeyCloakService.GetToken();
         const hitlPayload = (target as any)?.payload ?? {};
+        const hasExplicitChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
         const selectedChoice =
-          typeof answerOrChoice === "string" && Array.isArray(hitlPayload?.choices)
+          hasExplicitChoices && typeof answerOrChoice === "string" && Array.isArray(hitlPayload?.choices)
             ? hitlPayload.choices.find((c: any) => c?.id === answerOrChoice)
             : undefined;
+        const normalizedFreeText = typeof freeText === "string" ? freeText.trim() || undefined : undefined;
+        const answerValue = !hasExplicitChoices && normalizedFreeText ? normalizedFreeText : answerOrChoice;
         const payload = {
           type: "human_resume",
           session_id: chatSessionId,
           exchange_id: target.exchange_id,
           payload: {
-            answer: answerOrChoice,
-            choice_id: typeof answerOrChoice === "string" ? answerOrChoice : undefined,
+            answer: answerValue,
+            choice_id: hasExplicitChoices && typeof answerOrChoice === "string" ? answerOrChoice : undefined,
             _hitl_choice_label: selectedChoice?.label,
             _hitl_title: hitlPayload?.title,
             _hitl_stage: hitlPayload?.stage,
-            text: freeText,
+            text: hasExplicitChoices ? normalizedFreeText : undefined,
             checkpoint_id: hitlPayload?.checkpoint_id,
           },
           agent_id: currentAgent?.id,
@@ -1202,21 +1790,38 @@ const ChatBot = ({
     [beginWaiting, chatSessionId, currentAgent, pendingHitl, setupWebSocket, showError],
   );
 
-  const handleRequestLogGenius = useCallback(() => {
-    if (!logGeniusAgent) return;
-    const prompt = t(
-      "chatbot.logGenius.prompt",
-      "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
-    );
-    const context = buildLogGeniusContext(messagesRef.current);
-    const fullPrompt = context
-      ? `${prompt}\n\nRecent conversation context (last ${LOG_GENIUS_CONTEXT_TURNS} turns, including tool calls):\n${context}`
-      : prompt;
-    queryChatBot(fullPrompt, logGeniusAgent, buildRuntimeContext(), {
-      suppressUserMessage: true,
-      traceThought: fullPrompt,
-    });
-  }, [buildRuntimeContext, logGeniusAgent, queryChatBot, t]);
+  const handleRequestLogGenius = useCallback(
+    (mode: LogGeniusMode = "logs") => {
+      const prompt =
+        mode === "performance"
+          ? t(
+              "chatbot.logGenius.performancePrompt",
+              "Analyze this conversation performance from Langfuse traces and summarize bottlenecks, slow nodes/tools, and concrete actions.",
+            )
+          : t(
+              "chatbot.logGenius.prompt",
+              "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
+            );
+      const traceThought =
+        mode === "performance"
+          ? t(
+              "chatbot.logGenius.performanceTrace",
+              "Diagnosing conversation performance (trace timings and bottlenecks).",
+            )
+          : t("chatbot.logGenius.trace", "Diagnosing the current conversation and runtime context.");
+      const context = buildLogGeniusContext(messagesRef.current);
+      const fullPrompt = context
+        ? `${prompt}\n\nRecent conversation context (last ${LOG_GENIUS_CONTEXT_TURNS} turns, including tool calls):\n${context}`
+        : prompt;
+      queryChatBot(fullPrompt, internalLogGeniusAgent, buildRuntimeContext(), {
+        suppressUserMessage: true,
+        traceThought,
+        internalProfileId: "log_genius",
+        internalCapability: "log_genius",
+      });
+    },
+    [buildRuntimeContext, internalLogGeniusAgent, queryChatBot, t],
+  );
 
   const loadError = (isHistoryError && historyError) || (isPrefsError && prefsError);
   const hasLoadError = Boolean(loadError);
@@ -1230,29 +1835,43 @@ const ChatBot = ({
       !loadState.historyReady ||
       !loadState.prefsReady ||
       Boolean(loadError));
-  const showWelcome = isNewConversation && !isSessionLoadBlocked && !waitResponseForCurrentSession && messages.length === 0;
+  const showWelcome =
+    isNewConversation && !isSessionLoadBlocked && !waitResponseForCurrentSession && messages.length === 0;
   // Helps spot session-history fetch issues quickly in dev without adding noisy logs.
   const showHistoryLoading =
-    !!chatSessionId && isHistoryFetching && messages.length === 0 && !waitResponseForCurrentSession && !isClientCreatedSession;
+    !!chatSessionId &&
+    isHistoryFetching &&
+    messages.length === 0 &&
+    !waitResponseForCurrentSession &&
+    !isClientCreatedSession;
   const debugWidgetProps = {
     isAdmin,
     debugDrawerOpen,
     setDebugDrawerOpen,
+    debugGroups,
     debugHistoryText,
     onCopyDebugHistory: handleCopyDebugHistory,
+    onCopyDebugGroup: handleCopyDebugGroup,
     copyFeedback,
     hasDebugHistory: debugEvents.length > 0,
   };
+  const messageAgents = useMemo(
+    () => [...agents, ...internalAgents, internalLogGeniusAgent],
+    [agents, internalAgents, internalLogGeniusAgent],
+  );
 
   const handleHitlSubmit = useCallback(
-    (choiceId: string, freeText?: string) => {
+    (choiceId?: string, freeText?: string) => {
       if (!pendingHitl) return;
       const hasExplicitChoices = Boolean(pendingHitl.payload?.choices?.length);
-      let answer: string | boolean = choiceId;
       if (!hasExplicitChoices) {
-        if (choiceId === "yes") answer = true;
-        else if (choiceId === "no") answer = false;
+        respondHumanInLoop(undefined, freeText, pendingHitl);
+        return;
       }
+      if (!choiceId) return;
+      let answer: string | boolean = choiceId;
+      if (choiceId === "yes") answer = true;
+      else if (choiceId === "no") answer = false;
       respondHumanInLoop(answer, freeText, pendingHitl);
     },
     [pendingHitl, respondHumanInLoop],
@@ -1285,12 +1904,13 @@ const ChatBot = ({
         conversationPrefs={conversationPrefs}
         currentAgent={currentAgent}
         agents={agents}
+        messageAgents={messageAgents}
         messages={messages}
         hiddenUserExchangeIds={hiddenUserExchangeIdsRef.current}
         layout={layout}
         onSend={handleSend}
         onStop={stopStreaming}
-        onRequestLogGenius={logGeniusAgent ? handleRequestLogGenius : undefined}
+        onRequestLogGenius={isAdmin ? handleRequestLogGenius : undefined}
         onSelectAgent={selectAgent}
         setSearchPolicy={setSearchPolicy}
         setSearchRagScope={setSearchRagScope}

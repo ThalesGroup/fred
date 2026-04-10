@@ -353,7 +353,7 @@
     }
   },
   "assetManager": {
-    "title": "Manage Assets for {{agentId}}",
+    "title": "Resources for {{agentId}}",
     "description": "Upload and manage binary resources like templates or configuration files for this agent. These resources can be referenced by key in your agent interactions.",
     "listTitle": "Current Assets",
     "noAssetsFound": "No assets found. Upload one below to get started.",
@@ -376,20 +376,43 @@
     "deleteFailedSummary": "Deletion Failed",
     "unknownDeleteError": "An unknown error occurred during deletion.",
     "confirmDeleteTitle": "Confirm deletion",
-    "confirmDeleteMessage": "Delete this asset? This action cannot be undone."
+    "confirmDeleteMessage": "Delete this asset? This action cannot be undone.",
+    "addMoreFiles": "Add more files"
+  },
+  "agentTuning": {
+    "groups": {
+      "prompts": "Prompts",
+      "chatOptions": "Chat options"
+    },
+    "fields": {
+      "prompts_system": {
+        "title": "System prompt",
+        "description": "Core behavior instructions for the assistant."
+      },
+      "chat_options_attach_files": {
+        "title": "Allow file attachments",
+        "description": "Show file upload/attachment controls for this agent."
+      },
+      "chat_options_libraries_selection": {
+        "title": "Document libraries picker",
+        "description": "Let users select document libraries/knowledge sources for this agent."
+      }
+    }
   },
   "agentEditDrawer": {
     "nameLabel": "Name",
-    "nameHelperText": "The display name of the agent.",
-    "roleHelperText": "The agent's mandatory role for discovery (e.g., 'Financial Analyst')",
-    "descriptionHelperText": "The agent's mandatory description.",
-    "tagsHelperText": "Tags used for categorization and filtering.",
     "noTunableFields": "This agent exposes no tunable fields.",
     "coreFields": "Core Fields",
     "tunableFields": "Tunable Fields",
     "tagsLabel": "Tags",
     "selectMcpServers": "Select MCP servers",
-    "noMcpServers": "No MCP servers are currently available."
+    "noMcpServers": "No MCP servers are currently available.",
+    "headerTitle": "{{agentsNicknameSingular}} edition",
+    "headerTitleCreate": "Create {{agentsNicknameSingular}}",
+    "errors": {
+      "createFailed": "Failed to create agent",
+      "updateFailed": "Failed to update agent"
+    }
   },
   "agentHub": {
     "title": "Your {{agentsNicknamePlural}}",
@@ -417,14 +440,39 @@
       "description": "Description",
       "role": "Role",
       "agentType": "Agent Type",
+      "creationMode": "Starting point",
+      "creationModeHelp": "Choose the most natural way to create this agent. You can refine its configuration later in settings.",
+      "creationModeBasic": "Base agent",
+      "creationModeBasicHelp": "Creates a generic ReAct agent with no preloaded profile. Good when you want to start from a neutral baseline.",
+      "creationModeProfile": "ReAct profile",
+      "creationModeProfileHelp": "Creates a base agent already specialized by a backend profile such as Georges, Custodian, Sentinel, or Geo Demo.",
+      "creationModeLegacyV1": "Legacy ReAct (v1)",
+      "creationModeLegacyV1Help": "Creates an agent with the historical v1 BasicReAct runtime. Use only when you explicitly need legacy behavior.",
+      "creationModeLegacyV1Note": "This mode creates the agent with the v1 BasicReAct runtime class (legacy path).",
+      "creationModeClass": "Custom class",
+      "creationModeClassHelp": "Reserved for workflow agents or backend-specific implementations that do not fit the standard model.",
+      "agentVersion": "Agent version",
+      "agentVersionV2": "v2",
+      "agentVersionV2Help": "Recommended for all new agents. Fully configurable — set the role, tools and behaviour to match any use case.",
+      "agentVersionV1": "v1",
+      "agentVersionV1Help": "Legacy format. Use only if specifically instructed. All new agents should use V2.",
+      "v2ModeReact": "Custom",
+      "v2ModeReactHelp": "A blank-slate agent you configure entirely yourself — role, tools and instructions from scratch.",
+      "v2ModeProfile": "From template",
+      "v2ModeProfileHelp": "Start from a ready-made configuration. Faster to set up when a predefined template fits your needs.",
+      "v2ModeDefinition": "Specialist",
+      "v2ModeDefinitionHelp": "A purpose-built agent delivered by the platform team with a fixed, non-editable behaviour (e.g. Archie, Corpus Investigator).",
+      "definitionRef": "Definition ref",
+      "definitionRefHelp": "Fixed-behaviour v2 agent. Its behaviour is defined in code.",
       "base_prompt": "Base Prompt",
       "agent_type": "Agent Type",
-      "a2aProxyToggle": "A2A Proxy",
-      "a2aBaseUrl": "A2A Base URL",
-      "a2aBaseUrlRequired": "A2A base URL is required for an A2A agent.",
-      "a2aToken": "A2A Token (optional)",
+      "profile": "Starting profile",
+      "profileHelp": "Choose a backend-defined profile. You can refine prompt, tools, and safety settings after creation.",
+      "profileNoOptions": "No ReAct profile is currently available.",
+      "profileRequired": "A starting profile is required for this agent.",
       "classPath": "Custom Agent Class Path",
       "classPathHelp": "Select a class path declared in backend configuration. Leave empty for default.",
+      "classPathRequired": "A custom class path is required when creating an agent from a class.",
       "classPathNoOptions": "No class path declared in backend configuration.",
       "optional": "Optional",
       "icon": "Icon",
@@ -454,7 +502,6 @@
     "errors": {
       "updateFailed": "Failed to update agent",
       "tuningUpdateFailed": "Failed to update agent tuning",
-      "crewUpdateFailed": "Failed to update leader crew",
       "creationFailedSummary": "Agent creation failed",
       "creationFailedDetailFallback": "An unexpected error occurred while creating the agent."
     },
@@ -470,17 +517,7 @@
       "title": "Tools"
     },
     "confirmRestoreTitle": "Overwrite agents with configuration?",
-    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone.",
-    "registerA2A": "Register",
-    "noA2ACardSummary": "No A2A card stored",
-    "noA2ACardDetail": "This agent does not have a stored A2A agent card yet.",
-    "a2aCardTitle": "A2A Agent Card",
-    "a2aCapabilities": "Capabilities",
-    "a2aStreaming": "Streaming",
-    "a2aPush": "Push notifications",
-    "a2aHistory": "State history",
-    "a2aSkills": "Skills",
-    "a2aExamples": "Examples"
+    "confirmRestoreMessage": "This will replace all tuned settings saved in the UI with the YAML configuration. You will lose any custom changes. This cannot be undone."
   },
   "mcpHub": {
     "title": "Tools",
@@ -585,9 +622,14 @@
       "label": "Log Genius",
       "tooltip": "Analyze recent logs for quick diagnosis",
       "tooltipDescription": "Analyze recent logs and summarize likely issues with next steps.",
+      "panelTitle": "Diagnostics Assistant",
       "description": "Runs a short investigation over the last few minutes of logs and returns a ready-to-use diagnosis.",
       "action": "Ask for assistance or analysis",
-      "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps."
+      "prompt": "Analyze the last 5 minutes of logs and summarize likely issues with next steps.",
+      "incidentAction": "Incident diagnosis",
+      "incidentDescription": "Investigates recent errors and abnormal signals, then returns a concise diagnosis with concrete remediation steps.",
+      "performanceAction": "Performance diagnosis",
+      "performanceDescription": "Analyzes conversation traces to identify bottlenecks (model, tools, step latency) and prioritize optimization actions."
     },
     "searchOptions": "Search options",
     "searchOptionsReset": "Back to default",
@@ -734,9 +776,8 @@
     "favorite": "Add the agent to your favorites",
     "unfavorite": "Remove the agent from your favorites",
     "manageAssets": "Manage Assets",
-    "manageCrew": "Manage Crew",
     "inspectCode": "Inspect source code",
-    "viewA2ACard": "View A2A card",
+    "inspectAgent": "Inspect agent definition",
     "enable": "Enable"
   },
   "dialogs": {
@@ -829,7 +870,7 @@
     "upload": "Upload a document",
     "uploadAndProcess": "Upload and Process document",
     "refresh": "Refresh",
-    "uploadInLibrary": "Add document to library",
+    "uploadInLibrary": "Add files",
     "uploadDrawerTitle": "Upload a document",
     "dropFiles": "Drop your files here",
     "maxSize": "or click to select (max 200Mb per file)",
@@ -865,6 +906,8 @@
     "emptyLibraryDescription": "This library is empty. Add your first documents to make them available to your AI assistants.",
     "uploadFirstDocument": "Add your first document",
     "preview": "Preview",
+    "previewNotReadySummary": "Preview not ready",
+    "previewNotReadyDetail": "This document has not generated a preview yet. Run processing to create it.",
     "selected": "Selected",
     "clearSelection": "Clear selection",
     "bulkRemove": "Remove selected documents",
@@ -1049,7 +1092,7 @@
     "noLibrariesFoundDescription": "Get started by creating your first document library to organize and manage your documents.",
     "documentCountSingular": "{{count}} document",
     "documentCountPlural": "{{count}} documents",
-    "createLibrary": "Create Document Library",
+    "createLibrary": "Create folder",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "emptyFoldersTitle": "No libraries yet",
@@ -1162,6 +1205,10 @@
         "name": "Filesystem access",
         "description": "Allow your agent to access a filesystem (local or Minio)"
       },
+      "prometheus": {
+        "name": "Prometheus access",
+        "description": "Allow your agent to query Prometheus metrics and execute PromQL requests"
+      },
       "search_opensearch": {
         "name": "Search in opensearch",
         "description": "Allow your agent to search in opensearch indices"
@@ -1257,49 +1304,118 @@
     "noAppTitle": "No app",
     "noAppDescription": "The team owners have not configured any applications for this group at this time."
   },
-  "teamSettingsPage": {
-    "teamBanner": {
-      "label": "Team banner",
-      "buttonLabel": "Upload image...",
-      "alt": "Team banner image",
-      "noImage": "No banner image uploaded",
-      "uploadSuccess": "Banner uploaded successfully",
-      "uploadError": "Failed to upload banner image",
-      "invalidType": "Invalid file type. Please use JPEG, PNG, or WebP format.",
-      "tooLarge": "File is too large. Maximum size is 5MB."
-    },
-    "description": {
-      "label": "Team description",
-      "placeholder": "Describe here the purpose of your team and its key challenges."
-    },
-    "private": {
-      "label": "Private team"
-    }
-  },
-  "teamMembersPage": {
-    "tableHeader": {
-      "username": "Username",
-      "firstName": "First name",
-      "lastName": "Last name",
-      "role": "Role",
-      "actions": "Actions"
-    },
-    "headerTitle": "Team members",
-    "headerInfoTooltip": "Here are the members of this team. A member can belong to multiple teams at the same time.",
-    "teamRole": {
-      "member": "Member",
-      "manager": "Manager",
-      "owner": "Owner"
-    },
-    "addUserInputPlaceholder": "Add a user...",
-    "removeMemberConfonfirmationDialog": {
-      "title": "Confirm deletion ?",
-      "message": "You're about to remove this user from the team. Do you want to continue?",
-      "confirmButtonLabel": "Delete"
-    }
-  },
   "confirmationDialog": {
     "defaultCancelButtonLabel": "Cancel",
     "defaultConfirmButtonLabel": "Confirm"
+  },
+  "rework": {
+    "back": "Back",
+    "agentCard": {
+      "startChat": "New chat"
+    },
+    "teamRoles": {
+      "member": "Member",
+      "manager": "Editor",
+      "owner": "Owner"
+    },
+    "teamCard": {
+      "memberCount": "{{count}} members"
+    },
+    "sidebar": {
+      "team": {
+        "avatarAlt": "Team {{teamName}}",
+        "bannerAlt": "Team's banner",
+        "userTeam": "Personal space",
+        "marketplace": "Marketplace",
+        "menu": {
+          "resources": "Resources",
+          "apps": "Apps"
+        }
+      },
+      "marketplace": {
+        "title": "Marketplace",
+        "menu": {
+          "teams": "Teams",
+          "tools": "Tools",
+          "apps": "Apps"
+        }
+      },
+      "newChat": "New chat",
+      "chatList": {
+        "title": "Chat"
+      }
+    },
+    "userSettings": {
+      "back": "Back",
+      "disconnect": "Disconnect",
+      "title": "Your profile",
+      "app": {
+        "dark": "Dark",
+        "system": "System",
+        "light": "Light",
+        "french": "French",
+        "english": "English"
+      },
+      "conversationProfile": {
+        "title": "Conversation profile",
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}."
+      }
+    },
+    "teamSettings": {
+      "navigation": {
+        "members": "Members",
+        "settings": "Settings",
+        "leaveTeam": "Leave team"
+      },
+      "members": {
+        "title": "Team members",
+        "addMember": {
+          "placeholder": "Invite users"
+        },
+        "table": {
+          "deleteAction": "Delete",
+          "identifiant": "Identifiant",
+          "firstName": "First name",
+          "lastName": "Last name",
+          "role": "Role",
+          "actions": "Actions"
+        },
+        "errors": {
+          "updateRoleSummary": "Failed to update role",
+          "updateRoleDetail": "Could not update member role.",
+          "removeMemberSummary": "Failed to remove member",
+          "removeMemberDetail": "Could not remove team member.",
+          "forbiddenDetail": "You are not allowed to perform this action.",
+          "lastOwnerDetail": "A team must keep at least one owner."
+        }
+      },
+      "parameters": {
+        "teamBannerTitle": "Team banner",
+        "description": {
+          "label": "Team description",
+          "placeholder": "Help other users understand your team's role."
+        },
+        "privateTeam": "Private team",
+        "teamPrompt": {
+          "label": "Team context (prompt)",
+          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
+        }
+      }
+    },
+    "teams": {
+      "agents": {
+        "title": "Chat with your {{agentsNicknamePlural}}",
+        "create": "Create Agent",
+        "firstTitle": "Create your first {{agentsNicknameSingular}} !",
+        "firstCreate": "Create"
+      }
+    },
+    "marketplace": {
+      "teams": {
+        "title": "Community teams",
+        "yourTeams": "Your teams",
+        "otherTeams": "Discover other teams"
+      }
+    }
   }
 }

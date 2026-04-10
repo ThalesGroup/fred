@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, FormControl, Grid2, InputLabel, MenuItem, Select } from "@mui/material";
+import { Box, FormControl, Grid, InputLabel, MenuItem, Select } from "@mui/material";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/fr";
 import { useEffect, useMemo, useState } from "react";
@@ -146,7 +146,7 @@ const useProcessHistoryRows = ({
  * Why (Fred): a single top-level page that owns date range + precision, renders many compact KPI tiles
  * without nesting Papers (no Paper-in-Paper). Tiles are *frameless* and receive shared xDomain + precision.
  *
- * How to extend: add another <Grid2> with a frameless tile component below. Tiles should accept
+ * How to extend: add another <Grid> with a frameless tile component below. Tiles should accept
  * { start, end, precision, xDomain, viewingMode?, userId?, agentId? } and stay presentational.
  */
 export default function KpiDashboard() {
@@ -423,8 +423,8 @@ export default function KpiDashboard() {
       </DashboardCard>
 
       {/* Compact grid; frameless tiles (Boxes) to avoid Paper-in-Paper */}
-      <Grid2 container spacing={1}>
-        <Grid2 size={{ xs: 12, md: 12, lg: 12 }}>
+      <Grid container spacing={1}>
+        <Grid size={{ xs: 12, md: 12, lg: 12 }}>
           <Box
             sx={{
               p: UI.compactPadding,
@@ -546,9 +546,9 @@ export default function KpiDashboard() {
               </Box>
             </Box>
           </Box>
-        </Grid2>
+        </Grid>
 
-        <Grid2 size={{ xs: 12, md: 12, lg: 12 }}>
+        <Grid size={{ xs: 12, md: 12, lg: 12 }}>
           <FramelessTile
             title="Token usage"
             subtitle={`Sum of tokens per ${precision} bucket — all agents`}
@@ -563,9 +563,9 @@ export default function KpiDashboard() {
               xDomain={xDomain}
             />
           </FramelessTile>
-        </Grid2>
+        </Grid>
 
-        <Grid2 size={{ xs: 12, md: 6, lg: 6 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 6 }}>
           <FramelessTile
             title="Chat exchange latency (ms) — median & p95"
             subtitle={`End-to-end time to answer per ${precision} bucket — lower is better`}
@@ -581,8 +581,8 @@ export default function KpiDashboard() {
               rows={latencyRows}
             />
           </FramelessTile>
-        </Grid2>
-        <Grid2 size={{ xs: 12, md: 6, lg: 6 }}>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 6 }}>
           <FramelessTile
             title="Exchanges by status"
             subtitle="Range totals in the selected window"
@@ -590,9 +590,9 @@ export default function KpiDashboard() {
           >
             <KpiStatusMini rows={statusRows} height={UI.tileChartHeight} showLegend={false} />
           </FramelessTile>
-        </Grid2>
+        </Grid>
 
-        <Grid2 size={{ xs: 12, md: 6, lg: 6 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 6 }}>
           <FramelessTile
             title="Agent step latency (avg ms)"
             subtitle="Average latency per agent step over the selected range"
@@ -606,8 +606,8 @@ export default function KpiDashboard() {
               groupKey="dims.agent_step"
             />
           </FramelessTile>
-        </Grid2>
-        <Grid2 size={{ xs: 12, md: 6, lg: 6 }}>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 6 }}>
           <FramelessTile
             title="Tool latency (avg ms)"
             subtitle="Average MCP/tool call latency over the selected range"
@@ -621,8 +621,8 @@ export default function KpiDashboard() {
               groupKey="dims.tool_name"
             />
           </FramelessTile>
-        </Grid2>
-      </Grid2>
+        </Grid>
+      </Grid>
     </Box>
   );
 }

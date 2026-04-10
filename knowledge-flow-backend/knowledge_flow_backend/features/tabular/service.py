@@ -16,7 +16,7 @@ import logging
 from typing import Any, Dict, List
 
 from fred_core import Action, KeycloakUser, Resource, authorize
-from fred_core.store.structures import StoreInfo
+from fred_core.store import StoreInfo
 
 from knowledge_flow_backend.features.tabular.structures import (
     DTypes,

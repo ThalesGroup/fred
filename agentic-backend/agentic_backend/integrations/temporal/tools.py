@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Optional
 
+from fred_core.scheduler import SchedulerBackend
 from langchain_core.tools import tool
 
 from .gateway import TemporalGateway
@@ -63,7 +64,7 @@ class TemporalTools:
         )
 
         cfg = get_configuration().scheduler
-        if cfg.backend.lower() != "temporal":
+        if cfg.backend != SchedulerBackend.TEMPORAL:
             raise RuntimeError(
                 f"TemporalTools.from_app_context requires scheduler.backend=temporal (found {cfg.backend})"
             )

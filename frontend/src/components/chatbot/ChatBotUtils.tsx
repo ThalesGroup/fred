@@ -1,16 +1,60 @@
 import { ChatMessage } from "../../slices/agentic/agenticOpenApi";
 import React from "react";
 
-// Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker)
+const exchangeKeyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;
+
+const stableConversationKeyOf = (m: ChatMessage) => `${exchangeKeyOf(m)}|${m.role}|${m.channel}`;
+
+const isOptimisticUserMessage = (m: ChatMessage) =>
+  m.role === "user" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
+
+const hasStreamingDeltaFlag = (m: ChatMessage) =>
+  m.role === "assistant" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { streaming_delta?: unknown } | undefined)?.streaming_delta === true;
+
+const shouldClearStreamingDeltas = (m: ChatMessage) =>
+  exchangeKeyOf(m) &&
+  (m.channel === "tool_call" ||
+    m.channel === "tool_result" ||
+    (m.role === "assistant" && m.channel === "final" && !hasStreamingDeltaFlag(m)));
+
+// Replace-or-insert one message, then keep array sorted by (rank asc, timestamp asc as tiebreaker).
+// For streaming_delta frames, text is accumulated onto the existing message rather than replaced.
 export const upsertOne = (all: ChatMessage[], m: ChatMessage) => {
+  const exchangeKey = exchangeKeyOf(m);
+  const base = shouldClearStreamingDeltas(m)
+    ? all.filter((x) => !(exchangeKeyOf(x) === exchangeKey && hasStreamingDeltaFlag(x)))
+    : all;
   const k = keyOf(m);
-  const idx = all.findIndex((x) => keyOf(x) === k);
+  const stableConversationKey = stableConversationKeyOf(m);
+  const idx = base.findIndex((x) => {
+    if (keyOf(x) === k) return true;
+    if (isOptimisticUserMessage(x) && m.role === "user" && m.channel === "final") {
+      return stableConversationKeyOf(x) === stableConversationKey;
+    }
+    return false;
+  });
   if (idx >= 0) {
-    const updated = [...all];
-    updated[idx] = m; // overwrite (most recent wins)
+    const updated = [...base];
+    if (hasStreamingDeltaFlag(m)) {
+      // Accumulate delta text onto the existing message's first text part.
+      // Delta frames always carry a TextPart — construct it explicitly to satisfy the discriminated union.
+      const existing = updated[idx];
+      const deltaText = (m.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
+      const existingText = (existing.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
+      updated[idx] = {
+        ...m,
+        parts: [{ type: "text" as const, text: existingText + deltaText }],
+      };
+    } else {
+      updated[idx] = m; // authoritative frame — replace entirely
+    }
     return sortMessages(updated);
   }
-  return sortMessages([...all, m]);
+  return sortMessages([...base, m]);
 };
 
 export const sortMessages = (arr: ChatMessage[]) =>
@@ -23,17 +67,17 @@ export const sortMessages = (arr: ChatMessage[]) =>
   });
 
 export const mergeAuthoritative = (existing: ChatMessage[], finals: ChatMessage[]) => {
-  // Build maps by key
-  const map = new Map(existing.map((m) => [keyOf(m), m]));
-  for (const f of finals) map.set(keyOf(f), f); // overwrite existing or insert new
-  return sortMessages([...map.values()]);
+  let merged = [...existing];
+  for (const msg of finals) {
+    merged = upsertOne(merged, msg);
+  }
+  return sortMessages(merged);
 };
 
 // Convert http(s) API base to ws(s) chat endpoint reliably
-export const toWsUrl = (base: string | undefined, path: string) => {
-  const url = new URL((base || "http://localhost") + path);
-  if (url.protocol === "http:") url.protocol = "ws:";
-  if (url.protocol === "https:") url.protocol = "wss:";
+export const toWsUrl = (path: string) => {
+  const url = new URL(path, window.location.origin);
+  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 };
 

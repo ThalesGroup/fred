@@ -14,122 +14,90 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, List
+from typing import List
 
-from fred_core.sql import (
-    AsyncBaseSqlStore,
-    advisory_lock_key,
-    json_for_engine,
-    run_ddl_with_advisory_lock,
-)
-from sqlalchemy import Column, MetaData, String, Table, select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from fred_core.sql.async_session import make_session_factory, use_session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from knowledge_flow_backend.core.stores.resources.base_resource_store import (
     BaseResourceStore,
     ResourceNotFoundError,
 )
+from knowledge_flow_backend.core.stores.resources.resource_models import ResourceRow
 from knowledge_flow_backend.features.resources.structures import Resource, ResourceKind
 
 logger = logging.getLogger(__name__)
 
 
 class PostgresResourceStore(BaseResourceStore):
-    """
-    PostgreSQL-backed resource store using JSONB.
-    """
+    """PostgreSQL-backed resource store using declarative ORM."""
 
-    def __init__(self, engine: AsyncEngine, table_name: str, prefix: str):
-        self.store = AsyncBaseSqlStore(engine, prefix=prefix)
-        self.table_name = self.store.prefixed(table_name)
-        self._ddl_lock_id = advisory_lock_key(self.table_name)
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._sessions = make_session_factory(engine)
 
-        json_type = json_for_engine(self.store.engine)
+    # --- helpers ---
 
-        metadata = MetaData()
-        self.table = Table(
-            self.table_name,
-            metadata,
-            Column("resource_id", String, primary_key=True),
-            Column("resource_name", String, index=True),
-            Column("resource_type", String, index=True),
-            Column("author", String, index=True),
-            Column("doc", json_type),
-            keep_existing=True,
-        )
-
-        async def _create():
-            await run_ddl_with_advisory_lock(
-                engine=self.store.engine,
-                lock_key=self._ddl_lock_id,
-                ddl_sync_fn=metadata.create_all,
-                logger=logger,
-            )
-
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_create())
-        except RuntimeError:
-            asyncio.run(_create())
-        logger.info("[RESOURCES][PG][ASYNC] Table ready: %s", self.table_name)
-
-    def _from_dict(self, data: Any) -> Resource:
-        return Resource.model_validate(data or {})
+    @staticmethod
+    def _row_to_resource(row: ResourceRow) -> Resource:
+        return Resource.model_validate(row.doc or {})
 
     # --- CRUD ---
 
-    async def create_resource(self, resource: Resource) -> Resource:
-        values = {
-            "resource_id": resource.id,
-            "resource_name": resource.name,
-            "resource_type": resource.kind.value,
-            "author": resource.author,
-            "doc": resource.model_dump(mode="json"),
-        }
-        async with self.store.begin() as conn:
-            await self.store.upsert(conn, self.table, values, pk_cols=["resource_id"])
+    async def create_resource(self, resource: Resource, session: AsyncSession | None = None) -> Resource:
+        async with use_session(self._sessions, session) as s:
+            existing = await s.get(ResourceRow, resource.id)
+            if existing:
+                # Upsert: update in place
+                existing.resource_name = resource.name
+                existing.resource_type = resource.kind.value
+                existing.author = resource.author
+                existing.doc = resource.model_dump(mode="json")
+            else:
+                row = ResourceRow(
+                    resource_id=resource.id,
+                    resource_name=resource.name,
+                    resource_type=resource.kind.value,
+                    author=resource.author,
+                    doc=resource.model_dump(mode="json"),
+                )
+                s.add(row)
         return resource
 
-    async def get_resource_by_id(self, resource_id: str) -> Resource:
-        async with self.store.begin() as conn:
-            result = await conn.execute(select(self.table.c.doc).where(self.table.c.resource_id == resource_id))
-            row = result.fetchone()
-        if not row:
+    async def get_resource_by_id(self, resource_id: str, session: AsyncSession | None = None) -> Resource:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(ResourceRow, resource_id)
+        if row is None:
             raise ResourceNotFoundError(f"Resource '{resource_id}' not found")
-        return self._from_dict(row[0])
+        return self._row_to_resource(row)
 
-    async def update_resource(self, resource_id: str, resource: Resource) -> Resource:
-        await self.get_resource_by_id(resource_id)  # ensure exists
-        values = {
-            "resource_id": resource.id,
-            "resource_name": resource.name,
-            "resource_type": resource.kind.value,
-            "author": resource.author,
-            "doc": resource.model_dump(mode="json"),
-        }
-        async with self.store.begin() as conn:
-            await self.store.upsert(conn, self.table, values, pk_cols=["resource_id"])
+    async def update_resource(self, resource_id: str, resource: Resource, session: AsyncSession | None = None) -> Resource:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(ResourceRow, resource_id)
+            if row is None:
+                raise ResourceNotFoundError(f"Resource '{resource_id}' not found")
+            row.resource_name = resource.name
+            row.resource_type = resource.kind.value
+            row.author = resource.author
+            row.doc = resource.model_dump(mode="json")
         return resource
 
-    async def delete_resource(self, resource_id: str) -> None:
-        async with self.store.begin() as conn:
-            result = await conn.execute(self.table.delete().where(self.table.c.resource_id == resource_id))
-            if result.rowcount == 0:
+    async def delete_resource(self, resource_id: str, session: AsyncSession | None = None) -> None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(ResourceRow, resource_id)
+            if row is None:
                 raise ResourceNotFoundError(f"Resource '{resource_id}' not found")
+            await s.delete(row)
 
-    async def get_all_resources(self, kind: ResourceKind) -> List[Resource]:
-        async with self.store.begin() as conn:
-            result = await conn.execute(select(self.table.c.doc).where(self.table.c.resource_type == kind.value))
-            rows = result.fetchall()
-        return [self._from_dict(r[0]) for r in rows]
+    async def get_all_resources(self, kind: ResourceKind, session: AsyncSession | None = None) -> List[Resource]:
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(ResourceRow).where(ResourceRow.resource_type == kind.value))).scalars().all()
+        return [self._row_to_resource(row) for row in rows]
 
-    async def list_resources_for_user(self, user: str, kind: ResourceKind) -> List[Resource]:
-        # If we add owner scoping later, we can store owner_id; currently no owner field in Postgres schema.
-        # Align with other stores: filter by kind only (since owner not persisted here).
-        return await self.get_all_resources(kind)
+    async def list_resources_for_user(self, user: str, kind: ResourceKind, session: AsyncSession | None = None) -> List[Resource]:
+        return await self.get_all_resources(kind, session=session)
 
-    async def get_resources_in_tag(self, tag_id: str) -> List[Resource]:
+    async def get_resources_in_tag(self, tag_id: str, session: AsyncSession | None = None) -> List[Resource]:
         # Placeholder: tag relations not persisted in this simple schema.
         return []

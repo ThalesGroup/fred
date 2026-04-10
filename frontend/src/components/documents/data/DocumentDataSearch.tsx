@@ -21,9 +21,7 @@ interface DocumentDataSearchProps {
   setSearch: (value: string) => void;
 }
 
-export const DocumentDataSearch = (
-  { search, setSearch } : DocumentDataSearchProps
-) => {
+export const DocumentDataSearch = ({ search, setSearch }: DocumentDataSearchProps) => {
   const { t } = useTranslation();
   const theme = useTheme();
 
@@ -59,4 +57,4 @@ export const DocumentDataSearch = (
       </Box>
     </Box>
   );
-}
+};

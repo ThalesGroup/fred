@@ -1,0 +1,89 @@
+@use "src/index.scss" as *;
+
+.input {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+
+  &:has(.icon) {
+    input {
+      padding-left: calc(var(--spacing-s) + 1.5rem + var(--spacing-xs));
+    }
+  }
+
+  input {
+    outline: 2px solid var(--input-outline, transparent);
+    border: 1px solid var(--input-border, var(--outline-muted));
+    border-radius: var(--spacing-xs);
+    background-color: var(--surface-container-lowest);
+    padding: 0 var(--spacing-xs) 0 var(--spacing-s);
+    height: 3rem;
+    color: var(--on-surface-retreat);
+
+    @include typography("body", "large");
+  }
+
+  &:not(.error) input:not(:disabled) {
+    &:hover {
+      border-color: var(--outline);
+    }
+
+    &:focus {
+      border-color: transparent;
+      --input-outline: var(--primary);
+    }
+  }
+
+  &.error input:not(:disabled) {
+    --input-border: var(--error);
+
+    &:focus {
+      --input-outline: var(--error);
+    }
+  }
+}
+
+.label {
+  padding-left: var(--spacing-xs);
+  color: var(--label-color, var(--on-surface-retreat));
+
+  @include typography("label", "large");
+}
+
+.input[data-compact="false"].hint {
+  padding-left: var(--spacing-xs);
+  min-height: 1.25rem;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  @include typography("body", "medium");
+}
+
+.error .hint {
+  color: var(--error);
+}
+
+.error .label {
+  color: var(--error);
+}
+
+.disabled .label,
+.disabled .hint {
+  color: var(--on-surface-retreat);
+}
+
+.input:focus-within .label {
+  --label-color: var(--on-surface);
+}
+
+.icon {
+  display: flex;
+  position: absolute;
+  align-items: center;
+  padding-left: var(--spacing-s);
+  height: 3rem;
+  color: var(--on-surface-retreat);
+  font-size: 1.5rem;
+}

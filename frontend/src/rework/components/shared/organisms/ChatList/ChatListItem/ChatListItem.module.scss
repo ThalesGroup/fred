@@ -1,0 +1,79 @@
+@use "src/index.scss" as *;
+
+.chatItemContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border-radius: var(--spacing-xs);
+  padding: var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-xs);
+  height: 3rem;
+
+  &:hover {
+    --display-action: block;
+    background-color: var(--state-on-surface-hover);
+  }
+
+  &[data-selected="true"] {
+    background-color: color-mix(in srgb, var(--secondary), transparent 84%);
+  }
+}
+
+.chatDescription {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+  padding: 2px 0;
+  min-width: 0;
+}
+
+.title,
+.agentName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  @include typography("body", "medium");
+  color: var(--on-surface);
+}
+
+.metadata {
+  @include typography("label", "small");
+  display: flex;
+  gap: var(--spacing-2xs);
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.agentName {
+  color: var(--secondary);
+}
+
+.separator {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 100%;
+  color: var(--on-surface-retreat);
+
+  @include typography("body", "small", true);
+}
+
+.date {
+  @include typography("label", "small");
+  color: var(--on-surface-muted);
+}
+
+.chatActions {
+  display: var(--display-action, none);
+  color: var(--error);
+}

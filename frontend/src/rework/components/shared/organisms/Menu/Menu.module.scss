@@ -1,0 +1,26 @@
+@use "src/index.scss" as *;
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--spacing-xs);
+  background-color: var(--surface-container-highest);
+  padding: var(--spacing-xs) 0;
+  width: max-content;
+  min-width: 100%;
+  max-height: clamp(200px, 40vh, 500px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.menu-empty {
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+  text-align: center;
+
+  @include typography("body", "large");
+}

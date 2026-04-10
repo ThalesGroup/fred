@@ -17,10 +17,7 @@ export const benchPersistApi = knowledgeFlowApi.injectEndpoints({
       query: () => ({ url: `/knowledge-flow/v1/dev/bench/runs` }),
       providesTags: (res) =>
         res
-          ? [
-              ...res.map((r) => ({ type: "BenchRun" as const, id: r.id })),
-              { type: "BenchRun" as const, id: "LIST" },
-            ]
+          ? [...res.map((r) => ({ type: "BenchRun" as const, id: r.id })), { type: "BenchRun" as const, id: "LIST" }]
           : [{ type: "BenchRun" as const, id: "LIST" }],
     }),
     getBenchRun: build.query<BenchmarkResponse, { runId: string }>({
@@ -40,9 +37,5 @@ export const benchPersistApi = knowledgeFlowApi.injectEndpoints({
   }),
 });
 
-export const {
-  useListBenchRunsQuery,
-  useGetBenchRunQuery,
-  useLazyGetBenchRunQuery,
-  useDeleteBenchRunMutation,
-} = benchPersistApi;
+export const { useListBenchRunsQuery, useGetBenchRunQuery, useLazyGetBenchRunQuery, useDeleteBenchRunMutation } =
+  benchPersistApi;

@@ -78,19 +78,15 @@ const applyLangGraphContrastOverrides = (code: string, paletteMode: PaletteMode)
     paletteMode === "dark"
       ? {
           // Light nodes + dark text for readability in dark-mode UI
-          default:
-            "classDef default fill:#f8fafc,stroke:#64748b,stroke-width:1.25px,color:#0f172a,line-height:1.2",
+          default: "classDef default fill:#f8fafc,stroke:#64748b,stroke-width:1.25px,color:#0f172a,line-height:1.2",
           // Start node is transparent in LangGraph style; keep it visible on dark background
-          first:
-            "classDef first fill-opacity:0,stroke:#cbd5e1,stroke-width:1px,color:#e5e7eb",
+          first: "classDef first fill-opacity:0,stroke:#cbd5e1,stroke-width:1px,color:#e5e7eb",
           // End node accent with readable dark text
           last: "classDef last fill:#93c5fd,stroke:#2563eb,stroke-width:1.25px,color:#0f172a",
         }
       : {
-          default:
-            "classDef default fill:#ffffff,stroke:#475569,stroke-width:1.25px,color:#111827,line-height:1.2",
-          first:
-            "classDef first fill-opacity:0,stroke:#94a3b8,stroke-width:1px,color:#334155",
+          default: "classDef default fill:#ffffff,stroke:#475569,stroke-width:1.25px,color:#111827,line-height:1.2",
+          first: "classDef first fill-opacity:0,stroke:#94a3b8,stroke-width:1px,color:#334155",
           last: "classDef last fill:#dbeafe,stroke:#2563eb,stroke-width:1.25px,color:#111827",
         };
 
@@ -147,7 +143,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   const theme = useTheme();
   const baseCode = applyLangGraphContrastOverrides(
     code.replace(/^mermaid\s*\n/i, "").trim(),
-    theme.palette.mode === "dark" ? "dark" : "light"
+    theme.palette.mode === "dark" ? "dark" : "light",
   );
 
   // Store the SVG data URI in state (via Blob URL, not innerHTML)
@@ -163,9 +159,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
     // Candidate 1: raw code (least destructive)
     const rawCandidate = baseCode;
     // Candidate 2: normalize line break markers commonly produced by LLMs
-    const htmlBreakCandidate = baseCode
-      .replace(/<br\s*\/?>/gi, "<br/>")
-      .replace(/\\n/g, "<br/>");
+    const htmlBreakCandidate = baseCode.replace(/<br\s*\/?>/gi, "<br/>").replace(/\\n/g, "<br/>");
     // Candidate 3: legacy transform kept as fallback for backward compatibility
     const normalized = baseCode.replace(/<br\s*\/?>/gi, "\n");
     const canonical = normalized.replace(/\n\(/g, "<br>(");
@@ -184,9 +178,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
         ];
     const renderCandidates = uniqueCandidates(orderedCandidates);
     const flowEdgeColor =
-      theme.palette.mode === "dark"
-        ? alpha(theme.palette.common.white, 0.72)
-        : alpha(theme.palette.text.primary, 0.5);
+      theme.palette.mode === "dark" ? alpha(theme.palette.common.white, 0.72) : alpha(theme.palette.text.primary, 0.5);
     const flowEdgeWidth = theme.palette.mode === "dark" ? 2.1 : 1.8;
 
     // Initialize Mermaid with theme-aware colors for readability
@@ -348,9 +340,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
   const handleCloseModal = () => setIsModalOpen(false);
   const previewMaxHeight = "60vh";
   const previewSurfaceBg =
-    theme.palette.mode === "dark"
-      ? theme.palette.background.paper
-      : theme.palette.background.paper;
+    theme.palette.mode === "dark" ? theme.palette.background.paper : theme.palette.background.paper;
   const previewSurfaceBorder =
     theme.palette.mode === "dark"
       ? `1px solid ${alpha(theme.palette.common.white, 0.14)}`
@@ -409,9 +399,7 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
                 bgcolor: toolbarBg,
                 border: (theme) =>
                   `1px solid ${
-                    theme.palette.mode === "dark"
-                      ? alpha(theme.palette.common.white, 0.06)
-                      : theme.palette.divider
+                    theme.palette.mode === "dark" ? alpha(theme.palette.common.white, 0.06) : theme.palette.divider
                   }`,
                 backdropFilter: "blur(6px)",
               }}
@@ -453,13 +441,9 @@ const Mermaid: React.FC<MermaidProps> = ({ code }) => {
             <Box style={{ width: "100%" }}>
               <p style={{ color: "#d32f2f", fontStyle: "italic", marginTop: 0 }}>{error}</p>
               {errorDetails && (
-                <p style={{ color: "#b71c1c", opacity: 0.9, marginTop: 4, marginBottom: 8 }}>
-                  {errorDetails}
-                </p>
+                <p style={{ color: "#b71c1c", opacity: 0.9, marginTop: 4, marginBottom: 8 }}>{errorDetails}</p>
               )}
-              <p style={{ opacity: 0.8, marginTop: 0, marginBottom: 6 }}>
-                Fallback: showing Mermaid source code
-              </p>
+              <p style={{ opacity: 0.8, marginTop: 0, marginBottom: 6 }}>Fallback: showing Mermaid source code</p>
               <Box
                 component="pre"
                 sx={{

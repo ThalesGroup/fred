@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from fred_core import get_model
-from fred_core.common.structures import ModelConfiguration
+from fred_core.common import ModelConfiguration
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -32,8 +32,45 @@ Constraints:
 - If unsure, say what is uncertain rather than hallucinating specifics.
 """.strip()
 
+PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1 = """
+You are generating a short visual enrichment for a slide that has already been processed by native extraction.
 
-def build_image_describer(vision_cfg: Optional[ModelConfiguration]) -> Optional[BaseImageDescriber]:
+Your goal is not to describe the whole slide like an image caption.
+Your goal is to add only visually useful information that is likely missing from the native markdown.
+
+Priorities:
+- Recover important visible text embedded in images, screenshots, charts, diagrams, or visual blocks.
+- Summarize the useful visual structure only when it adds meaning.
+- Describe diagrams, charts, maps, screenshots, or tables only to the extent needed to understand their content.
+- Keep only information that improves markdown reading or retrieval.
+
+Do not include:
+- decorative details
+- colors, background, styling, branding, or general visual impression
+- slide numbers
+- repetition of content already likely extracted natively
+- speculative interpretations when the structure is ambiguous
+
+If the slide contains:
+- a diagram: name the main components and their relationships
+- a chart: summarize what is being compared and the key visible trend
+- a screenshot or web page: extract the important visible text and the purpose of the screen
+- a table: summarize the main headers and key takeaway, not every cell
+- logos or portraits only: ignore them unless they add essential meaning
+
+Output constraints:
+- Output plain text only
+- Be concise
+- Use at most 4 short paragraphs
+- Prefer factual statements
+- If uncertain, say so briefly instead of inventing details
+""".strip()
+
+
+def build_image_describer(
+    vision_cfg: Optional[ModelConfiguration],
+    system_prompt: str | None = None,
+) -> Optional[BaseImageDescriber]:
     """
     Fred rationale:
     - Centralizes the decision: if 'vision' is configured, we return a describer.
@@ -43,7 +80,7 @@ def build_image_describer(vision_cfg: Optional[ModelConfiguration]) -> Optional[
         logger.info("No vision configuration found; images won't be described.")
         return None
     model = get_model(vision_cfg)  # one constructor for all providers
-    return VisionImageDescriber(model, VISION_DESCRIBE_PROMPT_V1)
+    return VisionImageDescriber(model, system_prompt or VISION_DESCRIBE_PROMPT_V1, provider=vision_cfg.provider)
 
 
 def _stringify_content(content: Union[str, List[Any], Dict[str, Any]]) -> str:
@@ -79,9 +116,16 @@ class VisionImageDescriber(BaseImageDescriber):
     - Prompt lives here; transport/auth stays in fred_core.model_hub.
     """
 
-    def __init__(self, model: BaseChatModel, system_prompt: str, max_tokens: int = 512):
+    def __init__(self, model: BaseChatModel, system_prompt: str, provider: str | None = None, max_tokens: int = 512):
         # Bind per-call kwargs like max_tokens via LC's .bind()
-        self.model = model.bind(max_tokens=max_tokens)
+        self.provider = (provider or "").lower()
+        # `max_tokens` via LangChain `.bind(...)` is not accepted by the Ollama chat client
+        # used in our current setup. Keep the historical bound behavior for other providers,
+        # but skip it for Ollama and rely on provider-native settings (e.g. `num_predict`).
+        if self.provider == "ollama":
+            self.model = model
+        else:
+            self.model = model.bind(max_tokens=max_tokens)
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens
 

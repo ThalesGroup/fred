@@ -32,6 +32,7 @@ import ChatDeepSearchWidget from "./ChatDeepSearchWidget.tsx";
 import ChatDocumentsWidget from "./ChatDocumentsWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
 import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
+import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
 import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
@@ -784,7 +785,7 @@ type ConversationOptionsPanelProps = {
   onAddAttachments: (files: File[]) => void;
   onAttachmentsUpdated: () => void;
   isUploadingAttachments: boolean;
-  onRequestLogGenius?: () => void;
+  onRequestLogGenius?: (mode: LogGeniusMode) => void;
   libraryNameMap: Record<string, string>;
   libraryById: Record<string, TagWithItemsId | undefined>;
   promptNameMap: Record<string, string>;

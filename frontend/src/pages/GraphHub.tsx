@@ -75,7 +75,7 @@ export default function GraphHub() {
   const { data: tagsData } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" });
   const [selectedTagId, setSelectedTagId] = useState<string | "">("");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  
+
   // UMAP projection for a whole tag
   const [projectUmap, { data: projection, isLoading: isProjecting, error: projectError, reset: resetProjection }] =
     useProjectKnowledgeFlowV1ModelsUmapRefTagUidProjectPostMutation();
@@ -93,7 +93,7 @@ export default function GraphHub() {
     setPoints([]);
     setSelectedIds([]);
   };
-  
+
   const handleSelectTagIds = (event: SelectChangeEvent<typeof selectedTagIds>) => {
     const value = event.target.value;
     setSelectedTagIds(typeof value === "string" ? value.split(",") : value);
@@ -112,16 +112,19 @@ export default function GraphHub() {
       errorShownRef.current = true;
       const errorData = (projectError as any)?.data;
       const detail = errorData?.detail || (projectError as any)?.message || String(projectError);
-      
+
       // Check if it's a "model not found" error
       let summary = t("graphHub.umapError", "Error with projection");
       let message = detail;
-      
-      if (typeof detail === 'string' && detail.includes('Object not found') && detail.includes('model.umap')) {
+
+      if (typeof detail === "string" && detail.includes("Object not found") && detail.includes("model.umap")) {
         summary = t("graphHub.modelNotFoundError", "Model not found");
-        message = t("graphHub.modelNotFoundDetail", "The UMAP model has not been trained yet. Please train the model first.");
+        message = t(
+          "graphHub.modelNotFoundDetail",
+          "The UMAP model has not been trained yet. Please train the model first.",
+        );
       }
-      
+
       showError({
         summary,
         detail: message,
@@ -150,11 +153,11 @@ export default function GraphHub() {
       setPoints([]);
       setSelectedIds([]);
       // Use the reference library model (selectedTagId) to project the selected libraries
-      projectUmap({ 
-        refTagUid: selectedTagId, 
-        projectRequest: { 
-          tag_uids: selectedTagIds 
-        } 
+      projectUmap({
+        refTagUid: selectedTagId,
+        projectRequest: {
+          tag_uids: selectedTagIds,
+        },
       });
     }
   };
@@ -352,7 +355,7 @@ export default function GraphHub() {
               <Typography variant="subtitle2">{t("graphHub.showGraphSection", "Show Graph")}</Typography>
               <FormControl size="small" fullWidth>
                 <InputLabel id="multi-tag-select-label">{t("graphHub.selectLibraries", "Libraries")}</InputLabel>
-                <Select
+                <Select<string[]>
                   labelId="multi-tag-select-label"
                   label={t("graphHub.selectLibraries", "Libraries")}
                   multiple
@@ -387,7 +390,7 @@ export default function GraphHub() {
                   {t("graphHub.refreshGraph", "Show graph")}
                 </Button>
               </Box>
-              
+
               {/* Separator and selection accordions are visible only when there is a selection */}
               {selectedIds.length > 0 && (
                 <>

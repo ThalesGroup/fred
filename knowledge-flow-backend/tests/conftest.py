@@ -18,13 +18,15 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from fred_core import (
-    DuckdbStoreConfig,
     M2MSecurity,
+    SecurityConfiguration,
+    UserSecurity,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
-    UserSecurity,
 )
 from langchain_community.embeddings import FakeEmbeddings
 from pydantic import AnyHttpUrl, AnyUrl
@@ -58,7 +60,7 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
     def __init__(self) -> None:
         self._items: dict[str, DocumentMetadata] = {}
 
-    async def get_all_metadata(self, filters: dict) -> list[DocumentMetadata]:
+    async def get_all_metadata(self, filters: dict, session=None) -> list[DocumentMetadata]:
         docs = list(self._items.values())
         if not filters:
             return [d.model_copy(deep=True) for d in docs]
@@ -84,11 +86,11 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
 
         return [d.model_copy(deep=True) for d in docs if _matches(d)]
 
-    async def get_metadata_by_uid(self, document_uid: str) -> DocumentMetadata | None:
+    async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
         item = self._items.get(document_uid)
         return item.model_copy(deep=True) if item else None
 
-    async def get_metadata_in_tag(self, tag_id: str) -> list[DocumentMetadata]:
+    async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
         out: list[DocumentMetadata] = []
         for doc in self._items.values():
             tag_ids = list(getattr(doc.tags, "tag_ids", []) or [])
@@ -97,16 +99,16 @@ class _InMemoryTestMetadataStore(BaseMetadataStore):
                 out.append(doc.model_copy(deep=True))
         return out
 
-    async def list_by_source_tag(self, source_tag: str) -> list[DocumentMetadata]:
+    async def list_by_source_tag(self, source_tag: str, session=None) -> list[DocumentMetadata]:
         return [doc.model_copy(deep=True) for doc in self._items.values() if doc.source_tag == source_tag]
 
-    async def save_metadata(self, metadata: DocumentMetadata) -> None:
+    async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
         self._items[metadata.document_uid] = metadata.model_copy(deep=True)
 
-    async def delete_metadata(self, document_uid: str) -> None:
+    async def delete_metadata(self, document_uid: str, session=None) -> None:
         self._items.pop(document_uid, None)
 
-    async def clear(self) -> None:
+    async def clear(self, session=None) -> None:
         self._items.clear()
 
 

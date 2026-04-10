@@ -14,10 +14,13 @@
   {{- include "common-library.configmap-frontend" $ctx }}
   {{- include "common-library.configmap-kube" $ctx }}
   {{- include "common-library.configmap-backend" $ctx }}
+  {{- include "common-library.configmap-catalog" $ctx }}
   {{- include "common-library.pvc_pv" $ctx }}
   {{- include "common-library.deployment" $ctx }}
   {{- include "common-library.secrets-env" $ctx }}
   {{- include "common-library.job" $ctx }}
-  {{- include "common-library.job-opensearch-index-creation" $ctx }}
+  {{- include "common-library.hook-migration-rbac" $ctx }}
+  {{- include "common-library.hook-scale-down" $ctx }}
+  {{- include "common-library.hook-migration" $ctx }}
   {{- end }}
 {{- end }}

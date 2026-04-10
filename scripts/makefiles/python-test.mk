@@ -6,10 +6,11 @@
 PYTEST_OPTS ?=
 
 .PHONY: test
-test: dev ## Run all tests
+test: dev ## Run default/offline tests
 	@echo "************ TESTING ************"
 	# Ensure uv doesn't warn about foreign active VIRTUAL_ENV
-	VIRTUAL_ENV= ${UV} run pytest $(PYTEST_OPTS) -m "not integration" --cov=. --cov-config=.coveragerc --cov-report=html
+	# Enforce offline unit tests in CI (no Keycloak/Temporal/OpenFGA/Postgres/MinIO calls).
+	VIRTUAL_ENV= ${UV} run pytest $(PYTEST_OPTS) -m "not integration" --disable-socket --allow-unix-socket --cov=. --cov-config=.coveragerc --cov-report=html
 	@echo "✅ Coverage report: htmlcov/index.html"
 	@if [ "${OPEN_COVERAGE}" = "1" ]; then \
 		xdg-open htmlcov/index.html || echo "📎 Open manually htmlcov/index.html"; \

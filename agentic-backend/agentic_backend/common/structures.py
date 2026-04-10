@@ -13,17 +13,20 @@
 # limitations under the License.
 
 import logging
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from fred_core import (
     LogStorageConfig,
+    SecurityConfiguration,
+)
+from fred_core.common import (
     ModelConfiguration,
     OpenSearchStoreConfig,
     PostgresStoreConfig,
-    SecurityConfiguration,
     StoreConfig,
     TemporalSchedulerConfig,
 )
+from fred_core.scheduler import SchedulerBackend
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, Field, field_validator
 
@@ -74,12 +77,25 @@ class RecursionConfig(BaseModel):
 
 class AgentChatOptions(BaseModel):
     """
-    UI toggles for the chat input.
+    Controls which extra input options appear in the chat UI for this agent.
 
-    Fred rationale:
-    - These flags control which optional pickers/actions appear next to the user message box.
-    - They do not change agent behavior by themselves; they expose inputs the agent may consume.
-    - All options are opt-in and default to False.
+    All flags default to False — opt in to what your agent actually needs.
+
+    Quick reference:
+        attach_files=True          — users can attach PDF/image/text files to a message
+        libraries_selection=True   — users can pick which document libraries to search
+        search_rag_scoping=True    — users can choose corpus-only vs broader search
+        documents_selection=True   — users can restrict retrieval to specific documents
+        search_policy_selection    — users can pick the retrieval strategy (hybrid, semantic…)
+        deep_search_delegate       — users can delegate retrieval to a senior deep-search agent
+        record_audio_files         — users can attach a recorded audio clip
+
+    Example (RAG assistant):
+        chat_options=AgentChatOptions(
+            attach_files=True,
+            libraries_selection=True,
+            search_rag_scoping=True,
+        )
     """
 
     search_policy_selection: bool = Field(
@@ -153,12 +169,19 @@ class BaseAgent(BaseModel):
         description="Owning team id when this is a team-owned agent.",
     )
     enabled: bool = True
-    class_path: Optional[str] = None  # None → dynamic/UI agent
+    class_path: Optional[str] = None  # Legacy resolver key (v1 and compat path)
+    definition_ref: Optional[str] = Field(
+        default=None,
+        description=(
+            "Stable v2 definition identifier (preferred for v2 agents). "
+            "Example: 'v2.react.basic'."
+        ),
+    )
     tuning: Optional[AgentTuning] = None
     chat_options: AgentChatOptions = AgentChatOptions()
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Optional arbitrary metadata for integrations (e.g., A2A proxy config).",
+        description="Optional arbitrary metadata for integrations.",
     )
     # Added for backward compatibility with older YAML files
     mcp_servers: List[MCPServerConfiguration] = Field(
@@ -187,29 +210,14 @@ class BaseAgent(BaseModel):
 class Agent(BaseAgent):
     """
     Why this subclass:
-    - Regular agents don’t own crew. They can be *selected* into a leader’s crew.
+    - Single straightforward agent settings contract.
     """
 
     type: Literal["agent"] = "agent"
 
 
-# ---------------- Leader: declares its crew (and only here) ----------------
-class Leader(BaseAgent):
-    """
-    Why this subclass:
-    - Crew membership is defined *once*, at the leader level, to avoid drift.
-    - You can include by IDs and/or by tags; optional excludes too.
-    """
-
-    type: Literal["leader"] = "leader"
-    crew: List[str] = Field(
-        default_factory=list,
-        description="IDs of agents in this leader's crew (if any).",
-    )
-
-
-# ---------------- Discriminated union for IO (YAML ⇄ DB ⇄ API) ----------------
-AgentSettings = Annotated[Union[Agent, Leader], Field(discriminator="type")]
+# ---------------- Agent settings for IO (YAML ⇄ DB ⇄ API) ----------------
+AgentSettings = Agent
 
 
 class AIConfig(BaseModel):
@@ -228,11 +236,36 @@ class AIConfig(BaseModel):
             "persistent configurations are ignored."
         ),
     )
+    enable_catalog_mode: bool = Field(
+        False,
+        description=(
+            "If true, external catalogs (agents/mcp/models) may override missing "
+            "sections from configuration YAML."
+        ),
+    )
+    enable_v2_sql_checkpointer: bool = Field(
+        True,
+        description=(
+            "Enable durable SQL checkpointing for v2 runtimes. "
+            "The checkpointer is the sole source of agent memory for v2: "
+            "LangGraph reads and writes conversation state via thread_id=session.id. "
+            "The history_store remains the source of truth for UI display only. "
+            "Tables are auto-created on first use."
+        ),
+    )
     restore_max_exchanges: int = Field(
         20,
         description="Number of past exchanges to restore when initializing an agent session.",
     )
 
+    stream_flush_interval_ms: int = Field(
+        100,
+        description=(
+            "Interval in milliseconds between partial-stream WebSocket frames. "
+            "Tokens arriving faster than this are buffered and sent as a single delta. "
+            "Raise to 200 on high-concurrency deployments to reduce write frequency."
+        ),
+    )
     max_concurrent_agents: int = Field(
         1024,
         description="Maximum number of agents that can be cached in memory for faster access.",
@@ -251,17 +284,45 @@ class AIConfig(BaseModel):
         50,
         description="Maximum size (in MB) for each attached file.",
     )
-    default_chat_model: ModelConfiguration = Field(
-        ...,
-        description="Default chat model configuration for all agents and services.",
+    default_chat_model: Optional[ModelConfiguration] = Field(
+        None,
+        description=(
+            "Default chat model configuration for all agents and services. "
+            "Required unless provided via models catalog override."
+        ),
     )
     default_language_model: Optional[ModelConfiguration] = Field(
         None,
         description="Default language model configuration for all agents and services (Optional).",
     )
+    react_profile_allowlist: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Internal allowlist of ReAct starting profile ids exposed to agent creation UX "
+            "and accepted by profile-based agent creation. This list is catalog-driven "
+            "(agents_catalog.react_profiles). Default is empty (no profile exposed)."
+        ),
+    )
     agents: List[AgentSettings] = Field(
         default_factory=list, description="List of AI agents."
     )
+
+    @field_validator("react_profile_allowlist", mode="before")
+    @classmethod
+    def normalize_react_profile_allowlist(cls, value: Optional[List[str]]) -> List[str]:
+        if value is None:
+            return []
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            if not isinstance(raw, str):
+                continue
+            profile_id = raw.strip()
+            if not profile_id or profile_id in seen:
+                continue
+            seen.add(profile_id)
+            cleaned.append(profile_id)
+        return cleaned
 
 
 class FrontendFlags(BaseModel):
@@ -277,23 +338,24 @@ class Properties(BaseModel):
     faviconName: str | None = None
     faviconNameDark: str | None = None
     siteDisplayName: str = "Fred"
+    siteTitle: str = "Fred"
+    siteSubtitle: str | None = None
     releaseBrand: Optional[str] = Field(
         default="fred",
         description="Optional brand slug used to resolve brand-specific assets (e.g., release notes). Defaults to 'fred'.",
     )
     agentsNicknameSingular: str = "agent"
     agentsNicknamePlural: str = "agents"
-    agentIconPath: str | None = None
+    agentIconName: str = "person"
     contactSupportLink: str | None = None
-    agentIconName: str | None = Field(
-        default=None,
-        description="Name of the SVG icon for agents. The svg should handle colors via 'currentColor' to switch between light and dark theme.",
-    )
-    showAgentRegisterA2A: bool = True
     showAgentRestoreFromConfiguration: bool = True
     showAgentDisableButton: bool = True
     showAgentCode: bool = True
     allowAgentSwitchInOneConversation: bool = True
+    defaultTeamBannerFile: str = "default-team-banner.png"
+    defaultPersonalBannerFile: str = "default-team-banner.png"
+    defaultTeamAvatarFile: str = "default-team-avatar.png"
+    defaultPersonalAvatarFile: str = "default-team-avatar.png"
 
 
 class FrontendSettings(BaseModel):
@@ -328,7 +390,7 @@ class AppConfig(BaseModel):
 
 class SchedulerConfig(BaseModel):
     enabled: bool = False
-    backend: str = "temporal"
+    backend: SchedulerBackend = SchedulerBackend.TEMPORAL
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 

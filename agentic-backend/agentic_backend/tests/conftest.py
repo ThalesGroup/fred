@@ -18,14 +18,17 @@ import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core import (
-    DuckdbStoreConfig,
     KeycloakUser,
     M2MSecurity,
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
     SecurityConfiguration,
     UserSecurity,
     get_current_user,
+)
+from fred_core.common import (
+    DuckdbStoreConfig,
+    ModelConfiguration,
+    OpenSearchStoreConfig,
+    PostgresStoreConfig,
 )
 from pydantic import AnyHttpUrl, AnyUrl
 
@@ -41,7 +44,6 @@ from agentic_backend.common.structures import (
     FrontendFlags,
     FrontendSettings,
     McpConfiguration,
-    ModelConfiguration,
     Properties,
     StorageConfig,
     TimeoutSettings,
@@ -90,8 +92,11 @@ def minimal_generalist_config() -> Configuration:
         security=fake_security_config,
         ai=AIConfig(
             use_static_config_only=True,
+            enable_catalog_mode=False,
+            enable_v2_sql_checkpointer=True,
             max_concurrent_agents=128,
             restore_max_exchanges=20,
+            stream_flush_interval_ms=100,
             knowledge_flow_url="http://localhost:8000/agentic/v1",
             timeout=TimeoutSettings(connect=5, read=15),
             max_concurrent_sessions_per_user=10,
@@ -110,18 +115,11 @@ def minimal_generalist_config() -> Configuration:
             agents=[
                 # ⬇️ instantiate the concrete Agent (discriminator handled automatically)
                 Agent(
-                    id="Georges",
-                    name="Georges",
-                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
+                    id="basic.react.v2",
+                    name="Basic ReAct V2",
+                    class_path="agentic_backend.agents.v2.production.basic_react.BasicReActDefinition",
                     enabled=True,
-                ),
-                # Include a basic flow named 'Fred' to satisfy tests expecting it
-                Agent(
-                    id="Fred",
-                    name="Fred",
-                    class_path="agentic_backend.agents.generalist.generalist_expert.Georges",
-                    enabled=True,
-                ),
+                )
             ],
         ),
         mcp=McpConfiguration(servers=[]),
@@ -169,6 +167,12 @@ def client(app_context, monkeypatch) -> TestClient:
 
         async def list_agents(self, user, owner_filter=None, team_id=None):
             return list(app_context.configuration.ai.agents)
+
+        async def get_agent_by_id(self, user, agent_id):
+            for agent in app_context.configuration.ai.agents:
+                if agent.id == agent_id:
+                    return agent
+            return None
 
     monkeypatch.setattr(agent_controller, "AgentService", _FakeAgentService)
 

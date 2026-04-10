@@ -44,6 +44,7 @@ class UIHints(BaseModel):
     markdown: bool = False
     textarea: bool = False
     group: Optional[str] = None  # e.g., "Prompts", "MCP", "Advanced"
+    hide: bool = False  # if true, the field is not shown in the UI but can still be set via API or defaults
 
 
 class FieldSpec(BaseModel):
@@ -122,9 +123,20 @@ class MCPServerConfiguration(BaseModel):
 class MCPServerRef(BaseModel):
     """
     Reference to an MCP server.
-    Fred rationale:
-    - Agents reference logical servers by name.
-    - Resolution (URL/transport/env) is done at runtime per env/tenant/user.
+
+    Why this model exists:
+    - agents should reference one logical MCP server by id rather than hard-code
+      transport details such as URLs, commands, or environment variables
+    - Fred resolves the concrete MCP configuration later for the current
+      environment, tenant, and user
+
+    How to use:
+    - store the logical server id in `id`
+    - for v2 agent profiles, prefer named constants exported from
+      `agentic_backend.core.agents.v2` instead of repeating raw string ids
+
+    Example:
+    - `MCPServerRef(id="mcp-knowledge-flow-fs")`
     """
 
     id: str = Field(

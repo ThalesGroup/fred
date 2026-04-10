@@ -1,0 +1,23 @@
+@use "src/index.scss" as *;
+
+.team-settings-members-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  overflow: hidden;
+}
+
+.team-settings-members-header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.team-settings-members-header-title {
+  display: flex;
+  align-items: center;
+  color: var(--on-surface);
+  @include typography("title", "large");
+}
+
+.team-settings-members-content {
+}
