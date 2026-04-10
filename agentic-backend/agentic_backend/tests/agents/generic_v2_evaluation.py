@@ -169,7 +169,7 @@ def _silence_logging() -> None:
 def _write_report(
     output_path: Path,
     agent_id: str,
-    dataset_path: Path,
+    dataset_path: Path | None,
     judge_model: str,
     records: list[dict],
     metric_results: dict,
@@ -187,7 +187,7 @@ def _write_report(
     a(f"  EVALUATION REPORT  —  {agent_id}")
     a(sep)
     a(f"  Date    : {now}")
-    a(f"  Dataset : {dataset_path.name}")
+    a(f"  Dataset : {dataset_path.name if dataset_path else 'unknown'}")
     a(f"  Judge   : {judge_model}")
     a(f"  Total   : {len(records)} question(s)")
     a(sep)
@@ -206,17 +206,17 @@ def _write_report(
         a("Scores")
         for metric_name, score in rec["scores"].items():
             bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
-            a(f"  {metric_name:<30} {score:.2f}  [{bar}]  {score*100:.1f}%")
+            a(f"  {metric_name:<30} {score:.2f}  [{bar}]  {score * 100:.1f}%")
 
     a(f"\n{sep}")
     a("  SUMMARY")
     a(sep)
     for metric_name, stats in sorted(metric_results.items()):
         a(f"\n{metric_name}")
-        a(f"  Average : {stats['average']:.4f}  ({stats['average']*100:.2f}%)")
+        a(f"  Average : {stats['average']:.4f}  ({stats['average'] * 100:.2f}%)")
         a(f"  Min     : {stats['min']:.4f}  —  Max : {stats['max']:.4f}")
     a(f"\n{thin}")
-    a(f"  OVERALL AVERAGE : {global_average:.4f}  ({global_average*100:.2f}%)")
+    a(f"  OVERALL AVERAGE : {global_average:.4f}  ({global_average * 100:.2f}%)")
     a(sep)
 
     _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -255,7 +255,8 @@ class GenericV2Evaluator(BaseEvaluator):
             metavar="AGENT",
         )
         parser.add_argument(
-            "--dataset", "--dataset_path",
+            "--dataset",
+            "--dataset_path",
             dest="dataset_path",
             type=Path,
             default=Path(cfg["dataset_path"]) if "dataset_path" in cfg else None,
@@ -342,7 +343,9 @@ class GenericV2Evaluator(BaseEvaluator):
 
         session_agent = await self._build_session_agent(agent_id)
         try:
-            with tqdm(self.dataset, desc="Questioning agent", unit="q", leave=True) as bar:
+            with tqdm(
+                self.dataset, desc="Questioning agent", unit="q", leave=True
+            ) as bar:
                 for item in bar:
                     question: str = item["question"]
                     expected: str = item.get("expect", item.get("expected_answer", ""))
@@ -350,7 +353,9 @@ class GenericV2Evaluator(BaseEvaluator):
                     sys.stdout = sys.stderr = open(os.devnull, "w")
                     try:
                         answer = await self._ask(
-                            session_agent, question, thread_id=f"eval_{len(records) + 1}"
+                            session_agent,
+                            question,
+                            thread_id=f"eval_{len(records) + 1}",
                         )
                     except Exception as exc:
                         answer = f"[ERROR: {exc}]"
@@ -359,7 +364,12 @@ class GenericV2Evaluator(BaseEvaluator):
                         sys.stdout, sys.stderr = old_out, old_err
 
                     records.append(
-                        {"question": question, "expected": expected, "answer": answer, "scores": {}}
+                        {
+                            "question": question,
+                            "expected": expected,
+                            "answer": answer,
+                            "scores": {},
+                        }
                     )
                     test_cases.append(
                         LLMTestCase(
@@ -393,7 +403,7 @@ class GenericV2Evaluator(BaseEvaluator):
         )
 
         # Score each test case individually so tqdm can advance per question
-        import io
+
         metrics = [answer_relevancy, correctness]
         with tqdm(test_cases, desc="Scoring (LLM judge) ", unit="q", leave=True) as bar:
             for i, tc in enumerate(bar):
@@ -406,7 +416,9 @@ class GenericV2Evaluator(BaseEvaluator):
                         sys.stdout.close()
                         sys.stdout, sys.stderr = old_out, old_err
                     metric_name = metric.__name__
-                    records[i]["scores"][metric_name] = getattr(metric, "score", 0.0) or 0.0
+                    records[i]["scores"][metric_name] = (
+                        getattr(metric, "score", 0.0) or 0.0
+                    )
 
         # Build a lightweight result-like structure for calculate_metric_averages
         class _FakeMetricData:
@@ -423,10 +435,9 @@ class GenericV2Evaluator(BaseEvaluator):
                 self.test_results = test_results
 
         fake_test_results = [
-            _FakeTestResult([
-                _FakeMetricData(name, score)
-                for name, score in rec["scores"].items()
-            ])
+            _FakeTestResult(
+                [_FakeMetricData(name, score) for name, score in rec["scores"].items()]
+            )
             for rec in records
         ]
         result = _FakeResult(fake_test_results)
@@ -460,6 +471,7 @@ class GenericV2Evaluator(BaseEvaluator):
 
             # ── Build metric summary ──────────────────────────────────────────
             from collections import defaultdict
+
             metrics_scores: dict = defaultdict(list)
             for test_result in result.test_results:
                 for md in test_result.metrics_data:
@@ -498,10 +510,12 @@ class GenericV2Evaluator(BaseEvaluator):
             print(f"  Results — {agent_id}")
             print(sep)
             for name, stats in sorted(metric_results.items()):
-                print(f"  {name:<30} {stats['average']*100:.1f}%"
-                      f"  (min {stats['min']*100:.1f}%  max {stats['max']*100:.1f}%)")
-            print(f"{'─'*50}")
-            print(f"  {'OVERALL':<30} {global_average*100:.1f}%")
+                print(
+                    f"  {name:<30} {stats['average'] * 100:.1f}%"
+                    f"  (min {stats['min'] * 100:.1f}%  max {stats['max'] * 100:.1f}%)"
+                )
+            print(f"{'─' * 50}")
+            print(f"  {'OVERALL':<30} {global_average * 100:.1f}%")
             print(sep)
             print(f"\nReport saved → {output_path}\n")
 
