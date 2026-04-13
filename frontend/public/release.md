@@ -1,3 +1,12 @@
+**v1.4.1** — 2026-04-13
+
+- **Bug Fixes**
+
+  - Typo on personal team name
+  - Public team displayed in sidebar even when you're not a member
+  - Personal conversation not listed in personal space
+  - Image link in markdown render using internal Minio address instead of ingress
+
 **v1.4.0** — 2026-04-10
 
 - **Summary**
