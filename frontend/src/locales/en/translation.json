@@ -1408,6 +1408,16 @@
         "create": "Create Agent",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
         "firstCreate": "Create"
+      },
+      "formAgent": {
+        "titleCreate": "Create a new {{agentsNicknameSingular}}",
+        "titleEdit": "Edit a {{agentsNicknameSingular}}",
+        "fields": {
+          "name": {
+            "placeholder": "Enter an original name",
+            "label": "Name"
+          }
+        }
       }
     },
     "marketplace": {

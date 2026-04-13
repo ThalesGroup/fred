@@ -11,8 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import DeleteIcon from "@mui/icons-material/Delete";
-import { Autocomplete, Box, Button, Divider, Stack, TextField, Typography } from "@mui/material";
+import { Autocomplete, Box, Divider, TextField, Typography } from "@mui/material";
 import { Ref, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
@@ -37,6 +36,8 @@ import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
+import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 
 type TopLevelTuningState = {
   role: string;
@@ -303,215 +304,187 @@ export function AgentCreateEditForm({
   const showTuningFields = !isCreateMode || (agentVersion === "v2" && v2CreateMode === "react");
 
   return (
-    <Box sx={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
-      {/* Body (scrollable) */}
-      <Box sx={{ p: 2, flex: 1, overflow: "auto" }}>
-        <Stack spacing={1}>
-          {/* ── Version toggle (create mode, team admin only) ── */}
-          {isCreateMode && isAdmin && (
-            <ButtonGroup
-              items={[
-                {
-                  key: "v2",
-                  value: "v2",
-                  label: t("agentHub.fields.agentVersionV2"),
-                  onClick: () => handleAgentVersionChange("v2"),
-                },
-                {
-                  key: "v1",
-                  value: "v1",
-                  label: t("agentHub.fields.agentVersionV1"),
-                  onClick: () => handleAgentVersionChange("v1"),
-                },
-              ]}
-              size={"medium"}
-              color={"secondary"}
+    <>
+      {/* ── Version toggle (create mode, team admin only) ── */}
+      {isCreateMode && isAdmin && (
+        <ButtonGroup
+          items={[
+            {
+              key: "v2",
+              value: "v2",
+              label: t("agentHub.fields.agentVersionV2"),
+              onClick: () => handleAgentVersionChange("v2"),
+            },
+            {
+              key: "v1",
+              value: "v1",
+              label: t("agentHub.fields.agentVersionV1"),
+              onClick: () => handleAgentVersionChange("v1"),
+            },
+          ]}
+          size={"medium"}
+          color={"secondary"}
+        />
+      )}
+
+      {/* ── V2 type toggle (create mode, team admin only) ── */}
+      {isCreateMode && isAdmin && agentVersion === "v2" && (
+        <ButtonGroup
+          items={[
+            {
+              key: "react",
+              value: "react",
+              label: t("agentHub.fields.v2ModeReact"),
+              onClick: () => handleV2CreateModeChange("react"),
+            },
+            hasReactProfiles && {
+              key: "profile",
+              value: "profile",
+              label: t("agentHub.fields.v2ModeProfile"),
+              onClick: () => handleV2CreateModeChange("profile"),
+            },
+            hasDefinitionRefs && {
+              key: "definition_ref",
+              value: "definition_ref",
+              label: t("agentHub.fields.v2ModeDefinition"),
+              onClick: () => handleV2CreateModeChange("definition_ref"),
+            },
+          ]}
+          size={"medium"}
+          color={"secondary"}
+        />
+      )}
+
+      {/* Agent Name */}
+      <TextInput
+        placeholder={t("rework.teams.formAgent.fields.name.placeholder")}
+        label={t("rework.teams.formAgent.fields.name.label")}
+        value={agentName}
+        onChange={(e) => setAgentName(e.target.value)}
+        maxLength={20}
+        required
+      />
+
+      {/* ── Profile picker (V2 profile mode) ── */}
+      {isCreateMode && v2CreateMode === "profile" && (
+        <Autocomplete
+          options={reactProfiles}
+          value={reactProfiles.find((p) => p.profile_id === profileId) ?? null}
+          isOptionEqualToValue={(option, value) => option.profile_id === value.profile_id}
+          getOptionLabel={(option) => option.title}
+          onChange={(_, value) => setProfileId(value?.profile_id ?? null)}
+          renderOption={(props, option) => (
+            <li {...props} key={option.profile_id}>
+              <Box>
+                <Typography variant="body2">{option.title}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {option.description}
+                </Typography>
+              </Box>
+            </li>
+          )}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              size="small"
+              label={t("agentHub.fields.profile")}
+              helperText={
+                reactProfiles.find((p) => p.profile_id === profileId)?.agent_description ??
+                t("agentHub.fields.profileHelp")
+              }
             />
           )}
+        />
+      )}
 
-          {/* ── V2 type toggle (create mode, team admin only) ── */}
-          {isCreateMode && isAdmin && agentVersion === "v2" && (
-            <ButtonGroup
-              items={[
-                {
-                  key: "react",
-                  value: "react",
-                  label: t("agentHub.fields.v2ModeReact"),
-                  onClick: () => handleV2CreateModeChange("react"),
-                },
-                hasReactProfiles && {
-                  key: "profile",
-                  value: "profile",
-                  label: t("agentHub.fields.v2ModeProfile"),
-                  onClick: () => handleV2CreateModeChange("profile"),
-                },
-                hasDefinitionRefs && {
-                  key: "definition_ref",
-                  value: "definition_ref",
-                  label: t("agentHub.fields.v2ModeDefinition"),
-                  onClick: () => handleV2CreateModeChange("definition_ref"),
-                },
-              ]}
-              size={"medium"}
-              color={"secondary"}
+      {/* ── Definition ref picker (V2 definition mode) ── */}
+      {isCreateMode && v2CreateMode === "definition_ref" && (
+        <Autocomplete<string>
+          options={v2DefinitionRefs}
+          value={definitionRef}
+          onChange={(_, value) => setDefinitionRef(value)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              size="small"
+              label={t("agentHub.fields.definitionRef")}
+              helperText={t("agentHub.fields.definitionRefHelp")}
             />
           )}
+        />
+      )}
 
-          {/* Agent Name */}
-          <TextField
-            label={t("agentEditDrawer.nameLabel")}
-            size="small"
-            value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
+      {/* ── Class path picker (V1 create or edit, admin only) ── */}
+      {isAdmin && (!isCreateMode || agentVersion === "v1") && (
+        <Autocomplete<string>
+          options={declaredClassPaths}
+          value={classPath}
+          onChange={(_, value) => setClassPath(value)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              size="small"
+              label={t("agentHub.fields.classPath")}
+              placeholder="my_module.agents.MyCustomAgent"
+              helperText={t("agentHub.fields.classPathHelp")}
+            />
+          )}
+        />
+      )}
+
+      {/* ── Tuning core fields (react create or edit) ── */}
+      {showTuningFields && (
+        <>
+          <TextInput
+            placeholder={t("rework.teams.formAgent.fields.role.placeholder")}
+            label={t("rework.teams.formAgent.fields.role.label")}
+            value={topLevelTuning.role}
+            onChange={(e) => onTopLevelChange("role", e.target.value)}
+            maxLength={55}
             required
-            fullWidth
-            slotProps={{
-              input: {
-                sx: (theme) => ({
-                  fontSize: theme.typography.body2.fontSize,
-                }),
-              },
-            }}
           />
+          <TextArea
+            placeholder={t("rework.teams.formAgent.fields.description.placeholder")}
+            label={t("rework.teams.formAgent.fields.description.label")}
+            maxLength={80}
+            value={topLevelTuning.description}
+            onChange={(e) => onTopLevelChange("description", e.target.value)}
+            required
+          />
+        </>
+      )}
 
-          {/* ── Profile picker (V2 profile mode) ── */}
-          {isCreateMode && v2CreateMode === "profile" && (
-            <Autocomplete
-              options={reactProfiles}
-              value={reactProfiles.find((p) => p.profile_id === profileId) ?? null}
-              isOptionEqualToValue={(option, value) => option.profile_id === value.profile_id}
-              getOptionLabel={(option) => option.title}
-              onChange={(_, value) => setProfileId(value?.profile_id ?? null)}
-              renderOption={(props, option) => (
-                <li {...props} key={option.profile_id}>
-                  <Box>
-                    <Typography variant="body2">{option.title}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {option.description}
-                    </Typography>
-                  </Box>
-                </li>
-              )}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  label={t("agentHub.fields.profile")}
-                  helperText={
-                    reactProfiles.find((p) => p.profile_id === profileId)?.agent_description ??
-                    t("agentHub.fields.profileHelp")
-                  }
-                />
-              )}
-            />
-          )}
+      {/* ── Tools ── */}
+      {showTuningFields && (
+        <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
+      )}
 
-          {/* ── Definition ref picker (V2 definition mode) ── */}
-          {isCreateMode && v2CreateMode === "definition_ref" && (
-            <Autocomplete<string>
-              options={v2DefinitionRefs}
-              value={definitionRef}
-              onChange={(_, value) => setDefinitionRef(value)}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  label={t("agentHub.fields.definitionRef")}
-                  helperText={t("agentHub.fields.definitionRefHelp")}
-                />
-              )}
-            />
-          )}
+      {/* ── Dynamic tuning fields ── */}
+      {showTuningFields &&
+        (fields.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {t("agentEditDrawer.noTunableFields")}
+          </Typography>
+        ) : (
+          <TuningForm fields={fields} onChange={onChange} />
+        ))}
 
-          {/* ── Class path picker (V1 create or edit, admin only) ── */}
-          {isAdmin && (!isCreateMode || agentVersion === "v1") && (
-            <Autocomplete<string>
-              options={declaredClassPaths}
-              value={classPath}
-              onChange={(_, value) => setClassPath(value)}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  label={t("agentHub.fields.classPath")}
-                  placeholder="my_module.agents.MyCustomAgent"
-                  helperText={t("agentHub.fields.classPathHelp")}
-                />
-              )}
-            />
-          )}
+      {/* ── Profile description (profile mode) ── */}
+      {isCreateMode && v2CreateMode === "profile" && profileId && (
+        <Typography variant="body2" color="text.secondary">
+          {reactProfiles.find((p: ReActProfileSummary) => p.profile_id === profileId)?.agent_description ??
+            t("agentHub.fields.profileHelp")}
+        </Typography>
+      )}
 
-          {/* ── Tuning core fields (react create or edit) ── */}
-          {showTuningFields && (
-            <>
-              <TextField
-                label={t("agentHub.fields.role")}
-                size="small"
-                value={topLevelTuning.role}
-                onChange={(e) => onTopLevelChange("role", e.target.value)}
-                required
-                fullWidth
-                slotProps={{
-                  input: {
-                    sx: (theme) => ({
-                      fontSize: theme.typography.body2.fontSize,
-                    }),
-                  },
-                }}
-              />
-              <TextField
-                label={t("agentHub.fields.description")}
-                size="small"
-                value={topLevelTuning.description}
-                onChange={(e) => onTopLevelChange("description", e.target.value)}
-                required
-                multiline
-                rows={3}
-                fullWidth
-                slotProps={{
-                  input: {
-                    sx: (theme) => ({
-                      fontSize: theme.typography.body2.fontSize,
-                    }),
-                  },
-                }}
-              />
-            </>
-          )}
-
-          {/* ── Tools ── */}
-          {showTuningFields && (
-            <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
-          )}
-
-          {/* ── Dynamic tuning fields ── */}
-          {showTuningFields &&
-            (fields.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {t("agentEditDrawer.noTunableFields")}
-              </Typography>
-            ) : (
-              <TuningForm fields={fields} onChange={onChange} />
-            ))}
-
-          {/* ── Profile description (profile mode) ── */}
-          {isCreateMode && v2CreateMode === "profile" && profileId && (
-            <Typography variant="body2" color="text.secondary">
-              {reactProfiles.find((p: ReActProfileSummary) => p.profile_id === profileId)?.agent_description ??
-                t("agentHub.fields.profileHelp")}
-            </Typography>
-          )}
-
-          {/* Workspace Files (edit mode only, admin only) */}
-          {isAdmin && !isCreateMode && (
-            <>
-              <Divider />
-              <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
-              {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
-            </>
-          )}
-        </Stack>
-      </Box>
-    </Box>
+      {/* Workspace Files (edit mode only, admin only) */}
+      {isAdmin && !isCreateMode && (
+        <>
+          <Divider />
+          <Typography variant="h6">{t("assetManager.title", { agentId: agent?.name })}</Typography>
+          {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
+        </>
+      )}
+    </>
   );
 }

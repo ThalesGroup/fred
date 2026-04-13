@@ -1412,11 +1412,20 @@
         "firstCreate": "Créer"
       },
       "formAgent": {
-        "title": "Céer un nouveal {{agentsNicknameSingular}}",
+        "titleCreate": "Céer un nouvel {{agentsNicknameSingular}}",
+        "titleEdit": "Editer un {{agentsNicknameSingular}}",
         "fields": {
           "name": {
             "placeholder": "Entrez un nom original",
             "label": "Nom"
+          },
+          "role": {
+            "placeholder": "Quel est le rôle qu’incarne ce Lumi ?",
+            "label": "Rôle"
+          },
+          "description": {
+            "placeholder": "Décrivez ce Lumi pour les autres utilisateurs",
+            "label": "Description"
           }
         }
       }

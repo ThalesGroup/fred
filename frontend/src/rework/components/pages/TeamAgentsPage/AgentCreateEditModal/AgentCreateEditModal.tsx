@@ -52,7 +52,9 @@ export default function AgentCreateEditModal({
           </span>
           <div className={styles.agentCreateEditModalPresentationTitle}>
             <div className={styles.agentCreateEditModalTitle}>
-              {t("rework.teams.formAgent.title", { agentsNicknameSingular })}
+              {agent
+                ? t("rework.teams.formAgent.titleEdit", { agentsNicknameSingular })
+                : t("rework.teams.formAgent.titleCreate", { agentsNicknameSingular })}
             </div>
             <div className={styles.agentCreateEditModalTeam}>{teamName}</div>
           </div>
@@ -64,11 +66,6 @@ export default function AgentCreateEditModal({
           <Button color={"primary"} variant={"filled"} size={"medium"} onClick={handleSave} disabled={isSaveDisabled}>
             {isCreateMode ? t("rework.create") : t("rework.save")}
           </Button>
-          {!isCreateMode && (
-            <Button color={"error"} variant={"filled"} size={"medium"} onClick={handleDelete} disabled={!canDelete}>
-              {t("common.delete")}
-            </Button>
-          )}
         </div>
       </div>
       <div className={styles.agentCreateEditModalContent}>
@@ -85,6 +82,13 @@ export default function AgentCreateEditModal({
           }}
           onValidityChange={setIsSaveDisabled}
         />
+        {!isCreateMode && (
+          <div className={styles.deleteAction}>
+            <Button color={"error"} variant={"filled"} size={"medium"} onClick={handleDelete} disabled={!canDelete}>
+              {t("common.delete")}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

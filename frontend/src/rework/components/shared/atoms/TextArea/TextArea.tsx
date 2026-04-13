@@ -7,6 +7,7 @@ export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   explication?: string;
   error?: string;
   maxLength?: number;
+  required: boolean;
 }
 
 export default function TextArea({
@@ -18,6 +19,7 @@ export default function TextArea({
   onChange,
   value,
   defaultValue,
+  required,
   ref,
   ...props
 }: TextAreaProps) {
@@ -46,7 +48,7 @@ export default function TextArea({
       className={`${styles.input} ${props.disabled ? styles.disabled : ""} ${!props.disabled && error ? styles.error : ""}`}
     >
       <label className={styles.label} htmlFor={id}>
-        {label}
+        {required ? `${label} *` : label}
       </label>
 
       <textarea

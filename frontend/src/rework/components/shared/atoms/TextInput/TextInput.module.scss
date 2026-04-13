@@ -13,14 +13,17 @@
 
   input {
     outline: 2px solid var(--input-outline, transparent);
-    border: 1px solid var(--input-border, var(--outline-muted));
+    border: 1px solid var(--input-border, var(--outline-retreat));
     border-radius: var(--spacing-xs);
     background-color: var(--surface-container-lowest);
     padding: 0 var(--spacing-xs) 0 var(--spacing-s);
     height: 3rem;
-    color: var(--on-surface-retreat);
-
+    color: var(--on-surface);
     font: var(--font-body-large);
+
+    &::placeholder {
+      color: var(--on-surface-retreat);
+    }
   }
 
   &:not(.error) input:not(:disabled) {
@@ -50,7 +53,7 @@
   font: var(--font-label-large);
 }
 
-.input[data-compact="false"].hint {
+.input[data-compact="false"] .hint {
   padding-left: var(--spacing-xs);
   min-height: 1.25rem;
   overflow: hidden;

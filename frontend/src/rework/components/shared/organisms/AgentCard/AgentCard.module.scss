@@ -34,7 +34,7 @@
   border-radius: var(--spacing-m);
   background-color: var(--surface-container);
   padding: var(--spacing-m) var(--spacing-m) var(--spacing-s) var(--spacing-m);
-  width: 280px;
+  width: 320px;
   height: 100%;
   --blur: 0px;
   --newChatDisplay: none;
@@ -97,8 +97,11 @@
 }
 
 .agentName {
+  overflow: hidden;
   color: var(--agent-name-color);
   font: var(--font-body-large-emphasized);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agentRole {

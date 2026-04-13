@@ -6,13 +6,13 @@
 
   textarea {
     outline: 2px solid var(--input-outline, transparent);
-    border: 1px solid var(--input-border, var(--outline-muted));
+    border: 1px solid var(--input-border, var(--outline-retreat));
     border-radius: var(--spacing-xs);
     background-color: var(--surface-container-lowest);
     padding: var(--spacing-s);
     height: 100%;
     resize: none;
-    color: var(--on-surface-retreat);
+    color: var(--on-surface);
     font: var(--font-body-large);
 
     &::placeholder {
