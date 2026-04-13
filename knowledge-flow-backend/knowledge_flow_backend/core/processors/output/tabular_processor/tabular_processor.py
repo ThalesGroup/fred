@@ -207,7 +207,11 @@ class TabularProcessor(BaseOutputProcessor):
         """
         connection = duckdb.connect(database=":memory:")
         try:
-            source_relation_sql = self.csv_reader.build_duckdb_read_relation_sql(csv_path, csv_read_options)
+            source_relation_sql = self.csv_reader.build_duckdb_read_relation_sql(
+                csv_path,
+                csv_read_options,
+                sample_size=-1,
+            )
             # The table-function SQL below comes from locally escaped CSV path
             # and encoding settings, not from end-user SQL text.
             source_query = f"SELECT * FROM {source_relation_sql}"  # nosec B608

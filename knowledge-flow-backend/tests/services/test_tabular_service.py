@@ -284,6 +284,31 @@ async def test_tabular_processor_converts_csv_without_pandas_read_csv(tmp_path, 
     assert artifact is not None
     assert artifact.row_count == 2
     assert [column.name for column in artifact.columns] == ["city", "amount"]
+    assert [column.dtype for column in artifact.columns] == ["string", "integer"]
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_keeps_mixed_numeric_and_text_column_as_string(tmp_path):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "mixed-values.csv"
+    with csv_path.open("w", encoding="utf-8") as file_handle:
+        file_handle.write("id,label,value\n")
+        for index in range(30_000):
+            file_handle.write(f"{index},row,{index / 10}\n")
+        file_handle.write("30000,tail,xxxxxxxxxxxxxxx\n")
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-mixed-types", file_name="mixed-values.csv")
+
+    processed_metadata = processor.process(str(csv_path), metadata)
+    artifact = read_tabular_artifact(processed_metadata)
+
+    assert artifact is not None
+    assert artifact.row_count == 30_001
+    assert [column.name for column in artifact.columns] == ["id", "label", "value"]
+    assert [column.dtype for column in artifact.columns] == ["integer", "string", "string"]
 
 
 @pytest.mark.integration

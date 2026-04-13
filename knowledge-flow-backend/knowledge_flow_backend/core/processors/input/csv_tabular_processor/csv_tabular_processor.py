@@ -231,7 +231,7 @@ class CsvTabularProcessor(BaseTabularProcessor):
         finally:
             connection.close()
 
-    def build_duckdb_read_relation_sql(self, file_path: Path, options: CsvReadOptions) -> str:
+    def build_duckdb_read_relation_sql(self, file_path: Path, options: CsvReadOptions, *, sample_size: int | None = None) -> str:
         """
         Return the DuckDB table-function SQL used to read one CSV file.
 
@@ -241,16 +241,19 @@ class CsvTabularProcessor(BaseTabularProcessor):
 
         How to use:
         - Pass a validated CSV path and the output of `inspect_read_options(...)`.
+        - Optionally set `sample_size=-1` when full-file type inference is
+          required for stable mixed-type handling.
         - Embed the returned SQL fragment in a `SELECT` or `COPY` statement.
 
         Example:
-        - `sql = processor.build_duckdb_read_relation_sql(Path("/tmp/data.csv"), options)`
+        - `sql = processor.build_duckdb_read_relation_sql(Path("/tmp/data.csv"), options, sample_size=-1)`
         """
         quoted_path = str(file_path).replace("'", "''")
         quoted_delimiter = options.delimiter.replace("'", "''")
         quoted_encoding = options.encoding.replace("'", "''")
         header_literal = "true" if options.header else "false"
-        return f"read_csv_auto('{quoted_path}', delim='{quoted_delimiter}', header={header_literal}, encoding='{quoted_encoding}')"
+        sample_size_sql = f", sample_size={sample_size}" if sample_size is not None else ""
+        return f"read_csv_auto('{quoted_path}', delim='{quoted_delimiter}', header={header_literal}, encoding='{quoted_encoding}'{sample_size_sql})"
 
     def normalize_duckdb_encoding_name(self, encoding: str) -> str:
         """

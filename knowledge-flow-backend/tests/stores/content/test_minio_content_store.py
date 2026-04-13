@@ -64,7 +64,7 @@ def test_put_file_uses_direct_minio_file_upload(monkeypatch, tmp_path):
     store = MinioStorageBackend(
         endpoint="http://internal-minio:9000",
         access_key="minio",
-        secret_key="minio-secret",
+        secret_key="minio-secret",  # pragma: allowlist secret
         document_bucket="documents",
         object_bucket="objects",
         secure=False,
@@ -89,7 +89,7 @@ def test_internal_presigned_url_uses_internal_minio_client(monkeypatch):
     store = MinioStorageBackend(
         endpoint="http://internal-minio:9000",
         access_key="minio",
-        secret_key="minio-secret",
+        secret_key="minio-secret",  # pragma: allowlist secret
         document_bucket="documents",
         object_bucket="objects",
         secure=False,
