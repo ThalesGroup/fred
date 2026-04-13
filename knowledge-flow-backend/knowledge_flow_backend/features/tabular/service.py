@@ -309,10 +309,11 @@ class TabularService:
         How to use:
         - Call once per request and reuse the resulting list for downstream
           selection or API formatting.
+        - When ReBAC is enabled, the service resolves only the authorized
+          document uids instead of scanning the whole metadata catalog.
         """
 
         authorized_document_ref = await self.rebac.lookup_user_resources(user, DocumentPermission.READ)
-        documents = await self.metadata_store.get_all_metadata({})
         scoped_tag_ids = await self._resolve_scope_tag_ids(
             user,
             document_library_tags_ids=document_library_tags_ids,
@@ -321,10 +322,12 @@ class TabularService:
         )
 
         if isinstance(authorized_document_ref, RebacDisabledResult):
-            visible_documents = documents
+            visible_documents = await self.metadata_store.get_all_metadata({})
         else:
-            authorized_ids = {document.id for document in authorized_document_ref}
-            visible_documents = [document for document in documents if document.document_uid in authorized_ids]
+            authorized_ids = [document.id for document in authorized_document_ref]
+            if not authorized_ids:
+                return []
+            visible_documents = await self.metadata_store.get_metadata_by_uids(authorized_ids)
 
         resolved_datasets: list[ResolvedDataset] = []
         used_aliases: set[str] = set()

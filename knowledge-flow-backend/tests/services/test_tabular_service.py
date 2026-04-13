@@ -18,6 +18,7 @@ from knowledge_flow_backend.common.document_structures import (
     Tagging,
 )
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
+from knowledge_flow_backend.core.stores.metadata.base_metadata_store import BaseMetadataStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
     TABULAR_EXTENSION_KEY,
@@ -125,6 +126,57 @@ class _FakeTagService:
                 raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
             return set(self.team_scopes.get(team_id, set()))
         return set(self.personal_scope)
+
+
+class _TrackingMetadataStore(BaseMetadataStore):
+    """
+    Delegate wrapper that records targeted vs full metadata reads.
+
+    Why this exists:
+    - Tabular authorization should use one uid-targeted metadata lookup once
+      ReBAC has already narrowed the readable document set.
+
+    How to use:
+    - Wrap the real metadata store, assign it to `service.metadata_store`, then
+      inspect the recorded calls after one request.
+
+    Example:
+    - `service.metadata_store = _TrackingMetadataStore(metadata_store)`
+    """
+
+    def __init__(self, delegate) -> None:
+        self._delegate = delegate
+        self.get_all_metadata_calls = 0
+        self.get_metadata_by_uids_calls: list[list[str]] = []
+
+    async def get_all_metadata(self, filters: dict, session=None):
+        self.get_all_metadata_calls += 1
+        return await self._delegate.get_all_metadata(filters, session=session)
+
+    async def get_metadata_by_uids(self, document_uids: list[str], session=None):
+        self.get_metadata_by_uids_calls.append(list(document_uids))
+        return await self._delegate.get_metadata_by_uids(document_uids, session=session)
+
+    async def get_metadata_by_uid(self, document_uid: str, session=None) -> DocumentMetadata | None:
+        return await self._delegate.get_metadata_by_uid(document_uid, session=session)
+
+    async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
+        return await self._delegate.get_metadata_in_tag(tag_id, session=session)
+
+    async def list_by_source_tag(self, source_tag: str, session=None) -> list[DocumentMetadata]:
+        return await self._delegate.list_by_source_tag(source_tag, session=session)
+
+    async def save_metadata(self, metadata: DocumentMetadata, session=None) -> None:
+        await self._delegate.save_metadata(metadata, session=session)
+
+    async def delete_metadata(self, document_uid: str, session=None) -> None:
+        await self._delegate.delete_metadata(document_uid, session=session)
+
+    async def clear(self, session=None) -> None:
+        await self._delegate.clear(session=session)
+
+    def __getattr__(self, name):
+        return getattr(self._delegate, name)
 
 
 class _PresignedLocalContentStore:
@@ -331,6 +383,38 @@ async def test_tabular_service_rejects_explicit_dataset_requests_without_rebac_a
                 dataset_uids=["doc-hidden"],
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_tabular_service_lists_authorized_datasets_with_targeted_metadata_lookup(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-visible",
+        file_name="visible.csv",
+        content="city,amount\nParis,10\n",
+    )
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-hidden",
+        file_name="hidden.csv",
+        content="city,amount\nLyon,20\n",
+    )
+
+    service = TabularService()
+    tracking_store = _TrackingMetadataStore(metadata_store)
+    service.metadata_store = tracking_store
+    service.rebac = _FakeRebac({"doc-visible"})
+
+    datasets = await service.list_datasets(_user())
+
+    assert [dataset.document_uid for dataset in datasets] == ["doc-visible"]
+    assert tracking_store.get_all_metadata_calls == 0
+    assert tracking_store.get_metadata_by_uids_calls == [["doc-visible"]]
 
 
 @pytest.mark.asyncio
