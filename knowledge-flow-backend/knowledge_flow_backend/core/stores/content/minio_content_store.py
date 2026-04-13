@@ -400,6 +400,40 @@ class MinioStorageBackend(BaseContentStore):
             etag=st.etag,
         )
 
+    def put_file(self, key: str, file_path: Path, *, content_type: str) -> StoredObjectInfo:
+        """
+        Store one existing local file at `key` with MinIO's direct file upload.
+
+        Why this exists:
+        - Large Parquet artifacts should be uploaded from disk without the extra
+          Python-side spooling required by `put_object(...)`.
+
+        How to use:
+        - Pass the destination storage key and the local file path already
+          materialized by the tabular processor.
+
+        Example:
+        - `store.put_file("tabular/data.parquet", Path("/tmp/data.parquet"), content_type="application/vnd.apache.parquet")`
+        """
+        object_name = self._normalize_key(key)
+        try:
+            ct = content_type or "application/octet-stream"
+            self.client.fput_object(self.object_bucket, object_name, str(file_path), content_type=ct)
+        except S3Error as e:
+            logger.error(f"put_file failed for '{object_name}' in object bucket: {e}")
+            raise
+
+        st = self.client.stat_object(self.object_bucket, object_name)
+        file_name = self._basename(object_name)
+        return StoredObjectInfo(
+            key=key,
+            size=st.size if st.size is not None else file_path.stat().st_size,
+            file_name=file_name,
+            content_type=st.content_type,
+            modified=self._now_utc(st.last_modified),
+            etag=st.etag,
+        )
+
     def get_object_stream(self, key: str, *, start: Optional[int] = None, length: Optional[int] = None) -> BinaryIO:
         object_name = self._normalize_key(key)
         try:
@@ -500,4 +534,32 @@ class MinioStorageBackend(BaseContentStore):
             if getattr(e, "code", "") in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
                 raise FileNotFoundError(f"Object not found: {key}") from e
             logger.error(f"[CONTENT][MINIO] Failed to generate presigned URL for {key}: {e}")
+            raise
+
+    def get_presigned_url_internal(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
+        """
+        Generate a presigned URL signed against the internal MinIO endpoint.
+
+        Why this exists:
+        - Backend runtimes running inside Kubernetes should read large objects
+          through the cheapest internal route instead of the browser-facing
+          ingress hostname.
+
+        How to use:
+        - Call from server-side code paths such as tabular DuckDB reads.
+
+        Example:
+        - `store.get_presigned_url_internal("tabular/data.parquet", expires=timedelta(hours=1))`
+        """
+        object_name = self._normalize_key(key)
+        try:
+            return self.client.presigned_get_object(
+                self.object_bucket,
+                object_name,
+                expires=expires,
+            )
+        except S3Error as e:
+            if getattr(e, "code", "") in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+                raise FileNotFoundError(f"Object not found: {key}") from e
+            logger.error(f"[CONTENT][MINIO] Failed to generate internal presigned URL for {key}: {e}")
             raise

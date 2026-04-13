@@ -264,3 +264,21 @@ class BaseTabularProcessor(BaseInputProcessor):
     @abstractmethod
     def convert_file_to_table(self, file_path: Path) -> pandas.DataFrame:
         pass
+
+    def write_table_preview(self, file_path: Path, output_dir: Path) -> Path:
+        """
+        Materialize the tabular preview file expected by the ingestion pipeline.
+
+        Why this exists:
+        - The input stage stores one preview artifact under `output_dir` before
+          the output processors run.
+        - Concrete tabular processors can override this method to avoid loading
+          the whole dataset into pandas when a cheaper path exists.
+
+        How to use:
+        - Pass the original local file path and the ingestion output directory.
+        - The default implementation writes `output_dir/table.csv`.
+        """
+        table_path = output_dir / "table.csv"
+        self.convert_file_to_table(file_path).to_csv(table_path, index=False)
+        return table_path

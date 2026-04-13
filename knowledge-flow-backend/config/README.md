@@ -119,7 +119,7 @@ storage:
     query:
       engine: "duckdb"
       access_mode: "presigned_url"
-      presigned_ttl_seconds: 900
+      internal_presigned_ttl_seconds: 3600
       default_max_rows: 200
       max_rows: 1000
 ```

@@ -183,8 +183,7 @@ class ProcessingPipeline:
                 processor_name=processor.__class__.__name__,
             )
         elif isinstance(processor, BaseTabularProcessor):
-            df = processor.convert_file_to_table(input_path)
-            df.to_csv(output_dir / "table.csv", index=False)
+            processor.write_table_preview(input_path, output_dir)
             self._validate_preview_output(
                 output_dir=output_dir,
                 input_path=input_path,

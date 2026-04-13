@@ -178,6 +178,61 @@ def dataframe_schema(df: pd.DataFrame) -> list[TabularColumnSchema]:
     return [TabularColumnSchema(name=str(column_name), dtype=dataframe_dtype_to_literal(df[column_name].dtype)) for column_name in df.columns]
 
 
+def duckdb_dtype_to_literal(dtype_name: str | None) -> DTypes:
+    """
+    Map one DuckDB type name to the tabular API literal used across Fred.
+
+    Why this exists:
+    - The scalable CSV-to-Parquet pipeline now discovers schema from DuckDB and
+      Parquet metadata instead of pandas DataFrames.
+
+    How to use:
+    - Pass the `duckdb_type` string returned by DuckDB schema inspection.
+
+    Example:
+    - `dtype = duckdb_dtype_to_literal("TIMESTAMP")`
+    """
+    normalized = (dtype_name or "").upper()
+    if normalized in {"BOOLEAN"}:
+        return "boolean"
+    if normalized in {
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "HUGEINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+    }:
+        return "integer"
+    if normalized in {"FLOAT", "DOUBLE", "DECIMAL", "REAL"}:
+        return "float"
+    if normalized in {"DATE", "TIMESTAMP", "TIMESTAMP_MS", "TIMESTAMP_NS", "TIMESTAMP_S", "TIMESTAMP WITH TIME ZONE", "TIME"}:
+        return "datetime"
+    if normalized in {"VARCHAR", "BLOB", "UUID"}:
+        return "string"
+    return "unknown"
+
+
+def duckdb_schema(column_types: list[tuple[str, str | None]]) -> list[TabularColumnSchema]:
+    """
+    Build the ordered tabular API schema from DuckDB column metadata.
+
+    Why this exists:
+    - The scalable tabular ingestion path now inspects schema after writing the
+      Parquet artifact, without materializing a pandas DataFrame.
+
+    How to use:
+    - Pass `(column_name, duckdb_type)` pairs returned by DuckDB.
+
+    Example:
+    - `columns = duckdb_schema([("city", "VARCHAR"), ("amount", "BIGINT")])`
+    """
+    return [TabularColumnSchema(name=column_name, dtype=duckdb_dtype_to_literal(dtype_name)) for column_name, dtype_name in column_types]
+
+
 def build_tabular_object_key(*, artifacts_prefix: str, document_uid: str, source_revision: str) -> str:
     """
     Return the canonical Parquet object key for one dataset revision.
@@ -240,8 +295,11 @@ def compute_source_revision(file_path: str, metadata: DocumentMetadata) -> str:
     if metadata.file.sha256:
         return metadata.file.sha256
 
-    file_bytes = Path(file_path).read_bytes()
-    return hashlib.sha256(file_bytes).hexdigest()
+    hasher = hashlib.sha256()
+    with Path(file_path).open("rb") as file_handle:
+        for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def build_default_query_alias(document_uid: str, document_name: str) -> str:

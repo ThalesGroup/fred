@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import resource
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -193,10 +194,18 @@ class _PresignedLocalContentStore:
 
     def __init__(self, delegate) -> None:
         self._delegate = delegate
+        self.public_presigned_calls = 0
+        self.internal_presigned_calls = 0
 
     def get_presigned_url(self, key, expires=None) -> str:
         del expires
+        self.public_presigned_calls += 1
         return f"https://signed.example.invalid/{key}"
+
+    def get_presigned_url_internal(self, key, expires=None) -> str:
+        del expires
+        self.internal_presigned_calls += 1
+        return f"https://internal-signed.example.invalid/{key}"
 
     def __getattr__(self, name):
         return getattr(self._delegate, name)
@@ -252,6 +261,56 @@ async def test_tabular_processor_stores_one_parquet_artifact_and_replaces_previo
     stored_objects = content_store.list_objects(object_prefix)
     assert len(stored_objects) == 1
     assert stored_objects[0].key == updated_artifact.object_key
+
+
+@pytest.mark.asyncio
+async def test_tabular_processor_converts_csv_without_pandas_read_csv(tmp_path, monkeypatch):
+    import pandas as pd
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    monkeypatch.setattr(pd, "read_csv", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("pandas path should not be used")))
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-no-pandas", file_name="sales.csv")
+
+    processed_metadata = processor.process(str(csv_path), metadata)
+    artifact = read_tabular_artifact(processed_metadata)
+
+    assert artifact is not None
+    assert artifact.row_count == 2
+    assert [column.name for column in artifact.columns] == ["city", "amount"]
+
+
+@pytest.mark.integration
+def test_tabular_processor_limits_python_rss_growth_for_large_csv(tmp_path):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+
+    row_count = 400_000
+    csv_path = tmp_path / "large.csv"
+    with csv_path.open("w", encoding="utf-8") as file_handle:
+        file_handle.write("city,amount,created_at\n")
+        for index in range(row_count):
+            file_handle.write(f"city_{index % 100},{index},2024-01-{(index % 28) + 1:02d}\n")
+
+    assert csv_path.stat().st_size > 9 * 1024 * 1024
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-large", file_name="large.csv")
+    rss_before_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+    processed_metadata = processor.process(str(csv_path), metadata)
+
+    rss_after_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    rss_growth_bytes = max(0, rss_after_kb - rss_before_kb) * 1024
+
+    assert processed_metadata.file.row_count == row_count
+    assert rss_growth_bytes < 128 * 1024 * 1024
 
 
 @pytest.mark.asyncio
@@ -459,6 +518,9 @@ async def test_tabular_service_requires_httpfs_for_remote_locations(tmp_path, me
 
     with pytest.raises(RuntimeError, match="DuckDB httpfs is required"):
         await service.read_dataset_frame(_user(), "doc-sales")
+
+    assert service.content_store.internal_presigned_calls >= 2
+    assert service.content_store.public_presigned_calls == 0
 
 
 @pytest.mark.asyncio

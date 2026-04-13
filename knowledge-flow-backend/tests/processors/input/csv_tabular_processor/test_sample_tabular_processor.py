@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
 
@@ -38,3 +39,36 @@ def test_valid_csv():
     assert metadata["sample_columns"] == ["name", "age"]
 
     temp_path.unlink()
+
+
+def test_inspect_read_options_supports_non_utf8_csv():
+    processor = CsvTabularProcessor()
+    content = "ville;montant\nMálaga;10\nLyon;25\n"
+    with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".csv", encoding="latin1") as f:
+        f.write(content)
+        temp_path = Path(f.name)
+
+    options = processor.inspect_read_options(temp_path)
+
+    assert options.delimiter == ";"
+    assert options.encoding == "latin-1"
+    temp_path.unlink()
+
+
+def test_write_table_preview_links_or_copies_csv(tmp_path):
+    processor = CsvTabularProcessor()
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_text("name,age\nAlice,30\n", encoding="utf-8")
+    output_dir = tmp_path / "output"
+
+    table_path = processor.write_table_preview(csv_path, output_dir)
+
+    assert table_path.read_text(encoding="utf-8") == csv_path.read_text(encoding="utf-8")
+    assert table_path.name == "table.csv"
+
+
+def test_inspect_read_options_rejects_invalid_csv_path(tmp_path):
+    processor = CsvTabularProcessor()
+
+    with pytest.raises(ValueError, match="File invalid or not found"):
+        processor.inspect_read_options(tmp_path / "missing.csv")

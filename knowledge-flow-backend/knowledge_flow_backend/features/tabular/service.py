@@ -511,7 +511,8 @@ class TabularService:
         Resolve one content-store object to a DuckDB-readable location.
 
         Why this exists:
-        - Remote object stores use presigned URLs through DuckDB `httpfs`.
+        - Remote object stores use backend-internal presigned URLs through
+          DuckDB `httpfs`.
         - The local filesystem content store used in local development and
           offline tests should expose a direct file path instead of emulating a
           remote download flow.
@@ -522,9 +523,9 @@ class TabularService:
 
         tabular_config = self.tabular_config
         try:
-            return self.content_store.get_presigned_url(
+            return self.content_store.get_presigned_url_internal(
                 object_key,
-                expires=timedelta(seconds=tabular_config.query.presigned_ttl_seconds),
+                expires=timedelta(seconds=tabular_config.query.internal_presigned_ttl_seconds),
             )
         except NotImplementedError:
             return self._resolve_local_dataset_path(object_key)

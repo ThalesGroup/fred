@@ -720,7 +720,7 @@ class TabularQueryConfig(BaseModel):
 
     How to use:
     - Keep the default `duckdb` engine.
-    - Tune result limits and presigned URL TTL per deployment.
+    - Tune result limits and backend-internal presigned URL TTL per deployment.
     """
 
     engine: Literal["duckdb"] = Field(
@@ -731,10 +731,10 @@ class TabularQueryConfig(BaseModel):
         default="presigned_url",
         description="Primary object-access method for remote tabular artifacts.",
     )
-    presigned_ttl_seconds: int = Field(
-        default=900,
+    internal_presigned_ttl_seconds: int = Field(
+        default=3600,
         ge=1,
-        description="TTL in seconds for generated object-storage URLs.",
+        description="TTL in seconds for backend-internal object-storage URLs used by tabular DuckDB reads.",
     )
     default_max_rows: int = Field(
         default=200,
@@ -915,5 +915,14 @@ class Configuration(BaseModel):
             raise ValueError(
                 "'storage.tabular_stores' is no longer supported. Configure tabular settings under 'storage.tabular_store'.",
             )
+
+        if isinstance(storage_value, dict):
+            tabular_store_value = storage_value.get("tabular_store")
+            if isinstance(tabular_store_value, dict):
+                tabular_query_value = tabular_store_value.get("query")
+                if isinstance(tabular_query_value, dict) and "presigned_ttl_seconds" in tabular_query_value:
+                    raise ValueError(
+                        "'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported. Use 'storage.tabular_store.query.internal_presigned_ttl_seconds'.",
+                    )
 
         return values

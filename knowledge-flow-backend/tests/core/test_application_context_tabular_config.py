@@ -138,3 +138,24 @@ def test_configuration_rejects_removed_storage_tabular_stores_field(tmp_path):
 
     with pytest.raises(ValueError, match="'storage.tabular_stores' is no longer supported"):
         Configuration.model_validate(payload)
+
+
+def test_configuration_rejects_removed_tabular_query_presigned_ttl_seconds_field(tmp_path):
+    """
+    Ensure the removed tabular public presigned TTL key is rejected.
+
+    Why this exists:
+    - The tabular runtime now uses only backend-internal presigned URLs, so the
+      old query TTL key should fail loudly instead of being silently ignored.
+
+    How to use:
+    - Dump a valid payload, inject
+      `storage.tabular_store.query.presigned_ttl_seconds`, and assert
+      validation fails.
+    """
+
+    payload = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path)).model_dump(mode="python")
+    payload["storage"]["tabular_store"]["query"]["presigned_ttl_seconds"] = 900
+
+    with pytest.raises(ValueError, match="'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported"):
+        Configuration.model_validate(payload)
