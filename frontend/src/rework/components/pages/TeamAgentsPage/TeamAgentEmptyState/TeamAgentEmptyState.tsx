@@ -7,9 +7,10 @@ import Button from "@shared/atoms/Button/Button.tsx";
 
 interface TeamAgentEmptyStateProps {
   onCreateAgent: () => void;
+  canUpdateAgents: boolean;
 }
 
-export default function TeamAgentEmptyState({ onCreateAgent }: TeamAgentEmptyStateProps) {
+export default function TeamAgentEmptyState({ onCreateAgent, canUpdateAgents }: TeamAgentEmptyStateProps) {
   const { agentIconName, agentsNicknameSingular } = useFrontendProperties();
   const { t } = useTranslation();
 
@@ -21,15 +22,17 @@ export default function TeamAgentEmptyState({ onCreateAgent }: TeamAgentEmptySta
         </span>
         <span>{t("rework.teams.agents.firstTitle", { agentsNicknameSingular })}</span>
       </div>
-      <Button
-        color={"primary"}
-        variant={"filled"}
-        size={"medium"}
-        icon={{ category: "outlined", type: "add" }}
-        onClick={onCreateAgent}
-      >
-        {t("rework.teams.agents.firstCreate", { agentsNicknameSingular })}
-      </Button>
+      {canUpdateAgents && (
+        <Button
+          color={"primary"}
+          variant={"filled"}
+          size={"medium"}
+          icon={{ category: "outlined", type: "add" }}
+          onClick={onCreateAgent}
+        >
+          {t("rework.teams.agents.firstCreate", { agentsNicknameSingular })}
+        </Button>
+      )}
     </div>
   );
 }

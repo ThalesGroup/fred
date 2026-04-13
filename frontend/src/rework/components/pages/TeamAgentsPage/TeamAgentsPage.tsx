@@ -54,9 +54,10 @@ export default function TeamAgentsPage() {
           onCreateAgent={handleOpenCreateAgent}
           onEditAgent={handleEdit}
           onToggleAgent={handleToggleEnabled}
+          canUpdateAgents={canUpdateAgents}
         />
       ) : (
-        <TeamAgentEmptyState onCreateAgent={handleOpenCreateAgent} />
+        <TeamAgentEmptyState onCreateAgent={handleOpenCreateAgent} canUpdateAgents={canUpdateAgents} />
       )}
       <FullPageModal isOpen={editOpen} onClose={() => setEditOpen(false)} id={"create-edit-agent-modal"}>
         <AgentCreateEditModal

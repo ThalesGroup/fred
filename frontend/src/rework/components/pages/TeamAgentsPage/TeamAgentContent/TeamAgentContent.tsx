@@ -2,9 +2,6 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { Link, useParams } from "react-router-dom";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { useTranslation } from "react-i18next";
-import { useMemo } from "react";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import { AnyAgent } from "../../../../../common/agent.ts";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import styles from "./TeamAgentContent.module.scss";
@@ -14,21 +11,19 @@ interface TeamAgentContentProps {
   onCreateAgent: () => void;
   onEditAgent: (agent: AnyAgent) => void;
   onToggleAgent: (agent: AnyAgent) => void;
+  canUpdateAgents: boolean;
 }
 
-export default function TeamAgentContent({ agents, onCreateAgent, onEditAgent, onToggleAgent }: TeamAgentContentProps) {
+export default function TeamAgentContent({
+  agents,
+  onCreateAgent,
+  onEditAgent,
+  onToggleAgent,
+  canUpdateAgents,
+}: TeamAgentContentProps) {
   const { agentsNicknameSingular, agentsNicknamePlural } = useFrontendProperties();
   const { t } = useTranslation();
-
   const { teamId } = useParams();
-  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
-  const isPersonalTeam = teamId === userDetails?.personalTeam.id;
-  const { data: noPersonalTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: isPersonalTeam });
-  const team = isPersonalTeam ? userDetails?.personalTeam : noPersonalTeam;
-
-  const canUpdateAgents = useMemo(() => {
-    return team?.permissions?.includes("can_update_agents");
-  }, [team]);
 
   const renderAgentCard = (agent: AnyAgent, withKey: boolean = false) => {
     return (
