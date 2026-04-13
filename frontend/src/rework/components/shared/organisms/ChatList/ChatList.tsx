@@ -8,6 +8,7 @@ interface ChatListProps {
 }
 
 export default function ChatList({ teamId }: ChatListProps) {
+  const { t } = useTranslation();
   const { data: sessions, refetch: refetchSessions } = useGetSessionsAgenticV1ChatbotSessionsGetQuery(
     { teamId },
     {
@@ -21,12 +22,11 @@ export default function ChatList({ teamId }: ChatListProps) {
     const dateB = new Date(b.updated_at).getTime();
     return dateB - dateA;
   });
-  const { t } = useTranslation();
 
   return (
-    <div className={styles["chat-list-container"]}>
-      <div className={styles["chat-list-header"]}>{t("rework.sidebar.chatList.title")}</div>
-      <div className={styles["chat-list-items"]}>
+    <div className={styles.chatListContainer}>
+      <div className={styles.chatListHeader}>{t("rework.sidebar.chatList.title")}</div>
+      <div className={styles.chatListItems}>
         {sortedSessions?.map((session) => <ChatListItem key={session.id} chat={session} onDelete={refetchSessions} />)}
       </div>
     </div>

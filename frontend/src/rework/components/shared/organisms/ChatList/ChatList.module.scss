@@ -1,11 +1,11 @@
-.chat-list-container {
+.chatListContainer {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow-y: hidden;
 }
 
-.chat-list-header {
+.chatListHeader {
   display: flex;
   font: var(--font-body-small);
   justify-content: space-between;
@@ -15,7 +15,7 @@
   color: var(--on-surface-retreat);
 }
 
-.chat-list-items {
+.chatListItems {
   display: flex;
   flex-direction: column;
   padding: 0 var(--spacing-xs) var(--spacing-xs);
