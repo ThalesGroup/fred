@@ -11,11 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Autocomplete, Box, Divider, Stack, TextField, Typography } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { Autocomplete, Box, Button, Divider, Stack, TextField, Typography } from "@mui/material";
+import { Ref, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
-import { useFrontendProperties } from "../../hooks/useFrontendProperties";
 import { KeyCloakService } from "../../security/KeycloakService";
 import {
   FieldSpec,
@@ -37,7 +37,6 @@ import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
-import Button from "@components/shared/atoms/Button/Button.tsx";
 
 type TopLevelTuningState = {
   role: string;
@@ -51,17 +50,24 @@ type V2CreateMode = "react" | "profile" | "definition_ref";
 /** Top-level version choice in create mode (admin only). */
 type AgentVersion = "v2" | "v1";
 
-export type AgentCreateEditFormProps = Omit<AgentCreateEditDrawerProps, "open">;
+export interface CreationFormCallback {
+  save: () => void;
+  delete: () => void;
+}
+
+export type AgentCreateEditFormProps = Omit<AgentCreateEditDrawerProps, "open"> & {
+  ref?: Ref<CreationFormCallback | null>;
+  onValidityChange: (validity: boolean) => void;
+};
 
 export function AgentCreateEditForm({
+  ref,
   agent,
-  canDelete,
   teamId,
-  onClose,
   onSaved,
   onDeleted,
+  onValidityChange,
 }: AgentCreateEditFormProps) {
-  const { agentsNicknameSingular } = useFrontendProperties();
   const [createV2Agent] = useCreateV2AgentAgenticV1AgentsV2CreatePostMutation();
   const [createV1Agent] = useCreateV1AgentAgenticV1AgentsV1CreatePostMutation();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
@@ -217,7 +223,6 @@ export function AgentCreateEditForm({
       // Profile, definition_ref, and V1 class_path agents are created with defaults — skip tuning update.
       if (isCreateMode && (v2CreateMode === "profile" || v2CreateMode === "definition_ref" || agentVersion === "v1")) {
         onSaved?.();
-        onClose();
         return;
       }
 
@@ -232,7 +237,6 @@ export function AgentCreateEditForm({
 
       await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
       onSaved?.();
-      onClose();
     } catch (e: any) {
       showError({
         summary: isCreateMode ? t("agentEditDrawer.errors.createFailed") : t("agentEditDrawer.errors.updateFailed"),
@@ -252,7 +256,6 @@ export function AgentCreateEditForm({
         try {
           await triggerDeleteAgent({ agentId: agent.id }).unwrap();
           onDeleted?.();
-          onClose();
         } catch (err) {
           console.error("Failed to delete agent:", err);
         }
@@ -260,9 +263,30 @@ export function AgentCreateEditForm({
     });
   };
 
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    delete: handleDelete,
+  }));
+
   const hasEmptyRequiredFields = fields.some(
     (f) => f.required && (f.default === undefined || f.default === null || f.default === ""),
   );
+
+  useEffect(() => {
+    onValidityChange(isSaveDisabled);
+  }, [
+    agentName,
+    isLoading,
+    isCreateMode,
+    topLevelTuning.role,
+    topLevelTuning.description,
+    hasEmptyRequiredFields,
+    agentVersion,
+    classPath,
+    v2CreateMode,
+    profileId,
+    definitionRef,
+  ]);
 
   const isSaveDisabled = (() => {
     if (!agentName.trim()) return true;
@@ -279,10 +303,10 @@ export function AgentCreateEditForm({
   const showTuningFields = !isCreateMode || (agentVersion === "v2" && v2CreateMode === "react");
 
   return (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-
+    <Box sx={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
+      {/* Body (scrollable) */}
       <Box sx={{ p: 2, flex: 1, overflow: "auto" }}>
-        <Stack spacing={3}>
+        <Stack spacing={1}>
           {/* ── Version toggle (create mode, team admin only) ── */}
           {isCreateMode && isAdmin && (
             <ButtonGroup
@@ -300,7 +324,7 @@ export function AgentCreateEditForm({
                   onClick: () => handleAgentVersionChange("v1"),
                 },
               ]}
-              size={"xs"}
+              size={"medium"}
               color={"secondary"}
             />
           )}
@@ -328,7 +352,7 @@ export function AgentCreateEditForm({
                   onClick: () => handleV2CreateModeChange("definition_ref"),
                 },
               ]}
-              size={"small"}
+              size={"medium"}
               color={"secondary"}
             />
           )}
@@ -486,35 +510,6 @@ export function AgentCreateEditForm({
               {agent && <AgentPrivateResourcesManager agentId={agent.id} />}
             </>
           )}
-        </Stack>
-      </Box>
-
-      {/* Sticky footer */}
-      <Divider />
-      <Box
-        sx={{
-          p: 1.5,
-          position: "sticky",
-          bottom: 0,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Stack direction="row" justifyContent="flex-start">
-          {!isCreateMode && (
-            <Button color={"error"} variant={"filled"} size={"medium"} onClick={handleDelete} disabled={!canDelete}>
-              {t("common.delete")}
-            </Button>
-          )}
-        </Stack>
-        <Stack direction="row" gap={1} justifyContent="flex-end">
-          <Button color={"primary"} variant={"outlined"} size={"medium"} onClick={onClose}>
-            {t("dialogs.cancel")}
-          </Button>
-          <Button color={"primary"} variant={"filled"} size={"medium"} disabled={isSaveDisabled} onClick={handleSave}>
-            {isCreateMode ? t("common.create") : t("common.save")}
-          </Button>
         </Stack>
       </Box>
     </Box>

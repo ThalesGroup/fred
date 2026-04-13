@@ -10,8 +10,6 @@ import TeamAgentContent from "@components/pages/TeamAgentsPage/TeamAgentContent/
 import TeamAgentEmptyState from "@components/pages/TeamAgentsPage/TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import AgentCreateEditModal from "@components/pages/TeamAgentsPage/AgentCreateEditModal/AgentCreateEditModal.tsx";
-import { AgentCreateEditForm } from "../../../../components/agentHub/AgentCreateEditForm.tsx";
-import Button from "@shared/atoms/Button/Button.tsx";
 
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
@@ -27,7 +25,6 @@ export default function TeamAgentsPage() {
 
   const [selected, setSelected] = useState<AnyAgent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [editOldOpen, setEditOldOpen] = useState(false);
 
   const canUpdateAgents = useMemo(() => {
     return team?.permissions?.includes("can_update_agents");
@@ -51,7 +48,6 @@ export default function TeamAgentsPage() {
 
   return (
     <div className={styles.teamAgentContainer}>
-        <Button color={"primary"} variant={"text"} size={"medium"} onClick={() => setEditOldOpen(true)}>open</Button>
       {agents?.length !== 0 ? (
         <TeamAgentContent
           agents={agents}
@@ -68,16 +64,9 @@ export default function TeamAgentsPage() {
           teamName={team?.name}
           agent={selected}
           canDelete={canUpdateAgents}
-        ></AgentCreateEditModal>
-      </FullPageModal>
-        <FullPageModal isOpen={editOldOpen} onClose={() => setEditOldOpen(false)} id={"create-edit-agent-modal"}>
-        <AgentCreateEditForm
-          agent={selected}
-          canDelete={canUpdateAgents}
           teamId={teamId}
-          onClose={() => setEditOpen(false)}
-          onSaved={refetch}
           onDeleted={refetch}
+          onSaved={refetch}
         />
       </FullPageModal>
     </div>

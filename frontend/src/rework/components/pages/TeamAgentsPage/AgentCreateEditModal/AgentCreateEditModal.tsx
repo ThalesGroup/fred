@@ -6,42 +6,40 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { AnyAgent } from "../../../../../common/agent.ts";
-import { useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation } from "../../../../../slices/agentic/agenticOpenApi.ts";
-import AgentV1CreateEditForm from "@components/pages/TeamAgentsPage/AgentCreateEditModal/AgentV1CreateEditForm/AgentV1CreateEditForm.tsx";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { AgentCreateEditForm, CreationFormCallback } from "../../../../../components/agentHub/AgentCreateEditForm.tsx";
 
 interface AgentCreateEditModalProps {
   modalInteraction: ModalInteractionProps;
   teamName: string;
+  teamId: string;
   agent: AnyAgent | null;
   canDelete: boolean;
   onDeleted?: () => void;
+  onSaved?: () => void;
 }
-
-class AgentVersion {}
-
-class V2CreateMode {}
 
 export default function AgentCreateEditModal({
   modalInteraction,
   teamName,
+  teamId,
   agent,
   canDelete,
   onDeleted,
+  onSaved,
 }: AgentCreateEditModalProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
   const isCreateMode = agent === null;
-
-  const [agentVersion, setAgentVersion] = useState<AgentVersion>("v2");
-  const [v2CreateMode, setV2CreateMode] = useState<V2CreateMode>("react");
-
-  const [triggerDeleteAgent] = useDeleteAgentAgenticV1AgentsAgentIdDeleteMutation();
+  const childRef = useRef<CreationFormCallback>(null);
+  const [isSaveDisabled, setIsSaveDisabled] = useState(true);
 
   const handleDelete = () => {
-    if (!agent) return;
-    triggerDeleteAgent({ agentId: agent.id }).unwrap();
-    onDeleted();
+    childRef.current.delete();
+  };
+
+  const handleSave = () => {
+    childRef.current.save();
     modalInteraction.close();
   };
 
@@ -63,7 +61,7 @@ export default function AgentCreateEditModal({
           <Button color={"primary"} variant={"text"} size={"medium"} onClick={modalInteraction.close}>
             {t("rework.cancel")}
           </Button>
-          <Button color={"primary"} variant={"filled"} size={"medium"} onClick={modalInteraction.close}>
+          <Button color={"primary"} variant={"filled"} size={"medium"} onClick={handleSave} disabled={isSaveDisabled}>
             {isCreateMode ? t("rework.create") : t("rework.save")}
           </Button>
           {!isCreateMode && (
@@ -74,7 +72,19 @@ export default function AgentCreateEditModal({
         </div>
       </div>
       <div className={styles.agentCreateEditModalContent}>
-        <AgentV1CreateEditForm />
+        <AgentCreateEditForm
+          ref={childRef}
+          agent={agent}
+          canDelete={true}
+          teamId={teamId}
+          onClose={() => modalInteraction.close()}
+          onSaved={onSaved}
+          onDeleted={() => {
+            onDeleted();
+            modalInteraction.close();
+          }}
+          onValidityChange={setIsSaveDisabled}
+        />
       </div>
     </div>
   );
