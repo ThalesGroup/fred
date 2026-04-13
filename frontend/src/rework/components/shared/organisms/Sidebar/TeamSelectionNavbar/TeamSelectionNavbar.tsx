@@ -15,6 +15,9 @@ export default function TeamSelectionNavbar() {
   const { pathname } = useLocation();
   const { t } = useTranslation();
 
+  // TODO 1501 Remove when teams are not based on keycloak anymore
+  const yourTeams = teams && teams.filter((t) => t.is_member);
+
   return (
     <div className={styles.teamNavbarContainer}>
       <div>
@@ -38,7 +41,7 @@ export default function TeamSelectionNavbar() {
       </div>
       <Separator margin={"var(--spacing-xs)"} />
       <div className={styles.teamContainer}>
-        {teams?.map((team) => {
+        {yourTeams?.map((team) => {
           return (
             <TeamSelectionItem
               key={team.id}
