@@ -31,13 +31,13 @@ import {
 import { useConfirmationDialog } from "../ConfirmationDialogProvider";
 import { useToast } from "../ToastProvider";
 import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawer";
-import { AgentCreateEditDrawerProps } from "./AgentCreateEditDrawer";
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
+import {AnyAgent} from "../../common/agent.ts";
 
 type TopLevelTuningState = {
   role: string;
@@ -56,7 +56,17 @@ export interface CreationFormCallback {
   delete: () => void;
 }
 
-export type AgentCreateEditFormProps = Omit<AgentCreateEditDrawerProps, "open"> & {
+export type AgentCreateEditFormProps = {
+  /** Pass an agent to edit, or null to create a new one. */
+  agent: AnyAgent | null;
+  canDelete?: boolean;
+  /** Team ownership for the newly created agent (only used in create mode). */
+  teamId?: string;
+
+  onClose: () => void;
+  onSaved?: () => void;
+  onDeleted?: () => void;
+
   ref?: Ref<CreationFormCallback | null>;
   onValidityChange: (validity: boolean) => void;
 };

@@ -7,7 +7,7 @@ export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   explication?: string;
   error?: string;
   maxLength?: number;
-  required: boolean;
+  required?: boolean;
 }
 
 export default function TextArea({
