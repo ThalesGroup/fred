@@ -18,9 +18,11 @@ Knowledge Flow provides two primary services:
    search (e.g., RAG pipelines).
 
 2. **Structured Data Ingestion**  
-   Processes structured files (CSV, XLSX, etc.) into dataset-scoped Parquet artifacts stored in the shared
-   `content_storage` object area. These datasets are then exposed through read-only REST and MCP endpoints and queried
-   on demand with DuckDB, instead of being materialized into one global SQL database.
+   Processes CSV files into dataset-scoped Parquet artifacts stored in the shared `content_storage` object area.
+   The primary ingestion path inspects delimiter and encoding once, converts CSV to Parquet directly with DuckDB,
+   then derives row counts and column schema from the generated Parquet artifact instead of materializing a full
+   pandas DataFrame. These datasets are then exposed through read-only REST and MCP endpoints and queried on demand
+   with DuckDB, instead of being materialized into one global SQL database.
 
 Knowledge Flow supports one tabular data runtime that can be queried with SQL:
 
@@ -52,22 +54,25 @@ Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as A
 
 ## Quick Start
 
-If you start it s follows the default configuration is developper friendly and only uses local stores, checkout
-the [configuration page](./config/README.md)
-to use another setup.
+The default configuration is developer-friendly and only uses local stores. See the
+[configuration page](./config/README.md) when you want another setup.
 
 ### Storage credentials
 
 - **Core storage (`storage.postgres`)**: used by tags, metadata, resources, pgvector, etc.  
   - User/host/db come from `storage.postgres` in `configuration*.yaml`.  
   - Password comes from `FRED_POSTGRES_PASSWORD` (or an explicit `password:` in the YAML).
-- **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV/Excel ingestion now writes Parquet artifacts into the shared content store object area.  
+- **Tabular artifacts (`storage.tabular_store` + `content_storage`)**: CSV ingestion writes Parquet artifacts into the shared content store object area.  
   - Runtime query limits come from `storage.tabular_store` in `configuration*.yaml`.  
+  - The CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.  
+  - Tabular runtime URLs now use `storage.tabular_store.query.internal_presigned_ttl_seconds` for backend-internal reads.  
   - Object-storage credentials come from `content_storage` when using MinIO/S3-compatible backends.  
   - This is the recommended mode for new deployments.
   - If `storage.tabular_store` is omitted, this runtime is enabled with the built-in defaults.
 
-Tip: for S3-compatible deployments, keep `content_storage` pointed to the object bucket and use `storage.tabular_store` only for query/runtime bounds.
+Tip: for S3-compatible deployments, keep `content_storage.endpoint` on the internal MinIO/S3 address used by backend
+pods and workers, reserve `public_endpoint` for browser-facing links, and use `storage.tabular_store` only for
+query/runtime bounds.
 
 ```bash
 git clone https://github.com/ThalesGroup/knowledge-flow.git
@@ -92,7 +97,7 @@ instructions.
 ## Features
 
 - Ingests files: PDF, DOCX, PPTX → Markdown
-- Ingests data: CSV, Excel → Parquet datasets queried with DuckDB
+- Ingests data: CSV → Parquet datasets queried with DuckDB
 - Vectorizes content using OpenAI, Azure, or Ollama
 - Stores content and metadata in pluggable backends
 - Runs standalone with only an OpenAI key and local file system

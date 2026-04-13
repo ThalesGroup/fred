@@ -74,7 +74,8 @@ POST /knowledge-flow/v1/tabular/query
 ```
 
 Agents do not see presigned object-store URLs directly. They receive only authorized dataset metadata plus SQL aliases,
-while Knowledge Flow resolves Parquet locations and mounts them in DuckDB internally.
+while Knowledge Flow resolves Parquet locations and mounts them in DuckDB internally. For MinIO/S3-compatible
+deployments, these DuckDB reads use backend-internal presigned URLs rather than browser-facing links.
 
 This approach is consistent and scalable across all agent-facing interfaces.
 
@@ -144,13 +145,17 @@ The recommended tabular runtime is document-scoped rather than database-scoped.
   [ CSV INPUT ]
         │
         ▼
-  Input tabular processor
+  CsvTabularProcessor
+  - delimiter/encoding inspection
         │
         ▼
   TabularProcessor
+  - DuckDB read_csv_auto(...)
+  - COPY ... TO PARQUET
         │
         ▼
   Parquet artifact in content_storage
+  + schema/row_count from Parquet metadata
         │
         ▼
   metadata.extensions["tabular_v1"]
@@ -165,9 +170,12 @@ The recommended tabular runtime is document-scoped rather than database-scoped.
 Important runtime rules for the recommended mode:
 
 - Each document produces its own Parquet artifact under `storage.tabular_store.artifacts_prefix`.
+- The main CSV-to-Parquet path is DuckDB-native and avoids loading the full dataset into a pandas DataFrame.
+- Column names are normalized before export so the mounted dataset exposes stable SQL-safe names.
 - ReBAC is enforced at document level before a dataset is exposed or mounted.
 - Team/personal/library scope is applied before query aliases are shown to the caller.
-- Remote MinIO/S3-compatible reads use presigned URLs plus DuckDB `httpfs`.
+- Read-only query validation accepts only `SELECT`/`WITH` statements and only against authorized mounted datasets.
+- Remote MinIO/S3-compatible reads use backend-internal presigned URLs plus DuckDB `httpfs`.
 
 ### Legacy pipeline: SQL-backed tabular stores
 
