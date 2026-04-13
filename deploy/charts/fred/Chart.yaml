@@ -1,5 +1,5 @@
 apiVersion: v2
 name: fred
 description: Helm chart for Fred
-version: 1.4.0-post
-appVersion: 1.4.0-post
+version: 1.4.1-post
+appVersion: 1.4.1-post

@@ -119,11 +119,7 @@ def _replace_with_presigned(content: str, content_store) -> str:
         filename = m.group(2)
         object_key = f"{uid}/output/media/{filename}"
         try:
-            url = content_store.client.presigned_get_object(
-                bucket_name=content_store.document_bucket,
-                object_name=object_key,
-                expires=timedelta(minutes=1),
-            )
+            url = content_store.get_presigned_url(object_key, expires=timedelta(minutes=1))
             logger.info("[PRESIGNED] generated URL for %s: %s", object_key, url)
             return url
         except Exception as e:

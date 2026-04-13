@@ -1,7 +1,7 @@
 [project]
 name = "knowledge-flow-backend"
 readme = "README.md"
-version = "1.4.0+post"
+version = "1.4.1+post"
 description = "Knowledge Flow Backend"
 authors = [{ name = "Fred", email = "noreply@example.com" }]
 requires-python = ">=3.12,<3.13"
