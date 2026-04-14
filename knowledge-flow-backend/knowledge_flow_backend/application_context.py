@@ -46,7 +46,6 @@ from fred_core.common import (
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
-from fred_core.store import SQLTableStore, StoreInfo
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -66,6 +65,7 @@ from knowledge_flow_backend.common.structures import (
     MinioStorageConfig,
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
+    TabularStoreConfig,
     WeaviateVectorStorage,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseInputProcessor, BaseMarkdownProcessor, BaseTabularProcessor
@@ -290,7 +290,6 @@ class ApplicationContext:
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
     _resource_store_instance: Optional[BaseResourceStore] = None
-    _tabular_stores: Optional[Dict[str, StoreInfo]] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _kpi_writer: Optional[KPIWriter] = None
     _rebac_engine: Optional[RebacEngine] = None
@@ -317,7 +316,8 @@ class ApplicationContext:
     def is_tabular_file(self, file_name: str) -> bool:
         """
         Returns True if the file is handled by a tabular input processor.
-        This allows detecting if a file is meant to be stored in a SQL/structured store like DuckDB.
+        This allows detecting if a file should produce a dataset-centric
+        Parquet artifact for the tabular runtime.
         """
         ext = Path(file_name).suffix.lower()
         try:
@@ -912,48 +912,6 @@ class ApplicationContext:
             return self._resource_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
-    def get_tabular_stores(self) -> Dict[str, StoreInfo]:
-        if self._tabular_stores is not None:
-            return self._tabular_stores
-
-        config_map = get_configuration().storage.tabular_stores or {}
-        stores = {}
-
-        for name, cfg in config_map.items():
-            if isinstance(cfg, SQLStorageConfig):
-                try:
-                    database_name = cfg.database
-                    if cfg.path is not None:
-                        path = Path(cfg.path).expanduser()
-                        # ensure the path's parent directory exists
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        store = SQLTableStore(driver=cfg.driver, path=path)
-                    else:
-                        raise ValueError("The path must not be None")
-
-                    stores[database_name] = StoreInfo(store=store, mode=cfg.mode)
-                    logger.info(f"[{database_name}] Connected to {cfg.driver} ({cfg.mode}) at {cfg.path}")
-                except Exception as e:
-                    logger.warning(f"[{name}] Failed to connect to {cfg.driver}: {e}")
-
-        self._tabular_stores = stores
-        return stores
-
-    def get_csv_input_store(self) -> SQLTableStore:
-        """
-        Returns the store named 'base_database' if it exists,
-        otherwise returns the first store with mode 'read_and_write'.
-        """
-        stores = self.get_tabular_stores()
-
-        if "base_database" in stores:
-            return stores["base_database"].store
-
-        for store_info in stores.values():
-            if store_info.mode == "read_and_write":
-                return store_info.store
-        raise ValueError("No tabular_stores with mode 'read_and_write' found. Please check the knowledge flow configuration.")
-
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -1245,28 +1203,28 @@ class ApplicationContext:
             _describe("vector_store", st.vector_store)
             _describe("resource_store", st.resource_store)
 
-            # Tabular stores (CSV ingestion / statistic)
-            tabular_map = st.tabular_stores or {}
-            if tabular_map:
-                logger.info("  🗄️  Tabular stores:")
-                for name, cfg in tabular_map.items():
-                    if isinstance(cfg, SQLStorageConfig):
-                        logger.info(
-                            "     • %-14s SQLStorage  driver=%s  mode=%s  database=%s  host=%s",
-                            name,
-                            cfg.driver,
-                            cfg.mode,
-                            cfg.database or "unset",
-                            cfg.host or "unset",
-                        )
-                        secret = cfg.password or os.getenv("TABULAR_POSTGRES_PASSWORD") or os.getenv("SQL_PASSWORD")
-                        logger.info("     ↳ Username: %s", cfg.username or "<unset>")
-                        self._log_sensitive("TABULAR_POSTGRES_PASSWORD|SQL_PASSWORD", secret)
-                    else:
-                        logger.info("     • %-14s %s", name, type(cfg).__name__)
-
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")
+
+        try:
+            tabular_store: TabularStoreConfig = self.configuration.storage.tabular_store
+            logger.info("  📊 Tabular runtime:")
+            logger.info(
+                "     • prefix=%s  format=%s  compression=%s",
+                tabular_store.artifacts_prefix,
+                tabular_store.format,
+                tabular_store.compression,
+            )
+            logger.info(
+                "     • engine=%s  access=%s  default_max_rows=%s  max_rows=%s  internal_presigned_ttl_seconds=%s",
+                tabular_store.query.engine,
+                tabular_store.query.access_mode,
+                tabular_store.query.default_max_rows,
+                tabular_store.query.max_rows,
+                tabular_store.query.internal_presigned_ttl_seconds,
+            )
+        except Exception:
+            logger.warning("  ⚠️ Failed to read tabular runtime section.")
 
         # Filesystem
         logger.info("  📁 Agent filesystem:")

@@ -265,6 +265,46 @@ class FileSystemContentStore(BaseContentStore):
             etag=hasher.hexdigest(),
         )
 
+    def put_file(self, key: str, file_path: Path, *, content_type: str) -> StoredObjectInfo:
+        """
+        Store one existing local file at `key` without re-buffering it in Python.
+
+        Why this exists:
+        - Large tabular artifacts are already materialized on local disk before
+          being copied into the shared content store.
+        - Copying the file directly keeps the local filesystem backend aligned
+          with the direct-upload MinIO path.
+
+        How to use:
+        - Pass the destination storage key and the local file path to persist.
+
+        Example:
+        - `store.put_file("tabular/data.parquet", Path("/tmp/data.parquet"), content_type="application/vnd.apache.parquet")`
+        """
+        path = self._safe_under(self.object_root, self._key_to_path(key))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(file_path, path)
+
+        try:
+            hasher = hashlib.md5(usedforsecurity=False)
+        except TypeError:
+            raise RuntimeError("Python 3.9+ is required for secure MD5 hashing in this context")
+
+        with open(path, "rb") as copied_file:
+            for chunk in iter(lambda: copied_file.read(1024 * 1024), b""):
+                hasher.update(chunk)
+
+        stat = path.stat()
+        modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        return StoredObjectInfo(
+            key=key,
+            size=stat.st_size,
+            file_name=os.path.basename(path),
+            content_type=content_type or mimetypes.guess_type(path.name)[0],
+            modified=modified,
+            etag=hasher.hexdigest(),
+        )
+
     def get_object_stream(self, key: str, *, start: Optional[int] = None, length: Optional[int] = None) -> BinaryIO:
         """
         Streaming reader for object 'key'. If start/length provided, limit reads accordingly.

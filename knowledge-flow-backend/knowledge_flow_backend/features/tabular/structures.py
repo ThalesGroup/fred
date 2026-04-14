@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from fred_core.common import OwnerFilter
+from pydantic import BaseModel, Field
 
 # -- Constants for consistent types --
 DTypes = Literal["string", "integer", "float", "boolean", "datetime", "unknown"]
@@ -28,78 +28,112 @@ class TabularColumnSchema(BaseModel):
     dtype: DTypes
 
 
-class ListDatabasesResponse(BaseModel):
-    db_name: str
-    tables: list[str]
+class TabularDatasetResponse(BaseModel):
+    """
+    Authorized dataset summary exposed by the dataset-centric tabular API.
 
+    Why this exists:
+    - Callers need one dataset-level payload that already includes the SQL alias
+      and schema preview authorized for the current user.
 
-class ListTablesResponse(BaseModel):
-    db_name: str
-    tables: list[str]
+    How to use:
+    - Returned by `GET /tabular/datasets`.
+    - Reuse `query_alias` directly in SQL statements executed via `/tabular/query`.
+    """
 
-
-class GetSchemaResponse(BaseModel):
-    db_name: str
-    table_name: str
-    columns: List[TabularColumnSchema]
+    document_uid: str
+    document_name: str
+    query_alias: str
     row_count: Optional[int] = None
+    columns: list[TabularColumnSchema] = Field(default_factory=list)
+    tag_ids: list[str] = Field(default_factory=list)
+    tag_names: list[str] = Field(default_factory=list)
+    source_tag: Optional[str] = None
+    generated_at: Optional[str] = None
 
 
-class RawSQLRequest(BaseModel):
-    query: str
+class TabularDatasetSchemaResponse(BaseModel):
+    """
+    Full schema description for one authorized dataset.
+
+    Why this exists:
+    - Schema inspection is now document-scoped instead of database/table-scoped.
+
+    How to use:
+    - Returned by `GET /tabular/datasets/{document_uid}/schema`.
+    """
+
+    document_uid: str
+    document_name: str
+    query_alias: str
+    columns: list[TabularColumnSchema] = Field(default_factory=list)
+    row_count: Optional[int] = None
+    source_tag: Optional[str] = None
+    generated_at: Optional[str] = None
+
+
+class TabularQueryRequest(BaseModel):
+    """
+    Read-only SQL query request for authorized tabular datasets.
+
+    Why this exists:
+    - The new tabular runtime can query several document-scoped datasets at once.
+
+    How to use:
+    - Send `sql` and an optional `dataset_uids` subset.
+    - Leave `dataset_uids` empty to query every readable dataset in the active
+      tabular scope.
+    - Optionally pass `owner_filter`, `team_id`, and
+      `document_library_tags_ids` so SQL execution stays inside the current
+      personal/team area and selected libraries.
+
+    Example:
+    ```python
+    request = TabularQueryRequest(
+        sql="SELECT city, COUNT(*) FROM d_doc_sales GROUP BY city",
+        dataset_uids=["doc-sales"],
+        owner_filter=OwnerFilter.TEAM,
+        team_id="team-a",
+        max_rows=50,
+    )
+    ```
+    """
+
+    sql: str = Field(..., min_length=1)
+    dataset_uids: Optional[list[str]] = None
+    document_library_tags_ids: Optional[list[str]] = Field(
+        default=None,
+        description="Optional list of library tag IDs used to keep the query inside selected libraries.",
+    )
+    owner_filter: Optional[OwnerFilter] = Field(
+        default=None,
+        description="Optional ownership scope: 'personal' or 'team'.",
+    )
+    team_id: Optional[str] = Field(
+        default=None,
+        description="Team ID required when owner_filter is 'team'.",
+    )
+    max_rows: Optional[int] = Field(default=None, ge=1)
+
+    @property
+    def sql_text(self) -> str:
+        """
+        Return the normalized SQL text carried by the dataset-centric request.
+
+        Why this exists:
+        - Service code should execute one trimmed SQL string without duplicating
+          normalization logic.
+
+        How to use:
+        - Use `request.sql_text` in the execution service.
+        """
+
+        return self.sql.strip()
 
 
 class RawSQLResponse(BaseModel):
-    db_name: str
     sql_query: str
-    rows: Optional[List[dict]] = []
+    rows: list[dict] = Field(default_factory=list)
     error: Optional[str] = None
-
-
-class TabularDatasetMetadata(BaseModel):
-    document_name: str
-    title: str
-    description: Optional[str] = ""
-    tags: List[str] = []
-    domain: Optional[str] = ""
-    row_count: Optional[int] = None
-
-
-# -- Aggregation Models --
-
-
-class Precision(str, Enum):
-    sec = "sec"
-    min = "min"
-    hour = "hour"
-    day = "day"
-    all = "all"  # for global (non-bucketed) aggregations
-
-
-class Aggregation(str, Enum):
-    min = "MIN"
-    max = "MAX"
-    count = "COUNT"
-    count_distinct = "COUNT_DISTINCT"
-    avg = "AVG"
-    sum = "SUM"
-
-
-class AggregatedBucket(BaseModel):
-    time_bucket: str
-    values: Dict[str, Any]
-    groupby_fields: Optional[Dict[str, Any]] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def extract_groupby_fields(cls, values):
-        if "groupby_fields" not in values:
-            reserved = {"time_bucket", "values"}
-            groupby = {k: v for k, v in values.items() if k not in reserved}
-            if groupby:
-                values["groupby_fields"] = groupby
-        return values
-
-
-class TabularAggregationResponse(BaseModel):
-    buckets: List[AggregatedBucket]
+    dataset_uids: list[str] = Field(default_factory=list)
+    query_aliases: list[str] = Field(default_factory=list)

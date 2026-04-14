@@ -26,7 +26,7 @@ The agent is invoked in-process using the same V2 runtime that the server uses.
 No WebSocket, no session management, no Agentic API token needed.
 
 The only external dependency is the Knowledge Flow server (for the MCP tools
-`knowledge.tabular.get_context` and `knowledge.tabular.read_query`).
+`knowledge.tabular.list_tabular_datasets` and `knowledge.tabular.read_query`).
 Set AGENTIC_TOKEN in config/.env if your KF server requires a Bearer token.
 
 MANUAL USAGE
