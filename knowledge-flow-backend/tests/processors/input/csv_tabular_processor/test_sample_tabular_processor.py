@@ -30,8 +30,10 @@ def test_valid_csv():
 
     assert processor.check_file_validity(temp_path)
     preview = processor.render_markdown_preview(temp_path, max_rows=20, max_cols=10)
-    assert "| name | age |" in preview
-    assert "| Alice | 30 |" in preview
+    assert "name" in preview
+    assert "age" in preview
+    assert "Alice" in preview
+    assert "30" in preview
 
     metadata = processor.extract_file_metadata(temp_path)
     assert metadata["num_columns"] == 2
@@ -61,10 +63,22 @@ def test_render_markdown_preview_marks_truncation(tmp_path):
 
     preview = processor.render_markdown_preview(csv_path, max_rows=1, max_cols=2)
 
-    assert "| name | age |" in preview
-    assert "| Alice | 30 |" in preview
+    assert "name" in preview
+    assert "age" in preview
+    assert "Alice" in preview
+    assert "30" in preview
     assert "city" not in preview
-    assert "… (table truncated)" in preview
+    assert "table truncated" in preview
+
+
+def test_render_markdown_preview_escapes_pipe_characters(tmp_path):
+    processor = CsvTabularProcessor()
+    csv_path = tmp_path / "input.csv"
+    csv_path.write_text("name,notes\nAlice,a|b\n", encoding="utf-8")
+
+    preview = processor.render_markdown_preview(csv_path, max_rows=5, max_cols=5)
+
+    assert "a&#124;b" in preview
 
 
 def test_inspect_read_options_rejects_invalid_csv_path(tmp_path):

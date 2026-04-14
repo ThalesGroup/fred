@@ -19,6 +19,7 @@ from typing import BinaryIO, Tuple
 
 import pandas as pd
 from fred_core import Action, KeycloakUser, Resource, authorize
+from tabulate import tabulate
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
@@ -73,7 +74,14 @@ class ContentService:
         - Pass a small preview DataFrame, typically already limited to the
           desired row count.
         """
-        preview_str = df.to_markdown(index=False, tablefmt="github")
+
+        def _format_cell(value: object) -> str:
+            text = "" if value is None else str(value)
+            return text.replace("|", "&#124;").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+
+        formatted_headers = [_format_cell(name) for name in df.columns.tolist()]
+        formatted_rows = [[_format_cell(cell) for cell in row] for row in df.itertuples(index=False, name=None)]
+        preview_str = tabulate(formatted_rows, headers=formatted_headers, tablefmt="github")
         if preview_str is None or preview_str.strip() == "":
             return "_(The CSV file is empty or has no data to display)_"
         return preview_str

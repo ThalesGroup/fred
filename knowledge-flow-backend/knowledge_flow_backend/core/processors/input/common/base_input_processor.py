@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import duckdb
+from tabulate import tabulate
 
 from knowledge_flow_backend.common.document_structures import (
     DocumentMetadata,
@@ -361,15 +362,14 @@ class BaseTabularProcessor(BaseInputProcessor):
 
         def _format_cell(value: object) -> str:
             text = "" if value is None else str(value)
-            return text.replace("|", "\\|").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+            return text.replace("|", "&#124;").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
-        lines = [
-            "",
-            "| " + " | ".join(_format_cell(name) for name in column_names) + " |",
-            "| " + " | ".join("---" for _ in column_names) + " |",
-        ]
-        lines.extend("| " + " | ".join(_format_cell(cell) for cell in row) + " |" for row in rows)
+        formatted_headers = [_format_cell(name) for name in column_names]
+        formatted_rows = [[_format_cell(cell) for cell in row] for row in rows]
+        markdown_table = tabulate(formatted_rows, headers=formatted_headers, tablefmt="github")
+
+        lines = ["", markdown_table]
         if truncated:
-            lines.append("… (table truncated)")
+            lines.append("... (table truncated)")
         lines.append("")
         return "\n".join(lines) + "\n"
