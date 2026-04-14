@@ -40,21 +40,25 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
         with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
             working_dir = pathlib.Path(tmpdir)
             output_dir = working_dir / "output"
+            document_name = metadata.document_name
 
             # For both push and pull, restore what was saved (input/output)
             await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Locate preview file
-            preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
-            if ApplicationContext.get_instance().is_tabular_file(preview_file.name):
+            is_tabular_document = ApplicationContext.get_instance().is_tabular_file(document_name)
+            if is_tabular_document:
                 output_stage = ProcessingStage.SQL_INDEXED
+                file_name_for_processing = document_name
             else:
+                preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
                 output_stage = ProcessingStage.VECTORIZED
+                file_name_for_processing = preview_file.name
 
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
             await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
-            if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
+            if not is_tabular_document:
                 from knowledge_flow_backend.common.structures import InMemoryVectorStorage
 
                 vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
@@ -68,7 +72,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
             metadata = await asyncio.to_thread(
                 ingestion_service.process_output,
                 file.processed_by,
-                preview_file.name,
+                file_name_for_processing,
                 output_dir,
                 metadata,
                 file.profile,

@@ -282,22 +282,25 @@ storage:
     type: "postgres"
   task_store:
     type: "postgres"
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
   vector_store:
     type: chroma
-  tabular_stores:
-    base_database: # Minimal configuration to enable CSV document ingestion
-      type: "sql"
-      driver: "duckdb"
-      database: "base_database"
-      path: "~/.fred/knowledge-flow/db.duckdb"
-      mode: "read_and_write"
 
 integrations:
   prometheus:
     base_url: http://localhost:9090
     verify_ssl: false
     timeout_seconds: 15.0
-    username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
+    username: admin # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
 
 mcp:
   reports_enabled: true

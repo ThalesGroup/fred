@@ -268,17 +268,6 @@ crossencoder_model:
       keepalive_expiry_seconds: 10
 
 storage:
-  tabular_stores:
-    base_database:
-      type: "sql"
-      mode: "read_and_write"
-      driver: "postgresql+psycopg2"
-      host: "localhost"
-      port: 5432
-      database: "data"
-      path: null # (important: remove the `path` default value)
-      username: "tabular"
-
   postgres:
     host: localhost
     port: 5432
@@ -318,6 +307,16 @@ storage:
     type: "postgres"
   task_store:
     type: "postgres"
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
 
   vector_store:
     type: opensearch

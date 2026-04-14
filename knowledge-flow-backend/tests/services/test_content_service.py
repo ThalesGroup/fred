@@ -1,5 +1,6 @@
 import asyncio
 
+import pandas as pd
 import pytest
 from fred_core import KeycloakUser
 
@@ -77,6 +78,17 @@ class _ContentStoreStub:
         raise FileNotFoundError(doc_path)
 
 
+class _TabularPreviewServiceStub:
+    def __init__(self, frame: pd.DataFrame):
+        self.frame = frame
+        self.calls: list[tuple[str, int]] = []
+
+    async def read_dataset_preview_frame(self, user, document_uid: str, *, max_rows: int = 200):
+        del user
+        self.calls.append((document_uid, max_rows))
+        return self.frame
+
+
 def test_get_markdown_preview_does_not_hit_store_when_preview_stage_not_ready(app_context):
     service = ContentService()
     metadata = _metadata(preview_status=ProcessingStatus.NOT_STARTED)
@@ -101,3 +113,77 @@ def test_get_markdown_preview_reads_output_when_preview_stage_is_done(app_contex
 
     assert result == "# Hello preview"
     assert content_store.preview_calls == ["doc-1/output/output.md"]
+
+
+def test_get_markdown_preview_reads_csv_from_tabular_artifact_without_table_csv(app_context):
+    service = ContentService()
+    metadata = _metadata(
+        file_name="sales.csv",
+        mime_type="text/csv",
+        preview_status=ProcessingStatus.NOT_STARTED,
+    )
+    metadata.processing.stages[ProcessingStage.SQL_INDEXED] = ProcessingStatus.DONE
+    metadata.extensions = {
+        "tabular_v1": {
+            "dataset_uid": "doc-1",
+            "object_key": "tabular/datasets/doc-1/rev/data.parquet",
+            "source_revision": "rev",
+            "format": "parquet",
+            "row_count": 2,
+            "columns": [],
+            "generated_at": "2026-04-13T10:00:00+00:00",
+            "file_size_bytes": 128,
+        }
+    }
+    content_store = _ContentStoreStub()
+    preview_service = _TabularPreviewServiceStub(
+        pd.DataFrame(
+            [
+                {"city": "Paris", "amount": 10},
+                {"city": "Lyon", "amount": 20},
+            ]
+        )
+    )
+    service.metadata_store = _MetadataStoreStub(metadata)
+    service.content_store = content_store
+    service._tabular_service = preview_service
+
+    result = asyncio.run(service.get_markdown_preview(_user(), "doc-1"))
+
+    assert "| city" in result
+    assert "| Paris" in result
+    assert content_store.preview_calls == []
+    assert preview_service.calls == [("doc-1", 200)]
+
+
+def test_get_markdown_preview_escapes_pipe_characters_from_tabular_artifact(app_context):
+    service = ContentService()
+    metadata = _metadata(
+        file_name="sales.csv",
+        mime_type="text/csv",
+        preview_status=ProcessingStatus.NOT_STARTED,
+    )
+    metadata.processing.stages[ProcessingStage.SQL_INDEXED] = ProcessingStatus.DONE
+    metadata.extensions = {
+        "tabular_v1": {
+            "dataset_uid": "doc-1",
+            "object_key": "tabular/datasets/doc-1/rev/data.parquet",
+            "source_revision": "rev",
+            "format": "parquet",
+            "row_count": 1,
+            "columns": [],
+            "generated_at": "2026-04-13T10:00:00+00:00",
+            "file_size_bytes": 128,
+        }
+    }
+    content_store = _ContentStoreStub()
+    preview_service = _TabularPreviewServiceStub(pd.DataFrame([{"tags_csv": "alpha|beta|release"}]))
+    service.metadata_store = _MetadataStoreStub(metadata)
+    service.content_store = content_store
+    service._tabular_service = preview_service
+
+    result = asyncio.run(service.get_markdown_preview(_user(), "doc-1"))
+
+    assert "alpha&#124;beta&#124;release" in result
+    assert content_store.preview_calls == []
+    assert preview_service.calls == [("doc-1", 200)]

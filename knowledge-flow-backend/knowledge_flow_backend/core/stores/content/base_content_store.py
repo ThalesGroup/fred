@@ -170,6 +170,27 @@ class BaseContentStore(ABC):
         """
         pass
 
+    def put_file(self, key: str, file_path: Path, *, content_type: str) -> StoredObjectInfo:
+        """
+        Store one existing local file at `key`.
+
+        Why this exists:
+        - Large tabular artifacts should be uploaded directly from disk when the
+          backend already produced a local file.
+        - The default implementation preserves the existing `put_object(...)`
+          contract for stores that do not have a more efficient file-native API.
+
+        How to use:
+        - Pass the storage key and the local file path to upload.
+        - Override in concrete stores when they can avoid an extra Python-side
+          buffering step.
+
+        Example:
+        - `store.put_file("tabular/data.parquet", Path("/tmp/data.parquet"), content_type="application/vnd.apache.parquet")`
+        """
+        with file_path.open("rb") as stream:
+            return self.put_object(key, stream, content_type=content_type)
+
     @abstractmethod
     def get_object_stream(self, key: str, *, start: Optional[int] = None, length: Optional[int] = None) -> BinaryIO:
         """
@@ -225,3 +246,23 @@ class BaseContentStore(ABC):
             NotImplementedError: If the storage backend doesn't support presigned URLs
         """
         pass
+
+    def get_presigned_url_internal(self, key: str, expires: timedelta = timedelta(hours=1)) -> str:
+        """
+        Generate a presigned URL intended for backend-to-storage access.
+
+        Why this exists:
+        - Server-side runtimes such as tabular DuckDB queries should use the
+          storage endpoint that is cheapest and most direct from inside the
+          cluster, without changing browser-facing URL semantics.
+
+        How to use:
+        - Call from server-side code paths that need a temporary HTTP(S) object
+          URL.
+        - Concrete stores may override this helper to sign against an internal
+          endpoint while leaving `get_presigned_url(...)` browser-oriented.
+
+        Example:
+        - `store.get_presigned_url_internal("tabular/data.parquet", expires=timedelta(hours=1))`
+        """
+        return self.get_presigned_url(key, expires=expires)

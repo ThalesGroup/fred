@@ -8,7 +8,7 @@ Evaluation script for the **V2 SQL analyst graph agent** using [DeepEval](https:
 |---|---|---|
 | Agent invocation | Internal (`agent.ainvoke()`) | Real WebSocket stack |
 | Tests HTTP/auth | No | Yes |
-| Tests MCP tool calls | No | Yes (get_context, read_query) |
+| Tests MCP tool calls | No | Yes (list_tabular_datasets, read_query) |
 | Agent version | V1 | V2 graph |
 | Metrics | Faithfulness, Relevancy, Contextual* | AnswerRelevancy, SQL Correctness |
 
