@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from fred_core import OwnerFilter
+from fred_core.common import OwnerFilter
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
