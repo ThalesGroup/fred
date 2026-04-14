@@ -199,6 +199,8 @@ x-kf-storage: &kf-storage
       default_max_rows: 200
       max_rows: 1000
 x-kf-mcp: &kf-mcp
+  tabular_enabled: true
+  text_enabled: true
   prometheus_ops_enabled: true
 
 x-cp-scheduler: &cp-scheduler
@@ -405,7 +407,14 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
-
+        - id: "mcp-knowledge-flow-mcp-tabular"
+          name: "mcp.servers.tabular.name"
+          description: "mcp.servers.tabular.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
