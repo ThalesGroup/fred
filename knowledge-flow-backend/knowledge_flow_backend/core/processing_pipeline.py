@@ -217,9 +217,7 @@ class ProcessingPipeline:
                 input_path=input_path,
                 processor_name=processor.__class__.__name__,
             )
-        elif isinstance(processor, BaseTabularProcessor):
-            processor.write_table_preview(input_path, output_dir)
-        else:
+        elif not isinstance(processor, BaseTabularProcessor):
             raise RuntimeError(f"Unknown input processor type for: {input_path}")
 
     def process_output(self, input_file_name: str, output_dir: pathlib.Path, input_file_metadata: DocumentMetadata) -> DocumentMetadata:

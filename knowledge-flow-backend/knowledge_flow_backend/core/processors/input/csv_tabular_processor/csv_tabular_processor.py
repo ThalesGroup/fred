@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import duckdb
-import pandas as pd
 
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseTabularProcessor
 
@@ -34,11 +33,12 @@ class CsvReadOptions:
 
     Why this exists:
     - Large CSV processing should discover delimiter and encoding once, then
-      feed those settings to DuckDB or pandas without reimplementing detection.
+      feed those settings to DuckDB-backed readers without reimplementing
+      detection.
 
     How to use:
     - Build it with `CsvTabularProcessor.inspect_read_options(...)`.
-    - Reuse the returned values when opening the CSV in DuckDB or pandas.
+    - Reuse the returned values when opening the CSV through DuckDB.
 
     Example:
     - `options = processor.inspect_read_options(Path("/tmp/data.csv"))`
@@ -51,17 +51,19 @@ class CsvReadOptions:
 
 class CsvTabularProcessor(BaseTabularProcessor):
     """
-    CSV input processor that can either inspect or fully materialize one CSV.
+    CSV input processor for Parquet-backed tabular ingestion.
 
     Why this exists:
-    - The ingestion pipeline needs cheap CSV inspection for metadata and
-      preview generation, while some lightweight markdown flows still expect a
-      pandas DataFrame.
+    - The tabular ingestion flow needs cheap CSV inspection before the output
+      processor converts the source file to Parquet.
+    - Lightweight Markdown previews should reuse the same DuckDB-readable
+      source relation instead of building a separate pandas-based flow.
 
     How to use:
-    - Use `inspect_read_options(...)` for scalable tabular ingestion.
-    - Use `convert_file_to_table(...)` only for flows that explicitly need a
-      pandas DataFrame.
+    - Use `inspect_read_options(...)` and `build_duckdb_read_relation_sql(...)`
+      for the scalable tabular flow.
+    - Use `render_markdown_preview(...)` when one bounded Markdown table is
+      needed from the same CSV source.
     """
 
     description = "Parses CSV files, detects delimiters/encodings, and exposes scalable read settings."
@@ -166,45 +168,29 @@ class CsvTabularProcessor(BaseTabularProcessor):
             "sample_columns": columns,
         }
 
-    def convert_file_to_table(self, file_path: Path) -> pd.DataFrame:
+    def build_duckdb_source_relation_sql(self, file_path: Path, *, sample_size: int | None = None) -> str:
         """
-        Load one CSV into pandas for lightweight preview-only code paths.
+        Return the DuckDB relation SQL for one CSV file.
 
         Why this exists:
-        - The lightweight CSV-to-Markdown processor still expects a pandas
-          DataFrame for truncation and `to_markdown(...)`.
+        - The tabular input processor and lightweight Markdown preview should
+          share the same DuckDB CSV reader contract as the Parquet output
+          processor.
 
         How to use:
-        - Prefer `inspect_read_options(...)` for scalable tabular ingestion.
-        - Use this method only when a pandas DataFrame is explicitly required.
-        """
-        options = self.inspect_read_options(file_path)
-        return pd.read_csv(
-            file_path,
-            sep=options.delimiter,
-            encoding=options.encoding,
-            engine="python",
-        )
-
-    def write_table_preview(self, file_path: Path, output_dir: Path) -> Path | None:
-        """
-        Skip storing a duplicated CSV preview during the input stage.
-
-        Why this exists:
-        - The tabular runtime now derives previews from the indexed Parquet
-          artifact at read time.
-        - Persisting `output/table.csv` would duplicate the ingested data next
-          to the generated Parquet artifact for no benefit.
-
-        How to use:
-        - Pass the original CSV path and the ingestion output directory.
-        - The method returns `None` because no preview file is written during
-          the input stage.
+        - Pass the CSV file path and optional `sample_size`.
+        - The method inspects delimiter/encoding once and returns a relation
+          SQL fragment suitable for `SELECT * FROM ...`.
 
         Example:
-        - `assert processor.write_table_preview(Path("/tmp/data.csv"), Path("/tmp/output")) is None`
+        - `sql = processor.build_duckdb_source_relation_sql(Path("/tmp/data.csv"), sample_size=-1)`
         """
-        return None
+        options = self.inspect_read_options(file_path)
+        return self.build_duckdb_read_relation_sql(
+            file_path,
+            options,
+            sample_size=sample_size,
+        )
 
     def _validate_duckdb_read(self, path: Path, *, delimiter: str, encoding: str) -> None:
         """

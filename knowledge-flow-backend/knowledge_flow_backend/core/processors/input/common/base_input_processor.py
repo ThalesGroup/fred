@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import pandas  # kept because BaseTabularProcessor references it
+import duckdb
 
 from knowledge_flow_backend.common.document_structures import (
     DocumentMetadata,
@@ -259,29 +259,117 @@ class BaseMarkdownProcessor(BaseInputProcessor):
 
 
 class BaseTabularProcessor(BaseInputProcessor):
-    """For processors that convert to structured tabular format (e.g., SQL rows)."""
+    """
+    Base class for tabular input processors backed by DuckDB-readable sources.
 
-    @abstractmethod
-    def convert_file_to_table(self, file_path: Path) -> pandas.DataFrame:
-        pass
+    Why this exists:
+    - The input stage only needs to recognize that one file belongs to the
+      tabular ingestion flow.
+    - Tabular processors no longer promise a pandas DataFrame preview or an
+      `output/table.csv` artifact during input processing.
+    - The shared tabular preview path should reuse the same DuckDB-readable
+      source description that the Parquet output stage already relies on.
 
-    def write_table_preview(self, file_path: Path, output_dir: Path) -> Path | None:
+    How to use:
+    - Subclass it for processors whose real output is produced later by a
+      tabular output processor, typically as a Parquet artifact.
+    - Override `build_duckdb_source_relation_sql(...)` when the processor can
+      expose a DuckDB relation for bounded preview rendering.
+    """
+
+    def build_duckdb_source_relation_sql(self, file_path: Path, *, sample_size: int | None = None) -> str:
         """
-        Optionally materialize a tabular preview asset during the input stage.
+        Return the DuckDB relation SQL that reads one tabular source file.
 
         Why this exists:
-        - Some tabular processors may want to persist a lightweight preview
-          artifact during the input stage.
-        - Other tabular runtimes can generate previews later from their indexed
-          artifact and therefore do not need to store anything under
-          `output_dir`.
+        - The Parquet output stage and lightweight preview flows should share
+          the same source relation contract instead of materializing pandas
+          DataFrames during input processing.
 
         How to use:
-        - Pass the original local file path and the ingestion output directory.
-        - Return the created preview path when one exists.
-        - Return `None` when preview rendering is deferred to a later stage.
+        - Override this method in tabular processors that can expose their
+          source file through DuckDB.
+        - Return only a relation SQL fragment suitable for `SELECT * FROM ...`.
 
         Example:
-        - `preview_path = processor.write_table_preview(Path("/tmp/data.csv"), Path("/tmp/output"))`
+        - `sql = processor.build_duckdb_source_relation_sql(Path("/tmp/data.csv"), sample_size=-1)`
         """
-        return None
+        raise NotImplementedError(f"{self.__class__.__name__} does not expose a DuckDB tabular source relation.")
+
+    def render_markdown_preview(self, file_path: Path, *, max_rows: int, max_cols: int) -> str:
+        """
+        Render a bounded markdown preview from one DuckDB-readable tabular file.
+
+        Why this exists:
+        - Lightweight CSV previews should reuse the same DuckDB-oriented
+          ingestion path as the Parquet pipeline instead of loading the full
+          source into pandas memory.
+
+        How to use:
+        - Pass the local source file path and the desired row/column limits.
+        - The preview is read directly from the source relation and never
+          persists `output/table.csv`.
+
+        Example:
+        - `markdown = processor.render_markdown_preview(Path("/tmp/data.csv"), max_rows=20, max_cols=10)`
+        """
+        visible_rows = max(0, max_rows)
+        visible_cols = max(0, max_cols)
+        if visible_rows == 0 or visible_cols == 0:
+            return "*Empty CSV*\n"
+
+        relation_sql = self.build_duckdb_source_relation_sql(file_path)
+        preview_limit = visible_rows + 1
+        connection = duckdb.connect(database=":memory:")
+        try:
+            preview_query = f"SELECT * FROM {relation_sql} LIMIT {preview_limit}"  # nosec B608
+            cursor = connection.execute(preview_query)
+            column_names = [str(description[0]) for description in (cursor.description or [])]
+            rows = cursor.fetchall()
+        finally:
+            connection.close()
+
+        if not rows or not column_names:
+            return "*Empty CSV*\n"
+
+        truncated_rows = len(rows) > visible_rows
+        truncated_cols = len(column_names) > visible_cols
+        visible_column_names = column_names[:visible_cols]
+        visible_data_rows = [tuple(row[:visible_cols]) for row in rows[:visible_rows]]
+        return self._rows_to_markdown_preview(
+            column_names=visible_column_names,
+            rows=visible_data_rows,
+            truncated=truncated_rows or truncated_cols,
+        )
+
+    @staticmethod
+    def _rows_to_markdown_preview(column_names: list[str], rows: list[tuple[object, ...]], *, truncated: bool) -> str:
+        """
+        Format one small tabular preview as GitHub-flavored Markdown.
+
+        Why this exists:
+        - Tabular previews should be rendered consistently whether they come
+          from raw source inspection or later Parquet-backed reads.
+
+        How to use:
+        - Pass already-bounded columns and rows.
+        - Set `truncated=True` when the caller intentionally omitted extra rows
+          or columns from the preview.
+        """
+        if not column_names:
+            return "*Empty CSV*\n"
+
+        def _format_cell(value: object) -> str:
+            text = "" if value is None else str(value)
+            return text.replace("|", "\\|").replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+
+        lines = [
+            "",
+            "| " + " | ".join(_format_cell(name) for name in column_names) + " |",
+            "| " + " | ".join("---" for _ in column_names) + " |",
+        ]
+        lines.extend("| " + " | ".join(_format_cell(cell) for cell in row) + " |" for row in rows)
+        if truncated:
+            lines.append("… (table truncated)")
+        lines.append("")
+        return "\n".join(lines) + "\n"

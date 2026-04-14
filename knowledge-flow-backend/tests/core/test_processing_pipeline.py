@@ -1,6 +1,4 @@
 from pathlib import Path
-
-import pandas as pd
 import pytest
 
 from knowledge_flow_backend.common.document_structures import (
@@ -41,12 +39,6 @@ class NoPreviewTabularProcessor(BaseTabularProcessor):
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         return {"document_name": file_path.name}
-
-    def convert_file_to_table(self, file_path: Path) -> pd.DataFrame:
-        return pd.DataFrame({"city": ["Paris"]})
-
-    def write_table_preview(self, file_path: Path, output_dir: Path) -> Path | None:
-        return None
 
 
 class CapturingOutputProcessor(BaseOutputProcessor):

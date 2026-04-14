@@ -16,7 +16,6 @@
 import tempfile
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from knowledge_flow_backend.core.processors.input.csv_tabular_processor.csv_tabular_processor import CsvTabularProcessor
@@ -30,9 +29,9 @@ def test_valid_csv():
         temp_path = Path(f.name)
 
     assert processor.check_file_validity(temp_path)
-    df = processor.convert_file_to_table(temp_path)
-    assert isinstance(df, pd.DataFrame)
-    assert df.shape == (2, 2)
+    preview = processor.render_markdown_preview(temp_path, max_rows=20, max_cols=10)
+    assert "| name | age |" in preview
+    assert "| Alice | 30 |" in preview
 
     metadata = processor.extract_file_metadata(temp_path)
     assert metadata["num_columns"] == 2
@@ -55,16 +54,17 @@ def test_inspect_read_options_supports_non_utf8_csv():
     temp_path.unlink()
 
 
-def test_write_table_preview_does_not_persist_duplicate_csv(tmp_path):
+def test_render_markdown_preview_marks_truncation(tmp_path):
     processor = CsvTabularProcessor()
     csv_path = tmp_path / "input.csv"
-    csv_path.write_text("name,age\nAlice,30\n", encoding="utf-8")
-    output_dir = tmp_path / "output"
+    csv_path.write_text("name,age,city\nAlice,30,Paris\nBob,25,Lyon\n", encoding="utf-8")
 
-    table_path = processor.write_table_preview(csv_path, output_dir)
+    preview = processor.render_markdown_preview(csv_path, max_rows=1, max_cols=2)
 
-    assert table_path is None
-    assert not (output_dir / "table.csv").exists()
+    assert "| name | age |" in preview
+    assert "| Alice | 30 |" in preview
+    assert "city" not in preview
+    assert "… (table truncated)" in preview
 
 
 def test_inspect_read_options_rejects_invalid_csv_path(tmp_path):
