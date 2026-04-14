@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, Path, status
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, TeamPermission, get_current_user
-from fred_core.common import TeamId
+from fred_core.common import PERSONAL_TEAM_ID
 from pydantic import BaseModel
 
 from control_plane_backend.teams_structures import (
@@ -104,7 +104,7 @@ async def get_user_details(
 ) -> UserDetails:
     return UserDetails(
         personalTeam=TeamWithPermissions(
-            id=TeamId("personal"),
+            id=PERSONAL_TEAM_ID,
             name="Equipe personnelle",
             member_count=1,
             is_private=True,
