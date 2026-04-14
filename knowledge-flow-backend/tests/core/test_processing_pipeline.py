@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import pytest
 
 from knowledge_flow_backend.common.document_structures import (
