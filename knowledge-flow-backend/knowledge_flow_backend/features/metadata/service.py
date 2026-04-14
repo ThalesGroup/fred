@@ -34,8 +34,12 @@ from knowledge_flow_backend.common.structures import (
     OpenSearchVectorIndexConfig,
     PgVectorStorageConfig,
 )
-from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.core.stores.metadata.base_metadata_store import MetadataDeserializationError
+from knowledge_flow_backend.features.tabular.artifacts import (
+    TABULAR_EXTENSION_KEY,
+    document_artifact_prefix,
+    read_tabular_artifact,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +95,6 @@ class MetadataService:
         context = ApplicationContext.get_instance()
         self.config = context.get_config()
         self.metadata_store = context.get_metadata_store()
-        self.csv_input_store = None
         self.vector_store = None
         self.content_store = context.get_content_store()
         self.rebac = context.get_rebac_engine()
@@ -375,25 +378,8 @@ class MetadataService:
                     logger.warning(f"[GRAPH] Could not initialize vector store for graph: {e}")
             return self.vector_store
 
-        def ensure_tabular_store():
-            if self.csv_input_store is None:
-                try:
-                    self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
-                except Exception as e:
-                    logger.warning(f"[GRAPH] Could not initialize tabular store for graph: {e}")
-            return self.csv_input_store
-
         nodes: list[ProcessingGraphNode] = []
         edges: list[ProcessingGraphEdge] = []
-
-        # Pre-cache existing tables to avoid repeated roundtrips
-        csv_store = ensure_tabular_store()
-        existing_tables: set[str] = set()
-        if csv_store is not None:
-            try:
-                existing_tables = set(csv_store.list_tables())
-            except Exception as e:
-                logger.warning(f"[GRAPH] Failed to list tables from tabular store: {e}")
 
         # Vector backend info (for UI diagnostics)
         vector_backend: str | None = None
@@ -466,20 +452,9 @@ class MetadataService:
                 )
 
             # --- SQL table node (per-document) ------------------------------------
-            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and csv_store is not None:
-                table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
-                row_count: int | None = None
-
-                if table_name in existing_tables:
-                    try:
-                        # Use a lightweight COUNT(*) query to avoid loading full tables.
-                        # table_name is sanitized via sanitize_sql_name, so this is safe from SQL injection.
-                        df = csv_store.execute_sql_query(f'SELECT COUNT(*) AS n FROM "{table_name}"')  # nosec B608
-                        if not df.empty and "n" in df.columns:
-                            row_count = int(df["n"].iloc[0])
-                    except Exception as e:
-                        logger.warning(f"[GRAPH] Failed to count rows for table '{table_name}': {e}")
-
+            artifact = read_tabular_artifact(metadata)
+            if stages.get(ProcessingStage.SQL_INDEXED) == ProcessingStatus.DONE and artifact is not None:
+                table_name = artifact.dataset_uid
                 table_node_id = f"table:{table_name}"
                 nodes.append(
                     ProcessingGraphNode(
@@ -488,7 +463,7 @@ class MetadataService:
                         label=table_name,
                         document_uid=doc_uid,
                         table_name=table_name,
-                        row_count=row_count,
+                        row_count=artifact.row_count,
                     )
                 )
                 edges.append(
@@ -619,14 +594,7 @@ class MetadataService:
                         logger.warning(f"Could not delete vector of'{metadata.document_name}': {e}")
 
                 if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
-                    if self.csv_input_store is None:
-                        self.csv_input_store = ApplicationContext.get_instance().get_csv_input_store()
-                    table_name = sanitize_sql_name(metadata.document_name.rsplit(".", 1)[0])
-                    try:
-                        self.csv_input_store.delete_table(table_name)
-                        logger.info(f"[TABULAR] Deleted SQL table '{table_name}' linked to '{metadata.document_name}'")
-                    except Exception as e:
-                        logger.warning(f"Could not delete SQL table '{table_name}': {e}")
+                    await self._delete_tabular_artifacts(metadata)
 
                 # Promote an alternate version (version=1) to base if present
                 if getattr(metadata.identity, "version", 0) == 0:
@@ -667,6 +635,35 @@ class MetadataService:
         except Exception as e:
             logger.error(f"Failed to remove tag '{tag_id_to_remove}' from document '{metadata.document_name}': {e}")
             raise MetadataUpdateError(f"Failed to remove tag: {e}")
+
+    async def _delete_tabular_artifacts(self, metadata: DocumentMetadata) -> None:
+        """
+        Delete dataset-centric tabular artifacts linked to one document.
+
+        Why this exists:
+        - Removing the last visible tag from a document must also remove its
+          queryable Parquet revisions from the shared content store.
+
+        How to use:
+        - Call during destructive metadata cleanup paths only.
+        """
+
+        artifact = read_tabular_artifact(metadata)
+        if artifact is None:
+            logger.info("[TABULAR] No %s payload found for '%s'", TABULAR_EXTENSION_KEY, metadata.document_name)
+            return
+
+        prefix = document_artifact_prefix(
+            artifacts_prefix=self.config.storage.tabular_store.artifacts_prefix,
+            document_uid=metadata.document_uid,
+        )
+
+        try:
+            for stored_object in self.content_store.list_objects(prefix):
+                self.content_store.delete_object(stored_object.key)
+            logger.info("[TABULAR] Deleted tabular artifacts linked to '%s'", metadata.document_name)
+        except Exception as e:
+            logger.warning("Could not delete tabular artifacts for '%s': %s", metadata.document_name, e)
 
     @authorize(Action.UPDATE, Resource.DOCUMENTS)
     async def update_document_retrievable(self, user: KeycloakUser, document_uid: str, value: bool, modified_by: str) -> None:
@@ -716,8 +713,18 @@ class MetadataService:
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_document_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
         """
-        Save document metadata and update tag timestamps for any assigned tags.
-        This is an internal method only called by other services
+        Save document metadata, then finalize follow-up document maintenance.
+
+        Why this exists:
+        - Ingestion and document updates need one shared persistence path for
+          metadata, ReBAC parent links, and tag timestamps.
+        - Tabular re-ingestion must only prune superseded Parquet revisions
+          after the new metadata payload has been saved successfully.
+
+        How to use:
+        - Call from services that create or update one document metadata record.
+        - The method persists metadata first, then runs best-effort cleanup for
+          stale tabular artifacts linked to the saved document.
         """
         # Check if user has permissions to add document in all specified tags
         if metadata.tags:
@@ -733,10 +740,45 @@ class MetadataService:
             # Update tag timestamps for any tags assigned to this document
             if metadata.tags:
                 await self._update_tag_timestamps(user, metadata.tags.tag_ids)
+            await self._prune_stale_tabular_artifacts(metadata)
 
         except Exception as e:
             logger.error(f"Error saving metadata for {metadata.document_uid}: {e}")
             raise MetadataUpdateError(f"Failed to save metadata: {e}")
+
+    async def _prune_stale_tabular_artifacts(self, metadata: DocumentMetadata) -> None:
+        """
+        Keep only the saved tabular artifact revision for one document.
+
+        Why this exists:
+        - Re-ingestion should not delete the previous dataset revision before
+          the new metadata record has been persisted successfully.
+        - Running the cleanup after `save_metadata(...)` preserves the previous
+          readable dataset if metadata persistence fails mid-request.
+
+        How to use:
+        - Call only after the latest document metadata has been durably saved.
+        - Cleanup is best-effort and logs warnings instead of failing the save.
+        """
+
+        artifact = read_tabular_artifact(metadata)
+        if artifact is None:
+            return
+
+        prefix = document_artifact_prefix(
+            artifacts_prefix=self.config.storage.tabular_store.artifacts_prefix,
+            document_uid=metadata.document_uid,
+        )
+        try:
+            for stored_object in self.content_store.list_objects(prefix):
+                if stored_object.key != artifact.object_key:
+                    self.content_store.delete_object(stored_object.key)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Could not prune stale tabular artifacts for '%s': %s",
+                metadata.document_uid,
+                exc,
+            )
 
     async def _handle_tag_timestamp_updates(self, user: KeycloakUser, document_uid: str, new_tags: list[str]) -> None:
         """

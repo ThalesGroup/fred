@@ -194,17 +194,16 @@ x-kf-storage: &kf-storage
     level: "DEBUG"
   log_store:
     type: "in_memory"
-  tabular_stores:
-    base_database:
-      type: "sql"
-      mode: "read_and_write"
-      driver: "postgresql+psycopg2"
-      host: "postgres"
-      port: 5432
-      database: "data"
-      path: null
-      username: "tabular"
-
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
 x-kf-mcp: &kf-mcp
   prometheus_ops_enabled: true
 
@@ -254,7 +253,7 @@ applications:
   # ===========================================================================
   agentic-backend:
     image:
-        tag: "0.1" 
+      tag: "0.1"
     # -------------------------------------------------------------------------
     # Agentic Backend — Application Configuration
     # -------------------------------------------------------------------------
