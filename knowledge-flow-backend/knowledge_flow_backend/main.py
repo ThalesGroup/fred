@@ -227,7 +227,7 @@ def create_app() -> FastAPI:
     ModelController(router)
     ContentController(router)
     AssetController(router)
-    WorkspaceStorageController(router, public_base_url=configuration.app.public_base_url)
+    WorkspaceStorageController(router)
     IngestionController(router)
     TagController(app, router)
     VectorSearchController(router)

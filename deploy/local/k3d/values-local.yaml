@@ -547,8 +547,6 @@ applications:
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
     configuration:
-      app:
-        public_base_url: "http://localhost:8088"
       security:        *kf-security
       scheduler:       *kf-scheduler
       content_storage: *kf-content-storage
