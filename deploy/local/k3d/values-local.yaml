@@ -168,22 +168,16 @@ x-kf-storage: &kf-storage
     username: admin
   catalog_store:
     type: "postgres"
-    table: catalog
   prompt_store:
     type: "postgres"
-    table: prompt
   resource_store:
     type: "postgres"
-    table: resource
   tag_store:
     type: "postgres"
-    table: tag
   metadata_store:
     type: "postgres"
-    table: metadata
   task_store:
     type: "postgres"
-    table: workflow_tasks
     prefix: "sched_"
   vector_store:
     type: opensearch
@@ -254,6 +248,8 @@ applications:
   agentic-backend:
     image:
       tag: "0.1"
+    migration:
+      enabled: false
     # -------------------------------------------------------------------------
     # Agentic Backend — Application Configuration
     # -------------------------------------------------------------------------
@@ -285,83 +281,6 @@ applications:
           read: 60
         recursion:
           recursion_limit: 40
-        agents:
-          - id: "Georges"
-            name: "Georges"
-            type: "agent"
-            class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-            enabled: true
-            chat_options:
-              attach_files: false
-          - id: "Rico"
-            name: "Rico"
-            type: "agent"
-            class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-            enabled: true
-            chat_options:
-              search_policy_selection: true
-              libraries_selection: true
-              search_rag_scoping: true
-              deep_search_delegate: false
-              attach_files: true
-              include_corpus_in_search: true
-          - id: "Tessa"
-            name: "Tessa"
-            type: "agent"
-            class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
-            enabled: true
-          - id: "Spot"
-            name: "Spot"
-            type: "agent"
-            class_path: "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
-            enabled: true
-
-      mcp:
-        servers:
-          - id: "mcp-knowledge-flow-mcp-text"
-            name: "mcp.servers.search_documents.name"
-            description: "mcp.servers.search_documents.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-mcp-tabular"
-            name: "mcp.servers.tabular.name"
-            description: "mcp.servers.tabular.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-opensearch-ops"
-            name: "mcp.servers.search_opensearch.name"
-            description: "mcp.servers.search_opensearch.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-prometheus-ops"
-            name: "mcp.servers.prometheus.name"
-            description: "mcp.servers.prometheus.description"
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-prometheus-ops"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-fs"
-            name: "mcp.servers.filesystem.name"
-            description: "mcp.servers.filesystem.description"
-            enabled: true
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
-          - id: "mcp-knowledge-flow-corpus"
-            name: "mcp.servers.corpus.name"
-            description: "mcp.servers.corpus.description"
-            enabled: true
-            transport: "streamable_http"
-            url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
-            sse_read_timeout: 2000
-            auth_mode: "user_token"
 
       storage:
         postgres:
@@ -373,25 +292,18 @@ applications:
           host: https://opensearch:9200
         feedback_store:
           type: "postgres"
-          table: feedbacks
         agent_store:
           type: "postgres"
-          table: agent
         mcp_servers_store:
           type: "postgres"
-          table: mcp-server
         session_store:
           type: "postgres"
-          table: session
         attachments_store:
           type: "postgres"
-          table: session_attachments
         history_store:
           type: "postgres"
-          table: session_history
         task_store:
           type: "postgres"
-          table: tasks
         kpi_store:
           type: "log"
           level: "DEBUG"
@@ -411,13 +323,24 @@ applications:
     agents_catalog:
       version: v1
       agents:
-        - id: "Georges"
-          name: "Georges"
+        - id: "Rico"
+          name: "Rico"
           type: "agent"
-          class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
+          class_path: "agentic_backend.agents.v1.production.rags.rag_expert.Rico"
           enabled: true
           chat_options:
-            attach_files: false
+            search_policy_selection: true
+            libraries_selection: true
+            search_rag_scoping: true
+            deep_search_delegate: false
+            attach_files: true
+            include_corpus_in_search: true
+        - id: "Tessa"
+          name: "Tessa"
+          type: "agent"
+          class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
+          enabled: true
+
 
     # -------------------------------------------------------------------------
     # Agentic Backend — Models catalog (overrides default: only default profile)
@@ -542,6 +465,8 @@ applications:
   knowledge-flow-backend:
     image:
       tag: "0.1"
+    migration:
+      enabled: false
     # -------------------------------------------------------------------------
     # Knowledge Flow Backend — Application Configuration
     # -------------------------------------------------------------------------
@@ -610,6 +535,8 @@ applications:
   control-plane-backend:
     image:
       tag: "0.1"
+    migration:
+      enabled: false
     configuration:
       security:  *kf-security
       scheduler: *cp-scheduler
