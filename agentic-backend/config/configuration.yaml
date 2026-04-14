@@ -72,6 +72,8 @@ frontend_settings:
     showAgentCode: false
     defaultTeamBannerFile: "default-team-banner-prism.png"
     defaultTeamAvatarFile: "default-team-avatar-prism.png"
+    defaultPersonalBannerFile: "default-personal-banner.png"
+    defaultPersonalAvatarFile: "default-personal-banner.png"
 
 ai:
   # In production  activate the configuration persistence mechanism

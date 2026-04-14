@@ -25,8 +25,15 @@ x-common-security: &common-security
     - "https://prism-ui-int.six.cloud.thales"
   rebac:
     enabled: true
-    type: openfga
-    api_url: "http://openfga:8080"
+
+x-common-postgres: &common-postgres
+  host: "postgresql-primary"
+  port: 5432
+  database: fred
+  username: fred
+
+x-common-opensearch: &common-opensearch
+  host: https://prism-opensearch-prd.six.cloud.thales
 
 x-kf-scheduler: &kf-scheduler
   enabled: true
@@ -48,11 +55,8 @@ x-kf-content-storage: &kf-content-storage
   public_secure: true
 
 x-kf-filesystem: &kf-filesystem
-  type: minio
-  endpoint: http://minio:9000
-  access_key: "admin"
+  <<: *kf-content-storage
   bucket_name: "filesystem"
-  secure: false
 
 x-kf-embedding-model: &kf-embedding-model
   provider: "openai"
@@ -69,28 +73,18 @@ x-kf-chat-model: &kf-chat-model
     stream_usage: false
 
 x-kf-storage: &kf-storage
-  postgres: &int-postgres
-    host: "postgresql"
-    port: 5432
-    database: fred
-    username: fred
-  opensearch:
-    host: https://prism-opensearch-int.six.cloud.thales
+  postgres: *common-postgres
+  opensearch: *common-opensearch
   catalog_store:
     type: "postgres"
-    table: catalog
   prompt_store:
     type: "postgres"
-    table: prompt
   resource_store:
     type: "postgres"
-    table: resource
   tag_store:
     type: "postgres"
-    table: tag
   metadata_store:
     type: "postgres"
-    table: metadata
   kpi_store:
     type: "opensearch"
     index: kpi-index
@@ -103,10 +97,9 @@ x-kf-storage: &kf-storage
     index: log-index
   task_store:
     type: "postgres"
-    table: workflow-tasks
   tabular_stores:
     base_database:
-      <<: *int-postgres
+      <<: *common-postgres
       type: "sql"
       mode: read_and_write
       driver: "postgresql+psycopg2"
@@ -135,21 +128,12 @@ x-cp-scheduler: &cp-scheduler
     connect_timeout_seconds: 5
 
 x-cp-storage: &cp-storage
-  postgres:
-    host: "postgresql"
-    port: 5432
-    database: fred
-    username: fred
+  postgres:  *common-postgres
   session_store:
     type: postgres
-    table: session
-  purge_queue_table: session_purge_queue
-  content_storage:
-    type: minio
-    endpoint: http://minio:9000
-    access_key: "admin"
+  content_storage: 
+    <<: *kf-content-storage
     bucket_name: "control-plane-content"
-    secure: false
 
 x-ssl-extra-env-vars: &ssl-extra-env-vars
   - name: SSL_CERT_FILE
@@ -233,6 +217,8 @@ applications:
           showAgentDisableButton: false
           defaultTeamBannerFile: "default-team-banner-prism.png"
           defaultTeamAvatarFile: "default-team-avatar-prism.png"
+          defaultPersonalBannerFile: "default-personal-banner.png"
+          defaultPersonalAvatarFile: "default-personal-banner.png"
 
       scheduler:
         backend: "temporal"
@@ -248,31 +234,20 @@ applications:
         knowledge_flow_url: "https://prism-ui-int.six.cloud.thales/knowledge-flow/v1"
 
       storage:
-        postgres:
-          host: "postgresql"
-          port: 5432
-          database: fred
-          username: fred
-        opensearch:
-          host: https://prism-opensearch-int.six.cloud.thales
+        postgres: *common-postgres
+        opensearch: *common-opensearch
         feedback_store:
           type: "postgres"
-          table: feedbacks
         agent_store:
           type: "postgres"
-          table: agent
         mcp_servers_store:
           type: "postgres"
-          table: mcp-server
         session_store:
           type: "postgres"
-          table: session
         attachments_store:
           type: "postgres"
-          table: session_attachments
         history_store:
           type: "postgres"
-          table: session_history
         kpi_store:
           type: "opensearch"
           index: kpi-index
