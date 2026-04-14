@@ -4,7 +4,7 @@ Describe what changed and why.
 
 ## Mandatory Checklist
 
-- [ ] I followed [`docs/DEVELOPER_CONTRACT.md`](../docs/DEVELOPER_CONTRACT.md).
+- [ ] I followed [`docs/platform/DEVELOPER_CONTRACT.md`](../docs/platform/DEVELOPER_CONTRACT.md).
 - [ ] The change is minimal and avoids over-engineering.
 - [ ] I ran `make code-quality` in every touched project.
 - [ ] I ran `make test` in every touched project.

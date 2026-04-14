@@ -667,6 +667,14 @@ class StreamTranscoder:
                         continue
                     if partial_stream_rank is None:
                         partial_stream_rank = base_rank + seq
+                    # Only stream deltas once tool activity has been seen.
+                    # Before the first tool call, the model may stream reasoning text
+                    # ("I'm going to call X...") that would be visually replaced by
+                    # the tool call UI. Buffer it silently; it gets discarded when the
+                    # tool call resets partial_stream_text (line ~784), or flushed at
+                    # end-of-stream by the flush block below for no-tool agents.
+                    if not tool_activity_seen:
+                        continue
                     now = time.monotonic()
                     if now - last_partial_emit < self._stream_flush_interval_s:
                         continue

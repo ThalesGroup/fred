@@ -13,8 +13,10 @@ from knowledge_flow_backend.common.document_structures import (
 from knowledge_flow_backend.core.processing_pipeline import ProcessingPipeline
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import (
     BaseMarkdownProcessor,
+    BaseTabularProcessor,
     InputConversionError,
 )
+from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
 
 
 class FailingMarkdownProcessor(BaseMarkdownProcessor):
@@ -30,6 +32,23 @@ class FailingMarkdownProcessor(BaseMarkdownProcessor):
             "message": "simulated conversion failure",
             "md_file": None,
         }
+
+
+class NoPreviewTabularProcessor(BaseTabularProcessor):
+    def check_file_validity(self, file_path: Path) -> bool:
+        return True
+
+    def extract_file_metadata(self, file_path: Path) -> dict:
+        return {"document_name": file_path.name}
+
+
+class CapturingOutputProcessor(BaseOutputProcessor):
+    def __init__(self) -> None:
+        self.processed_paths: list[str] = []
+
+    def process(self, file_path: str, metadata: DocumentMetadata) -> DocumentMetadata:
+        self.processed_paths.append(file_path)
+        return metadata
 
 
 def _metadata_for(file_name: str) -> DocumentMetadata:
@@ -54,3 +73,41 @@ def test_process_input_raises_when_preview_is_missing(tmp_path: Path):
 
     with pytest.raises(InputConversionError, match="reported status='error'"):
         pipeline.process_input(input_path=input_file, output_dir=output_dir, metadata=metadata)
+
+
+def test_process_input_allows_tabular_processors_without_persisted_preview(tmp_path: Path):
+    input_file = tmp_path / "sales.csv"
+    input_file.write_text("city,amount\nParis,10\n", encoding="utf-8")
+
+    output_dir = tmp_path / "output"
+    metadata = _metadata_for(input_file.name)
+    pipeline = ProcessingPipeline(
+        name="test",
+        input_processors={".csv": NoPreviewTabularProcessor()},
+        output_processors={},
+    )
+
+    pipeline.process_input(input_path=input_file, output_dir=output_dir, metadata=metadata)
+
+    assert output_dir.exists()
+    assert list(output_dir.iterdir()) == []
+
+
+def test_process_output_uses_input_csv_when_tabular_output_has_no_preview_file(tmp_path: Path):
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    original_csv = input_dir / "sales.csv"
+    original_csv.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    processor = CapturingOutputProcessor()
+    pipeline = ProcessingPipeline(
+        name="test",
+        output_processors={".csv": [processor]},
+    )
+
+    pipeline.process_output("sales.csv", output_dir, _metadata_for("sales.csv"))
+
+    assert processor.processed_paths == [str(original_csv.resolve())]

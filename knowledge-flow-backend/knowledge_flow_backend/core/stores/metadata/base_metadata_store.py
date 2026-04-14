@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 from abc import abstractmethod
 from typing import List
 
@@ -60,6 +61,30 @@ class BaseMetadataStore:
         :raises MetadataDeserializationError: if stored data is malformed.
         """
         pass
+
+    async def get_metadata_by_uids(self, document_uids: list[str], session: AsyncSession | None = None) -> list[DocumentMetadata]:
+        """
+        Return metadata documents for one targeted document uid list.
+
+        Why this exists:
+        - Callers such as tabular authorization already know the candidate
+          document ids from ReBAC and should not have to scan the full metadata
+          catalog to resolve them.
+
+        How to use:
+        - Pass the document uids needed for one request.
+        - Concrete stores should override this method with one backend-native
+          batch query when they can do so efficiently.
+
+        Example:
+        - `docs = await metadata_store.get_metadata_by_uids(["doc-1", "doc-2"])`
+        """
+        unique_uids = list(dict.fromkeys(document_uids))
+        if not unique_uids:
+            return []
+
+        documents = await asyncio.gather(*(self.get_metadata_by_uid(document_uid, session=session) for document_uid in unique_uids))
+        return [document for document in documents if document is not None]
 
     @abstractmethod
     async def get_metadata_in_tag(self, tag_id: str, session: AsyncSession | None = None) -> List[DocumentMetadata]:

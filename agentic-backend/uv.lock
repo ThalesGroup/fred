@@ -4,7 +4,7 @@ requires-python = "==3.12.*"
 
 [[package]]
 name = "agentic-backend-app"
-version = "1.4.0+post"
+version = "1.4.1+post"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -865,7 +865,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "1.4.0+post"
+version = "1.4.1+post"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite" },

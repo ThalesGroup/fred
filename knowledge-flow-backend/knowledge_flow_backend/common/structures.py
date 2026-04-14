@@ -701,9 +701,85 @@ class StorageConfig(BaseModel):
         default=None,
         description="Task store backend (optional; scheduler may fall back to defaults).",
     )
-    tabular_stores: Optional[Dict[str, StoreConfig]] = Field(default=None, description="Optional tabular store")
+    tabular_store: "TabularStoreConfig" = Field(
+        default_factory=lambda: TabularStoreConfig(),  # type: ignore
+        description="Dataset-centric tabular runtime configuration backed by Parquet artifacts in content storage.",
+    )
     vector_store: VectorStorageConfig
     log_store: Optional[LogStorageConfig] = Field(default=None, description="Optional log store")
+
+
+class TabularQueryConfig(BaseModel):
+    """
+    Runtime settings for dataset-centric SQL queries.
+
+    Why this exists:
+    - Tabular querying now runs on transient Parquet datasets rather than
+      long-lived SQL tables.
+    - These values keep query execution bounded and configurable from YAML.
+
+    How to use:
+    - Keep the default `duckdb` engine.
+    - Tune result limits and backend-internal presigned URL TTL per deployment.
+    """
+
+    engine: Literal["duckdb"] = Field(
+        default="duckdb",
+        description="Embedded query engine used to read Parquet datasets.",
+    )
+    access_mode: Literal["presigned_url"] = Field(
+        default="presigned_url",
+        description="Primary object-access method for remote tabular artifacts.",
+    )
+    internal_presigned_ttl_seconds: int = Field(
+        default=3600,
+        ge=1,
+        description="TTL in seconds for backend-internal object-storage URLs used by tabular DuckDB reads.",
+    )
+    default_max_rows: int = Field(
+        default=200,
+        ge=1,
+        description="Default preview row limit applied when callers omit max_rows.",
+    )
+    max_rows: int = Field(
+        default=1000,
+        ge=1,
+        description="Hard cap applied to query result previews.",
+    )
+
+
+class TabularStoreConfig(BaseModel):
+    """
+    Dataset-centric tabular storage settings for the supported tabular runtime.
+
+    Why this exists:
+    - CSV ingestion persists one Parquet artifact per document in the shared
+      content store.
+    - One dedicated config block keeps object keys and query limits explicit.
+
+    How to use:
+    - Configure the block directly under `storage.tabular_store`.
+    - `artifacts_prefix` namespaces Parquet datasets under the shared
+      content-store object area.
+    - `format` is intentionally fixed to `parquet`.
+    """
+
+    artifacts_prefix: str = Field(
+        default="tabular/datasets",
+        description="Prefix under content_storage objects where Parquet datasets are stored.",
+    )
+    format: Literal["parquet"] = Field(
+        default="parquet",
+        description="Physical storage format used for tabular artifacts.",
+    )
+    compression: str = Field(
+        default="snappy",
+        description="Parquet compression codec used when persisting tabular artifacts.",
+    )
+    query: TabularQueryConfig = Field(
+        default_factory=TabularQueryConfig,
+        description="Runtime limits and access settings for tabular SQL queries.",
+    )
 
 
 # ---------- Agent filesystem config, used for listing, reading, creating & deleting files.  ---------- #
@@ -799,4 +875,54 @@ class Configuration(BaseModel):
             raise ValueError(
                 "Legacy root field 'input_processors' is no longer supported. Move processors under processing.profiles.<profile>.input_processors.",
             )
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_tabular_store_config(cls, values: object):
+        """
+        Validate the modern tabular-store configuration shape.
+
+        Why this exists:
+        - Tabular storage is now exposed through one single dataset-centric
+          `storage.tabular_store` block.
+        - The removed `storage.tabular_stores` key should fail loudly instead
+          of being silently ignored.
+
+        How to use:
+        - Configure `storage.tabular_store.artifacts_prefix`,
+          `storage.tabular_store.format`, `storage.tabular_store.compression`,
+          and `storage.tabular_store.query.*`.
+        - Omit `storage.tabular_store` only when you want the defaults.
+
+        Example:
+        ```yaml
+        content_storage:
+          type: local
+          root_path: ".fred/data/content"
+        storage:
+          tabular_store:
+            artifacts_prefix: "tabular/datasets"
+        ```
+        """
+
+        if not isinstance(values, dict):
+            return values
+
+        storage_value = values.get("storage")
+
+        if isinstance(storage_value, dict) and "tabular_stores" in storage_value and storage_value.get("tabular_stores") is not None:
+            raise ValueError(
+                "'storage.tabular_stores' is no longer supported. Configure tabular settings under 'storage.tabular_store'.",
+            )
+
+        if isinstance(storage_value, dict):
+            tabular_store_value = storage_value.get("tabular_store")
+            if isinstance(tabular_store_value, dict):
+                tabular_query_value = tabular_store_value.get("query")
+                if isinstance(tabular_query_value, dict) and "presigned_ttl_seconds" in tabular_query_value:
+                    raise ValueError(
+                        "'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported. Use 'storage.tabular_store.query.internal_presigned_ttl_seconds'.",
+                    )
+
         return values

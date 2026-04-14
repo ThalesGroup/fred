@@ -2,7 +2,7 @@
 # Evaluation configuration for the V2 SQL analyst agent.
 #
 # To run:   make eval-sql-agent          (from agentic-backend/)
-# Requires: Knowledge Flow server running (for MCP tools get_context / read_query)
+# Requires: Knowledge Flow server running (for MCP tools list_tabular_datasets / read_query)
 #           Set AGENTIC_TOKEN in config/.env if KF server requires auth.
 # ─────────────────────────────────────────────────────────────────────────────
 
