@@ -97,18 +97,21 @@ x-kf-storage: &kf-storage
     index: log-index
   task_store:
     type: "postgres"
-  tabular_stores:
-    base_database:
-      <<: *common-postgres
-      type: "sql"
-      mode: read_and_write
-      driver: "postgresql+psycopg2"
-      path: null
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
 
 x-kf-mcp: &kf-mcp
   reports_enabled: false
   kpi_enabled: false
-  tabular_enabled: false
+  tabular_enabled: true
   statistic_enabled: false
   text_enabled: true
   templates_enabled: false
@@ -285,6 +288,12 @@ applications:
         chat_options:
           libraries_selection: true
           attach_files: true
+
+      - id: "Tessa"
+        name: "Tessa"
+        type: "agent"
+        class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
+        enabled: true
       react_profiles: []
 
     # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
@@ -334,7 +343,14 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
-
+        - id: "mcp-knowledge-flow-mcp-tabular"
+          name: "mcp.servers.tabular.name"
+          description: "mcp.servers.tabular.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
   # ===========================================================================
   # FRONTEND
   # ===========================================================================

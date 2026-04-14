@@ -103,13 +103,16 @@ x-kf-storage: &kf-storage
     index: log-index
   task_store:
     type: "postgres"
-  tabular_stores:
-    base_database:
-      <<: *common-postgres
-      type: "sql"
-      mode: read_and_write
-      driver: "postgresql+psycopg2"
-      path: null
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
 
 x-kf-mcp: &kf-mcp
   reports_enabled: false
