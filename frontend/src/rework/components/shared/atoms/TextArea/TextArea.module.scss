@@ -51,21 +51,27 @@
 .label {
   padding-left: var(--spacing-xs);
   color: var(--label-color, var(--on-surface-retreat));
-
   font: var(--font-label-large);
 }
 
-.hint {
-  padding-left: var(--spacing-xs);
+.information {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--spacing-xs);
+  width: 100%;
   min-height: 1.25rem;
-  overflow: hidden;
   color: var(--on-surface-retreat);
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font: var(--font-body-medium);
 }
 
-.error .hint {
+.hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-wrap: nowrap;
+}
+
+.error .information {
   color: var(--error);
 }
 
@@ -74,7 +80,7 @@
 }
 
 .disabled .label,
-.disabled .hint {
+.disabled .information {
   color: var(--on-surface-retreat);
 }
 

@@ -20,7 +20,7 @@ export default function TeamAgentEmptyState({ onCreateAgent, canUpdateAgents }: 
         <span className={styles.teamAgentEmptyStateIcon}>
           <Icon category={"outlined"} type={agentIconName as IconType} filled={true} />
         </span>
-        <span>{t("rework.teams.agents.firstTitle", { agentsNicknameSingular })}</span>
+        <span>{t("rework.teams.agents.noAgent", { agentsNicknameSingular })}</span>
       </div>
       {canUpdateAgents && (
         <Button

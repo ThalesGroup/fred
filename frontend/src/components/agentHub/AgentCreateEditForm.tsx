@@ -37,7 +37,7 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
-import {AnyAgent} from "../../common/agent.ts";
+import { AnyAgent } from "../../common/agent.ts";
 
 type TopLevelTuningState = {
   role: string;

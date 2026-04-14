@@ -1,47 +1,29 @@
 import styles from "./TextInput.module.scss";
-import { ChangeEvent, ComponentPropsWithRef, useId, useState } from "react";
+import { ComponentPropsWithRef, useId } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 export interface TextInputProps extends ComponentPropsWithRef<"input"> {
   label?: string;
-  placeholder: string;
-  explication?: string;
+  explanation?: string;
   error?: string;
   icon?: IconProps;
   compact?: boolean;
-  maxLength?: number;
-  required?: boolean;
 }
 
 export default function TextInput({
   label,
-  placeholder,
-  explication,
+  explanation,
   error,
   icon,
   compact = false,
-  onChange,
-  maxLength = 0,
+  maxLength,
   value,
-  defaultValue,
-  required = false,
-  ref,
+  required,
   ...props
 }: TextInputProps) {
   const id = useId();
 
-  const initialValue = value ?? defaultValue ?? "";
-  const [characterCounter, setCharacterCounter] = useState(String(initialValue).length);
-
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (maxLength && e.target.value.length > maxLength) {
-      e.target.value = e.target.value.slice(0, maxLength);
-    }
-
-    setCharacterCounter(e.target.value.length);
-
-    if (onChange) onChange(e);
-  };
+  const characterCounter = String(value).length;
 
   return (
     <div
@@ -59,17 +41,17 @@ export default function TextInput({
         </span>
       )}
       <input
-        ref={ref}
         id={id}
         type={"text"}
-        placeholder={placeholder}
-        onChange={handleChange}
         value={value}
-        defaultValue={defaultValue}
+        maxLength={maxLength}
+        required={required}
+        autoComplete="off"
         {...props}
       />
-      <span className={styles.hint}>
-        {error || explication || (maxLength !== 0 && `${characterCounter} / ${maxLength}`) || null}
+      <span className={styles.information}>
+        <span className={styles.hint}>{error || explanation || null}</span>
+        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
       </span>
     </div>
   );

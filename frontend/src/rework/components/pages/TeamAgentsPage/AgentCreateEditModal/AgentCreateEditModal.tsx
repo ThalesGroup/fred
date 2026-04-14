@@ -53,7 +53,7 @@ export default function AgentCreateEditModal({
           <div className={styles.agentCreateEditModalPresentationTitle}>
             <div className={styles.agentCreateEditModalTitle}>
               {agent
-                ? t("rework.teams.formAgent.titleEdit", { agentsNicknameSingular })
+                ? t("rework.teams.formAgent.titleEdit", { agent: agent.name })
                 : t("rework.teams.formAgent.titleCreate", { agentsNicknameSingular })}
             </div>
             <div className={styles.agentCreateEditModalTeam}>{teamName}</div>

@@ -1409,11 +1409,12 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}",
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
+        "noAgent": "Aucun agent dans cette équipe !",
         "firstCreate": "Créer"
       },
       "formAgent": {
         "titleCreate": "Céer un nouvel {{agentsNicknameSingular}}",
-        "titleEdit": "Editer un {{agentsNicknameSingular}}",
+        "titleEdit": "Editer {{agent}}",
         "fields": {
           "name": {
             "placeholder": "Entrez un nom original",
