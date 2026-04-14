@@ -55,7 +55,7 @@ def test_inspect_read_options_supports_non_utf8_csv():
     temp_path.unlink()
 
 
-def test_write_table_preview_links_or_copies_csv(tmp_path):
+def test_write_table_preview_does_not_persist_duplicate_csv(tmp_path):
     processor = CsvTabularProcessor()
     csv_path = tmp_path / "input.csv"
     csv_path.write_text("name,age\nAlice,30\n", encoding="utf-8")
@@ -63,8 +63,8 @@ def test_write_table_preview_links_or_copies_csv(tmp_path):
 
     table_path = processor.write_table_preview(csv_path, output_dir)
 
-    assert table_path.read_text(encoding="utf-8") == csv_path.read_text(encoding="utf-8")
-    assert table_path.name == "table.csv"
+    assert table_path is None
+    assert not (output_dir / "table.csv").exists()
 
 
 def test_inspect_read_options_rejects_invalid_csv_path(tmp_path):

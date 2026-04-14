@@ -205,14 +205,44 @@ class TabularService:
             owner_filter=owner_filter,
             team_id=team_id,
         )
-        connection = duckdb.connect(database=":memory:")
-        try:
-            location = self._resolve_dataset_location(dataset.artifact.object_key)
-            if self._requires_httpfs(location):
-                self._ensure_httpfs_ready(connection)
-            return connection.from_parquet(location).df()
-        finally:
-            connection.close()
+        return self._load_dataset_frame(dataset=dataset)
+
+    @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
+    async def read_dataset_preview_frame(
+        self,
+        user: KeycloakUser,
+        document_uid: str,
+        *,
+        max_rows: int = 200,
+        document_library_tags_ids: list[str] | None = None,
+        owner_filter: OwnerFilter | None = None,
+        team_id: str | None = None,
+    ) -> pd.DataFrame:
+        """
+        Load only the first rows of one authorized dataset into pandas.
+
+        Why this exists:
+        - Document previews should reuse the indexed Parquet artifact instead
+          of persisting a duplicate `table.csv` copy in content storage.
+        - Preview endpoints need a bounded read that stays cheap for large
+          datasets.
+
+        How to use:
+        - Pass the current user and target dataset uid.
+        - Tune `max_rows` when a caller needs a smaller or larger tabular
+          preview window.
+        """
+        if max_rows < 1:
+            raise ValueError("max_rows must be greater than 0")
+
+        dataset = await self._get_dataset_or_raise(
+            user=user,
+            document_uid=document_uid,
+            document_library_tags_ids=document_library_tags_ids,
+            owner_filter=owner_filter,
+            team_id=team_id,
+        )
+        return self._load_dataset_frame(dataset=dataset, max_rows=max_rows)
 
     @authorize(action=Action.READ, resource=Resource.DOCUMENTS)
     async def query_read(
@@ -618,3 +648,37 @@ class TabularService:
             source_tag=dataset.metadata.source_tag,
             generated_at=dataset.artifact.generated_at,
         )
+
+    def _load_dataset_frame(
+        self,
+        *,
+        dataset: ResolvedDataset,
+        max_rows: int | None = None,
+    ) -> pd.DataFrame:
+        """
+        Read one dataset artifact from Parquet into a pandas DataFrame.
+
+        Why this exists:
+        - Full dataset reads and preview reads share the same object-location
+          resolution and DuckDB/httpfs setup.
+        - Keeping that logic in one helper avoids preview-specific drift.
+
+        How to use:
+        - Pass a resolved dataset from `_get_dataset_or_raise(...)`.
+        - Optionally set `max_rows` to limit the returned preview size.
+
+        Example:
+        - `frame = self._load_dataset_frame(dataset=dataset, max_rows=200)`
+        """
+        connection = duckdb.connect(database=":memory:")
+        try:
+            location = self._resolve_dataset_location(dataset.artifact.object_key)
+            if self._requires_httpfs(location):
+                self._ensure_httpfs_ready(connection)
+
+            relation = connection.from_parquet(location)
+            if max_rows is not None:
+                relation = relation.limit(max_rows)
+            return relation.df()
+        finally:
+            connection.close()

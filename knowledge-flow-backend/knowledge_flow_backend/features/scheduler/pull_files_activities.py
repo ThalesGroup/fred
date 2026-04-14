@@ -160,7 +160,8 @@ async def pull_input_process(
                 },
             )
 
-        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        if not ingestion_service.context.is_tabular_file(metadata.document_name):
+            metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
         await ingestion_service.save_metadata(user, metadata=metadata)
         logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
         return metadata

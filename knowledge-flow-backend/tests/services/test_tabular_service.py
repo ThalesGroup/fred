@@ -14,6 +14,8 @@ from knowledge_flow_backend.common.document_structures import (
     FileInfo,
     FileType,
     Identity,
+    ProcessingStage,
+    ProcessingStatus,
     SourceInfo,
     SourceType,
     Tagging,
@@ -285,6 +287,8 @@ async def test_tabular_processor_converts_csv_without_pandas_read_csv(tmp_path, 
     assert artifact.row_count == 2
     assert [column.name for column in artifact.columns] == ["city", "amount"]
     assert [column.dtype for column in artifact.columns] == ["string", "integer"]
+    assert processed_metadata.processing.stages[ProcessingStage.PREVIEW_READY] == ProcessingStatus.DONE
+    assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
 
 
 @pytest.mark.asyncio

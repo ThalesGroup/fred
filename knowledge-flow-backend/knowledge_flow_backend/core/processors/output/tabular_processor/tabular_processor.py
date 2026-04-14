@@ -98,8 +98,10 @@ class TabularProcessor(BaseOutputProcessor):
 
         How to use:
         - Pass the extracted CSV file path produced by the input stage.
-        - The returned metadata always marks `ProcessingStage.SQL_INDEXED` as
-          done and updates `metadata.extensions["tabular_v1"]`.
+        - The returned metadata marks `ProcessingStage.SQL_INDEXED` and
+          `ProcessingStage.PREVIEW_READY` as done because the Parquet artifact
+          can now serve tabular previews directly.
+        - The method updates `metadata.extensions["tabular_v1"]`.
         """
         try:
             logger.info("Processing tabular file %s for document %s", file_path, metadata.document_uid)
@@ -113,6 +115,7 @@ class TabularProcessor(BaseOutputProcessor):
             metadata.file.row_count = artifact.row_count
             write_tabular_artifact(metadata, artifact)
 
+            metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
             metadata.mark_stage_done(ProcessingStage.SQL_INDEXED)
             return metadata
 

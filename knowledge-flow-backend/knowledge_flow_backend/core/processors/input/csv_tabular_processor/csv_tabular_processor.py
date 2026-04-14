@@ -14,8 +14,6 @@
 
 import csv
 import logging
-import os
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -188,27 +186,25 @@ class CsvTabularProcessor(BaseTabularProcessor):
             engine="python",
         )
 
-    def write_table_preview(self, file_path: Path, output_dir: Path) -> Path:
+    def write_table_preview(self, file_path: Path, output_dir: Path) -> Path | None:
         """
-        Expose the CSV preview file with a link-first strategy.
+        Skip storing a duplicated CSV preview during the input stage.
 
         Why this exists:
-        - Large CSV ingestion should avoid creating a second full local copy
-          just to satisfy the `output/table.csv` preview contract.
+        - The tabular runtime now derives previews from the indexed Parquet
+          artifact at read time.
+        - Persisting `output/table.csv` would duplicate the ingested data next
+          to the generated Parquet artifact for no benefit.
 
         How to use:
         - Pass the original CSV path and the ingestion output directory.
-        - The method creates `output/table.csv`, preferring a hard link and
-          falling back to a regular copy when linking is not possible.
+        - The method returns `None` because no preview file is written during
+          the input stage.
+
+        Example:
+        - `assert processor.write_table_preview(Path("/tmp/data.csv"), Path("/tmp/output")) is None`
         """
-        output_dir.mkdir(parents=True, exist_ok=True)
-        table_path = output_dir / "table.csv"
-        table_path.unlink(missing_ok=True)
-        try:
-            os.link(file_path, table_path)
-        except OSError:
-            shutil.copy2(file_path, table_path)
-        return table_path
+        return None
 
     def _validate_duckdb_read(self, path: Path, *, delimiter: str, encoding: str) -> None:
         """
