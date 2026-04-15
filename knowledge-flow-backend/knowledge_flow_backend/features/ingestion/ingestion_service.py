@@ -119,8 +119,23 @@ class IngestionService:
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     def save_output(self, user: KeycloakUser, metadata: DocumentMetadata, output_dir: pathlib.Path) -> None:
+        """
+        Persist the input-stage output directory for one document.
+
+        Why this exists:
+        - Markdown flows still need their generated preview artifacts copied to
+          content storage after the input stage.
+        - Tabular flows may keep `output_dir` empty because previews are
+          derived later from the indexed Parquet artifact.
+
+        How to use:
+        - Pass the current user, document metadata, and local `output_dir`.
+        - The method marks `PREVIEW_READY` only when the input stage actually
+          produced a persisted preview artifact.
+        """
         self.content_store.save_output(metadata.document_uid, output_dir)
-        metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+        if not self.context.is_tabular_file(metadata.document_name):
+            metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
 
     @authorize(Action.CREATE, Resource.DOCUMENTS)
     async def save_metadata(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:

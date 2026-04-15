@@ -1,174 +1,171 @@
 import logging
-from typing import Any, Dict, List
+from typing import Annotated, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fred_core import Action, KeycloakUser, Resource, authorize_or_raise, get_current_user
+from fred_core.common import OwnerFilter
 
-from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import (
-    GetSchemaResponse,
-    ListTablesResponse,
-    RawSQLRequest,
     RawSQLResponse,
+    TabularDatasetResponse,
+    TabularDatasetSchemaResponse,
+    TabularQueryRequest,
 )
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 logger = logging.getLogger(__name__)
 
 
 class TabularController:
-    """API controller for tabular operations on multiple databases."""
+    """API controller for dataset-centric tabular operations."""
 
     def __init__(self, router: APIRouter):
-        self.context = ApplicationContext.get_instance()
-        stores = self.context.get_tabular_stores()
-        self.service = TabularService(stores)
+        self.service = TabularService()
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
         @router.get(
-            "/tabular/databases",
-            response_model=List[str],
+            "/tabular/datasets",
+            response_model=List[TabularDatasetResponse],
             tags=["Tabular"],
-            summary="List available databases",
-            operation_id="list_databases",
+            summary="List authorized tabular datasets",
+            operation_id="list_tabular_datasets",
         )
-        async def list_databases(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
-            try:
-                return self.service.list_databases(user)
-            except Exception as e:
-                logger.exception("Failed to list databases")
-                raise HTTPException(status_code=500, detail=str(e))
-
-        @router.get(
-            "/tabular/databases/{db_name}/tables",
-            response_model=ListTablesResponse,
-            tags=["Tabular"],
-            summary="List tables in a given database",
-            operation_id="list_tables",
-        )
-        async def list_tables(
-            db_name: str = Path(..., description="Database name"),
+        async def list_datasets(
+            document_library_tags_ids: Annotated[
+                list[str] | None,
+                Query(description="Optional library tag IDs used to keep datasets inside selected libraries."),
+            ] = None,
+            owner_filter: Annotated[
+                OwnerFilter | None,
+                Query(description="Optional ownership scope: 'personal' or 'team'."),
+            ] = None,
+            team_id: Annotated[
+                str | None,
+                Query(description="Team ID, required when owner_filter is 'team'."),
+            ] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
+            """
+            List every tabular dataset visible to the current user.
+
+            Why this exists:
+            - The public tabular REST surface is now document-scoped instead of
+              database-scoped.
+            - Team/personal and library scope must be enforced before dataset
+              aliases are exposed.
+
+            How to use:
+            - Call without parameters to retrieve every readable dataset.
+            - Pass `owner_filter`, `team_id`, and `document_library_tags_ids`
+              to stay inside the active area/library scope.
+            """
+
+            authorize_or_raise(user, Action.READ, Resource.DOCUMENTS)
             try:
-                return self.service.list_tables(user, db_name=db_name)
+                return await self.service.list_datasets(
+                    user,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
+            except MissingTeamIdError as e:
+                raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:
-                logger.exception(f"Failed to list tables for database {db_name}")
+                logger.exception("Failed to list tabular datasets")
                 raise HTTPException(status_code=500, detail=str(e))
 
         @router.get(
-            "/tabular/databases/{db_name}/schemas",
-            response_model=List[GetSchemaResponse],
+            "/tabular/datasets/{document_uid}/schema",
+            response_model=TabularDatasetSchemaResponse,
             tags=["Tabular"],
-            summary="List schemas of all tables in a given database",
-            operation_id="get_database_schemas",
+            summary="Describe one authorized tabular dataset",
+            operation_id="get_tabular_dataset_schema",
         )
-        async def list_schemas(
-            db_name: str = Path(..., description="Database name"),
+        async def describe_dataset(
+            document_uid: str = Path(..., description="Document UID of the dataset to describe"),
+            document_library_tags_ids: Annotated[
+                list[str] | None,
+                Query(description="Optional library tag IDs used to keep datasets inside selected libraries."),
+            ] = None,
+            owner_filter: Annotated[
+                OwnerFilter | None,
+                Query(description="Optional ownership scope: 'personal' or 'team'."),
+            ] = None,
+            team_id: Annotated[
+                str | None,
+                Query(description="Team ID, required when owner_filter is 'team'."),
+            ] = None,
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.list_tables_with_schema(user, db_name=db_name)
-            except Exception as e:
-                logger.exception(f"Failed to list schemas for database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+            """
+            Return the schema for one authorized tabular dataset.
 
-        @router.get(
-            "/tabular/databases/{db_name}/tables/{table_name}/descibe_table",
-            response_model=GetSchemaResponse,
-            tags=["Tabular"],
-            summary="Get schema of a specific table",
-            operation_id="describe_table",
-        )
-        async def describe_table(
-            db_name: str = Path(..., description="Database name"),
-            table_name: str = Path(..., description="Table name"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.describe_table(user, db_name=db_name, table_name=table_name)
-            except Exception as e:
-                logger.exception(f"Failed to get schema for {table_name} in database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+            Why this exists:
+            - Schema inspection must follow the same document-level access rules
+              as query execution.
+            - Team/personal and library scope must hide datasets outside the
+              active area.
 
-        @router.get(
-            "/tabular/context",
-            response_model=Dict[str, List[Dict[str, Any]]],
-            tags=["Tabular"],
-            summary="Return all databases with their tables",
-            operation_id="get_context",
-        )
-        async def list_tabular_context(user: KeycloakUser = Depends(get_current_user)):
-            authorize_or_raise(user, Action.READ, Resource.TABLES_DATABASES)
+            How to use:
+            - Pass the dataset document uid from `/tabular/datasets`.
+            - Reuse the same scope parameters as the list endpoint when the
+              caller is bound to one active area.
+            """
+
+            authorize_or_raise(user, Action.READ, Resource.DOCUMENTS)
             try:
-                return self.service.get_context(user)
+                return await self.service.describe_dataset(
+                    user,
+                    document_uid=document_uid,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
+            except MissingTeamIdError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except PermissionError as e:
+                raise HTTPException(status_code=403, detail=str(e))
+            except FileNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e))
             except Exception as e:
-                logger.exception("Failed to list databases and tables")
+                logger.exception("Failed to describe tabular dataset %s", document_uid)
                 raise HTTPException(status_code=500, detail=str(e))
 
         @router.post(
-            "/tabular/databases/{db_name}/sql/read",
+            "/tabular/query",
             response_model=RawSQLResponse,
             tags=["Tabular"],
-            summary="Execute a read-only SQL query on a given database (one statement allowed, DDL operations and dangerous SQL patterns are blocked)",
+            summary="Execute one read-only SQL query on authorized datasets",
             operation_id="read_query",
         )
         async def raw_sql_read(
-            db_name: str = Path(..., description="Database name"),
-            request: RawSQLRequest = Body(..., description="SQL query payload"),
+            request: TabularQueryRequest = Body(..., description="Dataset-centric SQL query payload"),
             user: KeycloakUser = Depends(get_current_user),
         ):
-            authorize_or_raise(user, Action.READ, Resource.TABLES)
-            try:
-                return self.service.query_read(user, db_name=db_name, query=request.query)
-            except Exception as e:
-                logger.exception(f"Read SQL query failed on database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+            """
+            Execute one read-only SQL query against authorized datasets.
 
-        @router.post(
-            "/tabular/databases/{db_name}/sql/write",
-            response_model=RawSQLResponse,
-            tags=["Tabular"],
-            summary="Execute a write SQL query on a given database (one statement allowed and dangerous SQL patterns are blocked)",
-            operation_id="execute_write_query",
-        )
-        async def raw_sql_write(
-            db_name: str = Path(..., description="Database name"),
-            request: RawSQLRequest = Body(..., description="SQL query payload"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.CREATE, Resource.TABLES)
-            try:
-                return self.service.query_write(user, db_name=db_name, query=request.query)
-            except PermissionError as e:
-                logger.warning(f"Write attempt forbidden on database {db_name}: {e}")
-                raise HTTPException(status_code=403, detail=str(e))
-            except Exception as e:
-                logger.exception(f"Write SQL query failed on database {db_name}")
-                raise HTTPException(status_code=500, detail=str(e))
+            Why this exists:
+            - Dataset-scoped queries now run in an ephemeral DuckDB session with
+              only authorized views mounted.
 
-        @router.delete(
-            "/tabular/databases/{db_name}/tables/{table_name}",
-            status_code=204,
-            tags=["Tabular"],
-            summary="Delete a table from a given database",
-            operation_id="delete_table",
-        )
-        async def delete_table(
-            db_name: str = Path(..., description="Database name"),
-            table_name: str = Path(..., description="Table name"),
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            authorize_or_raise(user, Action.DELETE, Resource.TABLES)
+            How to use:
+            - Send `sql` and optional `dataset_uids`.
+            """
+
+            authorize_or_raise(user, Action.READ, Resource.DOCUMENTS)
             try:
-                self.service.delete_table(user, db_name=db_name, table_name=table_name)
+                return await self.service.query_read(user, request=request)
+            except MissingTeamIdError as e:
+                raise HTTPException(status_code=400, detail=str(e))
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
+            except FileNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:
-                logger.exception(f"Failed to delete table {table_name} in database {db_name}")
+                logger.exception("Read SQL query failed")
                 raise HTTPException(status_code=500, detail=str(e))
