@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .team-card-container {
   display: flex;
   position: relative;
@@ -55,7 +53,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 
-  @include typography("title", "large", true);
+  font: var(--font-title-large-emphasized);
 }
 
 .team-member-count {
@@ -64,7 +62,7 @@
   gap: var(--spacing-xs);
   color: var(--on-surface);
 
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .team-member-count-icon {
@@ -84,7 +82,7 @@
   color: var(--on-surface-retreat);
   overflow-wrap: anywhere;
 
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .team-card-footer {

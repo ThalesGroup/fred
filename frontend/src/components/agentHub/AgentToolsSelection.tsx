@@ -26,7 +26,7 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
   }
 
   return (
-    <Stack spacing={1}>
+    <>
       <Typography variant="subtitle2">{t("agentHub.toolsSelection.title")}</Typography>
 
       <Stack spacing={0.75}>
@@ -57,6 +57,6 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
           );
         })}
       </Stack>
-    </Stack>
+    </>
   );
 });

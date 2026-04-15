@@ -1309,7 +1309,10 @@
     "defaultConfirmButtonLabel": "Confirm"
   },
   "rework": {
-    "back": "Back",
+    "back": "Retour",
+    "create": "Create",
+    "save": "Save",
+    "cancel": "Cancel",
     "agentCard": {
       "startChat": "New chat"
     },
@@ -1408,6 +1411,16 @@
         "create": "Create Agent",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
         "firstCreate": "Create"
+      },
+      "formAgent": {
+        "titleCreate": "Create a new {{agentsNicknameSingular}}",
+        "titleEdit": "Edit {{agent}}",
+        "fields": {
+          "name": {
+            "placeholder": "Enter an original name",
+            "label": "Name"
+          }
+        }
       }
     },
     "marketplace": {

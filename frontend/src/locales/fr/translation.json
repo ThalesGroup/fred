@@ -1311,6 +1311,9 @@
   },
   "rework": {
     "back": "Retour",
+    "create": "Créer",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
     "agentCard": {
       "startChat": "Nouveau chat"
     },
@@ -1406,7 +1409,26 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}",
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
+        "noAgent": "Aucun agent dans cette équipe !",
         "firstCreate": "Créer"
+      },
+      "formAgent": {
+        "titleCreate": "Céer un nouvel {{agentsNicknameSingular}}",
+        "titleEdit": "Editer {{agent}}",
+        "fields": {
+          "name": {
+            "placeholder": "Entrez un nom original",
+            "label": "Nom"
+          },
+          "role": {
+            "placeholder": "Quel est le rôle qu’incarne ce Lumi ?",
+            "label": "Rôle"
+          },
+          "description": {
+            "placeholder": "Décrivez ce Lumi pour les autres utilisateurs",
+            "label": "Description"
+          }
+        }
       }
     },
     "marketplace": {
