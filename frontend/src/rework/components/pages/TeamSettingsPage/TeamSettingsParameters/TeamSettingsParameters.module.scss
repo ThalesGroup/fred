@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .team-settings-parameters-container {
   display: flex;
   flex-direction: column;
@@ -25,8 +23,7 @@
 
 .team-banner-title {
   color: var(--on-surface-retreat);
-
-  @include typography("label", "large");
+  font: var(--font-label-large);
 }
 
 .team-banner-image {
@@ -42,6 +39,5 @@
   justify-content: space-between;
   align-items: center;
   color: var(--on-surface);
-
-  @include typography("body", "large");
+  font: var(--font-body-large);
 }
