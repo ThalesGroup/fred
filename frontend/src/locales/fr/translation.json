@@ -1415,6 +1415,10 @@
         "yourTeams": "Vos équipes",
         "otherTeams": "Découvrez d'autres équipes"
       }
+    },
+    "gcu": {
+      "title": "Conditions Générales d’Utilisation (CGU)",
+      "lockInformation": "Lire les CGU avant de pouvoir les accepter"
     }
   }
 }

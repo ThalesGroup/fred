@@ -30,6 +30,7 @@ import React, { lazy, Suspense } from "react";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -185,6 +186,10 @@ export const routes: RouteObject[] = [
         element: <PageError />,
       },
     ].filter(Boolean),
+  },
+  {
+    path: "/gcu",
+    element: <GcuPage />,
   },
   {
     path: "unauthorized",

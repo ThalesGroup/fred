@@ -328,6 +328,7 @@ class AIConfig(BaseModel):
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
+    enableGCU: bool = False
 
 
 class Properties(BaseModel):

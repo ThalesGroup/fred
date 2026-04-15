@@ -297,6 +297,7 @@ export type TeamWithPermissions = {
   permissions?: TeamPermission[];
 };
 export type UserDetails = {
+  cguValidated: boolean;
   personalTeam: TeamWithPermissions;
 };
 export type Team = {
