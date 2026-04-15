@@ -19,7 +19,7 @@ export default function TextArea({ label,explanation, error, maxLength, value, r
         {required ? `${label} *` : label}
       </label>
 
-      <textarea id={id} value={value} maxLength={undefined} required={required} {...props} />
+      <textarea id={id} value={value} maxLength={maxLength} required={required} {...props} />
 
       <span className={styles.information}>
         <span className={styles.hint}>{error || explanation || null}</span>
