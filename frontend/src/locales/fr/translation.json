@@ -1409,11 +1409,11 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}",
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
-        "noAgent": "Aucun agent dans cette équipe !",
+        "noAgent": "Aucun {{agentsNicknameSingular}} dans cette équipe !",
         "firstCreate": "Créer"
       },
       "formAgent": {
-        "titleCreate": "Céer un nouvel {{agentsNicknameSingular}}",
+        "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",
         "fields": {
           "name": {
@@ -1421,11 +1421,11 @@
             "label": "Nom"
           },
           "role": {
-            "placeholder": "Quel est le rôle qu’incarne ce Lumi ?",
+            "placeholder": "Quel est le rôle qu’incarne votre {{agentsNicknameSingular}} ?",
             "label": "Rôle"
           },
           "description": {
-            "placeholder": "Décrivez ce Lumi pour les autres utilisateurs",
+            "placeholder": "Décrivez votre {{agentsNicknameSingular}} pour les autres utilisateurs",
             "label": "Description"
           }
         }
