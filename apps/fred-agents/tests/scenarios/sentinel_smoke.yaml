@@ -1,0 +1,30 @@
+name: "Sentinel smoke — plain request/reply"
+description: >
+  Verify that Sentinel produces a final event in both execution modes.
+  MCP servers are not wired; tool-connection warnings in the pod log are
+  expected and are NOT a test failure.
+
+agent_id: sentinel.react.v2
+user_id: test-user
+
+steps:
+  # --- Final (non-streaming) mode ---
+  - id: final-mode
+    message: "Identify yourself in one sentence."
+    mode: final
+    # Fresh session per run so a leftover checkpoint never masks a regression.
+    session_id: "smoke-final-${run_id}"
+    checks:
+      - kind: final
+      - no_error: true
+
+  # --- Streaming (SSE) mode ---
+  - id: stream-mode
+    message: "Identify yourself in one sentence."
+    mode: stream
+    session_id: "smoke-stream-${run_id}"
+    checks:
+      # The last SSE event must be the final outcome.
+      - kind: final
+      # No event in the stream may carry an "error" key.
+      - no_error: true

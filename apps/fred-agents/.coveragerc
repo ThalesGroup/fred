@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = fred_agents
+
+[report]
+omit =
+    tests/*

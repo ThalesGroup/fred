@@ -1,0 +1,39 @@
+app:
+  name: "Fred default agents"
+  base_url: "/fred/agents/v2"
+  host: "0.0.0.0"
+  port: 8000
+  log_level: "info"
+  openai_compat: true
+
+
+security:
+  m2m:
+    enabled: false
+    realm_url: "http://app-keycloak:8080/realms/app"
+    client_id: "agentic"
+  user:
+    enabled: false
+    realm_url: "http://app-keycloak:8080/realms/app"
+    client_id: "app"
+  authorized_origins: []
+
+ai:
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+  timeout:
+    connect: 5
+    read: 30
+
+observability:
+  tracer: logging     # null | logging | langfuse
+  metrics: logging    # null | logging | prometheus (prometheus not yet implemented)
+
+storage:
+  postgres:
+    sqlite_path: "~/.fred/fred-agents/runtime.sqlite3"
+
+scheduler:
+  enabled: false
+
+platform:
+  control_plane_url: "http://localhost:8222/control-plane/v1"

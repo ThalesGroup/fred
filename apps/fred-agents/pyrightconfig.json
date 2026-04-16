@@ -1,0 +1,10 @@
+{
+  "include": ["fred_agents", "tests"],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false,
+  "extraPaths": [
+    "../fred-core",
+    "../fred-sdk",
+    "../fred-runtime"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+    "files": {
+        "./fred_sdk/deep/runtime.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 14,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
+}

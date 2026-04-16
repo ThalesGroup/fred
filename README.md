@@ -19,6 +19,37 @@ Fred is composed of four components:
 
 The repository also includes an [academy](./academy/README.md) with sample MCP servers and agents to get started quickly.
 
+---
+
+> ### Architecture transition in progress
+>
+> This branch introduces a new layout alongside the existing components above.
+>
+> **`libs/`** — pip-installable Python libraries, already published on PyPI:
+>
+> | Package | Role |
+> |---------|------|
+> | `libs/fred-core` | Shared SQL, KPI, security, and configuration infrastructure |
+> | `libs/fred-sdk` | Agent authoring SDK — define agents, tools, graphs, HITL |
+> | `libs/fred-runtime` | Execution runtime — FastAPI pod factory, checkpointing, history store, CLI |
+>
+> **`apps/`** — standalone agent applications built on top of those libraries:
+>
+> | App | Role |
+> |-----|------|
+> | `apps/fred-agents` | First-party agent pod (RAG expert, general assistant, sentinel) — replaces `agentic-backend` agent execution |
+>
+> **What this means in practice:**
+>
+> - `libs/fred-sdk` + `libs/fred-runtime` are the new way to build an independent agent pod without pulling in the full Fred platform. See [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](./libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) and the [bootstrap guide](./docs/authoring/BOOTSTRAP.md).
+> - `apps/fred-agents` is production-ready and can already replace `agentic-backend` for agent execution. Both coexist in this branch.
+> - `knowledge-flow-backend` and `control-plane-backend` will progressively move into `apps/` in follow-up commits.
+> - The existing `agentic-backend`, `knowledge-flow-backend`, and `control-plane-backend` directories remain **fully operational** throughout the migration. Nothing is removed until the replacement is validated.
+>
+> If you want to experiment with the new model today, start with `apps/fred-agents` or the [fred-samples](https://github.com/ThalesGroup/fred-samples) reference pod.
+
+---
+
 See the project site: <https://fredk8.dev>
 
 Contents:
@@ -626,12 +657,23 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 
 ### System Architecture
 
+**Existing platform components (fully operational):**
+
 | Component              | Location                    | Role                                                                 |
 | ---------------------- | --------------------------- | -------------------------------------------------------------------- |
 | Frontend UI            | `./frontend`                | React chat interface and agent management UI                         |
 | Agentic backend        | `./agentic-backend`         | Multi-agent runtime, session orchestration, streaming, MCP tools     |
 | Knowledge Flow backend | `./knowledge-flow-backend`  | Document ingestion, vectorization, and retrieval                     |
 | Control Plane backend  | `./control-plane-backend`   | Team and user management, access policy, agent registry              |
+
+**New libraries and apps (migration in progress — see notice above):**
+
+| Component         | Location              | Role                                                            |
+| ----------------- | --------------------- | --------------------------------------------------------------- |
+| fred-core         | `./libs/fred-core`    | Shared infrastructure library (PyPI)                           |
+| fred-sdk          | `./libs/fred-sdk`     | Agent authoring SDK (PyPI)                                      |
+| fred-runtime      | `./libs/fred-runtime` | Pod execution runtime + `fred-agent-chat` CLI (PyPI)           |
+| fred-agents app   | `./apps/fred-agents`  | First-party agent pod — progressive replacement for agentic-backend |
 
 ### Configuration Files
 

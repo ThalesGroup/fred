@@ -1,0 +1,535 @@
+# Copyright Thales 2025
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass
+from typing import Any, BinaryIO, Callable, Optional
+
+import httpx
+import requests
+
+from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
+
+logger = logging.getLogger(__name__)
+
+
+class WorkspaceRetrievalError(Exception):
+    """Raised when an agent configuration file cannot be retrieved."""
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class WorkspaceUploadError(Exception):
+    """Raised when an asset cannot be uploaded."""
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+@dataclass(frozen=True)
+class UserStorageBlob:
+    bytes: bytes
+    content_type: str
+    filename: str
+    size: int
+
+
+@dataclass(frozen=True)
+class UserStorageUploadResult:
+    key: str
+    file_name: str
+    size: int
+    document_uid: Optional[str] = None
+    download_url: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class UserStorageResourceInfo:
+    """
+    One entry returned by workspace listing endpoints.
+
+    `type` is normalized to either:
+    - `file`
+    - `directory`
+    - `unknown`
+    """
+
+    path: str
+    size: int | None
+    type: str
+    modified: str | None
+
+    def is_file(self) -> bool:
+        return self.type == "file"
+
+    def is_directory(self) -> bool:
+        return self.type == "directory"
+
+
+class KfWorkspaceClient(KfBaseClient):
+    """
+    Workspace client for non-corpus files.
+
+    Three clear use-cases (and matching dedicated methods):
+    1) User exchange (end-user ↔ agent): `fetch_user_*`, `upload_user_file`, `delete_user_file`.
+    2) Agent configuration (admin-managed, agent-read): `fetch_agent_config_*`, `upload_agent_config_file`, `delete_agent_config_file`.
+    3) Agent per-user notes (agent-private, per end-user): `fetch_agent_user_*`, `upload_agent_user_file`, `delete_agent_user_file`.
+    """
+
+    def __init__(
+        self,
+        agent: Optional[KnowledgeFlowAgentContext] = None,
+        *,
+        access_token: Optional[str] = None,
+        refresh_user_access_token: Optional[Callable[[], str]] = None,
+    ):
+        """
+        Why: keep workspace access bound to the caller's runtime identity.
+        How: provide an agent context or explicit access token/refresh callback.
+        Example:
+            >>> client = KfWorkspaceClient(agent=agent_ctx)
+        """
+        super().__init__(
+            agent=agent,
+            access_token=access_token,
+            refresh_user_access_token=refresh_user_access_token,
+            allowed_methods=frozenset({"GET", "POST", "DELETE"}),
+        )
+
+    # ---------------- Path helpers (dedicated) ----------------
+    @staticmethod
+    def _path_user_download(key: str) -> str:
+        return f"/storage/user/{key}"
+
+    @staticmethod
+    def _path_user_upload() -> str:
+        return "/storage/user/upload"
+
+    @staticmethod
+    def _path_agent_config_download(agent_id: str, key: str) -> str:
+        logical_key = (key or "").strip().replace("\\", "/").split("/")[-1]
+        return f"/storage/agent-config/{agent_id}/{logical_key}"
+
+    @staticmethod
+    def _path_agent_config_upload(agent_id: str) -> str:
+        return f"/storage/agent-config/{agent_id}/upload"
+
+    @staticmethod
+    def _path_agent_user_download(agent_id: str, target_user_id: str, key: str) -> str:
+        return f"/storage/agent-user/{agent_id}/{target_user_id}/{key}"
+
+    @staticmethod
+    def _path_agent_user_upload(agent_id: str, target_user_id: str) -> str:
+        return f"/storage/agent-user/{agent_id}/{target_user_id}/upload"
+
+    # ---------------- Core operations ----------------
+    async def _get_file_stream(
+        self, path: str, access_token: Optional[str] = None
+    ) -> httpx.Response:
+        r = await self._request_with_token_refresh(
+            "GET",
+            path,
+            phase_name="kf_workspace_fetch_stream",
+            access_token=access_token,
+            stream=True,
+        )
+        r.raise_for_status()
+        return r
+
+    async def _fetch_text_at_path(
+        self, path: str, access_token: Optional[str] = None
+    ) -> str:
+        """Fetch the complete text content of a user file."""
+        try:
+            response = await self._get_file_stream(path, access_token)
+
+            content = bytearray()
+            async for chunk in response.aiter_bytes():
+                content.extend(chunk)
+            await response.aclose()
+            return bytes(content).decode("utf-8")
+
+        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
+            status = e.response.status_code
+            logger.error(
+                f"HTTP error ({status}) reading asset at {path}: {e}", exc_info=True
+            )
+            if status == 404:
+                raise WorkspaceRetrievalError(
+                    f"Asset path '{path}' not found (404).", status_code=status
+                ) from e
+            raise WorkspaceRetrievalError(
+                f"HTTP failure retrieving asset '{path}' (Status: {status}).",
+                status_code=status,
+            ) from e
+        except Exception as e:
+            logger.error(f"General error reading asset {path}: {e}", exc_info=True)
+            raise WorkspaceRetrievalError(
+                f"Failed to read/decode asset '{path}' ({type(e).__name__})."
+            ) from e
+
+    # -------------- Public dedicated methods --------------
+    async def fetch_user_text(
+        self, key: str, access_token: Optional[str] = None
+    ) -> str:
+        """Read a user-space exchange file (for example a generated report) as plain text."""
+        return await self._fetch_text_at_path(
+            self._path_user_download(key), access_token
+        )
+
+    async def fetch_agent_config_text(
+        self,
+        key: str,
+        access_token: Optional[str] = None,
+        agent_id: Optional[str] = None,
+    ) -> str:
+        """Read an agent configuration file (for example template or prompt) as plain text."""
+        if not agent_id:
+            raise ValueError("agent_id is required to fetch agent config text.")
+        return await self._fetch_text_at_path(
+            self._path_agent_config_download(agent_id, key), access_token
+        )
+
+    async def fetch_agent_user_text(
+        self,
+        key: str,
+        access_token: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        target_user_id: Optional[str] = None,
+    ) -> str:
+        """Read a private agent memo for one specific user (agent-only scope)."""
+        if not agent_id or not target_user_id:
+            raise ValueError(
+                "agent_id and target_user_id are required to fetch agent-user text."
+            )
+        return await self._fetch_text_at_path(
+            self._path_agent_user_download(agent_id, target_user_id, key), access_token
+        )
+
+    async def _fetch_blob_at_path(
+        self, path: str, access_token: Optional[str] = None
+    ) -> UserStorageBlob:
+        """
+        Why: Return raw bytes + HTTP metadata. The agent decides if it will:
+             - inline a small text preview, or
+             - emit an attachment for the UI to download/preview.
+
+        Requires access_token for authorization.
+        """
+        try:
+            resp = await self._get_file_stream(path, access_token)
+            chunks = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                if chunk:
+                    chunks.append(chunk)
+                    total += len(chunk)
+            content = b"".join(chunks)
+            await resp.aclose()
+
+            ctype = resp.headers.get("Content-Type", "application/octet-stream")
+            disp = resp.headers.get("Content-Disposition", "")
+            m = re.search(r"filename\*=UTF-8''([^;]+)", disp) or re.search(
+                r'filename="([^"]+)"', disp
+            )
+            filename = (m.group(1) if m else path.split("/")[-1]) or path
+
+            return UserStorageBlob(
+                bytes=content, content_type=ctype, filename=filename, size=total
+            )
+
+        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
+            status = e.response.status_code
+            logger.error(
+                f"HTTP error ({status}) reading asset {path}: {e}", exc_info=True
+            )
+            if status == 404:
+                raise WorkspaceRetrievalError(
+                    f"Asset path '{path}' not found (404).", status_code=404
+                ) from e
+            raise WorkspaceRetrievalError(
+                f"HTTP failure retrieving asset '{path}' (Status: {status}).",
+                status_code=status,
+            ) from e
+        except Exception as e:
+            logger.error(f"General error reading asset {path}: {e}", exc_info=True)
+            raise WorkspaceRetrievalError(
+                f"Failed to read asset '{path}' ({type(e).__name__})."
+            ) from e
+
+    async def fetch_user_blob(
+        self, key: str, access_token: Optional[str] = None
+    ) -> UserStorageBlob:
+        """Fetch a user-space exchange file (binary content + metadata)."""
+        return await self._fetch_blob_at_path(
+            self._path_user_download(key), access_token
+        )
+
+    async def fetch_agent_config_blob(
+        self,
+        key: str,
+        access_token: Optional[str] = None,
+        agent_id: Optional[str] = None,
+    ) -> UserStorageBlob:
+        """Fetch an agent configuration file (binary content + metadata)."""
+        if not agent_id:
+            raise ValueError("agent_id is required to fetch agent config blob.")
+        return await self._fetch_blob_at_path(
+            self._path_agent_config_download(agent_id, key), access_token
+        )
+
+    async def fetch_agent_user_blob(
+        self,
+        key: str,
+        access_token: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        target_user_id: Optional[str] = None,
+    ) -> UserStorageBlob:
+        """Fetch a private agent↔user note (binary content + metadata)."""
+        if not agent_id or not target_user_id:
+            raise ValueError(
+                "agent_id and target_user_id are required to fetch agent-user blob."
+            )
+        return await self._fetch_blob_at_path(
+            self._path_agent_user_download(agent_id, target_user_id, key), access_token
+        )
+
+    # ---------------- Uploads ----------------
+    async def _upload_blob(
+        self,
+        path: str,
+        key: str,
+        file_content: bytes | BinaryIO,
+        filename: str,
+        content_type: Optional[str] = None,
+    ) -> UserStorageUploadResult:
+        logger.info(
+            "UPLOADING_ASSET: Attempting to upload asset to %s key=%s", path, key
+        )
+        files = {
+            "file": (filename, file_content, content_type or "application/octet-stream")
+        }
+        data = {"key": key}
+        try:
+            r = await self._request_with_token_refresh(
+                "POST",
+                path,
+                phase_name="kf_workspace_upload",
+                files=files,
+                data=data,
+            )
+            r.raise_for_status()
+            meta = r.json()
+            return UserStorageUploadResult(
+                key=meta.get("key", key),
+                file_name=meta.get("file_name", filename),
+                size=meta.get("size", 0),
+                document_uid=_coerce_optional_document_uid(meta.get("document_uid")),
+                download_url=meta.get("download_url"),
+            )
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code
+            detail = (
+                e.response.json().get("detail", "No detail provided")
+                if e.response.content
+                else e.response.reason
+            )
+            logger.error(
+                f"HTTP error ({status}) uploading asset {key}: {detail}", exc_info=True
+            )
+            raise WorkspaceUploadError(
+                f"HTTP failure uploading asset '{key}' (Status: {status}, Detail: {detail}).",
+                status_code=status,
+            ) from e
+        except Exception as e:
+            logger.error(f"General error uploading asset {key}: {e}", exc_info=True)
+            raise WorkspaceUploadError(
+                f"Failed to upload asset '{key}' ({type(e).__name__})."
+            ) from e
+
+    async def upload_user_blob(
+        self,
+        key: str,
+        file_content: bytes | BinaryIO,
+        filename: str,
+        content_type: Optional[str] = None,
+    ) -> UserStorageUploadResult:
+        """Upload a user-space file (for example a downloadable report)."""
+        path = self._path_user_upload()
+        return await self._upload_blob(path, key, file_content, filename, content_type)
+
+    async def upload_agent_config_blob(
+        self,
+        key: str,
+        file_content: bytes | BinaryIO,
+        filename: str,
+        agent_id: str,
+        content_type: Optional[str] = None,
+    ) -> UserStorageUploadResult:
+        """Upload an agent configuration file (for example template or prompt)."""
+        path = self._path_agent_config_upload(agent_id)
+        return await self._upload_blob(path, key, file_content, filename, content_type)
+
+    async def upload_agent_user_blob(
+        self,
+        key: str,
+        file_content: bytes | BinaryIO,
+        filename: str,
+        agent_id: str,
+        target_user_id: str,
+        content_type: Optional[str] = None,
+    ) -> UserStorageUploadResult:
+        """Upload a private note for one specific user (agent notebook scope)."""
+        path = self._path_agent_user_upload(agent_id, target_user_id)
+        return await self._upload_blob(path, key, file_content, filename, content_type)
+
+    async def list_user_blobs(
+        self, prefix: str = "", access_token: Optional[str] = None
+    ) -> list[UserStorageResourceInfo]:
+        """List user-space resources (typed) optionally filtered by prefix."""
+        r = await self._request_with_token_refresh(
+            "GET",
+            "/storage/user",
+            phase_name="kf_workspace_list_user",
+            params={"prefix": prefix} if prefix else None,
+            access_token=access_token,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        if not isinstance(payload, list):
+            raise ValueError("Invalid /storage/user response: expected a list.")
+
+        items: list[UserStorageResourceInfo] = []
+        for raw in payload:
+            parsed = self._parse_user_storage_resource(raw)
+            if parsed is not None:
+                items.append(parsed)
+        return items
+
+    async def delete_user_blob(
+        self, key: str, access_token: Optional[str] = None
+    ) -> None:
+        """Delete a file from user-space storage."""
+        path = self._path_user_download(key)
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            path,
+            phase_name="kf_workspace_delete_user",
+            access_token=access_token,
+        )
+        r.raise_for_status()
+
+    async def delete_agent_config_blob(
+        self,
+        key: str,
+        access_token: Optional[str] = None,
+        agent_id: Optional[str] = None,
+    ) -> None:
+        """Delete an agent configuration file."""
+        if not agent_id:
+            raise ValueError("agent_id is required to delete agent config blob.")
+        path = self._path_agent_config_download(agent_id, key)
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            path,
+            phase_name="kf_workspace_delete_agent_config",
+            access_token=access_token,
+        )
+        r.raise_for_status()
+
+    async def delete_agent_user_blob(
+        self,
+        key: str,
+        access_token: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        target_user_id: Optional[str] = None,
+    ) -> None:
+        """Delete a private agent↔user note."""
+        if not agent_id or not target_user_id:
+            raise ValueError(
+                "agent_id and target_user_id are required to delete agent-user blob."
+            )
+        path = self._path_agent_user_download(agent_id, target_user_id, key)
+        r = await self._request_with_token_refresh(
+            "DELETE",
+            path,
+            phase_name="kf_workspace_delete_agent_user",
+            access_token=access_token,
+        )
+        r.raise_for_status()
+
+    @staticmethod
+    def _normalize_resource_type(value: Any) -> str:
+        raw = str(value or "").strip().lower()
+        if not raw:
+            return "unknown"
+        if raw in {"file", "filesystemresourceinfo.file"} or raw.endswith(".file"):
+            return "file"
+        if raw in {
+            "directory",
+            "dir",
+            "filesystemresourceinfo.directory",
+        } or raw.endswith(".directory"):
+            return "directory"
+        return "unknown"
+
+    @classmethod
+    def _parse_user_storage_resource(
+        cls, payload: Any
+    ) -> UserStorageResourceInfo | None:
+        if not isinstance(payload, dict):
+            return None
+
+        path = str(payload.get("path") or "").strip()
+        if not path:
+            return None
+
+        size_value = payload.get("size")
+        size: int | None = None
+        if isinstance(size_value, int):
+            size = size_value
+        elif isinstance(size_value, float):
+            size = int(size_value)
+        elif isinstance(size_value, str):
+            try:
+                size = int(size_value)
+            except ValueError:
+                size = None
+
+        modified_value = payload.get("modified")
+        modified = str(modified_value) if modified_value is not None else None
+
+        return UserStorageResourceInfo(
+            path=path,
+            size=size,
+            type=cls._normalize_resource_type(payload.get("type")),
+            modified=modified,
+        )
+
+
+def _coerce_optional_document_uid(value: object) -> Optional[str]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned if cleaned and cleaned != "0" else None
+    if isinstance(value, int | float):
+        return None if value == 0 else str(value)
+    return str(value)

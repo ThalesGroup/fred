@@ -1,0 +1,13 @@
+{
+  "include": ["fred_runtime", "tests"],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["../fred-core", "../fred-sdk"]
+    }
+  ]
+}
