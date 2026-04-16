@@ -1,0 +1,8 @@
+.mainFormCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}

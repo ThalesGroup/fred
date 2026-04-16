@@ -1,8 +1,9 @@
-import { Stack, Typography } from "@mui/material";
+import { Box, Collapse, Stack, Typography } from "@mui/material";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { McpServerRef, useListMcpServersAgenticV1AgentsMcpServersGetQuery } from "../../slices/agentic/agenticOpenApi";
 import { AgentOptionSelectionCard } from "./AgentOptionSelectionCard";
+import { TOOL_PARAMS_REGISTRY } from "./toolParams/toolParamsRegistry";
 
 export interface AgentToolsSelectionProps {
   mcpServerRefs: McpServerRef[];
@@ -14,14 +15,14 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
   onMcpServerRefsChange,
 }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
-  const { data: mcpServersData, isLoading: isLoadingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
+  const { data: tools, isLoading: isLoadingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
   const refIds = new Set(mcpServerRefs.map((ref) => ref.id));
 
   if (isLoadingMcpServers) {
     return <div>Loading tools...</div>;
   }
 
-  if (!mcpServersData || mcpServersData.length === 0) {
+  if (!tools || tools.length === 0) {
     return <div>No tools available.</div>;
   }
 
@@ -30,30 +31,35 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
       <Typography variant="subtitle2">{t("agentHub.toolsSelection.title")}</Typography>
 
       <Stack spacing={0.75}>
-        {mcpServersData.map((conf, index) => {
-          const isEnabled = conf.enabled !== false;
+        {tools.map((tool, index) => {
+          const isEnabled = tool.enabled !== false;
           if (!isEnabled) {
             return null;
           }
+          const isSelected = refIds.has(tool.id);
+          const ParamsComponent = TOOL_PARAMS_REGISTRY[tool.id];
           return (
-            <AgentOptionSelectionCard
-              key={index}
-              name={t(conf.name)}
-              description={t(conf.description)}
-              selected={refIds.has(conf.id)}
-              onSelectedChange={(selected) => {
-                if (selected) {
-                  onMcpServerRefsChange([...mcpServerRefs, { id: conf.id }]);
-                } else {
-                  onMcpServerRefsChange(
-                    mcpServerRefs.filter((ref) => {
-                      const refId = ref.id;
-                      return refId !== conf.id;
-                    }),
-                  );
-                }
-              }}
-            />
+            <Box key={index} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <AgentOptionSelectionCard
+                name={t(tool.name)}
+                description={t(tool.description)}
+                selected={isSelected}
+                onSelectedChange={(selected) => {
+                  if (selected) {
+                    onMcpServerRefsChange([...mcpServerRefs, { id: tool.id }]);
+                  } else {
+                    onMcpServerRefsChange(mcpServerRefs.filter((ref) => ref.id !== tool.id));
+                  }
+                }}
+              />
+              {ParamsComponent && (
+                <Collapse in={isSelected} unmountOnExit>
+                  <Box sx={{ mt: 0.5, px: 1.25, pb: 0.75 }}>
+                    <ParamsComponent params={{}} onParamsChange={() => {}} />
+                  </Box>
+                </Collapse>
+              )}
+            </Box>
           );
         })}
       </Stack>
