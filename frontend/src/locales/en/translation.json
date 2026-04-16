@@ -1410,7 +1410,8 @@
         "title": "Chat with your {{agentsNicknamePlural}}",
         "create": "Create Agent",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
-        "firstCreate": "Create"
+        "firstCreate": "Create",
+        "noAgent": "No {{agentsNicknameSingular}} yet. Create your first one to get started."
       },
       "formAgent": {
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
