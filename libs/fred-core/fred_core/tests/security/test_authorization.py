@@ -59,8 +59,8 @@ class TestRBACProvider:
 
     def test_admin_has_all_permissions(self):
         """Test that admin users can perform all actions on all resources."""
-        for action in Action:
-            for resource in Resource:
+        for action in list(Action):
+            for resource in list(Resource):
                 assert self.rbac.is_authorized(self.admin_user, action, resource), (
                     f"Admin should be authorized for {action.value} on {resource.value}"
                 )
@@ -96,8 +96,8 @@ class TestRBACProvider:
 
     def test_no_role_user_denied(self):
         """Test that users with no roles are denied access."""
-        for action in Action:
-            for resource in Resource:
+        for action in list(Action):
+            for resource in list(Resource):
                 assert not self.rbac.is_authorized(
                     self.no_role_user, action, resource
                 ), (
