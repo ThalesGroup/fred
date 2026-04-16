@@ -13,7 +13,7 @@
 }
 
 .state-layer {
-  @include typography("title", "small");
+  font: var(--font-title-small);
   display: flex;
   justify-content: center;
   align-items: center;

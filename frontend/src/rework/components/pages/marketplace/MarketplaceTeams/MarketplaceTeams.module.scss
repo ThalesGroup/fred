@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .marketplace-teams-container {
   padding: 0 var(--spacing-l);
   height: 100%;
@@ -16,8 +14,7 @@
   margin: 0;
   padding: 0;
   color: var(--on-surface);
-
-  @include typography("title", "large", true);
+  font: var(--font-title-large-emphasized);
 }
 
 .marketplace-teams-content {
@@ -29,8 +26,7 @@
   align-items: center;
   height: 2.5rem;
   color: var(--on-surface-retreat);
-
-  @include typography("title", "medium");
+  font: var(--font-title-medium);
 }
 
 .marketplace-teams-list {

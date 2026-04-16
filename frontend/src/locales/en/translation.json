@@ -1309,7 +1309,10 @@
     "defaultConfirmButtonLabel": "Confirm"
   },
   "rework": {
-    "back": "Back",
+    "back": "Retour",
+    "create": "Create",
+    "save": "Save",
+    "cancel": "Cancel",
     "agentCard": {
       "startChat": "New chat"
     },
@@ -1405,9 +1408,9 @@
     "teams": {
       "agents": {
         "title": "Chat with your {{agentsNicknamePlural}}",
-        "create": "Create Agent",
+        "create": "Create {{agentsNicknameSingular}}",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
-        "noAgent": "No Agent in your team!",
+        "noAgent": "No {{agentsNicknameSingular}} in your team!",
         "firstCreate": "Create"
       },
       "formAgent": {

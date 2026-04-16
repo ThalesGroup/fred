@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .menu {
   display: flex;
   flex-direction: column;
@@ -20,7 +18,6 @@
 .menu-empty {
   padding: var(--spacing-m);
   color: var(--on-surface);
+  font: var(--font-body-large);
   text-align: center;
-
-  @include typography("body", "large");
 }

@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .team-settings-navbar {
   display: flex;
   flex-direction: column;
@@ -11,7 +9,7 @@
   padding-left: var(--spacing-xs);
   color: var(--on-surface);
 
-  @include typography("title", "medium");
+  font: var(--font-title-medium);
 }
 
 .team-settings-navbar-disconnect {

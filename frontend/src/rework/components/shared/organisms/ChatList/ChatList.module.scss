@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .chatListContainer {
   display: flex;
   flex-direction: column;
@@ -9,7 +7,7 @@
 
 .chatListHeader {
   display: flex;
-  @include typography("body", "small");
+  font: var(--font-body-small);
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-xs) var(--spacing-m);

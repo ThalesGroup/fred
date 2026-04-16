@@ -1,5 +1,3 @@
-@use "src/index" as *;
-
 .menu-item {
   display: block;
   cursor: pointer;
@@ -47,8 +45,7 @@
 
 .label {
   overflow: hidden;
+  font: var(--font-body-large);
   text-overflow: ellipsis;
   white-space: nowrap;
-
-  @include typography("body", "large");
 }

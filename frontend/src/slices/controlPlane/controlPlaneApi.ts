@@ -5,10 +5,6 @@ import { createDynamicBaseQuery } from "../../common/dynamicBaseQuery";
 export const controlPlaneApi = createApi({
   reducerPath: "controlPlaneApi",
   baseQuery: createDynamicBaseQuery(),
-  keepUnusedDataFor: 0,
-  refetchOnMountOrArgChange: true,
-  refetchOnFocus: true,
-  refetchOnReconnect: true,
   tagTypes: ["ControlPlaneTeam", "ControlPlaneTeamMember", "ControlPlaneUser"],
   endpoints: () => ({}),
 });
