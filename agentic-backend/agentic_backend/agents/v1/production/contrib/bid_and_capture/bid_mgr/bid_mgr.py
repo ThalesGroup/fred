@@ -6,7 +6,7 @@ from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Checkpointer
 
-from agentic_backend.agents.v1.production.contrib.bid_mgr.discovery_tools import (
+from agentic_backend.agents.v1.production.contrib.bid_and_capture.bid_mgr.discovery_tools import (
     DiscoveryTools,
 )
 from agentic_backend.application_context import get_default_chat_model

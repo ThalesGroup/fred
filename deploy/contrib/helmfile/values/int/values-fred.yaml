@@ -294,6 +294,45 @@ applications:
         type: "agent"
         class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
         enabled: true
+  
+      # -------- Bid and capture agents
+      - id: "Archie"
+        name: "Archie"
+        type: "agent"
+        class_path: "agentic_backend.agents.v1.production.rags.archie.Archie"
+        enabled: true
+        chat_model: {}
+        chat_options:
+          search_policy_selection: true
+          libraries_selection: true
+          search_rag_scoping: true
+          attach_files: false
+          deep_search_delegate: false
+    
+      - id: "Tempo"
+        name: "Tempo"
+        type: "agent"
+        class_path: "agentic_backend.agents.v1.production.contrib.bid_and_capture.tempo.Tempo"
+        enabled: true
+        chat_model: {}
+        chat_options:
+          search_policy_selection: true
+          libraries_selection: false
+          documents_selection: false
+          search_rag_scoping: true
+          deep_search_delegate: false
+          attach_files: true
+          include_corpus_in_search: false
+
+      - id: "Bid Mgr"
+        name: "Bid Mgr"
+        type: "agent"
+        class_path: "agentic_backend.agents.v1.production.contrib.bid_and_capture.bid_mgr.bid_mgr.BidMgr"
+        enabled: true
+        chat_options:
+          libraries_selection: true
+          attach_files: true      
+
       react_profiles: []
 
     # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
