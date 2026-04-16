@@ -795,9 +795,13 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Fast path for chat attachments:
-            - use fast text extractor
-            - store as a single vectorized document with user/session metadata
+            Why this exists:
+            - Chat attachments need a lightweight ingestion path that stays responsive for the UI.
+            - The route extracts compact text, splits oversized payloads, then stores session-scoped vectors.
+
+            How to use:
+            - Upload one file plus optional `options_json`, `session_id`, and `scope`.
+            - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
             """
             filename = file.filename or "uploaded"
 

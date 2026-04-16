@@ -1030,6 +1030,8 @@ applications:
         value: "http://knowledge-flow-backend:8000"
       - name: FRONTEND_CONTROL_PLANE_UPSTREAM
         value: "http://control-plane-backend:8222"
+      - name: FRONTEND_CLIENT_MAX_BODY_SIZE
+        value: "150m"
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "{YOUR-KF-URL}"
       - name: VITE_USE_AUTH

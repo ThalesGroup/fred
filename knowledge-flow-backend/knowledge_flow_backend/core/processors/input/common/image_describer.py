@@ -27,9 +27,12 @@ If the image is a photograph, describe scene, objects, and people, including not
 If the image is a logo or icon, describe its design and any visible text.
 
 Constraints:
+- Be concise
+- Use at most 4 short paragraphs.
+- If you feel you need to describe the image more (if it is complex for exampe), feel free to do so while keeping in mind to be as concise as you can and try to spare no details.
 - Output plain text only (no markdown, code fences, or links).
 - Do not include image URLs or base64.
-- If unsure, say what is uncertain rather than hallucinating specifics.
+- If uncertain, say so briefly instead of inventing details
 """.strip()
 
 PPTX_MEDIUM_VISION_DESCRIBE_PROMPT_V1 = """
@@ -119,13 +122,7 @@ class VisionImageDescriber(BaseImageDescriber):
     def __init__(self, model: BaseChatModel, system_prompt: str, provider: str | None = None, max_tokens: int = 512):
         # Bind per-call kwargs like max_tokens via LC's .bind()
         self.provider = (provider or "").lower()
-        # `max_tokens` via LangChain `.bind(...)` is not accepted by the Ollama chat client
-        # used in our current setup. Keep the historical bound behavior for other providers,
-        # but skip it for Ollama and rely on provider-native settings (e.g. `num_predict`).
-        if self.provider == "ollama":
-            self.model = model
-        else:
-            self.model = model.bind(max_tokens=max_tokens)
+        self.model = model
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens
 
