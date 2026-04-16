@@ -19,11 +19,14 @@ from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, Field
 
-from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import KfVectorSearchParams
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+    KfVectorSearchParams,
+)
 
 # Discriminated union of all typed inprocess tool params.
 # Add new provider param models here as new inprocess tools gain typed params.
 ToolParams = Annotated[KfVectorSearchParams, Field(discriminator="provider")]
+
 
 FieldType = Literal[
     "string",

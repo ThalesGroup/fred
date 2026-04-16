@@ -5,7 +5,9 @@ from typing import Callable, Optional
 from langchain_core.tools import BaseTool
 
 from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
-from agentic_backend.integrations.kf_vector_search.kf_vector_search_tools import build_kf_vector_search_tools
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_tools import (
+    build_kf_vector_search_tools,
+)
 from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
     KF_VECTOR_SEARCH_PROVIDER,
 )

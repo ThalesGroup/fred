@@ -40,8 +40,13 @@ from __future__ import annotations
 import logging
 from typing import Any, TypeVar
 
+from agentic_backend.common.chat_options_protocol import ChatOptionsEditor
 from agentic_backend.common.structures import Agent, AgentChatOptions, AgentSettings
-from agentic_backend.core.agents.agent_spec import AgentTuning, FieldSpec, MCPServerRef
+from agentic_backend.core.agents.agent_spec import (
+    AgentTuning,
+    FieldSpec,
+    MCPServerRef,
+)
 
 from ..contracts.models import (
     AgentDefinition,
@@ -631,6 +636,7 @@ def _declared_tool_refs_for_definition(
 
 def _chat_options_from_fields(
     fields: tuple[FieldSpec, ...] | list[FieldSpec],
+    mcp_servers: tuple[MCPServerRef, ...] | list[MCPServerRef] | None = None,
 ) -> AgentChatOptions:
     overrides: dict[str, bool] = {}
     for field in fields:
@@ -639,11 +645,29 @@ def _chat_options_from_fields(
         option_name = field.key.split(".", 1)[1]
         if isinstance(field.default, bool):
             overrides[option_name] = field.default
-    return AgentChatOptions(**overrides)
+    options = AgentChatOptions(**overrides)
+
+    for ref in mcp_servers or []:
+        if isinstance(ref.params, ChatOptionsEditor):
+            ref.params.edit_chat_options(options)
+
+    return options
 
 
 def _chat_options_from_definition(definition: AgentDefinition) -> AgentChatOptions:
     profile = _selected_react_profile(definition)
     if profile is None:
-        return _chat_options_from_fields(definition.fields)
-    return profile.chat_options.model_copy(deep=True)
+        mcp_servers = getattr(definition, "default_mcp_servers", None)
+        return _chat_options_from_fields(definition.fields, mcp_servers)
+    # Start from the profile's declared chat_options, then let the profile's own
+    # mcp_servers params further enrich them.
+    # model_copy(deep=True) serves as the single copy before in-place edits.
+    options = profile.chat_options.model_copy(deep=True)
+    editors = [
+        ref.params
+        for ref in profile.mcp_servers
+        if isinstance(ref.params, ChatOptionsEditor)
+    ]
+    for editor in editors:
+        editor.edit_chat_options(options)
+    return options
