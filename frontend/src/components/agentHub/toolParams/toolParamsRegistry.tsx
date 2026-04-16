@@ -1,4 +1,4 @@
-import { DocumentCapacityForm } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/DocumentCapacityForm/DocumentCapacityForm";
+import { KfVectorSearchForm } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/KfVectorSearchForm/KfVectorSearchForm";
 import React from "react";
 
 export interface ToolParamsProps {
@@ -7,5 +7,5 @@ export interface ToolParamsProps {
 }
 
 export const TOOL_PARAMS_REGISTRY: Record<string, React.FC<ToolParamsProps>> = {
-  "mcp-knowledge-flow-mcp-text": DocumentCapacityForm,
+  "mcp-knowledge-flow-mcp-text": KfVectorSearchForm,
 };

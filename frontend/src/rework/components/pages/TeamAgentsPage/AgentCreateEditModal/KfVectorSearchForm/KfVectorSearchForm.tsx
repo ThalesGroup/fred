@@ -3,7 +3,7 @@ import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRe
 import { SwitchRow } from "../SwitchRow/SwitchRow";
 import styles from "./DocumentCapacityForm.module.css";
 
-export function DocumentCapacityForm({ params, onParamsChange }: ToolParamsProps) {
+export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps) {
   const { t } = useTranslation();
 
   const attachFiles = Boolean(params["chat_options.attach_files"]);
