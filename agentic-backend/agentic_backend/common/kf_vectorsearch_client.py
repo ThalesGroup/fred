@@ -27,6 +27,10 @@ from agentic_backend.common.kf_base_client import (
 )
 from agentic_backend.common.structures import AgentSettings
 from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+    KF_VECTOR_SEARCH_PROVIDER,
+    KfVectorSearchParams,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +62,22 @@ class VectorSearchClient(KfBaseClient):
         document_uids: Optional[Collection[str]] = None,
     ) -> List[VectorSearchHit]:
         """Simplified search method for use within agent tools, which infers auth
-        and other parameters from the agent settings and runtime context."""
+        and other parameters from the agent settings and runtime context.
 
-        # If user manually scopes the search, restrict agent selection to that scope (intersection).
-        # If only one side is set, use it as-is.
+        Library scope is resolved as a three-level intersection (broadest → narrowest):
+          1. creator scope  — set at agent creation time via MCPServerRef.params
+          2. user scope     — runtime_context.selected_document_libraries_ids chosen by the user
+          3. LLM scope      — document_library_tags_ids chosen by the agent for this call
+        """
+        kf_params = _get_kf_vector_search_params(agent_settings)
+
+        # Apply the three-level intersection: creator ∩ user ∩ LLM.
         final_document_library_tags_ids = _intersect_or_fallback(
-            document_library_tags_ids, runtime_context.selected_document_libraries_ids
+            _intersect_or_fallback(
+                kf_params.document_library_tags_ids,
+                runtime_context.selected_document_libraries_ids,
+            ),
+            document_library_tags_ids,
         )
         final_document_uids = _intersect_or_fallback(
             document_uids, runtime_context.selected_document_uids
@@ -204,13 +218,31 @@ class VectorSearchClient(KfBaseClient):
 
 
 def _intersect_or_fallback(
-    agent_ids: Optional[Collection[str]], user_ids: Optional[Collection[str]]
+    a: Optional[Collection[str]], b: Optional[Collection[str]]
 ) -> Optional[Collection[str]]:
     """Return the intersection when both sides are set, otherwise whichever is non-None."""
-    if agent_ids and user_ids:
-        return set(agent_ids) & set(user_ids)
-    if agent_ids:
-        return agent_ids
-    if user_ids:
-        return user_ids
+    if a and b:
+        return set(a) & set(b)
+    if a:
+        return a
+    if b:
+        return b
     return None
+
+
+def _get_kf_vector_search_params(agent_settings: AgentSettings) -> KfVectorSearchParams:
+    """
+    Extract KfVectorSearchParams from the agent's tuning refs.
+
+    Scans mcp_servers refs for one whose params are KfVectorSearchParams
+    (identified by provider == KF_VECTOR_SEARCH_PROVIDER). Returns default
+    (no scope restriction) if not found, so callers never need a None check.
+    """
+    if agent_settings.tuning:
+        for ref in agent_settings.tuning.mcp_servers:
+            if (
+                ref.params is not None
+                and ref.params.provider == KF_VECTOR_SEARCH_PROVIDER
+            ):
+                return ref.params
+    return KfVectorSearchParams()

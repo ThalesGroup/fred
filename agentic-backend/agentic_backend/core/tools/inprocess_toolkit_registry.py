@@ -5,8 +5,13 @@ from typing import Callable, Optional
 from langchain_core.tools import BaseTool
 
 from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
-from agentic_backend.integrations.kf_vector_search import build_kf_vector_search_tools
-from agentic_backend.integrations.web_github_readonly import build_web_github_readonly_tools
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_tools import build_kf_vector_search_tools
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+    KF_VECTOR_SEARCH_PROVIDER,
+)
+from agentic_backend.integrations.web_github_readonly import (
+    build_web_github_readonly_tools,
+)
 
 
 class UnknownInprocessToolkitProvider(ValueError):
@@ -17,7 +22,7 @@ InprocessToolkitFactory = Callable[[KnowledgeFlowAgentContext], list[BaseTool]]
 
 _INPROCESS_TOOLKIT_FACTORIES: dict[str, InprocessToolkitFactory] = {
     "web_github_readonly": build_web_github_readonly_tools,
-    "kf_vector_search": build_kf_vector_search_tools,
+    KF_VECTOR_SEARCH_PROVIDER: build_kf_vector_search_tools,
 }
 
 

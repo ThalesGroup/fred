@@ -617,9 +617,20 @@ export type FieldSpec = {
     | null;
   ui?: UiHints;
 };
+export type KfVectorSearchParams = {
+  provider?: "kf_vector_search";
+  /** Restrict semantic search to these document library tag IDs. User and LLM selections are intersected with this set at query time. */
+  document_library_tags_ids?: string[] | null;
+};
 export type McpServerRef = {
   id: string;
   require_tools?: string[];
+  /** Typed agent-level parameters for inprocess tools, discriminated by `provider`. Example: KfVectorSearchParams(document_library_tags_ids=['lib-123']) */
+  params?:
+    | ({
+        provider: "kf_vector_search";
+      } & KfVectorSearchParams)
+    | null;
 };
 export type AgentTuning = {
   /** The agent's mandatory role for discovery. */
