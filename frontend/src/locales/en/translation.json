@@ -1407,7 +1407,26 @@
         "title": "Chat with your {{agentsNicknamePlural}}",
         "create": "Create Agent",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
+        "noAgent": "No Agent in your team!",
         "firstCreate": "Create"
+      },
+      "formAgent": {
+        "titleCreate": "Create a new {{agentsNicknameSingular}}",
+        "titleEdit": "Edit {{agentsNicknameSingular}}",
+        "fields": {
+          "name": {
+            "placeholder": "Enter an original name",
+            "label": "Name"
+          },
+          "role": {
+            "placeholder": "What is the role of your {{agentsNicknameSingular}} ?",
+            "label": "Role"
+          },
+          "description": {
+            "placeholder": "Describe this {{agentsNicknameSingular}} for the team members",
+            "label": "Description"
+          }
+        }
       }
     },
     "marketplace": {

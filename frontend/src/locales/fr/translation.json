@@ -1407,6 +1407,24 @@
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
         "firstCreate": "Créer"
+      },
+      "formAgent": {
+        "titleCreate": "Créer un nouvel {{agentsNicknameSingular}}",
+        "titleEdit": "Editer {{agentsNicknameSingular}}",
+        "fields": {
+          "name": {
+            "placeholder": "Entrez un nom original",
+            "label": "Nom"
+          },
+          "role": {
+            "placeholder": "Quel est le rôle qu’incarne votre {{agentsNicknameSingular}} ?",
+            "label": "Rôle"
+          },
+          "description": {
+            "placeholder": "Décrivez votre {{agentsNicknameSingular}} pour les autres utilisateurs",
+            "label": "Description"
+          }
+        }
       }
     },
     "marketplace": {
