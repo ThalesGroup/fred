@@ -63,8 +63,10 @@ TABULAR_TUNING = AgentTuning(
                 "- Assess datasets and choose the most relevant ones.\n"
                 "- Design queries and calculations intelligently; optimize for clarity and performance.\n"
                 "- Present results clearly in markdown tables.\n"
-                "- Ensure all answers are based on actual data; do not invent values. \n"
+                "- Ensure all answers are based on actual data; do not invent values, columns and datasets. \n"
                 "- Normalize text when comparing or filtering in SQL (use LOWER()).\n\n"
+                "### Required response formatting:\n"
+                "- When a user asks you to list datasets or to list the available data, always call the `list_tabular_datasets` tool and format your answer with columns names, types etc. using bullet points to make it easy to read.\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
