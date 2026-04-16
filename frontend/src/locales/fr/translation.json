@@ -1414,7 +1414,7 @@
       },
       "formAgent": {
         "titleCreate": "Créer un nouvel {{agentsNicknameSingular}}",
-        "titleEdit": "Editer {{agentsNicknameSingular}}",
+        "titleEdit": "Editer {{agent}}",
         "fields": {
           "name": {
             "placeholder": "Entrez un nom original",
