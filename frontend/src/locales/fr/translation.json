@@ -1413,7 +1413,7 @@
         "firstCreate": "Créer"
       },
       "formAgent": {
-        "titleCreate": "Créer un nouvel {{agentsNicknameSingular}}",
+        "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",
         "fields": {
           "name": {
