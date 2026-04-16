@@ -175,7 +175,6 @@ class MCPRuntime:
             )
             await asyncio.sleep(delay_secs)
 
-        await self._aclose_inprocess_toolkits()
         if last_error is not None:
             raise last_error
 

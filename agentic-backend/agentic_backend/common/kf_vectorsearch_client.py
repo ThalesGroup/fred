@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Collection, Dict, List, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
@@ -25,6 +25,8 @@ from agentic_backend.common.kf_base_client import (
     KfBaseClient,
     KnowledgeFlowAgentContext,
 )
+from agentic_backend.common.structures import AgentSettings
+from agentic_backend.core.agents.runtime_context import RuntimeContext
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +47,51 @@ class VectorSearchClient(KfBaseClient):
             allowed_methods=frozenset({"POST"}),
         )
 
+    async def agent_search(
+        self,
+        *,
+        agent_settings: AgentSettings,
+        runtime_context: RuntimeContext,
+        question: str,
+        top_k: int,
+        document_library_tags_ids: Optional[Collection[str]] = None,
+        document_uids: Optional[Collection[str]] = None,
+    ) -> List[VectorSearchHit]:
+        """Simplified search method for use within agent tools, which infers auth
+        and other parameters from the agent settings and runtime context."""
+
+        # If user manually scopes the search, restrict agent selection to that scope (intersection).
+        # If only one side is set, use it as-is.
+        final_document_library_tags_ids = _intersect_or_fallback(
+            document_library_tags_ids, runtime_context.selected_document_libraries_ids
+        )
+        final_document_uids = _intersect_or_fallback(
+            document_uids, runtime_context.selected_document_uids
+        )
+
+        return await self.search(
+            question=question,
+            top_k=top_k,
+            document_library_tags_ids=final_document_library_tags_ids,
+            document_uids=final_document_uids,
+            # Inferred from agent settings and runtime context:
+            search_policy=runtime_context.search_policy,
+            owner_filter=OwnerFilter.TEAM
+            if agent_settings.team_id
+            else OwnerFilter.PERSONAL,
+            team_id=agent_settings.team_id,
+            session_id=runtime_context.session_id,
+            include_session_scope=runtime_context.include_session_scope or True,
+            include_corpus_scope=runtime_context.include_corpus_scope or True,
+        )
+
     async def search(
         self,
         *,
         question: str,
         top_k: int = 10,
-        document_library_tags_ids: Optional[Sequence[str]] = None,
-        document_uids: Optional[Sequence[str]] = None,
+        document_library_tags_ids: Optional[Collection[str]] = None,
+        document_uids: Optional[Collection[str]] = None,
         search_policy: Optional[str] = None,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
@@ -161,3 +201,16 @@ class VectorSearchClient(KfBaseClient):
             logger.warning("Unexpected vector rerank payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
+
+
+def _intersect_or_fallback(
+    agent_ids: Optional[Collection[str]], user_ids: Optional[Collection[str]]
+) -> Optional[Collection[str]]:
+    """Return the intersection when both sides are set, otherwise whichever is non-None."""
+    if agent_ids and user_ids:
+        return set(agent_ids) & set(user_ids)
+    if agent_ids:
+        return agent_ids
+    if user_ids:
+        return user_ids
+    return None
