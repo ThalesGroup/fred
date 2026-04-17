@@ -251,14 +251,13 @@ def build_langfuse_tracer() -> TracerPort | None:
 
     has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
     has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not (has_public and has_secret):
-        _LANGFUSE_TRACER = None
-        return None
-
-    try:
-        _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
-    except Exception:
-        logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
+    if has_public and has_secret:
+        try:
+            _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
+        except Exception:
+            logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
+            _LANGFUSE_TRACER = None
+    else:
         _LANGFUSE_TRACER = None
     return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
 
