@@ -7,7 +7,7 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
-from agentic_backend.agents.v1.production.contrib.bid_mgr.pydantic_models import (
+from agentic_backend.agents.v1.production.contrib.bid_and_capture.bid_mgr.pydantic_models import (
     AttentesResult,
     RiskAnalysisResult,
     SyntheseResult,

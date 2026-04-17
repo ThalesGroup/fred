@@ -95,7 +95,7 @@ agents:
   - id: "Bid Mgr"
     name: "Bid Mgr"
     type: "agent"
-    class_path: "agentic_backend.agents.v1.production.contrib.bid_mgr.bid_mgr.BidMgr"
+    class_path: "agentic_backend.agents.v1.production.contrib.bid_and_capture.bid_mgr.bid_mgr.BidMgr"
     enabled: true
     chat_options:
       libraries_selection: true
