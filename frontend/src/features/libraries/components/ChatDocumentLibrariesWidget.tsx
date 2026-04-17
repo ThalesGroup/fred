@@ -50,6 +50,8 @@ export type ChatDocumentLibrariesWidgetProps = {
   disabled?: boolean;
   onOpen: () => void;
   onClose: () => void;
+  /** When set, the library picker only shows libraries whose id is in this list (agent creator scope). */
+  creatorScopeLibraryIds?: string[];
 };
 
 const ChatDocumentLibrariesWidget = ({
@@ -67,6 +69,7 @@ const ChatDocumentLibrariesWidget = ({
   disabled = false,
   onOpen,
   onClose,
+  creatorScopeLibraryIds,
 }: ChatDocumentLibrariesWidgetProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -262,6 +265,7 @@ const ChatDocumentLibrariesWidget = ({
               setSelectedLibrariesIds={onChangeSelectedLibraryIds}
               teamId={teamId}
               onClose={() => setPickerAnchor(null)}
+              allowedLibraryIds={creatorScopeLibraryIds}
             />
           </FloatingPanel>
         </ClickAwayListener>

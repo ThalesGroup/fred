@@ -22,6 +22,8 @@ export interface ChatDocumentLibrariesSelectionCardProps {
   libraryType: TagType;
   teamId?: string;
   onClose?: () => void;
+  /** When set, only libraries whose id is in this list are shown in the picker. */
+  allowedLibraryIds?: string[];
 }
 
 function computeCheck(n: TagNode, selected: Set<string>) {
@@ -70,6 +72,7 @@ export function ChatDocumentLibrariesSelectionCard({
   libraryType,
   teamId,
   onClose,
+  allowedLibraryIds,
 }: ChatDocumentLibrariesSelectionCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -81,7 +84,12 @@ export function ChatDocumentLibrariesSelectionCard({
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
 
-  const libs = useMemo<TagWithItemsId[]>(() => libraries as TagWithItemsId[], [libraries]);
+  const libs = useMemo<TagWithItemsId[]>(() => {
+    const all = libraries as TagWithItemsId[];
+    if (!allowedLibraryIds) return all;
+    const allowed = new Set(allowedLibraryIds);
+    return all.filter((lib) => allowed.has(lib.id));
+  }, [libraries, allowedLibraryIds]);
   const tree = useMemo(() => buildTree(libs), [libs]);
   const filtered = useMemo(() => filterTree(tree, search), [tree, search]);
   const selected = useMemo(() => new Set(selectedLibrariesIds), [selectedLibrariesIds]);

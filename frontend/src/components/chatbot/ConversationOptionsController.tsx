@@ -112,6 +112,7 @@ export type ConversationOptionsState = {
   displayChatContextIds: string[];
   displayDocumentLibraryIds: string[];
   displayDocumentUids: string[];
+  creatorLibraryScope: string[] | null;
   chatContextWidgetOpenDisplay: boolean;
   attachmentsWidgetOpenDisplay: boolean;
   searchOptionsWidgetOpenDisplay: boolean;
@@ -227,6 +228,11 @@ export function useConversationOptionsController({
   const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
   const supportsLibrariesSelection = currentAgent?.chat_options?.libraries_selection === true;
   const supportsDocumentsSelection = currentAgent?.chat_options?.documents_selection === true;
+
+  const creatorLibraryScope = useMemo<string[] | null>(() => {
+    const ref = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search");
+    return ref?.params?.document_library_tags_ids ?? null;
+  }, [currentAgent]);
 
   const [persistSessionPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
   const {
@@ -735,6 +741,7 @@ export function useConversationOptionsController({
       displayChatContextIds,
       displayDocumentLibraryIds,
       displayDocumentUids,
+      creatorLibraryScope,
       chatContextWidgetOpenDisplay,
       attachmentsWidgetOpenDisplay,
       searchOptionsWidgetOpenDisplay,
@@ -836,6 +843,7 @@ export function ConversationOptionsPanel({
     contextOpen,
     hasContext,
     userInputContext,
+    creatorLibraryScope,
   } = controller.state;
   const {
     setChatContextIds,
@@ -954,6 +962,7 @@ export function ConversationOptionsPanel({
               disabledReason={librariesDisabledReason}
               onOpen={() => openWidget("libraries")}
               onClose={() => setLibrariesWidgetOpen(false)}
+              creatorScopeLibraryIds={creatorLibraryScope ?? undefined}
             />
           )}
           {supportsDocumentsSelection && (
