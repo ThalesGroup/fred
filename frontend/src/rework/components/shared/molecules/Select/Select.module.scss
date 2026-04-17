@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .trigger {
   all: unset;
 }
@@ -62,19 +60,18 @@
 .label {
   padding-left: var(--spacing-xs);
   color: var(--label-color, var(--on-surface-retreat));
-  @include typography("label", "large");
+  font: var(--font-label-large);
 }
 
 .value {
-  @include typography("body", "large");
+  font: var(--font-body-large);
 }
 
 .select-container[data-compact="false"] .error-message {
   padding: 0 var(--spacing-xs);
   height: 1rem;
   color: var(--error);
-
-  @include typography("body", "small");
+  font: var(--font-body-small);
 }
 
 .menu-popover {

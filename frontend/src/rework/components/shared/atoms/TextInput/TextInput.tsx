@@ -4,8 +4,7 @@ import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 export interface TextInputProps extends ComponentPropsWithRef<"input"> {
   label?: string;
-  placeholder: string;
-  explication?: string;
+  explanation?: string;
   error?: string;
   icon?: IconProps;
   compact?: boolean;
@@ -13,15 +12,18 @@ export interface TextInputProps extends ComponentPropsWithRef<"input"> {
 
 export default function TextInput({
   label,
-  placeholder,
-  explication,
+  explanation,
   error,
   icon,
   compact = false,
-  ref,
+  maxLength,
+  value,
+  required,
   ...props
 }: TextInputProps) {
   const id = useId();
+
+  const characterCounter = String(value).length;
 
   return (
     <div
@@ -30,7 +32,7 @@ export default function TextInput({
     >
       {label && (
         <label className={styles.label} htmlFor={id}>
-          {label}
+          {required ? `${label} *` : label}
         </label>
       )}
       {icon && (
@@ -38,8 +40,19 @@ export default function TextInput({
           <Icon {...icon} />
         </span>
       )}
-      <input ref={ref} id={id} type={"text"} placeholder={placeholder} {...props} />
-      <span className={styles.hint}>{error || explication || null}</span>
+      <input
+        id={id}
+        type={"text"}
+        value={value}
+        maxLength={maxLength}
+        required={required}
+        autoComplete="off"
+        {...props}
+      />
+      <span className={styles.information}>
+        <span className={styles.hint}>{error || explanation || null}</span>
+        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+      </span>
     </div>
   );
 }

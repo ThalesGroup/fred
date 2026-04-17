@@ -13,6 +13,7 @@ set -eu
 : "${FRONTEND_AGENTIC_UPSTREAM:=http://agentic-backend}"
 : "${FRONTEND_KNOWLEDGE_FLOW_UPSTREAM:=http://knowledge-flow-backend:8000}"
 : "${FRONTEND_CONTROL_PLANE_UPSTREAM:=http://control-plane-backend:8222}"
+: "${FRONTEND_CLIENT_MAX_BODY_SIZE:=150m}"
 
 cat > /etc/nginx/conf.d/fred.conf <<EOF
 server {
@@ -20,6 +21,7 @@ server {
     server_name localhost;
     root /usr/share/nginx/html;
     index index.html index.htm;
+    client_max_body_size ${FRONTEND_CLIENT_MAX_BODY_SIZE};
 
     location /agentic/ {
         proxy_pass ${FRONTEND_AGENTIC_UPSTREAM};

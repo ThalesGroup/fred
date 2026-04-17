@@ -1,7 +1,9 @@
 # app/common/vectorization_utils.py
 
 import hashlib
+import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -125,7 +127,11 @@ _ALLOWED_CHUNK_KEYS = {
     "viewer_fragment",
     "original_doc_length",
     "section",
+    "slide_id",
+    "has_visual_evidence",
+    "slide_image_uri",
 }
+_BOOL_KEYS = {"has_visual_evidence"}
 
 _INT_KEYS = {"chunk_index", "char_start", "char_end", "original_doc_length"}
 
@@ -197,6 +203,10 @@ def sanitize_chunk_metadata(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[s
             else:
                 proj[k] = iv
 
+    for k in _BOOL_KEYS:
+        if k in proj:
+            proj[k] = bool(proj[k])
+
     frag = _build_viewer_fragment(proj)
     if frag:
         proj["viewer_fragment"] = frag
@@ -220,3 +230,41 @@ def make_stable_chunk_id(base_flat: Dict[str, Any], proj: Dict[str, Any]) -> str
     ]
     key = "|".join(str(x) for x in parts)
     return _stable_id16_from_str(key)
+
+
+def load_pptx_slide_assets(output_file_path: str) -> dict[int, dict[str, Any]]:
+    manifest_path = Path(output_file_path).with_name("pptx_slide_assets.json")
+    if not manifest_path.exists():
+        return {}
+
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    slides = data.get("slides") or []
+    return {
+        int(entry["slide_number"]): {
+            "has_visual_evidence": bool(entry.get("has_visual_evidence", False)),
+            "slide_image_uri": entry.get("slide_image_path"),
+        }
+        for entry in slides
+        if entry.get("slide_number") is not None and entry.get("slide_image_path")
+    }
+
+
+_SLIDE_SECTION_RE = re.compile(r"(?:^| / )Slide\s+(\d+)(?:$|\b)")
+
+
+def slide_number_from_chunk_metadata(raw: Dict[str, Any]) -> int | None:
+    section = raw.get("section")
+    if section:
+        match = _SLIDE_SECTION_RE.search(str(section))
+        if match:
+            return int(match.group(1))
+
+    for key in _HEADER_KEYS:
+        value = raw.get(key)
+        if not value:
+            continue
+        match = _SLIDE_SECTION_RE.search(str(value))
+        if match:
+            return int(match.group(1))
+
+    return None
