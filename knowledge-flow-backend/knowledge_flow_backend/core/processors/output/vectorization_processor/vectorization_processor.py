@@ -30,8 +30,10 @@ from knowledge_flow_backend.core.processors.output.summarizer.smart_llm_summariz
 from knowledge_flow_backend.core.processors.output.vectorization_processor.vectorization_utils import (
     flat_metadata_from,
     load_langchain_doc_from_metadata,
+    load_pptx_slide_assets,
     make_chunk_uid,
     sanitize_chunk_metadata,
+    slide_number_from_chunk_metadata,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,8 @@ class VectorizationProcessor(BaseOutputProcessor):
             if not document:
                 raise ValueError("Document is empty or not loaded correctly.")
 
+            slide_assets = load_pptx_slide_assets(file_path)
+
             # Ensure keywords is always defined
             keywords: List[str] | None = None
 
@@ -167,6 +171,14 @@ class VectorizationProcessor(BaseOutputProcessor):
                 # - Name is short; ensure sanitize_chunk_metadata() whitelists 'doc_kw'.
                 if kw_for_search:
                     raw_meta["doc_kw"] = kw_for_search
+
+                slide_number = slide_number_from_chunk_metadata(raw_meta)
+                if slide_number is not None:
+                    raw_meta["slide_id"] = slide_number
+                    asset = slide_assets.get(slide_number)
+                    if asset:
+                        raw_meta["has_visual_evidence"] = asset.get("has_visual_evidence", False)
+                        raw_meta["slide_image_uri"] = asset.get("slide_image_uri")
 
                 # Whitelist + coerce + derive viewer_fragment/section
                 clean, dropped = sanitize_chunk_metadata(raw_meta)

@@ -168,6 +168,14 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/raw_content/${queryArg.documentUid}` }),
     }),
+    downloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGet: build.query<
+      DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiResponse,
+      DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/markdown/${queryArg.documentUid}/artifact/${queryArg.artifactPath}`,
+      }),
+    }),
     streamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGet: build.query<
       StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse,
       StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg
@@ -1258,6 +1266,12 @@ export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
   /** status 200 Binary file stream */ Blob;
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
+};
+export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg = {
+  documentUid: string;
+  artifactPath: string;
 };
 export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse = unknown;
 export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = {
@@ -2380,6 +2394,9 @@ export type VectorSearchHit = {
   page?: number | null;
   section?: string | null;
   viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
   /** Document UID */
   uid: string;
   title: string;
@@ -2909,6 +2926,8 @@ export const {
   useLazyDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
   useDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
+  useLazyDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
   useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,

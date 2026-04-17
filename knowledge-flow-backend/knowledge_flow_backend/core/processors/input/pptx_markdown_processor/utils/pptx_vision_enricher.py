@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_renderer import (
@@ -28,24 +29,30 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class PptxVisionEnrichmentResult:
+    visual_enrichments: dict[int, str] = field(default_factory=dict)
+    rendered_slides: dict[int, Path] = field(default_factory=dict)
+
+
 def enrich_slides_with_vision(
     pptx_path: Path,
     slide_numbers: list[int],
     output_dir: Path,
     image_describer,
-) -> dict[int, str]:
+) -> PptxVisionEnrichmentResult:
     """Return slide-level visual enrichments for the selected slide numbers."""
     if not slide_numbers:
-        return {}
+        return PptxVisionEnrichmentResult()
 
     if image_describer is None:
         logger.warning("[PROCESSOR][PPTX] No image describer available for vision enrichment.")
-        return {}
+        return PptxVisionEnrichmentResult()
 
     pdf_path = convert_pptx_to_pdf(pptx_path)
     if pdf_path is None:
         logger.warning("[PROCESSOR][PPTX] PPTX to PDF conversion failed; skipping vision enrichment.")
-        return {}
+        return PptxVisionEnrichmentResult()
 
     slides_dir = output_dir / "slides_png"
     rendered_slides = render_pdf_pages_to_png(pdf_path, slide_numbers, slides_dir)
@@ -71,4 +78,7 @@ def enrich_slides_with_vision(
         "[PROCESSOR][PPTX] Generated vision enrichments for %s slide(s).",
         len(enrichments),
     )
-    return enrichments
+    return PptxVisionEnrichmentResult(
+        visual_enrichments=enrichments,
+        rendered_slides=rendered_slides,
+    )
