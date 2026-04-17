@@ -37,7 +37,7 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
             return null;
           }
           const isSelected = refIds.has(tool.id);
-          const ParamsComponent = TOOL_PARAMS_REGISTRY[tool.id];
+          const registryEntry = tool.provider ? TOOL_PARAMS_REGISTRY[tool.provider] : undefined;
           return (
             <Box key={index} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
               <AgentOptionSelectionCard
@@ -52,10 +52,28 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
                   }
                 }}
               />
-              {ParamsComponent && (
+              {registryEntry && (
                 <Collapse in={isSelected} unmountOnExit>
                   <Box sx={{ mt: 0.5, px: 1.25, pb: 0.75 }}>
-                    <ParamsComponent params={{}} onParamsChange={() => {}} />
+                    {(() => {
+                      const currentRef = mcpServerRefs.find((ref) => ref.id === tool.id);
+                      const currentParams = currentRef?.params ?? registryEntry.defaultParams;
+                      return registryEntry.render(currentParams, (updatedParams) => {
+                        onMcpServerRefsChange(
+                          mcpServerRefs.map((ref) =>
+                            ref.id === tool.id
+                              ? {
+                                  ...ref,
+                                  params: {
+                                    ...(updatedParams as object),
+                                    provider: registryEntry.provider,
+                                  } as McpServerRef["params"],
+                                }
+                              : ref,
+                          ),
+                        );
+                      });
+                    })()}
                   </Box>
                 </Collapse>
               )}

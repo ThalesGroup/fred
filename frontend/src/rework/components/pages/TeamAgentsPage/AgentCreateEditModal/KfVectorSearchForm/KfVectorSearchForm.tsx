@@ -1,27 +1,25 @@
 import { useTranslation } from "react-i18next";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
+import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
 import { SwitchRow } from "../SwitchRow/SwitchRow";
-import styles from "./DocumentCapacityForm.module.css";
+import styles from "./KfVectorSearchForm.module.css";
 
-export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps) {
+export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps<KfVectorSearchParams>) {
   const { t } = useTranslation();
-
-  const attachFiles = Boolean(params["chat_options.attach_files"]);
-  const librariesSelection = Boolean(params["chat_options.libraries_selection"]);
 
   return (
     <div className={styles["mainFormCard"]}>
       <SwitchRow
         label={t("agentTuning.fields.chat_options_attach_files.title")}
         description={t("agentTuning.fields.chat_options_attach_files.description")}
-        checked={attachFiles}
-        onChange={(checked) => onParamsChange({ ...params, "chat_options.attach_files": checked })}
+        checked={Boolean(params.attach_files)}
+        onChange={(checked) => onParamsChange({ ...params, attach_files: checked })}
       />
       <SwitchRow
         label={t("agentTuning.fields.chat_options_libraries_selection.title")}
         description={t("agentTuning.fields.chat_options_libraries_selection.description")}
-        checked={librariesSelection}
-        onChange={(checked) => onParamsChange({ ...params, "chat_options.libraries_selection": checked })}
+        checked={Boolean(params.libraries_selection)}
+        onChange={(checked) => onParamsChange({ ...params, libraries_selection: checked })}
       />
     </div>
   );
