@@ -295,7 +295,7 @@ async def get_connected_mcp_client_for_agent(
                 dur_ms,
             )
             total_tools += len(tools)
-        except BaseException as e:
+        except Exception as e:
             dur_ms = (time.perf_counter() - start) * 1000
             logger.warning(
                 "[MCP][%s] connect fail name=%s url=%s err=%s dur_ms=%.0f: %s",
