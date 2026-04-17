@@ -50,6 +50,7 @@ from fred_sdk.contracts.context import (
     GeoPart,
     JsonScalar,
     PortableContext,
+    PortableEnvironment,
     PublishedArtifact,
     ResourceFetchRequest,
     ResourceScope,
@@ -183,7 +184,13 @@ class LangfuseTracerAdapter(TracerPort):
         context: PortableContext | None = None,
         attributes: Mapping[str, JsonScalar] | None = None,
     ) -> SpanPort:
-        context = context or PortableContext()
+        context = context or PortableContext(
+            request_id="unknown",
+            correlation_id="unknown",
+            actor="unknown",
+            tenant="unknown",
+            environment=PortableEnvironment.DEV,
+        )
         trace_seed = (
             context.trace_id
             or context.correlation_id
