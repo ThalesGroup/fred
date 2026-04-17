@@ -20,6 +20,7 @@ extraction reusable for future vision-enriched PPTX processing.
 """
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,9 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_native_slide_extractor import (
     extract_native_slide_content,
 )
+from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_asset_manifest import (
+    write_slide_asset_manifest,
+)
 from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.pptx_slide_markdown_formatter import (
     format_slide_markdown,
 )
@@ -52,6 +56,12 @@ from knowledge_flow_backend.core.processors.input.pptx_markdown_processor.utils.
 logger = logging.getLogger(__name__)
 
 
+class PptxProcessingMode(str, Enum):
+    NATIVE_ONLY = "native_only"
+    VISION_TEXT = "vision_text"
+    VISION_TEXT_PLUS_ASSETS = "vision_text_plus_assets"
+
+
 class PptxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts PPTX slide decks into Markdown sections, slide by slide."
 
@@ -60,21 +70,24 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
         self.image_describer = None
         self._warned_missing_vision_model = False
 
-    def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, bool]:
+    def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, PptxProcessingMode]:
         processing = get_configuration().processing
         current_profile = get_current_processing_profile()
         active_profile = processing.normalize_profile(current_profile)
 
-        # V1 choice:
-        # - fast: native only
-        # - medium: enable vision enrichment
-        # - rich: kept disabled for now until the rich strategy is finalized
-        enable_vision = active_profile == IngestionProcessingProfile.MEDIUM
+        if active_profile == IngestionProcessingProfile.FAST:
+            mode = PptxProcessingMode.NATIVE_ONLY
+        elif active_profile == IngestionProcessingProfile.MEDIUM:
+            mode = PptxProcessingMode.VISION_TEXT
+        elif active_profile == IngestionProcessingProfile.RICH:
+            mode = PptxProcessingMode.VISION_TEXT_PLUS_ASSETS
+        else:
+            mode = PptxProcessingMode.NATIVE_ONLY
 
-        return active_profile, enable_vision
+        return active_profile, mode
 
-    def _resolve_image_describer(self, enable_vision: bool):
-        if not enable_vision:
+    def _resolve_image_describer(self, mode: PptxProcessingMode):
+        if mode == PptxProcessingMode.NATIVE_ONLY:
             return None
         if self.image_describer is not None:
             return self.image_describer
@@ -170,13 +183,13 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
         md_path = output_dir / "output.md"
 
         try:
-            active_profile, enable_vision = self._resolve_effective_options()
-            image_describer = self._resolve_image_describer(enable_vision)
+            active_profile, processing_mode = self._resolve_effective_options()
+            image_describer = self._resolve_image_describer(processing_mode)
 
             logger.info(
-                "[PROCESSOR][PPTX] Using profile=%s enable_vision=%s vision_model_available=%s",
+                "[PROCESSOR][PPTX] Using profile=%s processing_mode=%s vision_model_available=%s",
                 active_profile.value,
-                enable_vision,
+                processing_mode.value,
                 bool(image_describer),
             )
 
@@ -191,7 +204,9 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
             self._log_visual_preanalysis(visual_preanalysis)
 
             visual_enrichments: dict[int, str] = {}
-            if enable_vision and image_describer:
+            rendered_slides: dict[int, Path] = {}
+
+            if processing_mode != PptxProcessingMode.NATIVE_ONLY and image_describer:
                 slides_to_enrich = self._select_slides_for_vision(visual_preanalysis)
                 logger.info(
                     "[PROCESSOR][PPTX] Selected %s slide(s) for vision enrichment: %s",
@@ -199,11 +214,24 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
                     slides_to_enrich,
                 )
 
-                visual_enrichments = enrich_slides_with_vision(
+                vision_result = enrich_slides_with_vision(
                     pptx_path=file_path,
                     slide_numbers=slides_to_enrich,
                     output_dir=output_dir,
                     image_describer=image_describer,
+                )
+                visual_enrichments = vision_result.visual_enrichments
+                rendered_slides = vision_result.rendered_slides
+
+            if processing_mode == PptxProcessingMode.VISION_TEXT_PLUS_ASSETS and rendered_slides:
+                manifest_path = write_slide_asset_manifest(
+                    output_dir=output_dir,
+                    rendered_slides=rendered_slides,
+                )
+                logger.info(
+                    "[PROCESSOR][PPTX] Wrote slide asset manifest for %s slide(s): %s",
+                    len(rendered_slides),
+                    manifest_path,
                 )
 
             slide_markdowns = [

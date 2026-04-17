@@ -14,6 +14,7 @@
 
 import asyncio
 import sys
+from typing import Any
 
 from deepeval import evaluate
 from deepeval.evaluate import AsyncConfig
@@ -35,7 +36,9 @@ class RAGEvaluator(BaseEvaluator):
         self,
         agent_id: str,
         doc_lib_ids: list[str] | None = None,
-    ):
+    ) -> Any:
+        pass
+
         """
         This method runs the evaluation of an agent by generating test cases from the dataset
         and evaluating them using the defined metrics.

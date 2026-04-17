@@ -25,6 +25,9 @@ class VectorSearchHit(BaseModel):
     page: Optional[int] = None
     section: Optional[str] = None
     viewer_fragment: Optional[str] = None  # e.g., "p=12&sel=340-520"
+    slide_id: Optional[int] = None
+    has_visual_evidence: Optional[bool] = None
+    slide_image_uri: Optional[str] = None
 
     # Identity
     uid: str = Field(..., description="Document UID")
