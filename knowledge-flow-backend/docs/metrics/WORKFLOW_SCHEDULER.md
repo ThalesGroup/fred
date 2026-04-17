@@ -131,16 +131,16 @@
  ### Dimensions
  It uses the same dimensions as `temporal.system.activity_duration_ms`:
 
- - phase
- - status
- - error_code
- - activity_type
- - task_queue
- - workflow_type
- - attempt
- - file_type
- - source_type
- - source_tag
+ - `phase`
+ - `status`
+ - `error_code`
+ - `activity_type`
+ - `task_queue`
+ - `workflow_type`
+ - `attempt`
+ - `file_type`
+ - `source_type`
+ - `source_tag`
 
  ### Important interpretation note
  Because this counter is emitted at activity-result level, it may not represent "unique business documents" unless each document maps cleanly to one emitted result in your pipeline.
