@@ -710,6 +710,38 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
             **settings,
         )
 
+    if provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
+        if not name:
+            raise ValueError(
+                "Vertex AI Model Garden embeddings require 'name' (model id). Ex: publishers/baai/models/bge*"
+            )
+        _require_settings(
+            settings, ["project", "location"], "Vertex AI Model Garden embeddings"
+        )
+        project = str(settings.pop("project"))
+        location = str(settings.pop("location"))
+        settings.pop("request_timeout", None)
+        settings.pop("model_family", None)
+        try:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        except ImportError as e:
+            raise ImportError(
+                "Provider 'vertex-ai-model-garden' embeddings requires package 'langchain-google-genai'."
+            ) from e
+
+        log_settings = dict(settings)
+        log_settings.update(
+            {"project": project, "location": location, "vertexai": True}
+        )
+        _info_provider(cfg, log_settings)
+        return GoogleGenerativeAIEmbeddings(
+            model=name,
+            project=project,
+            location=location,
+            vertexai=True,
+            **settings,
+        )
+
     if provider == ModelProvider.OLLAMA.value:
         if not name:
             raise ValueError("Ollama embeddings require 'name' (model).")
