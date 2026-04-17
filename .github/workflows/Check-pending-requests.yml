@@ -36,7 +36,7 @@ jobs:
             knowledge-flow:
               - 'knowledge-flow-backend/**'
             fred-core:
-              - 'fred-core/**'
+              - 'libs/fred-core/**'
             control-plane:
               - 'control-plane-backend/**'
 
@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        directory: [agentic-backend, knowledge-flow-backend, fred-core, control-plane-backend]
+        directory: [agentic-backend, knowledge-flow-backend, libs/fred-core, control-plane-backend]
         check:
           - lint
           - format
@@ -64,7 +64,7 @@ jobs:
           - directory: knowledge-flow-backend
             condition: needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true'
           # Fred core runs when fred-core changes
-          - directory: fred-core
+          - directory: libs/fred-core
             condition: needs.detect-changes.outputs.fred-core == 'true'
           # Control plane backend runs when control-plane or fred-core changes
           - directory: control-plane-backend
@@ -100,7 +100,7 @@ jobs:
       matrix:
         include:
           - name: fred-core
-            directory: fred-core
+            directory: libs/fred-core
             unit-target: test
             integration-target: test-integration
             needs-pandoc: false
