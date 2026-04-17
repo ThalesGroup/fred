@@ -179,7 +179,6 @@ class LangfuseTracerAdapter(TracerPort):
 
     def start_span(
         self,
-        *,
         name: str,
         context: PortableContext,
         attributes: Mapping[str, JsonScalar] | None = None,
