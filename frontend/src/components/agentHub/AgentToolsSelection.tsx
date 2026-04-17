@@ -8,11 +8,13 @@ import { TOOL_PARAMS_REGISTRY } from "./toolParams/toolParamsRegistry";
 export interface AgentToolsSelectionProps {
   mcpServerRefs: McpServerRef[];
   onMcpServerRefsChange: (newMcpServerRefs: McpServerRef[]) => void;
+  teamId?: string;
 }
 
 export const AgentToolsSelection = memo(function AgentToolsSelection({
   mcpServerRefs,
   onMcpServerRefsChange,
+  teamId,
 }: AgentToolsSelectionProps) {
   const { t } = useTranslation();
   const { data: tools, isLoading: isLoadingMcpServers } = useListMcpServersAgenticV1AgentsMcpServersGetQuery();
@@ -72,7 +74,7 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
                               : ref,
                           ),
                         );
-                      });
+                      }, teamId);
                     })()}
                   </Box>
                 </Collapse>

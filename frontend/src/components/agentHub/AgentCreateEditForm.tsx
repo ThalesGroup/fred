@@ -468,7 +468,7 @@ export function AgentCreateEditForm({
 
       {/* ── Tools ── */}
       {showTuningFields && (
-        <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} />
+        <AgentToolsSelection mcpServerRefs={mcpServerRefs} onMcpServerRefsChange={setMcpServerRefs} teamId={teamId} />
       )}
 
       {/* ── Dynamic tuning fields ── */}

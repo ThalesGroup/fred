@@ -6,12 +6,13 @@ import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
 export interface ToolParamsProps<T> {
   params: T;
   onParamsChange: (params: T) => void;
+  teamId?: string;
 }
 
 // Type-erased entry stored in the registry
 export interface RegistryEntry {
   provider: string;
-  render: (params: unknown, onParamsChange: (p: unknown) => void) => React.ReactNode;
+  render: (params: unknown, onParamsChange: (p: unknown) => void, teamId?: string) => React.ReactNode;
   defaultParams: unknown;
 }
 
@@ -21,8 +22,8 @@ function makeEntry<T>(provider: string, component: React.FC<ToolParamsProps<T>>,
   return {
     provider,
     defaultParams,
-    render(params: unknown, onParamsChange: (p: unknown) => void) {
-      return <Component params={params as T} onParamsChange={onParamsChange as (p: T) => void} />;
+    render(params: unknown, onParamsChange: (p: unknown) => void, teamId?: string) {
+      return <Component params={params as T} onParamsChange={onParamsChange as (p: T) => void} teamId={teamId} />;
     },
   };
 }

@@ -171,7 +171,6 @@ export function ChatDocumentLibrariesSelectionCard({
     <Box
       sx={{
         width: "100%",
-        maxWidth: 420,
         height: "min(70vh, 460px)",
         display: "flex",
         flexDirection: "column",
