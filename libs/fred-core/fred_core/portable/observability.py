@@ -43,7 +43,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Generator
 
-
 # ---------------------------------------------------------------------------
 # Span
 # ---------------------------------------------------------------------------
@@ -215,6 +214,7 @@ class TimerRecord:
 
     name: str
     dims: dict[str, str | None]
+    elapsed_s: float = 0.0
 
 
 class InMemoryMetricsProvider(MetricsProvider):
@@ -261,8 +261,11 @@ class InMemoryMetricsProvider(MetricsProvider):
             d.setdefault("status", "error")
             raise
         finally:
+            elapsed_s = _time.perf_counter() - start
             d.setdefault("status", "ok")
-            self._timers.append(TimerRecord(name=name, dims=dict(d)))
+            self._timers.append(
+                TimerRecord(name=name, dims=dict(d), elapsed_s=elapsed_s)
+            )
 
 
 # ---------------------------------------------------------------------------

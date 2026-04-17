@@ -4,13 +4,19 @@
 			"path": ".."
 		},
 		{
-			"path": "../fred-core"
+			"path": "../libs/fred-sdk"
+		},
+		{
+			"path": "../libs/fred-runtime"
+		},
+		{
+			"path": "../libs/fred-core"
 		},
 		{
 			"path": "../agentic-backend"
 		},
 		{
-			"path": "../app-backend"
+			"path": "../apps/fred-agents"
 		},
 		{
 			"path": "../control-plane-backend"
@@ -25,11 +31,13 @@
 	"settings": {
 		"files.exclude": {
 			"agentic-backend/": true,
-			"app-backend/": true,
+			"apps/fred-agents/": true,
 			"control-plane-backend/": true,
 			"knowledge-flow/": true,
 			"frontend/": true,
-			"fred-core/": true,
+			"../libs/fred-sdk/": true,
+			"../libs/fred-runtime/": true,
+			"../libs/fred-core/": true,
 		},
 		"i18n-ally.localesPaths": [
 			"frontend/src/locales",

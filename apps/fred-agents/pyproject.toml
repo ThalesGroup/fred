@@ -41,9 +41,9 @@ markers = ["integration: marks tests that require external services"]
 testpaths = ["tests"]
 
 [tool.uv.sources]
-fred-core = { path = "../fred-core", editable = true }
-fred-sdk = { path = "../fred-sdk", editable = true }
-fred-runtime = { path = "../fred-runtime", editable = true }
+fred-core = { path = "../../libs/fred-core", editable = true }
+fred-sdk = { path = "../../libs/fred-sdk", editable = true }
+fred-runtime = { path = "../../libs/fred-runtime", editable = true }
 
 [dependency-groups]
 dev = [

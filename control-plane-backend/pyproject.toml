@@ -14,7 +14,7 @@ dependencies = [
   "python-dotenv>=1.0.1,<2.0.0",
   "pydantic>=2.10.0,<3.0.0",
   "temporalio>=1.11.1,<2.0.0",
-  "fred-core",
+  "fred-core>=1.5.0",
   "alembic>=1.18.4",
 ]
 
@@ -40,7 +40,7 @@ markers = [
 ]
 
 [tool.uv.sources]
-fred-core = { path = "../fred-core", editable = true }
+fred-core = { path = "../libs/fred-core", editable = true }
 
 [dependency-groups]
 dev = [

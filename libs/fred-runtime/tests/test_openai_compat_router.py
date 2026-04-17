@@ -24,7 +24,6 @@ from langchain_core.messages import AIMessage
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 
-
 # ---------------------------------------------------------------------------
 # Shared test fixtures (mirrors test_agent_app.py conventions)
 # ---------------------------------------------------------------------------

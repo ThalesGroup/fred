@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := fred-core agentic-backend knowledge-flow-backend control-plane-backend
-TEST_DIRS := agentic-backend knowledge-flow-backend control-plane-backend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents agentic-backend knowledge-flow-backend control-plane-backend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents agentic-backend knowledge-flow-backend control-plane-backend
 DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backend frontend
 
 .DEFAULT_GOAL := help
@@ -125,9 +125,9 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
-	@echo "--- fred-core ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' fred-core/pyproject.toml
-	cd fred-core && uv lock
+	@echo "--- libs/fred-core ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
+	cd libs/fred-core && uv lock
 	@echo "--- agentic-backend ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' agentic-backend/pyproject.toml
 	cd agentic-backend && uv lock

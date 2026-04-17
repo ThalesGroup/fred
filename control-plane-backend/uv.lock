@@ -398,7 +398,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "fastapi", specifier = "==0.116.1" },
-    { name = "fred-core", editable = "../fred-core" },
+    { name = "fred-core", editable = "../libs/fred-core" },
     { name = "pydantic", specifier = ">=2.10.0,<3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5,<9.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.1.1,<7.0.0" },
@@ -566,8 +566,8 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "1.4.1+post"
-source = { editable = "../fred-core" }
+version = "1.5.0"
+source = { editable = "../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "asyncpg" },

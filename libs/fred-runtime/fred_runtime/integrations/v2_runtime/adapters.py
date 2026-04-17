@@ -35,11 +35,8 @@ from fred_core.common import OwnerFilter
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
+from fred_core.portable import LoggingTracer, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
-from fred_core.portable import get_tracer
-from fred_core.portable import LoggingTracer, Tracer
-
-
 from fred_sdk.authoring.api import (
     ArtifactPublicationError,
     ResourceFetchError,
@@ -148,7 +145,6 @@ class LangfuseTracerAdapter(TracerPort):
 
     def __init__(self, client: Langfuse):
         self._client = client
-        
 
     @property
     def propagator(self):  # type: ignore[override]
@@ -164,8 +160,6 @@ class LangfuseTracerAdapter(TracerPort):
         Example:
         - `headers = {}; tracer.propagator.inject_to_carrier(headers)`
         """
-
-        
 
     def shutdown(self) -> None:
         """

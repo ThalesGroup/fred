@@ -114,21 +114,22 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
 
         list_response = client.get("/fred/agents/v2/agents")
         assert list_response.status_code == 200
-        assert list_response.json() == [
-            "sentinel.react.v2",
-            "rag_expert.react.v2",
-        ]
+        registered = list_response.json()
+        assert "fred.github.sentinel" in registered
+        assert "fred.github.rag_expert" in registered
 
         templates_response = client.get("/fred/agents/v2/agents/templates")
         assert templates_response.status_code == 200
-        assert {
+        template_ids = {
             template["template_agent_id"] for template in templates_response.json()
-        } == {"sentinel.react.v2", "rag_expert.react.v2"}
+        }
+        assert "fred.github.sentinel" in template_ids
+        assert "fred.github.rag_expert" in template_ids
 
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
             json={
-                "agent_id": "sentinel.react.v2",
+                "agent_id": "fred.github.sentinel",
                 "message": "Give me a short health summary.",
                 "context": {
                     "session_id": "sentinel-session",

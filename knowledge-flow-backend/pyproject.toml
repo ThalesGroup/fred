@@ -38,7 +38,7 @@ dependencies = [
   "fastapi-mcp==0.4.0",
   "duckdb>=1.3.2",
   "weaviate-client<4.0.0",
-  "fred-core",
+  "fred-core>=1.5.0",
   "dateparser>=1.2.2",
   "pymysql>=1.1.1",
   "duckdb-engine>=0.17.0",
@@ -111,7 +111,7 @@ markers = [
 ]
 
 [tool.uv.sources]
-fred-core = { path = "../fred-core", editable = true }
+fred-core = { path = "../libs/fred-core", editable = true }
 
 # Keep CPU-only index for x86_64
 torch = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64'" }

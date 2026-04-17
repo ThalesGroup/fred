@@ -26,7 +26,7 @@ Exports
     )
 """
 
-from fred_core.portable.observability import (
+from .observability import (
     InMemoryMetricsProvider,
     LoggingMetricsProvider,
     LoggingTracer,

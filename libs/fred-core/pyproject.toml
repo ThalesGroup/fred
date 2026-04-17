@@ -50,6 +50,7 @@ build-backend = "setuptools.build_meta"
 include = ["fred_core*"]
 
 [tool.setuptools.package-data]
+"fred_core" = ["py.typed"]
 "fred_core.security.rebac" = ["schema.fga", "schema.fga.json"]
 
 [dependency-groups]

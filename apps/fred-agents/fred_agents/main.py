@@ -26,8 +26,8 @@ Example:
 - `app = create_app()`
 """
 
-from fred_runtime.app import AgentPodConfig, create_agent_app, load_agent_pod_config
 from fastapi import FastAPI
+from fred_runtime.app import AgentPodConfig, create_agent_app, load_agent_pod_config
 
 from fred_agents.registry import REGISTRY
 

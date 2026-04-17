@@ -3,8 +3,8 @@
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
   "extraPaths": [
-    "../fred-core",
-    "../fred-sdk",
-    "../fred-runtime"
+    "../../libs/fred-core",
+    "../../libs/fred-sdk",
+    "../../libs/fred-runtime"
   ]
 }

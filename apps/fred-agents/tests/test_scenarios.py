@@ -26,7 +26,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from fred_runtime.client import AgentPodClient, run_scenario_file
 
 pytestmark = pytest.mark.integration

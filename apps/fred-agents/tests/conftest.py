@@ -4,7 +4,6 @@ from collections.abc import Generator
 
 import httpx
 import pytest
-
 from fred_runtime.client import AgentPodClient, normalize_base_url
 
 _DEFAULT_POD_URL = "http://127.0.0.1:8010/fred/agents/v2"

@@ -33,8 +33,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Annotated, Any, Generic, List, Literal, Protocol, TypeAlias, TypeVar
 
-from fred_core.store import VectorSearchHit
 from fred_core.portable import MetricsProvider, Span, Tracer
+from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, ConfigDict, Field
 
 from .context import (
