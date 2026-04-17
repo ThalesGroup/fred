@@ -4,8 +4,6 @@ from typing import TYPE_CHECKING, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from agentic_backend.common.chat_options_protocol import ChatOptionsEditor
-
 if TYPE_CHECKING:
     from agentic_backend.common.structures import AgentChatOptions
 
@@ -13,7 +11,7 @@ KfVectorSearchProviderType = Literal["kf_vector_search"]
 KF_VECTOR_SEARCH_PROVIDER: KfVectorSearchProviderType = "kf_vector_search"
 
 
-class KfVectorSearchParams(BaseModel, ChatOptionsEditor):
+class KfVectorSearchParams(BaseModel):
     """
     Agent-level scoping parameters for the kf_vector_search inprocess tool.
 
