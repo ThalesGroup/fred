@@ -79,14 +79,12 @@ def friendly_mcp_tool_error_handler(e: Exception) -> str:
         httpx = _httpx
     except Exception:  # noqa: BLE001
         logger.exception("Failed to import httpx")
-        pass
     try:  # pragma: no cover - best-effort import
         import httpcore as _httpcore  # type: ignore
 
         httpcore = _httpcore
     except Exception:  # noqa: BLE001
         logger.exception("Failed to import httpcore")
-        pass
 
     conn_like: tuple[type[Exception], ...] = (ConnectionError, TimeoutError)
     if httpx is not None:
