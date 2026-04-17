@@ -540,7 +540,7 @@ class IngestionController:
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
         processing_cfg = ApplicationContext.get_instance().get_config().processing
-        max_parallelism = ApplicationContext.get_instance().get_config().app.max_ingestion_workers
+        max_parallelism = ApplicationContext.get_instance().get_config().scheduler.temporal.ingestion_workflow_parallelism
         self.scheduler_task_service: IngestionTaskService | None = None
         if scheduler_cfg.enabled:
             self.scheduler_task_service = IngestionTaskService(
