@@ -180,9 +180,10 @@ class LangfuseTracerAdapter(TracerPort):
     def start_span(
         self,
         name: str,
-        context: PortableContext,
+        context: PortableContext | None = None,
         attributes: Mapping[str, JsonScalar] | None = None,
     ) -> SpanPort:
+        context = context or PortableContext()
         trace_seed = (
             context.trace_id
             or context.correlation_id
