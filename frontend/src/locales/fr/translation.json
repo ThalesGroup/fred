@@ -397,7 +397,8 @@
       "chat_options_libraries_selection": {
         "title": "Sélecteur de bibliothèques de documents",
         "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent.",
-        "library_selection": "Base de connaissance"
+        "library_selection": "Base de connaissance",
+        "library_selection_description": "Sélectionner les ressources exploitables par le {{agentsNicknameSingular}}"
       }
     }
   },

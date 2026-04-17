@@ -56,25 +56,29 @@ export const AgentToolsSelection = memo(function AgentToolsSelection({
               />
               {registryEntry && (
                 <Collapse in={isSelected} unmountOnExit>
-                  <Box sx={{ mt: 0.5, px: 1.25, pb: 0.75 }}>
+                  <Box sx={{ px: 1.25, pb: 1 }}>
                     {(() => {
                       const currentRef = mcpServerRefs.find((ref) => ref.id === tool.id);
                       const currentParams = currentRef?.params ?? registryEntry.defaultParams;
-                      return registryEntry.render(currentParams, (updatedParams) => {
-                        onMcpServerRefsChange(
-                          mcpServerRefs.map((ref) =>
-                            ref.id === tool.id
-                              ? {
-                                  ...ref,
-                                  params: {
-                                    ...(updatedParams as object),
-                                    provider: registryEntry.provider,
-                                  } as McpServerRef["params"],
-                                }
-                              : ref,
-                          ),
-                        );
-                      }, teamId);
+                      return registryEntry.render(
+                        currentParams,
+                        (updatedParams) => {
+                          onMcpServerRefsChange(
+                            mcpServerRefs.map((ref) =>
+                              ref.id === tool.id
+                                ? {
+                                    ...ref,
+                                    params: {
+                                      ...(updatedParams as object),
+                                      provider: registryEntry.provider,
+                                    } as McpServerRef["params"],
+                                  }
+                                : ref,
+                            ),
+                          );
+                        },
+                        teamId,
+                      );
                     })()}
                   </Box>
                 </Collapse>

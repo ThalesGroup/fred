@@ -396,7 +396,8 @@
       "chat_options_libraries_selection": {
         "title": "Document libraries picker",
         "description": "Let users select document libraries/knowledge sources for this agent.",
-        "library_selection": "Knowledge base"
+        "library_selection": "Knowledge base",
+        "library_selection_description": "Select resources the {{agentsNicknameSingular}} can use"
       }
     }
   },
