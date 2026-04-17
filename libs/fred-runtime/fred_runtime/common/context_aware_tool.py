@@ -56,7 +56,6 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
         pass
     except Exception:
         logger.warning("Failed to extract HTTP response body", exc_info=True)
-        pass
 
     if code == 401:
         expired_flag = " (expired token)" if is_expired_httpx_status_error(err) else ""
