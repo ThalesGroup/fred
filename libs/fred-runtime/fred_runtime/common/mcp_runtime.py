@@ -280,7 +280,7 @@ class MCPRuntime:
             assert self._stop_event is not None
             await self._stop_event.wait()
 
-        except BaseException as e:
+        except Exception as e:
             # Propagate init error to caller
             self._lifecycle_error = e
             if self._ready_event and not self._ready_event.is_set():
