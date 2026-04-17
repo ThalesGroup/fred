@@ -1205,31 +1205,6 @@ def _build_agent_router(
     # local-dev pods start without any Keycloak configuration.
     _auth_deps = [Depends(get_current_user)] if security_enabled else []
 
-    def _resolve_definition(
-        agent_id: str,
-    ) -> ReActAgentDefinition | GraphAgentDefinition:
-        """
-        Resolve one registered agent definition or raise a 404 HTTP error.
-
-        Why this helper exists:
-        - both execute routes should share the same lookup and error wording
-
-        How to use it:
-        - call from the route handlers after request validation
-
-        Example:
-        - `definition = _resolve_definition(request.agent_id)`
-        """
-
-        definition = registry.get(agent_id)
-        if definition is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Unknown agent_id: {agent_id!r}. "
-                f"Known agents: {list(registry.keys())}",
-            )
-        return definition
-
     @router.get("")
     async def list_agents() -> list[str]:
         """Return the agent IDs registered in this pod."""
