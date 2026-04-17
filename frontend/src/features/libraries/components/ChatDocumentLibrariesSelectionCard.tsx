@@ -9,7 +9,7 @@ import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TagNode, buildTree, collectDescendantTagIds, fullPath } from "../../../shared/utils/tagTree";
+import { TagNode, buildTree, collectDescendantTagIds } from "../../../shared/utils/tagTree";
 import {
   TagType,
   TagWithItemsId,
@@ -40,18 +40,13 @@ function filterTree(root: TagNode, q: string): TagNode {
   if (!q) return root;
   const needle = q.toLowerCase();
   const dfs = (n: TagNode): TagNode | null => {
-    const labelHit =
-      n.name.toLowerCase().includes(needle) ||
-      n.full.toLowerCase().includes(needle) ||
-      n.tagsHere.some(
-        (t) => (t.description ?? "").toLowerCase().includes(needle) || fullPath(t).toLowerCase().includes(needle),
-      );
+    const labelHit = n.name.toLowerCase().includes(needle) || n.full.toLowerCase().includes(needle);
     const keptChildren = new Map<string, TagNode>();
     for (const [k, ch] of n.children) {
       const fc = dfs(ch);
       if (fc) keptChildren.set(k, fc);
     }
-    if (n.full === "" || labelHit || keptChildren.size > 0 || n.tagsHere.length > 0)
+    if (n.full === "" || labelHit || keptChildren.size > 0)
       return { ...n, children: keptChildren };
     return null;
   };
