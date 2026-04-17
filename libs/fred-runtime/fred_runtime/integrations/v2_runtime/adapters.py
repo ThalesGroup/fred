@@ -225,9 +225,11 @@ _LANGFUSE_TRACER: TracerPort | None | bool = False
 class _LangfuseSpanLike(Protocol):
     def update(
         self, *, metadata: Mapping[str, object] | None = None, **kwargs
-    ) -> object: ...
+    ) -> object:
+        pass
 
-    def end(self, *, end_time: int | None = None) -> object: ...
+    def end(self, *, end_time: int | None = None) -> object:
+        pass
 
 
 def build_langfuse_tracer() -> TracerPort | None:
