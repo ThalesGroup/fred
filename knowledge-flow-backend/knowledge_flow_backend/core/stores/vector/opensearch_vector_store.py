@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import logging
 import time
 from contextlib import nullcontext
@@ -27,7 +28,15 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from opensearchpy import NotFoundError, OpenSearch, OpenSearchException, RequestError, RequestsHttpConnection
 
-from knowledge_flow_backend.core.stores.vector.base_vector_store import CHUNK_ID_FIELD, AnnHit, BaseVectorHit, BaseVectorStore, FullTextHit, HybridHit, SearchFilter
+from knowledge_flow_backend.core.stores.vector.base_vector_store import (
+    CHUNK_ID_FIELD,
+    AnnHit,
+    BaseVectorHit,
+    BaseVectorStore,
+    FullTextHit,
+    HybridHit,
+    SearchFilter,
+)
 
 logger = logging.getLogger(__name__)
 DEBUG = True
@@ -498,11 +507,156 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """
         return EMBEDDING_RETRY_BASE_DELAY_SECONDS * (2 ** max(0, attempt - 1))
 
+    def _build_retry_split_base_id(self, document: Document, *, forced_id: Optional[str]) -> str:
+        """
+        Why:
+            When one stored chunk is re-split after an embedding-limit failure, each child
+            chunk still needs a stable id so the retry remains idempotent.
+
+        How to use:
+            Pass the original logical document and its caller-provided id when available.
+            The helper returns the stable base prefix used for retry child chunks.
+
+        Example:
+            `self._build_retry_split_base_id(doc, forced_id="chunk-1")`
+        """
+        if isinstance(forced_id, str) and forced_id:
+            return forced_id
+
+        metadata = document.metadata or {}
+        chunk_uid = metadata.get(CHUNK_ID_FIELD)
+        if isinstance(chunk_uid, str) and chunk_uid:
+            return chunk_uid
+
+        seed = f"{metadata.get('document_uid') or 'doc'}|{document.page_content[:256]}"
+        digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:16]  # nosec B324
+        return f"{metadata.get('document_uid') or 'doc'}::{digest}"
+
+    def _next_retry_split_chunk_size(self, previous_chunk_size: Optional[int]) -> Optional[int]:
+        """
+        Why:
+            A document that is too large for the embedding backend should be retried with
+            progressively smaller chunks rather than failing immediately.
+
+        How to use:
+            Pass the previous retry chunk size, or `None` for the first retry.
+            The helper derives the next smaller chunk size from the configured text splitter.
+
+        Example:
+            `self._next_retry_split_chunk_size(previous_chunk_size=None)`
+        """
+        from knowledge_flow_backend.application_context import ApplicationContext
+
+        configured_splitter = ApplicationContext.get_instance().get_text_splitter()
+        configured_chunk_size = getattr(configured_splitter, "chunk_size", None)
+        base_chunk_size = previous_chunk_size or configured_chunk_size
+        if not isinstance(base_chunk_size, int) or base_chunk_size <= 128:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] cannot reduce retry chunk size for index=%s current_chunk_size=%s configured_chunk_size=%s",
+                self._index,
+                previous_chunk_size,
+                configured_chunk_size,
+            )
+            return None
+
+        next_chunk_size = max(128, base_chunk_size // 2)
+        if next_chunk_size >= base_chunk_size:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] next retry chunk size is not smaller for index=%s current=%s next=%s",
+                self._index,
+                base_chunk_size,
+                next_chunk_size,
+            )
+            return None
+        logger.info(
+            "[VECTOR][OPENSEARCH] reducing retry chunk size for index=%s from=%s to=%s",
+            self._index,
+            base_chunk_size,
+            next_chunk_size,
+        )
+        return next_chunk_size
+
+    def _split_single_document_for_retry(
+        self,
+        document: Document,
+        *,
+        forced_id: Optional[str],
+        chunk_size: int,
+    ) -> tuple[List[Document], List[str]]:
+        """
+        Why:
+            Some embedding failures come from one chunk being too large even after the
+            normal ingestion path. Reusing the configured text splitter keeps retry
+            behavior aligned with the standard chunking strategy.
+
+        How to use:
+            Pass the oversized document, its logical id, and the smaller target chunk size.
+            The helper returns the retry child documents and their derived ids.
+
+        Example:
+            `self._split_single_document_for_retry(doc, forced_id="chunk-1", chunk_size=750)`
+        """
+        from knowledge_flow_backend.application_context import ApplicationContext
+
+        configured_splitter = ApplicationContext.get_instance().get_text_splitter()
+        retry_splitter_type: Any = type(configured_splitter)
+        chunk_overlap = getattr(configured_splitter, "chunk_overlap", 0)
+        preserve_tables = getattr(configured_splitter, "preserve_tables", True)
+        reduced_overlap = min(max(0, int(chunk_overlap)), max(0, chunk_size - 1))
+
+        try:
+            retry_splitter = retry_splitter_type(
+                chunk_size=chunk_size,
+                chunk_overlap=reduced_overlap,
+                preserve_tables=preserve_tables,
+            )
+        except TypeError:
+            retry_splitter = retry_splitter_type(
+                chunk_size=chunk_size,
+                chunk_overlap=reduced_overlap,
+            )
+
+        split_documents = retry_splitter.split(
+            Document(
+                page_content=document.page_content or "",
+                metadata=dict(document.metadata or {}),
+            )
+        )
+        if len(split_documents) <= 1:
+            logger.warning(
+                "[VECTOR][OPENSEARCH] retry split did not reduce oversized chunk for index=%s chunk_id=%s target_chunk_size=%s",
+                self._index,
+                forced_id or document.metadata.get(CHUNK_ID_FIELD),
+                chunk_size,
+            )
+            return [document], [forced_id or str(document.metadata.get(CHUNK_ID_FIELD) or "")]
+
+        base_id = self._build_retry_split_base_id(document, forced_id=forced_id)
+        prepared_documents: List[Document] = []
+        prepared_ids: List[str] = []
+
+        for index, split_document in enumerate(split_documents):
+            metadata = dict(split_document.metadata or {})
+            chunk_id = f"{base_id}::part::{index}"
+            metadata[CHUNK_ID_FIELD] = chunk_id
+            prepared_documents.append(Document(page_content=split_document.page_content or "", metadata=metadata))
+            prepared_ids.append(chunk_id)
+
+        logger.info(
+            "[VECTOR][OPENSEARCH] split oversized chunk for retry index=%s original_chunk_id=%s target_chunk_size=%s produced=%s",
+            self._index,
+            base_id,
+            chunk_size,
+            len(prepared_documents),
+        )
+        return prepared_documents, prepared_ids
+
     def _add_documents_with_adaptive_batching(
         self,
         documents: List[Document],
         ids: List[str],
         retry_attempt: int = 0,
+        split_chunk_size: Optional[int] = None,
     ) -> List[str]:
         """
         Why:
@@ -520,13 +674,72 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
             same batch with exponential backoff before giving up.
         """
         try:
-            return list(self._lc.add_documents(documents, ids=ids))
+            logger.info(
+                "[VECTOR][OPENSEARCH] add batch attempt index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s ids_sample=%s",
+                self._index,
+                len(documents),
+                retry_attempt,
+                split_chunk_size,
+                ids[:3],
+            )
+            model_name = self._embedding_model_name or "unknown"
+            now_iso = datetime.now(timezone.utc).isoformat()
+            for doc, cid in zip(documents, ids):
+                if CHUNK_ID_FIELD not in doc.metadata:
+                    doc.metadata[CHUNK_ID_FIELD] = cid
+                doc.metadata.setdefault("embedding_model", model_name)
+                doc.metadata.setdefault("vector_index", self._index)
+                doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
+                doc.metadata.setdefault("ingested_at", now_iso)
+            assigned_ids = list(self._lc.add_documents(documents, ids=ids))
+            logger.info(
+                "[VECTOR][OPENSEARCH] batch attempt succeeded index=%s batch_size=%s assigned=%s retry_attempt=%s split_chunk_size=%s",
+                self._index,
+                len(documents),
+                len(assigned_ids),
+                retry_attempt,
+                split_chunk_size,
+            )
+            return assigned_ids
         except Exception as error:
             failure = self._get_embedding_request_failure(error)
+            logger.warning(
+                "[VECTOR][OPENSEARCH] batch attempt failed index=%s batch_size=%s retry_attempt=%s split_chunk_size=%s status=%s code=%s type=%s error=%s",
+                self._index,
+                len(documents),
+                retry_attempt,
+                split_chunk_size,
+                failure.status_code if failure else None,
+                failure.provider_code if failure else None,
+                failure.provider_type if failure else None,
+                type(error).__name__,
+            )
 
             if self._is_embedding_batch_too_large_error(error):
-                if len(documents) <= 1:
-                    raise
+                if len(documents) == 1:
+                    next_chunk_size = self._next_retry_split_chunk_size(split_chunk_size)
+                    if next_chunk_size is None:
+                        raise
+
+                    split_documents, split_ids = self._split_single_document_for_retry(
+                        documents[0],
+                        forced_id=ids[0],
+                        chunk_size=next_chunk_size,
+                    )
+                    if len(split_documents) <= 1:
+                        raise
+
+                    logger.warning(
+                        "[VECTOR][OPENSEARCH] oversized single chunk for index=%s; retrying with text_splitter chunk_size=%s produced=%s",
+                        self._index,
+                        next_chunk_size,
+                        len(split_documents),
+                    )
+                    return self._add_documents_with_adaptive_batching(
+                        documents=split_documents,
+                        ids=split_ids,
+                        split_chunk_size=next_chunk_size,
+                    )
 
                 split_index = max(1, len(documents) // 2)
                 logger.warning(
@@ -539,10 +752,12 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 left_ids = self._add_documents_with_adaptive_batching(
                     documents=documents[:split_index],
                     ids=ids[:split_index],
+                    split_chunk_size=split_chunk_size,
                 )
                 right_ids = self._add_documents_with_adaptive_batching(
                     documents=documents[split_index:],
                     ids=ids[split_index:],
+                    split_chunk_size=split_chunk_size,
                 )
                 return left_ids + right_ids
 
@@ -564,6 +779,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     documents=documents,
                     ids=ids,
                     retry_attempt=next_attempt,
+                    split_chunk_size=split_chunk_size,
                 )
 
             raise
@@ -585,6 +801,7 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """
         try:
             if not documents:
+                logger.info("[VECTOR][OPENSEARCH] add_documents called with empty payload for index=%s", self._index)
                 return []
 
             if self._bulk_size <= 0:
@@ -602,11 +819,26 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                         raise ValueError(f"Document missing {CHUNK_ID_FIELD} in metadata")
                     ids.append(cid)
 
+            logger.info(
+                "[VECTOR][OPENSEARCH] add_documents start index=%s documents=%s bulk_size=%s ids_provided=%s",
+                self._index,
+                len(documents),
+                self._bulk_size,
+                ids is not None,
+            )
+
             assigned_ids: List[str] = []
             for start in range(0, len(documents), self._bulk_size):
                 end = start + self._bulk_size
                 batch_documents = documents[start:end]
                 batch_ids = ids[start:end]
+                logger.info(
+                    "[VECTOR][OPENSEARCH] processing bulk slice index=%s start=%s end=%s batch_size=%s",
+                    self._index,
+                    start,
+                    min(end, len(documents)),
+                    len(batch_documents),
+                )
                 assigned_ids.extend(
                     self._add_documents_with_adaptive_batching(
                         documents=batch_documents,
@@ -614,22 +846,12 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                     )
                 )
 
-            if len(assigned_ids) != len(documents):
-                raise RuntimeError("Vector store returned an unexpected number of assigned ids")
-
-            model_name = self._embedding_model_name or "unknown"
-            now_iso = datetime.now(timezone.utc).isoformat()
-
-            # Normalize metadata (handy for UI/telemetry)
-            for doc, cid in zip(documents, assigned_ids):
-                if CHUNK_ID_FIELD not in doc.metadata:
-                    doc.metadata[CHUNK_ID_FIELD] = cid
-                doc.metadata.setdefault("embedding_model", model_name)
-                doc.metadata.setdefault("vector_index", self._index)
-                doc.metadata.setdefault("token_count", len((doc.page_content or "").split()))
-                doc.metadata.setdefault("ingested_at", now_iso)
-
-            logger.debug("[VECTOR][OPENSEARCH] upserted %s chunk(s) into %s", len(assigned_ids), self._index)
+            logger.info(
+                "[VECTOR][OPENSEARCH] add_documents complete index=%s input_documents=%s stored_chunks=%s",
+                self._index,
+                len(documents),
+                len(assigned_ids),
+            )
             return assigned_ids
 
         except Exception as e:

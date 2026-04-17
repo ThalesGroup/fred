@@ -300,7 +300,7 @@ export default function DesignSystemPage() {
         <TextInput label={"Input texte"} placeholder={"Placeholder"}></TextInput>
       </div>
       <div className={styles.componentCard}>
-        <TextInput label={"Input texte"} placeholder={"Placeholder"} explication={"explication only"}></TextInput>
+        <TextInput label={"Input texte"} placeholder={"Placeholder"} explanation={"explication only"}></TextInput>
       </div>
       <div className={styles.componentCard}>
         <TextInput label={"Input texte"} placeholder={"Placeholder"} error={"error only"}></TextInput>
@@ -309,7 +309,7 @@ export default function DesignSystemPage() {
         <TextInput
           label={"Input texte"}
           placeholder={"Placeholder"}
-          explication={"explication"}
+          explanation={"explication"}
           error={"error + explication set"}
         ></TextInput>
       </div>
@@ -319,14 +319,14 @@ export default function DesignSystemPage() {
         <TextInput
           label={"Input texte"}
           placeholder={"Placeholder"}
-          explication={"explication"}
+          explanation={"explication"}
           error={"error + explication set"}
           disabled
         ></TextInput>
       </div>
       <div className={styles.componentCard}>
         {" "}
-        <TextInput label={"Input texte"} placeholder={"Placeholder"} explication={"explication"} disabled></TextInput>
+        <TextInput label={"Input texte"} placeholder={"Placeholder"} explanation={"explication"} disabled></TextInput>
       </div>
       <div className={styles.componentCard}></div>
       <div className={styles.componentCard}></div>

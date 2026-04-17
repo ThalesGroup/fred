@@ -1,10 +1,9 @@
-@use "src/index.scss" as *;
-
 .input {
   display: flex;
   position: relative;
   flex-direction: column;
   gap: var(--spacing-2xs);
+  width: 100%;
 
   &:has(.icon) {
     input {
@@ -14,14 +13,17 @@
 
   input {
     outline: 2px solid var(--input-outline, transparent);
-    border: 1px solid var(--input-border, var(--outline-muted));
+    border: 1px solid var(--input-border, var(--outline-retreat));
     border-radius: var(--spacing-xs);
     background-color: var(--surface-container-lowest);
     padding: 0 var(--spacing-xs) 0 var(--spacing-s);
     height: 3rem;
-    color: var(--on-surface-retreat);
+    color: var(--on-surface);
+    font: var(--font-body-large);
 
-    @include typography("body", "large");
+    &::placeholder {
+      color: var(--on-surface-retreat);
+    }
   }
 
   &:not(.error) input:not(:disabled) {
@@ -48,20 +50,31 @@
   padding-left: var(--spacing-xs);
   color: var(--label-color, var(--on-surface-retreat));
 
-  @include typography("label", "large");
+  font: var(--font-label-large);
 }
 
-.input[data-compact="false"].hint {
-  padding-left: var(--spacing-xs);
+.input[data-compact="false"] .information {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 var(--spacing-xs);
+  width: 100%;
   min-height: 1.25rem;
-  overflow: hidden;
   color: var(--on-surface-retreat);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
-.error .hint {
+.hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-wrap: nowrap;
+}
+
+.maxLength {
+  padding-left: var(--spacing-m);
+}
+
+.error .information {
   color: var(--error);
 }
 
@@ -70,7 +83,7 @@
 }
 
 .disabled .label,
-.disabled .hint {
+.disabled .information {
   color: var(--on-surface-retreat);
 }
 

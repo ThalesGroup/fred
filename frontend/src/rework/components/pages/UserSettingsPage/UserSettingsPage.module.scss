@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .user-settings-page {
   display: flex;
   flex-direction: column;
@@ -23,7 +21,7 @@
 }
 
 .user-settings-header-title {
-  @include typography("title", "medium");
+  font: var(--font-title-medium);
 }
 
 .user-settings-description {
@@ -38,28 +36,27 @@
 .user-settings-identity {
   display: flex;
   flex-direction: column;
-
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .user-settings-identity-name {
   color: var(--primary);
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .user-settings-identity-fullname {
   color: var(--on-surface);
-  @include typography("title", "medium");
+  font: var(--font-title-medium);
 }
 
 .user-settings-identity-email {
   color: var(--on-surface-retreat);
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .user-settings-identity-role {
   color: var(--on-surface-retreat);
-  @include typography("body", "medium");
+  font: var(--font-body-medium);
 }
 
 .user-settings-application {

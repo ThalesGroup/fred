@@ -43,16 +43,30 @@ class WorkspaceStorageController:
     """
 
     @staticmethod
-    def _build_download_url(request: Request, suffix: str) -> str:
+    def _build_download_href(request: Request, suffix: str) -> str:
         """
-        Compose a full download URL for the given path suffix (e.g. 'storage/user/foo.txt')
-        based on the incoming request host + API prefix.
+        Build a browser-resolvable download href for a stored file.
+
+        Why this exists:
+        - artifact links are consumed by the browser, but uploads can be proxied by
+          another backend whose host is not browser-reachable
+        - returning an origin-relative href keeps the link correct without extra
+          host/port configuration
+
+        How to use:
+        - pass the current request and the storage path suffix returned by the
+          controller scope
+        - the helper reuses the API prefix that appears before `/storage/...`
+
+        Example:
+        - request path `/knowledge-flow/v1/storage/user/upload`
+        - suffix `storage/user/report.txt`
+        - returns `/knowledge-flow/v1/storage/user/report.txt`
         """
-        base = str(request.base_url).rstrip("/")
         segments = [p for p in request.url.path.split("/") if p]
-        # Expect path like knowledge-flow/v1/...
-        api_prefix = "/".join(segments[:2]) if len(segments) >= 2 else ""
-        prefix = f"{base}/{api_prefix}".rstrip("/")
+        storage_index = segments.index("storage") if "storage" in segments else len(segments)
+        api_prefix = "/".join(segments[:storage_index])
+        prefix = f"/{api_prefix}" if api_prefix else ""
         return f"{prefix}/{suffix.lstrip('/')}"
 
     @staticmethod
@@ -116,7 +130,7 @@ class WorkspaceStorageController:
             try:
                 logical_key = key or (file.filename or "file")
                 meta = await self.service.put_user_file(user, logical_key, file)
-                download_url = self._build_download_url(request, f"storage/user/{logical_key}")
+                download_url = self._build_download_href(request, f"storage/user/{logical_key}")
                 meta_dict = self._meta_to_dict(meta)
                 return {**meta_dict, "download_url": download_url}
             except ValueError as e:
@@ -203,7 +217,7 @@ class WorkspaceStorageController:
             try:
                 logical_key = key or (file.filename or "file")
                 meta = await self.service.put_agent_config_file(user, agent_id, logical_key, file)
-                download_url = self._build_download_url(request, f"storage/agent-config/{agent_id}/{logical_key}")
+                download_url = self._build_download_href(request, f"storage/agent-config/{agent_id}/{logical_key}")
                 meta_dict = self._meta_to_dict(meta)
                 return {**meta_dict, "download_url": download_url}
             except ValueError as e:
@@ -294,7 +308,7 @@ class WorkspaceStorageController:
             try:
                 logical_key = key or (file.filename or "file")
                 meta = await self.service.put_agent_user_file(user, agent_id, target_user_id, logical_key, file)
-                download_url = self._build_download_url(request, f"storage/agent-user/{agent_id}/{target_user_id}/{logical_key}")
+                download_url = self._build_download_href(request, f"storage/agent-user/{agent_id}/{target_user_id}/{logical_key}")
                 meta_dict = self._meta_to_dict(meta)
                 return {**meta_dict, "download_url": download_url}
             except ValueError as e:

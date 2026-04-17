@@ -26,7 +26,6 @@ app:
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
   max_ingestion_workers: 3
-
 processing:
   default_profile: fast
   profiles:
@@ -178,7 +177,6 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
-
 security:
   m2m:
     enabled: true
@@ -195,7 +193,6 @@ security:
     enabled: true
     type: openfga
     api_url: "http://localhost:9080"
-
 scheduler:
   enabled: true
   backend: "temporal"
@@ -205,19 +202,16 @@ scheduler:
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
-
 content_storage:
   type: minio
   endpoint: http://localhost:9000
   access_key: "admin"
   bucket_name: "knowledge-flow-content"
   secure: false
-
 document_sources:
   fred:
     type: push
     description: "Documents manually uploaded by users"
-
 chat_model:
   provider: openai
   name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
@@ -243,7 +237,6 @@ embedding_model:
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
-
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
@@ -270,7 +263,6 @@ crossencoder_model:
       max_connections: 500
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
-
 # Model provider examples:
 # NOTE: Keep secrets in .env; only non-secret model settings go here.
 #
@@ -362,19 +354,7 @@ crossencoder_model:
 #     temperature: 0
 #     max_retries: 2
 #     request_timeout: 90
-
 storage:
-  tabular_stores:
-    base_database:
-      type: "sql"
-      mode: "read_and_write"
-      driver: "postgresql+psycopg2"
-      host: "localhost"
-      port: 5432
-      database: "data"
-      path: null # (important: remove the `path` default value)
-      username: "tabular"
-
   postgres:
     host: localhost
     port: 5432
@@ -385,7 +365,6 @@ storage:
     pool_timeout: 30
     pool_recycle: 1800
     pool_pre_ping: true
-
   opensearch:
     host: https://localhost:9200
     secure: true
@@ -401,16 +380,22 @@ storage:
 
   resource_store:
     type: "postgres"
-
   tag_store:
     type: "postgres"
-
   metadata_store:
     type: "postgres"
-
   task_store:
     type: "postgres"
-
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
   vector_store:
     type: opensearch
     index: vector-index
@@ -420,20 +405,16 @@ storage:
     # enough memory and want faster ingestion. Or if run into ingestion errors
     # while ingesting large documents.
     bulk_size: 1000
-
   kpi_store:
     type: "log"
     level: "DEBUG"
-
   log_store:
     type: "in_memory"
-
 # integrations:
 #   prometheus:
 #     base_url: http://prometheus:9090
 #     verify_ssl: false
 #     timeout_seconds: 15.0
-
 mcp:
   reports_enabled: true
   kpi_enabled: true
@@ -446,14 +427,12 @@ mcp:
   prometheus_ops_enabled: false
   neo4j_enabled: false
   filesystem_enabled: true
-
 filesystem:
   type: minio
   endpoint: http://localhost:9000
   access_key: admin
   bucket_name: filesystem
   secure: false
-
 # Workspace storage layout (paths inside the bucket/filesystem)
 workspace_layout:
   user_pattern: "users/{user_id}/{key}"

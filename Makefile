@@ -83,30 +83,7 @@ MISTRAL_API_KEY ?=
 
 .PHONY: use-mistral
 use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: make use-mistral [MISTRAL_API_KEY=<key>])
-	@echo "--- agentic-backend: models_catalog.yaml ---"
-	yq -i '.default_profile_by_capability.chat = "default.chat.mistral"' agentic-backend/config/models_catalog.yaml
-	yq -i '.default_profile_by_capability.language = "default.language.mistral"' agentic-backend/config/models_catalog.yaml
-	yq -i 'del(.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' agentic-backend/config/models_catalog.yaml
-	yq -i '.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .profiles' agentic-backend/config/models_catalog.yaml
-	@echo "--- knowledge-flow-backend: configuration_prod.yaml ---"
-	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
-	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_prod.yaml
-	yq -i '.vision_model.name = "mistral-medium-latest" | .vision_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_prod.yaml
-	yq -i '.storage.vector_store.index = "vector-index-mistral"' knowledge-flow-backend/config/configuration_prod.yaml
-	@echo "--- knowledge-flow-backend: configuration_worker.yaml ---"
-	yq -i '.chat_model.name = "mistral-medium-latest" | .chat_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_worker.yaml
-	yq -i '.embedding_model.name = "mistral-embed" | .embedding_model.settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' knowledge-flow-backend/config/configuration_worker.yaml
-	yq -i '.vision_model.name = "mistral-medium-latest" | .vision_model.settings = {"base_url": "https://api.mistral.ai/v1"}' knowledge-flow-backend/config/configuration_worker.yaml
-	yq -i '.storage.vector_store.index = "vector-index-mistral"' knowledge-flow-backend/config/configuration_worker.yaml
-	@echo "--- deploy/local/k3d: values-local.yaml ---"
-	yq -i '.applications."agentic-backend".models_catalog.default_profile_by_capability.chat = "default.chat.mistral"' deploy/local/k3d/values-local.yaml
-	yq -i '.applications."agentic-backend".models_catalog.default_profile_by_capability.language = "default.language.mistral"' deploy/local/k3d/values-local.yaml
-	yq -i 'del(.applications."agentic-backend".models_catalog.profiles[] | select(.profile_id == "default.chat.mistral" or .profile_id == "default.language.mistral"))' deploy/local/k3d/values-local.yaml
-	yq -i '.applications."agentic-backend".models_catalog.profiles = [{"profile_id": "default.chat.mistral", "capability": "chat", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}, {"profile_id": "default.language.mistral", "capability": "language", "model": {"provider": "openai", "name": "mistral-medium-latest", "settings": {"base_url": "https://api.mistral.ai/v1"}}}] + .applications."agentic-backend".models_catalog.profiles' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-chat-model".provider = "openai" | ."x-kf-chat-model".name = "mistral-medium-latest" | ."x-kf-chat-model".settings = {"base_url": "https://api.mistral.ai/v1"}' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-embedding-model".provider = "openai" | ."x-kf-embedding-model".name = "mistral-embed" | ."x-kf-embedding-model".settings = {"base_url": "https://api.mistral.ai/v1", "check_embedding_ctx_length": false}' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-vision-model".provider = "openai" | ."x-kf-vision-model".name = "mistral-medium-latest" | ."x-kf-vision-model".settings = {"base_url": "https://api.mistral.ai/v1"}' deploy/local/k3d/values-local.yaml
-	yq -i '."x-kf-storage".vector_store.index = "vector-index-mistral"' deploy/local/k3d/values-local.yaml
+	python3 scripts/use_mistral.py
 	@if [ -n "$(MISTRAL_API_KEY)" ]; then \
 		echo "--- .env files: setting OPENAI_API_KEY to Mistral API key ---"; \
 		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env control-plane-backend/config/.env; do \

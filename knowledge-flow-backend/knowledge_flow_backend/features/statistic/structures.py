@@ -14,11 +14,28 @@
 
 from typing import Any, Dict, List, Literal
 
+from fred_core.common import OwnerFilter
 from pydantic import BaseModel
 
 
 class SetDatasetRequest(BaseModel):
-    dataset_name: str
+    """
+    Select one tabular dataset for stateful statistics operations.
+
+    Why this exists:
+    - The statistics feature keeps one loaded pandas DataFrame in memory and
+      needs the same area/library scope contract as the tabular API.
+
+    How to use:
+    - Send the target `document_uid`.
+    - Optionally pass `owner_filter`, `team_id`, and
+      `document_library_tags_ids` to keep selection inside the active scope.
+    """
+
+    document_uid: str
+    document_library_tags_ids: list[str] | None = None
+    owner_filter: OwnerFilter | None = None
+    team_id: str | None = None
 
 
 class DetectOutliersRequest(BaseModel):

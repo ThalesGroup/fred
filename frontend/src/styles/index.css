@@ -1,0 +1,214 @@
+@import "./color-ramps.css";
+
+@import "./colors-semantic-light.css";
+@import "./colors-semantic-dark.css";
+
+@import "./colors-state-semantic.css";
+
+@import "./shadow-light.css";
+@import "./shadow-dark.css";
+
+@import "spacings.css";
+@import "radius.css";
+
+@import "typography.css";
+
+@font-face {
+  font-style: normal;
+  font-weight: 100 900;
+  src: url("../assets/fonts/Geist.woff2") format("woff2-variations");
+  font-family: "Geist";
+  font-display: swap;
+}
+
+@font-face {
+  font-style: italic;
+  font-weight: 100 900;
+  src: url("../assets/fonts/Geist-Italic.woff2") format("woff2-variations");
+  font-family: "Geist";
+  font-display: swap;
+}
+
+@font-face {
+  font-style: normal;
+  font-weight: 100 700;
+  src: url(../assets/fonts/material-symbols-rounded.woff2) format("woff2");
+  font-family: "Material Symbols Rounded";
+}
+
+.material-symbols-rounded {
+  display: inline-block;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 24px;
+  line-height: 1;
+  font-family: "Material Symbols Rounded";
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  -moz-font-feature-settings: "liga";
+  direction: ltr;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@font-face {
+  font-style: normal;
+  font-weight: 100 700;
+  src: url(../../src/assets/fonts/material-symbols-outlined.woff2) format("woff2");
+  font-family: "Material Symbols Outlined";
+}
+
+.material-symbols-outlined {
+  display: inline-block;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 24px;
+  line-height: 1;
+  font-family: "Material Symbols Outlined";
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  -moz-font-feature-settings: "liga";
+  direction: ltr;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+* {
+  box-sizing: border-box;
+  corner-shape: superellipse(1.4);
+}
+
+html {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+}
+
+[data-color="primary"] {
+  --main-color: var(--primary);
+  --on-main-color: var(--on-primary);
+  --container-color: var(--primary-container);
+  --on-container-color: var(--on-primary-container);
+  --hover-color: var(--state-on-primary-hover);
+  --pressed-color: var(--state-on-primary-pressed);
+  --focused-color: var(--state-on-primary-focused);
+  --selected-color: var(--state-on-primary-selected);
+  --on-container-hover-color: var(--state-on-primary-container-hover);
+  --on-container-pressed-color: var(--state-on-primary-container-pressed);
+  --on-container-focused-color: var(--state-on-primary-container-focused);
+  --on-container-selected-color: var(--state-on-primary-container-selected);
+}
+
+[data-color="secondary"] {
+  --main-color: var(--secondary);
+  --on-main-color: var(--on-secondary);
+  --container-color: var(--secondary-container);
+  --on-container-color: var(--on-secondary-container);
+  --hover-color: var(--state-on-secondary-hover);
+  --pressed-color: var(--state-on-secondary-pressed);
+  --focused-color: var(--state-on-secondary-focused);
+  --selected-color: var(--state-on-secondary-selected);
+  --on-container-hover-color: var(--state-on-secondary-container-hover);
+  --on-container-pressed-color: var(--state-on-secondary-container-pressed);
+  --on-container-focused-color: var(--state-on-secondary-container-focused);
+  --on-container-selected-color: var(--state-on-secondary-container-selected);
+}
+
+[data-color="tertiary"] {
+  --main-color: var(--tertiary);
+  --on-main-color: var(--on-tertiary);
+  --container-color: var(--tertiary-container);
+  --on-container-color: var(--on-tertiary-container);
+  --hover-color: var(--state-on-tertiary-hover);
+  --pressed-color: var(--state-on-tertiary-pressed);
+  --focused-color: var(--state-on-tertiary-focused);
+  --selected-color: var(--state-on-tertiary-selected);
+  --on-container-hover-color: var(--state-on-tertiary-container-hover);
+  --on-container-pressed-color: var(--state-on-tertiary-container-pressed);
+  --on-container-focused-color: var(--state-on-tertiary-container-focused);
+  --on-container-selected-color: var(--state-on-tertiary-container-selected);
+}
+
+[data-color="error"] {
+  --main-color: var(--error);
+  --on-main-color: var(--on-error);
+  --container-color: var(--error-container);
+  --on-container-color: var(--on-error-container);
+  --hover-color: var(--state-on-error-hover);
+  --pressed-color: var(--state-on-error-pressed);
+  --focused-color: var(--state-on-error-focused);
+  --selected-color: var(--state-on-error-selected);
+  --on-container-hover-color: var(--state-on-error-container-hover);
+  --on-container-pressed-color: var(--state-on-error-container-pressed);
+  --on-container-focused-color: var(--state-on-error-container-focused);
+  --on-container-selected-color: var(--state-on-error-container-selected);
+}
+
+[data-color="success"] {
+  --main-color: var(--success);
+  --on-main-color: var(--on-success);
+  --container-color: var(--success-container);
+  --on-container-color: var(--on-success-container);
+  --hover-color: var(--state-on-success-hover);
+  --pressed-color: var(--state-on-success-pressed);
+  --focused-color: var(--state-on-success-focused);
+  --selected-color: var(--state-on-success-selected);
+  --on-container-hover-color: var(--state-on-success-container-hover);
+  --on-container-pressed-color: var(--state-on-success-container-pressed);
+  --on-container-focused-color: var(--state-on-success-container-focused);
+  --on-container-selected-color: var(--state-on-success-container-selected);
+}
+
+[data-color="warning"] {
+  --main-color: var(--warning);
+  --on-main-color: var(--on-warning);
+  --container-color: var(--warning-container);
+  --on-container-color: var(--on-warning-container);
+  --hover-color: var(--state-on-warning-hover);
+  --pressed-color: var(--state-on-warning-pressed);
+  --focused-color: var(--state-on-warning-focused);
+  --selected-color: var(--state-on-warning-selected);
+  --on-container-hover-color: var(--state-on-warning-container-hover);
+  --on-container-pressed-color: var(--state-on-warning-container-pressed);
+  --on-container-focused-color: var(--state-on-warning-container-focused);
+  --on-container-selected-color: var(--state-on-warning-container-selected);
+}
+
+[data-color="info"] {
+  --main-color: var(--info);
+  --on-main-color: var(--on-info);
+  --container-color: var(--info-container);
+  --on-container-color: var(--on-info-container);
+  --hover-color: var(--state-on-info-hover);
+  --pressed-color: var(--state-on-info-pressed);
+  --focused-color: var(--state-on-info-focused);
+  --selected-color: var(--state-on-info-selected);
+  --on-container-hover-color: var(--state-on-info-container-hover);
+  --on-container-pressed-color: var(--state-on-info-container-pressed);
+  --on-container-focused-color: var(--state-on-info-container-focused);
+  --on-container-selected-color: var(--state-on-info-container-selected);
+}
+
+[data-color="on-surface"] {
+  --main-color: var(--on-surface);
+  --on-main-color: var(--surface-main);
+  --container-color: var(--surface-container);
+  --on-container-color: var(--on-surface);
+  --hover-color: var(--state-on-surface-hover);
+  --pressed-color: var(--state-on-surface-pressed);
+  --focused-color: var(--state-on-surface-focused);
+  --selected-color: var(--state-on-surface-selected);
+  --on-container-hover-color: var(--state-on-surface-hover);
+  --on-container-pressed-color: var(--state-on-surface-pressed);
+  --on-container-focused-color: var(--state-on-surface-focused);
+  --on-container-selected-color: var(--state-on-surface-selected);
+}

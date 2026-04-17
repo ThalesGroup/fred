@@ -28,9 +28,11 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 # Set environment variables for uv and Python
 ENV UV_PROJECT_ENVIRONMENT=/app/venv
 ENV PATH="/app/venv/bin:$PATH"
+ENV HOME=/home/${USER_NAME}
 ENV OPENAI_API_KEY=<MUST_BE_DEFINED>
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV DUCKDB_EXTENSION_DIRECTORY=${HOME}/.duckdb/extensions
 ENV CACHE_HOME=/home/${USER_NAME}/.cache
 ENV XDG_CACHE_HOME=${CACHE_HOME}
 ENV RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-12-v2
@@ -68,6 +70,12 @@ WORKDIR /app/knowledge-flow-backend
 # Install dependencies with uv
 RUN make dev
 RUN python /app/scripts/patch_docling_rapidocr_openvino.py
+RUN mkdir -p ${DUCKDB_EXTENSION_DIRECTORY}
+RUN python -c "\
+import duckdb; \
+con = duckdb.connect(database=':memory:'); \
+con.execute('INSTALL httpfs'); \
+con.execute('LOAD httpfs')"
 
 # Expose Fast API port
 EXPOSE 8111

@@ -84,9 +84,11 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/encodings /app/encodings
 
 ENV PATH="/app/venv/bin:$PATH"
+ENV HOME=/home/${USER_NAME}
 ENV TIKTOKEN_CACHE_DIR=/app/encodings
 ENV DOCLING_ARTIFACTS_PATH=/app/docling-artifacts
 ENV PRODUCTION_FASTAPI_DOCS_ENABLED=${PRODUCTION_FASTAPI_DOCS_ENABLED}
+ENV DUCKDB_EXTENSION_DIRECTORY=${HOME}/.duckdb/extensions
 
 # Hugging Face / reranker cache layout
 ENV CACHE_HOME=/home/${USER_NAME}/.cache
@@ -102,6 +104,12 @@ RUN mkdir -p ${CACHE_HOME} ${RERANKER_MODEL_CACHE} ${DOCLING_ARTIFACTS_PATH} && 
 
 # Warm the cross-encoder cache during build (faster startup, offline-friendly runtime)
 USER ${USER_NAME}
+RUN mkdir -p ${DUCKDB_EXTENSION_DIRECTORY}
+RUN python -c "\
+import duckdb; \
+con = duckdb.connect(database=':memory:'); \
+con.execute('INSTALL httpfs'); \
+con.execute('LOAD httpfs')"
 RUN python -c "\
 from sentence_transformers import CrossEncoder; \
 import os; \

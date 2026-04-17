@@ -1,10 +1,10 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core import KeycloakUser, get_current_user
+from fred_core.common import OwnerFilter
 
-from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.common.utils import sanitize_sql_name
 from knowledge_flow_backend.features.statistic.service import StatisticService
 from knowledge_flow_backend.features.statistic.structures import (
     DetectOutliersMLRequest,
@@ -19,34 +19,106 @@ from knowledge_flow_backend.features.statistic.structures import (
     TrainModelRequest,
 )
 from knowledge_flow_backend.features.statistic.utils import clean_json
+from knowledge_flow_backend.features.tabular.service import TabularService
+from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 logger = logging.getLogger(__name__)
 
 
 class StatisticController:
     def __init__(self, router: APIRouter):
+        """
+        Initialize the statistic controller with dataset-centric tabular access.
+
+        Why this exists:
+        - Statistic endpoints still work on pandas DataFrames, but datasets now
+          come from authorized tabular artifacts instead of a global SQL store.
+
+        How to use:
+        - Instantiate once during API startup with the shared router.
+        """
+
         self.service = StatisticService()
-        self.store = ApplicationContext.get_instance().get_csv_input_store()
+        self.tabular_service = TabularService()
 
         self._register_routes(router)
 
     def _register_routes(self, router: APIRouter):
         @router.get("/stat/list_datasets", tags=["Statistic"], summary="View the available datasets", operation_id="list_datasets")
-        async def list_datasets(_: KeycloakUser = Depends(get_current_user)):
+        async def list_datasets(
+            document_library_tags_ids: Annotated[
+                list[str] | None,
+                Query(description="Optional library tag IDs used to keep datasets inside selected libraries."),
+            ] = None,
+            owner_filter: Annotated[
+                OwnerFilter | None,
+                Query(description="Optional ownership scope: 'personal' or 'team'."),
+            ] = None,
+            team_id: Annotated[
+                str | None,
+                Query(description="Team ID, required when owner_filter is 'team'."),
+            ] = None,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            """
+            Return the authorized dataset identifiers available to statistic tools.
+
+            Why this exists:
+            - Statistic workflows must only load datasets the current user can
+              read through the document-level ReBAC rules.
+            - Team/personal and library scope must match the active tabular
+              area before a dataset is loaded into worker memory.
+
+            How to use:
+            - Call before `/stat/set_dataset` and pass one returned
+              `document_uid`.
+            - Reuse the same scope parameters as the tabular dataset listing
+              endpoint when the caller is bound to one active area.
+            """
+
             try:
-                return f"available_datasets:{self.store.list_tables()}"
+                datasets = await self.tabular_service.list_datasets(
+                    user,
+                    document_library_tags_ids=document_library_tags_ids,
+                    owner_filter=owner_filter,
+                    team_id=team_id,
+                )
+                return f"available_datasets:{[dataset.document_uid for dataset in datasets]}"
+            except MissingTeamIdError as e:
+                raise HTTPException(400, str(e))
             except Exception as e:
-                logger.exception("Failed to get head")
+                logger.exception("Failed to list statistic datasets")
                 raise HTTPException(500, str(e))
 
         @router.post("/stat/set_dataset", tags=["Statistic"], summary="Select a dataset", operation_id="set_dataset")
-        async def set_dataset(request: SetDatasetRequest, _: KeycloakUser = Depends(get_current_user)):
+        async def set_dataset(request: SetDatasetRequest, user: KeycloakUser = Depends(get_current_user)):
+            """
+            Load one authorized dataset into the in-memory statistic service.
+
+            Why this exists:
+            - Statistical analysis remains stateful per API worker and expects a
+              pandas DataFrame to be loaded before running analyses.
+            - The selected dataset must stay inside the same team/personal and
+              library scope as the caller's active area.
+
+            How to use:
+            - Send the dataset `document_uid` returned by `/stat/list_datasets`.
+            """
+
             try:
-                dataset = self.store.load_table(sanitize_sql_name(request.dataset_name))
+                dataset = await self.tabular_service.read_dataset_frame(
+                    user,
+                    request.document_uid,
+                    document_library_tags_ids=request.document_library_tags_ids,
+                    owner_filter=request.owner_filter,
+                    team_id=request.team_id,
+                )
                 self.service.set_dataset(dataset)
-                return f"{request.dataset_name} is loaded."
+                return f"{request.document_uid} is loaded."
+            except MissingTeamIdError as e:
+                raise HTTPException(400, str(e))
             except Exception as e:
-                logger.exception(f"Failed to set the dataset as {request.dataset_name}")
+                logger.exception("Failed to set the dataset as %s", request.document_uid)
                 raise HTTPException(500, str(e))
 
         @router.get("/stat/head", tags=["Statistic"], summary="Preview the dataset", operation_id="head")

@@ -263,15 +263,18 @@ storage:
     type: "postgres"
   task_store:
     type: "postgres"
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
   vector_store:
-    type: in_memory
-  tabular_stores:
-    base_database:
-      type: "sql"
-      driver: "duckdb"
-      database: "base_database"
-      path: "/app/.fred-test/db.duckdb"
-      mode: "read_and_write"
+    type: chroma
 
 # integrations:
 #   prometheus:
