@@ -49,6 +49,7 @@ from agentic_backend.common.rags_utils import (
     attach_sources_to_llm_response,
     ensure_ranks,
     format_sources_for_prompt,
+    format_visual_evidence_for_prompt,
     sort_hits,
 )
 from agentic_backend.core.agents.agent_flow import AgentFlow
@@ -147,6 +148,9 @@ RAG_TUNING = AgentTuning(
                 "Base your answer on the following documents. Prioritize these sources and cite the document title.\n"
                 "If the information is missing, cautiously supplement with your general knowledge and state that it does not come from the documents.\n"
                 "If the sources conflict or are insufficient, mention it briefly.\n\n"
+                "If a section called 'Visual evidence from slides' is provided, use it as additional grounding for visual layout or positioning questions.\n"
+                "Do not invent visual details if the position, structure, or relationship is not clearly supported by the provided evidence.\n\n"
+                "When visual evidence from slides is present, describe only what is clearly supported by the retrieved text and the provided visual evidence. Do not guess the exact visualization type, chart family, geometric layout, spatial relationships, grouping structure, ordering, or color meaning unless this is explicit in the sources or unmistakably visible. Prefer neutral descriptions such as 'blocks', 'sections', 'text on the right', or 'visual elements grouped by profile' over speculative labels such as 'cluster diagram', 'bubble chart', 'bar chart', or '2D map' unless the evidence is direct. If the visual structure is uncertain, say that it cannot be determined precisely. Do not use neighboring slides unless the user explicitly asks for cross-slide context."
                 "Question:\n{question}\n\n"
                 "Documents:\n{sources}\n"
             ),
@@ -857,6 +861,7 @@ class Rico(AgentFlow):
             #    - One HumanMessage with task + formatted sources
             sys_msg = SystemMessage(content=self._system_prompt())
             sources_block = format_sources_for_prompt(hits, snippet_chars=500)
+            visual_sources_block = format_visual_evidence_for_prompt(hits)
             logger.debug(
                 "[AGENT] prepared %d source(s) for prompt (chars=%s)",
                 len(hits),
@@ -876,11 +881,18 @@ class Rico(AgentFlow):
                     "If they are insufficient, state that you cannot answer without evidence from the corpus. "
                     "Do not rely on your general knowledge."
                 )
+            rich_sources = sources_block
+            if visual_sources_block:
+                rich_sources = (
+                    f"{sources_block}\n\n"
+                    f"Visual evidence from slides:\n{visual_sources_block}"
+                )
+
             human_msg = HumanMessage(
                 content=self._render_tuned_prompt(
                     "prompts.with_sources",
                     question=question,
-                    sources=sources_block,
+                    sources=rich_sources,
                 )
                 + guardrails
             )

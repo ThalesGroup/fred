@@ -1408,8 +1408,9 @@
     "teams": {
       "agents": {
         "title": "Chat with your {{agentsNicknamePlural}}",
-        "create": "Create Agent",
+        "create": "Create {{agentsNicknameSingular}}",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
+        "noAgent": "No {{agentsNicknameSingular}} in your team!",
         "firstCreate": "Create"
       },
       "formAgent": {
@@ -1419,6 +1420,14 @@
           "name": {
             "placeholder": "Enter an original name",
             "label": "Name"
+          },
+          "role": {
+            "placeholder": "What is the role of your {{agentsNicknameSingular}} ?",
+            "label": "Role"
+          },
+          "description": {
+            "placeholder": "Describe this {{agentsNicknameSingular}} for the team members",
+            "label": "Description"
           }
         }
       }
