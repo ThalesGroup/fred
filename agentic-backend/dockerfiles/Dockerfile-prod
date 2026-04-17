@@ -35,7 +35,7 @@ COPY agentic-backend/pyproject.toml agentic-backend/uv.lock* /app/
 COPY agentic-backend/Makefile /app/
 COPY scripts /scripts
 # Copy fred-core folder as this is a Python-dependency for the backend
-COPY fred-core /fred-core
+COPY libs/fred-core /libs/fred-core
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
@@ -93,7 +93,7 @@ WORKDIR /app
 COPY --chown=${USER_ID}:${GROUP_ID} agentic-backend/. /app
 RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Set environment (prod should inject via secrets/CI, not hardcoded)

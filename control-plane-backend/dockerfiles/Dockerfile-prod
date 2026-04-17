@@ -23,7 +23,7 @@ WORKDIR /app
 COPY control-plane-backend/pyproject.toml control-plane-backend/uv.lock* /app/
 COPY control-plane-backend/Makefile /app/
 COPY scripts /scripts
-COPY fred-core /fred-core
+COPY libs/fred-core /libs/fred-core
 
 RUN make dev
 
@@ -61,7 +61,7 @@ WORKDIR /app
 COPY --chown=${USER_ID}:${GROUP_ID} control-plane-backend/. /app
 RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 ENV PYTHONPATH=/app

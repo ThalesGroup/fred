@@ -31,8 +31,8 @@ COPY knowledge-flow-backend/pyproject.toml knowledge-flow-backend/uv.lock* /app/
 COPY knowledge-flow-backend/Makefile /app/
 COPY scripts /scripts
 
-# Copy fred-core folder as this is a Python-dependency for the backend
-COPY fred-core /fred-core
+# Copy libs/fred-core as it is a local Python dependency for the backend
+COPY libs/fred-core /libs/fred-core
 
 # Install dependencies using make with both VENV and TARGET properly set
 RUN make dev
@@ -146,7 +146,7 @@ WORKDIR /app
 COPY --chown=${USER_ID}:${GROUP_ID} knowledge-flow-backend/. /app
 RUN rm -f /app/alembic.ini
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /app/alembic.ini
-COPY --chown=${USER_ID}:${GROUP_ID} fred-core /fred-core
+COPY --chown=${USER_ID}:${GROUP_ID} libs/fred-core /libs/fred-core
 COPY --chown=${USER_ID}:${GROUP_ID} scripts /scripts
 
 # Set environment
