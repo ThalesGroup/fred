@@ -22,7 +22,8 @@
     "loadingPreview": "Aperçu en cours de chargement...",
     "loadingPreviewError": "Impossible de charger l'aperçu.",
     "view": "Aperçu",
-    "contactSupport": "Contacter l'équipe support."
+    "contactSupport": "Contacter l'équipe support.",
+    "failToLoad": "Impossible de charger les resources"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",

@@ -3,7 +3,7 @@ import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import { Box, Checkbox, IconButton, TextField, Typography, useTheme } from "@mui/material";
+import { Box, Checkbox, IconButton, Skeleton, TextField, Typography, useTheme } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
@@ -46,8 +46,7 @@ function filterTree(root: TagNode, q: string): TagNode {
       const fc = dfs(ch);
       if (fc) keptChildren.set(k, fc);
     }
-    if (n.full === "" || labelHit || keptChildren.size > 0)
-      return { ...n, children: keptChildren };
+    if (n.full === "" || labelHit || keptChildren.size > 0) return { ...n, children: keptChildren };
     return null;
   };
   return dfs(root) ?? { ...root, children: new Map() };
@@ -71,7 +70,11 @@ export function ChatDocumentLibrariesSelectionCard({
 }: ChatDocumentLibrariesSelectionCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+  const {
+    data: libraries = [],
+    isLoading,
+    isError,
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
     type: libraryType,
     ownerFilter: teamId ? "team" : "personal",
     teamId: teamId,
@@ -197,13 +200,25 @@ export function ChatDocumentLibrariesSelectionCard({
       </Box>
 
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", px: 1, pb: 1.5 }}>
-        <SimpleTreeView
-          expandedItems={search ? expandedWhenSearching : expanded}
-          onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
-          slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
-        >
-          {renderTree(filtered)}
-        </SimpleTreeView>
+        {isLoading ? (
+          <Box sx={{ px: 1, pt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} variant="rounded" height={34} />
+            ))}
+          </Box>
+        ) : isError ? (
+          <Typography variant="body2" sx={{ px: 2, py: 1, color: "error.main" }}>
+            {t("common.failToLoad")}
+          </Typography>
+        ) : (
+          <SimpleTreeView
+            expandedItems={search ? expandedWhenSearching : expanded}
+            onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
+            slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
+          >
+            {renderTree(filtered)}
+          </SimpleTreeView>
+        )}
       </Box>
     </Box>
   );

@@ -21,7 +21,8 @@
     "dropHere": "Drop files here or click to browse",
     "loadingPreview": "Loading preview...",
     "loadingPreviewError": "Unable to load preview.",
-    "contactSupport": "Contact support team."
+    "contactSupport": "Contact support team.",
+    "failToLoad": "Fail to load resources"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
