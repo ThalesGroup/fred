@@ -31,10 +31,22 @@ const (
 )
 
 type askPayload struct {
-	SessionID        string `json:"session_id,omitempty"`
-	Message          string `json:"message"`
-	AgentID          string `json:"agent_id"`
-	ClientExchangeID string `json:"client_exchange_id,omitempty"`
+	Type             string                 `json:"type,omitempty"`
+	SessionID        string                 `json:"session_id,omitempty"`
+	Message          string                 `json:"message"`
+	AgentID          string                 `json:"agent_id,omitempty"`
+	RuntimeContext   *runtimeContextPayload `json:"runtime_context,omitempty"`
+	ClientExchangeID string                 `json:"client_exchange_id,omitempty"`
+}
+
+type runtimeContextPayload struct {
+	SessionID                    string   `json:"session_id,omitempty"`
+	SelectedDocumentLibrariesIDs []string `json:"selected_document_libraries_ids,omitempty"`
+	SelectedDocumentUIDs         []string `json:"selected_document_uids,omitempty"`
+	SearchPolicy                 string   `json:"search_policy,omitempty"`
+	SearchRagScope               string   `json:"search_rag_scope,omitempty"`
+	IncludeSessionScope          *bool    `json:"include_session_scope,omitempty"`
+	IncludeCorpusScope           *bool    `json:"include_corpus_scope,omitempty"`
 }
 
 type eventEnvelope struct {
@@ -47,26 +59,33 @@ type errorEvent struct {
 }
 
 type config struct {
-	URL                string
-	Token              string
-	TokenInQuery       bool
-	AgentID            string
-	Message            string
-	SessionID          string
-	SessionURL         string
-	SessionTitle       string
-	CreateSession      bool
-	PrepareSessions    bool
-	PrepareConcurrency int
-	DeleteSession      bool
-	Clients            int
-	Requests           int
-	RequestsPerClient  int
-	Timeout            time.Duration
-	InsecureTLS        bool
-	AllowEmptyTok      bool
-	DebugEvents        bool
-	RampDuration       time.Duration
+	URL                 string
+	Token               string
+	TokenInQuery        bool
+	AgentID             string
+	Message             string
+	SessionID           string
+	SessionURL          string
+	SessionTitle        string
+	CreateSession       bool
+	PrepareSessions     bool
+	PrepareConcurrency  int
+	DeleteSession       bool
+	Clients             int
+	Requests            int
+	RequestsPerClient   int
+	Timeout             time.Duration
+	InsecureTLS         bool
+	AllowEmptyTok       bool
+	DebugEvents         bool
+	RampDuration        time.Duration
+	ReadLimitBytes      int64
+	DocumentLibraryIDs  []string
+	DocumentUIDs        []string
+	SearchPolicy        string
+	SearchRagScope      string
+	IncludeSessionScope *bool
+	IncludeCorpusScope  *bool
 }
 
 type result struct {
@@ -194,6 +213,9 @@ func main() {
 	printSummary(cfg, totalRequests, durations, errorCount, errorSamples, elapsed)
 }
 
+// parseFlags exists to let the benchmark exercise plain chat and public RAG
+// flows from the same binary. Use the runtime-context flags below to scope
+// Rico's retrieval behaviour without changing the code.
 func parseFlags() config {
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options]\n\n", os.Args[0])
@@ -219,9 +241,16 @@ func parseFlags() config {
 	requestsFlag := flag.Int("requests", 0, "Total requests (defaults to clients)")
 	requestsPerClientFlag := flag.Int("requests-per-client", 10, "Requests per client (sequential mode)")
 	timeoutFlag := flag.Duration("timeout", 90*time.Second, "Timeout per request")
+	readLimitBytesFlag := flag.Int64("read-limit-bytes", 4*1024*1024, "Maximum WebSocket message size accepted by the benchmark client before failing the read")
 	insecureFlag := flag.Bool("insecure", false, "Skip TLS verification for wss://")
 	allowEmptyTok := flag.Bool("allow-empty-token", false, "Allow missing token (not recommended)")
 	debugEvents := flag.Bool("debug-events", false, "Print every WebSocket event payload")
+	documentLibraryIDsFlag := flag.String("document-library-ids", "", "Optional comma-separated document library ids for runtime_context.selected_document_libraries_ids")
+	documentUIDsFlag := flag.String("document-uids", "", "Optional comma-separated document uids for runtime_context.selected_document_uids")
+	searchPolicyFlag := flag.String("search-policy", "", "Optional runtime_context.search_policy, e.g. semantic, hybrid, strict")
+	searchRagScopeFlag := flag.String("search-rag-scope", "", "Optional runtime_context.search_rag_scope: corpus_only, hybrid, general_only")
+	includeSessionScopeFlag := flag.String("include-session-scope", "", "Optional runtime_context.include_session_scope: true or false")
+	includeCorpusScopeFlag := flag.String("include-corpus-scope", "", "Optional runtime_context.include_corpus_scope: true or false")
 
 	flag.Parse()
 
@@ -239,26 +268,33 @@ func parseFlags() config {
 	}
 
 	return config{
-		URL:                strings.TrimSpace(*urlFlag),
-		Token:              token,
-		TokenInQuery:       *tokenInQuery,
-		AgentID:            strings.TrimSpace(*agentFlag),
-		Message:            *messageFlag,
-		SessionID:          strings.TrimSpace(*sessionFlag),
-		SessionURL:         strings.TrimSpace(*sessionURLFlag),
-		SessionTitle:       strings.TrimSpace(*sessionTitleFlag),
-		CreateSession:      *createSessionFlag,
-		PrepareSessions:    *prepareSessionsFlag,
-		PrepareConcurrency: *prepareConcurrencyFlag,
-		DeleteSession:      *deleteSessionFlag,
-		Clients:            *clientsFlag,
-		Requests:           requests,
-		RequestsPerClient:  *requestsPerClientFlag,
-		Timeout:            *timeoutFlag,
-		InsecureTLS:        *insecureFlag,
-		AllowEmptyTok:      *allowEmptyTok,
-		DebugEvents:        *debugEvents,
-		RampDuration:       *rampDurationFlag,
+		URL:                 strings.TrimSpace(*urlFlag),
+		Token:               token,
+		TokenInQuery:        *tokenInQuery,
+		AgentID:             strings.TrimSpace(*agentFlag),
+		Message:             *messageFlag,
+		SessionID:           strings.TrimSpace(*sessionFlag),
+		SessionURL:          strings.TrimSpace(*sessionURLFlag),
+		SessionTitle:        strings.TrimSpace(*sessionTitleFlag),
+		CreateSession:       *createSessionFlag,
+		PrepareSessions:     *prepareSessionsFlag,
+		PrepareConcurrency:  *prepareConcurrencyFlag,
+		DeleteSession:       *deleteSessionFlag,
+		Clients:             *clientsFlag,
+		Requests:            requests,
+		RequestsPerClient:   *requestsPerClientFlag,
+		Timeout:             *timeoutFlag,
+		ReadLimitBytes:      *readLimitBytesFlag,
+		InsecureTLS:         *insecureFlag,
+		AllowEmptyTok:       *allowEmptyTok,
+		DebugEvents:         *debugEvents,
+		RampDuration:        *rampDurationFlag,
+		DocumentLibraryIDs:  parseCSVFlag(*documentLibraryIDsFlag),
+		DocumentUIDs:        parseCSVFlag(*documentUIDsFlag),
+		SearchPolicy:        strings.TrimSpace(*searchPolicyFlag),
+		SearchRagScope:      strings.TrimSpace(*searchRagScopeFlag),
+		IncludeSessionScope: parseOptionalBoolFlag(*includeSessionScopeFlag),
+		IncludeCorpusScope:  parseOptionalBoolFlag(*includeCorpusScopeFlag),
 	}
 }
 
@@ -306,6 +342,7 @@ func runClientPersistent(cfg config, sessionID string) []result {
 		results = append(results, result{Err: err})
 		return results
 	}
+	applyConnReadLimit(conn, cfg)
 	defer conn.Close(websocket.StatusNormalClosure, "done")
 
 	for i := 0; i < cfg.RequestsPerClient; i++ {
@@ -331,12 +368,7 @@ func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sess
 	reqCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	payload := askPayload{
-		SessionID:        sessionID,
-		Message:          cfg.Message,
-		AgentID:          cfg.AgentID,
-		ClientExchangeID: newExchangeID(),
-	}
+	payload := buildAskPayload(cfg, sessionID)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return result{Err: err}
@@ -375,6 +407,7 @@ func runOverOpenConn(ctx context.Context, conn *websocket.Conn, cfg config, sess
 	}
 }
 
+// printConfigRecap exists to keep load-test runs self-describing.
 func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effectiveClients int) {
 	style := makeStyler(shouldColor())
 	mode := "total-requests"
@@ -393,6 +426,18 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 	fmt.Printf("\n%s\n", style("WS BENCH CONFIG", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
 	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+	if len(cfg.DocumentLibraryIDs) > 0 {
+		fmt.Printf("%s %s\n", style("Document libraries:", colorDim), strings.Join(cfg.DocumentLibraryIDs, ","))
+	}
+	if len(cfg.DocumentUIDs) > 0 {
+		fmt.Printf("%s %s\n", style("Document UIDs:", colorDim), strings.Join(cfg.DocumentUIDs, ","))
+	}
+	if cfg.SearchPolicy != "" {
+		fmt.Printf("%s %s\n", style("Search policy:", colorDim), cfg.SearchPolicy)
+	}
+	if cfg.SearchRagScope != "" {
+		fmt.Printf("%s %s\n", style("RAG scope:", colorDim), cfg.SearchRagScope)
+	}
 	fmt.Printf("%s %s\n", style("Mode:", colorDim), mode)
 	fmt.Printf("%s %d\n", style("Clients:", colorDim), effectiveClients)
 	fmt.Printf("%s %d\n", style("Total requests:", colorDim), totalRequests)
@@ -409,6 +454,7 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 		fmt.Printf("%s %s\n", style("Session URL override:", colorDim), cfg.SessionURL)
 	}
 	fmt.Printf("%s %s\n", style("Timeout:", colorDim), cfg.Timeout)
+	fmt.Printf("%s %d\n", style("Read limit bytes:", colorDim), cfg.ReadLimitBytes)
 	if cfg.TokenInQuery {
 		fmt.Printf("%s %s\n", style("Auth:", colorDim), "query")
 	} else {
@@ -417,6 +463,8 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 	fmt.Printf("%s %t\n", style("Insecure TLS:", colorDim), cfg.InsecureTLS)
 }
 
+// runOnceWithSession exists to measure one full websocket exchange, including
+// optional session lifecycle.
 func runOnceWithSession(cfg config, sessionID string) result {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
@@ -466,14 +514,10 @@ func runOnceWithSession(cfg config, sessionID string) result {
 	if err != nil {
 		return result{Err: err}
 	}
+	applyConnReadLimit(conn, cfg)
 	defer conn.Close(websocket.StatusNormalClosure, "done")
 
-	payload := askPayload{
-		SessionID:        sessionID,
-		Message:          cfg.Message,
-		AgentID:          cfg.AgentID,
-		ClientExchangeID: newExchangeID(),
-	}
+	payload := buildAskPayload(cfg, sessionID)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return result{Err: err}
@@ -512,6 +556,56 @@ func runOnceWithSession(cfg config, sessionID string) result {
 	}
 }
 
+// buildAskPayload exists to keep the websocket request contract in one place.
+// Usage: call before serializing an ask sent to `/chatbot/query/ws`.
+func buildAskPayload(cfg config, sessionID string) askPayload {
+	payload := askPayload{
+		Type:             "ask",
+		SessionID:        sessionID,
+		Message:          cfg.Message,
+		AgentID:          cfg.AgentID,
+		ClientExchangeID: newExchangeID(),
+	}
+	if runtimeContext := buildRuntimeContextPayload(cfg, sessionID); runtimeContext != nil {
+		payload.RuntimeContext = runtimeContext
+	}
+	return payload
+}
+
+// buildRuntimeContextPayload exists to pass retrieval-scoping hints to Rico.
+// Usage: populate library filters or `search_rag_scope` to benchmark corpus search paths.
+func buildRuntimeContextPayload(cfg config, sessionID string) *runtimeContextPayload {
+	if sessionID == "" &&
+		len(cfg.DocumentLibraryIDs) == 0 &&
+		len(cfg.DocumentUIDs) == 0 &&
+		cfg.SearchPolicy == "" &&
+		cfg.SearchRagScope == "" &&
+		cfg.IncludeSessionScope == nil &&
+		cfg.IncludeCorpusScope == nil {
+		return nil
+	}
+
+	return &runtimeContextPayload{
+		SessionID:                    sessionID,
+		SelectedDocumentLibrariesIDs: cfg.DocumentLibraryIDs,
+		SelectedDocumentUIDs:         cfg.DocumentUIDs,
+		SearchPolicy:                 cfg.SearchPolicy,
+		SearchRagScope:               cfg.SearchRagScope,
+		IncludeSessionScope:          cfg.IncludeSessionScope,
+		IncludeCorpusScope:           cfg.IncludeCorpusScope,
+	}
+}
+
+// applyConnReadLimit exists to let the benchmark receive larger RAG and MCP
+// payloads without tripping the websocket library's conservative default cap.
+// Usage: call immediately after each successful websocket dial.
+func applyConnReadLimit(conn *websocket.Conn, cfg config) {
+	if conn == nil || cfg.ReadLimitBytes <= 0 {
+		return
+	}
+	conn.SetReadLimit(cfg.ReadLimitBytes)
+}
+
 func buildURL(rawURL, token string, tokenInQuery bool) (string, error) {
 	if !tokenInQuery || token == "" {
 		return rawURL, nil
@@ -540,6 +634,38 @@ func newExchangeID() string {
 		return fmt.Sprintf("ex-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// parseCSVFlag exists to keep list-style benchmark flags compact for CLI and
+// Helm usage. Example: `-document-library-ids=lib-a,lib-b`.
+func parseCSVFlag(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	parts := strings.Split(trimmed, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+// parseOptionalBoolFlag exists because runtime_context booleans need a tri-state:
+// unset, true, or false. Example: `-include-corpus-scope=false`.
+func parseOptionalBoolFlag(raw string) *bool {
+	trimmed := strings.TrimSpace(strings.ToLower(raw))
+	if trimmed == "" {
+		return nil
+	}
+	value := trimmed == "true"
+	return &value
 }
 
 func createSession(ctx context.Context, cfg config) (string, error) {

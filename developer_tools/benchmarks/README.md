@@ -59,13 +59,83 @@ uv run uvicorn agentic_backend.main:create_app --factory --host 0.0.0.0 --port 8
 ### 3) Run the Go benchmark client
 From `developer_tools/benchmarks`:
 ```bash
-make run ARGS='-clients=20 -requests-per-client=5'
+AGENTIC_TOKEN=<bearer-token> make run ARGS='-clients=20 -requests-per-client=5'
 ```
 
 Defaults:
 - Sessions are prepared per client before measuring.
 - Sessions are deleted after the run.
 - The benchmark target defaults to `ws://localhost:8000/agentic/v1/chatbot/query/ws`.
+- The benchmark expects a bearer token via `AGENTIC_TOKEN` (or `-token`).
+- When backend auth is disabled for local development, any placeholder such as `fake-token` is enough.
+
+To benchmark a real RAG path, use the public `Rico` agent. By default, if you
+do not pass `-document-library-ids`, Rico searches across all document
+libraries the current user is allowed to access:
+
+```bash
+AGENTIC_TOKEN=<bearer-token> make run ARGS='\
+  -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
+  -agent Rico \
+  -message "Quelle est la fréquence recommandée des sprints ?" \
+  -search-policy=hybrid \
+  -search-rag-scope=corpus_only \
+  -clients=20 \
+  -requests-per-client=5 \
+  -create-session=true \
+  -prepare-sessions=true \
+  -delete-session=true \
+  -read-limit-bytes=8388608'
+```
+
+Example with a local dev token placeholder:
+
+```bash
+AGENTIC_TOKEN=fake-token make run ARGS='\
+  -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
+  -agent Rico \
+  -message "Quelle est la fréquence recommandée des sprints ?" \
+  -search-policy=hybrid \
+  -search-rag-scope=corpus_only \
+  -clients=20 \
+  -requests-per-client=5 \
+  -create-session=true \
+  -prepare-sessions=true \
+  -delete-session=true \
+  -read-limit-bytes=8388608'
+```
+
+To simulate many users sending requests at the same time, increase `-clients`
+and keep `-ramp-duration=0s` so they all start together:
+
+```bash
+AGENTIC_TOKEN=<bearer-token> make run ARGS='\
+  -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
+  -agent Rico \
+  -message "Quelle est la fréquence recommandée des sprints ?" \
+  -search-policy=hybrid \
+  -search-rag-scope=corpus_only \
+  -clients=100 \
+  -requests-per-client=10 \
+  -create-session=true \
+  -prepare-sessions=true \
+  -delete-session=true \
+  -prepare-concurrency=50 \
+  -ramp-duration=0s \
+  -read-limit-bytes=8388608'
+```
+
+Useful RAG/load flags:
+- Omitting `-document-library-ids` lets Rico search across all libraries the current user can access.
+- `-document-library-ids=a,b` populates `runtime_context.selected_document_libraries_ids` when you want to restrict the run to specific libraries.
+- `-document-uids=a,b` restricts retrieval to specific documents.
+- `-search-policy=semantic|hybrid|strict` forwards the retrieval policy.
+- `-search-rag-scope=corpus_only|hybrid|general_only` steers whether corpus retrieval should be used.
+- `-clients` controls how many users are simulated concurrently.
+- `-requests-per-client` controls how many sequential asks each simulated user sends.
+- `-prepare-sessions=true` creates one session per user before measurement, which is usually the cleanest setup for RAG load tests.
+- `-ramp-duration=0s` starts all clients at once; use `30s` or more for a gentler ramp-up.
+- `-read-limit-bytes=8388608` avoids client-side read failures when RAG answers or source payloads are large.
 
 ### 4) Container + Helm (run inside Kubernetes)
 Build and push the benchmark image:
