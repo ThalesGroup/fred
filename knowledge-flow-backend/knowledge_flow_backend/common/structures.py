@@ -493,7 +493,6 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     reload: bool = False
     reload_dir: str = "."
-    max_ingestion_workers: int = 1
     metrics_enabled: bool = True
     metrics_address: str = "127.0.0.1"
     metrics_port: int = 9111
@@ -924,5 +923,43 @@ class Configuration(BaseModel):
                     raise ValueError(
                         "'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported. Use 'storage.tabular_store.query.internal_presigned_ttl_seconds'.",
                     )
+
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_app_ingestion_concurrency(cls, values: object):
+        """
+        Move the legacy app-level ingestion workers knob into scheduler.temporal.
+
+        Why:
+            Ingestion queue/concurrency settings logically belong to the Temporal
+            scheduler configuration, not generic app runtime settings.
+        How:
+            Read legacy `app.max_ingestion_workers` when present and backfill missing
+            `scheduler.temporal.ingestion_*` keys without overriding explicit
+            scheduler-level configuration.
+        Usage example:
+            `app.max_ingestion_workers: 3` now behaves like setting all three
+            `scheduler.temporal.ingestion_*` keys to `3`.
+        """
+        if not isinstance(values, dict):
+            return values
+
+        app_value = values.get("app")
+        scheduler_value = values.get("scheduler")
+        if not isinstance(app_value, dict) or not isinstance(scheduler_value, dict):
+            return values
+
+        temporal_value = scheduler_value.get("temporal")
+        if not isinstance(temporal_value, dict):
+            return values
+
+        legacy_single = app_value.get("max_ingestion_workers")
+
+        if legacy_single is not None:
+            temporal_value.setdefault("ingestion_workflow_parallelism", legacy_single)
+            temporal_value.setdefault("ingestion_max_concurrent_workflow_tasks", legacy_single)
+            temporal_value.setdefault("ingestion_max_concurrent_activities", legacy_single)
 
         return values

@@ -164,6 +164,16 @@ x-profile-rich-worker: &profile-rich-worker
   <<: *profile-rich-backend
   generate_summary: true
 
+# x-fast-attachment-processors: &fast-attachment-processors
+#   - suffix: ".pdf"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
+#   - suffix: ".docx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
+#   - suffix: ".pptx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
+#   - suffix: ".csv"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
+
 # ── Shared knowledge-flow configuration (backend + worker) ──────────────────────────
 
 x-kf-security: &kf-security
@@ -200,6 +210,9 @@ x-kf-scheduler: &kf-scheduler
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    ingestion_workflow_parallelism: 3
+    ingestion_max_concurrent_workflow_tasks: 3
+    ingestion_max_concurrent_activities: 3
 
 x-kf-content-storage: &kf-content-storage
   type: local
@@ -1276,7 +1289,6 @@ applications:
         kpi_process_metrics_interval_sec: 0
         kpi_log_summary_interval_sec: 0.0
         kpi_log_summary_top_n: 0
-        max_ingestion_workers: 3
 
       # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
       processing:
@@ -1285,6 +1297,7 @@ applications:
           fast:   *profile-fast
           medium: *profile-medium
           rich:   *profile-rich-backend
+      # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
 
       security:        *kf-security
       scheduler:       *kf-scheduler
@@ -1456,6 +1469,7 @@ applications:
           fast:   *profile-fast
           medium: *profile-medium
           rich:   *profile-rich-worker
+      # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
 
       security:        *kf-security
       scheduler:       *kf-scheduler
