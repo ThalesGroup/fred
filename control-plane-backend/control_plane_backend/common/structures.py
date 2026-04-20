@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Annotated, Literal, Optional, Union
+from typing import Any, Annotated, Literal, Optional, Union
 
 from fred_core import (
     SecurityConfiguration,
@@ -21,6 +21,105 @@ class AppConfig(BaseModel):
     address: str = "127.0.0.1"
     port: int = 8222
     log_level: str = "info"
+
+
+class FrontendFeatureFlags(BaseModel):
+    """Typed feature flags exposed to the frontend bootstrap."""
+
+    enableK8Features: bool = False
+    enableElecWarfare: bool = False
+
+
+class FrontendUiSettings(BaseModel):
+    """Small typed UI settings surface owned by control-plane."""
+
+    siteDisplayName: str = "Fred"
+    agentsNicknameSingular: str = "agent"
+    agentsNicknamePlural: str = "agents"
+
+
+class FrontendBootstrapConfig(BaseModel):
+    """Static frontend bootstrap configuration served by control-plane."""
+
+    feature_flags: FrontendFeatureFlags = Field(default_factory=FrontendFeatureFlags)
+    ui_settings: FrontendUiSettings = Field(default_factory=FrontendUiSettings)
+
+
+class RuntimeCatalogSourceConfig(BaseModel):
+    """Configured runtime endpoint used for read-only template aggregation."""
+
+    runtime_id: str = Field(..., min_length=1)
+    base_url: str = Field(..., min_length=1)
+    enabled: bool = True
+    ingress_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Ingress-relative URL prefix for browser-facing runtime access, "
+            "e.g. /runtime/agents-v2. Required for execution preparation. "
+            "MUST NOT be a cluster-internal hostname or pod IP."
+        ),
+    )
+
+
+class ManagedAgentUiHints(BaseModel):
+    """Small UI metadata kept compatible with runtime tuning fields."""
+
+    multiline: bool = False
+    max_lines: int = 6
+    placeholder: str | None = None
+    markdown: bool = False
+    textarea: bool = False
+    group: str | None = None
+    hide: bool = False
+
+
+class ManagedAgentFieldSpec(BaseModel):
+    """Locally owned tunable-field shape sent back to fred-runtime."""
+
+    key: str
+    type: str
+    title: str
+    description: str | None = None
+    required: bool = False
+    default: Any | None = None
+    enum: list[str] | None = None
+    min: float | None = None
+    max: float | None = None
+    pattern: str | None = None
+    item_type: str | None = None
+    ui: ManagedAgentUiHints = Field(default_factory=ManagedAgentUiHints)
+
+
+class ManagedMcpServerRef(BaseModel):
+    """Logical MCP reference kept in the managed-agent tuning payload."""
+
+    id: str
+    require_tools: list[str] = Field(default_factory=list)
+
+
+class ManagedAgentTuning(BaseModel):
+    """Minimal runtime-compatible tuning payload owned by control-plane."""
+
+    role: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
+    mcp_servers: list[ManagedMcpServerRef] = Field(default_factory=list)
+
+
+class PlatformConfig(BaseModel):
+    """
+    Control-plane deployment configuration for product/runtime coordination.
+
+    Contains ONLY infrastructure references (which runtime pods exist).
+    Managed agent instance enrollment (which team has which agents) is
+    DB-backed and never stored in this deployment config.
+    """
+
+    frontend: FrontendBootstrapConfig = Field(default_factory=FrontendBootstrapConfig)
+    runtime_catalog_sources: list[RuntimeCatalogSourceConfig] = Field(
+        default_factory=list
+    )
 
 
 class SchedulerConfig(BaseModel):
@@ -117,6 +216,7 @@ class StorageConfig(BaseModel):
 
 class Configuration(BaseModel):
     app: AppConfig
+    platform: PlatformConfig = Field(default_factory=PlatformConfig)
     scheduler: SchedulerConfig
     security: SecurityConfiguration = Field(default_factory=_default_security)
     storage: StorageConfig = Field(default_factory=StorageConfig)

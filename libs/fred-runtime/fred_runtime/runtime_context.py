@@ -116,6 +116,7 @@ class RuntimeConfig:
     """
 
     knowledge_flow_url: str
+    service_name: str | None = None
     control_plane_url: str | None = None
     timeouts: RuntimeTimeouts = field(default_factory=RuntimeTimeouts)
     kpi_writer: BaseKPIWriter = field(default_factory=NoOpKPIWriter)

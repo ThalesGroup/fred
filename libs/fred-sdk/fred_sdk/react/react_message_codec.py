@@ -215,8 +215,9 @@ def to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
         dict(configurable_raw) if isinstance(configurable_raw, Mapping) else {}
     )
 
-    if config.thread_id is not None:
-        configurable["thread_id"] = config.thread_id
+    if config.session_id is not None:
+        # session_id is Fred's public identity; thread_id is LangGraph's internal key.
+        configurable["thread_id"] = config.session_id
 
     if configurable:
         merged["configurable"] = configurable

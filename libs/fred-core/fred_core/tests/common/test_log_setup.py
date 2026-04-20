@@ -16,7 +16,23 @@ from __future__ import annotations
 
 import logging
 
-from fred_core.logs.log_setup import UvicornSensitiveQueryFilter
+from fred_core.logs.base_log_store import LogEventDTO
+from fred_core.logs.log_setup import UvicornSensitiveQueryFilter, log_setup
+from fred_core.logs.log_structures import LogQuery, LogQueryResult
+
+
+class _StubLogStore:
+    def ensure_ready(self) -> None:
+        return None
+
+    def index_event(self, event: LogEventDTO) -> None:
+        return None
+
+    def bulk_index(self, events: list[LogEventDTO]) -> None:
+        return None
+
+    def query(self, q: LogQuery) -> LogQueryResult:
+        raise NotImplementedError
 
 
 def test_uvicorn_sensitive_query_filter_redacts_token_in_args() -> None:
@@ -38,3 +54,18 @@ def test_uvicorn_sensitive_query_filter_redacts_token_in_args() -> None:
     assert isinstance(record.args, tuple)
     assert isinstance(record.args[1], str)
     assert record.args[1] == "/agentic/v1/chatbot/query/ws?token=<redacted>&x=1"
+
+
+def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:
+    log_setup(
+        service_name="test-log-setup-aiosqlite",
+        log_level="DEBUG",
+        store=_StubLogStore(),
+        include_uvicorn=False,
+        use_rich=False,
+    )
+
+    logger = logging.getLogger("aiosqlite")
+
+    assert logger.level == logging.WARNING
+    assert logger.propagate is False

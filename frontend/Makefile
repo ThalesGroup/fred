@@ -105,6 +105,15 @@ update-control-plane-api: ## update the generated hooks used in UI based on cont
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
+.PHONY: update-runtime-api
+update-runtime-api: ## update the generated hooks used in UI based on fred-runtime OpenAPI spec
+	@echo "🔧 Installing frontend dependencies..."
+	npm ci
+	@echo "🔧 Generating fred-runtime OpenAPI specification..."
+	cd ../libs/fred-runtime && make generate-openapi
+	@echo "🎯 Generating RTK Query hooks for fred-runtime..."
+	npx -y @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json
+
 ##@ Clean
 
 .PHONY: clean

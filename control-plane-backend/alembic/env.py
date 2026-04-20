@@ -4,6 +4,7 @@ from logging.config import fileConfig
 
 from fred_core.sql import make_alembic_env
 
+import control_plane_backend.models.agent_instance_models  # noqa: F401
 import control_plane_backend.models.purge_queue_models  # noqa: F401
 import control_plane_backend.models.team_metadata_models  # noqa: F401
 from alembic import context

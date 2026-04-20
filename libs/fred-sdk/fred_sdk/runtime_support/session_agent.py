@@ -167,9 +167,10 @@ def _execution_config_from_runnable_config(
     config: RunnableConfig, *, state: Any
 ) -> ExecutionConfig:
     configurable = config.get("configurable") or {}
-    thread_id = configurable.get("thread_id")
-    if thread_id is not None and not isinstance(thread_id, str):
-        thread_id = str(thread_id)
+    # LangGraph stores this as "thread_id" internally; map to Fred's session_id.
+    session_id = configurable.get("thread_id")
+    if session_id is not None and not isinstance(session_id, str):
+        session_id = str(session_id)
     checkpoint_id = configurable.get("checkpoint_id")
     if checkpoint_id is not None and not isinstance(checkpoint_id, str):
         checkpoint_id = str(checkpoint_id)
@@ -182,7 +183,7 @@ def _execution_config_from_runnable_config(
 
     resume_payload = state.resume if isinstance(state, Command) else None
     return ExecutionConfig(
-        thread_id=thread_id,
+        session_id=session_id,
         checkpoint_id=checkpoint_id,
         adapter_config=passthrough_config,
         resume_payload=resume_payload,

@@ -158,3 +158,9 @@ If you need to update one of them, just run one of the command while the corresp
   ```sh
   make update-control-plane-api
   ```
+
+- Fred Runtime:
+
+  ```sh
+  make update-runtime-api
+  ```

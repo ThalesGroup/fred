@@ -241,6 +241,42 @@ class ContextAwareTool(BaseTool):
         user_id = getattr(context, "user_id", None) if context else None
         if user_id:
             dims["user_id"] = str(user_id)
+        team_id = getattr(context, "team_id", None) if context else None
+        if team_id:
+            dims["team_id"] = str(team_id)
+        agent_instance_id = (
+            getattr(context, "agent_instance_id", None) if context else None
+        )
+        if agent_instance_id:
+            dims["agent_instance_id"] = str(agent_instance_id)
+        template_agent_id = (
+            getattr(context, "template_agent_id", None) if context else None
+        )
+        if template_agent_id:
+            dims["template_agent_id"] = str(template_agent_id)
+        checkpoint_id = getattr(context, "checkpoint_id", None) if context else None
+        if checkpoint_id:
+            dims["checkpoint_id"] = str(checkpoint_id)
+        trace_id = getattr(context, "trace_id", None) if context else None
+        if trace_id:
+            dims["trace_id"] = str(trace_id)
+        correlation_id = getattr(context, "correlation_id", None) if context else None
+        if correlation_id:
+            dims["correlation_id"] = str(correlation_id)
+        execution_action = (
+            getattr(context, "execution_action", None) if context else None
+        )
+        if execution_action:
+            dims["execution_action"] = str(execution_action)
+        exchange_id = getattr(context, "exchange_id", None) if context else None
+        if exchange_id:
+            dims["exchange_id"] = str(exchange_id)
+        try:
+            runtime_id = get_runtime_context().config.service_name
+            if runtime_id:
+                dims["runtime_id"] = runtime_id
+        except Exception as exc:
+            logger.debug("[KPI] Could not resolve runtime_id: %s", exc)
         return dims
 
     def _kpi_timer(

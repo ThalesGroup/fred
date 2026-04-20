@@ -16,6 +16,7 @@ from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
     OpenAICompletionChunk,
     OpenAIMessage,
+    OpenAIToolCall,
     fred_event_to_openai_chunk,
 )
 
@@ -68,11 +69,31 @@ def test_tool_call_maps_to_tool_calls_chunk() -> None:
     assert delta.tool_calls is not None
     assert len(delta.tool_calls) == 1
     tc = delta.tool_calls[0]
-    assert tc["id"] == "call-abc"
-    assert tc["type"] == "function"
-    assert tc["function"]["name"] == "search_knowledge"
-    assert json.loads(tc["function"]["arguments"]) == {"query": "fred"}
+    assert isinstance(tc, OpenAIToolCall)
+    assert tc.id == "call-abc"
+    assert tc.type == "function"
+    assert tc.function.name == "search_knowledge"
+    assert json.loads(tc.function.arguments) == {"query": "fred"}
     assert chunk.fred is None
+
+
+def test_tool_call_serialises_to_openai_json_shape() -> None:
+    event = {
+        "kind": "tool_call",
+        "call_id": "call-xyz",
+        "tool_name": "fetch_data",
+        "arguments": {"limit": 10},
+        "sequence": 2,
+    }
+    chunk = _chunk(event)
+
+    assert chunk is not None
+    data = json.loads(chunk.model_dump_json(exclude_none=True))
+    tc = data["choices"][0]["delta"]["tool_calls"][0]
+    assert tc["id"] == "call-xyz"
+    assert tc["type"] == "function"
+    assert tc["function"]["name"] == "fetch_data"
+    assert json.loads(tc["function"]["arguments"]) == {"limit": 10}
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +224,14 @@ def test_awaiting_human_sets_stop_and_hitl_payload() -> None:
     assert chunk is not None
     assert chunk.choices[0].finish_reason == "stop"
     assert chunk.fred is not None
-    assert chunk.fred.awaiting_human == hitl_request
+    # awaiting_human is now typed as HumanInputRequest, not a raw dict
+    from fred_sdk.contracts.runtime import HumanInputRequest
+
+    assert isinstance(chunk.fred.awaiting_human, HumanInputRequest)
+    assert chunk.fred.awaiting_human.title == "Approve?"
+    assert chunk.fred.awaiting_human.question == "Do you want to proceed?"
+    assert chunk.fred.awaiting_human.checkpoint_id == "cp-1"
+    assert len(chunk.fred.awaiting_human.choices) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -302,3 +330,92 @@ def test_openai_chat_request_accepts_valid_payload() -> None:
     )
     assert req.model == "my-agent"
     assert req.stream is True
+
+
+# ---------------------------------------------------------------------------
+# ui_parts — carried in tool_result and final events
+# ---------------------------------------------------------------------------
+
+
+def test_tool_result_with_ui_parts_populates_fred_ui_parts() -> None:
+    event = {
+        "kind": "tool_result",
+        "call_id": "call-abc",
+        "content": "map data",
+        "is_error": False,
+        "sources": [],
+        "ui_parts": [
+            {
+                "type": "link",
+                "href": "https://example.com/doc.pdf",
+                "title": "Report",
+                "kind": "download",
+            }
+        ],
+        "sequence": 3,
+    }
+    chunk = _chunk(event)
+
+    assert chunk is not None
+    assert chunk.fred is not None
+    assert len(chunk.fred.ui_parts) == 1
+    from fred_sdk.contracts.context import LinkPart
+
+    part = chunk.fred.ui_parts[0]
+    assert isinstance(part, LinkPart)
+    assert part.href == "https://example.com/doc.pdf"
+    assert part.title == "Report"
+
+
+def test_final_event_with_geo_ui_part_populates_fred() -> None:
+    geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [2.35, 48.85]},
+                "properties": {"name": "Paris"},
+            }
+        ],
+    }
+    event = {
+        "kind": "final",
+        "content": "Here is the map.",
+        "sources": [],
+        "finish_reason": "stop",
+        "ui_parts": [{"type": "geo", "geojson": geojson}],
+        "sequence": 4,
+    }
+    chunk = _chunk(event)
+
+    assert chunk is not None
+    assert chunk.fred is not None
+    assert len(chunk.fred.ui_parts) == 1
+    from fred_sdk.contracts.context import GeoPart
+
+    part = chunk.fred.ui_parts[0]
+    assert isinstance(part, GeoPart)
+    assert part.geojson["type"] == "FeatureCollection"
+
+
+def test_awaiting_human_with_typed_hitl_object() -> None:
+    from fred_sdk.contracts.runtime import HumanInputRequest
+
+    hitl = HumanInputRequest(
+        title="Confirm?",
+        question="Are you sure?",
+        free_text=True,
+        checkpoint_id="cp-99",
+    )
+    event = {
+        "kind": "awaiting_human",
+        "request": hitl,
+        "sequence": 6,
+    }
+    chunk = _chunk(event)
+
+    assert chunk is not None
+    assert chunk.fred is not None
+    assert isinstance(chunk.fred.awaiting_human, HumanInputRequest)
+    assert chunk.fred.awaiting_human.title == "Confirm?"
+    assert chunk.fred.awaiting_human.checkpoint_id == "cp-99"

@@ -10,24 +10,44 @@ import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import React, { useState } from "react";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { IconType } from "@shared/utils/Type.ts";
+import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 
+/**
+ * Render one team-scoped sidebar section using the bootstrap active team as the
+ * personal-team source of truth.
+ *
+ * Why this component exists:
+ * - the shell still needs a team-aware navigation block while the frontend
+ *   moves away from the temporary user-details bootstrap path
+ *
+ * How to use it:
+ * - mount it in the sidebar for routes under `/team/:teamId/...`
+ *
+ * Example:
+ * - `<TeamContentNavbar />`
+ */
 export default function TeamContentNavbar() {
   const { defaultTeamBannerFile, defaultPersonalBannerFile, agentIconName, agentsNicknamePlural } =
     useFrontendProperties();
   const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const { activeTeam, availableTeams } = useFrontendBootstrap();
+  const personalTeamId = activeTeam?.id ?? "personal";
+  const isPersonalTeam = teamId === personalTeamId;
 
   const { data: team } = useGetTeamQuery(
     { teamId: teamId },
-    { skip: !teamId || teamId === userDetails?.personalTeam.id },
+    { skip: !teamId || isPersonalTeam },
   );
-  const selectedTeam = teamId === userDetails?.personalTeam.id ? userDetails?.personalTeam : team;
-  const canOpenTeamSettings = selectedTeam?.permissions?.includes("can_administer_owners") || false;
+  const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);
+  const selectedTeam = isPersonalTeam ? activeTeam : team ?? bootstrapTeam;
+  const canOpenTeamSettings =
+    selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
+      ? selectedTeam.permissions.includes("can_administer_owners")
+      : false;
 
   const navigationItems: NavigationMenuItemProps[] = [
     {
@@ -46,7 +66,7 @@ export default function TeamContentNavbar() {
 
   const bannerStyle = {
     "--banner-img":
-      teamId === userDetails?.personalTeam.id
+      isPersonalTeam
         ? `url("/images/${defaultPersonalBannerFile}")`
         : `url("${selectedTeam?.banner_image_url ?? `/images/${defaultTeamBannerFile}`}")`,
   } as React.CSSProperties;
@@ -57,7 +77,7 @@ export default function TeamContentNavbar() {
         <div className={styles.bannerContainer} style={bannerStyle}>
           <div className={styles.teamNameContainer}>
             <span className={styles.teamName}>
-              {teamId == userDetails?.personalTeam.id ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
+              {isPersonalTeam ? t("rework.sidebar.team.userTeam") : selectedTeam?.name}
             </span>
             {canOpenTeamSettings && (
               <span className={styles["user-settings-button-container"]}>

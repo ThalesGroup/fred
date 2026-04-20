@@ -1345,7 +1345,8 @@
         }
       },
       "chatList": {
-        "title": "Conversations"
+        "title": "Conversations",
+        "emptyManaged": "Les sessions gérées apparaîtront ici une fois la migration des métadonnées de session du control-plane terminée."
       }
     },
     "userSettings": {

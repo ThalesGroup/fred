@@ -37,6 +37,11 @@ from control_plane_backend.scheduler.policies.policy_models import (
     PolicyResolutionRequest,
 )
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
+from control_plane_backend.system_teams import (
+    get_system_team,
+    list_system_teams,
+    to_team_summary,
+)
 from control_plane_backend.team_metadata_store import TeamMetadataPatch
 from control_plane_backend.teams_structures import (
     AddTeamMemberRequest,
@@ -75,13 +80,33 @@ def _utcnow() -> datetime:
 
 
 async def list_teams(user: KeycloakUser) -> list[Team]:
+    """List all selectable teams, including reserved system teams.
+
+    Why this function exists:
+    - frontend team discovery should treat `personal` as a normal selectable
+      team instead of relying on bootstrap-only special casing
+
+    How to use it:
+    - call from `/teams` or any backend flow that needs the user-visible team
+      list
+
+    Example:
+    - `teams = await list_teams(user)`
+    """
+
+    selectable_teams: dict[str, Team] = {
+        str(team.id): to_team_summary(team) for team in list_system_teams(user)
+    }
+
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
 
     admin = create_keycloak_admin(app_context.configuration.security.m2m)
     if isinstance(admin, KeycloackDisabled):
-        logger.info("Keycloak admin client not configured; returning empty team list.")
-        return []
+        logger.info(
+            "Keycloak admin client not configured; returning system teams only."
+        )
+        return list(selectable_teams.values())
 
     root_groups = await _fetch_root_keycloak_groups(admin)
     consistency_token = await rebac.ensure_team_organization_relations(
@@ -99,10 +124,33 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
             group for group in root_groups if group.id in authorized_team_ids
         ]
 
-    return await _enrich_groups_with_team_data(admin, rebac, user, root_groups)
+    collaborative_teams = await _enrich_groups_with_team_data(
+        admin, rebac, user, root_groups
+    )
+    for team in collaborative_teams:
+        selectable_teams[str(team.id)] = team
+    return list(selectable_teams.values())
 
 
 async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions:
+    """Resolve one selectable team, including reserved system teams.
+
+    Why this function exists:
+    - product-facing team routes should expose `personal` through the same team
+      contract as collaborative teams
+
+    How to use it:
+    - call from `/teams/{team_id}` and bootstrap flows that need one
+      `TeamWithPermissions`
+
+    Example:
+    - `team = await get_team_by_id(user, TeamId("personal"))`
+    """
+
+    system_team = get_system_team(user, team_id)
+    if system_team is not None:
+        return system_team
+
     app_context = ApplicationContext.get_instance()
     rebac = app_context.get_rebac_engine()
 

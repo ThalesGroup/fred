@@ -11,16 +11,22 @@ from fred_runtime.client import (
     KeycloakLoginConfig,
     KeycloakUserSessionManager,
     _complete_scenario_path,
+    build_parser,
     build_hitl_resume_payload,
     completion_candidates,
+    default_agent_metrics_url,
     default_agent_pod_base_url,
     default_keycloak_token_file,
     execution_mode_label,
     load_cli_environment,
     normalize_base_url,
+    parse_prometheus_text_exposition,
     parse_mode_command,
+    render_kpi_report,
     resolve_keycloak_login_config,
+    run_scenario_file,
     run_single_turn,
+    summarize_prometheus_histograms,
 )
 
 
@@ -42,6 +48,26 @@ def test_default_agent_pod_base_url_normalizes_env_override(monkeypatch) -> None
     monkeypatch.setenv("FRED_AGENT_POD_URL", "http://localhost:9999/fred/agents/v2/")
 
     assert default_agent_pod_base_url() == "http://localhost:9999/fred/agents/v2"
+
+
+def test_default_agent_metrics_url_honors_env_override(monkeypatch) -> None:
+    """
+    Verify the CLI honors an explicit metrics URL override.
+
+    Why this test exists:
+    - `/kpi` should stay usable against forwarded or remote pods whose metrics
+      endpoint is not discoverable from the local config file alone
+
+    How to use it:
+    - run as part of the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    monkeypatch.setenv("FRED_AGENT_METRICS_URL", "http://localhost:9115/metrics/")
+
+    assert default_agent_metrics_url() == "http://localhost:9115/metrics"
 
 
 def test_completion_candidates_suggest_scenario_command() -> None:
@@ -131,6 +157,48 @@ scheduler:
     assert config is not None
     assert config.realm_url == "http://localhost:8080/realms/fred"
     assert config.client_id == "fred-ui"
+
+
+def test_default_agent_metrics_url_reads_pod_configuration(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    Verify the CLI derives the metrics scrape URL from pod configuration.
+
+    Why this test exists:
+    - `/kpi` should follow the same pod config as the runtime and rewrite
+      wildcard bind addresses into a curlable host
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    config_file = tmp_path / "configuration.yaml"
+    config_file.write_text(
+        """
+app:
+  name: "Test Pod"
+  metrics_address: "0.0.0.0"
+  metrics_port: 9115
+security:
+  user:
+    enabled: false
+ai:
+  knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("FRED_AGENT_METRICS_URL", raising=False)
+    monkeypatch.setenv("CONFIG_FILE", str(config_file))
+
+    assert (
+        default_agent_metrics_url(base_url="http://127.0.0.1:8000/pod/v1")
+        == "http://127.0.0.1:9115/metrics"
+    )
 
 
 def test_cli_environment_loads_config_file_selection_from_env_file(
@@ -287,6 +355,24 @@ def test_completion_candidates_support_mode_switching() -> None:
     assert completion_candidates("/mode st", agent_ids=()) == ["stream"]
 
 
+def test_completion_candidates_suggest_team_command() -> None:
+    """
+    Verify tab completion suggests the team-scope command.
+
+    Why this test exists:
+    - team-scoped validation is now a first-class CLI workflow
+    - the new command should stay discoverable from the shell prompt
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    assert "/team" in completion_candidates("/te", agent_ids=())
+
+
 def test_parse_mode_command_handles_show_and_switch_requests() -> None:
     """
     Verify the mode command parser accepts the supported interactive forms.
@@ -307,6 +393,49 @@ def test_parse_mode_command_handles_show_and_switch_requests() -> None:
     assert parse_mode_command("/mode stream") is True
     assert execution_mode_label(stream=False) == "final"
     assert execution_mode_label(stream=True) == "stream"
+
+
+def test_build_parser_accepts_team_id_flag() -> None:
+    """
+    Verify the CLI parser accepts an explicit team-scoping flag.
+
+    Why this test exists:
+    - team-scoped execution should be available in one-shot and interactive
+      modes without relying only on REPL commands
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    parser = build_parser()
+    args = parser.parse_args(["--team-id", "fredlab", "hello"])
+
+    assert args.team_id == "fredlab"
+    assert args.message == ["hello"]
+
+
+def test_build_parser_accepts_metrics_url_flag() -> None:
+    """
+    Verify the CLI parser accepts an explicit metrics scrape URL.
+
+    Why this test exists:
+    - developers may need `/kpi` against a forwarded or custom metrics endpoint
+      without changing configuration files
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    parser = build_parser()
+    args = parser.parse_args(["--metrics-url", "http://localhost:9115/metrics"])
+
+    assert args.metrics_url == "http://localhost:9115/metrics"
 
 
 def test_agent_pod_client_lists_agents_and_streams_events() -> None:
@@ -362,6 +491,113 @@ def test_agent_pod_client_lists_agents_and_streams_events() -> None:
     ) == [{"kind": "final", "content": "sentinel ok"}]
 
     http_client.close()
+
+
+def test_agent_pod_client_fetches_metrics_text() -> None:
+    """
+    Verify the reusable client can fetch plain-text Prometheus metrics.
+
+    Why this test exists:
+    - `/kpi` depends on the same HTTP client lifecycle as the rest of the CLI
+    - the metrics fetch should stay offline-testable without a running pod
+
+    How to use it:
+    - run with `make test` inside `fred-runtime`
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/metrics":
+            return httpx.Response(
+                200,
+                text='process_cpu_percent 12.5\nagent_tool_failed_total{tool_name="demo"} 1\n',
+                headers={"content-type": "text/plain; version=0.0.4"},
+            )
+        return httpx.Response(404)
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = AgentPodClient(
+        base_url="http://localhost:8010/fred/agents/v2",
+        metrics_url="http://localhost:9115/metrics",
+        http_client=http_client,
+    )
+
+    assert "process_cpu_percent" in client.get_metrics_text()
+
+    http_client.close()
+
+
+def test_parse_prometheus_text_exposition_and_histogram_summary() -> None:
+    """
+    Verify `/kpi` parsing keeps histogram counts, sums, and labels.
+
+    Why this test exists:
+    - the CLI should summarize runtime latency histograms without depending on
+      bucket-by-bucket output
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    text = """
+# HELP agent_tool_latency_ms KPI timer
+agent_tool_latency_ms_bucket{tool_name="search",team_id="fredlab",le="10.0"} 1
+agent_tool_latency_ms_bucket{tool_name="search",team_id="fredlab",le="+Inf"} 2
+agent_tool_latency_ms_sum{tool_name="search",team_id="fredlab"} 25
+agent_tool_latency_ms_count{tool_name="search",team_id="fredlab"} 2
+process_cpu_percent 12.5
+""".strip()
+
+    samples = parse_prometheus_text_exposition(text)
+    histograms = summarize_prometheus_histograms(samples)
+
+    assert len(samples) == 5
+    assert histograms[0].name == "agent_tool_latency_ms"
+    assert histograms[0].labels == {"tool_name": "search", "team_id": "fredlab"}
+    assert histograms[0].count == 2
+    assert histograms[0].sum_value == 25
+    assert histograms[0].avg_value == 12.5
+
+
+def test_render_kpi_report_renders_latency_process_and_counters() -> None:
+    """
+    Verify `/kpi` renders a compact human-readable KPI summary.
+
+    Why this test exists:
+    - the CLI output should stay useful for laptop benchmarking without raw
+      Prometheus exposition noise
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    samples = parse_prometheus_text_exposition(
+        """
+agent_tool_latency_ms_sum{tool_name="search"} 40
+agent_tool_latency_ms_count{tool_name="search"} 4
+process_cpu_percent 18.2
+agent_tool_failed_total{tool_name="search",error_code="TimeoutError"} 2
+""".strip()
+    )
+
+    lines = render_kpi_report(samples, color_enabled=False)
+    report = "\n".join(lines)
+
+    assert "Phase / latency breakdown:" in report
+    assert "[search]" in report
+    assert "avg=     10 ms" in report
+    assert "Process gauges:" in report
+    assert "process_cpu_percent" in report
+    assert "Counters:" in report
+    assert "agent_tool_failed_total" in report
 
 
 def test_agent_pod_client_passes_resume_payload_through_execute_and_stream() -> None:
@@ -427,6 +663,67 @@ def test_agent_pod_client_passes_resume_payload_through_execute_and_stream() -> 
     http_client.close()
 
 
+def test_agent_pod_client_passes_team_id_through_execute_and_stream() -> None:
+    """
+    Verify the reusable client forwards team scope in runtime_context.
+
+    Why this test exists:
+    - backend completeness validation now depends on exercising a team-scoped
+      execution path from the CLI
+    - the CLI must preserve `team_id` for both final and streamed execution
+
+    How to use it:
+    - run with `make test` inside `fred-runtime`
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    seen_payloads: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read().decode("utf-8"))
+        assert isinstance(body, dict)
+        seen_payloads.append(body)
+        if request.url.path.endswith("/agents/execute"):
+            return httpx.Response(200, json={"kind": "final", "content": "ok"})
+        if request.url.path.endswith("/agents/execute/stream"):
+            return httpx.Response(
+                200,
+                text='data: {"kind":"final","content":"ok"}\n\n',
+                headers={"content-type": "text/event-stream"},
+            )
+        return httpx.Response(404)
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = AgentPodClient(
+        base_url="http://localhost:8010/fred/agents/v2",
+        http_client=http_client,
+    )
+
+    client.execute(
+        agent_id="sentinel.react.v2",
+        message="hello",
+        session_id="demo",
+        user_id="alice",
+        team_id="fredlab",
+    )
+    client.stream_events(
+        agent_id="sentinel.react.v2",
+        message="hello",
+        session_id="demo",
+        user_id="alice",
+        team_id="fredlab",
+    )
+
+    assert [payload["runtime_context"] for payload in seen_payloads] == [
+        {"user_id": "alice", "team_id": "fredlab"},
+        {"user_id": "alice", "team_id": "fredlab"},
+    ]
+
+    http_client.close()
+
+
 def test_build_hitl_resume_payload_supports_choice_index_and_raw_id() -> None:
     """
     Verify the interactive chat converts menu answers into structured resumes.
@@ -454,6 +751,63 @@ def test_build_hitl_resume_payload_supports_choice_index_and_raw_id() -> None:
     assert build_hitl_resume_payload(raw_response="cancel", choices=choices) == {
         "choice_id": "cancel"
     }
+
+
+def test_run_scenario_file_applies_team_id_override(tmp_path) -> None:
+    """
+    Verify scenario execution can be forced into one explicit team scope.
+
+    Why this test exists:
+    - Phase 3b uses the CLI scenario runner as a backend validation tool for
+      team-scoped execution flows
+    - an explicit override keeps one scenario reusable across team contexts
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    seen_payloads: list[dict[str, object]] = []
+    scenario = tmp_path / "team_scenario.yaml"
+    scenario.write_text(
+        """
+name: team scenario
+agent_id: sentinel.react.v2
+user_id: alice
+steps:
+  - id: first
+    type: turn
+    mode: final
+    session_id: scenario-${run_id}
+    message: hello
+    checks:
+      - kind: final
+""".strip(),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read().decode("utf-8"))
+        assert isinstance(body, dict)
+        seen_payloads.append(body)
+        return httpx.Response(200, json={"kind": "final", "content": "ok"})
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = AgentPodClient(
+        base_url="http://localhost:8010/fred/agents/v2",
+        http_client=http_client,
+    )
+
+    run_scenario_file(scenario, client=client, team_id_override="fredlab")
+
+    assert seen_payloads[0]["runtime_context"] == {
+        "user_id": "alice",
+        "team_id": "fredlab",
+    }
+
+    http_client.close()
 
 
 def test_agent_pod_client_injects_bearer_token() -> None:
@@ -663,6 +1017,7 @@ def test_run_single_turn_prints_final_answer(capsys) -> None:
         message="status",
         session_id="demo",
         user_id="alice",
+        team_id=None,
         verbose=False,
         stream=False,
         color_enabled=False,
@@ -712,6 +1067,7 @@ def test_run_single_turn_stream_prints_live_events(capsys) -> None:
         message="status",
         session_id="demo",
         user_id="alice",
+        team_id=None,
         verbose=False,
         stream=True,
         color_enabled=False,
@@ -766,6 +1122,7 @@ def test_run_single_turn_stream_with_assistant_delta_avoids_duplicate_final(
         message="status",
         session_id="demo",
         user_id="alice",
+        team_id=None,
         verbose=False,
         stream=True,
         color_enabled=False,
@@ -815,6 +1172,7 @@ def test_run_single_turn_verbose_stream_prints_raw_json(capsys) -> None:
         message="status",
         session_id="demo",
         user_id="alice",
+        team_id=None,
         verbose=True,
         stream=True,
         color_enabled=False,

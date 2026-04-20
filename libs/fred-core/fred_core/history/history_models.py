@@ -54,11 +54,20 @@ class SessionHistoryRow(Base):
     Why ``exchange_id`` is stored:
     - groups all messages produced during a single user turn so analytics and
       the UI can reconstruct the turn boundary without scanning timestamps
+
+    Why ``team_id`` and ``agent_instance_id`` are stored:
+    - admin and retention queries must be filterable by team and managed agent
+    - these are nullable for backward compatibility with rows written before
+      Phase 3c; new rows always carry these values when execution is managed
     """
 
     __tablename__ = "session_history"
 
-    __table_args__ = (Index("ix_session_history_timestamp", "timestamp"),)
+    __table_args__ = (
+        Index("ix_session_history_timestamp", "timestamp"),
+        Index("ix_session_history_team_id", "team_id"),
+        Index("ix_session_history_agent_instance_id", "agent_instance_id"),
+    )
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -67,5 +76,7 @@ class SessionHistoryRow(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)
     channel: Mapped[str] = mapped_column(String, nullable=False)
     exchange_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    team_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_instance_id: Mapped[str | None] = mapped_column(String, nullable=True)
     parts_json: Mapped[list | None] = mapped_column(JsonColumn, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)

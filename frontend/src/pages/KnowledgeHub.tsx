@@ -22,9 +22,9 @@ import { UserAssetsList } from "../components/documents/libraries/UserAssetsList
 import { DocumentOperations } from "../components/documents/operations/DocumentOperations";
 import InvisibleLink from "../components/InvisibleLink";
 import ResourceLibraryList from "../components/resources/ResourceLibraryList";
+import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { usePermissions } from "../security/usePermissions";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../slices/controlPlane/controlPlaneOpenApi.ts";
 
 const knowledgeHubViews = ["operations", "documents", "chatContexts", "userAssets"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
@@ -35,11 +35,26 @@ function isKnowledgeHubView(value: string): value is KnowledgeHubView {
 
 const defaultView: KnowledgeHubView = "documents";
 
+/**
+ * Render the personal knowledge hub using the bootstrap-owned personal team id.
+ *
+ * Why this component exists:
+ * - the personal knowledge area remains a first-class navigation target during
+ *   the frontend bootstrap migration
+ *
+ * How to use it:
+ * - mount it for the personal-team route or when `KnowledgePage` resolves the
+ *   active team to the bootstrap personal team
+ *
+ * Example:
+ * - `<KnowledgeHub />`
+ */
 export const KnowledgeHub = () => {
   const { t } = useTranslation();
   const { can } = usePermissions();
   const canCreateTag = can("tag", "create");
-  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const { activeTeam } = useFrontendBootstrap();
+  const personalTeamId = activeTeam?.id ?? "personal";
 
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get("view");
@@ -57,7 +72,7 @@ export const KnowledgeHub = () => {
       <TopBar title={t("knowledge.title")} description={t("knowledge.description")}>
         <Box>
           <ButtonGroup variant="outlined" color="primary" size="small">
-            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=chatContexts`}>
+            <InvisibleLink to={`/team/${personalTeamId}/ressources?view=chatContexts`}>
               <Button variant={selectedView === "chatContexts" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.chatContexts")}
               </Button>
@@ -72,12 +87,12 @@ export const KnowledgeHub = () => {
                 {t("knowledge.viewSelector.prompts")}
               </Button>
             </InvisibleLink> */}
-            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=documents`}>
+            <InvisibleLink to={`/team/${personalTeamId}/ressources?view=documents`}>
               <Button variant={selectedView === "documents" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.documents")}
               </Button>
             </InvisibleLink>
-            <InvisibleLink to={`/team/${userDetails?.personalTeam.id}/ressources?view=userAssets`}>
+            <InvisibleLink to={`/team/${personalTeamId}/ressources?view=userAssets`}>
               <Button variant={selectedView === "userAssets" ? "contained" : "outlined"}>
                 {t("knowledge.viewSelector.userAssets", "My Files (agents & me)")}
               </Button>

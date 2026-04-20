@@ -30,6 +30,7 @@ import React, { lazy, Suspense } from "react";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -75,6 +76,10 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/agents",
         element: <TeamAgentsPage />,
+      },
+      {
+        path: "team/:teamId/managed-chat/:agentInstanceId",
+        element: <ManagedChatPage />,
       },
       {
         path: "team/:teamId/*",

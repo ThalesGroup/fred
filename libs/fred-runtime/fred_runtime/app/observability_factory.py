@@ -39,7 +39,9 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import cast
 
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.portable import (
     LoggingMetricsProvider,
     LoggingTracer,
@@ -54,7 +56,11 @@ from .config import MetricsBackend, PodObservabilityConfig, TracerBackend
 logger = logging.getLogger(__name__)
 
 
-def bootstrap_observability(config: PodObservabilityConfig) -> None:
+def bootstrap_observability(
+    config: PodObservabilityConfig,
+    *,
+    kpi_writer: BaseKPIWriter | None = None,
+) -> None:
     """
     Set the global tracer and metrics provider from pod config.
 
@@ -64,14 +70,16 @@ def bootstrap_observability(config: PodObservabilityConfig) -> None:
 
     How to use it:
     - call once in the FastAPI lifespan before any other startup work
+    - pass `kpi_writer` when `metrics=prometheus` so portable runtime timers
+      feed the same Prometheus/KPI pipeline as the execution engine
     - the choices made here propagate to every `get_tracer()` / `get_metrics_provider()`
       call in the process
 
     Example:
-    - `bootstrap_observability(config.observability)`
+    - `bootstrap_observability(config.observability, kpi_writer=writer)`
     """
     tracer = _build_tracer(config)
-    metrics = _build_metrics(config)
+    metrics = _build_metrics(config, kpi_writer=kpi_writer)
     set_tracer(tracer)
     set_metrics_provider(metrics)
     logger.info(
@@ -147,17 +155,27 @@ def _build_langfuse_tracer(config: PodObservabilityConfig) -> Tracer:
 # ---------------------------------------------------------------------------
 
 
-def _build_metrics(config: PodObservabilityConfig) -> MetricsProvider:
+def _build_metrics(
+    config: PodObservabilityConfig,
+    *,
+    kpi_writer: BaseKPIWriter | None = None,
+) -> MetricsProvider:
     if config.metrics == MetricsBackend.null:
         return MetricsProvider()
     if config.metrics == MetricsBackend.logging:
         return LoggingMetricsProvider()
     if config.metrics == MetricsBackend.prometheus:
-        logger.warning(
-            "[fred-runtime] metrics=prometheus is not yet implemented"
-            " — falling back to logging"
+        if kpi_writer is None:
+            logger.warning(
+                "[fred-runtime] metrics=prometheus selected without a KPI writer"
+                " — falling back to logging"
+            )
+            return LoggingMetricsProvider()
+        from fred_runtime.integrations.v2_runtime.adapters import (
+            KPIWriterMetricsAdapter,
         )
-        return LoggingMetricsProvider()
+
+        return cast(MetricsProvider, KPIWriterMetricsAdapter(kpi_writer))
     logger.warning(
         "[fred-runtime] Unknown metrics backend '%s' — falling back to logging",
         config.metrics,

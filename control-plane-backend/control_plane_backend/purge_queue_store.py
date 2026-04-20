@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fred_core.sql import make_session_factory, use_session
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.purge_queue_models import PurgeQueueRow
@@ -59,7 +59,7 @@ class PurgeQueueStore:
                     await s.execute(
                         select(PurgeQueueRow)
                         .where(PurgeQueueRow.status == _PENDING)
-                        .where(PurgeQueueRow.due_at <= func.now())
+                        .where(PurgeQueueRow.due_at <= datetime.utcnow())
                         .order_by(
                             PurgeQueueRow.due_at.asc(), PurgeQueueRow.session_id.asc()
                         )

@@ -77,6 +77,7 @@ class RuntimeEventKind(str, Enum):
     ASSISTANT_DELTA = "assistant_delta"
     NODE_ERROR = "node_error"
     FINAL = "final"
+    TURN_PERSISTED = "turn_persisted"
 
 
 class ExecutionConfig(FrozenModel):
@@ -84,7 +85,10 @@ class ExecutionConfig(FrozenModel):
     Per-run execution options resolved by the chat/session layer.
 
     Practical meaning:
-    - `thread_id` / `checkpoint_id`: resume the right conversation state.
+    - `session_id` / `checkpoint_id`: resume the right conversation state.
+      session_id is the single public-facing conversation identity. Internally
+      it is passed as LangGraph's `thread_id` — that mapping is an
+      implementation detail and must not leak into any public API or CLI.
     - `adapter_config`: optional adapter-specific config passthrough when one runtime
       bridge needs extra execution metadata.
     - `max_steps`: hard stop against runaway loops.
@@ -92,7 +96,7 @@ class ExecutionConfig(FrozenModel):
     """
 
     checkpoint_strategy: CheckpointStrategy = CheckpointStrategy.SESSION
-    thread_id: str | None = None
+    session_id: str | None = None
     checkpoint_id: str | None = None
     adapter_config: dict[str, object] = Field(default_factory=dict)
     max_steps: int = Field(default=100, ge=1)
@@ -194,6 +198,28 @@ class FinalRuntimeEvent(RuntimeEventBase):
     finish_reason: str | None = None
 
 
+class TurnPersistedEvent(RuntimeEventBase):
+    """
+    Emitted after a completed turn's history has been durably persisted.
+
+    Why this exists:
+    - The streaming endpoint writes history fire-and-forget after SSE closes.
+    - Clients that need confirmation of persistence (e.g. audit flows,
+      session-list refresh triggers) can listen for this event.
+    - It carries session_id so the client knows which session was persisted.
+
+    Architectural note:
+    - fred-runtime is a CONSUMER of checkpoint/history storage, not its
+      ownership authority. This event signals persistence completion to the
+      caller without exposing any storage infrastructure details.
+    - exchange_id links the persisted turn to the runtime event sequence.
+    """
+
+    kind: Literal[RuntimeEventKind.TURN_PERSISTED] = RuntimeEventKind.TURN_PERSISTED
+    session_id: str = Field(..., min_length=1)
+    exchange_id: str | None = None
+
+
 RuntimeEvent: TypeAlias = Annotated[
     StatusRuntimeEvent
     | ToolCallRuntimeEvent
@@ -201,7 +227,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | AwaitingHumanRuntimeEvent
     | AssistantDeltaRuntimeEvent
     | NodeErrorRuntimeEvent
-    | FinalRuntimeEvent,
+    | FinalRuntimeEvent
+    | TurnPersistedEvent,
     Field(discriminator="kind"),
 ]
 
@@ -352,6 +379,8 @@ class HistoryStorePort(Protocol):
         session_id: str,
         messages: List[Any],
         user_id: str,
+        team_id: str | None = None,
+        agent_instance_id: str | None = None,
     ) -> None:
         """Persist a batch of messages for one turn."""
         ...

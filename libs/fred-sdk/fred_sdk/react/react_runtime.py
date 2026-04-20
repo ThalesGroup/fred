@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Sequence
+from contextlib import nullcontext
 from typing import cast
 
 from fred_core.store import VectorSearchHit
@@ -259,6 +260,26 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
 
+        metrics = self._services.metrics
+        if metrics is not None:
+            portable = self._binding.portable_context
+            baggage = portable.baggage
+            phase_timer_ctx = metrics.timer(
+                "app.phase_latency_ms",
+                dims={
+                    "phase": "react_stream",
+                    "agent_id": portable.agent_id or "",
+                    "agent_step": "react",
+                    "session_id": portable.session_id,
+                    "team_id": portable.team_id,
+                    "agent_instance_id": baggage.get("agent_instance_id"),
+                    "template_agent_id": baggage.get("template_agent_id"),
+                },
+                groups=self._binding.runtime_context.user_groups,
+            )
+        else:
+            phase_timer_ctx = nullcontext()
+
         sequence = 0
         last_assistant_message: ReActMessage | None = None
         collected_sources: tuple[VectorSearchHit, ...] = ()
@@ -271,6 +292,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # turn is consumed but discarded, and its streaming deltas are suppressed.
         last_tool_error: str | None = None
         suppress_assistant_deltas: bool = False
+        phase_timer_ctx.__enter__()
         try:
             async for raw_event in self._compiled_agent.astream(
                 _graph_input(input_model, config),
@@ -387,6 +409,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     finish_reason=last_finish_reason,
                 )
         finally:
+            phase_timer_ctx.__exit__(None, None, None)
             if span is not None:
                 span.end()
 

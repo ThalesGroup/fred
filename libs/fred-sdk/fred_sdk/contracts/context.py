@@ -101,7 +101,8 @@ class RuntimeContext(BaseModel):
     """
     Runtime-scoped context passed with a request.
 
-    Why: carry per-request identity, selection, and auth data to runtime services.
+    Why: carry per-request identity, selection, auth, and observability data to
+    runtime services.
     How: attach a RuntimeContext to the runtime binding or execution request.
     Example:
         >>> ctx = RuntimeContext(session_id="s-1", user_id="u-1")
@@ -109,8 +110,16 @@ class RuntimeContext(BaseModel):
 
     language: Optional[str] = None
     session_id: Optional[str] = None
+    exchange_id: Optional[str] = None
+    checkpoint_id: Optional[str] = None
     user_id: Optional[str] = None
+    team_id: Optional[str] = None
     user_groups: list[str] | None = None
+    trace_id: Optional[str] = None
+    correlation_id: Optional[str] = None
+    agent_instance_id: Optional[str] = None
+    template_agent_id: Optional[str] = None
+    execution_action: Optional[Literal["execute", "resume"]] = None
     selected_document_libraries_ids: list[str] | None = None
     selected_document_uids: list[str] | None = None
     selected_chat_context_ids: list[str] | None = None

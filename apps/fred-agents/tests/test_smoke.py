@@ -130,11 +130,9 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             "/fred/agents/v2/agents/execute/stream",
             json={
                 "agent_id": "fred.github.sentinel",
-                "message": "Give me a short health summary.",
-                "context": {
-                    "session_id": "sentinel-session",
-                    "user_id": "sentinel-user",
-                },
+                "input": "Give me a short health summary.",
+                "session_id": "sentinel-session",
+                "runtime_context": {"user_id": "sentinel-user"},
             },
         )
         assert stream_response.status_code == 200

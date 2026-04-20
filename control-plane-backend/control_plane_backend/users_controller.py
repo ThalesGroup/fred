@@ -2,12 +2,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Path, status
 from fastapi.responses import JSONResponse
-from fred_core import KeycloakUser, TeamPermission, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from fred_core.common import PERSONAL_TEAM_ID
 from pydantic import BaseModel
 
 from control_plane_backend.teams_structures import (
     TeamWithPermissions,
+)
+from control_plane_backend.teams_service import (
+    get_team_by_id as get_team_by_id_from_service,
 )
 from control_plane_backend.users_service import (
     create_user as create_user_from_service,
@@ -102,17 +105,17 @@ class UserDetails(BaseModel):
 async def get_user_details(
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserDetails:
+    """Return the personal team through the shared team resolver.
+
+    Why this function exists:
+    - this temporary helper endpoint must not duplicate personal-team shaping
+      while the shell migrates away from it
+
+    How to use it:
+    - treat it as a temporary helper only; bootstrap should use
+      `/frontend/bootstrap`
+    """
+
     return UserDetails(
-        personalTeam=TeamWithPermissions(
-            id=PERSONAL_TEAM_ID,
-            name="Equipe personnelle",
-            member_count=1,
-            is_private=True,
-            owners=[],
-            permissions=[
-                TeamPermission("can_read"),
-                TeamPermission("can_update_resources"),
-                TeamPermission("can_update_agents"),
-            ],
-        )
+        personalTeam=await get_team_by_id_from_service(user, PERSONAL_TEAM_ID)
     )

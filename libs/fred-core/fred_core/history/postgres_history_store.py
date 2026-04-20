@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
@@ -181,8 +181,52 @@ class PostgresHistoryStore(BaseHistoryStore):
             lambda conn: SessionHistoryRow.metadata.create_all(conn),
             logger,
         )
+        await self._migrate_columns()
         self._tables_ensured = True
         logger.info("[history][pg] session_history table ready")
+
+    async def _migrate_columns(self) -> None:
+        """
+        Add columns that were introduced after the initial table creation.
+
+        Why this exists:
+        - ``create_all`` is a no-op when the table already exists, so new columns
+          added to the SQLAlchemy model are never applied to old databases
+        - Postgres supports ``ADD COLUMN IF NOT EXISTS``; SQLite does not, so we
+          catch the ``duplicate column`` error and treat it as a no-op
+
+        Columns managed here:
+        - ``exchange_id`` (nullable TEXT) — per-turn UUID for KPI/history join
+        - ``team_id`` (nullable TEXT) — team-scoped execution identity
+        - ``agent_instance_id`` (nullable TEXT) — managed execution identity
+        """
+        is_sqlite = self._engine.dialect.name == "sqlite"
+        new_columns = [
+            ("exchange_id", "TEXT"),
+            ("team_id", "TEXT"),
+            ("agent_instance_id", "TEXT"),
+        ]
+        async with self._engine.begin() as conn:
+            for col_name, col_type in new_columns:
+                if is_sqlite:
+                    try:
+                        await conn.execute(
+                            text(
+                                f"ALTER TABLE session_history ADD COLUMN {col_name} {col_type}"
+                            )
+                        )
+                    except Exception as exc:
+                        if "duplicate column" in str(exc).lower():
+                            pass  # already exists — fine
+                        else:
+                            raise
+                else:
+                    await conn.execute(
+                        text(
+                            f"ALTER TABLE session_history ADD COLUMN IF NOT EXISTS"
+                            f" {col_name} {col_type}"
+                        )
+                    )
 
     # ------------------------------------------------------------------
     # Write
@@ -193,6 +237,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         session_id: str,
         messages: List[ChatMessage],
         user_id: str,
+        team_id: str | None = None,
+        agent_instance_id: str | None = None,
         session: AsyncSession | None = None,
     ) -> None:
         """
@@ -202,9 +248,14 @@ class PostgresHistoryStore(BaseHistoryStore):
         - call after the agent executor generator is fully exhausted
         - ``messages`` must have ``rank`` set in ascending order (use
           ``_assign_ranks`` in the calling code to compute ranks from MAX(rank)+1)
+        - ``team_id`` and ``agent_instance_id`` should always be passed for
+          managed execution so admin and retention queries can filter by them
 
         Example:
-            await store.save(session_id="s1", messages=[user_msg, assistant_msg], user_id="u1")
+            await store.save(
+                session_id="s1", messages=[user_msg, assistant_msg],
+                user_id="u1", team_id="personal", agent_instance_id="inst-abc"
+            )
         """
         if not messages:
             return
@@ -220,6 +271,8 @@ class PostgresHistoryStore(BaseHistoryStore):
                 if isinstance(msg.channel, Channel)
                 else msg.channel,
                 "exchange_id": msg.exchange_id,
+                "team_id": team_id,
+                "agent_instance_id": agent_instance_id,
                 "parts_json": [_serialize_part(p) for p in (msg.parts or [])],
                 "metadata_json": _serialize_metadata(msg.metadata),
             }
@@ -230,7 +283,13 @@ class PostgresHistoryStore(BaseHistoryStore):
             index_elements=["session_id", "user_id", "rank"],
             set_={
                 k: stmt.excluded[k]
-                for k in ["parts_json", "metadata_json", "timestamp"]
+                for k in [
+                    "parts_json",
+                    "metadata_json",
+                    "timestamp",
+                    "team_id",
+                    "agent_instance_id",
+                ]
             },
         )
         async with use_session(self._sessions, session) as s:

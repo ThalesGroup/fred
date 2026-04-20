@@ -35,6 +35,27 @@ class UserSummary(BaseModel):
     username: str | None = None
 
     @classmethod
+    def from_keycloak_user(cls, user: Any) -> "UserSummary":
+        """
+        Build a user summary from the authenticated Keycloak user object.
+
+        Why this helper exists:
+        - control-plane bootstrap endpoints already work with authenticated
+          `KeycloakUser` values and should not rebuild user projections inline
+
+        How to use it:
+        - pass the current authenticated user dependency result
+
+        Example:
+        - `summary = UserSummary.from_keycloak_user(current_user)`
+        """
+
+        return cls(
+            id=str(getattr(user, "uid")),
+            username=getattr(user, "username", None),
+        )
+
+    @classmethod
     def from_raw_user(cls, raw_user: dict[str, Any]) -> "UserSummary":
         """Build a user summary from a raw Keycloak user payload."""
         user_id = raw_user.get("id")

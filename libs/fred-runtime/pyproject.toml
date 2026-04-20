@@ -1,6 +1,6 @@
 [project]
 name = "fred-runtime"
-version = "0.1.17"
+version = "0.1.18"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

@@ -129,6 +129,58 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateTeamMemberRequest,
       }),
     }),
+    getFrontendBootstrapControlPlaneV1FrontendBootstrapGet: build.query<
+      GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse,
+      GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/frontend/bootstrap` }),
+    }),
+    getTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGet: build.query<
+      GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse,
+      GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/agent-templates` }),
+    }),
+    getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet: build.query<
+      GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiResponse,
+      GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances` }),
+    }),
+    postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: build.mutation<
+      PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiResponse,
+      PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances`,
+        method: "POST",
+        body: queryArg.createAgentInstanceRequest,
+      }),
+    }),
+    deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: build.mutation<
+      DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiResponse,
+      DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}`,
+        method: "DELETE",
+      }),
+    }),
+    getAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGet: build.query<
+      GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse,
+      GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/agent-instances/${queryArg.agentInstanceId}/runtime` }),
+    }),
+    postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
+      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
+      PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
+        method: "POST",
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -200,6 +252,41 @@ export type UpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchApiArg = 
   teamId: string;
   userId: string;
   updateTeamMemberRequest: UpdateTeamMemberRequest;
+};
+export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiResponse =
+  /** status 200 Successful Response */ FrontendBootstrap;
+export type GetFrontendBootstrapControlPlaneV1FrontendBootstrapGetApiArg = void;
+export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiResponse =
+  /** status 200 Successful Response */ AgentTemplateSummary[];
+export type GetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetApiArg = {
+  teamId: string;
+};
+export type GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary[];
+export type GetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetApiArg = {
+  teamId: string;
+};
+export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiResponse =
+  /** status 201 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiArg = {
+  teamId: string;
+  createAgentInstanceRequest: CreateAgentInstanceRequest;
+};
+export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiResponse = unknown;
+export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse =
+  /** status 200 Successful Response */ ManagedAgentRuntimeBinding;
+export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg = {
+  agentInstanceId: string;
+};
+export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
+  /** status 200 Successful Response */ ExecutionPreparation;
+export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -341,6 +428,143 @@ export type RemoveTeamMemberResponse = {
 export type UpdateTeamMemberRequest = {
   relation: UserTeamRelation;
 };
+export type FrontendFeatureFlags = {
+  enableK8Features?: boolean;
+  enableElecWarfare?: boolean;
+};
+export type FrontendUiSettings = {
+  siteDisplayName?: string;
+  agentsNicknameSingular?: string;
+  agentsNicknamePlural?: string;
+};
+export type PermissionSummary = {
+  items?: string[];
+  can_view_team_agents?: boolean;
+  can_manage_team_agents?: boolean;
+  can_manage_mcp_servers?: boolean;
+  can_view_feedback?: boolean;
+  can_submit_feedback?: boolean;
+  can_create_sessions?: boolean;
+};
+export type FrontendBootstrap = {
+  current_user: UserSummary;
+  active_team: TeamWithPermissions;
+  available_teams?: Team[];
+  feature_flags: FrontendFeatureFlags;
+  ui_settings: FrontendUiSettings;
+  permissions: PermissionSummary;
+};
+export type AgentTemplateSummary = {
+  template_id: string;
+  source_runtime_id: string;
+  source_agent_id: string;
+  display_name: string;
+  description: string;
+  category: string;
+  tags?: string[];
+  capabilities?: string[];
+  team_instantiable?: boolean;
+  status?: "available" | "unavailable";
+};
+export type ManagedAgentInstanceSummary = {
+  agent_instance_id: string;
+  team_id: string;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  status: "enabled" | "disabled";
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+};
+export type CreateAgentInstanceRequest = {
+  /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+};
+export type ManagedAgentUiHints = {
+  multiline?: boolean;
+  max_lines?: number;
+  placeholder?: string | null;
+  markdown?: boolean;
+  textarea?: boolean;
+  group?: string | null;
+  hide?: boolean;
+};
+export type ManagedAgentFieldSpec = {
+  key: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  required?: boolean;
+  default?: any | null;
+  enum?: string[] | null;
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;
+  item_type?: string | null;
+  ui?: ManagedAgentUiHints;
+};
+export type ManagedMcpServerRef = {
+  id: string;
+  require_tools?: string[];
+};
+export type ManagedAgentTuning = {
+  role: string;
+  description: string;
+  tags?: string[];
+  fields?: ManagedAgentFieldSpec[];
+  mcp_servers?: ManagedMcpServerRef[];
+};
+export type ManagedAgentRuntimeBinding = {
+  agent_instance_id: string;
+  template_agent_id: string;
+  owner_scope?: "team";
+  owner_user_id?: string | null;
+  owner_team_id: string;
+  enabled?: boolean;
+  tuning: ManagedAgentTuning;
+};
+export type ExecutionGrantAction = "execute" | "resume";
+export type ExecutionGrant = {
+  user_id: string;
+  team_id: string;
+  agent_instance_id: string;
+  action: ExecutionGrantAction;
+  /** Intended runtime service/endpoint URL or identifier. */
+  audience: string;
+  /** Grant issuance time as a Unix timestamp. */
+  issued_at: number;
+  /** Grant expiry time as a Unix timestamp. */
+  expires_at: number;
+  /** Optional permission scopes granted for this execution. */
+  scopes?: string[];
+  trace_id?: string | null;
+  correlation_id?: string | null;
+  /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
+  storage_scope?: string | null;
+};
+export type ExecutionPreparation = {
+  agent_instance_id: string;
+  team_id: string;
+  runtime_id: string;
+  execution_transport?: "sse";
+  /** Ingress-relative URL for non-streaming execution. */
+  execute_url: string;
+  /** Ingress-relative URL for SSE streaming execution. */
+  execute_stream_url: string;
+  /** RFC 6570 Level 1 URI Template for runtime history. Example: /runtime/agents-v2/agents/sessions/{session_id}/messages */
+  messages_url_template: string;
+  execution_grant: ExecutionGrant;
+  supports_streaming?: boolean;
+  supports_hitl?: boolean;
+  supports_ui_parts?: boolean;
+  expires_at: string;
+  runtime_display_name?: string | null;
+  grant_refresh_required?: boolean;
+  max_session_idle_seconds?: number | null;
+};
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
   useLazyHealthzControlPlaneV1HealthzGetQuery,
@@ -367,4 +591,15 @@ export const {
   useAddTeamMemberControlPlaneV1TeamsTeamIdMembersPostMutation,
   useRemoveTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDeleteMutation,
   useUpdateTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdPatchMutation,
+  useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
+  useLazyGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery,
+  useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
+  useLazyGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
+  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
+  useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
+  useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
+  useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
+  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
 } = injectedRtkApi;

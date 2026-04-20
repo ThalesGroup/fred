@@ -24,5 +24,48 @@ How to use:
 """
 
 from .context import GeoPart, LinkKind, LinkPart, RuntimeContext
+from .execution import (
+    ActorContext,
+    ExecutionGrant,
+    ExecutionGrantAction,
+    ExecutionGrantViolation,
+    ExecutionTarget,
+    RuntimeExecuteRequest,
+    TeamContext,
+    TeamType,
+    TraceContext,
+    validate_execution_grant,
+)
+from .openai_compat import (
+    OpenAIModelCard,
+    OpenAIModelList,
+    OpenAIToolCall,
+    OpenAIToolCallFunction,
+)
+from .runtime import TurnPersistedEvent
 
-__all__ = ["GeoPart", "LinkKind", "LinkPart", "RuntimeContext"]
+__all__ = [
+    # Context / UI parts
+    "GeoPart",
+    "LinkKind",
+    "LinkPart",
+    "RuntimeContext",
+    # Execution identity and authorization (Phase 1)
+    "ActorContext",
+    "TeamContext",
+    "TeamType",
+    "ExecutionTarget",
+    "TraceContext",
+    "ExecutionGrant",
+    "ExecutionGrantAction",
+    "ExecutionGrantViolation",
+    "RuntimeExecuteRequest",
+    "validate_execution_grant",
+    # Runtime events (Phase 1 addition)
+    "TurnPersistedEvent",
+    # OpenAI compat — typed tool call models
+    "OpenAIModelCard",
+    "OpenAIModelList",
+    "OpenAIToolCall",
+    "OpenAIToolCallFunction",
+]

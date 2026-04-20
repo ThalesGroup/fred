@@ -204,15 +204,22 @@ class LangfuseTracerAdapter(TracerPort):
             "agent_name": context.agent_name,
             "session_id": context.session_id,
             "fred_session_id": context.session_id,
+            "checkpoint_id": context.baggage.get("checkpoint_id"),
             "correlation_id": context.correlation_id,
+            "trace_id": context.trace_id,
             "request_id": context.request_id,
             "actor": context.actor,
             "user_id": context.user_id,
             "user_name": context.user_name,
             "team_id": context.team_id,
+            "agent_instance_id": context.baggage.get("agent_instance_id"),
+            "template_agent_id": context.baggage.get("template_agent_id"),
+            "execution_action": context.baggage.get("execution_action"),
             "tenant": context.tenant,
             "environment": context.environment.value,
         }
+        if context.baggage:
+            metadata["baggage"] = dict(context.baggage)
         if attributes:
             metadata.update(attributes)
         span = cast(

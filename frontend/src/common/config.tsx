@@ -12,22 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// src/config/AppConfig.ts
-// Copyright Thales 2025
-// SPDX-License-Identifier: Apache-2.0
-
 import { createKeycloakInstance } from "../security/KeycloakService";
-import { KeyCloakService } from "../security/KeycloakService.ts";
-import type { FrontendConfigDto, FrontendFlags, Properties, UserSecurity } from "../slices/agentic/agenticOpenApi";
 
-/** Final merged app config used by the UI. */
+/** Minimal auth config needed before the protected control-plane bootstrap call. */
+export interface UserAuthConfig {
+  enabled?: boolean;
+  realm_url?: string;
+  client_id?: string;
+}
+
+/** Final merged app config used by the UI before runtime bootstrap completes. */
 export interface AppConfig {
-  frontend_basename: string; // Base name used by the frontend
+  frontend_basename: string;
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
-  user_auth: UserSecurity; // from OpenAPI types
-  permissions: string[];
+  user_auth: UserAuthConfig;
 }
+
+type RawAppConfig = {
+  frontend_basename?: string;
+  feature_flags?: Record<string, boolean>;
+  properties?: Record<string, string>;
+  user_auth?: UserAuthConfig;
+};
 
 export const FeatureFlagKey = {
   ENABLE_K8_FEATURES: "enableK8Features",
@@ -37,60 +44,35 @@ export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFla
 
 let config: AppConfig | null = null;
 
-/** Helpers to normalize typed DTO parts into simple records */
-const normalizeFlags = (ff?: FrontendFlags): Record<string, boolean> => ({
-  ...(ff?.enableK8Features !== undefined ? { enableK8Features: ff.enableK8Features } : {}),
-  ...(ff?.enableElecWarfare !== undefined ? { enableElecWarfare: ff.enableElecWarfare } : {}),
-});
-
-const normalizeProps = (p?: Properties): Record<string, string> => {
-  const out: Record<string, string> = {};
-  if (p?.logoName !== undefined) out.logoName = String(p.logoName);
-  if (p?.logoNameDark !== undefined) out.logoNameDark = String((p as any).logoNameDark);
-  if (p?.siteDisplayName !== undefined) out.siteDisplayName = String((p as any).siteDisplayName);
-  if ((p as any)?.releaseBrand !== undefined) out.releaseBrand = String((p as any).releaseBrand);
-  if ((p as any)?.logoHeight !== undefined) out.logoHeight = String((p as any).logoHeight);
-  if ((p as any)?.logoWidth !== undefined) out.logoWidth = String((p as any).logoWidth);
-  if ((p as any)?.faviconName !== undefined) out.faviconName = String((p as any).faviconName);
-  if ((p as any)?.faviconNameDark !== undefined) out.faviconNameDark = String((p as any).faviconNameDark);
-  return out;
-};
-
 /**
- * Loads /config.json for static settings, then queries backend /config/frontend_settings.
- * All API calls use relative URLs — the Vite proxy (dev) or nginx ingress (prod)
- * routes /agentic, /knowledge-flow, /control-plane to the correct backends.
+ * Load the small pre-auth frontend configuration from `/config.json`.
+ *
+ * Why this function exists:
+ * - the migrated shell still needs a tiny static bootstrap before protected
+ *   control-plane requests can run
+ * - this keeps basename and optional auth hints outside the application
+ *   bootstrap payload
+ *
+ * How to use it:
+ * - call once during app startup before rendering React
+ * - read the resolved values later through `getConfig()`
+ *
+ * Example:
+ * - `await loadConfig();`
  */
 export const loadConfig = async () => {
-  // 1) Static config (frontend_basename only)
   const res = await fetch("/config.json");
   if (!res.ok) throw new Error(`Cannot load /config.json: ${res.status} ${res.statusText}`);
-  const base = (await res.json()) as {
-    frontend_basename: string;
-  };
 
-  // 2) Dynamic config from backend (uses relative URL via proxy/ingress)
-  const r = await fetch("/agentic/v1/config/frontend_settings");
-  if (!r.ok) throw new Error(`Cannot load frontend settings: ${r.status} ${r.statusText}`);
-  const settings = (await r.json()) as FrontendConfigDto;
-
-  const frontend = settings.frontend_settings;
-
-  // Assemble final config
-  const feature_flags = normalizeFlags(frontend.feature_flags);
-  feature_flags.is_rebac_enabled = settings.is_rebac_enabled;
-
-  const properties = normalizeProps(frontend.properties);
+  const base = (await res.json()) as RawAppConfig;
 
   config = {
-    frontend_basename: base.frontend_basename,
-    feature_flags,
-    properties,
-    user_auth: settings.user_auth,
-    permissions: [],
+    frontend_basename: base.frontend_basename ?? "/",
+    feature_flags: base.feature_flags ?? {},
+    properties: base.properties ?? {},
+    user_auth: base.user_auth ?? { enabled: false },
   };
 
-  // Initialize PKCE if enabled
   if (config.user_auth?.enabled) {
     const { realm_url, client_id } = config.user_auth;
     if (!realm_url || !client_id) {
@@ -100,63 +82,50 @@ export const loadConfig = async () => {
   }
 };
 
-/** Accessor after loadConfig() */
+/**
+ * Return the already loaded static frontend configuration.
+ *
+ * Why this function exists:
+ * - callers should not re-fetch `/config.json`
+ * - the app startup path guarantees the config is loaded before use
+ *
+ * How to use it:
+ * - call after `loadConfig()` has completed successfully
+ *
+ * Example:
+ * - `const basename = getConfig().frontend_basename;`
+ */
 export const getConfig = (): AppConfig => {
   if (!config) throw new Error("Config not loaded yet. Call loadConfig() first.");
   return config;
 };
 
-/** Feature flags helper */
+/**
+ * Read one pre-auth static feature flag by key.
+ *
+ * Why this function exists:
+ * - a few startup decisions still read from the tiny static config before the
+ *   control-plane bootstrap has hydrated the shell
+ *
+ * How to use it:
+ * - call after `loadConfig()` and pass a `FeatureFlagKey` value
+ *
+ * Example:
+ * - `const enabled = isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES);`
+ */
 export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConfig().feature_flags?.[flag];
 
-/** Properties helper */
+/**
+ * Read one pre-auth static property by key.
+ *
+ * Why this function exists:
+ * - the shell still keeps a tiny static fallback surface while the control-plane
+ *   bootstrap query is loading
+ *
+ * How to use it:
+ * - call after `loadConfig()` with the property name you need
+ *
+ * Example:
+ * - `const logoName = getProperty("logoName");`
+ */
 export const getProperty = (key: string): string => getConfig().properties?.[key];
-
-const normalizeBasename = (basename: string): string => {
-  if (!basename || basename === "/") return "";
-  return basename.endsWith("/") ? basename.slice(0, -1) : basename;
-};
-
-const redirectToComingSoon = () => {
-  const base = normalizeBasename(getConfig().frontend_basename);
-  const target = `${base}/coming-soon`;
-  if (window.location.pathname !== target) {
-    window.location.replace(target);
-  }
-};
-
-export const loadPermissions = async () => {
-  try {
-    const token = KeyCloakService.GetToken();
-    if (!token) throw new Error("No Keycloak token available");
-
-    const res = await fetch("/agentic/v1/config/permissions", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!res.ok) {
-      if (res.status === 403) {
-        let detail: unknown = null;
-        try {
-          const body = await res.json();
-          detail = body?.detail;
-        } catch {
-          detail = null;
-        }
-        if (typeof detail === "string" && detail.toLowerCase().includes("whitelist")) {
-          redirectToComingSoon();
-        }
-      }
-      throw new Error(`Cannot load permissions: ${res.status} ${res.statusText}`);
-    }
-    const perms: string[] = await res.json();
-    if (config) config.permissions = perms;
-    return perms;
-  } catch (err) {
-    console.error("Failed to load user permissions:", err);
-    if (config) config.permissions = [];
-    return [];
-  }
-};

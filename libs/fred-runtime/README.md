@@ -112,6 +112,13 @@ An interactive REPL and one-shot client for any Fred agent pod:
 # Interactive mode — connects to http://127.0.0.1:8000/api/v1 by default
 fred-agent-chat
 
+# Set the current team scope inside the REPL
+/team my-team
+
+# Inspect runtime KPIs without Grafana
+/kpi
+/kpi tool_name=search
+
 # One-shot
 fred-agent-chat --agent my-agent "What is the status of cluster A?"
 
@@ -120,6 +127,12 @@ fred-agent-chat --scenario tests/scenarios/smoke.yaml
 
 # Keycloak browser login
 fred-agent-chat --login
+
+# Start already scoped to one team
+fred-agent-chat --team-id my-team
+
+# Override the metrics endpoint used by /kpi
+fred-agent-chat --metrics-url http://127.0.0.1:9115/metrics
 ```
 
 The target pod URL is resolved from `configuration.yaml` automatically,
@@ -145,12 +158,23 @@ app:
   host: "0.0.0.0"
   port: 8010
   log_level: "info"
+  metrics_address: "127.0.0.1"
+  metrics_port: 9115
+  kpi_process_metrics_interval_sec: 10
+
+observability:
+  tracer: logging
+  metrics: prometheus
 
 ai:
   knowledge_flow_url: "http://localhost:8111/knowledge-flow/v1"
 ```
 
 Full schema: `fred_runtime.app.config.AgentPodConfig`.
+
+When `observability.metrics: prometheus` is enabled, `create_agent_app(...)`
+starts a dedicated Prometheus exporter on `app.metrics_address:app.metrics_port`
+and restores the shared Fred KPI pipeline, including process and SQL pool KPIs.
 
 ---
 

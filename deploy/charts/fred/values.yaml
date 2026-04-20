@@ -737,31 +737,32 @@ applications:
     agents_catalog:
       version: v1
       agents:
-        - id: "Georges"
-          name: "Georges"
+        - id: "SQL Agent"
+          name: "SQL Agent"
           type: "agent"
-          class_path: "agentic_backend.agents.generalist.generalist_expert.Georges"
-          enabled: true
-          chat_options:
-            attach_files: false
+          definition_ref: "v2.production.sql_analyst"
 
-        - id: "Rico"
-          name: "Rico"
+        - id: "Corpus Investigator Deep"
+          name: "Corpus Investigator Deep"
           type: "agent"
-          class_path: "agentic_backend.agents.rags.rag_expert.Rico"
-          enabled: true
-          chat_options:
-            search_policy_selection: true
-            libraries_selection: true
-            search_rag_scoping: true
-            deep_search_delegate: false
-            attach_files: true
-            include_corpus_in_search: true
+          definition_ref: "v2.deep.corpus_investigator"
 
-        - id: "Tessa"
-          name: "Tessa"
+        - id: "DVARiskValidatorGraph"
+          name: "DVA Risk Validator"
           type: "agent"
-          class_path: "agentic_backend.agents.tabular.tabular_expert.Tessa"
+          definition_ref: "v2.production.dva_risk_validator.graph"
+
+        - id: "DVARiskValidatorQA"
+          name: "DVA Risk Validator QA"
+          type: "agent"
+          definition_ref: "v2.production.dva_risk_validator.qa"
+
+      react_profiles:
+        - profile_id: "custodian"
+          enabled: true
+        - profile_id: "rag_expert"
+          enabled: true
+        - profile_id: "sentinel"
           enabled: true
 
     # ── models_catalog.yaml — LLM profiles ───────────────────────────────────

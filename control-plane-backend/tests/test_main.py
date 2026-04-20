@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, cast
 
 import pytest
@@ -8,15 +9,120 @@ from fred_core import RelationType, SessionSchema, TeamPermission
 from fred_core.common import TeamId
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakPutError
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
+from control_plane_backend.agent_instance_store import AgentInstanceRecord
+from control_plane_backend.agent_instance_store import AgentInstanceStore
+from control_plane_backend.application_context import ApplicationContext
+from control_plane_backend.common.structures import (
+    ManagedAgentTuning,
+    RuntimeCatalogSourceConfig,
+)
 from control_plane_backend.main import create_app
+from control_plane_backend.product_service import _RuntimeTemplatePayload
 from control_plane_backend.team_metadata_store import TeamMetadata
-from control_plane_backend.teams_structures import KeycloakGroupSummary, Team
+from control_plane_backend.teams_structures import (
+    KeycloakGroupSummary,
+    Team,
+    TeamWithPermissions,
+)
 
 
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+
+
+def _make_record(
+    *,
+    agent_instance_id: str = "instance-1",
+    team_id: str = "personal",
+    template_id: str = "runtime-a:rags.sample.echo",
+    source_runtime_id: str = "runtime-a",
+    source_agent_id: str = "rags.sample.echo",
+    display_name: str = "Echo Team Agent",
+    description: str | None = "Managed echo agent",
+    enabled: bool = True,
+    created_by: str | None = "internal-admin",
+) -> AgentInstanceRecord:
+    return AgentInstanceRecord(
+        agent_instance_id=agent_instance_id,
+        team_id=TeamId(team_id),
+        template_id=template_id,
+        source_runtime_id=source_runtime_id,
+        source_agent_id=source_agent_id,
+        display_name=display_name,
+        description=description,
+        enabled=enabled,
+        created_by=created_by,
+        tuning=ManagedAgentTuning(
+            role=display_name,
+            description=description or display_name,
+        ),
+    )
+
+
+class _FakeAgentInstanceStore:
+    """In-memory stand-in for AgentInstanceStore used in offline tests."""
+
+    def __init__(self, records: list[AgentInstanceRecord] | None = None) -> None:
+        self._records: list[AgentInstanceRecord] = list(records or [])
+
+    async def list_by_team(self, team_id: TeamId) -> list[AgentInstanceRecord]:
+        return [r for r in self._records if r.team_id == team_id]
+
+    async def get(self, agent_instance_id: str) -> AgentInstanceRecord | None:
+        return next(
+            (r for r in self._records if r.agent_instance_id == agent_instance_id),
+            None,
+        )
+
+    async def get_for_team(
+        self, agent_instance_id: str, team_id: TeamId
+    ) -> AgentInstanceRecord | None:
+        return next(
+            (
+                r
+                for r in self._records
+                if r.agent_instance_id == agent_instance_id and r.team_id == team_id
+            ),
+            None,
+        )
+
+    async def create(self, record: AgentInstanceRecord) -> AgentInstanceRecord:
+        self._records.append(record)
+        return record
+
+    async def delete(self, agent_instance_id: str, team_id: TeamId) -> bool:
+        before = len(self._records)
+        self._records = [
+            r
+            for r in self._records
+            if not (r.agent_instance_id == agent_instance_id and r.team_id == team_id)
+        ]
+        return len(self._records) < before
+
+
+def _patch_store(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakeAgentInstanceStore,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_agent_instance_store",
+        lambda _self: store,
+    )
+
+
+async def _fake_get_team_by_id(_user: Any, _team_id: Any) -> TeamWithPermissions:
+    return TeamWithPermissions(
+        id=TeamId("personal"),
+        name="Personal",
+        member_count=1,
+        is_private=True,
+        owners=[],
+        permissions=[],
+    )
 
 
 @pytest.mark.asyncio
@@ -98,7 +204,7 @@ async def test_delete_user_requires_keycloak_m2m() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_teams_returns_empty_without_keycloak_m2m() -> None:
+async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -106,7 +212,606 @@ async def test_list_teams_returns_empty_without_keycloak_m2m() -> None:
         resp = await client.get("/control-plane/v1/teams")
 
     assert resp.status_code == 200
+    assert resp.json() == [
+        {
+            "id": "personal",
+            "name": "Equipe personnelle",
+            "member_count": 1,
+            "owners": [],
+            "is_member": False,
+            "is_private": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
+    app = create_app()
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.frontend.ui_settings.siteDisplayName = (
+        "Fred Control Plane"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/bootstrap")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["current_user"]["id"] == "admin"
+    assert payload["active_team"]["id"] == "personal"
+    assert payload["available_teams"][0]["id"] == "personal"
+    assert payload["feature_flags"]["enableK8Features"] is False
+    assert payload["ui_settings"]["siteDisplayName"] == "Fred Control Plane"
+    assert "agents:read" in payload["permissions"]["items"]
+    assert payload["permissions"]["can_manage_team_agents"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_personal_team_returns_shared_system_team_contract() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "id": "personal",
+        "name": "Equipe personnelle",
+        "member_count": 1,
+        "owners": [],
+        "is_member": False,
+        "is_private": True,
+        "permissions": [
+            "can_read",
+            "can_update_resources",
+            "can_update_agents",
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_user_details_reuses_shared_personal_team_contract() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/user")
+
+    assert resp.status_code == 200
+    assert resp.json()["personalTeam"]["id"] == "personal"
+    assert resp.json()["personalTeam"]["permissions"] == [
+        "can_read",
+        "can_update_resources",
+        "can_update_agents",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_team_agent_templates_returns_empty_without_runtime_sources() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+
+    assert resp.status_code == 200
     assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_team_agent_templates_aggregates_runtime_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_fetch_runtime_templates(_base_url: str):
+        return [
+            _RuntimeTemplatePayload(
+                template_agent_id="rags.sample.echo",
+                title="Echo Agent",
+                description="Echo test agent",
+                kind="assistant",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product_service._fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+
+    app = create_app()
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload == [
+        {
+            "template_id": "runtime-a:rags.sample.echo",
+            "source_runtime_id": "runtime-a",
+            "source_agent_id": "rags.sample.echo",
+            "display_name": "Echo Agent",
+            "description": "Echo test agent",
+            "category": "assistant",
+            "tags": [],
+            "capabilities": ["assistant"],
+            "team_instantiable": True,
+            "status": "available",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_team_agent_instances_returns_managed_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _FakeAgentInstanceStore([_make_record()])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        list_resp = await client.get("/control-plane/v1/teams/personal/agent-instances")
+
+    assert list_resp.status_code == 200
+    assert list_resp.json() == [
+        {
+            "agent_instance_id": "instance-1",
+            "team_id": "personal",
+            "template_id": "runtime-a:rags.sample.echo",
+            "display_name": "Echo Team Agent",
+            "description": "Managed echo agent",
+            "status": "enabled",
+            "created_by": "internal-admin",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_endpoint_requires_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _FakeAgentInstanceStore([_make_record()])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        runtime_resp = await client.get(
+            "/control-plane/v1/agent-instances/instance-1/runtime"
+        )
+
+    assert runtime_resp.status_code == 200
+    assert runtime_resp.json()["agent_instance_id"] == "instance-1"
+    assert runtime_resp.json()["template_agent_id"] == "rags.sample.echo"
+    assert runtime_resp.json()["owner_team_id"] == "personal"
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_returns_ingress_relative_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-42",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+                source_agent_id="rags.sample.echo",
+                display_name="Echo Agent",
+                description="Test",
+            )
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-42/prepare-execution"
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["agent_instance_id"] == "inst-42"
+    assert payload["team_id"] == "personal"
+    assert payload["runtime_id"] == "agents-v2"
+    assert payload["execution_transport"] == "sse"
+    assert payload["execute_url"] == "/runtime/agents-v2/agents/execute"
+    assert payload["execute_stream_url"] == "/runtime/agents-v2/agents/execute/stream"
+    assert (
+        payload["messages_url_template"]
+        == "/runtime/agents-v2/agents/sessions/{session_id}/messages"
+    )
+    assert payload["supports_streaming"] is True
+    assert payload["supports_hitl"] is True
+    assert "execution_grant" in payload
+    grant = payload["execution_grant"]
+    assert grant["user_id"] == "admin"
+    assert grant["team_id"] == "personal"
+    assert grant["agent_instance_id"] == "inst-42"
+    assert grant["action"] == "execute"
+    assert grant["audience"] == "/runtime/agents-v2"
+    assert grant["expires_at"] > grant["issued_at"]
+    for url_field in ("execute_url", "execute_stream_url", "messages_url_template"):
+        assert "svc.cluster.local" not in payload[url_field]
+        assert payload[url_field].startswith("/")
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_returns_404_for_unknown_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/no-such/prepare-execution"
+        )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_returns_409_for_disabled_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [_make_record(agent_instance_id="inst-disabled", enabled=False)]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-disabled/prepare-execution"
+        )
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_returns_503_when_ingress_prefix_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-no-prefix",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+            )
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-no-prefix/prepare-execution"
+        )
+
+    assert resp.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_prepare_execution_team_mismatch_returns_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore(
+        [
+            _make_record(
+                agent_instance_id="inst-other-team",
+                team_id="team-b",
+                source_runtime_id="agents-v2",
+                template_id="agents-v2:rags.sample.echo",
+            )
+        ]
+    )
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="agents-v2",
+            base_url="http://agents-v2-svc/api/v1",
+            enabled=True,
+            ingress_prefix="/runtime/agents-v2",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances/inst-other-team/prepare-execution"
+        )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_creates_db_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+            ingress_prefix="/runtime/runtime-a",
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "My Echo Agent",
+                "description": "A test echo agent",
+            },
+        )
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["team_id"] == "personal"
+    assert payload["template_id"] == "runtime-a:rags.sample.echo"
+    assert payload["display_name"] == "My Echo Agent"
+    assert payload["description"] == "A test echo agent"
+    assert payload["status"] == "enabled"
+    assert payload["created_by"] == "admin"
+    assert "agent_instance_id" in payload
+    assert len(store._records) == 1
+    assert store._records[0].source_runtime_id == "runtime-a"
+    assert store._records[0].source_agent_id == "rags.sample.echo"
+
+
+@pytest.mark.asyncio
+async def test_agent_instance_store_create_overrides_sqlite_now_default(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "agent-instance.sqlite3"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE agent_instance (
+                    agent_instance_id VARCHAR NOT NULL PRIMARY KEY,
+                    team_id VARCHAR NOT NULL,
+                    template_id VARCHAR NOT NULL,
+                    source_runtime_id VARCHAR NOT NULL,
+                    source_agent_id VARCHAR NOT NULL,
+                    display_name VARCHAR(255) NOT NULL,
+                    description VARCHAR(500),
+                    enabled BOOLEAN NOT NULL,
+                    created_by VARCHAR,
+                    tuning_json TEXT,
+                    created_at DATETIME NOT NULL DEFAULT (now()),
+                    updated_at DATETIME NOT NULL DEFAULT (now())
+                )
+                """
+            )
+        )
+
+    try:
+        store = AgentInstanceStore(engine)
+        created = await store.create(
+            AgentInstanceRecord(
+                agent_instance_id="inst-sqlite-now",
+                team_id=TeamId("personal"),
+                template_id="runtime-a:rags.sample.echo",
+                source_runtime_id="runtime-a",
+                source_agent_id="rags.sample.echo",
+                display_name="SQLite-safe agent",
+                description="Created with Python timestamps",
+                enabled=True,
+                created_by="admin",
+                tuning=ManagedAgentTuning(
+                    role="SQLite-safe agent",
+                    description="Created with Python timestamps",
+                ),
+            )
+        )
+
+        assert created is not None
+        assert created.agent_instance_id == "inst-sqlite-now"
+        assert created.created_at is not None
+        assert created.updated_at is not None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    app_context = ApplicationContext.get_instance()
+    app_context.configuration.platform.runtime_catalog_sources = []
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "unknown-runtime:some-agent",
+                "display_name": "Agent",
+            },
+        )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_returns_400_for_malformed_template_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={"template_id": "no-colon-here", "display_name": "Agent"},
+        )
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_instance_removes_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([_make_record()])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1"
+        )
+
+    assert resp.status_code == 204
+    assert len(store._records) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_instance_returns_404_when_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/agent-instances/no-such"
+        )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_agent_instance_enforces_team_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([_make_record(team_id="other-team")])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.delete(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1"
+        )
+
+    assert resp.status_code == 404
+    assert len(store._records) == 1  # record belonging to other-team is untouched
 
 
 @pytest.mark.asyncio

@@ -21,3 +21,12 @@
   padding: 0 var(--spacing-xs) var(--spacing-xs);
   overflow-y: auto;
 }
+
+.chatListPlaceholder {
+  padding: var(--spacing-s) var(--spacing-m);
+  border: 1px dashed var(--outline-variant, #d6d6de);
+  border-radius: var(--radius-s, 0.75rem);
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-medium);
+  text-align: center;
+}

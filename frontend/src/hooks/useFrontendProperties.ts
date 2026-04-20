@@ -13,30 +13,64 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
-import type { Properties } from "../slices/agentic/agenticOpenApi";
+import { getProperty } from "../common/config";
+import { useFrontendBootstrap } from "./useFrontendBootstrap";
+
+export interface FrontendProperties {
+  agentIconName: string;
+  agentsNicknamePlural: string;
+  agentsNicknameSingular: string;
+  allowAgentSwitchInOneConversation: boolean;
+  defaultPersonalBannerFile: string;
+  defaultTeamAvatarFile: string;
+  defaultTeamBannerFile: string;
+  faviconName: string;
+  faviconNameDark: string;
+  logoName: string;
+  logoNameDark: string;
+  siteDisplayName: string;
+  siteSubtitle: string;
+  siteTitle: string;
+}
 
 /**
- * Custom hook to access frontend properties from the configuration.
+ * Expose frontend-facing labels and asset names with control-plane bootstrap
+ * as the primary source and static config/defaults as fallback.
  *
- * This hook wraps the frontend config query and exposes only the properties object.
- * The query is configured with aggressive caching since frontend config rarely changes
- * (only on helm chart redeployment).
+ * Why this hook exists:
+ * - the shell is migrating away from the legacy agentic frontend-settings
+ *   endpoint
+ * - components still need a stable property bag while the control-plane
+ *   bootstrap is loading
  *
- * @returns The frontend properties object containing configuration like agentsNickname, etc.
+ * How to use it:
+ * - call in UI components that need branding, labels, or asset names
+ * - treat the returned values as always defined and ready for rendering
+ *
+ * Example:
+ * - `const { siteDisplayName, agentIconName } = useFrontendProperties();`
  */
-export function useFrontendProperties(): Properties {
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery(undefined, {
-    // Cache for 1 hour (3600 seconds) since config rarely changes
-    pollingInterval: 0,
-    // Keep unused data in cache for 1 hour
-    refetchOnMountOrArgChange: 3600,
-    // Keep data fresh in cache even when component unmounts
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
+export function useFrontendProperties(): FrontendProperties {
+  const { bootstrap } = useFrontendBootstrap();
+  const ui = bootstrap?.ui_settings;
 
-  return useMemo(() => {
-    return frontendConfig?.frontend_settings?.properties || ({} as Properties);
-  }, [frontendConfig]);
+  return useMemo(
+    () => ({
+      agentIconName: getProperty("agentIconName") || "widgets",
+      agentsNicknamePlural: ui?.agentsNicknamePlural || "Agents",
+      agentsNicknameSingular: ui?.agentsNicknameSingular || "Agent",
+      allowAgentSwitchInOneConversation: getProperty("allowAgentSwitchInOneConversation") === "true",
+      defaultPersonalBannerFile: getProperty("defaultPersonalBannerFile") || "banner-personal.webp",
+      defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "banner-team.webp",
+      defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "banner-team.webp",
+      faviconName: getProperty("faviconName") || "fred",
+      faviconNameDark: getProperty("faviconNameDark") || "fred-dark",
+      logoName: getProperty("logoName") || "fred",
+      logoNameDark: getProperty("logoNameDark") || "fred-dark",
+      siteDisplayName: ui?.siteDisplayName || getProperty("siteDisplayName") || "Fred",
+      siteSubtitle: getProperty("siteSubtitle") || "",
+      siteTitle: getProperty("siteTitle") || ui?.siteDisplayName || "Fred",
+    }),
+    [ui],
+  );
 }

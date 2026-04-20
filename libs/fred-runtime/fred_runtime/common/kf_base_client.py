@@ -18,7 +18,6 @@ import logging
 from typing import Any, Callable, Dict, Optional, Protocol
 
 import httpx
-from fred_core.kpi.kpi_phase_metric import phase_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
 
@@ -97,16 +96,34 @@ class KfBaseClient:
             if agent_settings is not None:
                 agent_label = getattr(agent_settings, "id", None)
             dims["agent_id"] = agent_label or type(self._agent).__name__
-            session_id = getattr(
-                getattr(self._agent, "runtime_context", None), "session_id", None
-            )
+            runtime_context = getattr(self._agent, "runtime_context", None)
+            session_id = getattr(runtime_context, "session_id", None)
             if session_id:
                 dims["session_id"] = str(session_id)
-            user_id = getattr(
-                getattr(self._agent, "runtime_context", None), "user_id", None
-            )
+            user_id = getattr(runtime_context, "user_id", None)
             if user_id:
                 dims["user_id"] = str(user_id)
+            team_id = getattr(runtime_context, "team_id", None)
+            if team_id:
+                dims["team_id"] = str(team_id)
+            agent_instance_id = getattr(runtime_context, "agent_instance_id", None)
+            if agent_instance_id:
+                dims["agent_instance_id"] = str(agent_instance_id)
+            template_agent_id = getattr(runtime_context, "template_agent_id", None)
+            if template_agent_id:
+                dims["template_agent_id"] = str(template_agent_id)
+            checkpoint_id = getattr(runtime_context, "checkpoint_id", None)
+            if checkpoint_id:
+                dims["checkpoint_id"] = str(checkpoint_id)
+            trace_id = getattr(runtime_context, "trace_id", None)
+            if trace_id:
+                dims["trace_id"] = str(trace_id)
+            correlation_id = getattr(runtime_context, "correlation_id", None)
+            if correlation_id:
+                dims["correlation_id"] = str(correlation_id)
+            execution_action = getattr(runtime_context, "execution_action", None)
+            if execution_action:
+                dims["execution_action"] = str(execution_action)
         return dims
 
     # ---------------------------
@@ -211,7 +228,11 @@ class KfBaseClient:
         """
         Executes a request, handling user-token expiration (401) via refresh and retry.
         """
-        async with phase_timer(self._kpi, phase_name):
+        with self._kpi.timer(
+            "app.phase_latency_ms",
+            dims={**self._kpi_dims(method=method, path=path), "phase": phase_name},
+            actor=self._kpi_actor(),
+        ):
             r = await self._execute_authenticated_request(
                 method=method, path=path, **kwargs
             )

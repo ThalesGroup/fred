@@ -30,6 +30,7 @@ export default defineConfig({
       "/agentic": { target: process.env.VITE_BACKEND_URL || "http://localhost:8000", ws: true },
       "/knowledge-flow": process.env.VITE_BACKEND_URL_KNOWLEDGE || "http://localhost:8111",
       "/control-plane": process.env.VITE_BACKEND_URL_CONTROL_PLANE || "http://localhost:8222",
+      "/samples": process.env.VITE_BACKEND_URL_SAMPLES || "http://localhost:8010",
     },
   },
   resolve: {

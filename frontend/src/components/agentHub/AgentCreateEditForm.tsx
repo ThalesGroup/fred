@@ -14,6 +14,7 @@
 import { Autocomplete, Box, Divider, TextField, Typography } from "@mui/material";
 import { Ref, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFrontendBootstrap } from "../../hooks/useFrontendBootstrap";
 import { useAgentUpdater } from "../../hooks/useAgentUpdater";
 import { KeyCloakService } from "../../security/KeycloakService";
 import {
@@ -34,7 +35,6 @@ import { AgentPrivateResourcesManager } from "./AgentConfigWorkspaceManagerDrawe
 import { AgentToolsSelection } from "./AgentToolsSelection";
 import { TuningForm } from "./TuningForm";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/controlPlane/controlPlaneOpenApi.ts";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { AnyAgent } from "../../common/agent.ts";
@@ -71,6 +71,20 @@ export type AgentCreateEditFormProps = {
   onValidityChange: (validity: boolean) => void;
 };
 
+/**
+ * Create or edit one legacy agent while deriving personal-team ownership from
+ * the frontend bootstrap instead of the temporary user-details endpoint.
+ *
+ * Why this component exists:
+ * - this form is still part of the transitional legacy agent surface and must
+ *   remain compatible with the Phase 5 personal-team bootstrap changes
+ *
+ * How to use it:
+ * - pass `agent=null` for create mode or an existing agent for edit mode
+ *
+ * Example:
+ * - `<AgentCreateEditForm agent={null} teamId="personal" onClose={...} onValidityChange={...} />`
+ */
 export function AgentCreateEditForm({
   ref,
   agent,
@@ -81,7 +95,7 @@ export function AgentCreateEditForm({
 }: AgentCreateEditFormProps) {
   const [createV2Agent] = useCreateV2AgentAgenticV1AgentsV2CreatePostMutation();
   const [createV1Agent] = useCreateV1AgentAgenticV1AgentsV1CreatePostMutation();
-  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const { activeTeam } = useFrontendBootstrap();
   const { updateTuning, isLoading } = useAgentUpdater();
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
@@ -115,6 +129,7 @@ export function AgentCreateEditForm({
 
   const userRoles = KeyCloakService.GetUserRoles();
   const isAdmin = userRoles.includes("admin");
+  const personalTeamId = activeTeam?.id ?? "personal";
 
   const { data: reactProfiles = [] } = useListReactProfilesQuery(undefined, {
     skip: !isCreateMode || !isAdmin,
@@ -217,14 +232,14 @@ export function AgentCreateEditForm({
           ? await createV1Agent({
               createV1AgentRequest: {
                 name: trimmedName,
-                team_id: teamId === userDetails.personalTeam.id ? undefined : teamId,
+                team_id: teamId === personalTeamId ? undefined : teamId,
                 class_path: classPath!,
               },
             }).unwrap()
           : await createV2Agent({
               createV2AgentRequest: {
                 name: trimmedName,
-                team_id: teamId === userDetails.personalTeam.id ? undefined : teamId,
+                team_id: teamId === personalTeamId ? undefined : teamId,
                 profile_id: v2CreateMode === "profile" ? profileId || undefined : undefined,
                 definition_ref: v2CreateMode === "definition_ref" ? definitionRef || undefined : undefined,
               },

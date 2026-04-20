@@ -40,6 +40,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 import threading
@@ -51,7 +52,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 import yaml
@@ -69,13 +70,20 @@ _COMMANDS: tuple[str, ...] = (
     "/help",
     "/agents",
     "/agent",
+    "/checkpoints",
+    "/checkpoint",
+    "/context",
+    "/execution-context",
     "/history",
+    "/kpi",
     "/login",
     "/login-password",
     "/mode",
     "/scenario",
     "/session",
     "/sessions",
+    "/stats",
+    "/team",
     "/logout",
     "/quit",
     "/whoami",
@@ -87,11 +95,17 @@ _ANSI_GREEN = "\033[32m"
 _ANSI_RED = "\033[31m"
 _ANSI_YELLOW = "\033[33m"
 _ANSI_DIM = "\033[2m"
+_ANSI_WHITE = "\033[97m"
 DEFAULT_KEYCLOAK_TOKEN_FILE = (  # nosec B105 - local cache file path, not a credential
     "~/.config/fred/agent-chat-session.json"
 )
 DEFAULT_PKCE_CALLBACK_HOST = "127.0.0.1"
 DEFAULT_PKCE_CALLBACK_PORT = 8765
+_PROM_SAMPLE_RE = re.compile(
+    r"^(?P<name>[^{\s]+)(?:\{(?P<labels>[^}]*)\})?\s+"
+    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
+    r"(?:\s+\d+)?$"
+)
 
 
 @dataclass(slots=True)
@@ -886,6 +900,7 @@ class AgentPodClient:
     base_url: str
     http_client: httpx.Client
     token_provider: Callable[[], str | None] | None = None
+    metrics_url: str | None = None
 
     def _auth_headers(self) -> dict[str, str]:
         """
@@ -944,6 +959,7 @@ class AgentPodClient:
         message: str,
         session_id: str,
         user_id: str,
+        team_id: str | None = None,
         resume_payload: Any = None,
     ) -> dict[str, Any]:
         """
@@ -952,7 +968,7 @@ class AgentPodClient:
         Why this function exists:
         - many developer flows only need the terminal payload, not the full SSE
           stream
-        - the client should support the new `/agents/execute` route directly
+        - sends a RuntimeExecuteRequest (Phase 1 contract)
 
         How to use it:
         - pass the target agent id and user message
@@ -960,16 +976,16 @@ class AgentPodClient:
         - pass `resume_payload` to resume a graph agent paused at a HITL gate
 
         Example:
-        - `payload = client.execute(agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice")`
+        - `payload = client.execute(agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice", team_id="fredlab")`
         """
-
+        runtime_context: dict[str, Any] = {"user_id": user_id}
+        if team_id:
+            runtime_context["team_id"] = team_id
         payload: dict[str, Any] = {
             "agent_id": agent_id,
-            "message": message,
-            "context": {
-                "session_id": session_id,
-                "user_id": user_id,
-            },
+            "input": message,
+            "session_id": session_id,
+            "runtime_context": runtime_context,
         }
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
@@ -991,6 +1007,7 @@ class AgentPodClient:
         message: str,
         session_id: str,
         user_id: str,
+        team_id: str | None = None,
         resume_payload: Any = None,
     ) -> list[dict[str, Any]]:
         """
@@ -1006,7 +1023,7 @@ class AgentPodClient:
         - inspect the returned events for `final` content or runtime errors
 
         Example:
-        - `events = client.stream_events(agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice")`
+        - `events = client.stream_events(agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice", team_id="fredlab")`
         """
 
         events: list[dict[str, Any]] = []
@@ -1015,6 +1032,7 @@ class AgentPodClient:
             message=message,
             session_id=session_id,
             user_id=user_id,
+            team_id=team_id,
             resume_payload=resume_payload,
         ):
             events.append(event)
@@ -1027,6 +1045,7 @@ class AgentPodClient:
         message: str,
         session_id: str,
         user_id: str,
+        team_id: str | None = None,
         resume_payload: Any = None,
     ) -> Iterator[dict[str, Any]]:
         """
@@ -1042,16 +1061,17 @@ class AgentPodClient:
         - pass `resume_payload` to resume a graph agent paused at a HITL gate
 
         Example:
-        - `for event in client.iter_stream_events(...): ...`
+        - `for event in client.iter_stream_events(..., team_id="fredlab"): ...`
         """
 
+        runtime_context: dict[str, Any] = {"user_id": user_id}
+        if team_id:
+            runtime_context["team_id"] = team_id
         payload: dict[str, Any] = {
             "agent_id": agent_id,
-            "message": message,
-            "context": {
-                "session_id": session_id,
-                "user_id": user_id,
-            },
+            "input": message,
+            "session_id": session_id,
+            "runtime_context": runtime_context,
         }
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
@@ -1130,6 +1150,106 @@ class AgentPodClient:
             raise RuntimeError("Messages response must be a JSON array.")
         return payload
 
+    def get_checkpoint_stats(self) -> dict[str, Any]:
+        """
+        Fetch aggregate checkpoint storage statistics from the pod.
+
+        Why this function exists:
+        - developers need a quick storage health check without counting rows
+          manually or connecting to the database
+        - the pod exposes this as ``GET /agents/checkpoints/_stats``
+
+        How to use it:
+        - call from the ``/stats`` REPL command
+        - interpret blob_bytes_approx as the dominant storage cost
+
+        Example:
+        - `stats = client.get_checkpoint_stats()`
+        """
+        url = f"{self.base_url}/agents/checkpoints/_stats"
+        response = self.http_client.get(url, headers=self._auth_headers())
+        response.raise_for_status()
+        return response.json()
+
+    def list_checkpoint_threads(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """
+        List checkpoint threads stored in the pod, newest first.
+
+        Why this function exists:
+        - developers need to inspect which sessions have live checkpoint state
+          without using the frontend
+        - the pod exposes this as ``GET /agents/checkpoints?limit=<n>``
+
+        How to use it:
+        - call from the ``/checkpoints`` REPL command
+        - each entry has session_id, checkpoint_count, latest_created_at
+
+        Example:
+        - `threads = client.list_checkpoint_threads(limit=10)`
+        """
+        url = f"{self.base_url}/agents/checkpoints"
+        response = self.http_client.get(
+            url, params={"limit": limit}, headers=self._auth_headers()
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise RuntimeError("Checkpoint threads response must be a JSON array.")
+        return payload
+
+    def get_checkpoint_thread(self, session_id: str) -> dict[str, Any]:
+        """
+        Fetch all checkpoints for one session, newest first.
+
+        Why this function exists:
+        - developers need a terminal way to inspect checkpoint state for a
+          specific session without using the frontend
+        - the pod exposes this as ``GET /agents/checkpoints/{session_id}``
+
+        How to use it:
+        - pass the session_id (the public-facing conversation identity)
+        - returns a dict with session_id and a checkpoints list
+
+        Example:
+        - `detail = client.get_checkpoint_thread("session-abc")`
+        """
+        url = f"{self.base_url}/agents/checkpoints/{session_id}"
+        response = self.http_client.get(url, headers=self._auth_headers())
+        response.raise_for_status()
+        return response.json()
+
+    def get_metrics_text(self) -> str:
+        """
+        Fetch the pod Prometheus exposition text from the configured metrics URL.
+
+        Why this function exists:
+        - the CLI `/kpi` command should inspect runtime metrics without asking
+          developers to handcraft curl commands repeatedly
+        - keeping the HTTP fetch here makes metrics inspection reuse the same
+          client lifecycle as the rest of the CLI
+
+        How to use it:
+        - configure `metrics_url` when constructing the client
+        - call from `/kpi` and then parse the returned exposition text
+
+        Example:
+        - `text = client.get_metrics_text()`
+        """
+
+        if not self.metrics_url:
+            raise RuntimeError(
+                "Metrics URL is not configured. Pass `--metrics-url`, export "
+                "`FRED_AGENT_METRICS_URL`, or run from a pod project with "
+                "configuration.yaml exposing app.metrics_port."
+            )
+        print(f"[chat] connecting to metrics: GET {self.metrics_url}")
+        response = self.http_client.get(
+            self.metrics_url,
+            headers={"Accept": "text/plain; version=0.0.4"},
+        )
+        response.raise_for_status()
+        return response.text
+
 
 def default_agent_pod_base_url() -> str:
     """
@@ -1164,6 +1284,59 @@ def default_agent_pod_base_url() -> str:
             return normalize_base_url(f"http://127.0.0.1:{port}{base}")
 
     return normalize_base_url(DEFAULT_AGENT_POD_BASE_URL)
+
+
+def default_agent_metrics_url(*, base_url: str | None = None) -> str | None:
+    """
+    Resolve the default Prometheus metrics URL for the target pod.
+
+    Resolution order:
+    1. `FRED_AGENT_METRICS_URL` environment variable (explicit override).
+    2. `app.metrics_port` and optional `app.metrics_address` from
+       `configuration.yaml`.
+    3. `None` when no metrics configuration is available.
+
+    Why this function exists:
+    - `/kpi` should discover the pod metrics endpoint from the same config the
+      runtime uses, instead of hardcoding another host/port convention
+    - wildcard bind addresses like `0.0.0.0` are not directly curlable, so the
+      helper rewrites them to the host part of the active pod base URL
+
+    How to use it:
+    - call at CLI startup or when building an `AgentPodClient`
+
+    Example:
+    - `metrics_url = default_agent_metrics_url(base_url="http://127.0.0.1:8000/pod/v1")`
+    """
+
+    explicit = os.getenv("FRED_AGENT_METRICS_URL")
+    if explicit:
+        return explicit.rstrip("/")
+
+    payload = load_configuration_yaml(default_configuration_file())
+    if not isinstance(payload, dict):
+        return None
+    app_section = payload.get("app")
+    if not isinstance(app_section, dict):
+        return None
+
+    metrics_port = app_section.get("metrics_port")
+    if metrics_port in (None, ""):
+        return None
+
+    try:
+        port = int(metrics_port)
+    except (TypeError, ValueError):
+        return None
+
+    parsed_base = urlparse(base_url or default_agent_pod_base_url())
+    fallback_host = parsed_base.hostname or "127.0.0.1"
+    scheme = parsed_base.scheme or "http"
+    raw_host = (
+        str(app_section.get("metrics_address", fallback_host)).strip() or fallback_host
+    )
+    host = fallback_host if raw_host in {"0.0.0.0", "::", "[::]"} else raw_host  # nosec B104 - rewrite wildcard bind address to the active target host for local scraping
+    return urlunparse((scheme, f"{host}:{port}", "/metrics", "", "", ""))
 
 
 def normalize_base_url(base_url: str) -> str:
@@ -1509,7 +1682,9 @@ def print_help() -> None:
     """
 
     print("Commands:")
-    print("  /help                    Show this help")
+    print(
+        "  /help [question]         Show this help, or ask a question in natural language"
+    )
     print("  /agents                  Refresh and list available agent ids")
     print("  /agent <agent_id>        Switch the active agent")
     print(
@@ -1523,11 +1698,115 @@ def print_help() -> None:
     print("  /mode [final|stream]     Show or change the execution mode")
     print("  /scenario <file>         Run a YAML scenario file against the pod")
     print("  /session <id>            Change the current session id")
+    print("  /team [team_id|clear]    Show, set, or clear the current team scope")
     print(
         "  /sessions                List all sessions for the current user (most recent first)"
     )
     print("  /history [session_id]    Show the conversation history for a session")
+    print("  /kpi [pattern]           Show a KPI/Prometheus snapshot from the pod")
+    print(
+        "  /checkpoints [limit]     List checkpoint threads with sizes (default limit=20)"
+    )
+    print("  /checkpoint <session_id> Inspect all checkpoints for one session")
+    print("  /stats                   Show aggregate checkpoint storage statistics")
+    print("  /context                 Show current execution context summary")
     print("  /quit                    Exit the chat client")
+
+
+_CLI_HELP_CONTEXT = (
+    "You are an interactive help assistant embedded in the Fred CLI chat tool "
+    "(fred-agent-chat). Answer the user's question about how to use the CLI. "
+    "Respond in the same language as the user's question. Be concise and practical.\n\n"
+    "Available commands:\n"
+    "  /help [question]         Show command reference or ask a question in natural language\n"
+    "  /agents                  Refresh and list available agent ids\n"
+    "  /agent <agent_id>        Switch the active agent\n"
+    "  /login                   Log in through browser PKCE and cache the user session\n"
+    "  /login-password [user]   Use direct username/password login as a local fallback\n"
+    "  /whoami                  Show the current login state\n"
+    "  /logout                  Clear the cached login session\n"
+    "  /mode [final|stream]     Show or change the execution mode (default: stream)\n"
+    "  /scenario <file>         Run a YAML scenario file against the pod\n"
+    "  /session <id>            Change the current session id\n"
+    "  /team [team_id|clear]    Show, set, or clear the current team scope\n"
+    "  /sessions                List all sessions for the current user (most recent first)\n"
+    "  /history [session_id]    Show the conversation history for a session\n"
+    "  /kpi [pattern]           Show a KPI/Prometheus snapshot from the pod\n"
+    "  /checkpoints [limit]     List checkpoint threads with sizes (default limit=20)\n"
+    "  /checkpoint <session_id> Inspect all checkpoints for one session\n"
+    "  /stats                   Show aggregate checkpoint storage statistics\n"
+    "  /context                 Show current execution context summary\n"
+    "  /quit                    Exit the chat client\n\n"
+    "Any text that does not start with / is sent as a message to the current agent.\n\n"
+    "User question: "
+)
+
+
+def _ask_cli_help(
+    *,
+    question: str,
+    client: "AgentPodClient",
+    agent_id: str,
+    user_id: str,
+    team_id: str | None,
+    color_enabled: bool,
+) -> None:
+    compound = _CLI_HELP_CONTEXT + question
+    ephemeral_session = f"__help__{uuid.uuid4().hex}"
+    try:
+        payload = client.execute(
+            agent_id=agent_id,
+            message=compound,
+            session_id=ephemeral_session,
+            user_id=user_id,
+            team_id=team_id,
+        )
+    except Exception as exc:
+        print(
+            colorize(
+                f"[help] Pod unavailable ({exc}). Showing command reference instead.",
+                color=_ANSI_DIM,
+                enabled=color_enabled,
+            )
+        )
+        print_help()
+        return
+    if "error" in payload:
+        print(
+            colorize(
+                f"[help] Agent error: {payload['error']}. Showing command reference.",
+                color=_ANSI_DIM,
+                enabled=color_enabled,
+            )
+        )
+        print_help()
+        return
+    content = payload.get("content")
+    if not isinstance(content, str):
+        print_help()
+        return
+    print(content)
+
+
+def fmt_bytes(n: int) -> str:
+    """
+    Human-readable byte size with one decimal place.
+
+    Why this exists:
+    - checkpoint and blob sizes are displayed in multiple places in the CLI;
+      a shared formatter keeps the output consistent
+
+    How to use it:
+    - pass any integer byte count; returns e.g. "1.4 KB", "892.7 KB", "2.1 MB"
+
+    Example:
+    - `fmt_bytes(1432)` → "1.4 KB"
+    """
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
 
 
 def execution_mode_label(*, stream: bool) -> str:
@@ -1615,6 +1894,512 @@ def colorize(text: str, *, color: str, enabled: bool, bold: bool = False) -> str
         return text
     prefix = f"{_ANSI_BOLD if bold else ''}{color}"
     return f"{prefix}{text}{_ANSI_RESET}"
+
+
+@dataclass(frozen=True, slots=True)
+class PrometheusSample:
+    """
+    One parsed Prometheus exposition sample line.
+
+    Why this exists:
+    - `/kpi` should work from plain text exposition without depending on a full
+      Prometheus client/parser stack inside the CLI
+    - a small typed record keeps parsing and rendering logic testable offline
+
+    How to use it:
+    - build via `parse_prometheus_text_exposition(...)`
+    - inspect `name`, `labels`, and `value` when rendering summaries
+
+    Example:
+    - `sample = PrometheusSample(name="process_cpu_percent", labels={}, value=12.5)`
+    """
+
+    name: str
+    labels: dict[str, str]
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
+class HistogramSeriesSummary:
+    """
+    One summarized Prometheus histogram series.
+
+    Why this exists:
+    - KPI timers are exposed as Prometheus histograms, but developers usually
+      want quick `count/sum/avg` summaries in the CLI instead of raw buckets
+
+    How to use it:
+    - build via `summarize_prometheus_histograms(...)`
+    - render in `/kpi` output or tests
+
+    Example:
+    - `summary = HistogramSeriesSummary(name="agent_tool_latency_ms", labels={"tool_name": "search"}, count=4, sum_value=120.0)`
+    """
+
+    name: str
+    labels: dict[str, str]
+    count: float
+    sum_value: float
+
+    @property
+    def avg_value(self) -> float:
+        """
+        Return the average observed value for this histogram series.
+
+        Why this exists:
+        - the CLI needs one simple derived latency number without repeating the
+          `sum / count` guard everywhere
+
+        How to use it:
+        - call after parsing histogram `_sum` and `_count` samples
+
+        Example:
+        - `avg = summary.avg_value`
+        """
+
+        if self.count <= 0:
+            return 0.0
+        return self.sum_value / self.count
+
+
+def parse_prometheus_text_exposition(text: str) -> list[PrometheusSample]:
+    """
+    Parse Prometheus exposition text into typed sample rows.
+
+    Why this exists:
+    - `/kpi` scrapes the plain-text `/metrics` endpoint directly
+    - the CLI only needs sample values and labels, not the full Prometheus
+      metadata model
+
+    How to use it:
+    - pass the raw body returned by `client.get_metrics_text()`
+    - ignore comments and malformed lines automatically
+
+    Example:
+    - `samples = parse_prometheus_text_exposition(text)`
+    """
+
+    samples: list[PrometheusSample] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _PROM_SAMPLE_RE.match(line)
+        if match is None:
+            continue
+        labels = _parse_prometheus_labels(match.group("labels") or "")
+        samples.append(
+            PrometheusSample(
+                name=match.group("name"),
+                labels=labels,
+                value=float(match.group("value")),
+            )
+        )
+    return samples
+
+
+def _parse_prometheus_labels(label_block: str) -> dict[str, str]:
+    """
+    Parse one Prometheus label block into a plain dict.
+
+    Why this exists:
+    - exposition lines encode labels inline, and `/kpi` needs them for team,
+      session, tool, and phase filtering
+
+    How to use it:
+    - pass the inside of `{...}` from one exposition sample
+
+    Example:
+    - `_parse_prometheus_labels('phase="tool",team_id="fredlab"')`
+    """
+
+    labels: dict[str, str] = {}
+    if not label_block:
+        return labels
+    for part in label_block.split(","):
+        if "=" not in part:
+            continue
+        key, raw_value = part.split("=", 1)
+        value = raw_value.strip()
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = bytes(value[1:-1], "utf-8").decode("unicode_escape")
+        labels[key.strip()] = value
+    return labels
+
+
+def summarize_prometheus_histograms(
+    samples: Sequence[PrometheusSample],
+) -> list[HistogramSeriesSummary]:
+    """
+    Summarize Prometheus histogram families into `count/sum/avg` rows.
+
+    Why this exists:
+    - Prometheus emits histogram buckets as many lines, but developers usually
+      need a compact per-series summary when validating runtime KPIs
+
+    How to use it:
+    - pass the parsed samples from one `/metrics` scrape
+    - render the returned summaries directly in the CLI
+
+    Example:
+    - `histograms = summarize_prometheus_histograms(samples)`
+    """
+
+    grouped: dict[tuple[str, tuple[tuple[str, str], ...]], dict[str, float]] = {}
+    label_maps: dict[tuple[str, tuple[tuple[str, str], ...]], dict[str, str]] = {}
+    for sample in samples:
+        suffix = None
+        for candidate in ("_count", "_sum"):
+            if sample.name.endswith(candidate):
+                suffix = candidate
+                break
+        if suffix is None:
+            continue
+        base_name = sample.name.removesuffix(suffix)
+        filtered_labels = {k: v for k, v in sample.labels.items() if k != "le"}
+        key = (base_name, tuple(sorted(filtered_labels.items())))
+        grouped.setdefault(key, {})[suffix] = sample.value
+        label_maps[key] = filtered_labels
+
+    summaries: list[HistogramSeriesSummary] = []
+    for key, values in grouped.items():
+        name, _ = key
+        if "_count" not in values and "_sum" not in values:
+            continue
+        summaries.append(
+            HistogramSeriesSummary(
+                name=name,
+                labels=label_maps[key],
+                count=values.get("_count", 0.0),
+                sum_value=values.get("_sum", 0.0),
+            )
+        )
+    return sorted(
+        summaries,
+        key=lambda item: (-item.count, item.name, sorted(item.labels.items())),
+    )
+
+
+def filter_prometheus_samples(
+    samples: Sequence[PrometheusSample],
+    *,
+    pattern: str | None = None,
+) -> list[PrometheusSample]:
+    """
+    Filter Prometheus samples by a free-text pattern over names and labels.
+
+    Why this exists:
+    - `/kpi` should let developers narrow down metrics without learning PromQL
+    - a substring match is enough for laptop debugging and local benchmarks
+
+    How to use it:
+    - pass a pattern like `tool`, `session-123`, or `fredlab`
+    - leave it empty to keep all samples
+
+    Example:
+    - `filtered = filter_prometheus_samples(samples, pattern="team_id=fredlab")`
+    """
+
+    if not pattern:
+        return list(samples)
+    needle = pattern.lower()
+    kept: list[PrometheusSample] = []
+    for sample in samples:
+        haystacks = [sample.name]
+        haystacks.extend(f"{key}={value}" for key, value in sample.labels.items())
+        if any(needle in haystack.lower() for haystack in haystacks):
+            kept.append(sample)
+    return kept
+
+
+def format_metric_value(value: float) -> str:
+    """
+    Format one Prometheus sample value for compact terminal display.
+
+    Why this exists:
+    - `/kpi` mixes counters, gauges, and histogram aggregates and should render
+      readable numbers without noisy floating-point tails
+
+    How to use it:
+    - pass the numeric sample value to print
+
+    Example:
+    - `text = format_metric_value(12.34567)`
+    """
+
+    if value.is_integer():
+        return str(int(value))
+    return f"{value:.2f}"
+
+
+def format_prometheus_labels(
+    labels: dict[str, str], *, keys: Sequence[str] | None = None
+) -> str:
+    """
+    Render a compact label string for CLI KPI output.
+
+    Why this exists:
+    - Prometheus label sets can be wide, but `/kpi` should foreground the
+      execution labels that matter for Fred debugging
+
+    How to use it:
+    - pass the label dict from one sample or histogram summary
+    - optionally restrict the output order to the most useful keys first
+
+    Example:
+    - `text = format_prometheus_labels({"phase": "tool", "team_id": "fredlab"})`
+    """
+
+    if not labels:
+        return "-"
+    ordered_keys = list(keys or ())
+    ordered_keys.extend(key for key in labels if key not in ordered_keys)
+    parts = [f"{key}={labels[key]}" for key in ordered_keys if key in labels]
+    return ", ".join(parts)
+
+
+def render_kpi_report(
+    samples: Sequence[PrometheusSample],
+    *,
+    color_enabled: bool,
+    pattern: str | None = None,
+) -> list[str]:
+    """
+    Render a compact human-readable KPI report from Prometheus samples.
+
+    Why this exists:
+    - developers want a terminal-first KPI view without deploying Grafana just
+      to validate one pod or laptop benchmark run
+    - this function keeps `/kpi` output deterministic and unit-testable
+
+    How to use it:
+    - parse the `/metrics` text first, then pass the samples here
+    - optionally provide a free-text filter pattern
+
+    Example:
+    - `lines = render_kpi_report(samples, color_enabled=True, pattern="tool")`
+    """
+
+    filtered = filter_prometheus_samples(samples, pattern=pattern)
+    if not filtered:
+        return [
+            colorize(
+                "  No KPI metrics matched the requested filter.",
+                color=_ANSI_DIM,
+                enabled=color_enabled,
+            )
+        ]
+
+    histograms = summarize_prometheus_histograms(filtered)
+    histogram_bases = {summary.name for summary in histograms}
+    value_samples = [
+        sample
+        for sample in filtered
+        if not any(
+            sample.name == f"{base}{suffix}"
+            for base in histogram_bases
+            for suffix in ("_bucket", "_sum", "_count")
+        )
+    ]
+
+    process_samples = [
+        sample for sample in value_samples if sample.name.startswith("process_")
+    ]
+    counter_samples = [
+        sample
+        for sample in value_samples
+        if sample.name.endswith("_total")
+        and not sample.name.startswith("process_")
+        and sample.value > 0
+    ]
+    other_samples = [
+        sample
+        for sample in value_samples
+        if sample not in process_samples
+        and sample not in counter_samples
+        and not sample.name.endswith("_created")  # epoch-timestamp noise — skip
+    ]
+
+    lines: list[str] = []
+    title = "  KPI snapshot"
+    if pattern:
+        title += f" — filter={pattern}"
+    lines.append(colorize(title, color=_ANSI_DIM, enabled=color_enabled, bold=True))
+    lines.append(colorize("  " + "─" * 72, color=_ANSI_DIM, enabled=color_enabled))
+
+    if histograms:
+        # Labels that are always the same across every histogram series → show
+        # once as an execution-context block, not repeated on every row.
+        # Labels that are obviously implicit (actor_type=system, status=ok) are
+        # suppressed entirely; they add no debugging value.
+        _SUPPRESS_ALWAYS = {"actor_type", "status"}
+        _CONTEXT_KEYS = (
+            "session_id",
+            "template_agent_id",
+            "agent_instance_id",
+            "team_id",
+            "service",
+            "agent_id",
+        )
+        # Intersection: keep only keys whose value is identical in every series
+        if len(histograms) == 1:
+            shared_labels = {
+                k: v
+                for k, v in histograms[0].labels.items()
+                if k not in _SUPPRESS_ALWAYS
+            }
+        else:
+            shared_labels = {}
+            for key in histograms[0].labels:
+                if key in _SUPPRESS_ALWAYS:
+                    continue
+                val = histograms[0].labels[key]
+                if all(s.labels.get(key) == val for s in histograms[1:]):
+                    shared_labels[key] = val
+
+        lines.append(
+            colorize(
+                "  Phase / latency breakdown:",
+                color=_ANSI_WHITE,
+                enabled=color_enabled,
+                bold=True,
+            )
+        )
+        if shared_labels:
+            ctx_parts = [
+                colorize(k + "=", color=_ANSI_DIM, enabled=color_enabled)
+                + colorize(shared_labels[k], color=_ANSI_GREEN, enabled=color_enabled)
+                for k in _CONTEXT_KEYS
+                if k in shared_labels
+            ]
+            # also append any shared keys not in _CONTEXT_KEYS (in dim)
+            extra_ctx = [
+                colorize(f"{k}={v}", color=_ANSI_DIM, enabled=color_enabled)
+                for k, v in shared_labels.items()
+                if k not in _CONTEXT_KEYS
+            ]
+            ctx_line = "  " + colorize(
+                "context  ", color=_ANSI_DIM, enabled=color_enabled, bold=True
+            ) + "  ".join(ctx_parts + extra_ctx)
+            lines.append(ctx_line)
+
+        for summary in histograms[:10]:
+            phase = summary.labels.get("phase", "")
+            tool = summary.labels.get("tool_name", "")
+            phase_label = phase or tool or summary.name
+            # Per-row: only labels that differ across series and are not suppressed
+            row_labels = {
+                k: v
+                for k, v in summary.labels.items()
+                if k not in _SUPPRESS_ALWAYS
+                and k not in shared_labels
+                and k not in ("phase", "tool_name")  # already in the phase_label
+            }
+            row_label_str = format_prometheus_labels(
+                row_labels,
+                keys=("agent_step", "agent_instance_id", "team_id"),
+            )
+            lines.append(
+                "  "
+                + colorize(
+                    f"[{phase_label}]", color=_ANSI_CYAN, enabled=color_enabled, bold=True
+                )
+                + "  "
+                + colorize(
+                    f"avg={format_metric_value(summary.avg_value):>7} ms",
+                    color=_ANSI_YELLOW,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+                + colorize(
+                    f"  n={format_metric_value(summary.count):>4}"
+                    f"  total={format_metric_value(summary.sum_value):>8} ms",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+                + (
+                    colorize(
+                        f"  ({row_label_str})", color=_ANSI_DIM, enabled=color_enabled
+                    )
+                    if row_label_str != "-"
+                    else ""
+                )
+            )
+
+    if process_samples:
+        lines.append("")
+        lines.append(
+            colorize(
+                "  Process gauges:", color=_ANSI_DIM, enabled=color_enabled, bold=True
+            )
+        )
+        for sample in sorted(process_samples, key=lambda item: item.name):
+            lines.append(
+                "  "
+                + colorize(
+                    sample.name, color=_ANSI_GREEN, enabled=color_enabled, bold=True
+                )
+                + colorize(
+                    f"  value={format_metric_value(sample.value):>8}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+                + colorize(
+                    f"  [{format_prometheus_labels(sample.labels, keys=('pool',))}]",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+
+    if counter_samples:
+        lines.append("")
+        lines.append(
+            colorize("  Counters:", color=_ANSI_DIM, enabled=color_enabled, bold=True)
+        )
+        for sample in sorted(
+            counter_samples, key=lambda item: (-item.value, item.name)
+        )[:10]:
+            counter_color = (
+                _ANSI_RED
+                if any(word in sample.name for word in ("failed", "error"))
+                else _ANSI_YELLOW
+            )
+            lines.append(
+                "  "
+                + colorize(
+                    sample.name, color=counter_color, enabled=color_enabled, bold=True
+                )
+                + colorize(
+                    f"  total={format_metric_value(sample.value):>8}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+                + colorize(
+                    f"  [{format_prometheus_labels(sample.labels, keys=('tool_name', 'agent_instance_id', 'team_id', 'session_id', 'error_code'))}]",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+
+    if other_samples and not pattern:
+        lines.append("")
+        lines.append(
+            colorize(
+                "  Other samples:", color=_ANSI_DIM, enabled=color_enabled, bold=True
+            )
+        )
+        for sample in sorted(other_samples, key=lambda item: item.name)[:5]:
+            lines.append(
+                "  "
+                + colorize(sample.name, color=_ANSI_DIM, enabled=color_enabled)
+                + colorize(
+                    f"  value={format_metric_value(sample.value):>8}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+
+    return lines
 
 
 # Role → (display label, ANSI color)
@@ -1878,6 +2663,7 @@ def run_single_turn(
     message: str,
     session_id: str,
     user_id: str,
+    team_id: str | None,
     verbose: bool,
     stream: bool,
     color_enabled: bool,
@@ -1901,7 +2687,7 @@ def run_single_turn(
     - pass `resume_payload` to resume from a HITL gate
 
     Example:
-    - `exit_code, hitl = run_single_turn(client=client, agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice", verbose=False, stream=False, color_enabled=False)`
+    - `exit_code, hitl = run_single_turn(client=client, agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice", team_id="fredlab", verbose=False, stream=False, color_enabled=False)`
     """
 
     if not stream:
@@ -1910,6 +2696,7 @@ def run_single_turn(
             message=message,
             session_id=session_id,
             user_id=user_id,
+            team_id=team_id,
             resume_payload=resume_payload,
         )
         if "error" in payload:
@@ -1944,6 +2731,7 @@ def run_single_turn(
         message=message,
         session_id=session_id,
         user_id=user_id,
+        team_id=team_id,
         resume_payload=resume_payload,
     ):
         if verbose:
@@ -2010,6 +2798,7 @@ def run_interactive_chat(
     agent_id: str | None,
     session_id: str,
     user_id: str,
+    team_id: str | None,
     verbose: bool,
     stream: bool,
     color_enabled: bool,
@@ -2030,7 +2819,7 @@ def run_interactive_chat(
     - call this function from `main()` with the parsed CLI arguments
 
     Example:
-    - `run_interactive_chat(client=client, agent_id=None, session_id="demo", user_id="alice", verbose=False, stream=False, color_enabled=False, auth_session=None, callback_host="127.0.0.1", callback_port=8765)`
+    - `run_interactive_chat(client=client, agent_id=None, session_id="demo", user_id="alice", team_id="fredlab", verbose=False, stream=False, color_enabled=False, auth_session=None, callback_host="127.0.0.1", callback_port=8765)`
     """
 
     known_agents = client.list_agents()
@@ -2063,10 +2852,19 @@ def run_interactive_chat(
             "Auth: "
             f"{colorize(auth_session.describe(), color=_ANSI_DIM, enabled=color_enabled)}"
         )
-    print("Use /agents to list agents, /agent <id> to switch, /quit to exit.")
+    if team_id:
+        print(
+            "Team: "
+            f"{colorize(team_id, color=_ANSI_GREEN, enabled=color_enabled, bold=True)}"
+        )
+    print(
+        "Use /agents to list agents, /agent <id> to switch, "
+        "/team <id> to set team scope, /kpi to inspect metrics, /quit to exit."
+    )
 
     current_session_id = session_id
     current_stream = stream
+    current_team_id = team_id
     while True:
         try:
             prompt = (
@@ -2083,8 +2881,19 @@ def run_interactive_chat(
 
         if not message:
             continue
-        if message == "/help":
-            print_help()
+        if message.startswith("/help"):
+            question = message.removeprefix("/help").strip()
+            if question:
+                _ask_cli_help(
+                    question=question,
+                    client=client,
+                    agent_id=current_agent,
+                    user_id=user_id,
+                    team_id=current_team_id,
+                    color_enabled=color_enabled,
+                )
+            else:
+                print_help()
             continue
         if message == "/login":
             if auth_session is None:
@@ -2186,7 +2995,11 @@ def run_interactive_chat(
         if message.startswith("/scenario "):
             scenario_path = message.removeprefix("/scenario ").strip()
             try:
-                run_scenario_file(scenario_path, client=client)
+                run_scenario_file(
+                    scenario_path,
+                    client=client,
+                    team_id_override=current_team_id,
+                )
                 print("All checks passed.")
             except (AssertionError, ValueError, FileNotFoundError) as exc:
                 print(f"Scenario failed: {exc}")
@@ -2196,6 +3009,32 @@ def run_interactive_chat(
             print(
                 f"Session set to {colorize(current_session_id, color=_ANSI_DIM, enabled=color_enabled)}"
             )
+            continue
+        if message == "/team":
+            if current_team_id:
+                print(f"Current team: {current_team_id}")
+            else:
+                print("Current team: none")
+            continue
+        if message.startswith("/team "):
+            next_team = message.removeprefix("/team ").strip()
+            if not next_team:
+                print("Usage: /team [team_id|clear]")
+                continue
+            if next_team.lower() in {"clear", "none", "-"}:
+                current_team_id = None
+                print("Cleared team scope.")
+            else:
+                current_team_id = next_team
+                print(
+                    "Team set to "
+                    + colorize(
+                        current_team_id,
+                        color=_ANSI_GREEN,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
             continue
         if message == "/sessions":
             try:
@@ -2254,8 +3093,364 @@ def run_interactive_chat(
                     msgs, session_id=target_session, color_enabled=color_enabled
                 )
             continue
+        if message.startswith("/kpi"):
+            pattern = message.removeprefix("/kpi").strip() or None
+            try:
+                metrics_text = client.get_metrics_text()
+                metric_samples = parse_prometheus_text_exposition(metrics_text)
+            except Exception as exc:
+                print(f"Error fetching KPI metrics: {exc}")
+                continue
+            for line in render_kpi_report(
+                metric_samples,
+                color_enabled=color_enabled,
+                pattern=pattern,
+            ):
+                print(line)
+            continue
+        if message.startswith("/checkpoints"):
+            arg = message.removeprefix("/checkpoints").strip()
+            limit = 20
+            if arg:
+                try:
+                    limit = int(arg)
+                except ValueError:
+                    print("Usage: /checkpoints [limit]  (limit must be an integer)")
+                    continue
+            try:
+                threads = client.list_checkpoint_threads(limit=limit)
+            except Exception as exc:
+                print(f"Error fetching checkpoints: {exc}")
+                continue
+            if not threads:
+                print("No checkpoint threads found.")
+            else:
+                print(
+                    colorize(
+                        f"  Checkpoint threads ({len(threads)} shown, limit={limit}):",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
+                print(
+                    colorize(
+                        f"  {'Thread ID':<36}  {'CPs':>4}  {'Latest':<19}  {'cp struct':>9}  {'blobs':>5}  {'blob data':>9}  {'pend':>4}",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                print(colorize("  " + "─" * 96, color=_ANSI_DIM, enabled=color_enabled))
+                for t in threads:
+                    sid = t.get("session_id", "?")
+                    count = t.get("checkpoint_count", 0)
+                    latest = (t.get("latest_created_at") or "-")[:19]
+                    cp_bytes = fmt_bytes(t.get("checkpoint_bytes_total", 0))
+                    blob_cnt = t.get("blob_count", 0)
+                    blob_bytes = fmt_bytes(t.get("blob_bytes_total", 0))
+                    pending = t.get("pending_write_count", 0)
+                    marker = " ◀" if sid == current_session_id else ""
+                    line_color = _ANSI_CYAN if sid == current_session_id else _ANSI_DIM
+                    pending_color = _ANSI_YELLOW if pending > 0 else _ANSI_DIM
+                    print(
+                        colorize(
+                            f"  {sid:<36}", color=line_color, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {count:>4}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {latest:<19}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {cp_bytes:>9}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {blob_cnt:>5}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {blob_bytes:>9}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {pending:>4}",
+                            color=pending_color,
+                            enabled=color_enabled,
+                        )
+                        + colorize(marker, color=_ANSI_GREEN, enabled=color_enabled)
+                    )
+            continue
+        if message.startswith("/checkpoint "):
+            target_session = message.removeprefix("/checkpoint ").strip()
+            if not target_session:
+                print("Usage: /checkpoint <session_id>")
+                continue
+            try:
+                detail = client.get_checkpoint_thread(target_session)
+            except Exception as exc:
+                print(f"Error fetching checkpoint detail: {exc}")
+                continue
+            checkpoints: list[dict[str, Any]] = detail.get("checkpoints") or []
+            if not checkpoints:
+                print(f"No checkpoints found for session {target_session!r}.")
+            else:
+                print(
+                    colorize(
+                        f"  Checkpoints for session {target_session} ({len(checkpoints)} entries):",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
+                print(
+                    colorize(
+                        f"  {'step':>4}  {'source':<7}  {'node(s)':<20}  {'cp struct':>9}  {'pend':>4}  {'checkpoint_id':<38}  created",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                print(
+                    colorize("  " + "─" * 110, color=_ANSI_DIM, enabled=color_enabled)
+                )
+                for cp in checkpoints:
+                    cp_id = cp.get("checkpoint_id", "?")
+                    step = cp.get("step")
+                    step_str = str(step) if step is not None else "?"
+                    source = cp.get("source") or "?"
+                    nodes = cp.get("node_names") or []
+                    node_str = (
+                        ", ".join(nodes)
+                        if nodes
+                        else ("(start)" if source == "input" else "")
+                    )
+                    node_str = node_str[:20]
+                    cp_bytes = fmt_bytes(cp.get("checkpoint_bytes", 0))
+                    pending = cp.get("pending_write_count", 0)
+                    created = (cp.get("created_at") or "-")[:19]
+                    pending_color = _ANSI_YELLOW if pending > 0 else _ANSI_DIM
+                    print(
+                        colorize(
+                            f"  {step_str:>4}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {source:<7}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {node_str:<20}", color=_ANSI_CYAN, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {cp_bytes:>9}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {pending:>4}",
+                            color=pending_color,
+                            enabled=color_enabled,
+                        )
+                        + colorize(
+                            f"  {cp_id:<38}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {created}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                    )
+                print(
+                    colorize(
+                        "\n  Blob content (channel states) is shared across checkpoints at thread level.",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                print(
+                    colorize(
+                        "  Use /checkpoints to see total blob size for this thread.",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+            continue
+        if message == "/stats":
+            try:
+                stats = client.get_checkpoint_stats()
+            except Exception as exc:
+                print(f"Error fetching checkpoint stats: {exc}")
+                continue
+            cp_bytes = fmt_bytes(stats.get("checkpoint_bytes_approx", 0))
+            blob_bytes = fmt_bytes(stats.get("blob_bytes_approx", 0))
+            total_bytes = fmt_bytes(
+                stats.get("checkpoint_bytes_approx", 0)
+                + stats.get("blob_bytes_approx", 0)
+            )
+            pending = stats.get("pending_write_count", 0)
+            pending_color = _ANSI_YELLOW if pending > 0 else _ANSI_DIM
+            print(
+                colorize(
+                    "  Checkpoint storage stats:",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
+            print(colorize("  " + "─" * 50, color=_ANSI_DIM, enabled=color_enabled))
+            print(
+                colorize(
+                    f"  Threads:              {stats.get('thread_count', 0):>6}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            print(
+                colorize(
+                    f"  Checkpoints:          {stats.get('checkpoint_count', 0):>6}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+                + colorize(
+                    f"  (pointer structs: {cp_bytes})",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            print(
+                colorize(
+                    f"  Blob rows (channels): {stats.get('blob_count', 0):>6}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+                + colorize(
+                    f"  (channel states:  {blob_bytes})",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            print(
+                colorize(
+                    f"  Pending writes:       {pending:>6}",
+                    color=pending_color,
+                    enabled=color_enabled,
+                )
+                + (
+                    colorize(
+                        "  ⚠ non-zero: interrupted turn writes not cleaned up",
+                        color=_ANSI_YELLOW,
+                        enabled=color_enabled,
+                    )
+                    if pending > 0
+                    else ""
+                )
+            )
+            print(colorize("  " + "─" * 50, color=_ANSI_DIM, enabled=color_enabled))
+            print(
+                colorize(
+                    f"  Total storage approx: {total_bytes}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
+            print(
+                colorize(
+                    "\n  Note: blob rows are deduplicated by (channel, version) within a thread.",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            print(
+                colorize(
+                    "  Blob data dominates cost and grows with total conversation turns.",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            continue
+        if message in {"/context", "/execution-context"}:
+            print(
+                colorize(
+                    "  Execution context summary:",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
+            print(colorize("  " + "─" * 50, color=_ANSI_DIM, enabled=color_enabled))
+            agent_label = colorize(
+                current_agent, color=_ANSI_CYAN, enabled=color_enabled, bold=True
+            )
+            session_label = (
+                colorize(current_session_id, color=_ANSI_GREEN, enabled=color_enabled)
+                if current_session_id
+                else colorize("none", color=_ANSI_YELLOW, enabled=color_enabled)
+            )
+            mode_label = colorize(
+                execution_mode_label(stream=current_stream),
+                color=_ANSI_GREEN if current_stream else _ANSI_YELLOW,
+                enabled=color_enabled,
+                bold=True,
+            )
+            user_label = colorize(
+                user_id or "anonymous", color=_ANSI_DIM, enabled=color_enabled
+            )
+            auth_label = (
+                colorize(
+                    auth_session.describe(), color=_ANSI_DIM, enabled=color_enabled
+                )
+                if auth_session is not None
+                else colorize("not configured", color=_ANSI_DIM, enabled=color_enabled)
+            )
+            print(f"  Agent:    {agent_label}")
+            print(f"  Session:  {session_label}")
+            print(f"  User:     {user_label}")
+            print(
+                "  Team:     "
+                + (
+                    colorize(
+                        current_team_id,
+                        color=_ANSI_GREEN,
+                        enabled=color_enabled,
+                    )
+                    if current_team_id
+                    else colorize("none", color=_ANSI_YELLOW, enabled=color_enabled)
+                )
+            )
+            print(f"  Mode:     {mode_label}")
+            print(f"  Auth:     {auth_label}")
+            print(
+                f"  Pod URL:  {colorize(client.base_url, color=_ANSI_DIM, enabled=color_enabled)}"
+            )
+            print(
+                "  Metrics:  "
+                + colorize(
+                    client.metrics_url or "not configured",
+                    color=_ANSI_DIM if client.metrics_url else _ANSI_YELLOW,
+                    enabled=color_enabled,
+                )
+            )
+            print(
+                colorize(
+                    "\n  Note: execution_grant is issued by control-plane for production runs.",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            continue
         if message in {"/quit", "/exit"}:
             return 0
+
+        if message.startswith("/"):
+            bare = message.split()[0]
+            _USAGE_HINTS: dict[str, str] = {
+                "/session": "/session <id>",
+                "/team": "/team [team_id|clear]",
+                "/agent": "/agent <agent_id>  — use /agents to list available agents",
+                "/scenario": "/scenario <file>",
+                "/checkpoint": "/checkpoint <thread_id>  — use /checkpoints to list threads",
+            }
+            if bare in _USAGE_HINTS:
+                print(f"Usage: {_USAGE_HINTS[bare]}")
+            else:
+                print(
+                    f"Unknown command: {bare!r}  "
+                    "Type /help for available commands, or /help <question> to ask."
+                )
+            continue
 
         exit_code, hitl = run_single_turn(
             client=client,
@@ -2263,6 +3458,7 @@ def run_interactive_chat(
             message=message,
             session_id=current_session_id,
             user_id=user_id,
+            team_id=current_team_id,
             verbose=verbose,
             stream=current_stream,
             color_enabled=color_enabled,
@@ -2304,6 +3500,7 @@ def run_interactive_chat(
                 message="",
                 session_id=current_session_id,
                 user_id=user_id,
+                team_id=current_team_id,
                 verbose=verbose,
                 stream=current_stream,
                 color_enabled=color_enabled,
@@ -2404,6 +3601,7 @@ def _scenario_run_turn(
     *,
     agent_id: str,
     user_id: str,
+    team_id: str | None,
     run_id: str,
     step_id: str,
 ) -> None:
@@ -2422,6 +3620,7 @@ def _scenario_run_turn(
             message=message,
             session_id=session_id,
             user_id=user_id,
+            team_id=team_id,
         )
     elif mode == "final":
         events = [
@@ -2430,6 +3629,7 @@ def _scenario_run_turn(
                 message=message,
                 session_id=session_id,
                 user_id=user_id,
+                team_id=team_id,
             )
         ]
     else:
@@ -2446,7 +3646,12 @@ def _scenario_run_turn(
     )
 
 
-def run_scenario_file(path: Path | str, *, client: AgentPodClient) -> None:
+def run_scenario_file(
+    path: Path | str,
+    *,
+    client: AgentPodClient,
+    team_id_override: str | None = None,
+) -> None:
     """
     Parse and execute one YAML scenario file against the given pod client.
 
@@ -2457,7 +3662,7 @@ def run_scenario_file(path: Path | str, *, client: AgentPodClient) -> None:
       gets the runner for free
 
     How to use it:
-    - CLI:   fred-agent-chat --scenario path/to/sentinel_smoke.yaml
+    - CLI:   fred-agent-chat --scenario path/to/sentinel_smoke.yaml --team-id fredlab
     - pytest: call directly and let AssertionError propagate to pytest
 
     The function raises AssertionError on a failed check and ValueError on a
@@ -2469,6 +3674,7 @@ def run_scenario_file(path: Path | str, *, client: AgentPodClient) -> None:
     name = raw.get("name", path)
     agent_id = raw["agent_id"]
     user_id = raw.get("user_id", "test-user")
+    team_id = team_id_override or raw.get("team_id")
 
     print(f"\n{'=' * 60}")
     print(f"Scenario : {name}")
@@ -2487,6 +3693,7 @@ def run_scenario_file(path: Path | str, *, client: AgentPodClient) -> None:
                 step,
                 agent_id=agent_id,
                 user_id=user_id,
+                team_id=team_id,
                 run_id=run_id,
                 step_id=step_id,
             )
@@ -2516,6 +3723,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pod base URL. Defaults to app.port + app.base_url from configuration.yaml.",
     )
     parser.add_argument(
+        "--metrics-url",
+        default=None,
+        help=(
+            "Prometheus metrics URL used by /kpi. Defaults to app.metrics_port "
+            "from configuration.yaml when available."
+        ),
+    )
+    parser.add_argument(
         "--agent",
         default=None,
         help="Optional agent id. Defaults to the first registered agent.",
@@ -2529,6 +3744,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--user-id",
         default=getpass.getuser(),
         help="User id sent to the pod context.",
+    )
+    parser.add_argument(
+        "--team-id",
+        default=os.getenv("FRED_AGENT_TEAM_ID"),
+        help="Optional team id sent to the pod context for team-scoped execution.",
     )
     parser.add_argument(
         "--login",
@@ -2623,12 +3843,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     base_url = normalize_base_url(args.base_url)
+    metrics_url = (
+        args.metrics_url.rstrip("/")
+        if args.metrics_url
+        else default_agent_metrics_url(base_url=base_url)
+    )
     color_enabled = colors_enabled(no_color=args.no_color)
 
     config_file = default_configuration_file()
     print(f"[chat] env file  : {env_file}")
     print(f"[chat] config    : {config_file} (exists={config_file.exists()})")
     print(f"[chat] pod url   : {base_url}")
+    print(f"[chat] metrics   : {metrics_url or 'not configured'}")
 
     http_client = httpx.Client(timeout=httpx.Timeout(30.0, connect=5.0, read=None))
     auth_session = None
@@ -2661,6 +3887,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     client = AgentPodClient(
         base_url=base_url,
         http_client=http_client,
+        metrics_url=metrics_url,
         token_provider=_token_provider
         if auth_session is not None or static_token
         else None,
@@ -2700,7 +3927,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Logged in as {auth_session.current_username()}.")
         if args.scenario:
             try:
-                run_scenario_file(args.scenario, client=client)
+                run_scenario_file(
+                    args.scenario,
+                    client=client,
+                    team_id_override=args.team_id,
+                )
                 print("\nAll checks passed.")
                 return 0
             except AssertionError as exc:
@@ -2715,6 +3946,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 message=" ".join(args.message),
                 session_id=args.session_id,
                 user_id=args.user_id,
+                team_id=args.team_id,
                 verbose=args.verbose,
                 stream=args.stream,
                 color_enabled=color_enabled,
@@ -2725,6 +3957,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             agent_id=args.agent,
             session_id=args.session_id,
             user_id=args.user_id,
+            team_id=args.team_id,
             verbose=args.verbose,
             stream=args.stream,
             color_enabled=color_enabled,
@@ -2746,12 +3979,16 @@ __all__ = [
     "DEFAULT_AGENT_POD_BASE_URL",
     "build_parser",
     "completion_candidates",
+    "default_agent_metrics_url",
     "default_agent_pod_base_url",
     "main",
     "normalize_base_url",
+    "parse_prometheus_text_exposition",
+    "render_kpi_report",
     "run_interactive_chat",
     "run_scenario_file",
     "run_single_turn",
+    "summarize_prometheus_histograms",
 ]
 
 

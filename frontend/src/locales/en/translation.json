@@ -1345,7 +1345,8 @@
       },
       "newChat": "New chat",
       "chatList": {
-        "title": "Chat"
+        "title": "Chat",
+        "emptyManaged": "Managed sessions will appear here once the control-plane session metadata migration is implemented."
       }
     },
     "userSettings": {

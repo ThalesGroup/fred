@@ -12,43 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
-import { loadPermissions } from "../common/config";
+import { useCallback, useMemo } from "react";
+import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 
-// Hook to check permissions
+/**
+ * Read the flattened frontend permission summary from control-plane bootstrap.
+ *
+ * Why this hook exists:
+ * - route guards and UI affordances should use the same bootstrap-owned
+ *   permission list instead of triggering a second legacy permissions call
+ *
+ * How to use it:
+ * - call from components or guards that need `resource:action` checks
+ * - use `loading` to avoid false negatives while bootstrap is still resolving
+ *
+ * Example:
+ * - `const { can, loading } = usePermissions();`
+ */
 export const usePermissions = () => {
-  const [permissions, setPermissions] = useState<string[] | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const { permissionItems, isLoading, refetch } = useFrontendBootstrap();
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const perms = await loadPermissions();
-        if (mounted) setPermissions(perms);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const permissions = useMemo(() => permissionItems, [permissionItems]);
 
-  const can = (resource: string, action: string) => {
-    const list = permissions ?? [];
-    return list.some((p) => p.toLowerCase() === `${resource}:${action}`.toLowerCase());
-  };
+  const can = useCallback(
+    (resource: string, action: string) => {
+      const expected = `${resource}:${action}`.toLowerCase();
+      return permissions.some((permission) => permission.toLowerCase() === expected);
+    },
+    [permissions],
+  );
 
-  const refreshPermissions = async () => {
-    setLoading(true);
-    try {
-      const perms = await loadPermissions();
-      setPermissions(perms);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const refreshPermissions = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
-  return { permissions: permissions ?? [], loading, can, refreshPermissions };
+  return { permissions, loading: isLoading, can, refreshPermissions };
 };

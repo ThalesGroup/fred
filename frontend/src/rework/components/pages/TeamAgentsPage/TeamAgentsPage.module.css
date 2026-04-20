@@ -1,7 +1,282 @@
 .teamAgentContainer {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  height: 100%;
   min-height: 0;
+  height: 100%;
+}
+
+.title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-l);
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  text-align: center;
+}
+
+.bannerNotice {
+  margin: 0 auto var(--spacing-l);
+  padding: var(--spacing-s) var(--spacing-m);
+  border-radius: var(--radius-s, 0.75rem);
+  background: var(--surface-container-low, #f5f5f8);
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-medium);
+}
+
+.agentList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 360px));
+  justify-content: center;
+  gap: var(--spacing-m);
+  padding: 0 var(--spacing-l) var(--spacing-l);
+  overflow: auto;
+}
+
+.agentCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 260px;
+  border: 1px solid var(--outline, #d6d6de);
+  border-radius: var(--radius-m, 1rem);
+  background: var(--surface-container-lowest, #fff);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.agentIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-l);
+}
+
+.agentPresentation {
+  display: flex;
+  gap: var(--spacing-m);
+  align-items: center;
+}
+
+.agentIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: var(--primary-container, #e8def8);
+  color: var(--primary, #6750a4);
+  font-size: 1.5rem;
+}
+
+.agentHeading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.agentName {
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}
+
+.agentMeta {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-small);
+}
+
+.agentStatus {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font: var(--font-label-small);
+  text-transform: uppercase;
+}
+
+.agentStatus[data-status="enabled"] {
+  background: rgba(46, 125, 50, 0.12);
+  color: #2e7d32;
+}
+
+.agentStatus[data-status="disabled"] {
+  background: rgba(176, 0, 32, 0.12);
+  color: #b00020;
+}
+
+.agentDescription {
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-medium);
+  white-space: pre-wrap;
+}
+
+.agentFooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m) var(--spacing-l) var(--spacing-l);
+  border-top: 1px solid var(--outline-variant, #ececf2);
+}
+
+.agentTemplate {
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-small);
+}
+
+.agentActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-s);
+  flex-wrap: wrap;
+}
+
+.chatLink {
+  text-decoration: none;
+}
+
+.emptyState {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-l);
+  padding: var(--spacing-l);
+  color: var(--on-surface);
+  text-align: center;
+}
+
+.emptyStatePresentation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  align-items: center;
+  font: var(--font-title-large);
+}
+
+.emptyStateIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--primary);
+  font-size: 4.5rem;
+}
+
+.pageError {
+  padding: var(--spacing-l);
+  color: var(--error, #b00020);
+  font: var(--font-body-large);
+}
+
+.modalCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  margin: 1rem auto;
+  padding: var(--spacing-l);
+  border-radius: var(--radius-l, 1.25rem);
+  background: var(--surface-container-lowest, #fff);
+  overflow: auto;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-m);
+  align-items: flex-start;
+}
+
+.modalPresentation {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.modalIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 999px;
+  background: var(--primary-container, #e8def8);
+  color: var(--primary, #6750a4);
+  font-size: 1.75rem;
+}
+
+.modalTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.modalTitle {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.modalSubtitle {
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-medium);
+}
+
+.modalActions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.modalContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.fieldLabel {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.templateSelect {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--outline, #d6d6de);
+  border-radius: var(--radius-s, 0.75rem);
+  background: var(--surface-container-lowest, #fff);
+  color: var(--on-surface);
+  font: var(--font-body-large);
+}
+
+.templateHint {
+  margin: 0;
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-medium);
+}
+
+@media (max-width: 720px) {
+  .title {
+    flex-direction: column;
+  }
+
+  .modalHeader {
+    flex-direction: column;
+  }
+
+  .modalActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .agentActions {
+    justify-content: stretch;
+  }
 }

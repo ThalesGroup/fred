@@ -1,16 +1,30 @@
 import { Box } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { TeamDocumentsLibrary } from "../components/teamDetails/TeamDocumentsLibrary";
+import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { useGetTeamQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
-import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../slices/controlPlane/controlPlaneOpenApi.ts";
 import { KnowledgeHub } from "./KnowledgeHub.tsx";
 
+/**
+ * Route a team knowledge page to the personal hub or a collaborative-team view.
+ *
+ * Why this component exists:
+ * - the frontend still needs one route-level decision point while bootstrap and
+ *   team selection are converging onto control-plane-owned state
+ *
+ * How to use it:
+ * - mount it on `/team/:teamId/*` routes
+ *
+ * Example:
+ * - `<KnowledgePage />`
+ */
 export function KnowledgePage() {
   const { teamId } = useParams<{ teamId: string }>();
-  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
-  const isPersonalTeam = teamId === userDetails?.personalTeam.id;
+  const { activeTeam } = useFrontendBootstrap();
+  const personalTeamId = activeTeam?.id ?? "personal";
+  const isPersonalTeam = teamId === personalTeamId;
   const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
-  const team = isPersonalTeam ? fetchedTeam : userDetails?.personalTeam;
+  const team = isPersonalTeam ? activeTeam : fetchedTeam;
 
   // todo: handle error (404)
 
@@ -29,7 +43,7 @@ export function KnowledgePage() {
         overflow: "hidden",
       }}
     >
-      {teamId === userDetails?.personalTeam.id ? (
+      {teamId === personalTeamId ? (
         <KnowledgeHub />
       ) : (
         <TeamDocumentsLibrary teamId={teamId} canCreateTag={team?.permissions?.includes("can_update_resources")} />

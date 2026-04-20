@@ -1,0 +1,175 @@
+/* Layout ------------------------------------------------------------------ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-container-lowest, #fff);
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m, 1rem);
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
+  border-bottom: 1px solid var(--outline-muted, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
+  color: var(--on-surface, #1c1b1f);
+}
+
+.headerMeta {
+  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
+  color: var(--on-surface-retreat, #6e6e7a);
+  flex: 1;
+}
+
+.headerMeta code {
+  font-family: monospace;
+  font-size: 0.8em;
+}
+
+/* Messages ---------------------------------------------------------------- */
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-m, 1rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s, 0.75rem);
+}
+
+.empty {
+  margin: auto;
+  color: var(--on-surface-retreat, #6e6e7a);
+  font: var(--font-body-large, 1rem/1.5 sans-serif);
+  text-align: center;
+}
+
+.thinking {
+  align-self: flex-start;
+  color: var(--on-surface-retreat, #6e6e7a);
+  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
+  font-style: italic;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Bubbles ----------------------------------------------------------------- */
+
+.bubble {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs, 0.25rem);
+  max-width: 72%;
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
+  border-radius: var(--radius-s, 0.5rem);
+}
+
+.bubbleUser {
+  align-self: flex-end;
+  background: var(--primary-container, #e8def8);
+  color: var(--on-primary-container, #21005d);
+}
+
+.bubbleAgent {
+  align-self: flex-start;
+  background: var(--surface-container, #f3edf7);
+  color: var(--on-surface, #1c1b1f);
+}
+
+.bubbleRole {
+  font: var(--font-label-large, 600 0.875rem/1.25 sans-serif);
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bubbleText {
+  margin: 0;
+  font: var(--font-body-large, 1rem/1.6 sans-serif);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.streaming {
+  opacity: 0.85;
+}
+
+.bubbleTool {
+  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
+  color: var(--on-surface-retreat, #6e6e7a);
+  font-style: italic;
+}
+
+/* HITL card --------------------------------------------------------------- */
+
+.hitlCard {
+  align-self: flex-start;
+  max-width: 72%;
+  padding: var(--spacing-m, 1rem);
+  border: 1px solid var(--outline, #cac4d0);
+  border-radius: var(--radius-s, 0.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s, 0.75rem);
+  background: var(--surface-container, #f3edf7);
+}
+
+.hitlTitle {
+  margin: 0;
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
+  color: var(--on-surface, #1c1b1f);
+}
+
+.hitlQuestion {
+  margin: 0;
+  font: var(--font-body-large, 1rem/1.5 sans-serif);
+  color: var(--on-surface, #1c1b1f);
+}
+
+.hitlChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs, 0.5rem);
+}
+
+.hitlFreeText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 0.5rem);
+}
+
+/* Footer / input area ----------------------------------------------------- */
+
+.footer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-s, 0.75rem);
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
+  border-top: 1px solid var(--outline-muted, #e0e0e0);
+  flex-shrink: 0;
+}
+
+.footer > :first-child {
+  flex: 1;
+}
+
+/* Error state ------------------------------------------------------------- */
+
+.error {
+  padding: var(--spacing-m, 1rem);
+  color: var(--error-main, #b3261e);
+  font: var(--font-body-large, 1rem/1.5 sans-serif);
+}

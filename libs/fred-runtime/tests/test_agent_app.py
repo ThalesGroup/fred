@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import time
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from fred_core.kpi.kpi_writer import KPIWriter
+from fred_core.kpi.log_kpi_store import KpiLogStore
+from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
+from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.models import ReActAgentDefinition
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.runtime_context import get_runtime_context
 
 
 class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
@@ -160,7 +168,11 @@ class _TeamScopeAgent(ReActAgent):
 
 
 def _build_test_config(
-    tmp_path, *, control_plane_url: str | None = None
+    tmp_path,
+    *,
+    control_plane_url: str | None = None,
+    metrics_backend: str = "logging",
+    kpi_process_metrics_interval_sec: int = 0,
 ) -> AgentPodConfig:
     """
     Build an offline pod config for the authored-tool regression test.
@@ -183,6 +195,8 @@ def _build_test_config(
                 "base_url": "/pod/v1",
                 "port": 8000,
                 "log_level": "info",
+                "metrics_port": 9900,
+                "kpi_process_metrics_interval_sec": kpi_process_metrics_interval_sec,
             },
             "security": {
                 "m2m": {
@@ -199,6 +213,9 @@ def _build_test_config(
             },
             "ai": {
                 "knowledge_flow_url": "http://localhost:8111/knowledge-flow/v1",
+            },
+            "observability": {
+                "metrics": metrics_backend,
             },
             "storage": {
                 "postgres": {
@@ -275,13 +292,43 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
 
         openapi_response = client.get("/pod/v1/openapi.json")
         assert openapi_response.status_code == 200
+        openapi_spec = openapi_response.json()
+        execute_schema = openapi_spec["paths"]["/pod/v1/agents/execute"]["post"][
+            "responses"
+        ]["200"]["content"]["application/json"]["schema"]
+        messages_schema = openapi_spec["paths"][
+            "/pod/v1/agents/sessions/{session_id}/messages"
+        ]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        list_models_schema = openapi_spec["paths"]["/v1/models"]["get"]["responses"][
+            "200"
+        ]["content"]["application/json"]["schema"]
+        components = openapi_spec["components"]["schemas"]
+
+        assert "anyOf" in execute_schema
+        assert messages_schema["items"]["$ref"] == "#/components/schemas/ChatMessage"
+        assert list_models_schema["$ref"] == "#/components/schemas/OpenAIModelList"
+        for schema_name in (
+            "RuntimeExecuteRequest",
+            "ExecutionGrant",
+            "AssistantDeltaRuntimeEvent",
+            "AwaitingHumanRuntimeEvent",
+            "FinalRuntimeEvent",
+            "NodeErrorRuntimeEvent",
+            "ToolCallRuntimeEvent",
+            "ToolResultRuntimeEvent",
+            "TurnPersistedEvent",
+            "ChatMessage",
+            "OpenAIModelList",
+        ):
+            assert schema_name in components
 
         execute_response = client.post(
             "/pod/v1/agents/execute",
             json={
                 "agent_id": "rags.sample.echo",
-                "message": "hello",
-                "context": {"session_id": "session-execute", "user_id": "alice"},
+                "input": "hello",
+                "session_id": "session-execute",
+                "runtime_context": {"user_id": "alice"},
             },
         )
         assert execute_response.status_code == 200
@@ -292,8 +339,9 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
             "/pod/v1/agents/execute/stream",
             json={
                 "agent_id": "rags.sample.echo",
-                "message": "hello",
-                "context": {"session_id": "session-stream", "user_id": "alice"},
+                "input": "hello",
+                "session_id": "session-stream",
+                "runtime_context": {"user_id": "alice"},
             },
         )
         assert stream_response.status_code == 200
@@ -403,18 +451,27 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         ),
     )
 
+    now = int(time.time())
+    grant = ExecutionGrant(
+        user_id="alice",
+        team_id="fredlab",
+        agent_instance_id="instance-1",
+        action=ExecutionGrantAction.EXECUTE,
+        audience="http://localhost",
+        issued_at=now - 10,
+        expires_at=now + 3600,
+    )
+
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
             json={
                 "agent_instance_id": "instance-1",
-                "message": "what team am I in?",
-                "context": {
-                    "session_id": "managed-session",
-                    "user_id": "alice",
-                    "team_id": "caller-supplied-team",
-                },
+                "input": "what team am I in?",
+                "session_id": "managed-session",
+                "runtime_context": {"user_id": "alice", "team_id": "fredlab"},
+                "execution_grant": grant.model_dump(mode="json"),
             },
         )
 
@@ -422,3 +479,328 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     payload = response.json()
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+
+
+def test_create_agent_app_bootstraps_prometheus_kpis_and_background_emitters(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Ensure pod startup restores the historical Prometheus KPI wiring.
+
+    Why this exists:
+    - the old Fred backends exposed Prometheus metrics and periodic process/pool
+      KPIs, but `fred-runtime` still defaulted to a no-op writer
+    - this regression locks the backend completeness gate before CLI `/kpi`
+      support starts depending on the metrics surface
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    observed: dict[str, object] = {}
+
+    def _fake_start_http_server(port: int, addr: str = "127.0.0.1") -> tuple[object]:
+        observed["metrics_server"] = (port, addr)
+
+        class _FakeServer:
+            def shutdown(self) -> None:
+                observed["metrics_shutdown"] = True
+
+        return (_FakeServer(),)
+
+    async def _neverending_process(interval_s: float, kpi_writer) -> None:
+        observed["process_task"] = (interval_s, type(kpi_writer).__name__)
+        await asyncio.sleep(3600)
+
+    async def _neverending_pool(
+        interval_s: float, kpi_writer, engine, *, pool_name: str = "postgres"
+    ) -> None:
+        observed["pool_task"] = (
+            interval_s,
+            type(kpi_writer).__name__,
+            pool_name,
+            engine is not None,
+        )
+        await asyncio.sleep(3600)
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(agent_app_module, "start_http_server", _fake_start_http_server)
+    monkeypatch.setattr(agent_app_module, "emit_process_kpis", _neverending_process)
+    monkeypatch.setattr(agent_app_module, "emit_sql_pool_kpis", _neverending_pool)
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            metrics_backend="prometheus",
+            kpi_process_metrics_interval_sec=7,
+        ),
+    )
+
+    with TestClient(app):
+        runtime_writer = get_runtime_context().config.kpi_writer
+        assert isinstance(runtime_writer, KPIWriter)
+        assert isinstance(runtime_writer.store, PrometheusKPIStore)
+        assert isinstance(runtime_writer.store._delegate, KpiLogStore)
+
+    assert observed["metrics_server"] == (9900, "127.0.0.1")
+    assert observed["process_task"] == (7.0, "KPIWriter")
+    assert observed["pool_task"] == (7.0, "KPIWriter", "fred-runtime-postgres", True)
+    assert observed["metrics_shutdown"] is True
+
+
+def test_create_agent_app_keeps_log_kpis_when_prometheus_is_disabled(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Ensure logging-mode pods still get a concrete KPI writer instead of a no-op.
+
+    Why this exists:
+    - laptop benches and local debugging need KPI events even when Prometheus is
+      not enabled, otherwise the CLI and summary logs have nothing to inspect
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    observed: dict[str, object] = {"metrics_server": False}
+
+    def _unexpected_start_http_server(port: int, addr: str = "127.0.0.1") -> None:
+        observed["metrics_server"] = (port, addr)
+        return None
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    monkeypatch.setattr(
+        agent_app_module, "start_http_server", _unexpected_start_http_server
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app):
+        runtime_writer = get_runtime_context().config.kpi_writer
+        assert isinstance(runtime_writer, KPIWriter)
+        assert isinstance(runtime_writer.store, KpiLogStore)
+
+    assert observed["metrics_server"] is False
+
+
+def test_managed_resume_requires_resume_grant(monkeypatch, tmp_path) -> None:
+    """
+    Ensure managed HITL resume calls require a `resume` execution grant.
+
+    Why this exists:
+    - resume flows must not reuse normal `execute` grants
+    - the runtime should reject that mismatch before any downstream resolution
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _TeamScopeAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(
+        registry=registry,
+        config=_build_test_config(
+            tmp_path,
+            control_plane_url="http://control-plane:8222/control-plane/v1",
+        ),
+    )
+
+    now = int(time.time())
+    grant = ExecutionGrant(
+        user_id="alice",
+        team_id="fredlab",
+        agent_instance_id="instance-1",
+        action=ExecutionGrantAction.EXECUTE,
+        audience="http://localhost",
+        issued_at=now - 10,
+        expires_at=now + 3600,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_instance_id": "instance-1",
+                "input": "",
+                "session_id": "managed-session",
+                "resume_payload": {"choice_id": "confirm"},
+                "execution_grant": grant.model_dump(mode="json"),
+            },
+        )
+
+    assert response.status_code == 403
+    assert "grant action mismatch" in response.json()["detail"]
+
+
+def test_execute_route_propagates_checkpoint_and_observability_context(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Ensure the pod bridges checkpoint and observability fields into internal execution.
+
+    Why this exists:
+    - resume validation and observability enrichment both rely on the internal
+      request carrying checkpoint/correlation metadata from the public contract
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    seen: dict[str, object] = {}
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition, request, access_token=None, *, team_id=None, registry=None
+    ):
+        seen["checkpoint_id"] = request.checkpoint_id
+        seen["context"] = dict(request.context or {})
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    async def _fake_load_checkpoint(
+        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
+    ):
+        _ = (checkpointer, thread_id, checkpoint_ns)
+        return {"id": checkpoint_id or "cp-1", "channel_values": {}}
+
+    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-1",
+                "checkpoint_id": "cp-1",
+                "runtime_context": {
+                    "user_id": "alice",
+                    "team_id": "fredlab",
+                    "trace_id": "trace-1",
+                    "correlation_id": "corr-1",
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert seen["checkpoint_id"] == "cp-1"
+    assert seen["context"] == {
+        "session_id": "session-1",
+        "checkpoint_id": "cp-1",
+        "user_id": "alice",
+        "team_id": "fredlab",
+        "trace_id": "trace-1",
+        "correlation_id": "corr-1",
+        "execution_action": "execute",
+    }
+
+
+def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
+    """
+    Ensure resume requests fail fast when the checkpoint is not waiting for input.
+
+    Why this exists:
+    - stale or already-consumed checkpoints should not reach the agent runtime
+    - the backend completeness gate requires explicit local validation here
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    async def _fake_load_checkpoint(
+        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
+    ):
+        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+        return {
+            "id": "cp-1",
+            "channel_values": {
+                "runtime_kind": "graph_v2",
+                "pending": False,
+                "pending_checkpoint_id": "cp-1",
+            },
+        }
+
+    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    config = _build_test_config(tmp_path)
+    app = create_agent_app(registry=registry, config=config)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "",
+                "session_id": "session-1",
+                "checkpoint_id": "cp-1",
+                "resume_payload": {"choice_id": "confirm"},
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "checkpoint is not waiting for resume."

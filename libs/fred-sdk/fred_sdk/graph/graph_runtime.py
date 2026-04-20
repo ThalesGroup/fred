@@ -1287,8 +1287,8 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         return state, self._graph.entry_node, None
 
     def _checkpoint_key(self, config: ExecutionConfig) -> str:
-        if config.thread_id:
-            return config.thread_id
+        if config.session_id:
+            return config.session_id
         runtime_session_id = self._binding.runtime_context.session_id
         if runtime_session_id:
             return runtime_session_id
@@ -1683,6 +1683,7 @@ def _graph_phase_timer(
         "agent_id": agent_id,
         "agent_step": agent_step,
     }
+    dims.update(_runtime_observability_dims(binding=binding))
     if extra_dims:
         dims.update(dict(extra_dims))
     return metrics.timer(
@@ -1702,14 +1703,55 @@ def _start_runtime_span(
     tracer = services.tracer
     if tracer is None:
         return None
+    span_attributes: dict[str, str | int | float | bool | None] = dict(
+        _runtime_observability_dims(binding=binding)
+    )
+    if attributes:
+        span_attributes.update(dict(attributes))
     try:
         return tracer.start_span(
-            name=name,
-            context=binding.portable_context,
-            attributes=attributes,
+            name=name, context=binding.portable_context, attributes=span_attributes
         )
     except Exception:
-        return None
+        try:
+            return tracer.start_span(name=name, **span_attributes)
+        except Exception:
+            return None
+
+
+def _runtime_observability_dims(
+    *, binding: BoundRuntimeContext
+) -> dict[str, str | None]:
+    """
+    Derive the shared observability identity set for one bound execution.
+
+    Why this exists:
+    - runtime KPI rows and spans must preserve the same managed execution
+      identity across execute, resume, and HITL flows
+    - centralising the projection avoids drift between metrics and tracing
+
+    How to use it:
+    - call from span/timer helpers right before emitting observability payloads
+    - prefer adding new managed identity fields here rather than duplicating
+      ad hoc dims at each call site
+
+    Example:
+    - `dims = _runtime_observability_dims(binding=binding)`
+    """
+
+    portable = binding.portable_context
+    baggage = portable.baggage
+    return {
+        "user_id": portable.user_id,
+        "team_id": portable.team_id,
+        "session_id": portable.session_id,
+        "trace_id": portable.trace_id,
+        "correlation_id": portable.correlation_id,
+        "agent_instance_id": baggage.get("agent_instance_id"),
+        "template_agent_id": baggage.get("template_agent_id"),
+        "checkpoint_id": baggage.get("checkpoint_id"),
+        "execution_action": baggage.get("execution_action"),
+    }
 
 
 def _resolve_model_name(model: BaseChatModel) -> str | None:

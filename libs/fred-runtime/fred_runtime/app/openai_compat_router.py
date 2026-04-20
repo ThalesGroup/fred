@@ -54,6 +54,8 @@ from fastapi.responses import StreamingResponse
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
+    OpenAIModelCard,
+    OpenAIModelList,
     fred_event_to_openai_chunk,
 )
 
@@ -91,8 +93,8 @@ def create_openai_compat_router(
     router = APIRouter(tags=["OpenAI Compat"])
     _auth_deps = [Depends(get_current_user)] if security_enabled else []
 
-    @router.get("/models")
-    async def list_models() -> dict[str, Any]:
+    @router.get("/models", response_model=OpenAIModelList)
+    async def list_models() -> OpenAIModelList:
         """
         Return registered agents in OpenAI model-list format.
 
@@ -104,21 +106,21 @@ def create_openai_compat_router(
           populate the model selector; each Fred agent_id appears as a model
         """
         now = int(time.time())
-        return {
-            "object": "list",
-            "data": [
-                {
-                    "id": agent_id,
-                    "object": "model",
-                    "created": now,
-                    "owned_by": "fred",
-                }
+        return OpenAIModelList(
+            data=[
+                OpenAIModelCard(
+                    id=agent_id,
+                    created=now,
+                )
                 for agent_id, definition in registry.items()
                 if definition.public
-            ],
-        }
+            ]
+        )
 
-    @router.post("/chat/completions", dependencies=_auth_deps)
+    @router.post(
+        "/chat/completions",
+        dependencies=_auth_deps,
+    )
     async def chat_completions(
         request: OpenAIChatRequest, http_request: Request
     ) -> StreamingResponse:

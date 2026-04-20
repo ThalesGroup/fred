@@ -202,6 +202,20 @@ def log_setup(
     include_uvicorn: bool = True,
     use_rich: bool = True,
 ) -> None:
+    """
+    Configure Fred root logging plus targeted third-party noise suppression.
+
+    Why this exists:
+    - keep one consistent console/store logging pipeline across Fred services
+    - preserve useful app debug logs while downgrading or isolating noisy
+      library loggers that would otherwise drown them out
+
+    How to use:
+    - call once during service startup with the service name and active log store
+
+    Example:
+    - `log_setup(service_name="fred-runtime", log_level="DEBUG", store=store)`
+    """
     # Route Python warnings.warn(...) through logging so they share
     # Fred formatting/handlers instead of raw stderr lines.
     logging.captureWarnings(True)
@@ -258,6 +272,7 @@ def log_setup(
         "websockets.server",
         "websockets.protocol",
         "websockets.client",
+        "aiosqlite",
         "httptools",
         "mcp.client.streamable_http",
     )

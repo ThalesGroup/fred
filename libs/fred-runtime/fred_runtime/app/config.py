@@ -84,13 +84,49 @@ from ..runtime_context import RuntimeTimeouts
 
 
 class PodAppConfig(BaseModel):
-    """Basic HTTP server settings for an agent pod."""
+    """
+    Basic HTTP server and local observability settings for an agent pod.
+
+    Why this exists:
+    - every pod needs the same HTTP binding knobs plus the small Prometheus/KPI
+      settings already used by the other Fred backends
+    - keeping these fields in `app` preserves the familiar startup contract for
+      local benches and scrape-based debugging
+
+    How to use it:
+    - keep the defaults for simple local development
+    - set `metrics_port` / `metrics_address` when `observability.metrics` is
+      `prometheus`
+
+    Example:
+    - `PodAppConfig(base_url="/pod/v1", port=8000, metrics_port=9115)`
+    """
 
     name: str = "Fred Agent Pod"
     base_url: str = "/api/v1"
     host: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
+    metrics_address: str = "127.0.0.1"
+    metrics_port: int = 9000
+    kpi_process_metrics_interval_sec: int = Field(
+        default=0,
+        description=(
+            "Emit process and SQL pool KPIs every N seconds. Set 0 to disable "
+            "the background emitters."
+        ),
+    )
+    kpi_log_summary_interval_sec: float = Field(
+        default=0.0,
+        description=(
+            "Emit periodic KPI summary logs every N seconds for local benches. "
+            "Set 0 to disable."
+        ),
+    )
+    kpi_log_summary_top_n: int = Field(
+        default=0,
+        description="Top-N KPI summary rows to log. 0 means all / disabled.",
+    )
     openai_compat: bool = True
     """
     Enable the OpenAI-compatible /v1/chat/completions and /v1/models endpoints.
@@ -166,7 +202,8 @@ class MetricsBackend(str, Enum):
 
     - null       — no metrics, all timer events are dropped
     - logging    — each timer is emitted as a structured log entry (default)
-    - prometheus — metrics are exposed on a /metrics endpoint (not yet implemented)
+    - prometheus — KPI/process metrics are exported in Prometheus format on the
+                   dedicated metrics port configured under `app`
     """
 
     null = "null"

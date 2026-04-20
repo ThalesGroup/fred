@@ -9,3 +9,10 @@ include ../../scripts/makefiles/python-test.mk
 include ../../scripts/makefiles/python-clean.mk
 include ../../scripts/makefiles/python-publish.mk
 include ../../scripts/makefiles/help.mk
+
+##@ OpenAPI spec
+
+.PHONY: generate-openapi
+generate-openapi: dev ## Generate the frontend-facing fred-runtime OpenAPI JSON spec
+	@echo "🔧 Generating fred-runtime OpenAPI specification..."
+	$(UV) run python scripts/generate_openapi.py

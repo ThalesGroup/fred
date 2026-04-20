@@ -35,9 +35,40 @@ Example:
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any, Literal  # Any retained for event dict and token_usage
 
 from pydantic import BaseModel, Field
+
+from .context import UiPart
+from .runtime import HumanInputRequest
+
+
+# ---------------------------------------------------------------------------
+# Tool call models (OpenAI streaming shape)
+# ---------------------------------------------------------------------------
+
+
+class OpenAIToolCallFunction(BaseModel):
+    """Function name and JSON-serialised arguments for one tool call."""
+
+    name: str
+    arguments: str = Field(..., description="JSON-serialised tool arguments.")
+
+
+class OpenAIToolCall(BaseModel):
+    """
+    One tool call entry in an OpenAI streaming delta.
+
+    Why this model exists:
+    - replaces dict[str, Any] so tool_calls in OpenAIDelta is fully typed
+    - mirrors the OpenAI streaming ChoiceDeltaToolCall shape exactly
+    """
+
+    index: int = 0
+    id: str
+    type: Literal["function"] = "function"
+    function: OpenAIToolCallFunction
+
 
 # ---------------------------------------------------------------------------
 # Request model
@@ -68,6 +99,47 @@ class OpenAIChatRequest(BaseModel):
     model: str
     messages: list[OpenAIMessage] = Field(..., min_length=1)
     stream: bool = True
+
+
+# ---------------------------------------------------------------------------
+# OpenAI model-list models
+# ---------------------------------------------------------------------------
+
+
+class OpenAIModelCard(BaseModel):
+    """
+    One model entry returned by the OpenAI-compatible `/v1/models` endpoint.
+
+    Why this exists:
+    - `/v1/models` is part of the public compat surface and should not fall back
+      to an untyped `dict[str, Any]`
+    - Open WebUI and similar clients expect a stable list shape to populate the
+      model selector
+    """
+
+    id: str
+    object: Literal["model"] = "model"
+    created: int
+    owned_by: str = "fred"
+
+
+class OpenAIModelList(BaseModel):
+    """
+    OpenAI-compatible model listing returned by `/v1/models`.
+
+    Why this exists:
+    - gives the compat router a typed response contract instead of returning a
+      loose mapping
+
+    How to use:
+    - return from the `/v1/models` route
+
+    Example:
+    - `OpenAIModelList(data=[OpenAIModelCard(id="my-agent", created=1700000000)])`
+    """
+
+    object: Literal["list"] = "list"
+    data: list[OpenAIModelCard] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -111,16 +183,18 @@ class FredChunkMetadata(BaseModel):
     - sources: knowledge citations attached to the answer (populated on
       tool_result and final events)
     - awaiting_human: present on the final chunk when the agent is paused and
-      needs user input to resume (HITL); contains the HumanInputRequest payload
+      needs user input to resume (HITL); typed as HumanInputRequest
     - node_error: short error description when a graph node failed with on_error
       routing; the UI should render this as a warning banner, not an answer
     - token_usage: input/output token counts from the final event
+    - ui_parts: structured UI rendering parts (links, maps) from tool or final events
     """
 
     sources: list[FredSourceRef] = Field(default_factory=list)
-    awaiting_human: dict[str, Any] | None = None
+    awaiting_human: HumanInputRequest | None = None
     node_error: str | None = None
     token_usage: dict[str, int] | None = None
+    ui_parts: list[UiPart] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +207,7 @@ class OpenAIDelta(BaseModel):
 
     role: str | None = None
     content: str | None = None
-    tool_calls: list[dict[str, Any]] | None = None
+    tool_calls: list[OpenAIToolCall] | None = None
 
 
 class OpenAIChoice(BaseModel):
@@ -212,15 +286,13 @@ def fred_event_to_openai_chunk(
 
     if kind == "tool_call":
         # Emit the full tool call in one chunk (Fred delivers arguments atomically).
-        tool_call: dict[str, Any] = {
-            "index": 0,
-            "id": event.get("call_id", ""),
-            "type": "function",
-            "function": {
-                "name": event.get("tool_name", ""),
-                "arguments": json.dumps(event.get("arguments", {})),
-            },
-        }
+        tool_call = OpenAIToolCall(
+            id=event.get("call_id", ""),
+            function=OpenAIToolCallFunction(
+                name=event.get("tool_name", ""),
+                arguments=json.dumps(event.get("arguments", {})),
+            ),
+        )
         return _make_chunk(
             completion_id,
             model,
@@ -230,8 +302,13 @@ def fred_event_to_openai_chunk(
 
     if kind == "tool_result":
         sources = _extract_sources(event.get("sources", []))
-        fred = FredChunkMetadata(sources=sources) if sources else None
-        # Zero-content delta — carries fred.sources metadata only.
+        ui_parts = _extract_ui_parts(event.get("ui_parts", []))
+        fred = (
+            FredChunkMetadata(sources=sources, ui_parts=ui_parts)
+            if (sources or ui_parts)
+            else None
+        )
+        # Zero-content delta — carries fred.sources / fred.ui_parts metadata only.
         return _make_chunk(
             completion_id,
             model,
@@ -242,6 +319,7 @@ def fred_event_to_openai_chunk(
 
     if kind == "final":
         sources = _extract_sources(event.get("sources", []))
+        ui_parts = _extract_ui_parts(event.get("ui_parts", []))
         return _make_chunk(
             completion_id,
             model,
@@ -251,10 +329,18 @@ def fred_event_to_openai_chunk(
             fred=FredChunkMetadata(
                 sources=sources,
                 token_usage=event.get("token_usage"),
+                ui_parts=ui_parts,
             ),
         )
 
     if kind == "awaiting_human":
+        raw_request = event.get("request")
+        hitl_request: HumanInputRequest | None = None
+        if raw_request is not None:
+            if isinstance(raw_request, HumanInputRequest):
+                hitl_request = raw_request
+            elif isinstance(raw_request, dict):
+                hitl_request = HumanInputRequest.model_validate(raw_request)
         return _make_chunk(
             completion_id,
             model,
@@ -262,7 +348,7 @@ def fred_event_to_openai_chunk(
             delta=OpenAIDelta(),
             finish_reason="stop",
             fred=FredChunkMetadata(
-                awaiting_human=event.get("request"),
+                awaiting_human=hitl_request,
             ),
         )
 
@@ -328,4 +414,32 @@ def _extract_sources(raw: list[Any]) -> list[FredSourceRef]:
                     citation_url=item.get("citation_url"),
                 )
             )
+    return result
+
+
+def _extract_ui_parts(raw: list[Any]) -> list[UiPart]:
+    """
+    Normalise raw ui_part dicts or UiPart objects from RuntimeEvents.
+
+    Why this exists:
+    - RuntimeEvent payloads may carry ui_parts as serialised dicts (from
+      model_dump) or as already-typed UiPart objects
+    - this function normalises both shapes so FredChunkMetadata always
+      receives a typed list
+
+    How to use:
+    - pass the `ui_parts` list from any RuntimeEvent that carries one
+    """
+    from .context import GeoPart, LinkPart
+
+    result: list[UiPart] = []
+    for item in raw:
+        if isinstance(item, (LinkPart, GeoPart)):
+            result.append(item)
+        elif isinstance(item, dict):
+            part_type = item.get("type")
+            if part_type == "link":
+                result.append(LinkPart.model_validate(item))
+            elif part_type == "geo":
+                result.append(GeoPart.model_validate(item))
     return result
