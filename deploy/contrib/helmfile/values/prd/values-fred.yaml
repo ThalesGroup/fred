@@ -50,6 +50,14 @@ x-kf-scheduler: &kf-scheduler
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    ##################################################################################################
+    # INTERNAL CONCURRENCY SETUP: These are set to 10 in the integration values file, so depending on 
+    # how it goes we maybe can set them to 10 as well (or more if we feel like it is low risk)
+    ##################################################################################################
+    # ingestion_workflow_parallelism: 5 # TODO: see how much we can bump it, default is 3
+    # ingestion_max_concurrent_workflow_tasks: 5 # TODO: see how much we can bump it, default is 3
+    # ingestion_max_concurrent_activities: 5 # TODO: see how much we can bump it, default is 3
+    ##################################################################################################
 
 x-kf-content-storage: &kf-content-storage
   type: minio
@@ -742,9 +750,6 @@ applications:
         value: "/app/config/configuration.yaml"
 
     configuration:
-      app:
-        metrics_enabled: false
-
       processing:
         profiles:
           fast:

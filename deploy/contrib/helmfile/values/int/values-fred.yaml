@@ -44,7 +44,9 @@ x-kf-scheduler: &kf-scheduler
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
-
+    ingestion_workflow_parallelism: 10 # TODO: see how much we can bump it, default is 3
+    ingestion_max_concurrent_workflow_tasks: 10 # TODO: see how much we can bump it, default is 3
+    ingestion_max_concurrent_activities: 10 # TODO: see how much we can bump it, default is 3
 x-kf-content-storage: &kf-content-storage
   type: minio
   endpoint: http://minio:9000
@@ -520,9 +522,6 @@ applications:
         value: "/app/config/configuration.yaml"
 
     configuration:
-      app:
-        metrics_enabled: false
-
       processing:
         profiles:
           fast:
