@@ -14,7 +14,7 @@
 
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
-from fred_core.common import DuckdbStoreConfig, ModelConfiguration, PostgresStoreConfig, TemporalSchedulerConfig
+from fred_core.common import DuckdbStoreConfig, ModelConfiguration, PostgresStoreConfig
 from pydantic import AnyHttpUrl, AnyUrl
 
 from knowledge_flow_backend.common.structures import (
@@ -25,6 +25,7 @@ from knowledge_flow_backend.common.structures import (
     LocalFilesystemConfig,
     SchedulerConfig,
     StorageConfig,
+    TemporalSchedulerConfig,
 )
 
 
