@@ -112,7 +112,11 @@ async def main() -> None:
     kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
 
     try:
-        await run_worker(configuration.scheduler.temporal)
+        await run_worker(
+            configuration.scheduler.temporal,
+            max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
+            max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
+        )
     finally:
         for task in kpi_tasks:
             task.cancel()
