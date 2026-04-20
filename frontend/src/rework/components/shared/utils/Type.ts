@@ -55,7 +55,8 @@ export type MaterialIconType =
   | "visibility_off"
   | "reviews"
   | "delete_forever"
-  | "lock";
+  | "lock"
+  | "mail";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

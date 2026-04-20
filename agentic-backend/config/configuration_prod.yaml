@@ -25,6 +25,7 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  gcu_version: v1
 
 scheduler:
   enabled: true
@@ -61,6 +62,7 @@ frontend_settings:
   properties:
     logoName: "fred"
     siteDisplayName: "Fred"
+    gcuVersion: "v1"
 
 ai:
   # In production  activate the configuration persistence mechanism

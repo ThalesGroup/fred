@@ -1,11 +1,47 @@
 import styles from "./GcuPage.module.css";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  useGetUserDetailsControlPlaneV1UserGetQuery,
+  useValidateGcuControlPlaneV1GcuPostMutation,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 export default function GcuPage() {
   const { t } = useTranslation();
-  const [validationEnable, setValidationEnable] = useState();
+  const [trigger, { isLoading }] = useValidateGcuControlPlaneV1GcuPostMutation();
+  const { refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
+
+  const [hasReachedBottom, setHasReachedBottom] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHasReachedBottom(true);
+          observer.unobserve(entry.target);
+        } else {
+          setHasReachedBottom(false);
+        }
+      },
+      {
+        root: null,
+        threshold: 1.0,
+      },
+    );
+
+    if (bottomRef.current) {
+      observer.observe(bottomRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  const handleAcceptGcu = async () => {
+    await trigger().unwrap();
+    refetch();
+  };
 
   return (
     <div className={styles.gcuContainer}>
@@ -95,10 +131,17 @@ export default function GcuPage() {
         libero. Ut a nisi at sem tincidunt ullamcorper et ut justo. Duis accumsan sem et nisi eleifend laoreet et eget
         justo. Praesent placerat efficitur tortor. Orci varius natoque penatibus et magnis dis parturient montes,
         nascetur ridiculus mus. Pellentesque aliquam erat nec sagittis porta.
+        <div ref={bottomRef} />
       </div>
       <div className={styles.gcuActions}>
         <span className={styles.gcuLockInformation}>{t("rework.gcu.lockInformation")}</span>
-        <Button color={"primary"} variant={"filled"} size={"medium"} disabled={validationEnable}>
+        <Button
+          color={"primary"}
+          variant={"filled"}
+          size={"medium"}
+          disabled={!hasReachedBottom || isLoading}
+          onClick={handleAcceptGcu}
+        >
           Valider
         </Button>
       </div>

@@ -1323,7 +1323,8 @@
       "owner": "Propriétaire"
     },
     "teamCard": {
-      "memberCount": "{{count}} membres"
+      "memberCount": "{{count}} membres",
+      "join": "Rejoindre"
     },
     "sidebar": {
       "team": {

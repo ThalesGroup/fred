@@ -1149,6 +1149,7 @@ export type Properties = {
   defaultPersonalBannerFile?: string;
   defaultTeamAvatarFile?: string;
   defaultPersonalAvatarFile?: string;
+  gcuVersion?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

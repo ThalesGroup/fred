@@ -1,8 +1,10 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Path, status
 from fastapi.responses import JSONResponse
-from fred_core import KeycloakUser, TeamPermission, get_current_user, RBACProvider
+
+from fred_core import KeycloakUser, TeamPermission, get_current_user, RBACProvider, GcuVersionsType, BaseUserStore
 from fred_core.common import PERSONAL_TEAM_ID
 from pydantic import BaseModel
 
@@ -10,7 +12,7 @@ from control_plane_backend.teams_structures import (
   TeamWithPermissions,
 )
 from control_plane_backend.users_service import (
-  create_user as create_user_from_service,
+  create_user as create_user_from_service, find_user_details_by_id, update_gcu_validation,
 )
 from control_plane_backend.users_service import (
   delete_user as delete_user_from_service,
@@ -25,6 +27,7 @@ from control_plane_backend.users_structures import (
   UserNotFoundError,
   UserSummary,
 )
+from fred_core.users.store.postgres_user_store import get_user_store
 
 # Create a RBAC provider object to retrieve user permissions in the config/permissions route
 rbac_provider = RBACProvider()
@@ -95,7 +98,7 @@ async def delete_user(
 
 
 class UserDetails(BaseModel):
-  cguValidated: bool
+  cguValidated: GcuVersionsType
   personalTeam: TeamWithPermissions
 
 
@@ -105,9 +108,11 @@ class UserDetails(BaseModel):
 )
 async def get_user_details(
         user: KeycloakUser = Depends(get_current_user),
+        user_store: BaseUserStore = Depends(get_user_store)
 ) -> UserDetails:
+  user_details = await find_user_details_by_id(UUID(user.uid), user_store)
   return UserDetails(
-    cguValidated=False,
+    cguValidated=user_details.gcuVersionAccepted,
     personalTeam=TeamWithPermissions(
       id=PERSONAL_TEAM_ID,
       name="Equipe personnelle",
@@ -121,3 +126,9 @@ async def get_user_details(
       ],
     )
   )
+
+@router.post("/gcu")
+async def validate_gcu(
+        user: KeycloakUser = Depends(get_current_user)
+) -> None:
+  await update_gcu_validation(UUID(user.uid))

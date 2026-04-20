@@ -1292,8 +1292,7 @@
       "apps": "Apps",
       "members": "Members",
       "settings": "Settings"
-    },
-    "noAgents": "No team agents configured yet. Create your first team agent to get started."
+    }
   },
   "appCard": {
     "launch": "Start"
@@ -1322,7 +1321,8 @@
       "owner": "Owner"
     },
     "teamCard": {
-      "memberCount": "{{count}} members"
+      "memberCount": "{{count}} members",
+      "join": "Apply to join"
     },
     "sidebar": {
       "team": {
@@ -1410,6 +1410,7 @@
         "title": "Chat with your {{agentsNicknamePlural}}",
         "create": "Create Agent",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
+        "noAgent": "No team agents configured yet. Create your first team agent to get started.",
         "firstCreate": "Create"
       },
       "formAgent": {
@@ -1429,6 +1430,10 @@
         "yourTeams": "Your teams",
         "otherTeams": "Discover other teams"
       }
+    },
+    "gcu": {
+      "title": "Terms of Service (ToS)",
+      "lockInformation": "Read the Terms of Service before you can accept them"
     }
   }
 }

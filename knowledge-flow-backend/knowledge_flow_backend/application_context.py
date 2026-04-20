@@ -19,21 +19,23 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, Union
 
+from fastapi import FastAPI
+
 from fred_core import (
-    BaseFilesystem,
-    BaseLogStore,
-    InMemoryLogStorageConfig,
-    LocalFilesystem,
-    MinioFilesystem,
-    ModelProvider,
-    OpenFgaRebacConfig,
-    OpenSearchLogStore,
-    RamLogStore,
-    RebacEngine,
-    get_embeddings,
-    get_model,
-    rebac_factory,
-    split_realm_url,
+  BaseFilesystem,
+  BaseLogStore,
+  InMemoryLogStorageConfig,
+  LocalFilesystem,
+  MinioFilesystem,
+  ModelProvider,
+  OpenFgaRebacConfig,
+  OpenSearchLogStore,
+  RamLogStore,
+  RebacEngine,
+  get_embeddings,
+  get_model,
+  rebac_factory,
+  split_realm_url,
 )
 from fred_core.common import (
     DuckdbStoreConfig,
@@ -42,6 +44,7 @@ from fred_core.common import (
     OpenSearchIndexConfig,
     PostgresTableConfig,
     SQLStorageConfig,
+    get_config
 )
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
@@ -148,6 +151,8 @@ def get_configuration() -> Configuration:
     """
     return get_app_context().configuration
 
+app = FastAPI()
+app.dependency_overrides[get_config] = get_configuration
 
 def get_kpi_writer() -> BaseKPIWriter:
     """

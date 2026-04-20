@@ -14,8 +14,8 @@
 
 from .config_files import ConfigFiles
 from .config_loader import (
-    load_configuration_with_config_files,
-    parse_yaml_mapping_file,
+  load_configuration_with_config_files,
+  parse_yaml_mapping_file, get_config,
 )
 from .env import coerce_bool, read_env_bool
 from .fastapi_handlers import register_exception_handlers
@@ -60,4 +60,5 @@ __all__ = [
     "raise_internal_error",
     "read_env_bool",
     "register_exception_handlers",
+    "get_config"
 ]

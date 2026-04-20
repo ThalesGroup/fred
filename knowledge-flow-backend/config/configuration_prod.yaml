@@ -26,6 +26,7 @@ app:
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
   max_ingestion_workers: 3
+  gcu_version: v1
 processing:
   default_profile: fast
   profiles:
