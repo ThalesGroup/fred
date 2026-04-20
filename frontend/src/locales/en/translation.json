@@ -684,7 +684,7 @@
       "includeToggle": "Toggle library retrieval",
       "includeTooltipOn": "Libraries are included in retrieval for this conversation.",
       "includeTooltipOff": "Libraries are excluded from retrieval for this conversation.",
-      "empty": "No libraries selected. All visible document libraries will be searched.",
+      "empty": "No libraries selected. Search will return no results.",
       "previewTitle": "Library",
       "noDescription": "No description available."
     },

@@ -24,8 +24,8 @@ class KfVectorSearchParams(BaseModel):
     """
 
     provider: KfVectorSearchProviderType = KF_VECTOR_SEARCH_PROVIDER
-    document_library_tags_ids: Optional[List[str]] = Field(
-        default=None,
+    document_library_tags_ids: List[str] = Field(
+        default=[],
         description=(
             "Restrict semantic search to these document library tag IDs. "
             "User and LLM selections are intersected with this set at query time."

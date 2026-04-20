@@ -685,7 +685,7 @@
       "includeToggle": "Basculer la recherche sur les bibliothèques",
       "includeTooltipOn": "Les bibliothèques sont incluses dans la recherche pour cette conversation.",
       "includeTooltipOff": "Les bibliothèques sont exclues de la recherche pour cette conversation.",
-      "empty": "Aucune bibliothèque sélectionnée. Toutes les bibliothèques de documents visibles seront recherchées.",
+      "empty": "Aucune bibliothèque sélectionnée. La recherche ne retournera aucun résultat.",
       "previewTitle": "Bibliothèque",
       "noDescription": "Aucune description disponible."
     },

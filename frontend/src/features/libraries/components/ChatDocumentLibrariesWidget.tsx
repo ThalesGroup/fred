@@ -233,21 +233,12 @@ const ChatDocumentLibrariesWidget = ({
           >
             <TagTreeList
               tree={selectedTree}
-              emptyText={t(
-                "chatbot.libraries.empty",
-                "No libraries selected. All visible document libraries will be searched.",
-              )}
+              emptyText={t("chatbot.libraries.empty")}
               renderActions={(tag) => buildActions(tag.id)}
             />
           </Box>
         ) : (
-          <ChatWidgetList
-            items={fallbackItems}
-            emptyText={t(
-              "chatbot.libraries.empty",
-              "No libraries selected. All visible document libraries will be searched.",
-            )}
-          />
+          <ChatWidgetList items={fallbackItems} emptyText={t("chatbot.libraries.empty")} />
         )}
       </ChatWidgetShell>
       <Popper

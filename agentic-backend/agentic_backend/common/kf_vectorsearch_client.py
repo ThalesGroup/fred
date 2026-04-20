@@ -133,7 +133,7 @@ class VectorSearchClient(KfBaseClient):
           }
         """
         payload: Dict[str, Any] = {"question": question, "top_k": top_k}
-        if document_library_tags_ids:
+        if document_library_tags_ids is not None:
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
         if document_uids:
             payload["document_uids"] = list(document_uids)
@@ -220,14 +220,22 @@ class VectorSearchClient(KfBaseClient):
 def _intersect_or_fallback(
     a: Optional[Collection[str]], b: Optional[Collection[str]]
 ) -> Optional[Collection[str]]:
-    """Return the intersection when both sides are set, otherwise whichever is non-None."""
-    if a and b:
-        return set(a) & set(b)
-    if a:
-        return a
-    if b:
+    """Return the intersection when both sides are set, otherwise whichever is non-None.
+
+    Semantics:
+    - None means "no restriction at this level" — passes through whatever the other level sets.
+    - [] (empty collection) means "explicitly no libraries" — an explicit empty on either side
+      propagates through and results in no results when both sides are set.
+    - When both are non-None: return the intersection (may be an empty set).
+    - When one side is None: return the other side unchanged (preserving [] vs populated list).
+    """
+    if a is None and b is None:
+        return None
+    if a is None:
         return b
-    return None
+    if b is None:
+        return a
+    return set(a) & set(b)
 
 
 def _get_kf_vector_search_params(agent_settings: AgentSettings) -> KfVectorSearchParams:

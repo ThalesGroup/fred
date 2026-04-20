@@ -31,8 +31,8 @@ import ChatContextWidget from "./ChatContextWidget.tsx";
 import ChatDeepSearchWidget from "./ChatDeepSearchWidget.tsx";
 import ChatDocumentsWidget from "./ChatDocumentsWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
-import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
+import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
@@ -501,7 +501,7 @@ export function useConversationOptionsController({
       setConversationPrefs((prev) => ({
         ...prev,
         chatContextIds: [],
-        documentLibraryIds: initialCtx.documentLibraryIds,
+        documentLibraryIds: creatorLibraryScope ?? initialCtx.documentLibraryIds,
         documentUids: initialCtx.documentUids,
         promptResourceIds: initialCtx.promptResourceIds,
         templateResourceIds: initialCtx.templateResourceIds,
@@ -542,7 +542,7 @@ export function useConversationOptionsController({
       setSearchOptionsWidgetOpen(false);
       setConversationPrefs({
         chatContextIds: [],
-        documentLibraryIds: [],
+        documentLibraryIds: creatorLibraryScope ?? [],
         documentUids: [],
         promptResourceIds: [],
         templateResourceIds: [],
@@ -559,7 +559,7 @@ export function useConversationOptionsController({
     if (prefsLoadState === "loading" && sessionPrefs) {
       const p = (sessionPrefs as PersistedCtx) || {};
       const nextChatContextIds = asStringArray(p.chatContextIds, []);
-      const nextLibs = asStringArray(p.documentLibraryIds, []);
+      const nextLibs = asStringArray(p.documentLibraryIds, creatorLibraryScope ?? []);
       const nextDocUids = asStringArray(p.documentUids, []);
       const nextPrompts = asStringArray(p.promptResourceIds, []);
       const nextTemplates = asStringArray(p.templateResourceIds, []);

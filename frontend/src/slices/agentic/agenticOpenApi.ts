@@ -620,7 +620,7 @@ export type FieldSpec = {
 export type KfVectorSearchParams = {
   provider?: "kf_vector_search";
   /** Restrict semantic search to these document library tag IDs. User and LLM selections are intersected with this set at query time. */
-  document_library_tags_ids?: string[] | null;
+  document_library_tags_ids?: string[];
   /** When True, expose the file-attachment control in the chat bar so users can attach local files (PDFs, images, text) to their messages. */
   attach_files?: boolean;
   /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. */
