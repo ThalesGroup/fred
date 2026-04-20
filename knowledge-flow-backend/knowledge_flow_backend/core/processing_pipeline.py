@@ -247,15 +247,9 @@ class ProcessingPipeline:
                 output_dir=output_dir,
             )
         else:
-            supported_outputs = sorted(
-                path
-                for path in output_dir.glob("*.*")
-                if path.suffix.lower() in {".md", ".csv", ".duckdb"}
-            )
+            supported_outputs = sorted(path for path in output_dir.glob("*.*") if path.suffix.lower() in {".md", ".csv", ".duckdb"})
             if not supported_outputs:
-                raise ValueError(
-                    f"Output directory {output_dir} does not contain a markdown, csv or duckdb file"
-                )
+                raise ValueError(f"Output directory {output_dir} does not contain a markdown, csv or duckdb file")
             file_to_process = supported_outputs[0]
         if file_to_process.suffix.lower() not in [".md", ".csv", ".duckdb"]:
             raise ValueError(f"Output file {file_to_process} is not a markdown, csv or duckdb file")

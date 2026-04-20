@@ -21,15 +21,11 @@ from fred_core import KeycloakUser, get_current_user
 from fred_core.kpi import phase_timer
 from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
+
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest
-from knowledge_flow_backend.features.vector_search.vector_search_structures import (
-    RerankRequest,
-    SearchPolicyName,
-    SearchRequest,
-    VisualEvidenceArtifactResponse,
-)
+from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, VisualEvidenceArtifactResponse
+
 logger = logging.getLogger(__name__)
 
 # ---------------- Echo types for UI OpenAPI ----------------
@@ -92,6 +88,7 @@ class VectorSearchController:
                 return hits
             except Exception as e:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
         @router.get(
             "/vector/visual-evidence-artifact",
             tags=["Vector Search"],
@@ -120,9 +117,7 @@ class VectorSearchController:
             elif lowered.endswith(".webp"):
                 content_type = "image/webp"
 
-            artifact_url = (
-                f"/knowledge-flow/v1/markdown/{document_uid}/artifact/{artifact_name}"
-            )
+            artifact_url = f"/knowledge-flow/v1/markdown/{document_uid}/artifact/{artifact_name}"
 
             return VisualEvidenceArtifactResponse(
                 document_uid=document_uid,
