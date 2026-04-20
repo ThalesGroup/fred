@@ -16,6 +16,7 @@
   align-items: center;
   width: 100%;
   min-height: var(--spacing-3xl);
+  font: var(--font-title-large);
 }
 
 .gcuContent {
@@ -27,6 +28,17 @@
   min-height: 0;
   overflow: auto;
   color: var(--on-surface);
+  font: var(--font-body-large);
+
+  h2 {
+    color: var(--secondary);
+    font: var(--font-title-large-emphasized);
+  }
+
+  h3 {
+    color: var(--secondary);
+    font: var(--font-title-medium-emphasized);
+  }
 }
 
 .gcuActions {

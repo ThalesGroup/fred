@@ -26,6 +26,56 @@ def trim_snippet(text: Optional[str], limit: int = 500) -> str:
     return t if len(t) <= limit else (t[:limit] + "…")
 
 
+def extract_visual_hits(hits: List[VectorSearchHit]) -> List[VectorSearchHit]:
+    """
+    Keep only retrieval hits that have an associated rich slide image.
+    """
+    return [
+        h
+        for h in hits
+        if getattr(h, "has_visual_evidence", False)
+        and getattr(h, "slide_image_uri", None)
+    ]
+
+
+def format_visual_evidence_for_prompt(
+    hits: List[VectorSearchHit],
+    max_items: int = 3,
+    snippet_chars: int = 300,
+) -> str:
+    """
+    Build a compact prompt block describing the visual evidence available
+    for rich PPTX chunks.
+    """
+    visual_hits = extract_visual_hits(hits)[:max_items]
+    if not visual_hits:
+        return ""
+
+    lines: List[str] = []
+    for idx, h in enumerate(visual_hits, start=1):
+        label_bits = []
+        if h.title:
+            label_bits.append(h.title)
+        if h.slide_id is not None:
+            label_bits.append(f"slide {h.slide_id}")
+        if h.page is not None:
+            label_bits.append(f"p.{h.page}")
+        if h.file_name:
+            label_bits.append(f"({h.file_name})")
+
+        label = " - ".join(label_bits) if label_bits else h.uid
+        snippet = trim_snippet(h.content, snippet_chars)
+
+        lines.append(
+            f"[V{idx}] {label}\n"
+            f"Visual evidence available: yes\n"
+            f"Image artifact path: {h.slide_image_uri}\n"
+            f"Related text snippet: {snippet}"
+        )
+
+    return "\n\n".join(lines)
+
+
 def sort_hits(hits: List[VectorSearchHit]) -> List[VectorSearchHit]:
     # By explicit rank (None -> very large), then score desc
     return sorted(

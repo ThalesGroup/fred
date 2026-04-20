@@ -51,7 +51,7 @@ class SchedulerController:
             processing_config=app_config.processing,
             metadata_service=self.metadata_service,
             temporal_client_provider=temporal_client_provider,
-            max_parallelism=app_config.app.max_ingestion_workers,
+            max_parallelism=app_config.scheduler.temporal.ingestion_workflow_parallelism,
         )
 
         @router.post(

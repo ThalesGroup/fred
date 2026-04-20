@@ -852,6 +852,9 @@ export type VectorSearchHit = {
   page?: number | null;
   section?: string | null;
   viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
   /** Document UID */
   uid: string;
   title: string;

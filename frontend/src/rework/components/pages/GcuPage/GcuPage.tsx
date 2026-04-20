@@ -47,6 +47,8 @@ export default function GcuPage() {
     <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
       <div className={styles.gcuContent}>
+        <h2>Titre de la section</h2>
+        <h3>Sous titre</h3>
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer dapibus felis in enim posuere, quis interdum
         leo feugiat. Integer eu massa vehicula, scelerisque justo non, accumsan sem. Pellentesque eget aliquam tellus,
         suscipit efficitur libero. Donec urna libero, laoreet vel pretium eget, tempus vitae massa. Nulla eu metus
