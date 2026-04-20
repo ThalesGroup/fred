@@ -67,9 +67,7 @@ def normalize_mcp_content(content: Any) -> Any:
                 if block.get("url"):
                     image_url = block["url"]
                 elif block.get("base64") and block.get("mime_type"):
-                    image_url = (
-                        f"data:{block['mime_type']};base64,{block['base64']}"
-                    )
+                    image_url = f"data:{block['mime_type']};base64,{block['base64']}"
 
                 if image_url:
                     normalized_blocks.append(
@@ -100,7 +98,6 @@ def normalize_mcp_content(content: Any) -> Any:
             return merged
 
         return "\n".join(t for t in plain_texts if t) if plain_texts else ""
-
 
     # For other types, convert to JSON string
     return json.dumps(content)
