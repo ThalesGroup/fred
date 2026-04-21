@@ -307,7 +307,7 @@ export type TeamWithPermissions = {
   permissions?: TeamPermission[];
 };
 export type UserDetails = {
-  cguValidated: GcuVersionsType;
+  cguValidated: GcuVersionsType | null;
   personalTeam: TeamWithPermissions;
 };
 export type Team = {
