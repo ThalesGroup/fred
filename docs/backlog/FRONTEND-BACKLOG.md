@@ -531,14 +531,17 @@ This creates a hybrid UX even when execution itself is migrated.
 - [x] Remove default sidebar/session dependency on legacy agentic session APIs
 - [x] Decide whether session metadata is moved to control-plane or omitted:
       **Decision: omitted intentionally until control-plane slice exists**
-- [ ] Ensure managed chat history loading uses prepared runtime `messages_url_template` only
+- [x] Ensure managed chat history loading uses prepared runtime `messages_url_template` only
+      — implemented in `ManagedChatPage`: calls `prepare-execution` on mount when `?session=<id>`
+      is present, expands `{session_id}` in the template, fetches history with bearer token
 - [x] Define one supported managed chat entry flow from team page to chat page
 - [ ] Implement control-plane session metadata creation at `prepare-execution` time:
       `POST /control-plane/v1/sessions` with `{ session_id, team_id, agent_instance_id }`
 - [ ] Implement `GET /control-plane/v1/sessions` for sidebar session list
 - [ ] Wire sidebar to control-plane session list once the endpoint exists
-- [ ] Frontend generates `session_id` (UUID) before first turn and passes it in
-      `RuntimeExecuteRequest.session_id` and to the session metadata creation call
+- [x] Frontend generates `session_id` (UUID) before first turn and passes it in
+      `RuntimeExecuteRequest.session_id` — `ManagedChatPage` generates UUID upfront in `handleSend`
+      if sessionId is null, persists it in URL query params (`?session=<uuid>`)
 - [ ] Ensure `session_id` is never labeled `thread_id` anywhere in frontend code or UI
 
 ---

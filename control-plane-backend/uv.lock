@@ -612,7 +612,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "1.5.0"
+version = "1.5.1"
 source = { editable = "../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -693,7 +693,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "0.1.9"
+version = "0.1.10"
 source = { editable = "../libs/fred-sdk" }
 dependencies = [
     { name = "deepagents" },

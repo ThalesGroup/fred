@@ -179,8 +179,46 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 | `awaiting_human` | HITL pause; carries `HumanInputRequest` |
 | `node_error` | Graph node failed with on_error routing |
 | `final` | Turn complete; carries content, sources, token_usage, ui_parts |
-| `turn_persisted` | History persistence completed successfully |
+| `turn_persisted` | **Schema only — not emitted over SSE in Phase 1** (see gap below) |
 | `status` | Internal status update (dropped by OpenAI compat layer) |
+
+### SSE stream termination
+
+The SSE stream emitted by `POST /agents/execute/stream` **terminates by
+connection close** after the `final` event. There is no sentinel line (no
+`data: [DONE]` or equivalent). `final` is always the last data line in a
+successful turn.
+
+SSE clients MUST:
+- treat reception of `{"kind": "final"}` as the end-of-turn signal
+- treat connection close before `final` as an error
+
+### Unstructured error signal (contract gap — tracked below)
+
+When an unhandled exception escapes `_iterate_runtime_event_payloads`, the
+runtime yields a **bare error payload** before closing the stream:
+
+```
+data: {"error": "<exception message>"}
+```
+
+This payload has **no `kind` field** and is **not a member of the `RuntimeEvent`
+union**. It is the only way a client receives notice of a server-side crash.
+
+SSE clients MUST check for the top-level `"error"` key on every frame, not only
+on frames that carry a `"kind"` discriminator.
+
+This is a known contract gap tracked in Phase 3b. See Section 8 below.
+
+### `TurnPersistedEvent` — schema defined, SSE delivery not yet wired (contract gap)
+
+`TurnPersistedEvent` (`kind: "turn_persisted"`) exists in `RuntimeEventKind` and
+`RuntimeEvent` and is listed above, but is **never emitted to the SSE client in
+Phase 1**. History is written fire-and-forget via `asyncio.ensure_future` after
+the SSE generator exhausts; no frame reaches the client.
+
+Clients MUST NOT wait for `turn_persisted` as a stream-end signal. This gap is
+tracked in Phase 3b. See Section 8 below.
 
 ### UI rendering parts (`UiPart`)
 
@@ -241,6 +279,77 @@ Platform concerns belong to:
 - Kubernetes `Service` and `Ingress` / Gateway API
 - Namespace isolation and DNS stable names
 - Argo CD / GitOps deployment descriptors
+
+---
+
+## 8. Known SSE Contract Gaps (discovered April 2026)
+
+These gaps were surfaced while implementing an external SSE bench client against
+the live protocol. They are tracked as Phase 3b correction tasks in `BACKLOG.md`.
+
+### 8.1 Unstructured error signal
+
+**Symptom**: SSE clients that only dispatch on `kind` silently ignore agent
+crashes and hang until timeout.
+
+**Root cause**: `_iterate_runtime_event_payloads` exception handler (line 1691
+of `agent_app.py`) yields `{"error": str(exc)}` — no `kind` field. This payload
+is not in `RuntimeEventKind` and not in the `RuntimeEvent` union.
+
+**Required fix**: Promote the error signal to a first-class contract member.
+Either:
+- add `RuntimeErrorEvent(kind="execution_error", message=str)` to `fred-sdk`
+  and update the exception handler to yield it, OR
+- document `{"error": "..."}` as a guaranteed contract signal that all clients
+  must handle
+
+The fix must propagate to the OpenAPI spec and frontend codegen.
+
+### 8.2 `TurnPersistedEvent` not delivered over SSE
+
+**Symptom**: Any client that waits for `{"kind": "turn_persisted"}` as a
+session-save confirmation will hang indefinitely.
+
+**Root cause**: `_write_turn_history` is called via `asyncio.ensure_future` after
+the SSE generator exhausts. The `TurnPersistedEvent` type exists in the SDK but
+is never yielded to the client. The contract doc (Section 5) implies it is.
+
+**Required fix**: Either:
+- wire `TurnPersistedEvent` emission before the generator exhausts (requires
+  awaiting the history write, which adds latency), OR
+- deliver it via a push channel separate from the turn SSE stream (e.g. a
+  session status endpoint), OR
+- explicitly remove `turn_persisted` from the SSE contract and document it as
+  a future push-channel event
+
+Until resolved: clients MUST treat `final` as the only reliable end-of-turn
+signal.
+
+### 8.3 SSE stream termination not documented
+
+**Symptom**: Client authors must read source code to know how the stream ends.
+
+**Required fix**: Document in this file (done in Section 5 above) and confirm
+in the OpenAPI description for `POST /agents/execute/stream` that:
+- the stream terminates by connection close after `final`
+- no sentinel line is emitted
+- `turn_persisted` is not a reliable stream-end signal (see 8.2)
+
+### 8.4 Direct-mode (`agent_id`) session scoping not documented
+
+**Symptom**: Multi-turn bench clients using `agent_id` direct mode without
+`runtime_context` end up with all sessions keyed to user `"unknown"`, making
+per-user session isolation impossible.
+
+**Root cause**: In direct mode the `execution_grant` is absent, so `user_id`
+defaults to `"unknown"` unless `runtime_context.user_id` is explicitly provided.
+This behavior is not documented.
+
+**Required fix**: Add an explicit note in the `RuntimeExecuteRequest` docstring
+and in Section 2.3 of this document that in direct (`agent_id`) mode, callers
+MUST provide `runtime_context.user_id` (and optionally `team_id`) for correct
+session scoping. Managed execution (`agent_instance_id` + `ExecutionGrant`)
+is not affected — `user_id` is always authoritative there.
 
 ---
 

@@ -952,6 +952,41 @@ This enrichment requirement applies equally to:
 - [ ] Ensure KPI/metrics/logging preserve the same managed execution identity set (→ Phase 7)
 - [x] Add backend-focused tests for managed team-scoped execution and observability enrichment
 
+#### 3b.6 SSE Contract Corrections (discovered April 2026)
+
+These gaps were found while implementing an external SSE bench client.
+They are pre-Phase-4 blockers: the frontend SSE hook (`useChatSse`) is
+affected by the same assumptions. Full analysis in
+`docs/design/RUNTIME-EXECUTION-CONTRACT.md` Section 8.
+
+- [ ] **Formalize the error signal** (`fred-sdk` + `fred-runtime`):
+  The exception handler in `_iterate_runtime_event_payloads` yields
+  `{"error": str(exc)}` with no `kind` field — not in `RuntimeEventKind`,
+  not in the `RuntimeEvent` union, not in OpenAPI. Promote it to
+  `RuntimeErrorEvent(kind="execution_error", message=str)` or document it
+  as a guaranteed bare-key contract signal. Update OpenAPI and frontend codegen.
+  Until fixed every SSE client that dispatches only on `kind` silently ignores
+  agent crashes.
+
+- [ ] **Wire or deprecate `TurnPersistedEvent` SSE delivery** (`fred-runtime`):
+  `TurnPersistedEvent` is in `RuntimeEventKind` and `RuntimeEvent` but is
+  never yielded to the SSE client — history is written fire-and-forget after
+  the stream closes. Decide and document: wire the event before stream close,
+  deliver it via a separate push channel, or explicitly remove it from the SSE
+  contract and update Section 5 of `RUNTIME-EXECUTION-CONTRACT.md`.
+  Until resolved `final` is the only reliable end-of-turn signal.
+
+- [ ] **Document SSE stream termination in OpenAPI** (`fred-runtime`):
+  Add to the `/agents/execute/stream` route docstring that the stream ends
+  by connection close after `final`, with no sentinel. Already documented in
+  `RUNTIME-EXECUTION-CONTRACT.md` Section 5 but not in the OpenAPI spec.
+
+- [ ] **Document direct-mode `runtime_context` requirement** (`fred-sdk`):
+  In `agent_id` direct mode, `user_id` defaults to `"unknown"` unless
+  `runtime_context.user_id` is provided. Add an explicit note in
+  `RuntimeExecuteRequest` docstring. Add to Section 2.3 of
+  `RUNTIME-EXECUTION-CONTRACT.md`.
+
 ### 3b.7 Validation
 
 - [ ] one managed execution works end-to-end from `fred-agent-chat`
@@ -1702,27 +1737,33 @@ The frontend MUST:
 - [x] Preserve sources / token usage rendering (mapped in `final` → `ChatMetadata`)
 - [x] Ensure bearer authentication is forwarded on runtime calls
 - [x] Ensure `ExecutionGrant` is attached on runtime calls
-- [ ] Use `agent_instance_id` when the user selected a managed agent — **pending**: requires managed agent selection UI (no page yet); wire into `ChatBot.tsx` once a managed agent can be selected
-- [ ] Ensure history loading uses the prepared runtime history URL pattern — **pending**: wire into ChatBot when wiring managed agent send
+- [x] Use `agent_instance_id` when the user selected a managed agent — implemented in
+  `ManagedChatPage` (`frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`),
+  which gets `agentInstanceId` from URL params and passes it to `useChatSse`.
+  `TeamAgentsPage` lists enrolled instances and links to `/team/:teamId/managed-chat/:agentInstanceId`.
+  Route registered in `frontend/src/common/router.tsx`. **Not wired into legacy `ChatBot.tsx` by design.**
+- [x] Ensure history loading uses the prepared runtime history URL pattern —
+  `ManagedChatPage` calls `prepare-execution` on mount when `?session=<id>` is in URL,
+  expands `{session_id}` in `messages_url_template`, fetches history with bearer token.
+  `session_id` is generated upfront before first send and persisted in URL query params.
 
-### Frontend files to inspect
+### Frontend files
 
-- `frontend/src/hooks/useChatSocket.ts`
-- `frontend/src/components/chatbot/ChatBot.tsx`
-- `frontend/src/components/chatbot/HitlInlineCard.tsx`
-- `frontend/src/components/chatbot/GeoMapRenderer.tsx`
-- `frontend/src/components/chatbot/messageParts.ts`
+- `frontend/src/hooks/useChatSse.ts` — SSE transport hook
+- `frontend/src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx` — managed chat UI
+- `frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx` — agent enrollment + selection
+- `frontend/src/common/router.tsx` — route definitions
 
 ### Validation
 
-- [ ] frontend build passes
-- [ ] one normal streamed answer works
+- [x] frontend build passes
+- [ ] one normal streamed answer works end-to-end via `ManagedChatPage`
 - [ ] one HITL choice flow works
 - [ ] one HITL free-text flow works
 - [ ] one `GeoPart` map renders correctly
-- [ ] frontend does not derive runtime routing from bootstrap or K8 metadata
-- [ ] runtime execution uses prepared ingress-relative URLs only
-- [ ] runtime execution forwards both bearer auth and `ExecutionGrant`
+- [x] frontend does not derive runtime routing from bootstrap or K8 metadata
+- [x] runtime execution uses prepared ingress-relative URLs only
+- [x] runtime execution forwards both bearer auth and `ExecutionGrant`
 
 ## Phase 5 - Frontend Adaptation
 
@@ -1755,22 +1796,20 @@ The first required operating mode for Phase 5 is:
 | 2 – OpenAPI / codegen | ✓ Complete | `runtimeOpenApi.ts` generated |
 | 3a – Control-plane product surface | ✓ Complete | bootstrap, templates, instances endpoints |
 | 3b – Backend completeness gate | Code ✓; validation items open | Run in parallel — not blocking Phase 4 |
-| 3c – Execution preparation | Partial | A + B + E done; see below |
-| 4 – Frontend SSE | In progress | Hook done (`useChatSse`); ChatBot wiring pending managed agent selection UI |
+| 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking) |
+| 4 – Frontend SSE | ✓ Complete | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes |
 | 5 – Frontend adaptation | Planned | See `FRONTEND-BACKLOG.md`; start with no-security personal-only bootstrap |
 
 ### Phase 3c Remaining
 
-The following items are open. The enrollment endpoint (#1) is the only one
-needed before Phase 4 can be tested end-to-end. The others are hardening and
-can be done in parallel with Phase 4 work.
+Items 2 and 3 are hardening work that can run in parallel with Phase 4. Item 1 is complete.
 
-1. **DB enrollment endpoint** ← unblocks Phase 4 testing
-   - Implement DB schema + migration for `agent_instance` table
-   - Implement `POST /teams/{team_id}/agent-instances` (enroll a discovered template)
-   - Implement `DELETE /teams/{team_id}/agent-instances/{id}` (unenroll)
-   - Replace `ApplicationContext._agent_instance_registry` placeholder with DB reads
-   - Any discovered template from a configured pod can be enrolled — no whitelist
+1. ~~**DB enrollment endpoint**~~ ✓ **Done**
+   - DB schema + migration: `alembic/versions/e1f2a3b4c5d6_add_agent_instance.py`
+   - `POST /teams/{team_id}/agent-instances` implemented in `product_controller.py`
+   - `DELETE /teams/{team_id}/agent-instances/{id}` implemented
+   - `ApplicationContext.get_agent_instance_store()` is DB-backed via `AgentInstanceStore`
+   - Tests cover create, delete, team-scope enforcement, malformed template_id, unknown runtime
 
 2. **Runtime ingress URL convention** (hardening, parallel)
    - Align `base_url` and ingress prefix to `/runtime/{runtime_id}` pattern
@@ -1780,17 +1819,14 @@ can be done in parallel with Phase 4 work.
    - NetworkPolicy for runtime pods
    - Verify no cluster-internal URLs leak to browser
 
-4. **Regenerate contracts after enrollment is DB-backed** (follow-on)
-   - Regenerate `control-plane-backend/openapi.json` and `controlPlaneOpenApi.ts`
-
 ### Phase 4 Gate
 
-Phase 4 implementation can start now. Phase 4 testing requires item 1 above.
+Phase 4 is fully unblocked. All gate criteria are met.
 
 - [x] `ExecutionPreparation` endpoint implemented and code-generated
 - [x] Runtime validates bearer token + `ExecutionGrant` (correlation check done)
 - [x] Frontend receives typed `ExecutionPreparation` and runtime types
-- [ ] At least one enrollable instance exists via the API (needs DB enrollment endpoint)
+- [x] DB-backed enrollment endpoint exists; managed instances can be created via API
 
 Phase 3b validation runs in parallel and does not block Phase 4.
 

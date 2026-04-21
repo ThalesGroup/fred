@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { v4 as uuidv4 } from "uuid";
 
 import { useToast } from "../../../../components/ToastProvider";
 import { useChatSse, ChatSseCallbacks } from "../../../../hooks/useChatSse";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AwaitingHumanEvent, ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 
@@ -38,6 +41,11 @@ function roleLabel(msg: ChatMessage): string {
   if (msg.role === "user") return "You";
   if (msg.role === "tool") return "Tool";
   return "Agent";
+}
+
+/** Expand a RFC 6570 Level 1 URI template for a single {session_id} variable. */
+function expandMessagesUrl(template: string, sessionId: string): string {
+  return template.replace("{session_id}", encodeURIComponent(sessionId));
 }
 
 // ---------------------------------------------------------------------------
@@ -146,25 +154,79 @@ export default function ManagedChatPage() {
     teamId: string;
     agentInstanceId: string;
   }>();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { showError } = useToast();
 
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // sessionId is kept in URL query params (?session=<uuid>) for persistence across refreshes.
+  const [sessionId, setSessionId] = useState<string | null>(() => searchParams.get("session"));
   const [input, setInput] = useState("");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const historyLoadedRef = useRef<string | null>(null);
+
+  const [prepareExecution] =
+    usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+
+  const bindSessionId = useCallback(
+    (sid: string) => {
+      setSessionId(sid);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("session", sid);
+        return next;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
 
   const sseCallbacks: ChatSseCallbacks = {
-    onBindDraftAgentToSessionId: (sid) => setSessionId(sid),
+    onBindDraftAgentToSessionId: bindSessionId,
     onAwaitingHuman: (event) => setPendingHitl(event),
     onError: (msg) => showError({ summary: "Agent error", detail: msg }),
   };
 
-  const { messages, waitResponse, send, sendHitlResume, reset } = useChatSse({
+  const { messages, waitResponse, send, sendHitlResume, reset, replaceAllMessages } = useChatSse({
     agentInstanceId: agentInstanceId ?? "",
     teamId: teamId ?? "",
     ...sseCallbacks,
   });
+
+  // Load history from runtime when the page mounts with a known sessionId.
+  useEffect(() => {
+    const sid = sessionId;
+    if (!sid || !teamId || !agentInstanceId) return;
+    if (historyLoadedRef.current === sid) return;
+    historyLoadedRef.current = sid;
+
+    const loadHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        await KeyCloakService.ensureFreshToken(30);
+        const token = KeyCloakService.GetToken() ?? "";
+        const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+        const historyUrl = new URL(
+          expandMessagesUrl(prep.messages_url_template, sid),
+          window.location.origin,
+        );
+        const resp = await fetch(historyUrl.toString(), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) return;
+        const msgs: ChatMessage[] = await resp.json();
+        if (msgs.length > 0) {
+          replaceAllMessages(msgs);
+        }
+      } catch {
+        // History load failure is non-fatal — user continues with empty view.
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    loadHistory();
+  }, [sessionId, teamId, agentInstanceId, prepareExecution, replaceAllMessages]);
 
   // Scroll to bottom on new messages.
   useEffect(() => {
@@ -184,7 +246,16 @@ export default function ManagedChatPage() {
     if (!text || waitResponse) return;
     setInput("");
     setPendingHitl(null);
-    send(text, sessionId);
+
+    // Generate session_id upfront so the runtime receives it from the first turn.
+    // The turn_persisted event will confirm the binding via onBindDraftAgentToSessionId.
+    let sid = sessionId;
+    if (!sid) {
+      sid = uuidv4();
+      bindSessionId(sid);
+    }
+
+    send(text, sid);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -200,6 +271,18 @@ export default function ManagedChatPage() {
     sendHitlResume(pendingHitl, answer, freeText);
   };
 
+  const handleNewConversation = () => {
+    reset();
+    setSessionId(null);
+    setPendingHitl(null);
+    historyLoadedRef.current = null;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("session");
+      return next;
+    }, { replace: true });
+  };
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -211,18 +294,15 @@ export default function ManagedChatPage() {
           color="on-surface"
           variant="text"
           size="small"
-          onClick={() => {
-            reset();
-            setSessionId(null);
-            setPendingHitl(null);
-          }}
+          onClick={handleNewConversation}
         >
           New conversation
         </Button>
       </header>
 
       <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation">
-        {messages.length === 0 && !waitResponse && (
+        {isLoadingHistory && <p className={styles.thinking}>Loading conversation history…</p>}
+        {!isLoadingHistory && messages.length === 0 && !waitResponse && (
           <p className={styles.empty}>Send a message to start the conversation.</p>
         )}
         {messages.map((msg, i) => (
@@ -239,7 +319,7 @@ export default function ManagedChatPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={waitResponse}
+          disabled={waitResponse || isLoadingHistory}
           rows={2}
           placeholder="Press Enter to send, Shift+Enter for newline"
         />
@@ -247,7 +327,7 @@ export default function ManagedChatPage() {
           color="primary"
           variant="filled"
           size="medium"
-          disabled={!input.trim() || waitResponse}
+          disabled={!input.trim() || waitResponse || isLoadingHistory}
           onClick={handleSend}
         >
           Send

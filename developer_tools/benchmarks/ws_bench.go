@@ -67,6 +67,9 @@ type config struct {
 	AllowEmptyTok      bool
 	DebugEvents        bool
 	RampDuration       time.Duration
+	Protocol           string // "ws" or "sse"
+	SSEUserID          string
+	SSETeamID          string
 }
 
 type result struct {
@@ -111,31 +114,34 @@ func main() {
 
 	if perClientMode {
 		results = make(chan result, totalRequests)
-		sessionIDs := []string{}
-		if cfg.SessionID != "" {
-			sessionIDs = make([]string, cfg.Clients)
-			for i := 0; i < cfg.Clients; i++ {
-				sessionIDs[i] = cfg.SessionID
-			}
-		} else if cfg.CreateSession && cfg.PrepareSessions {
-			ids, err := createSessions(cfg, cfg.Clients)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "prepare sessions failed: %v\n", err)
-				os.Exit(2)
-			}
-			sessionIDs = ids
-		}
-
-		// Optional ramp-up: spread client starts evenly over RampDuration
 		delayPerClient := time.Duration(0)
 		if cfg.RampDuration > 0 && cfg.Clients > 1 {
 			delayPerClient = cfg.RampDuration / time.Duration(cfg.Clients-1)
 		}
+
+		// WS only: optionally pre-create one session per client via HTTP.
+		wsSessionIDs := []string{}
+		if cfg.Protocol != "sse" {
+			if cfg.SessionID != "" {
+				wsSessionIDs = make([]string, cfg.Clients)
+				for i := 0; i < cfg.Clients; i++ {
+					wsSessionIDs[i] = cfg.SessionID
+				}
+			} else if cfg.CreateSession && cfg.PrepareSessions {
+				ids, err := createSessions(cfg, cfg.Clients)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "prepare sessions failed: %v\n", err)
+					os.Exit(2)
+				}
+				wsSessionIDs = ids
+			}
+		}
+
 		for i := 0; i < cfg.Clients; i++ {
 			wg.Add(1)
-			sessionID := ""
-			if len(sessionIDs) > 0 {
-				sessionID = sessionIDs[i]
+			sessionID := cfg.SessionID
+			if cfg.Protocol != "sse" && len(wsSessionIDs) > 0 {
+				sessionID = wsSessionIDs[i]
 			}
 			startDelay := delayPerClient * time.Duration(i)
 			go func(id string, d time.Duration) {
@@ -143,7 +149,12 @@ func main() {
 				if d > 0 {
 					time.Sleep(d)
 				}
-				resList := runClientPersistent(cfg, id)
+				var resList []result
+				if cfg.Protocol == "sse" {
+					resList = runSSEClientPersistent(cfg, id)
+				} else {
+					resList = runClientPersistent(cfg, id)
+				}
 				for _, r := range resList {
 					results <- r
 				}
@@ -151,20 +162,23 @@ func main() {
 		}
 		wg.Wait()
 		close(results)
-		if cfg.DeleteSession && cfg.CreateSession && cfg.PrepareSessions && cfg.SessionID == "" {
-			deleteSessions(cfg, sessionIDs)
+		if cfg.Protocol != "sse" && cfg.DeleteSession && cfg.CreateSession && cfg.PrepareSessions && cfg.SessionID == "" {
+			deleteSessions(cfg, wsSessionIDs)
 		}
 	} else {
 		cfg.Clients = effectiveClients
 		results = make(chan result, totalRequests)
 		jobs := make(chan int)
+		runOnceFn := runOnce
+		if cfg.Protocol == "sse" {
+			runOnceFn = runSSEOnce
+		}
 		for i := 0; i < cfg.Clients; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for range jobs {
-					res := runOnce(cfg)
-					results <- res
+					results <- runOnceFn(cfg)
 				}
 			}()
 		}
@@ -202,10 +216,13 @@ func parseFlags() config {
 		fmt.Fprintln(flag.CommandLine.Output(), "  make run ARGS='-url ws://localhost:8000/agentic/v1/chatbot/query/ws -token $TOKEN -clients 100 -requests 100'")
 	}
 
-	urlFlag := flag.String("url", "ws://localhost:8000/agentic/v1/chatbot/query/ws", "WebSocket URL")
+	protocolFlag := flag.String("protocol", "ws", "Transport protocol: ws (agentic-backend) or sse (fred-runtime)")
+	sseUserIDFlag := flag.String("sse-user-id", "bench", "User ID injected into runtime_context for SSE requests (keys sessions per user)")
+	sseTeamIDFlag := flag.String("sse-team-id", "", "Team ID injected into runtime_context for SSE requests (optional)")
+	urlFlag := flag.String("url", "ws://localhost:8000/agentic/v1/chatbot/query/ws", "Endpoint URL (ws/wss for protocol=ws, http/https for protocol=sse)")
 	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
 	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
-	agentFlag := flag.String("agent", "Georges", "Agent ID (matches configuration.yaml)")
+	agentFlag := flag.String("agent", "Georges", "Agent ID (configuration.yaml for ws, fred_sdk agent_id for sse)")
 	messageFlag := flag.String("message", "Hello", "Prompt message")
 	sessionFlag := flag.String("session", "", "Session ID (optional)")
 	sessionURLFlag := flag.String("session-url", "", "HTTP session endpoint URL (optional)")
@@ -259,6 +276,9 @@ func parseFlags() config {
 		AllowEmptyTok:      *allowEmptyTok,
 		DebugEvents:        *debugEvents,
 		RampDuration:       *rampDurationFlag,
+		Protocol:           strings.ToLower(strings.TrimSpace(*protocolFlag)),
+		SSEUserID:          strings.TrimSpace(*sseUserIDFlag),
+		SSETeamID:          strings.TrimSpace(*sseTeamIDFlag),
 	}
 }
 
@@ -390,7 +410,8 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 		sessionPlan = "create per request"
 	}
 
-	fmt.Printf("\n%s\n", style("WS BENCH CONFIG", colorBold, colorCyan))
+	fmt.Printf("\n%s\n", style("BENCH CONFIG", colorBold, colorCyan))
+	fmt.Printf("%s %s\n", style("Protocol:", colorDim), cfg.Protocol)
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
 	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
 	fmt.Printf("%s %s\n", style("Mode:", colorDim), mode)
@@ -793,7 +814,7 @@ func printSummary(cfg config, total int, durations []time.Duration, errorCount i
 		successPct = (float64(success) / float64(total)) * 100
 	}
 
-	fmt.Printf("\n%s\n", style("WS BENCH SUMMARY", colorBold, colorCyan))
+	fmt.Printf("\n%s\n", style("BENCH SUMMARY", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Outcome:", colorDim), style(outcome, colorBold, outcomeColor))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
 	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
