@@ -58,34 +58,49 @@ type errorEvent struct {
 	Content string `json:"content"`
 }
 
+type createV2AgentPayload struct {
+	Name          string `json:"name"`
+	DefinitionRef string `json:"definition_ref,omitempty"`
+	ProfileID     string `json:"profile_id,omitempty"`
+}
+
+type createdAgentResponse struct {
+	ID string `json:"id"`
+}
+
 type config struct {
-	URL                 string
-	Token               string
-	TokenInQuery        bool
-	AgentID             string
-	Message             string
-	SessionID           string
-	SessionURL          string
-	SessionTitle        string
-	CreateSession       bool
-	PrepareSessions     bool
-	PrepareConcurrency  int
-	DeleteSession       bool
-	Clients             int
-	Requests            int
-	RequestsPerClient   int
-	Timeout             time.Duration
-	InsecureTLS         bool
-	AllowEmptyTok       bool
-	DebugEvents         bool
-	RampDuration        time.Duration
-	ReadLimitBytes      int64
-	DocumentLibraryIDs  []string
-	DocumentUIDs        []string
-	SearchPolicy        string
-	SearchRagScope      string
-	IncludeSessionScope *bool
-	IncludeCorpusScope  *bool
+	URL                   string
+	Token                 string
+	TokenInQuery          bool
+	AgentID               string
+	AgentCreateURL        string
+	EnsureV2DefinitionRef string
+	EnsureV2ProfileID     string
+	EnsureAgentName       string
+	DeleteCreatedAgent    bool
+	Message               string
+	SessionID             string
+	SessionURL            string
+	SessionTitle          string
+	CreateSession         bool
+	PrepareSessions       bool
+	PrepareConcurrency    int
+	DeleteSession         bool
+	Clients               int
+	Requests              int
+	RequestsPerClient     int
+	Timeout               time.Duration
+	InsecureTLS           bool
+	AllowEmptyTok         bool
+	DebugEvents           bool
+	RampDuration          time.Duration
+	ReadLimitBytes        int64
+	DocumentLibraryIDs    []string
+	DocumentUIDs          []string
+	SearchPolicy          string
+	SearchRagScope        string
+	IncludeSessionScope   *bool
+	IncludeCorpusScope    *bool
 }
 
 type result struct {
@@ -116,6 +131,23 @@ func main() {
 	}
 
 	start := time.Now()
+	if cfg.EnsureV2DefinitionRef != "" || cfg.EnsureV2ProfileID != "" {
+		createdAgentID, err := ensureV2Agent(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ensure v2 agent failed: %v\n", err)
+			os.Exit(2)
+		}
+		cfg.AgentID = createdAgentID
+		if cfg.DeleteCreatedAgent {
+			defer func() {
+				ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+				if err := deleteAgent(ctx, cfg, createdAgentID); err != nil {
+					fmt.Fprintf(os.Stderr, "delete agent failed: %v\n", err)
+				}
+				cancel()
+			}()
+		}
+	}
 	totalRequests := cfg.Requests
 	effectiveClients := cfg.Clients
 	if perClientMode {
@@ -228,6 +260,11 @@ func parseFlags() config {
 	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
 	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
 	agentFlag := flag.String("agent", "Georges", "Agent ID (matches configuration.yaml)")
+	agentCreateURLFlag := flag.String("agent-create-url", "", "HTTP v2 agent creation endpoint URL override (optional)")
+	ensureV2DefinitionRefFlag := flag.String("ensure-v2-definition-ref", "", "Optionally create a v2 agent from a definition_ref before benchmarking, e.g. v2.react.rag_expert")
+	ensureV2ProfileIDFlag := flag.String("ensure-v2-profile-id", "", "Optionally create a Basic ReAct v2 agent from a react profile before benchmarking, e.g. rag_expert")
+	ensureAgentNameFlag := flag.String("ensure-agent-name", "Bench RAG Expert", "Display name for an agent created automatically by the benchmark")
+	deleteCreatedAgentFlag := flag.Bool("delete-created-agent", false, "Delete the automatically created v2 agent after the benchmark run")
 	messageFlag := flag.String("message", "Hello", "Prompt message")
 	sessionFlag := flag.String("session", "", "Session ID (optional)")
 	sessionURLFlag := flag.String("session-url", "", "HTTP session endpoint URL (optional)")
@@ -268,33 +305,38 @@ func parseFlags() config {
 	}
 
 	return config{
-		URL:                 strings.TrimSpace(*urlFlag),
-		Token:               token,
-		TokenInQuery:        *tokenInQuery,
-		AgentID:             strings.TrimSpace(*agentFlag),
-		Message:             *messageFlag,
-		SessionID:           strings.TrimSpace(*sessionFlag),
-		SessionURL:          strings.TrimSpace(*sessionURLFlag),
-		SessionTitle:        strings.TrimSpace(*sessionTitleFlag),
-		CreateSession:       *createSessionFlag,
-		PrepareSessions:     *prepareSessionsFlag,
-		PrepareConcurrency:  *prepareConcurrencyFlag,
-		DeleteSession:       *deleteSessionFlag,
-		Clients:             *clientsFlag,
-		Requests:            requests,
-		RequestsPerClient:   *requestsPerClientFlag,
-		Timeout:             *timeoutFlag,
-		ReadLimitBytes:      *readLimitBytesFlag,
-		InsecureTLS:         *insecureFlag,
-		AllowEmptyTok:       *allowEmptyTok,
-		DebugEvents:         *debugEvents,
-		RampDuration:        *rampDurationFlag,
-		DocumentLibraryIDs:  parseCSVFlag(*documentLibraryIDsFlag),
-		DocumentUIDs:        parseCSVFlag(*documentUIDsFlag),
-		SearchPolicy:        strings.TrimSpace(*searchPolicyFlag),
-		SearchRagScope:      strings.TrimSpace(*searchRagScopeFlag),
-		IncludeSessionScope: parseOptionalBoolFlag(*includeSessionScopeFlag),
-		IncludeCorpusScope:  parseOptionalBoolFlag(*includeCorpusScopeFlag),
+		URL:                   strings.TrimSpace(*urlFlag),
+		Token:                 token,
+		TokenInQuery:          *tokenInQuery,
+		AgentID:               strings.TrimSpace(*agentFlag),
+		AgentCreateURL:        strings.TrimSpace(*agentCreateURLFlag),
+		EnsureV2DefinitionRef: strings.TrimSpace(*ensureV2DefinitionRefFlag),
+		EnsureV2ProfileID:     strings.TrimSpace(*ensureV2ProfileIDFlag),
+		EnsureAgentName:       strings.TrimSpace(*ensureAgentNameFlag),
+		DeleteCreatedAgent:    *deleteCreatedAgentFlag,
+		Message:               *messageFlag,
+		SessionID:             strings.TrimSpace(*sessionFlag),
+		SessionURL:            strings.TrimSpace(*sessionURLFlag),
+		SessionTitle:          strings.TrimSpace(*sessionTitleFlag),
+		CreateSession:         *createSessionFlag,
+		PrepareSessions:       *prepareSessionsFlag,
+		PrepareConcurrency:    *prepareConcurrencyFlag,
+		DeleteSession:         *deleteSessionFlag,
+		Clients:               *clientsFlag,
+		Requests:              requests,
+		RequestsPerClient:     *requestsPerClientFlag,
+		Timeout:               *timeoutFlag,
+		ReadLimitBytes:        *readLimitBytesFlag,
+		InsecureTLS:           *insecureFlag,
+		AllowEmptyTok:         *allowEmptyTok,
+		DebugEvents:           *debugEvents,
+		RampDuration:          *rampDurationFlag,
+		DocumentLibraryIDs:    parseCSVFlag(*documentLibraryIDsFlag),
+		DocumentUIDs:          parseCSVFlag(*documentUIDsFlag),
+		SearchPolicy:          strings.TrimSpace(*searchPolicyFlag),
+		SearchRagScope:        strings.TrimSpace(*searchRagScopeFlag),
+		IncludeSessionScope:   parseOptionalBoolFlag(*includeSessionScopeFlag),
+		IncludeCorpusScope:    parseOptionalBoolFlag(*includeCorpusScopeFlag),
 	}
 }
 
@@ -426,6 +468,12 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 	fmt.Printf("\n%s\n", style("WS BENCH CONFIG", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
 	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
+	if cfg.EnsureV2DefinitionRef != "" {
+		fmt.Printf("%s %s\n", style("Ensure v2 definition:", colorDim), cfg.EnsureV2DefinitionRef)
+	}
+	if cfg.EnsureV2ProfileID != "" {
+		fmt.Printf("%s %s\n", style("Ensure v2 profile:", colorDim), cfg.EnsureV2ProfileID)
+	}
 	if len(cfg.DocumentLibraryIDs) > 0 {
 		fmt.Printf("%s %s\n", style("Document libraries:", colorDim), strings.Join(cfg.DocumentLibraryIDs, ","))
 	}
@@ -636,6 +684,63 @@ func newExchangeID() string {
 	return hex.EncodeToString(b[:])
 }
 
+// ensureV2Agent exists to create one dynamic v2 agent before the benchmark so
+// the load test can hit a real v2 RAG runtime instead of a v1 fallback.
+// Usage: pass either `-ensure-v2-definition-ref` or `-ensure-v2-profile-id`.
+func ensureV2Agent(cfg config) (string, error) {
+	agentCreateURL, err := getAgentCreateURL(cfg)
+	if err != nil {
+		return "", err
+	}
+
+	payload := createV2AgentPayload{
+		Name:          cfg.EnsureAgentName,
+		DefinitionRef: cfg.EnsureV2DefinitionRef,
+		ProfileID:     cfg.EnsureV2ProfileID,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, agentCreateURL, strings.NewReader(string(body)))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if cfg.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	}
+
+	client := &http.Client{}
+	if cfg.InsecureTLS {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("create v2 agent failed: %s", resp.Status)
+	}
+
+	var created createdAgentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		return "", err
+	}
+	if created.ID == "" {
+		return "", fmt.Errorf("create v2 agent returned empty id")
+	}
+	return created.ID, nil
+}
+
 // parseCSVFlag exists to keep list-style benchmark flags compact for CLI and
 // Helm usage. Example: `-document-library-ids=lib-a,lib-b`.
 func parseCSVFlag(raw string) []string {
@@ -719,6 +824,39 @@ func createSession(ctx context.Context, cfg config) (string, error) {
 		return "", fmt.Errorf("create session returned empty id")
 	}
 	return session.ID, nil
+}
+
+// deleteAgent exists to clean up an agent created only for one benchmark run.
+// Usage: enable with `-delete-created-agent=true` when the bench creates a v2 agent.
+func deleteAgent(ctx context.Context, cfg config, agentID string) error {
+	deleteURL, err := getAgentDeleteURL(cfg, agentID)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
+	if err != nil {
+		return err
+	}
+	if cfg.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	}
+
+	client := &http.Client{}
+	if cfg.InsecureTLS {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("delete agent failed: %s", resp.Status)
+	}
+	return nil
 }
 
 func createSessions(cfg config, count int) ([]string, error) {
@@ -839,6 +977,52 @@ func getSessionURL(cfg config) (string, error) {
 		return cfg.SessionURL, nil
 	}
 	return deriveSessionURL(cfg.URL)
+}
+
+// getAgentCreateURL exists to derive the agent management endpoint from the
+// websocket target so the benchmark can bootstrap a dynamic v2 agent itself.
+// Usage: override with `-agent-create-url` when the default path is not correct.
+func getAgentCreateURL(cfg config) (string, error) {
+	if cfg.AgentCreateURL != "" {
+		return cfg.AgentCreateURL, nil
+	}
+	parsed, err := url.Parse(cfg.URL)
+	if err != nil {
+		return "", err
+	}
+	switch parsed.Scheme {
+	case "ws":
+		parsed.Scheme = "http"
+	case "wss":
+		parsed.Scheme = "https"
+	}
+	replacements := []string{
+		"/chatbot/query/ws-baseline",
+		"/chatbot/query/ws",
+	}
+	for _, old := range replacements {
+		if strings.Contains(parsed.Path, old) {
+			parsed.Path = strings.Replace(parsed.Path, old, "/agents/v2/create", 1)
+			return parsed.String(), nil
+		}
+	}
+	return "", fmt.Errorf("cannot derive agent create URL from %s (set -agent-create-url)", cfg.URL)
+}
+
+// getAgentDeleteURL exists to address the delete endpoint for one benchmark-
+// created agent after the run completes.
+// Usage: only used when `-delete-created-agent=true`.
+func getAgentDeleteURL(cfg config, agentID string) (string, error) {
+	createURL, err := getAgentCreateURL(cfg)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(createURL)
+	if err != nil {
+		return "", err
+	}
+	parsed.Path = strings.TrimSuffix(parsed.Path, "/v2/create") + "/" + agentID
+	return parsed.String(), nil
 }
 
 func getSessionDeleteURL(cfg config, sessionID string) (string, error) {

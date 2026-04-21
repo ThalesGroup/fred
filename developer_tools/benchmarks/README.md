@@ -105,6 +105,44 @@ AGENTIC_TOKEN=fake-token make run ARGS='\
   -read-limit-bytes=8388608'
 ```
 
+For local v2 bench runs, the two canonical `make run` commands are:
+
+Mode `normal`:
+```bash
+AGENTIC_TOKEN="$TOKEN" make run ARGS='\
+  -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
+  -agent basic.react.v2 \
+  -ensure-v2-definition-ref=v2.react.basic \
+  -ensure-agent-name="Bench Basic ReAct" \
+  -message "Quelle est la frequence recommandee des sprints ?" \
+  -clients=20 \
+  -requests-per-client=5 \
+  -create-session=true \
+  -prepare-sessions=true \
+  -delete-session=true \
+  -delete-created-agent=true \
+  -read-limit-bytes=8388608'
+```
+
+Mode `rag`:
+```bash
+AGENTIC_TOKEN="$TOKEN" make run ARGS='\
+  -url ws://localhost:8000/agentic/v1/chatbot/query/ws \
+  -agent basic.react.v2 \
+  -ensure-v2-profile-id=rag_expert \
+  -ensure-agent-name="Bench RAG Expert" \
+  -message "Quelle est la frequence recommandee des sprints ?" \
+  -search-policy=hybrid \
+  -search-rag-scope=corpus_only \
+  -clients=20 \
+  -requests-per-client=5 \
+  -create-session=true \
+  -prepare-sessions=true \
+  -delete-session=true \
+  -delete-created-agent=true \
+  -read-limit-bytes=8388608'
+```
+
 To simulate many users sending requests at the same time, increase `-clients`
 and keep `-ramp-duration=0s` so they all start together:
 
@@ -160,4 +198,36 @@ kubectl create secret generic agentic-bench-token \
   --from-literal=token=<bearer-token> \
   -n <namespace>
 ```
-Adjust `bench.clients`, `bench.requests`, or pass `bench.tokenInQuery=true` if the server expects the token in the query string.
+The chart does not mint a token from Keycloak. It expects a bearer token to be
+provided up front through `tokenSecret`.
+
+The chart now supports two modes through `bench.mode`:
+- `rag` (default): creates a temporary v2 Basic ReAct agent from `profile_id=rag_expert`, sends RAG websocket requests with `search_policy=hybrid`, and forces `search_rag_scope=corpus_only`.
+- `normal`: creates a temporary classic v2 ReAct agent from `definition_ref=v2.react.basic` and runs the same load pattern without RAG-specific retrieval flags.
+
+Values are split between:
+- `bench.common` for shared benchmark settings such as URL, concurrency, session lifecycle, and message.
+- `bench.modes.normal` / `bench.modes.rag` for mode-specific agent bootstrap and retrieval settings.
+
+Adjust `bench.clients`, `bench.requestsPerClient`, or pass
+`bench.tokenInQuery=true` if the server expects the token in the query string.
+
+Examples:
+
+```bash
+helm upgrade --install agentic-bench deploy/charts/agentic-bench \
+  -n <namespace> \
+  --set image.repository=<registry>/agentic-bench \
+  --set image.tag=latest \
+  --set tokenSecret.name=agentic-bench-token \
+  --set bench.mode=rag
+```
+
+```bash
+helm upgrade --install agentic-bench deploy/charts/agentic-bench \
+  -n <namespace> \
+  --set image.repository=<registry>/agentic-bench \
+  --set image.tag=latest \
+  --set tokenSecret.name=agentic-bench-token \
+  --set bench.mode=normal
+```

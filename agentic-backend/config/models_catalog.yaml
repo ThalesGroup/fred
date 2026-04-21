@@ -162,5 +162,20 @@ profiles:
       name: "mistral:latest"
       settings:
         base_url: "http://host.docker.internal:11434"
+  - profile_id: default.chat.mock
+    capability: chat
+    model:
+      provider: openai
+      name: gpt-4o
+      settings:
+        base_url: http://localhost:8383/v1
+
+  - profile_id: default.language.mock
+    capability: language
+    model:
+      provider: openai
+      name: gpt-4o
+      settings:
+        base_url: http://localhost:8383/v1
 
 rules: []
