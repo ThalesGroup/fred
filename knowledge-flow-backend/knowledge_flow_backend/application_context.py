@@ -36,7 +36,7 @@ from fred_core import (
     rebac_factory,
     split_realm_url,
 )
-from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig, SQLStorageConfig, get_config
+from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig, SQLStorageConfig
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
@@ -142,10 +142,6 @@ def get_configuration() -> Configuration:
         Configuration: The singleton application configuration.
     """
     return get_app_context().configuration
-
-
-app = FastAPI()
-app.dependency_overrides[get_config] = get_configuration
 
 
 def get_kpi_writer() -> BaseKPIWriter:

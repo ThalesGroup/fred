@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
+from typing import Optional
 from uuid import UUID
 
 from fastapi import Depends
@@ -165,12 +166,8 @@ async def _fetch_all_users(admin: KeycloakAdmin) -> list[dict]:
 
 async def find_user_details_by_id(
     user_id: UUID, user_store: BaseUserStore = Depends(get_user_store)
-) -> UserRow:
-    user_details = await user_store.find_user_by_id(user_id)
-
-    if user_details is None:
-        raise UserNotFoundError(str(user_id))
-    return user_details
+) -> Optional[UserRow]:
+    return await user_store.find_user_by_id(user_id)
 
 
 async def update_gcu_validation(user_id: UUID, user_store: BaseUserStore) -> None:

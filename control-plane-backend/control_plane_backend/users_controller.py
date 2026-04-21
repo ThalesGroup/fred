@@ -104,7 +104,7 @@ async def delete_user(
 
 
 class UserDetails(BaseModel):
-    cguValidated: GcuVersionsType
+    cguValidated: GcuVersionsType | None
     personalTeam: TeamWithPermissions
 
 
@@ -117,8 +117,9 @@ async def get_user_details(
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     user_details = await find_user_details_by_id(UUID(user.uid), user_store)
+
     return UserDetails(
-        cguValidated=user_details.gcuVersionAccepted,
+        cguValidated=user_details.gcuVersionAccepted if user_details else None,
         personalTeam=TeamWithPermissions(
             id=PERSONAL_TEAM_ID,
             name="Equipe personnelle",

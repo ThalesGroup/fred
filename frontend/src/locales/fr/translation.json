@@ -678,12 +678,12 @@
       }
     },
     "libraries": {
-      "disabledByDocuments": "La sélection de documents est active. Désactivez les documents pour utiliser les bibliothèques.",
-      "includeToggle": "Basculer la recherche sur les bibliothèques",
-      "includeTooltipOn": "Les bibliothèques sont incluses dans la recherche pour cette conversation.",
-      "includeTooltipOff": "Les bibliothèques sont exclues de la recherche pour cette conversation.",
-      "empty": "Aucune bibliothèque sélectionnée. Toutes les bibliothèques de documents visibles seront recherchées.",
-      "previewTitle": "Bibliothèque",
+      "disabledByDocuments": "La sélection de documents est active. Désactivez les documents pour utiliser les dossiers.",
+      "includeToggle": "Basculer la recherche sur les dossiers",
+      "includeTooltipOn": "Les dossiers sont incluses dans la recherche pour cette conversation.",
+      "includeTooltipOff": "Les dossiers sont exclues de la recherche pour cette conversation.",
+      "empty": "Aucun dossier sélectionnée. Toutes les dossiers de documents visibles seront recherchées.",
+      "previewTitle": "Dossiers",
       "noDescription": "Aucune description disponible."
     },
     "uploadingFile": "Téléversement de {{name}}...",
@@ -1009,12 +1009,12 @@
     "editResource": "Éditer un {{typeOne}}",
     "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
-    "loadingLibraries": "Chargement des bibliothèques…",
-    "failedToLoad": "Échec du chargement des bibliothèques.",
+    "loadingLibraries": "Chargement des dossiers…",
+    "failedToLoad": "Échec du chargement des dossiers.",
     "createSuccess": "Créé",
-    "createDetail": "{{typeOne, capitalize}} ajouté à la bibliothèque.",
+    "createDetail": "{{typeOne, capitalize}} ajouté au dossier.",
     "removeSuccess": "Supprimé",
-    "removeDetail": "{{typeOne, capitalize}} supprimé de la bibliothèque.",
+    "removeDetail": "{{typeOne, capitalize}} supprimé du dossier.",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
@@ -1022,7 +1022,7 @@
     "folderDeleteForbiddenSummary": "Non autorisé",
     "folderDeleteForbiddenDetail": "Seul les propriétaires peuvent supprimer la bibliothèque « {{name}} ».",
     "removeForbiddenSummary": "Non autorisé",
-    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments de la bibliothèque « {{folder}} ».",
+    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments du dossier « {{folder}} ».",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
     "dropFiles": "Déposez vos {{typePlural}} ici",
@@ -1037,8 +1037,8 @@
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
-    "emptyLibrariesTitle": "Aucune bibliothèque pour le moment",
-    "emptyLibrariesDescription": "Créez votre première bibliothèque pour organiser vos {{typePlural}}.",
+    "emptyLibrariesTitle": "Aucun dossier pour le moment",
+    "emptyLibrariesDescription": "Créez votre premier dossier pour organiser vos {{typePlural}}.",
     "emptyLibrariesAction": "Créer un dossier"
   },
   "documentLibraryTree": {
@@ -1096,8 +1096,8 @@
     "createLibrary": "Créer dossier",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
-    "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
-    "emptyFoldersDescription": "Créez votre première bibliothèque pour organiser les documents et garder les ajouts rangés.",
+    "emptyFoldersTitle": "Aucun dossier pour le moment",
+    "emptyFoldersDescription": "Créez votre premier dossier pour organiser les documents et garder les ajouts rangés.",
     "emptyFoldersAction": "Créer un dossier"
   },
   "libraryCreateDrawer": {
@@ -1109,11 +1109,11 @@
     "createUnder": "Créer un nouveau dossier sous",
     "saving": "Création en cours...",
     "validationError": "Erreur de validation",
-    "nameRequired": "Le nom de la bibliothèque est obligatoire",
-    "libraryCreated": "Bibliothèque créée",
-    "libraryCreatedDetail": "La bibliothèque \"{{name}}\" a été créée avec succès",
+    "nameRequired": "Le nom du dossier est obligatoire",
+    "libraryCreated": "Dossier créée",
+    "libraryCreatedDetail": "Le dossier \"{{name}}\" a été créée avec succès",
     "creationFailed": "Échec de la création",
-    "creationFailedDetail": "Erreur lors de la création de la bibliothèque : {{error}}"
+    "creationFailedDetail": "Erreur lors de la création de la dossier : {{error}}"
   },
   "libraryEdit": {
     "edit": "Modifier",
