@@ -7,7 +7,6 @@ from fred_core import (
     BaseUserStore,
     GcuVersionsType,
     KeycloakUser,
-    RBACProvider,
     TeamPermission,
     get_current_user,
 )
@@ -38,9 +37,6 @@ from control_plane_backend.users_structures import (
     UserNotFoundError,
     UserSummary,
 )
-
-# Create a RBAC provider object to retrieve user permissions in the config/permissions route
-rbac_provider = RBACProvider()
 
 router = APIRouter(tags=["Users"])
 

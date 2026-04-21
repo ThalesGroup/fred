@@ -15,7 +15,7 @@ export interface TeamCardProps {
 }
 
 export default function TeamCard({ team, withDescription, canJoin }: TeamCardProps) {
-  const { defaultTeamBannerFile, defaultTeamAvatarFile } = useFrontendProperties();
+  const { defaultTeamBannerFile, defaultTeamAvatarFile, siteTitle, siteSubtitle } = useFrontendProperties();
   const { t } = useTranslation();
   const userFullName = KeyCloakService.GetUserFullName();
   const username = KeyCloakService.GetUserName();
@@ -24,9 +24,9 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
     e.preventDefault();
     if (team.owners.length === 0) return;
     const recipients = team.owners.map((o) => o.email).join(",");
-    const subject = `[Prism AI Hub] Demande pour rejoindre l'équipe ${team.name}`;
+    const subject = `[${siteTitle} ${siteSubtitle}] Demande pour rejoindre l'équipe ${team.name}`;
     const teamUrl = `${window.location.origin}/teams/${team.id}/agents`;
-    const body = `Bonjour,\n\nJe souhaite rejoindre l’équipe ${team.name} sur Prism AI Hub.\n\nInformations utilisateur : ${userFullName} (${username})\n\nAller à la page de l'équipe ${team.name} : ${teamUrl}`;
+    const body = `Bonjour,\n\nJe souhaite rejoindre l’équipe ${team.name} sur ${siteTitle} ${siteSubtitle}.\n\nInformations utilisateur : ${userFullName} (${username})\n\nAller à la page de l'équipe ${team.name} : ${teamUrl}`;
     const params = new URLSearchParams({
       subject: subject,
       body: body,
