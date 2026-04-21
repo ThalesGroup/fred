@@ -494,26 +494,23 @@ class ApplicationContext:
         Lazily create and cache a single async Postgres Engine for all the postgres async stores.
         """
         if self._pg_async_engine is None:
-          self._init_pg_async_engine()
+            self._pg_async_engine = self._init_pg_async_engine()
         return self._pg_async_engine
 
     def _init_pg_async_engine(self):
-      pg_cfg = self.configuration.storage.postgres
-      self._pg_async_engine = create_async_engine_from_config(pg_cfg)
-      engine = self._pg_async_engine
+        pg_cfg = self.configuration.storage.postgres
+        pg_async_engine = create_async_engine_from_config(pg_cfg)
 
-      def _dispose_async_engine():
-        try:
-          asyncio.run(engine.dispose())
-        except Exception:
-          logger.debug(
-            "[SQL] Async engine dispose at exit failed", exc_info=True
-          )
+        def _dispose_async_engine():
+            try:
+                asyncio.run(pg_async_engine.dispose())
+            except Exception:
+                logger.debug("[SQL] Async engine dispose at exit failed", exc_info=True)
 
-      atexit.register(_dispose_async_engine)
-      logger.info("[SQL] Shared Postgres async initialized.")
-      init_user_store(self.get_pg_async_engine())
-
+        atexit.register(_dispose_async_engine)
+        logger.info("[SQL] Shared Postgres async initialized.")
+        init_user_store(pg_async_engine)
+        return pg_async_engine
 
     def begin_pg_transaction(self):
         """

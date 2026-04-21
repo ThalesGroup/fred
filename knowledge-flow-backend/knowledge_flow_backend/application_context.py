@@ -19,7 +19,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, Union
 
-from fastapi import FastAPI
 from fred_core import (
     BaseFilesystem,
     BaseLogStore,

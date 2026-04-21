@@ -29,9 +29,10 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
 from fred_core import (
-  get_current_user,
-  initialize_user_security,
-  log_setup, get_config,
+    get_config,
+    get_current_user,
+    initialize_user_security,
+    log_setup,
 )
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.kpi import emit_process_kpis, emit_sql_pool_kpis
@@ -190,7 +191,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.dependency_overrides[get_config] = get_configuration
-
 
     # Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) so that
     # request.base_url uses https:// when behind a TLS-terminating ingress.
