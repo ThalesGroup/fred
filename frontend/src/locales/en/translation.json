@@ -1003,7 +1003,7 @@
     "title": "{{typePlural}}",
     "edit": "Edit",
     "preview": "Preview",
-    "createLibrary": "Create library",
+    "createLibrary": "Create folder",
     "createResource": "Add {{typeOne}} to library",
     "editResource": "Edit a {{typeOne}}",
     "importResource": "Import {{typeOne}} from file",
@@ -1038,7 +1038,7 @@
     "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?",
     "emptyLibrariesTitle": "No libraries yet",
     "emptyLibrariesDescription": "Create your first library to organize your {{typePlural}}.",
-    "emptyLibrariesAction": "Create library"
+    "emptyLibrariesAction": "Create folder"
   },
   "documentLibraryTree": {
     "shareFolder": "Share folder",
@@ -1097,15 +1097,15 @@
     "expandAll": "Expand all",
     "emptyFoldersTitle": "No libraries yet",
     "emptyFoldersDescription": "Create your first library to organize these documents and keep uploads tidy.",
-    "emptyFoldersAction": "Create library"
+    "emptyFoldersAction": "Create folder"
   },
   "libraryCreateDrawer": {
-    "title": "Create New Library",
+    "title": "Create new folder",
     "libraryName": "Name",
     "libraryDescription": "Description",
     "cancel": "Cancel",
     "save": "Create",
-    "createUnder": "Create new library under",
+    "createUnder": "Create new folder under",
     "saving": "Creating...",
     "validationError": "Validation Error",
     "nameRequired": "Library name is required",
@@ -1308,7 +1308,7 @@
     "defaultConfirmButtonLabel": "Confirm"
   },
   "rework": {
-    "back": "Retour",
+    "back": "Back",
     "create": "Create",
     "save": "Save",
     "cancel": "Cancel",
@@ -1362,7 +1362,9 @@
       "conversationProfile": {
         "title": "Conversation profile",
         "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}."
-      }
+      },
+      "accessGcu": "Access to CGU",
+      "accessGdpr": "What do {{siteTitle}} {{siteSubtitle}} with my data ?"
     },
     "teamSettings": {
       "navigation": {
@@ -1441,7 +1443,13 @@
     },
     "gcu": {
       "title": "Terms of Service (ToS)",
-      "lockInformation": "Read the Terms of Service before you can accept them"
+      "lockInformation": "Read the Terms of Service before you can accept them",
+      "validate": "Accept the TOS",
+      "backToApp": "Back to app"
+    },
+    "gdpr": {
+      "title": "Privacy policy",
+      "backToApp": "Back to app"
     }
   }
 }

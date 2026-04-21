@@ -1,4 +1,4 @@
-.gcuContainer {
+.gdprContainer {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -10,7 +10,7 @@
   color: var(--on-surface);
 }
 
-.gcuTitle {
+.gdprTitle {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -19,7 +19,7 @@
   font: var(--font-title-large);
 }
 
-.gcuContent {
+.gdprContent {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-l);
@@ -46,13 +46,13 @@
   }
 }
 
-.gcuSection {
+.gdprSection {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
 }
 
-.gcuActions {
+.gdprActions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -60,10 +60,4 @@
   background-color: var(--surface-container-hight);
   padding: var(--spacing-m);
   width: 660px;
-}
-
-.gcuLockInformation {
-  margin-right: auto;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
 }

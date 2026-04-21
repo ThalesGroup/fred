@@ -50,10 +50,10 @@
 .teamName {
   overflow: hidden;
   color: var(--on-surface);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 
   font: var(--font-title-large-emphasized);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .teamMemberCount {
@@ -80,13 +80,13 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   color: var(--on-surface-retreat);
-  overflow-wrap: anywhere;
 
   font: var(--font-body-medium);
+  overflow-wrap: anywhere;
 }
 
 .teamCardFooter {
-  margin-top: auto;
   display: flex;
   justify-content: space-between;
+  margin-top: auto;
 }

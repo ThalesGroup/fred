@@ -20,35 +20,27 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Type, Union
 
 from fastapi import FastAPI
-
 from fred_core import (
-  BaseFilesystem,
-  BaseLogStore,
-  InMemoryLogStorageConfig,
-  LocalFilesystem,
-  MinioFilesystem,
-  ModelProvider,
-  OpenFgaRebacConfig,
-  OpenSearchLogStore,
-  RamLogStore,
-  RebacEngine,
-  get_embeddings,
-  get_model,
-  rebac_factory,
-  split_realm_url,
+    BaseFilesystem,
+    BaseLogStore,
+    InMemoryLogStorageConfig,
+    LocalFilesystem,
+    MinioFilesystem,
+    ModelProvider,
+    OpenFgaRebacConfig,
+    OpenSearchLogStore,
+    RamLogStore,
+    RebacEngine,
+    get_embeddings,
+    get_model,
+    rebac_factory,
+    split_realm_url,
 )
-from fred_core.common import (
-    DuckdbStoreConfig,
-    LogStoreConfig,
-    ModelConfiguration,
-    OpenSearchIndexConfig,
-    PostgresTableConfig,
-    SQLStorageConfig,
-    get_config
-)
+from fred_core.common import DuckdbStoreConfig, LogStoreConfig, ModelConfiguration, OpenSearchIndexConfig, PostgresTableConfig, SQLStorageConfig, get_config
 from fred_core.kpi import BaseKPIStore, BaseKPIWriter, KPIDefaults, KpiLogStore, KPIWriter, OpenSearchKPIStore, PrometheusKPIStore
 from fred_core.scheduler import SchedulerBackend, resolve_scheduler_backend
 from fred_core.sql import create_async_engine_from_config
+from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.embeddings import Embeddings
 from neo4j import Driver, GraphDatabase
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -151,8 +143,10 @@ def get_configuration() -> Configuration:
     """
     return get_app_context().configuration
 
+
 app = FastAPI()
 app.dependency_overrides[get_config] = get_configuration
+
 
 def get_kpi_writer() -> BaseKPIWriter:
     """
@@ -317,6 +311,7 @@ class ApplicationContext:
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
         self._log_config_summary()
+        init_user_store(self.get_pg_async_engine())
 
     def is_tabular_file(self, file_name: str) -> bool:
         """

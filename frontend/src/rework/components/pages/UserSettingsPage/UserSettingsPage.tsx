@@ -5,15 +5,15 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
+import { Link } from "react-router-dom";
 
 interface UserSettingsPageProps {
   modalInteraction: ModalInteractionProps;
 }
 
 export default function UserSettingsPage({ modalInteraction }: UserSettingsPageProps) {
-  const { agentsNicknamePlural } = useFrontendProperties();
+  const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { t } = useTranslation();
   // TODO Enable when Light mode is complete
   // const { themeMode, setThemeMode } = useContext(ApplicationContext);
@@ -97,13 +97,25 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
           color={"secondary"}
         ></ButtonGroup>
       </div>
-      <div className={styles.userSettingsConversation}>
+      {/*  <div className={styles.userSettingsConversation}>
         <TextArea
           disabled={true}
           label={t("rework.userSettings.conversationProfile.title")}
           placeholder={t("rework.userSettings.conversationProfile.placeholder", { agentsNicknamePlural })}
           maxLength={300}
         ></TextArea>
+      </div>*/}
+      <div className={styles.userSettingsLegals}>
+        <Link to={"/gdpr"}>
+          <Button color={"primary"} variant={"text"} size={"medium"}>
+            {t("rework.userSettings.accessGdpr", { siteTitle, siteSubtitle })}
+          </Button>
+        </Link>
+        <Link to={"/gcu"}>
+          <Button color={"primary"} variant={"text"} size={"medium"}>
+            {t("rework.userSettings.accessGcu")}
+          </Button>
+        </Link>
       </div>
     </div>
   );

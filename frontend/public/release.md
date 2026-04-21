@@ -9,7 +9,6 @@
   - Personal conversation not listed in personal space
   - Image link in markdown render using internal Minio address instead of ingress
 
-
 **v1.4.0** — 2026-04-10
 
 - **Summary**

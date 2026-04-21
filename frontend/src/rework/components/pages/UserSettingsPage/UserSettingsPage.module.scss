@@ -70,3 +70,9 @@
   padding: var(--spacing-m);
   min-height: 15rem;
 }
+
+.userSettingsLegals {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: var(--spacing-2xs);
+}

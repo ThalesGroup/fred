@@ -34,21 +34,20 @@ from threading import Lock
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import FastAPI
-
 from fred_core import (
-  BaseLogStore,
-  BaseSessionStore,
-  BearerAuth,
-  ClientCredentialsProvider,
-  InMemoryLogStorageConfig,
-  OpenFgaRebacConfig,
-  OpenSearchLogStore,
-  PostgresSessionStore,
-  RamLogStore,
-  RebacEngine,
-  get_model,
-  rebac_factory,
-  split_realm_url,
+    BaseLogStore,
+    BaseSessionStore,
+    BearerAuth,
+    ClientCredentialsProvider,
+    InMemoryLogStorageConfig,
+    OpenFgaRebacConfig,
+    OpenSearchLogStore,
+    PostgresSessionStore,
+    RamLogStore,
+    RebacEngine,
+    get_model,
+    rebac_factory,
+    split_realm_url,
 )
 from fred_core.common import (
     DuckdbStoreConfig,
@@ -56,7 +55,7 @@ from fred_core.common import (
     OpenSearchIndexConfig,
     PostgresTableConfig,
     SQLStorageConfig,
-    get_config
+    get_config,
 )
 from fred_core.kpi import (
     BaseKPIStore,
@@ -70,6 +69,7 @@ from fred_core.logs.log_structures import StdoutLogStorageConfig
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.sql import create_async_engine_from_config
+from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase
@@ -155,8 +155,10 @@ def get_configuration() -> Configuration:
     """
     return get_app_context().configuration
 
+
 app = FastAPI()
 app.dependency_overrides[get_config] = get_configuration
+
 
 def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
@@ -378,6 +380,7 @@ class ApplicationContext:
                 cls._instance._log_config_summary()
                 cls._instance._io_executor = ThreadPoolExecutor(max_workers=10)
                 cls._instance._pg_engine = None
+            init_user_store(cls._instance.get_pg_async_engine())
 
             return cls._instance
 

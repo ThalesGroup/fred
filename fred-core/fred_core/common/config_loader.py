@@ -46,5 +46,6 @@ def load_configuration_with_config_files(
     config_files.mark_config_loaded(config_file)
     return configuration
 
+
 def get_config():
-  raise NotImplementedError("This dependency have to be override in the backend")
+    raise NotImplementedError("This dependency have to be override in the backend")

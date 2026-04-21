@@ -38,6 +38,7 @@ import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../slices/contro
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { AnyAgent } from "../../common/agent.ts";
+import { useFrontendProperties } from "../../hooks/useFrontendProperties.ts";
 
 type TopLevelTuningState = {
   role: string;
@@ -79,6 +80,7 @@ export function AgentCreateEditForm({
   onDeleted,
   onValidityChange,
 }: AgentCreateEditFormProps) {
+  const { agentsNicknameSingular } = useFrontendProperties();
   const [createV2Agent] = useCreateV2AgentAgenticV1AgentsV2CreatePostMutation();
   const [createV1Agent] = useCreateV1AgentAgenticV1AgentsV1CreatePostMutation();
   const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
@@ -446,7 +448,7 @@ export function AgentCreateEditForm({
       {showTuningFields && (
         <>
           <TextInput
-            placeholder={t("rework.teams.formAgent.fields.role.placeholder")}
+            placeholder={t("rework.teams.formAgent.fields.role.placeholder", { agentsNicknameSingular })}
             label={t("rework.teams.formAgent.fields.role.label")}
             value={topLevelTuning.role}
             onChange={(e) => onTopLevelChange("role", e.target.value)}
@@ -454,7 +456,7 @@ export function AgentCreateEditForm({
             required
           />
           <TextArea
-            placeholder={t("rework.teams.formAgent.fields.description.placeholder")}
+            placeholder={t("rework.teams.formAgent.fields.description.placeholder", { agentsNicknameSingular })}
             label={t("rework.teams.formAgent.fields.description.label")}
             maxLength={80}
             value={topLevelTuning.description}

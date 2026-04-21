@@ -1004,7 +1004,7 @@
     "title": "{{typePlural}}",
     "edit": "Modifier",
     "preview": "Aperçu",
-    "createLibrary": "Créer une bibliothèque",
+    "createLibrary": "Créer un dossier",
     "createResource": "Créer un {{typeOne}}",
     "editResource": "Éditer un {{typeOne}}",
     "importResource": "Importer un {{typeOne}} depuis un fichier",
@@ -1039,7 +1039,7 @@
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
     "emptyLibrariesTitle": "Aucune bibliothèque pour le moment",
     "emptyLibrariesDescription": "Créez votre première bibliothèque pour organiser vos {{typePlural}}.",
-    "emptyLibrariesAction": "Créer une bibliothèque"
+    "emptyLibrariesAction": "Créer un dossier"
   },
   "documentLibraryTree": {
     "shareFolder": "Partager le dossier",
@@ -1098,15 +1098,15 @@
     "expandAll": "Tout développer",
     "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
     "emptyFoldersDescription": "Créez votre première bibliothèque pour organiser les documents et garder les ajouts rangés.",
-    "emptyFoldersAction": "Créer une bibliothèque"
+    "emptyFoldersAction": "Créer un dossier"
   },
   "libraryCreateDrawer": {
-    "title": "Créer une nouvelle bibliothèque",
+    "title": "Créer un nouveau dossier",
     "libraryName": "Nom",
     "libraryDescription": "Description",
     "cancel": "Annuler",
     "save": "Créer",
-    "createUnder": "Créer une  nouvelle bibliothèque sous",
+    "createUnder": "Créer un nouveau dossier sous",
     "saving": "Création en cours...",
     "validationError": "Erreur de validation",
     "nameRequired": "Le nom de la bibliothèque est obligatoire",
@@ -1362,7 +1362,9 @@
       "conversationProfile": {
         "title": "Profil de conversation",
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
-      }
+      },
+      "accessGcu": "Accéder aux CGU",
+      "accessGdpr": "Que fait Prism AI Hub de mes données ?"
     },
     "teamSettings": {
       "navigation": {
@@ -1441,7 +1443,13 @@
     },
     "gcu": {
       "title": "Conditions Générales d’Utilisation (CGU)",
-      "lockInformation": "Lire les CGU avant de pouvoir les accepter"
+      "lockInformation": "Lire les CGU avant de pouvoir les accepter",
+      "validate": "Accepter les CGU",
+      "backToApp": "Retourner à l'application"
+    },
+    "gdpr": {
+      "title": "Politique de confidentialité",
+      "backToApp": "Retourner à l'application"
     }
   }
 }
