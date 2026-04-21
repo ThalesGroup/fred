@@ -85,6 +85,82 @@ No `final` will follow. Treat `execution_error` as a terminal event.
 
 ---
 
+## 0.1 The Managed Path Step by Step
+
+The "managed path" is what happens before and during a production frontend call.
+It involves three participants: the browser, `control-plane-backend`, and a
+`fred-runtime` pod.
+
+```
+Browser                    control-plane              fred-runtime pod
+  │                             │                           │
+  │  1. Bootstrap               │                           │
+  │── GET /frontend/bootstrap ─►│                           │
+  │◄── { user, team, perms } ───│                           │
+  │                             │                           │
+  │  2. Pick an agent           │                           │
+  │── GET /teams/{id}/agent-instances ─►                    │
+  │◄── [ { agent_instance_id, name, … } ] ─────────────────│
+  │                             │                           │
+  │  3. Prepare execution       │                           │
+  │── POST /teams/{id}/agent-instances/{inst}/prepare-execution ─►
+  │                             │ validates team membership  │
+  │                             │ resolves runtime binding   │
+  │                             │ issues ExecutionGrant      │
+  │◄── ExecutionPreparation ────│                           │
+  │    {                        │                           │
+  │      execute_stream_url,    │  ← ingress-relative URL   │
+  │      execution_grant,       │  ← short-lived (5 min)    │
+  │      agent_instance_id,     │                           │
+  │      team_id,               │                           │
+  │      expires_at             │                           │
+  │    }                        │                           │
+  │                             │                           │
+  │  4. Execute directly        │                           │
+  │── POST {execute_stream_url} ──────────────────────────►│
+  │   Authorization: Bearer <token>                         │
+  │   Body: { input, session_id,                            │
+  │           agent_instance_id, execution_grant }          │
+  │                             │  runtime validates:        │
+  │                             │  • bearer token            │
+  │                             │  • grant expiry            │
+  │                             │  • team_id match           │
+  │                             │  • agent_instance_id match │
+  │◄── SSE stream ─────────────────────────────────────────│
+  │   (see section 0 for event sequence)                    │
+```
+
+**Why control-plane is in the middle for step 3 but not step 4:**
+
+Control-plane is the only component that knows which runtime pod serves which
+agent instance. But it must not proxy the SSE stream (latency, complexity).
+The `prepare-execution` step solves this: control-plane resolves the binding
+once, issues a short-lived grant, and returns a safe ingress-relative URL.
+The browser then calls the runtime pod directly — authorized, but without ever
+knowing any Kubernetes internal topology.
+
+**What the `execution_grant` contains:**
+
+```
+{
+  user_id:           "alice",
+  team_id:           "fredlab",
+  agent_instance_id: "inst-abc123",
+  action:            "execute",          ← or "resume" for HITL
+  audience:          "/runtime/agents-v2",
+  issued_at:         1745000000,
+  expires_at:        1745000300          ← 5 minutes
+}
+```
+
+Runtime rejects requests where any field mismatches or the grant is expired.
+The browser token is validated independently by Keycloak middleware.
+
+**HITL resume** follows the exact same path with `action: "resume"` and
+`resume_payload` in the request body instead of a new user message.
+
+---
+
 ## 1. Goal
 
 Establish `fred-sdk` as the single authoritative source of truth for the
@@ -338,74 +414,41 @@ Platform concerns belong to:
 
 ---
 
-## 8. Known SSE Contract Gaps (discovered April 2026)
+## 8. SSE Contract Gaps — Fixed (April 2026)
 
-These gaps were surfaced while implementing an external SSE bench client against
-the live protocol. They are tracked as Phase 3b correction tasks in `BACKLOG.md`.
+These gaps were surfaced while implementing an external SSE bench client.
+All four have been resolved in commit `eedbc610` (branch `agentic-pod`).
 
-### 8.1 Unstructured error signal
+### 8.1 ✅ Unstructured error signal — fixed
 
-**Symptom**: SSE clients that only dispatch on `kind` silently ignore agent
-crashes and hang until timeout.
+**Was**: exception handler yielded `{"error": str(exc)}` with no `kind` field,
+invisible to clients dispatching on `kind`.
 
-**Root cause**: `_iterate_runtime_event_payloads` exception handler (line 1691
-of `agent_app.py`) yields `{"error": str(exc)}` — no `kind` field. This payload
-is not in `RuntimeEventKind` and not in the `RuntimeEvent` union.
+**Fix**: `RuntimeErrorEvent(kind="execution_error", message=str)` added to
+`fred-sdk` contracts and `RuntimeEvent` union. Exception handler in
+`agent_app.py` now yields it. OpenAPI and `runtimeOpenApi.ts` regenerated.
 
-**Required fix**: Promote the error signal to a first-class contract member.
-Either:
-- add `RuntimeErrorEvent(kind="execution_error", message=str)` to `fred-sdk`
-  and update the exception handler to yield it, OR
-- document `{"error": "..."}` as a guaranteed contract signal that all clients
-  must handle
+### 8.2 ✅ `TurnPersistedEvent` — decision documented
 
-The fix must propagate to the OpenAPI spec and frontend codegen.
+**Was**: type existed in the union but was never emitted; clients waiting for
+`turn_persisted` would hang.
 
-### 8.2 `TurnPersistedEvent` not delivered over SSE
+**Decision**: `TurnPersistedEvent` is explicitly **not emitted** over the SSE
+stream. History is written fire-and-forget after the stream closes. The type
+is kept for future use. `final` is the only reliable end-of-turn signal.
+Documented in `TurnPersistedEvent` docstring and Section 5.
 
-**Symptom**: Any client that waits for `{"kind": "turn_persisted"}` as a
-session-save confirmation will hang indefinitely.
+### 8.3 ✅ SSE stream termination — documented
 
-**Root cause**: `_write_turn_history` is called via `asyncio.ensure_future` after
-the SSE generator exhausts. The `TurnPersistedEvent` type exists in the SDK but
-is never yielded to the client. The contract doc (Section 5) implies it is.
+**Fix**: Route docstring for `POST /agents/execute/stream` now states that the
+stream ends by connection close after `final`, with no sentinel frame, and that
+`RuntimeErrorEvent` is the terminal signal on pipeline crash.
 
-**Required fix**: Either:
-- wire `TurnPersistedEvent` emission before the generator exhausts (requires
-  awaiting the history write, which adds latency), OR
-- deliver it via a push channel separate from the turn SSE stream (e.g. a
-  session status endpoint), OR
-- explicitly remove `turn_persisted` from the SSE contract and document it as
-  a future push-channel event
+### 8.4 ✅ Direct-mode `user_id` — documented
 
-Until resolved: clients MUST treat `final` as the only reliable end-of-turn
-signal.
-
-### 8.3 SSE stream termination not documented
-
-**Symptom**: Client authors must read source code to know how the stream ends.
-
-**Required fix**: Document in this file (done in Section 5 above) and confirm
-in the OpenAPI description for `POST /agents/execute/stream` that:
-- the stream terminates by connection close after `final`
-- no sentinel line is emitted
-- `turn_persisted` is not a reliable stream-end signal (see 8.2)
-
-### 8.4 Direct-mode (`agent_id`) session scoping not documented
-
-**Symptom**: Multi-turn bench clients using `agent_id` direct mode without
-`runtime_context` end up with all sessions keyed to user `"unknown"`, making
-per-user session isolation impossible.
-
-**Root cause**: In direct mode the `execution_grant` is absent, so `user_id`
-defaults to `"unknown"` unless `runtime_context.user_id` is explicitly provided.
-This behavior is not documented.
-
-**Required fix**: Add an explicit note in the `RuntimeExecuteRequest` docstring
-and in Section 2.3 of this document that in direct (`agent_id`) mode, callers
-MUST provide `runtime_context.user_id` (and optionally `team_id`) for correct
-session scoping. Managed execution (`agent_instance_id` + `ExecutionGrant`)
-is not affected — `user_id` is always authoritative there.
+**Fix**: `RuntimeExecuteRequest.runtime_context` description updated: in
+`agent_id` direct mode, `user_id` defaults to `"unknown"` unless
+`runtime_context.user_id` is explicitly provided.
 
 ---
 
