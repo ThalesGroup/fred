@@ -33,7 +33,7 @@ x-common-postgres: &common-postgres
   username: fred
 
 x-common-opensearch: &common-opensearch
-  host: https://prism-opensearch-prd.six.cloud.thales
+  host: https://prism-opensearch-int.six.cloud.thales
 
 x-kf-scheduler: &kf-scheduler
   enabled: true
