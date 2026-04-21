@@ -1476,6 +1476,7 @@ async def _stream(
     *,
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
+    security_enabled: bool = False,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -1503,6 +1504,7 @@ async def _stream(
         team_id=team_id,
         registry=registry,
         exchange_id=exchange_id,
+        security_enabled=security_enabled,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -1545,6 +1547,7 @@ async def _iterate_runtime_event_payloads(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
+    security_enabled: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -1566,6 +1569,10 @@ async def _iterate_runtime_event_payloads(
     ctx = request.context or {}
     correlation_id = ctx.get("correlation_id", request_id)
     resolved_team_id = team_id or ctx.get("team_id")
+    # In no-security standalone mode, default to the personal team so that
+    # checkpoints, KPIs, and history always carry a team identity.
+    if not security_enabled and not resolved_team_id:
+        resolved_team_id = "personal"
     execution_action = ctx.get("execution_action") or (
         ExecutionGrantAction.RESUME.value
         if request.resume_payload is not None
@@ -2246,6 +2253,7 @@ def _build_agent_router(
                 access_token=access_token,
                 team_id=target.team_id,
                 registry=registry,
+                security_enabled=security_enabled,
             ),
             media_type="text/event-stream",
         )

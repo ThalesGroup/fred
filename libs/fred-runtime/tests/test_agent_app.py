@@ -804,3 +804,127 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "checkpoint is not waiting for resume."
+
+
+def test_no_security_forwards_security_enabled_false_to_iterate(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    _stream must pass security_enabled=False to _iterate_runtime_event_payloads
+    when the app is configured with user security disabled.
+
+    Why this exists:
+    - the default-to-personal logic lives inside _iterate and depends on
+      security_enabled being correctly threaded from the route handler
+    - if the flag is not forwarded, the default never fires
+
+    How to use it:
+    - pytest tests/test_agent_app.py::test_no_security_forwards_security_enabled_false_to_iterate
+    """
+
+    captured: dict[str, object] = {}
+
+    async def _fake_iterate(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+        security_enabled=False,
+    ):
+        captured["security_enabled"] = security_enabled
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),  # security.user.enabled=False
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={"agent_id": "rags.sample.echo", "input": "hello"},
+        )
+
+    assert response.status_code == 200
+    assert captured["security_enabled"] is False
+
+
+def test_no_security_resolves_personal_team_in_portable_context(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    When security is disabled and no team_id is provided, the agent's
+    PortableContext must carry team_id="personal".
+
+    Why this exists:
+    - validates the full default chain end-to-end:
+      no team_id in request → _iterate applies "personal" → PortableContext carries it
+    - uses the _demo_team_scope authored tool as an observable side-effect
+      (same pattern as test_create_agent_app_executes_managed_agent_instances)
+
+    How to use it:
+    - pytest tests/test_agent_app.py::test_no_security_resolves_personal_team_in_portable_context
+    """
+
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "demo_team_scope",
+                        "args": {},
+                        "id": "call-team",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="team:personal"),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _TeamScopeAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": "sentinel.react.v2",
+                "input": "what team?",
+                # no team_id provided
+            },
+        )
+
+    assert response.status_code == 200
+    lines = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    tool_results = [e for e in lines if e.get("kind") == "tool_result"]
+    assert any("team:personal" in e.get("content", "") for e in tool_results), (
+        f"Expected team:personal in tool_result events, got: {tool_results}"
+    )

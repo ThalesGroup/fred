@@ -3882,6 +3882,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         print("[chat] auth      : none (security.user not configured)")
 
+    # In no-security mode with no explicit --team-id, default to personal so
+    # checkpoints, KPIs, and history carry consistent team identity.
+    effective_team_id = args.team_id or ("personal" if login_config is None else None)
+
     static_token = os.getenv("FRED_AGENT_TOKEN")
 
     def _token_provider() -> str | None:
@@ -3937,7 +3941,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 run_scenario_file(
                     args.scenario,
                     client=client,
-                    team_id_override=args.team_id,
+                    team_id_override=effective_team_id,
                 )
                 print("\nAll checks passed.")
                 return 0
@@ -3953,7 +3957,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 message=" ".join(args.message),
                 session_id=args.session_id,
                 user_id=args.user_id,
-                team_id=args.team_id,
+                team_id=effective_team_id,
                 verbose=args.verbose,
                 stream=args.stream,
                 color_enabled=color_enabled,
@@ -3964,7 +3968,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             agent_id=args.agent,
             session_id=args.session_id,
             user_id=args.user_id,
-            team_id=args.team_id,
+            team_id=effective_team_id,
             verbose=args.verbose,
             stream=args.stream,
             color_enabled=color_enabled,
