@@ -41,6 +41,21 @@ class TemporalSchedulerConfig(BaseModel):
     task_queue: str = "default"
     workflow_id_prefix: str = "task"
     connect_timeout_seconds: Optional[int] = 5
+    ingestion_workflow_parallelism: int = Field(
+        default=3,
+        ge=1,
+        description="Max number of files launched in parallel per parent ingestion workflow.",
+    )
+    ingestion_max_concurrent_workflow_tasks: int = Field(
+        default=3,
+        ge=1,
+        description="Max concurrent Temporal workflow tasks processed by a worker process.",
+    )
+    ingestion_max_concurrent_activities: int = Field(
+        default=3,
+        ge=1,
+        description="Max concurrent Temporal activities processed by a worker process.",
+    )
 
 
 class ModelConfiguration(BaseModel):

@@ -25,15 +25,32 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
             "kpi_process_metrics_interval_sec": 10,
         }
     )
-    config.scheduler = config.scheduler.model_copy(update={"enabled": True})
+    config.scheduler = config.scheduler.model_copy(
+        update={
+            "enabled": True,
+            "temporal": config.scheduler.temporal.model_copy(
+                update={
+                    "ingestion_max_concurrent_workflow_tasks": 4,
+                    "ingestion_max_concurrent_activities": 6,
+                }
+            ),
+        }
+    )
 
     observed: dict[str, object] = {}
     writer_sentinel = object()
     engine_sentinel = object()
 
-    async def fake_run_worker(temporal_config) -> None:
+    async def fake_run_worker(
+        temporal_config,
+        *,
+        max_concurrent_workflow_tasks: int = 1,
+        max_concurrent_activities: int = 1,
+    ) -> None:
         """Capture the Temporal config passed to the worker and yield once."""
         observed["temporal_config"] = temporal_config
+        observed["max_concurrent_workflow_tasks"] = max_concurrent_workflow_tasks
+        observed["max_concurrent_activities"] = max_concurrent_activities
         await asyncio.sleep(0)
 
     async def fake_emit_process_kpis(interval_s: float, writer) -> None:
@@ -75,4 +92,6 @@ async def test_main_worker_enables_observability_from_configuration(app_context,
     assert observed["process_kpi"] == (10.0, writer_sentinel)
     assert observed["sql_pool_kpi"] == (10.0, writer_sentinel, engine_sentinel, "knowledge-flow-postgres")
     assert observed["temporal_config"] == config.scheduler.temporal
+    assert observed["max_concurrent_workflow_tasks"] == 4
+    assert observed["max_concurrent_activities"] == 6
     assert observed["shutdown_called"] is True
