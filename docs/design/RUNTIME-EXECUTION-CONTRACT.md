@@ -24,6 +24,67 @@ migration:
 
 ---
 
+## 0. The Flow in 30 Seconds
+
+This is what one agent turn looks like over HTTP SSE.
+
+```
+Browser / CLI                control-plane              fred-runtime pod
+     │                            │                           │
+     │── POST /prepare-execution ─►                           │
+     │◄── ExecutionPreparation ───                            │
+     │    (execute_stream_url,                                │
+     │     execution_grant,                                   │
+     │     team_id, agent_instance_id)                        │
+     │                                                        │
+     │── POST {execute_stream_url} ──────────────────────────►│
+     │   Authorization: Bearer <user token>                   │
+     │   Body: {                                              │
+     │     input: "Transfer 500€ to Alice",                   │
+     │     session_id: "uuid",           ← conversation key   │
+     │     agent_instance_id: "inst-1",  ← which agent        │
+     │     execution_grant: { ... }      ← control-plane auth │
+     │   }                                                    │
+     │                                                        │
+     │◄── data: {"kind":"status","status":"starting"} ────────│
+     │◄── data: {"kind":"assistant_delta","delta":"I will…"} ─│
+     │◄── data: {"kind":"tool_call","tool_name":"check_bal…"} ─│
+     │◄── data: {"kind":"tool_result","content":"1200€"} ─────│
+     │◄── data: {"kind":"final","content":"Transfer done."} ──│
+     │                                              [connection closed]
+```
+
+**Two execution paths:**
+
+| Path | When | Required fields |
+|---|---|---|
+| **Managed** (production) | Frontend selects a team agent | `agent_instance_id` + `execution_grant` |
+| **Direct** (dev/CLI only) | Developer targets a pod directly | `agent_id` (no grant) |
+
+The managed path is the only one authorized for production frontend calls.
+`control-plane` is the sole authority that issues `ExecutionGrant` and resolves
+which runtime pod serves which agent instance.
+
+**Session continuity:**
+
+`session_id` is the single stable key for a conversation. Keep it identical
+across all turns, including HITL resumes. The runtime uses it to restore the
+agent's graph state (checkpoints) between turns.
+
+**Error during execution:**
+
+If the agent pipeline crashes, the runtime emits a typed error event before
+closing the stream:
+
+```
+data: {"kind":"execution_error","message":"<reason>"}
+[connection closed]
+```
+
+No `final` will follow. Treat `execution_error` as a terminal event.
+
+---
+
 ## 1. Goal
 
 Establish `fred-sdk` as the single authoritative source of truth for the
@@ -193,32 +254,27 @@ SSE clients MUST:
 - treat reception of `{"kind": "final"}` as the end-of-turn signal
 - treat connection close before `final` as an error
 
-### Unstructured error signal (contract gap — tracked below)
+### Error signal — `RuntimeErrorEvent`
 
-When an unhandled exception escapes `_iterate_runtime_event_payloads`, the
-runtime yields a **bare error payload** before closing the stream:
+When an unhandled exception escapes the agent execution pipeline, the runtime
+emits a typed `RuntimeErrorEvent` before closing the stream:
 
 ```
-data: {"error": "<exception message>"}
+data: {"kind":"execution_error","message":"<reason>","sequence":0}
 ```
 
-This payload has **no `kind` field** and is **not a member of the `RuntimeEvent`
-union**. It is the only way a client receives notice of a server-side crash.
+This event is a full member of the `RuntimeEvent` union. SSE clients that
+dispatch on `kind` will receive it correctly. Treat it as a terminal event:
+no `final` will follow.
 
-SSE clients MUST check for the top-level `"error"` key on every frame, not only
-on frames that carry a `"kind"` discriminator.
+### `TurnPersistedEvent` — schema defined, not emitted over SSE
 
-This is a known contract gap tracked in Phase 3b. See Section 8 below.
+`TurnPersistedEvent` (`kind: "turn_persisted"`) exists in `RuntimeEventKind`
+and `RuntimeEvent` but is **never emitted over the SSE stream**. History is
+written fire-and-forget after the stream closes; no frame reaches the client.
 
-### `TurnPersistedEvent` — schema defined, SSE delivery not yet wired (contract gap)
-
-`TurnPersistedEvent` (`kind: "turn_persisted"`) exists in `RuntimeEventKind` and
-`RuntimeEvent` and is listed above, but is **never emitted to the SSE client in
-Phase 1**. History is written fire-and-forget via `asyncio.ensure_future` after
-the SSE generator exhausts; no frame reaches the client.
-
-Clients MUST NOT wait for `turn_persisted` as a stream-end signal. This gap is
-tracked in Phase 3b. See Section 8 below.
+`final` is the only reliable end-of-turn signal. The type is kept for future
+use (e.g. a dedicated push channel).
 
 ### UI rendering parts (`UiPart`)
 
