@@ -952,40 +952,59 @@ This enrichment requirement applies equally to:
 - [ ] Ensure KPI/metrics/logging preserve the same managed execution identity set (→ Phase 7)
 - [x] Add backend-focused tests for managed team-scoped execution and observability enrichment
 
-#### 3b.6 SSE Contract Corrections (discovered April 2026)
+#### 3b.6 SSE Contract Corrections (discovered April 2026) — ✅ Fixed
 
 These gaps were found while implementing an external SSE bench client.
-They are pre-Phase-4 blockers: the frontend SSE hook (`useChatSse`) is
-affected by the same assumptions. Full analysis in
+All four fixed in commit `eedbc610`. Full analysis and resolution status in
 `docs/design/RUNTIME-EXECUTION-CONTRACT.md` Section 8.
 
-- [ ] **Formalize the error signal** (`fred-sdk` + `fred-runtime`):
-  The exception handler in `_iterate_runtime_event_payloads` yields
-  `{"error": str(exc)}` with no `kind` field — not in `RuntimeEventKind`,
-  not in the `RuntimeEvent` union, not in OpenAPI. Promote it to
-  `RuntimeErrorEvent(kind="execution_error", message=str)` or document it
-  as a guaranteed bare-key contract signal. Update OpenAPI and frontend codegen.
-  Until fixed every SSE client that dispatches only on `kind` silently ignores
-  agent crashes.
+- [x] **Formalize the error signal** — `RuntimeErrorEvent(kind="execution_error",
+  message=str)` added to `fred-sdk`, wired in `agent_app.py`, OpenAPI and
+  `runtimeOpenApi.ts` regenerated.
 
-- [ ] **Wire or deprecate `TurnPersistedEvent` SSE delivery** (`fred-runtime`):
-  `TurnPersistedEvent` is in `RuntimeEventKind` and `RuntimeEvent` but is
-  never yielded to the SSE client — history is written fire-and-forget after
-  the stream closes. Decide and document: wire the event before stream close,
-  deliver it via a separate push channel, or explicitly remove it from the SSE
-  contract and update Section 5 of `RUNTIME-EXECUTION-CONTRACT.md`.
-  Until resolved `final` is the only reliable end-of-turn signal.
+- [x] **`TurnPersistedEvent` decision** — explicitly documented as not emitted
+  over SSE. `final` is the only reliable end-of-turn signal. Type kept for
+  future use.
 
-- [ ] **Document SSE stream termination in OpenAPI** (`fred-runtime`):
-  Add to the `/agents/execute/stream` route docstring that the stream ends
-  by connection close after `final`, with no sentinel. Already documented in
-  `RUNTIME-EXECUTION-CONTRACT.md` Section 5 but not in the OpenAPI spec.
+- [x] **SSE stream termination** — documented in `/agents/execute/stream`
+  docstring and `RUNTIME-EXECUTION-CONTRACT.md` section 0.
 
-- [ ] **Document direct-mode `runtime_context` requirement** (`fred-sdk`):
-  In `agent_id` direct mode, `user_id` defaults to `"unknown"` unless
-  `runtime_context.user_id` is provided. Add an explicit note in
-  `RuntimeExecuteRequest` docstring. Add to Section 2.3 of
+- [x] **Direct-mode `runtime_context.user_id`** — documented in
+  `RuntimeExecuteRequest.runtime_context` description and section 0.1 of
   `RUNTIME-EXECUTION-CONTRACT.md`.
+
+#### 3b.8 Standalone / No-Security Defaults
+
+In no-security mode (`security_enabled=false`), the current direct execution
+path requires the caller to pass `runtime_context.team_id = "personal"`
+explicitly. If omitted, `team_id` is absent from all KPI dims, checkpoints,
+and history rows — breaking identity even in the simplest single-user
+deployment (laptop, SOC workstation, airgapped instance).
+
+The fix is small and self-contained.
+
+**Rule:**
+> When `security_enabled=false` and no `execution_grant` is present,
+> `team_id` MUST default to `"personal"` in the runtime execution context
+> without any caller action.
+
+- [ ] In `fred-runtime` `_iterate_runtime_event_payloads`: when
+  `resolved_team_id` is `None` and security is disabled, default it to
+  `"personal"` before building `PortableContext` and `RuntimeContext`.
+  (`libs/fred-runtime/fred_runtime/app/agent_app.py`)
+
+- [ ] In `fred-agent-chat` CLI: when security is disabled (no `--keycloak`
+  flag / no token), default the active team to `personal` automatically —
+  no `--team-id` required.
+  (`libs/fred-runtime/fred_runtime/client.py`)
+
+- [ ] Add one unit test: a direct-mode request with no `team_id` and security
+  disabled produces `team_id="personal"` in the resolved execution context.
+
+- [ ] Update `RUNTIME-EXECUTION-CONTRACT.md` section 0.1 to document this
+  default: "In no-security standalone mode, `team_id` defaults to `personal`
+  when not provided. This ensures consistent identity in checkpoints, KPIs,
+  and history even without a full control-plane deployment."
 
 ### 3b.7 Validation
 
