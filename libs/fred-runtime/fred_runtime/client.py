@@ -2278,9 +2278,13 @@ def render_kpi_report(
                 for k, v in shared_labels.items()
                 if k not in _CONTEXT_KEYS
             ]
-            ctx_line = "  " + colorize(
-                "context  ", color=_ANSI_DIM, enabled=color_enabled, bold=True
-            ) + "  ".join(ctx_parts + extra_ctx)
+            ctx_line = (
+                "  "
+                + colorize(
+                    "context  ", color=_ANSI_DIM, enabled=color_enabled, bold=True
+                )
+                + "  ".join(ctx_parts + extra_ctx)
+            )
             lines.append(ctx_line)
 
         for summary in histograms[:10]:
@@ -2302,7 +2306,10 @@ def render_kpi_report(
             lines.append(
                 "  "
                 + colorize(
-                    f"[{phase_label}]", color=_ANSI_CYAN, enabled=color_enabled, bold=True
+                    f"[{phase_label}]",
+                    color=_ANSI_CYAN,
+                    enabled=color_enabled,
+                    bold=True,
                 )
                 + "  "
                 + colorize(

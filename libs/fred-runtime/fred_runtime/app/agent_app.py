@@ -92,6 +92,7 @@ from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMes
 from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     ExecutionConfig,
+    RuntimeErrorEvent,
     RuntimeEvent,
     RuntimeServices,
 )
@@ -1688,7 +1689,7 @@ async def _iterate_runtime_event_payloads(
         logger.exception(
             "[fred-runtime] agent execution error agent_id=%s", definition.agent_id
         )
-        yield {"error": str(exc)}
+        yield RuntimeErrorEvent(message=str(exc)).model_dump(mode="json")
     finally:
         await runtime.dispose()
 
@@ -2195,6 +2196,19 @@ def _build_agent_router(
         Authorization: Bearer <user JWT>
         Body: RuntimeExecuteRequest (agent_instance_id + execution_grant for managed exec)
         Response: text/event-stream, each `data:` line is a RuntimeEvent JSON
+
+        Stream termination:
+        - The stream ends by connection close after the `final` event is delivered.
+          There is no sentinel frame. `final` is the only reliable end-of-turn signal.
+        - If the execution pipeline raises an unhandled exception, a
+          `RuntimeErrorEvent` (kind="execution_error") is emitted instead of `final`,
+          and the stream closes immediately after. Clients dispatching on `kind` must
+          handle this case; otherwise agent crashes will be silently ignored.
+
+        TurnPersistedEvent:
+        - `TurnPersistedEvent` (kind="turn_persisted") is defined in the contract but
+          is NOT emitted over this stream. History is written fire-and-forget after the
+          stream closes. Do not rely on it as an end-of-turn signal here.
 
         Security:
         - For managed execution (agent_instance_id), an execution_grant issued by

@@ -78,6 +78,7 @@ class RuntimeEventKind(str, Enum):
     NODE_ERROR = "node_error"
     FINAL = "final"
     TURN_PERSISTED = "turn_persisted"
+    EXECUTION_ERROR = "execution_error"
 
 
 class ExecutionConfig(FrozenModel):
@@ -200,24 +201,45 @@ class FinalRuntimeEvent(RuntimeEventBase):
 
 class TurnPersistedEvent(RuntimeEventBase):
     """
-    Emitted after a completed turn's history has been durably persisted.
+    Signals that a completed turn's history has been durably persisted.
 
-    Why this exists:
-    - The streaming endpoint writes history fire-and-forget after SSE closes.
-    - Clients that need confirmation of persistence (e.g. audit flows,
-      session-list refresh triggers) can listen for this event.
-    - It carries session_id so the client knows which session was persisted.
+    Current SSE delivery status: NOT emitted live over the SSE stream.
+    History is written fire-and-forget after the stream closes, so this event
+    cannot be reliably delivered before connection close. `final` is the only
+    reliable end-of-turn signal for SSE clients.
+
+    This type is kept in the contract for future use (e.g. a separate push
+    channel or an explicit wiring decision in a later phase).
 
     Architectural note:
     - fred-runtime is a CONSUMER of checkpoint/history storage, not its
-      ownership authority. This event signals persistence completion to the
-      caller without exposing any storage infrastructure details.
+      ownership authority.
     - exchange_id links the persisted turn to the runtime event sequence.
     """
 
     kind: Literal[RuntimeEventKind.TURN_PERSISTED] = RuntimeEventKind.TURN_PERSISTED
     session_id: str = Field(..., min_length=1)
     exchange_id: str | None = None
+
+
+class RuntimeErrorEvent(RuntimeEventBase):
+    """
+    Emitted when the agent execution pipeline raises an unhandled exception.
+
+    Why this exists:
+    - Before this type, the exception handler yielded {"error": str(exc)} with
+      no `kind` field — invisible to any SSE client dispatching on `kind`.
+    - Promoting it to a typed event allows the frontend to surface agent crashes
+      with the same dispatch path as other runtime events.
+
+    SSE client guidance:
+    - Treat `execution_error` as a terminal event: no `final` will follow.
+    - Display `message` as a technical error detail (not as assistant content).
+    - The stream closes after this event is delivered.
+    """
+
+    kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
+    message: str = Field(..., min_length=1)
 
 
 RuntimeEvent: TypeAlias = Annotated[
@@ -228,7 +250,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | AssistantDeltaRuntimeEvent
     | NodeErrorRuntimeEvent
     | FinalRuntimeEvent
-    | TurnPersistedEvent,
+    | TurnPersistedEvent
+    | RuntimeErrorEvent,
     Field(discriminator="kind"),
 ]
 

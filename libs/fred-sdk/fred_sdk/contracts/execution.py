@@ -407,7 +407,9 @@ class RuntimeExecuteRequest(BaseModel):
         default=None,
         description=(
             "Optional per-request context passthrough (language, user_groups, etc.). "
-            "Kept for transitional compatibility; prefer execution_grant for identity fields."
+            "Kept for transitional compatibility; prefer execution_grant for identity fields. "
+            "In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' "
+            "unless runtime_context.user_id is explicitly provided."
         ),
     )
 

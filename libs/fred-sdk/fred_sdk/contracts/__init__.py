@@ -42,7 +42,7 @@ from .openai_compat import (
     OpenAIToolCall,
     OpenAIToolCallFunction,
 )
-from .runtime import TurnPersistedEvent
+from .runtime import RuntimeErrorEvent, TurnPersistedEvent
 
 __all__ = [
     # Context / UI parts
@@ -63,6 +63,7 @@ __all__ = [
     "validate_execution_grant",
     # Runtime events (Phase 1 addition)
     "TurnPersistedEvent",
+    "RuntimeErrorEvent",
     # OpenAI compat — typed tool call models
     "OpenAIModelCard",
     "OpenAIModelList",

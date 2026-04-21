@@ -113,6 +113,9 @@ export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful
           kind: "awaiting_human";
         } & AwaitingHumanRuntimeEvent)
       | ({
+          kind: "execution_error";
+        } & RuntimeErrorEvent)
+      | ({
           kind: "final";
         } & FinalRuntimeEvent)
       | ({
@@ -225,6 +228,11 @@ export type HumanInputRequest = {
 export type AwaitingHumanRuntimeEvent = {
   kind?: "awaiting_human";
   request: HumanInputRequest;
+  sequence?: number;
+};
+export type RuntimeErrorEvent = {
+  kind?: "execution_error";
+  message: string;
   sequence?: number;
 };
 export type VectorSearchHit = {
@@ -389,7 +397,7 @@ export type RuntimeExecuteRequest = {
   input?: string;
   /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
   resume_payload?: any | null;
-  /** Optional per-request context passthrough (language, user_groups, etc.). Kept for transitional compatibility; prefer execution_grant for identity fields. */
+  /** Optional per-request context passthrough (language, user_groups, etc.). Kept for transitional compatibility; prefer execution_grant for identity fields. In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' unless runtime_context.user_id is explicitly provided. */
   runtime_context?: {
     [key: string]: any;
   } | null;
