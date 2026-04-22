@@ -53,7 +53,9 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
           <span className={styles.userSettingsIdentityName}>{username}</span>
           <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>
           <span className={styles.userSettingsIdentityEmail}>{userEmail}</span>
-          <span className={styles.userSettingsIdentityRole}>{userRoles.join(", ")}</span>
+          {userRoles.includes("admin") && (
+            <span className={styles.userSettingsIdentityRole}>{userRoles.join(", ")}</span>
+          )}
         </div>
       </div>
       <div className={styles.userSettingsApplication}>

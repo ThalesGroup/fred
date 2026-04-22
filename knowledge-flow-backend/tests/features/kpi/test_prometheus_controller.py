@@ -17,10 +17,10 @@ def _build_prometheus_app(base_url: str = "") -> TestClient:
     router = APIRouter(prefix=base_url)
     PrometheusOpsController(router)
     app = FastAPI()
-    app.dependency_overrides[get_config] = get_configuration
-    app.include_router(router)
     # Called to init UserStore
     get_app_context().get_pg_async_engine()
+    app.dependency_overrides[get_config] = get_configuration
+    app.include_router(router)
     return TestClient(app)
 
 
