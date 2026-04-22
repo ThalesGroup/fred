@@ -205,6 +205,9 @@ class RebacEngine(ABC):
         """Tell whether this backend requires periodic Keycloak graph sync."""
         return False
 
+    async def close(self) -> None:
+        """Release any held connections or sessions. No-op by default."""
+
     @abstractmethod
     async def add_relation(self, relation: Relation) -> str | None:
         """Persist one authorization statement.

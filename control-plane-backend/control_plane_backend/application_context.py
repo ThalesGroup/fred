@@ -157,6 +157,20 @@ class ApplicationContext:
             self._rebac_engine = rebac_factory(self.configuration.security)
         return self._rebac_engine
 
+    async def shutdown(self) -> None:
+        """Best-effort cleanup of shared resources."""
+        if self._rebac_engine is not None:
+            try:
+                await self._rebac_engine.close()
+            except Exception:
+                logger.debug("[REBAC] Failed to close ReBAC engine", exc_info=True)
+
+        if self._pg_async_engine is not None:
+            try:
+                await self._pg_async_engine.dispose()
+            finally:
+                self._pg_async_engine = None
+
 
 def get_app_context() -> ApplicationContext:
     return ApplicationContext.get_instance()

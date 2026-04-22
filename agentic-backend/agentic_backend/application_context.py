@@ -416,6 +416,13 @@ class ApplicationContext:
         except Exception:
             logger.warning("[HTTP] Failed to shutdown shared clients", exc_info=True)
 
+        # ReBAC engine (e.g. OpenFGA aiohttp session)
+        if self._rebac_engine is not None:
+            try:
+                await self._rebac_engine.close()
+            except Exception:
+                logger.warning("[REBAC] Failed to close ReBAC engine", exc_info=True)
+
         # Async PG engine
         if self._pg_async_engine is not None:
             try:

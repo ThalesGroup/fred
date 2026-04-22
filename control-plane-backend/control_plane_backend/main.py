@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Literal
 from uuid import uuid4
@@ -91,12 +92,23 @@ def create_app() -> FastAPI:
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    ctx = ApplicationContext(configuration)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI):
+        try:
+            yield
+        finally:
+            await ctx.shutdown()
+            logger.info("[MAIN] Lifespan exit: orderly shutdown.")
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
         openapi_url=f"{configuration.app.base_url}/openapi.json"
         if docs_enabled
         else None,
+        lifespan=lifespan,
     )
     initialize_user_security(configuration.security.user)
     allowed_origins = list(
@@ -110,7 +122,6 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    ctx = ApplicationContext(configuration)
     router = APIRouter(prefix=configuration.app.base_url)
 
     @router.get("/healthz", summary="Liveness probe", response_model=HealthResponse)
