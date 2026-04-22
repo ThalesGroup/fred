@@ -27,7 +27,7 @@ x-common-security: &common-security
     enabled: true
 
 x-common-postgres: &common-postgres
-  host: "postgresql-primary"
+  host: "postgresql"
   port: 5432
   database: fred
   username: fred
