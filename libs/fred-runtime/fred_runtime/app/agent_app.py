@@ -1489,6 +1489,11 @@ async def _stream(
     - events are collected while yielding
     - after the stream closes, history is written as a fire-and-forget background
       task so the SSE connection is not held open waiting for the DB write
+
+    Team resolution:
+    - team_id is resolved once here so KPI, history, and the agent runtime all
+      see the same identity; in no-security standalone mode it defaults to
+      "personal" when the caller omits it.
     """
     ctx = request.context or {}
     session_id: str | None = ctx.get("session_id")
@@ -1496,15 +1501,20 @@ async def _stream(
     exchange_id = str(uuid4())
     turn_start = time.monotonic()
 
+    # Resolve team identity once so all downstream calls (runtime, KPI, history)
+    # carry the same value.  Standalone no-security default: "personal".
+    resolved_team_id: str | None = team_id or ctx.get("team_id")
+    if not security_enabled and not resolved_team_id:
+        resolved_team_id = "personal"
+
     collected: list[dict[str, Any]] = []
     async for payload in _iterate_runtime_event_payloads(
         definition,
         request,
         access_token=access_token,
-        team_id=team_id,
+        team_id=resolved_team_id,
         registry=registry,
         exchange_id=exchange_id,
-        security_enabled=security_enabled,
     ):
         collected.append(payload)
         yield _sse(json.dumps(payload, ensure_ascii=False))
@@ -1513,7 +1523,7 @@ async def _stream(
         session_id=session_id,
         exchange_id=exchange_id,
         user_id=user_id,
-        team_id=team_id,
+        team_id=resolved_team_id,
         agent_instance_id=request.agent_instance_id,
         template_agent_id=definition.agent_id,
         payloads=collected,
@@ -1532,7 +1542,7 @@ async def _stream(
                     request_message=request.message,
                     payloads=collected,
                     history_store=history_store,
-                    team_id=team_id,
+                    team_id=resolved_team_id,
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
                 )
@@ -1547,21 +1557,25 @@ async def _iterate_runtime_event_payloads(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
-    security_enabled: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
 
     Why this helper exists:
-    - both `/agents/execute` and `/agents/execute/stream` should share the same
-      runtime wiring and event production path
+    - both `/agents/execute` and `/agents/execute/stream` share the same runtime
+      wiring and event production path
     - keeping the generator payload-oriented lets the HTTP layer choose whether
       it renders SSE or returns a terminal JSON response
 
+    team_id:
+    - callers are responsible for resolving the effective team before calling this
+      function; see _stream() for the standalone "personal" default logic
+    - None is accepted for agent-to-agent (AgentInvoker) invocations where no
+      team scope is required
+
     access_token:
-    - the user's JWT forwarded from agentic-backend via the Authorization header
+    - the user's JWT forwarded via the Authorization header
     - stored in RuntimeContext so KF tool adapters can use it for outbound calls
-      (same path as local agents in agentic-backend)
     - None in local dev when security is disabled
     """
 
@@ -1569,10 +1583,6 @@ async def _iterate_runtime_event_payloads(
     ctx = request.context or {}
     correlation_id = ctx.get("correlation_id", request_id)
     resolved_team_id = team_id or ctx.get("team_id")
-    # In no-security standalone mode, default to the personal team so that
-    # checkpoints, KPIs, and history always carry a team identity.
-    if not security_enabled and not resolved_team_id:
-        resolved_team_id = "personal"
     execution_action = ctx.get("execution_action") or (
         ExecutionGrantAction.RESUME.value
         if request.resume_payload is not None

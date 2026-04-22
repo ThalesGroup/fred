@@ -3880,11 +3880,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             cache_file=default_keycloak_token_file(),
         )
     else:
-        print("[chat] auth      : none (security.user not configured)")
+        print("[chat] auth      : none  (standalone mode — security disabled)")
 
     # In no-security mode with no explicit --team-id, default to personal so
     # checkpoints, KPIs, and history carry consistent team identity.
     effective_team_id = args.team_id or ("personal" if login_config is None else None)
+    if effective_team_id:
+        print(f"[chat] team      : {effective_team_id}")
 
     static_token = os.getenv("FRED_AGENT_TOKEN")
 

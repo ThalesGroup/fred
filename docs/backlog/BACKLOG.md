@@ -988,23 +988,57 @@ The fix is small and self-contained.
 > `team_id` MUST default to `"personal"` in the runtime execution context
 > without any caller action.
 
-- [ ] In `fred-runtime` `_iterate_runtime_event_payloads`: when
-  `resolved_team_id` is `None` and security is disabled, default it to
-  `"personal"` before building `PortableContext` and `RuntimeContext`.
+- [x] In `fred-runtime` `_stream()`: resolve `team_id` once at the top and
+  propagate `resolved_team_id` to `_iterate_runtime_event_payloads`,
+  `_emit_turn_completed`, and `_write_turn_history`. When security is disabled
+  and no team_id is provided, default to `"personal"`.
   (`libs/fred-runtime/fred_runtime/app/agent_app.py`)
 
-- [ ] In `fred-agent-chat` CLI: when security is disabled (no `--keycloak`
+- [x] In `fred-agent-chat` CLI: when security is disabled (no `--keycloak`
   flag / no token), default the active team to `personal` automatically —
-  no `--team-id` required.
+  no `--team-id` required. Startup banner now prints active team identity.
   (`libs/fred-runtime/fred_runtime/client.py`)
 
-- [ ] Add one unit test: a direct-mode request with no `team_id` and security
-  disabled produces `team_id="personal"` in the resolved execution context.
+- [x] Two unit tests: (1) `_stream()` resolves `team_id="personal"` before
+  calling `_iterate`; (2) full end-to-end: `PortableContext.team_id=="personal"`.
+  (`libs/fred-runtime/tests/test_agent_app.py`)
 
-- [ ] Update `RUNTIME-EXECUTION-CONTRACT.md` section 0.1 to document this
-  default: "In no-security standalone mode, `team_id` defaults to `personal`
-  when not provided. This ensures consistent identity in checkpoints, KPIs,
-  and history even without a full control-plane deployment."
+- [x] Updated `RUNTIME-EXECUTION-CONTRACT.md` section 0 with a dedicated
+  "Standalone / no-security mode" paragraph covering the `team_id` default,
+  CLI banner, and what each subsystem receives.
+
+#### 3b.9 Checkpoint Retention Policy (Standalone)
+
+In standalone mode (SQLite at `~/.fred/pod/pod.sqlite3`) checkpoints accumulate
+indefinitely — one pointer row per graph step per session. A 10-turn conversation
+with a ReAct agent writes roughly 20-40 checkpoint rows. There is no automatic
+pruning.
+
+**Current state:**
+- Manual `DELETE /agents/checkpoints/{session_id}` exists and works.
+- `GET /agents/checkpoints/_stats` and `GET /agents/checkpoints` let an admin
+  see growth.
+- No TTL, no background sweeper, no auto-purge on session close.
+
+**Design decision needed (not a bug, record it now):**
+
+> Should checkpoints be kept after a session's `final` event is emitted?
+
+- **Keep indefinitely (current):** user can resume sessions across restarts.
+  Storage grows. Suitable while HITL resume is a first-class feature.
+- **Purge on session close:** lighter storage, no resume after exit. Would
+  require a session-closed signal the runtime currently doesn't emit.
+- **TTL (e.g. 30 days):** background sweeper deletes threads not touched in N
+  days. Reasonable default for production standalone.
+
+**Recommended path:** add a `storage.checkpoint_ttl_days` config knob (default
+`null` = keep forever) and a background sweeper that runs on pod startup. No
+implementation until the TTL policy is agreed.
+
+- [ ] Agree on TTL default for standalone (`null` / 30 / 90 days)
+- [ ] Add `storage.checkpoint_ttl_days: int | null` to `PodStorageConfig`
+- [ ] Implement background sweeper in `create_agent_app` lifespan
+- [ ] Expose `/agents/checkpoints/purge` (dry_run=true by default) for ops teams
 
 ### 3b.7 Validation
 

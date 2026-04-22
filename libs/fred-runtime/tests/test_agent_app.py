@@ -806,20 +806,22 @@ def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
     assert response.json()["detail"] == "checkpoint is not waiting for resume."
 
 
-def test_no_security_forwards_security_enabled_false_to_iterate(
+def test_no_security_resolves_personal_team_before_iterate(
     monkeypatch, tmp_path
 ) -> None:
     """
-    _stream must pass security_enabled=False to _iterate_runtime_event_payloads
-    when the app is configured with user security disabled.
+    _stream must resolve team_id to "personal" and pass it to
+    _iterate_runtime_event_payloads when security is disabled and the caller
+    omits team_id.
 
     Why this exists:
-    - the default-to-personal logic lives inside _iterate and depends on
-      security_enabled being correctly threaded from the route handler
-    - if the flag is not forwarded, the default never fires
+    - the resolution happens in _stream(), before calling _iterate; this test
+      catches any regression where KPIs and history would receive team_id=None
+    - the fake _iterate captures the team_id it was called with so we can assert
+      without running a real agent
 
     How to use it:
-    - pytest tests/test_agent_app.py::test_no_security_forwards_security_enabled_false_to_iterate
+    - pytest tests/test_agent_app.py::test_no_security_resolves_personal_team_before_iterate
     """
 
     captured: dict[str, object] = {}
@@ -832,9 +834,8 @@ def test_no_security_forwards_security_enabled_false_to_iterate(
         team_id=None,
         registry=None,
         exchange_id=None,
-        security_enabled=False,
     ):
-        captured["security_enabled"] = security_enabled
+        captured["team_id"] = team_id
         yield {"kind": "final", "sequence": 0, "content": "ok"}
 
     monkeypatch.setattr(
@@ -856,11 +857,12 @@ def test_no_security_forwards_security_enabled_false_to_iterate(
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute/stream",
+            # no team_id — _stream() must default to "personal"
             json={"agent_id": "rags.sample.echo", "input": "hello"},
         )
 
     assert response.status_code == 200
-    assert captured["security_enabled"] is False
+    assert captured["team_id"] == "personal"
 
 
 def test_no_security_resolves_personal_team_in_portable_context(

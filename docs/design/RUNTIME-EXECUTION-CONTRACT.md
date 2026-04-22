@@ -65,6 +65,22 @@ The managed path is the only one authorized for production frontend calls.
 `control-plane` is the sole authority that issues `ExecutionGrant` and resolves
 which runtime pod serves which agent instance.
 
+**Standalone / no-security mode (laptop, airgapped, developer workstation):**
+
+When `KEYCLOAK_ENABLED=false` the pod runs without authentication. A mock user
+(`uid="admin"`) is injected automatically. In this mode:
+
+- `team_id` defaults to `"personal"` when the caller omits it — no explicit
+  field is required in the request body.
+- This default is applied by `_stream()` before building `PortableContext`,
+  `RuntimeContext`, and the KPI/history records. Every subsystem sees the same
+  resolved value.
+- The CLI (`fred-agent-chat`) also defaults its active team to `"personal"` when
+  no Keycloak configuration is present, and prints it in the startup banner:
+  `[chat] team : personal`
+- Checkpoints, history rows, and KPI labels all carry `team_id="personal"` —
+  making it safe to compare metrics across restarts without null gaps.
+
 **Session continuity:**
 
 `session_id` is the single stable key for a conversation. Keep it identical
