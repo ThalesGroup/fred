@@ -1419,20 +1419,32 @@ def _emit_turn_completed(
     turn_start: float,
 ) -> None:
     """
-    Emit agent.turn_completed KPI for one completed turn.
+    Emit turn KPIs after the SSE stream closes.
 
-    Why this exists:
-    - one turn (user input → final assistant response) is the primary observability
-      unit — it must be queryable by session_id and exchange_id
-    - emitted after the SSE stream closes so all payloads are available
+    Two metrics are emitted:
+
+    agent.turn_completed (Histogram, ms):
+      Low-cardinality Prometheus dims only — session_id and exchange_id are
+      intentionally excluded to avoid high-cardinality label explosions.
+      finish_reason="error" when the turn ended with execution_error instead
+      of a normal final event.
+      Quantities (token counters, tool count) become Prometheus counters via
+      the KPI store's quantities path.
+
+    agent.turn_error_total (Counter):
+      Incremented only on execution_error turns.  Lets Prometheus alert on
+      the error rate without filtering histograms by label value.
     """
     try:
         kpi = get_runtime_context().get_kpi_writer()
         total_ms = int((time.monotonic() - turn_start) * 1000)
         tool_count = sum(1 for p in payloads if p.get("kind") == "tool_call")
         final = next((p for p in reversed(payloads) if p.get("kind") == "final"), None)
+        is_error = any(p.get("kind") == "execution_error" for p in payloads)
         model_name: str | None = final.get("model_name") if final else None
-        finish_reason: str | None = final.get("finish_reason") if final else None
+        finish_reason: str = (
+            "error" if is_error else (final.get("finish_reason") or "") if final else ""
+        )
         token_usage: dict[str, Any] | None = final.get("token_usage") if final else None
         input_tokens: int | None = (
             token_usage.get("input_tokens") if token_usage else None
@@ -1442,22 +1454,24 @@ def _emit_turn_completed(
         )
         runtime_id = get_runtime_context().config.service_name
 
+        # Prometheus-safe dims: low-cardinality only.
+        # session_id, exchange_id, user_id, agent_instance_id are per-turn
+        # UUIDs — they must NOT become Prometheus labels (cardinality bomb).
+        # They are available in history rows and SSE logs for per-turn tracing.
+        prom_dims: dict[str, str | None] = {
+            "team_id": team_id,
+            "template_agent_id": template_agent_id,
+            "runtime_id": runtime_id,
+            "model_name": model_name,
+            "finish_reason": finish_reason,
+        }
+
         kpi.emit(
             name="agent.turn_completed",
             type="timer",
             value=total_ms,
             unit="ms",
-            dims={
-                "session_id": session_id,
-                "exchange_id": exchange_id,
-                "user_id": user_id,
-                "team_id": team_id,
-                "agent_instance_id": agent_instance_id,
-                "template_agent_id": template_agent_id,
-                "runtime_id": runtime_id,
-                "model_name": model_name,
-                "finish_reason": finish_reason,
-            },
+            dims=prom_dims,
             quantities={
                 "tool_count": tool_count,
                 "input_tokens": input_tokens,
@@ -1465,6 +1479,15 @@ def _emit_turn_completed(
             },
             actor=KPIActor(type="system"),
         )
+
+        if is_error:
+            kpi.emit(
+                name="agent.turn_error_total",
+                type="counter",
+                value=1,
+                dims=prom_dims,
+                actor=KPIActor(type="system"),
+            )
     except Exception:
         logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
 
