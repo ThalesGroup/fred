@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+
 from fred_core import Action, Resource, get_config
 
 from knowledge_flow_backend import main as main_module
-from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
+from knowledge_flow_backend.application_context import ApplicationContext, get_configuration, get_app_context
 from knowledge_flow_backend.common.structures import IntegrationsConfig, PrometheusConfig
 from knowledge_flow_backend.features.kpi import prometheus_controller as prom_controller_module
 from knowledge_flow_backend.features.kpi.prometheus_controller import PrometheusOpsController
@@ -18,6 +19,8 @@ def _build_prometheus_app(base_url: str = "") -> TestClient:
     app = FastAPI()
     app.dependency_overrides[get_config] = get_configuration
     app.include_router(router)
+    # Called to init UserStore
+    get_app_context().get_pg_async_engine()
     return TestClient(app)
 
 
