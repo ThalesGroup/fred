@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
 from fred_core.users.user_models import GcuVersionsType, UserRow
+
 from .base_user_store import BaseUserStore
 
 _user_store: BaseUserStore | None = None
