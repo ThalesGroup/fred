@@ -1,0 +1,36 @@
+# SAST for Infrastructure as Code (Dockerfiles, Helm charts, docker-compose, YAML)
+# Based on: https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Jobs/SAST-IaC.gitlab-ci.yml
+
+variables:
+  SECURE_ANALYZERS_PREFIX: "$CI_TEMPLATE_REGISTRY_HOST/security-products"
+  SAST_IMAGE_SUFFIX: ""
+
+iac-sast:
+  stage: sast
+  artifacts:
+    access: 'developer'
+    reports:
+      sast: gl-sast-report.json
+    paths: [gl-sast-report.json]
+  rules:
+    - when: never
+  variables:
+    SEARCH_MAX_DEPTH: 4
+  allow_failure: true
+  script:
+    - /analyzer run
+
+kics-iac-sast:
+  extends: iac-sast
+  image:
+    name: "$SAST_ANALYZER_IMAGE"
+  variables:
+    SAST_ANALYZER_IMAGE_TAG: 6
+    SAST_ANALYZER_IMAGE: "$SECURE_ANALYZERS_PREFIX/kics:$SAST_ANALYZER_IMAGE_TAG$SAST_IMAGE_SUFFIX"
+  rules:
+    - if: $SAST_DISABLED == 'true' || $SAST_DISABLED == '1'
+      when: never
+    - if: $SAST_EXCLUDED_ANALYZERS =~ /kics/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
