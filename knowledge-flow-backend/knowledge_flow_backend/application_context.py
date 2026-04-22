@@ -306,7 +306,6 @@ class ApplicationContext:
         self.output_processor_registry: Dict[str, Type[BaseOutputProcessor]] = self._load_output_processor_registry()
         ApplicationContext._instance = self
         self._log_config_summary()
-        init_user_store(self.get_pg_async_engine())
 
     def is_tabular_file(self, file_name: str) -> bool:
         """
@@ -480,19 +479,23 @@ class ApplicationContext:
         Lazily create and cache a single async Postgres Engine for all the postgres async stores.
         """
         if self._pg_async_engine is None:
-            pg_cfg = self.configuration.storage.postgres
-            self._pg_async_engine = create_async_engine_from_config(pg_cfg)
-            engine = self._pg_async_engine
-
-            def _dispose_async_engine():
-                try:
-                    asyncio.run(engine.dispose())
-                except Exception:
-                    logger.debug("[SQL] Async engine dispose at exit failed", exc_info=True)
-
-            atexit.register(_dispose_async_engine)
-            logger.info("[SQL] Shared Postgres async initialized.")
+            self._init_pg_async_engine()
         return self._pg_async_engine
+
+    def _init_pg_async_engine(self):
+      pg_cfg = self.configuration.storage.postgres
+      pg_async_engine = create_async_engine_from_config(pg_cfg)
+
+      def _dispose_async_engine():
+        try:
+          asyncio.run(pg_async_engine.dispose())
+        except Exception:
+          logger.debug("[SQL] Async engine dispose at exit failed", exc_info=True)
+
+      atexit.register(_dispose_async_engine)
+      logger.info("[SQL] Shared Postgres async initialized.")
+      init_user_store(pg_async_engine)
+      return pg_async_engine
 
     def get_log_store(self) -> BaseLogStore:
         """
