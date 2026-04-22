@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
-from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest
+from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, VisualEvidenceArtifactResponse
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,44 @@ class VectorSearchController:
                 return hits
             except Exception as e:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        @router.get(
+            "/vector/visual-evidence-artifact",
+            tags=["Vector Search"],
+            summary="Get a visual evidence artifact for a rich PPTX hit",
+            operation_id="get_visual_evidence_artifact",
+            response_model=VisualEvidenceArtifactResponse,
+        )
+        async def get_visual_evidence_artifact(
+            document_uid: str,
+            artifact_path: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> VisualEvidenceArtifactResponse:
+            artifact_name = (artifact_path or "").strip().lstrip("/")
+            if not artifact_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Artifact path is empty.",
+                )
+
+            lowered = artifact_name.lower()
+            content_type = "application/octet-stream"
+            if lowered.endswith(".png"):
+                content_type = "image/png"
+            elif lowered.endswith(".jpg") or lowered.endswith(".jpeg"):
+                content_type = "image/jpeg"
+            elif lowered.endswith(".webp"):
+                content_type = "image/webp"
+
+            artifact_url = f"/knowledge-flow/v1/markdown/{document_uid}/artifact/{artifact_name}"
+
+            return VisualEvidenceArtifactResponse(
+                document_uid=document_uid,
+                artifact_path=artifact_name,
+                file_name=artifact_name.split("/")[-1],
+                content_type=content_type,
+                artifact_url=artifact_url,
+            )
 
         @router.post(
             "/vector/test",

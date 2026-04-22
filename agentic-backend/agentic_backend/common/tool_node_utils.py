@@ -46,18 +46,58 @@ def normalize_mcp_content(content: Any) -> Any:
         return content
 
     if isinstance(content, list):
-        # Extract text from content blocks
-        texts = []
+        normalized_blocks = []
+        plain_texts = []
+
         for block in content:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    texts.append(block.get("text", ""))
+            if not isinstance(block, dict):
+                plain_texts.append(str(block))
+                continue
+
+            block_type = block.get("type")
+            if block_type == "text":
+                text = block.get("text", "")
+                plain_texts.append(text)
+                normalized_blocks.append({"type": "text", "text": text})
+            elif block_type == "image_url":
+                normalized_blocks.append(block)
+            elif block_type == "image":
+                image_url = None
+
+                if block.get("url"):
+                    image_url = block["url"]
+                elif block.get("base64") and block.get("mime_type"):
+                    image_url = f"data:{block['mime_type']};base64,{block['base64']}"
+
+                if image_url:
+                    normalized_blocks.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_url},
+                        }
+                    )
                 else:
-                    # For non-text blocks, serialize to JSON
-                    texts.append(json.dumps(block))
+                    plain_texts.append(json.dumps(block))
             else:
-                texts.append(str(block))
-        return "\n".join(texts) if texts else ""
+                plain_texts.append(json.dumps(block))
+
+        has_image = any(
+            isinstance(block, dict) and block.get("type") == "image_url"
+            for block in normalized_blocks
+        )
+        if has_image:
+            merged = []
+            for text in plain_texts:
+                if text:
+                    merged.append({"type": "text", "text": text})
+            merged.extend(
+                block
+                for block in normalized_blocks
+                if isinstance(block, dict) and block.get("type") == "image_url"
+            )
+            return merged
+
+        return "\n".join(t for t in plain_texts if t) if plain_texts else ""
 
     # For other types, convert to JSON string
     return json.dumps(content)
