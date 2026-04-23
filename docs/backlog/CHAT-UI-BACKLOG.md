@@ -43,6 +43,31 @@ surface.
 - Keep existing `HitlPrompt` component unchanged in Phase 6A.
 - Never hand-edit `runtimeOpenApi.ts` — it is generated.
 
+### 0.4 History Ownership Contract
+
+This backlog must stay aligned with the managed execution architecture.
+
+Message history and session metadata have different owners.
+
+- `fred-runtime` owns conversation message content
+  - writes every turn to `session_history`
+  - serves message history reads via runtime endpoints
+  - remains the only backend on the hot path for conversation content
+- `control-plane-backend` owns session metadata only
+  - team-scoped session list, title, created/updated timestamps, status
+  - agent/team binding and management-plane concerns
+  - must not proxy, cache, or serve full message history
+
+Consequences for the frontend:
+
+- the chat page reads message history from runtime using the prepared
+  `messages_url_template`
+- the sidebar reads session metadata from control-plane
+- control-plane is not the scalable conversation-history serving plane in this
+  architecture
+- this backlog must never introduce a control-plane dependency for message
+  content reads or writes
+
 ---
 
 ## 1 Phase 6A — Page Architecture & Core Layout
@@ -120,6 +145,17 @@ Alignment convention (OpenWebUI / OpenAI):
 
 `ManagedChatPage` owns this state via `useState`. No Redux slice.
 
+This state is a presentation model only.
+
+It is populated from two sources:
+
+- streamed runtime events during live execution
+- runtime history loaded from `messages_url_template` for an existing
+  `session_id`
+
+It is not sourced from control-plane message-history APIs because none should
+exist in the managed path.
+
 ```typescript
 // Internal shape — not exported
 interface ConversationMessage {
@@ -184,7 +220,7 @@ type ThinkingStep =
 - [ ] Create `AssistantTurn` organism (ThinkingAccordion + AssistantMessage + SourcesPanel)
 - [ ] Refactor `ManagedChatPage` to use all new components
 - [ ] Map SSE events to `ConversationMessage` state (replace current flat state)
-- [ ] Normalise history-loaded messages (from control-plane) to `ConversationMessage[]`
+- [ ] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`
 - [ ] Run `make code-quality` on frontend
 
 ---
@@ -199,7 +235,7 @@ type ThinkingStep =
 - [ ] `SourcesPanel` appears below final message when `sources` non-empty
 - [ ] `ChatInputBar` is disabled (send button + textarea) while streaming
 - [ ] Existing HITL flow (`HitlPrompt`) is unaffected
-- [ ] History loaded from control-plane renders identically to streamed messages
+- [ ] History loaded from runtime renders identically to streamed messages
 - [ ] No regressions in `ChatList` sidebar session links
 
 ---
