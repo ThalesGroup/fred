@@ -363,6 +363,23 @@ async def get_current_user(
     user_store: BaseUserStore = Depends(get_user_store),
     configuration=Depends(get_config),
 ) -> KeycloakUser:
+    user = await get_current_user_without_gcu(token)
+    if configuration.app.gcu_version is None:
+        return user
+
+    user_details = await user_store.find_user_by_id(UUID(user.uid))
+
+    if (
+        not user_details
+        or user_details.gcuVersionAccepted.value != configuration.app.gcu_version
+    ):
+        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
+    return user
+
+
+async def get_current_user_without_gcu(
+    token: str = Security(oauth2_scheme),
+) -> KeycloakUser:
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
@@ -392,15 +409,4 @@ async def get_current_user(
             user.email,
         )
         raise HTTPException(status_code=403, detail="user_not_whitelisted")
-
-    if configuration.app.gcu_version is None:
-        return user
-
-    user_details = await user_store.find_user_by_id(UUID(user.uid))
-
-    if (
-        not user_details
-        or user_details.gcuVersionAccepted.value != configuration.app.gcu_version
-    ):
-        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user

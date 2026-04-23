@@ -9,6 +9,7 @@ from fred_core import (
     KeycloakUser,
     TeamPermission,
     get_current_user,
+    get_current_user_without_gcu,
 )
 from fred_core.common import PERSONAL_TEAM_ID
 from fred_core.users.store.postgres_user_store import get_user_store
@@ -138,6 +139,6 @@ async def get_user_details(
 @router.post("/gcu")
 async def validate_gcu(
     user: KeycloakUser = Depends(get_current_user),
-    user_store: BaseUserStore = Depends(get_user_store),
+    user_store: BaseUserStore = Depends(get_current_user_without_gcu),
 ) -> None:
     await update_gcu_validation(UUID(user.uid), user_store)
