@@ -3,19 +3,28 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
+from typing import Optional
+from uuid import UUID
 
+from fastapi import Depends
 from fred_core import (
     Action,
+    BaseUserStore,
     KeycloackDisabled,
     KeycloakUser,
     Resource,
     authorize,
     create_keycloak_admin,
 )
+from fred_core.users import GcuVersionsType, UserRow
+from fred_core.users.store.postgres_user_store import get_user_store
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakGetError, KeycloakPostError
 
-from control_plane_backend.application_context import ApplicationContext
+from control_plane_backend.application_context import (
+    ApplicationContext,
+    get_configuration,
+)
 from control_plane_backend.users_structures import (
     CreateUserRequest,
     KeycloakM2MUserOperationDisabledError,
@@ -153,3 +162,17 @@ async def _fetch_all_users(admin: KeycloakAdmin) -> list[dict]:
 
     logger.info("Collected %d users from Keycloak.", len(users))
     return users
+
+
+async def find_user_details_by_id(
+    user_id: UUID, user_store: BaseUserStore = Depends(get_user_store)
+) -> Optional[UserRow]:
+    return await user_store.find_user_by_id(user_id)
+
+
+async def update_gcu_validation(user_id: UUID, user_store: BaseUserStore) -> None:
+    cfg = get_configuration()
+    if cfg.app.gcu_version is None:
+        return
+
+    await user_store.update_gcu_version(user_id, GcuVersionsType(cfg.app.gcu_version))

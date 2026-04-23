@@ -1,4 +1,4 @@
-.user-settings-page {
+.userSettingsPage {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
@@ -7,7 +7,7 @@
   height: 100%;
 }
 
-.user-settings-header {
+.userSettingsHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -20,11 +20,11 @@
   }
 }
 
-.user-settings-header-title {
+.userSettingsHeaderTitle {
   font: var(--font-title-medium);
 }
 
-.user-settings-description {
+.userSettingsDescription {
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
@@ -33,40 +33,46 @@
   padding: var(--spacing-m);
 }
 
-.user-settings-identity {
+.userSettingsIdentity {
   display: flex;
   flex-direction: column;
   font: var(--font-body-medium);
 }
 
-.user-settings-identity-name {
+.userSettingsIdentityName {
   color: var(--primary);
   font: var(--font-body-medium);
 }
 
-.user-settings-identity-fullname {
+.userSettingsIdentityFullname {
   color: var(--on-surface);
   font: var(--font-title-medium);
 }
 
-.user-settings-identity-email {
+.userSettingsIdentityEmail {
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
 
-.user-settings-identity-role {
+.userSettingsIdentityRole {
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
 
-.user-settings-application {
+.userSettingsApplication {
   display: flex;
   gap: var(--spacing-m);
 }
 
-.user-settings-conversation {
+.userSettingsConversation {
   border-radius: var(--spacing-s);
   background-color: var(--surface-container);
   padding: var(--spacing-m);
   min-height: 15rem;
+}
+
+.userSettingsLegals {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: var(--spacing-2xs);
 }

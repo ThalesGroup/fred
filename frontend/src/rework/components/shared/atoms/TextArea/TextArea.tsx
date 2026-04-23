@@ -7,7 +7,7 @@ export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   error?: string;
 }
 
-export default function TextArea({ label,explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
+export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
   const id = useId();
   const characterCounter = String(value).length;
 

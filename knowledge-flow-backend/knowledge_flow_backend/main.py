@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
 from fred_core import (
+    get_config,
     get_current_user,
     initialize_user_security,
     log_setup,
@@ -40,7 +41,7 @@ from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.application_state import attach_app
 from knowledge_flow_backend.common.config_loader import (
     get_loaded_config_file_path,
@@ -189,6 +190,7 @@ def create_app() -> FastAPI:
         openapi_url=f"{configuration.app.base_url}/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
+    app.dependency_overrides[get_config] = get_configuration
 
     # Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For) so that
     # request.base_url uses https:// when behind a TLS-terminating ingress.

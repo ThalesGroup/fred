@@ -19,18 +19,22 @@ import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
+from uuid import UUID
 
 import jwt
-from fastapi import HTTPException, Security
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
-from fred_core.common import ThreadSafeLRUCache, read_env_bool
+from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.security.structure import KeycloakUser, UserSecurity
 from fred_core.security.whitelist_access_control.access_control import (
     is_user_whitelisted,
     is_whitelist_active,
 )
+
+from ..users.store import BaseUserStore
+from ..users.store.postgres_user_store import get_user_store
 
 logger = logging.getLogger(__name__)
 
@@ -354,7 +358,11 @@ def decode_jwt(token: str) -> KeycloakUser:
     return user
 
 
-def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
+async def get_current_user(
+    token: str = Security(oauth2_scheme),
+    user_store: BaseUserStore = Depends(get_user_store),
+    configuration=Depends(get_config),
+) -> KeycloakUser:
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
@@ -384,4 +392,15 @@ def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
             user.email,
         )
         raise HTTPException(status_code=403, detail="user_not_whitelisted")
+
+    if configuration.app.gcu_version is None:
+        return user
+
+    user_details = await user_store.find_user_by_id(UUID(user.uid))
+
+    if (
+        not user_details
+        or user_details.gcuVersionAccepted.value != configuration.app.gcu_version
+    ):
+        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user

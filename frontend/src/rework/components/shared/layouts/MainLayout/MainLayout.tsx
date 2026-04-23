@@ -7,11 +7,11 @@ export default function MainLayout() {
   return (
     <>
       <CssBaseline enableColorScheme />
-      <div className={styles["main-layout"]}>
-        <nav className={styles["sidebar"]}>
+      <div className={styles.mainLayout}>
+        <nav className={styles.sidebar}>
           <Sidebar />
         </nav>
-        <main className={styles["content"]}>
+        <main className={styles.content}>
           <Outlet />
         </main>
       </div>

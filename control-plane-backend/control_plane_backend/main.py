@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import (
     KeycloakUser,
+    get_config,
     get_current_user,
     initialize_user_security,
     log_setup,
@@ -19,7 +20,10 @@ from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
-from control_plane_backend.application_context import ApplicationContext
+from control_plane_backend.application_context import (
+    ApplicationContext,
+    get_configuration,
+)
 from control_plane_backend.common.config_loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -115,6 +119,10 @@ def create_app() -> FastAPI:
         {_norm_origin(origin) for origin in configuration.security.authorized_origins}
     )
     logger.info("[CORS] allow_origins=%s", allowed_origins)
+
+    ctx = ApplicationContext(configuration)
+    app.dependency_overrides[get_config] = get_configuration
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,

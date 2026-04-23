@@ -1,0 +1,69 @@
+.gcuContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: var(--surface-main);
+  padding: var(--spacing-xs) 0 var(--spacing-m) 0;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.gcuTitle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: var(--spacing-3xl);
+  font: var(--font-title-large);
+}
+
+.gcuContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+  background-color: var(--surface-container-lowest);
+  padding: var(--spacing-m);
+  width: 660px;
+  min-height: 0;
+  overflow: auto;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+
+  h2 {
+    margin: 0;
+    color: var(--secondary);
+    font: var(--font-title-large-emphasized);
+  }
+
+  h3 {
+    margin: 0;
+    color: var(--secondary);
+    font: var(--font-title-medium-emphasized);
+  }
+}
+
+.gcuSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.gcuActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  border-radius: 0 0 var(--radius-m) var(--radius-m);
+  background-color: var(--surface-container-hight);
+  padding: var(--spacing-m);
+  width: 660px;
+}
+
+.gcuLockInformation {
+  margin-right: auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

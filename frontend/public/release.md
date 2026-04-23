@@ -3,6 +3,8 @@
 - **Features**
 
   - Allow knowledge base of agent to be scopped at agent creation
+  - Add Gcu and Gdpr pages with Gcu version management
+  - Add join team mailto link on the teams marketplace
 
 **v1.4.1** — 2026-04-13
 
