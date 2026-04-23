@@ -101,7 +101,11 @@ async def _resolve_tag_ids(
         rebac.lookup_resources(subject_ref, TagPermission.VIEWER, Resource.TAGS),
     )
 
-    if isinstance(owned, RebacDisabledResult) or isinstance(edited, RebacDisabledResult) or isinstance(viewed, RebacDisabledResult):
+    if (
+        isinstance(owned, RebacDisabledResult)
+        or isinstance(edited, RebacDisabledResult)
+        or isinstance(viewed, RebacDisabledResult)
+    ):
         logger.info("[BACKFILL] ReBAC disabled for agent %s — using all tags", agent.id)
         return await _get_all_tag_ids(pg_async_engine)
 
@@ -131,7 +135,7 @@ def _needs_backfill(agent) -> bool:
 
 def _current_tag_ids(agent) -> list[str] | None:
     """Return the current document_library_tags_ids for the KF MCP server, or None if unset."""
-    for srv in (agent.tuning.mcp_servers or []):
+    for srv in agent.tuning.mcp_servers or []:
         if srv.id == KF_MCP_TEXT_SERVER_ID and srv.params is not None:
             return getattr(srv.params, "document_library_tags_ids", None)
     return None

@@ -6,6 +6,7 @@ Verifies the null-vs-empty-list distinction:
 """
 
 import pytest
+
 from agentic_backend.common.kf_vectorsearch_client import _intersect_or_fallback
 
 
@@ -80,7 +81,5 @@ def test_triple_intersection_no_creator_restriction():
 
 def test_triple_intersection_all_none():
     """creator=None, user=None, LLM=None → None (no restriction)."""
-    result = _intersect_or_fallback(
-        _intersect_or_fallback(None, None), None
-    )
+    result = _intersect_or_fallback(_intersect_or_fallback(None, None), None)
     assert result is None

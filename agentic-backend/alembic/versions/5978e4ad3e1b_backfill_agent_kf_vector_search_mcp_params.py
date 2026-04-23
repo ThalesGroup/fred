@@ -46,8 +46,9 @@ import logging
 from copy import deepcopy
 from typing import Sequence, Union
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,8 @@ def _migrate_payload(payload: dict) -> dict | None:
     # Task 1 — always strip superseded FieldSpec entries.
     if has_removed_fields:
         updated["tuning"]["fields"] = [
-            f for f in updated["tuning"].get("fields") or []
+            f
+            for f in updated["tuning"].get("fields") or []
             if f.get("key") not in REMOVED_FIELD_KEYS
         ]
 

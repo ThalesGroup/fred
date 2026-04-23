@@ -19,6 +19,7 @@ from agentic_backend.application_context import (
     get_mcp_configuration,
     get_mcp_server_manager,
 )
+from agentic_backend.common.chat_options_protocol import ChatOptionsEditor
 from agentic_backend.common.structures import (
     AgentChatOptions,
     AgentSettings,
@@ -29,7 +30,6 @@ from agentic_backend.core.agents.agent_class_resolver import (
     resolve_agent_reference,
 )
 from agentic_backend.core.agents.agent_loader import AgentLoader
-from agentic_backend.common.chat_options_protocol import ChatOptionsEditor
 from agentic_backend.core.agents.agent_spec import (
     AgentTuning,
     MCPServerConfiguration,
