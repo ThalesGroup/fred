@@ -33,7 +33,6 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import FastAPI
 from fred_core import (
     BaseLogStore,
     BaseSessionStore,
@@ -55,7 +54,6 @@ from fred_core.common import (
     OpenSearchIndexConfig,
     PostgresTableConfig,
     SQLStorageConfig,
-    get_config,
 )
 from fred_core.kpi import (
     BaseKPIStore,
