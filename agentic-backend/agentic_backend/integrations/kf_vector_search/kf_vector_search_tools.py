@@ -25,9 +25,16 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         document_library_tags_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
     ) -> str:
-        """Semantic search in the user documents (RAG)"""
+        """Search the user's document library using semantic similarity (RAG).
+
+        Returns ranked hits with title, content, and rank. For each answer:
+        - Cite sources with bracketed numbers matching hit rank: [1], [2], etc.
+        - Combine multiple sources when relevant: [1][3].
+        - Only use information actually present in the returned hits. Do not invent or infer facts beyond what the hits contain.
+        """
         client = VectorSearchClient(agent=agent)
         hits = await client.agent_search(
+            # todo: retrieve agent settings from `runtime.context`
             agent_settings=agent.agent_settings,
             runtime_context=runtime.context,
             question=query,
