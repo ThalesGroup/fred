@@ -1,9 +1,17 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Path, status
 from fastapi.responses import JSONResponse
-from fred_core import KeycloakUser, TeamPermission, get_current_user
+from fred_core import (
+    BaseUserStore,
+    GcuVersionsType,
+    KeycloakUser,
+    TeamPermission,
+    get_current_user,
+)
 from fred_core.common import PERSONAL_TEAM_ID
+from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
 from control_plane_backend.teams_structures import (
@@ -14,6 +22,10 @@ from control_plane_backend.users_service import (
 )
 from control_plane_backend.users_service import (
     delete_user as delete_user_from_service,
+)
+from control_plane_backend.users_service import (
+    find_user_details_by_id,
+    update_gcu_validation,
 )
 from control_plane_backend.users_service import (
     list_users as list_users_from_service,
@@ -92,17 +104,22 @@ async def delete_user(
 
 
 class UserDetails(BaseModel):
+    cguValidated: GcuVersionsType | None
     personalTeam: TeamWithPermissions
 
 
 @router.get(
     "/user",
-    summary="Temporary mock endpoint to get a user.",
+    summary="Return user informations.",
 )
 async def get_user_details(
     user: KeycloakUser = Depends(get_current_user),
+    user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
+    user_details = await find_user_details_by_id(UUID(user.uid), user_store)
+
     return UserDetails(
+        cguValidated=user_details.gcuVersionAccepted if user_details else None,
         personalTeam=TeamWithPermissions(
             id=PERSONAL_TEAM_ID,
             name="Equipe personnelle",
@@ -114,5 +131,13 @@ async def get_user_details(
                 TeamPermission("can_update_resources"),
                 TeamPermission("can_update_agents"),
             ],
-        )
+        ),
     )
+
+
+@router.post("/gcu")
+async def validate_gcu(
+    user: KeycloakUser = Depends(get_current_user),
+    user_store: BaseUserStore = Depends(get_user_store),
+) -> None:
+    await update_gcu_validation(UUID(user.uid), user_store)

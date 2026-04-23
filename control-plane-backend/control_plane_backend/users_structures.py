@@ -33,6 +33,7 @@ class UserSummary(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     username: str | None = None
+    email: str | None = None
 
     @classmethod
     def from_raw_user(cls, raw_user: dict[str, Any]) -> "UserSummary":
@@ -52,6 +53,7 @@ class UserSummary(BaseModel):
             first_name=_sanitize(raw_user.get("firstName")),
             last_name=_sanitize(raw_user.get("lastName")),
             username=_sanitize(raw_user.get("username")),
+            email=_sanitize(raw_user.get("email")),
         )
 
 

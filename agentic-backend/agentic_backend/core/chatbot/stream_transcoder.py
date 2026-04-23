@@ -586,6 +586,8 @@ class StreamTranscoder:
             async for raw_event in agent.astream_updates(
                 state=graph_input,
                 config=config,
+                # Todo: pass agent settings too ?
+                context=runtime_context,
                 stream_mode=["updates", "messages"],
             ):
                 mode, event = _split_stream_event_mode(raw_event)

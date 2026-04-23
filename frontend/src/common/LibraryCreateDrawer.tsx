@@ -132,6 +132,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
           inputProps={{ pattern: "^[^\\/]+$", title: "Name cannot contain '/'" }}
         />
 
+        {/*
         <TextField
           fullWidth
           label={t("libraryCreateDrawer.libraryDescription")}
@@ -140,6 +141,7 @@ export const LibraryCreateDrawer: React.FC<LibraryCreateDrawerProps> = ({
           multiline
           rows={3}
         />
+*/}
 
         {error && (
           <Alert severity="error">{(error as any)?.data?.detail || t("libraryCreateDrawer.creationFailed")}</Alert>

@@ -68,20 +68,22 @@ export default function AgentCreateEditModal({
           </Button>
         </div>
       </div>
-      <div className={styles.agentCreateEditModalContent}>
-        <AgentCreateEditForm
-          ref={childRef}
-          agent={agent}
-          canDelete={true}
-          teamId={teamId}
-          onClose={() => modalInteraction.close()}
-          onSaved={onSaved}
-          onDeleted={() => {
-            onDeleted();
-            modalInteraction.close();
-          }}
-          onValidityChange={setIsSaveDisabled}
-        />
+      <div className={styles.agentCreateEditModalContentWrapper}>
+        <div className={styles.agentCreateEditModalContent}>
+          <AgentCreateEditForm
+            ref={childRef}
+            agent={agent}
+            canDelete={true}
+            teamId={teamId}
+            onClose={() => modalInteraction.close()}
+            onSaved={onSaved}
+            onDeleted={() => {
+              onDeleted();
+              modalInteraction.close();
+            }}
+            onValidityChange={setIsSaveDisabled}
+          />
+        </div>
         {!isCreateMode && (
           <div className={styles.deleteAction}>
             <Button color={"error"} variant={"filled"} size={"medium"} onClick={handleDelete} disabled={!canDelete}>

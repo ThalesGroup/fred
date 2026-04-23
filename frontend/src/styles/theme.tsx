@@ -14,6 +14,13 @@
 
 import { alpha, createTheme, TypographyVariants } from "@mui/material/styles";
 
+// Resolves a CSS variable (e.g. "--primary") to its computed hex value at runtime.
+// MUI requires real color values (not CSS variable references) for palette entries
+// because it performs alpha/contrast calculations at theme-creation time.
+function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 // ------------------------------------------------------------
 // Extending MUI theme to add custom typography variant for markdown rendering
 // ------------------------------------------------------------
@@ -71,14 +78,6 @@ const sharedComponents = {
       },
     },
   },
-  // Make Divider a bit more visible
-  MuiDivider: {
-    styleOverrides: {
-      root: {
-        borderColor: "rgba(255, 255, 255, .3)",
-      },
-    },
-  },
 };
 
 // MUI's original elevation overlay formula (from getOverlayAlpha.js)
@@ -96,63 +95,87 @@ function getOverlayAlpha(elevation: number): number {
 // Light theme
 // ------------------------------------------------------------
 
-const lightTheme = createTheme({
-  palette: {
-    mode: "light",
-    secondary: {
-      main: "#2f3475ff",
+// Themes are factory functions (not constants) so that createTheme runs inside
+// a React render, where the DOM and data-theme attribute are already set and
+// cssVar() can resolve the correct computed values.
+
+function createLightTheme() {
+  return createTheme({
+    palette: {
+      mode: "light",
+      primary: { main: cssVar("--primary"), contrastText: cssVar("--on-primary") },
+      secondary: { main: cssVar("--secondary"), contrastText: cssVar("--on-secondary") },
+      error: { main: cssVar("--error"), contrastText: cssVar("--on-error") },
+      warning: { main: cssVar("--warning"), contrastText: cssVar("--on-warning") },
+      info: { main: cssVar("--info"), contrastText: cssVar("--on-info") },
+      success: { main: cssVar("--success"), contrastText: cssVar("--on-success") },
+      background: { default: cssVar("--surface-main"), paper: cssVar("--surface-container") },
+      text: {
+        primary: cssVar("--on-surface"),
+        secondary: cssVar("--on-surface-retreat"),
+        disabled: cssVar("--on-surface-muted"),
+      },
+      divider: cssVar("--outline"),
     },
-  },
-  typography: {
-    markdown: markdownDefaults,
-  },
-  components: {
-    ...sharedComponents,
-    // In MUI, on dark theme, when Paper uses elevation, a white overlay is applied to lighten the Paper color.
-    // On light theme, there is no such Paper color modification by default (it only add shadows).
-    // To make design easier and more consistent between light and dark themes, we apply here a similar logic on light theme,
-    // but using a black overlay to slightly darken the Paper color when elevation is used.
-    // (note: there is no need to apply this logic to the dark theme, as MUI already does it by default, we are noly mimicking it on light theme).
-    MuiPaper: {
-      styleOverrides: {
-        root: ({ ownerState }) => {
-          // Apply the same elevation overlay logic as dark mode, but with black instead of white
-          if (ownerState.variant === "elevation" && ownerState.elevation && ownerState.elevation > 0) {
-            const overlayColor = alpha("#000", getOverlayAlpha(ownerState.elevation));
-            return {
-              backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor})`,
-            };
-          }
-          return {};
+    typography: {
+      markdown: markdownDefaults,
+    },
+    components: {
+      ...sharedComponents,
+      // In MUI, on dark theme, when Paper uses elevation, a white overlay is applied to lighten the Paper color.
+      // On light theme, there is no such Paper color modification by default (it only add shadows).
+      // To make design easier and more consistent between light and dark themes, we apply here a similar logic on light theme,
+      // but using a black overlay to slightly darken the Paper color when elevation is used.
+      // (note: there is no need to apply this logic to the dark theme, as MUI already does it by default, we are noly mimicking it on light theme).
+      MuiPaper: {
+        styleOverrides: {
+          root: ({ ownerState }) => {
+            // Apply the same elevation overlay logic as dark mode, but with black instead of white
+            if (ownerState.variant === "elevation" && ownerState.elevation && ownerState.elevation > 0) {
+              const overlayColor = alpha("#000", getOverlayAlpha(ownerState.elevation));
+              return {
+                backgroundImage: `linear-gradient(${overlayColor}, ${overlayColor})`,
+              };
+            }
+            return {};
+          },
         },
       },
     },
-  },
-});
+  });
+}
 
 // ------------------------------------------------------------
 // Dark theme
 // ------------------------------------------------------------
 
-const darkTheme = createTheme({
-  palette: {
-    mode: "dark",
-    secondary: {
-      main: "#a2a9ffff",
+function createDarkTheme() {
+  return createTheme({
+    palette: {
+      mode: "dark",
+      primary: { main: cssVar("--primary"), contrastText: cssVar("--on-primary") },
+      secondary: { main: cssVar("--secondary"), contrastText: cssVar("--on-secondary") },
+      error: { main: cssVar("--error"), contrastText: cssVar("--on-error") },
+      warning: { main: cssVar("--warning"), contrastText: cssVar("--on-warning") },
+      info: { main: cssVar("--info"), contrastText: cssVar("--on-info") },
+      success: { main: cssVar("--success"), contrastText: cssVar("--on-success") },
+      background: { default: cssVar("--surface-main"), paper: cssVar("--surface-container") },
+      text: {
+        primary: cssVar("--on-surface"),
+        secondary: cssVar("--on-surface-retreat"),
+        disabled: cssVar("--on-surface-muted"),
+      },
+      divider: cssVar("--outline"),
     },
-    error: {
-      // Lighten a bit the error color
-      main: "#e57373",
+    typography: {
+      markdown: markdownDefaults,
     },
-  },
-  typography: {
-    markdown: markdownDefaults,
-  },
-  components: sharedComponents,
-});
+    components: sharedComponents,
+  });
+}
 
 // ------------------------------------------------------------
 // Exporting themes
 // ------------------------------------------------------------
 
-export { darkTheme, lightTheme };
+export { createDarkTheme, createLightTheme };

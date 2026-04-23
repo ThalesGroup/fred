@@ -356,6 +356,7 @@ class Properties(BaseModel):
     defaultPersonalBannerFile: str = "default-team-banner.png"
     defaultTeamAvatarFile: str = "default-team-avatar.png"
     defaultPersonalAvatarFile: str = "default-team-avatar.png"
+    gcuVersion: str | None = None
 
 
 class FrontendSettings(BaseModel):
@@ -386,6 +387,7 @@ class AppConfig(BaseModel):
         default=0,
         description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
     )
+    gcu_version: str | None = None
 
 
 class SchedulerConfig(BaseModel):

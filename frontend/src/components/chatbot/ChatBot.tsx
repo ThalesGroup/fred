@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { AnyAgent } from "../../common/agent.ts";
 import { useSessionChange } from "../../hooks/useSessionChange.ts";
@@ -50,11 +51,10 @@ import {
 import { useToast } from "../ToastProvider.tsx";
 import { keyOf, mergeAuthoritative, toWsUrl, upsertOne } from "./ChatBotUtils.tsx";
 import ChatBotView from "./ChatBotView.tsx";
-import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
+import { useConversationOptionsController } from "./ConversationOptionsController.tsx";
 import { toDisplayChunks } from "./messageParts.ts";
 import { UserInputContent } from "./user_input/UserInput.tsx";
-import { useParams } from "react-router-dom";
 
 const HISTORY_TEXT_LIMIT = 1200;
 const LOG_GENIUS_CONTEXT_TURNS = 3;
@@ -1460,7 +1460,7 @@ const ChatBot = ({
       supportsDocumentsSelection && conversationPrefs.includeDocumentScope && conversationPrefs.documentUids.length > 0;
     const includeCorpusScope = documentsScopeActive ? true : conversationPrefs.includeCorpusScope;
 
-    if (conversationPrefs.documentLibraryIds.length && !documentsScopeActive) {
+    if (!documentsScopeActive) {
       runtimeContext.selected_document_libraries_ids = conversationPrefs.documentLibraryIds;
     }
     if (documentsScopeActive) {

@@ -19,6 +19,7 @@ from agentic_backend.application_context import (
     get_mcp_configuration,
     get_mcp_server_manager,
 )
+from agentic_backend.common.chat_options_protocol import ChatOptionsEditor
 from agentic_backend.common.structures import (
     AgentChatOptions,
     AgentSettings,
@@ -88,18 +89,24 @@ class AgentManager:
     @staticmethod
     def _chat_options_from_tuning(tuning: AgentTuning) -> AgentChatOptions:
         """
-        Extract chat option booleans from tuning.fields (keys starting with chat_options.).
+        Derive AgentChatOptions from two sources, applied in order:
+        1. tuning.fields — FieldSpec entries whose key starts with "chat_options."
+        2. tuning.mcp_servers — params that implement ChatOptionsEditor.edit_chat_options()
         """
-        if not tuning or not tuning.fields:
-            return AgentChatOptions()
         overrides: Dict[str, bool] = {}
-        for f in tuning.fields:
+        for f in tuning.fields or []:
             if not f.key or not f.key.startswith("chat_options."):
                 continue
             key = f.key.split(".", 1)[1]
             if isinstance(f.default, bool):
                 overrides[key] = f.default
-        return AgentChatOptions(**overrides)
+        options = AgentChatOptions(**overrides)
+
+        for ref in tuning.mcp_servers or []:
+            if isinstance(ref.params, ChatOptionsEditor):
+                ref.params.edit_chat_options(options)
+
+        return options
 
     async def get_mcp_servers_configuration(self) -> List[MCPServerConfiguration]:
         try:

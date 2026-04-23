@@ -768,7 +768,11 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         return model
 
     async def invoke(
-        self, input_model: BaseModel, config: ExecutionConfig
+        self,
+        input_model: BaseModel,
+        config: ExecutionConfig,
+        *,
+        context: object | None = None,
     ) -> BaseModel:
         return await self._execute(
             input_model=input_model,
@@ -777,7 +781,11 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         )
 
     async def stream(
-        self, input_model: BaseModel, config: ExecutionConfig
+        self,
+        input_model: BaseModel,
+        config: ExecutionConfig,
+        *,
+        context: object | None = None,
     ) -> AsyncIterator[RuntimeEvent]:
         """
         Stream runtime events as they are emitted by each graph node.

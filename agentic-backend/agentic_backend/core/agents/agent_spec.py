@@ -15,9 +15,18 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, Field
+
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+    KfVectorSearchParams,
+)
+
+# Discriminated union of all typed inprocess tool params.
+# Add new provider param models here as new inprocess tools gain typed params.
+ToolParams = Annotated[KfVectorSearchParams, Field(discriminator="provider")]
+
 
 FieldType = Literal[
     "string",
@@ -143,6 +152,13 @@ class MCPServerRef(BaseModel):
         ..., validation_alias=AliasChoices("id", "name")
     )  # Accept both "id" and "name" on input for backward compatibility; always serializes as "id"
     require_tools: list[str] = []  # optional: "os.*", "kpi.*" capabilities
+    params: Optional[ToolParams] = Field(
+        default=None,
+        description=(
+            "Typed agent-level parameters for inprocess tools, discriminated by `provider`. "
+            "Example: KfVectorSearchParams(document_library_tags_ids=['lib-123'])"
+        ),
+    )
 
 
 class AgentTuning(BaseModel):

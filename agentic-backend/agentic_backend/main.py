@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#!/usr/bin/env python
+# !/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -27,7 +27,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fred_core import initialize_user_security, log_setup
+from fred_core import get_config, initialize_user_security, log_setup
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.kpi import KPIActor, KPIWriter, emit_process_kpis, emit_sql_pool_kpis
 from prometheus_client import start_http_server
@@ -37,6 +37,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from agentic_backend.application_context import (
     ApplicationContext,
     get_agent_store,
+    get_configuration,
     get_session_store,
 )
 from agentic_backend.common.config_loader import (
@@ -237,6 +238,9 @@ def create_app() -> FastAPI:
         {_norm_origin(o) for o in configuration.security.authorized_origins}
     )
     logger.info("[MAIN][CORS] allow_origins=%s", allowed_origins)
+
+    app.dependency_overrides[get_config] = get_configuration
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,

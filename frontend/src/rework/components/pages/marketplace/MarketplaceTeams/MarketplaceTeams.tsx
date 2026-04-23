@@ -14,29 +14,29 @@ export default function () {
   const yourTeams = teams && teams.filter((t) => t.is_member);
   const otherTeams = teams && teams.filter((t) => !t.is_member);
 
-  const renderCard = (team: Team, withDescription: boolean) => {
+  const renderCard = (team: Team, withDescription: boolean, canJoin: boolean) => {
     if (isAdmin)
       return (
         <Link to={`/team/${team.id}/agents`}>
-          <TeamCard key={team.id} team={team} withDescription={withDescription} />
+          <TeamCard key={team.id} team={team} withDescription={withDescription} canJoin={canJoin} />
         </Link>
       );
-    return <TeamCard key={team.id} team={team} withDescription={withDescription} />;
+    return <TeamCard key={team.id} team={team} withDescription={withDescription} canJoin={canJoin} />;
   };
 
   return (
-    <div className={styles["marketplace-teams-container"]}>
-      <div className={styles["marketplace-teams-header"]}>
-        <h1 className={styles["marketplace-teams-title"]}>{t("rework.marketplace.teams.title")}</h1>
+    <div className={styles.marketplaceTeamsContainer}>
+      <div className={styles.marketplaceTeamsHeader}>
+        <h1 className={styles.marketplaceTeamsTitle}>{t("rework.marketplace.teams.title")}</h1>
       </div>
-      <div className={styles["marketplace-teams-content"]}>
-        <div className={styles["marketplace-teams-list-subtitle"]}>{t("rework.marketplace.teams.yourTeams")}</div>
-        <div className={styles["marketplace-teams-list"]}>
-          {yourTeams && yourTeams.map((team) => renderCard(team, false))}
+      <div className={styles.marketplaceTeamsContent}>
+        <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
+        <div className={styles.marketplaceTeamsList}>
+          {yourTeams && yourTeams.map((team) => renderCard(team, false, false))}
         </div>
-        <div className={styles["marketplace-teams-list-subtitle"]}>{t("rework.marketplace.teams.otherTeams")}</div>
-        <div className={styles["marketplace-teams-list"]}>
-          {otherTeams && otherTeams.map((team) => renderCard(team, true))}
+        <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
+        <div className={styles.marketplaceTeamsList}>
+          {otherTeams && otherTeams.map((team) => renderCard(team, true, true))}
         </div>
       </div>
     </div>
