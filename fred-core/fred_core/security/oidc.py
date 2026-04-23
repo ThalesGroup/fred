@@ -399,7 +399,7 @@ async def get_current_user_without_gcu(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-        # do NOT log the full token
+    # do NOT log the full token
     logger.debug("[SECURITY] Received token prefix: %s...", token[:10])
     user = decode_jwt(token)
     if is_whitelist_active() and not is_user_whitelisted(user):
