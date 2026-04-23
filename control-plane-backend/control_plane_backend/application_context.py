@@ -33,6 +33,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
 from control_plane_backend.agent_instance_store import AgentInstanceStore
+from control_plane_backend.session_metadata_store import SessionMetadataStore
 from control_plane_backend.team_metadata_store import TeamMetadataStore
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class ApplicationContext:
         self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
+        self._session_metadata_store: SessionMetadataStore | None = None
         ApplicationContext._instance = self
 
     @classmethod
@@ -165,6 +167,13 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._agent_instance_store
+
+    def get_session_metadata_store(self) -> SessionMetadataStore:
+        if self._session_metadata_store is None:
+            self._session_metadata_store = SessionMetadataStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._session_metadata_store
 
 
 def get_app_context() -> ApplicationContext:

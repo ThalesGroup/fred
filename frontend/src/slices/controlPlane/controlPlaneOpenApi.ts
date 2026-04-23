@@ -172,6 +172,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/agent-instances/${queryArg.agentInstanceId}/runtime` }),
     }),
+    postTeamSessionControlPlaneV1TeamsTeamIdSessionsPost: build.mutation<
+      PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse,
+      PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions`,
+        method: "POST",
+        body: queryArg.createSessionRequest,
+      }),
+    }),
+    getTeamSessionsControlPlaneV1TeamsTeamIdSessionsGet: build.query<
+      GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse,
+      GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
+    }),
     postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
@@ -281,6 +297,17 @@ export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRu
   /** status 200 Successful Response */ ManagedAgentRuntimeBinding;
 export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg = {
   agentInstanceId: string;
+};
+export type PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiResponse =
+  /** status 201 Successful Response */ SessionListItem;
+export type PostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostApiArg = {
+  teamId: string;
+  createSessionRequest: CreateSessionRequest;
+};
+export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
+  /** status 200 Successful Response */ SessionListItem[];
+export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
+  teamId: string;
 };
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
   /** status 200 Successful Response */ ExecutionPreparation;
@@ -526,6 +553,20 @@ export type ManagedAgentRuntimeBinding = {
   enabled?: boolean;
   tuning: ManagedAgentTuning;
 };
+export type SessionListItem = {
+  session_id: string;
+  team_id: string;
+  agent_instance_id?: string | null;
+  title?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreateSessionRequest = {
+  /** Frontend-generated UUID. */
+  session_id: string;
+  agent_instance_id?: string | null;
+  title?: string | null;
+};
 export type ExecutionGrantAction = "execute" | "resume";
 export type ExecutionGrant = {
   user_id: string;
@@ -601,5 +642,8 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
   useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
+  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
+  useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
 } = injectedRtkApi;

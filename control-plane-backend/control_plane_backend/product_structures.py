@@ -110,6 +110,25 @@ class ExecutionPreparation(BaseModel):
     max_session_idle_seconds: int | None = None
 
 
+class SessionListItem(BaseModel):
+    """One session entry in the sidebar session list."""
+
+    session_id: str
+    team_id: TeamId
+    agent_instance_id: str | None = None
+    title: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CreateSessionRequest(BaseModel):
+    """Register session metadata in control-plane at session creation time."""
+
+    session_id: str = Field(..., min_length=1, description="Frontend-generated UUID.")
+    agent_instance_id: str | None = Field(default=None)
+    title: str | None = Field(default=None, max_length=500)
+
+
 class CreateAgentInstanceRequest(BaseModel):
     """Request body for enrolling a discovered template for a team."""
 

@@ -20,7 +20,7 @@ import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstr
  * - `<TeamSelectionNavbar />`
  */
 export default function TeamSelectionNavbar() {
-  const { defaultTeamBannerFile, defaultPersonalBannerFile } = useFrontendProperties();
+  const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { activeTeam, availableTeams } = useFrontendBootstrap();
   const { pathname } = useLocation();
@@ -41,7 +41,7 @@ export default function TeamSelectionNavbar() {
           teamName={t("rework.sidebar.team.userTeam")}
           selected={pathname.startsWith(`/team/${personalTeamId}`)}
           icon={{ category: "outlined", type: "person", filled: true }}
-          imgUrl={`/images/${defaultPersonalBannerFile}`}
+          imgUrl={`/images/${defaultPersonalAvatarFile}`}
         />
         {collaborativeTeams.length > 0 && (
           <TeamSelectionItem
@@ -61,7 +61,7 @@ export default function TeamSelectionNavbar() {
               redirection={`/team/${team.id}/agents`}
               teamName={team.name}
               selected={pathname.startsWith(`/team/${team.id}`)}
-              imgUrl={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
+              imgUrl={team.banner_image_url ?? `/images/${defaultTeamAvatarFile}`}
             />
           );
         })}

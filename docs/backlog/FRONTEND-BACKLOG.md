@@ -434,18 +434,51 @@ architecture:
 - runtime-owned execution only
 - no frontend dependency on Kubernetes or pod wiring
 
+### 5.2.1 Managed Agent Availability Model
+
+The frontend must present managed-agent availability using the same lifecycle
+language as the control-plane product model.
+
+Terms:
+
+- `template` = live-discovered capability available for enrollment
+- `managed agent instance` = enrolled team-scoped object stored in control-plane
+- `runtime unavailable` = the managed instance still exists, but new execution
+  cannot currently proceed
+
+Required behavior:
+
+1. if template discovery fails for one runtime, the page may show fewer
+   templates for enrollment without implying that existing enrolled instances
+   were deleted
+2. if an enrolled managed instance still exists in control-plane but execution
+   cannot proceed, the UI must keep showing the instance and present it as
+   unavailable rather than silently hiding it
+3. delete / unbind must remain available for managers even when execution is
+   unavailable, because unbinding is handled by control-plane and does not
+   require the runtime pod to be healthy
+4. the UI must not force the user to infer lifecycle state from a generic chat
+   failure
+
+Current implementation note:
+
+- the page already separates template discovery from managed instance listing
+- the page does not yet surface a first-class "runtime unavailable" state for an
+  enrolled instance
+- the delete path already goes through control-plane and should remain usable
+
 ---
 
-### 5.3 Current Mismatch
+### 5.3 Status Note (Phase 5C complete)
 
-Managed chat already prepares execution through control-plane, but the agent
-selection surface is still split:
+The agent selection surface is now fully migrated:
 
-- managed chat uses `agent_instance_id`
-- the team agent page still reads legacy agent lists from `agentic-backend`
-- legacy authoring/update flows still shape the page model
+- managed chat uses `agent_instance_id` via `ManagedChatPage`
+- `TeamAgentsPage` reads managed instances from control-plane (no more `agentic-backend`)
+- `agent_instance_id` is the route and execution identity throughout the managed path
 
-This keeps the entry point to Phase 4 transport work inconsistent.
+Remaining open item: decide which legacy authoring/editing capabilities (if any) remain
+supported during migration and which are intentionally deferred (see task below).
 
 ---
 
@@ -462,6 +495,15 @@ This keeps the entry point to Phase 4 transport work inconsistent.
   - no enrolled managed instances
   - no reachable templates
   - runtime unavailable but shell healthy
+- [ ] Make the managed instance list explicitly distinguish:
+  - enrolled but currently unavailable for execution
+  - removed/unbound
+- [ ] Keep delete / unbind affordances available when one enrolled instance is
+  currently unavailable because its runtime pod is down
+- [ ] Add one user-facing unavailable state/message that explains:
+  - the team still owns the instance
+  - new execution is temporarily unavailable
+  - delete remains possible
 
 ---
 
@@ -530,30 +572,35 @@ This creates a hybrid UX even when execution itself is migrated.
 - [x] Freeze which backend owns sidebar session metadata (see §6.2 above)
 - [x] Remove default sidebar/session dependency on legacy agentic session APIs
 - [x] Decide whether session metadata is moved to control-plane or omitted:
-      **Decision: omitted intentionally until control-plane slice exists**
+      **Decision: moved to control-plane — implemented in Phase 5D**
 - [x] Ensure managed chat history loading uses prepared runtime `messages_url_template` only
       — implemented in `ManagedChatPage`: calls `prepare-execution` on mount when `?session=<id>`
       is present, expands `{session_id}` in the template, fetches history with bearer token
 - [x] Define one supported managed chat entry flow from team page to chat page
-- [ ] Implement control-plane session metadata creation at `prepare-execution` time:
-      `POST /control-plane/v1/sessions` with `{ session_id, team_id, agent_instance_id }`
-- [ ] Implement `GET /control-plane/v1/sessions` for sidebar session list
-- [ ] Wire sidebar to control-plane session list once the endpoint exists
+- [x] Implement control-plane session metadata creation:
+      `POST /teams/{team_id}/sessions` with `{ session_id, agent_instance_id }` —
+      called from `ManagedChatPage.handleSend` after generating the session_id (fire-and-forget).
+      Backend: `session_metadata` table + `SessionMetadataStore` + `SessionMetadataRow` ORM +
+      Alembic migration `f1a2b3c4d5e6`. Pydantic: `SessionListItem`, `CreateSessionRequest`.
+- [x] Implement `GET /teams/{team_id}/sessions` for sidebar session list —
+      returns sessions ordered by `updated_at DESC`, limit 50
+- [x] Wire sidebar to control-plane session list —
+      `ChatList.tsx` now fetches from `useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery`
+      with 30s polling; renders links to `/team/:teamId/managed-chat/:agentInstanceId?session=<uuid>`
 - [x] Frontend generates `session_id` (UUID) before first turn and passes it in
       `RuntimeExecuteRequest.session_id` — `ManagedChatPage` generates UUID upfront in `handleSend`
       if sessionId is null, persists it in URL query params (`?session=<uuid>`)
-- [ ] Ensure `session_id` is never labeled `thread_id` anywhere in frontend code or UI
+- [x] Ensure `session_id` is never labeled `thread_id` anywhere in frontend code or UI
 
 ---
 
 ### 6.5 Validation
 
-- [ ] no managed chat screen requires legacy websocket/session APIs
-- [ ] session/history behavior follows the ownership split in §6.2
-- [ ] sidebar shows an intentional empty state when session metadata does not
-      exist yet — not a partial legacy fallback
-- [ ] message history loads from the runtime `messages_url_template` only
-- [ ] `session_id` is consistently used as the conversation identifier in all
+- [x] no managed chat screen requires legacy websocket/session APIs
+- [x] session/history behavior follows the ownership split in §6.2
+- [x] sidebar shows sessions from control-plane, empty state when none exist
+- [x] message history loads from the runtime `messages_url_template` only
+- [x] `session_id` is consistently used as the conversation identifier in all
       frontend state, route params, and API calls
 
 ---
@@ -590,21 +637,24 @@ Do not treat the following as Phase 5 starting requirements:
 
 ## 9 Current Frontend Gaps To Use As Input
 
-These are concrete migration signals already visible in the codebase:
+These are concrete migration signals still visible in the codebase (updated after Phase 5D):
 
 - `frontend/src/common/config.tsx` now only handles the tiny pre-auth
   `/config.json` bootstrap, but bootstrap failure handling is still not
-  converged into one typed recovery path
+  converged into one typed recovery path (open 5A task)
 - `frontend/src/pages/Chat.tsx` still lists legacy raw agents from
-  `agentic-backend`
+  `agentic-backend` — this is the legacy chat path, not the managed path; intentionally
+  left until the old chat surfaces are formally deprecated
 - `frontend/src/components/chatbot/ChatBot.tsx` still reads legacy session
-  metadata from `agentic-backend`
-- the managed sidebar currently uses an intentional placeholder for session
-  metadata until the control-plane session slice is implemented
+  metadata from `agentic-backend` — same as above, legacy surface
+- ~~the managed sidebar uses an intentional placeholder for session metadata~~
+  **done**: `ChatList.tsx` now fetches from `GET /teams/{team_id}/sessions` (Phase 5D)
 - the personal-only shell still leaves some collaborative/discovery UI decisions
   open, especially marketplace visibility
 - backend hardening for the synthetic `personal` team remains open and should be
   closed before treating the no-security baseline as fully robust
+- 5B validation: `active team = personal` after hard refresh + navigation with
+  `available_teams` size 1 — two smoke-test items still unconfirmed
 
 These gaps should inform the sequencing, not trigger ad hoc fixes.
 
@@ -628,13 +678,23 @@ we can answer "yes" to all of the following:
 
 ---
 
-## 11 Proposed Phase 5 Order
+## 11 Related Backlogs
 
-1. **Phase 5A - Bootstrap convergence**
-2. **Phase 5B - No-security personal-only baseline**
-3. **Backend readiness gates closed enough to remove ambiguity**
-4. **Phase 5C - Managed agent surface**
-5. **Phase 5D - Session and chat shell convergence**
-6. **Phase 5E - Knowledge-flow and shared shell alignment**
+- [`CHAT-UI-BACKLOG.md`](./CHAT-UI-BACKLOG.md) — Progressive build-out of the
+  managed chat interface quality: component architecture, rendering, markdown,
+  source citations, reasoning trace. Parallel to Phase 5 migration work.
+
+---
+
+## 12 Phase 5 Progress
+
+| Sub-phase | Status | Remaining |
+|---|---|---|
+| 5A – Bootstrap convergence | ✓ Complete | Bootstrap failure recovery screen (minor, deferred) |
+| 5B – No-security personal-only baseline | ✓ Substantially complete | 2 smoke-test validation items |
+| Backend readiness gates | Partial | Bootstrap permissions for route guards; personal-team doc; offline test |
+| 5C – Managed agent surface | ✓ Complete | Legacy authoring decision (intentionally deferred) |
+| 5D – Session and chat shell convergence | ✓ Complete | PATCH/DELETE session endpoints (deferred to Phase 6) |
+| 5E – Knowledge-flow and shared shell alignment | Planned | — |
 
 Security-enabled hardening should come after the no-security baseline is clean.

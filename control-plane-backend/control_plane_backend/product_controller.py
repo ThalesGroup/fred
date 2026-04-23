@@ -10,20 +10,24 @@ from control_plane_backend.product_service import (
     EnrollmentError,
     ExecutionPreparationError,
     build_frontend_bootstrap,
+    create_session,
     enroll_agent_instance,
     get_runtime_binding,
     list_agent_templates,
     list_managed_agent_instances,
+    list_sessions,
     prepare_execution,
     unenroll_agent_instance,
 )
 from control_plane_backend.product_structures import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
+    CreateSessionRequest,
     ExecutionPreparation,
     FrontendBootstrap,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    SessionListItem,
 )
 from control_plane_backend.teams_service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -156,6 +160,53 @@ async def get_agent_instance_runtime(
             status_code=409, detail="Managed agent instance is disabled."
         )
     return binding
+
+
+@router.post(
+    "/teams/{team_id}/sessions",
+    response_model=SessionListItem,
+    response_model_exclude_none=True,
+    status_code=201,
+    summary="Register session metadata in control-plane at session creation time.",
+)
+async def post_team_session(
+    team_id: Annotated[TeamId, Path()],
+    body: CreateSessionRequest,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SessionListItem:
+    """
+    Create a control-plane session metadata record for a new conversation.
+
+    Called by the frontend after generating a session_id (before or just after
+    the first SSE turn). Does not affect runtime execution or history.
+
+    Returns 409 if the session_id already exists.
+    """
+    await get_team_by_id_from_service(user, team_id)
+    try:
+        return await create_session(user=user, team_id=team_id, request=body)
+    except Exception as exc:
+        if "UNIQUE constraint" in str(exc) or "unique" in str(exc).lower():
+            raise HTTPException(
+                status_code=409,
+                detail=f"Session {body.session_id!r} already exists.",
+            ) from exc
+        raise
+
+
+@router.get(
+    "/teams/{team_id}/sessions",
+    response_model=list[SessionListItem],
+    response_model_exclude_none=True,
+    summary="List session metadata for one team (sidebar use).",
+)
+async def get_team_sessions(
+    team_id: Annotated[TeamId, Path()],
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[SessionListItem]:
+    """Return the most recent sessions for this team, newest first."""
+    del user
+    return await list_sessions(team_id)
 
 
 @router.post(

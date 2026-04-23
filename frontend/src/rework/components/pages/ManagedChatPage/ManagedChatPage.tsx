@@ -20,7 +20,10 @@ import { useToast } from "../../../../components/ToastProvider";
 import { useChatSse, ChatSseCallbacks } from "../../../../hooks/useChatSse";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AwaitingHumanEvent, ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
-import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
+  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 
@@ -168,6 +171,8 @@ export default function ManagedChatPage() {
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const [registerSession] =
+    usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
 
   const bindSessionId = useCallback(
     (sid: string) => {
@@ -253,6 +258,16 @@ export default function ManagedChatPage() {
     if (!sid) {
       sid = uuidv4();
       bindSessionId(sid);
+      // Register session metadata in control-plane (fire-and-forget — non-fatal).
+      registerSession({
+        teamId: teamId,
+        createSessionRequest: {
+          session_id: sid,
+          agent_instance_id: agentInstanceId ?? undefined,
+        },
+      }).catch(() => {
+        // Session registration failure is non-fatal; chat execution continues.
+      });
     }
 
     send(text, sid);

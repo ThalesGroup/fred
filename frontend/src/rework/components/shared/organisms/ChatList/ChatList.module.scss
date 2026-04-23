@@ -30,3 +30,38 @@
   font: var(--font-body-medium);
   text-align: center;
 }
+
+.chatListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-m);
+  border-radius: var(--radius-s, 0.75rem);
+  text-decoration: none;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  cursor: pointer;
+  min-height: 2.25rem;
+
+  &:hover {
+    background-color: var(--surface-container-high, rgba(0, 0, 0, 0.06));
+  }
+
+  &:active {
+    background-color: var(--surface-container-highest, rgba(0, 0, 0, 0.1));
+  }
+}
+
+.chatListItemLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatListItemDate {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-small);
+}

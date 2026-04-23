@@ -21,6 +21,7 @@ export interface FrontendProperties {
   agentsNicknamePlural: string;
   agentsNicknameSingular: string;
   allowAgentSwitchInOneConversation: boolean;
+  defaultPersonalAvatarFile: string;
   defaultPersonalBannerFile: string;
   defaultTeamAvatarFile: string;
   defaultTeamBannerFile: string;
@@ -60,9 +61,10 @@ export function useFrontendProperties(): FrontendProperties {
       agentsNicknamePlural: ui?.agentsNicknamePlural || "Agents",
       agentsNicknameSingular: ui?.agentsNicknameSingular || "Agent",
       allowAgentSwitchInOneConversation: getProperty("allowAgentSwitchInOneConversation") === "true",
-      defaultPersonalBannerFile: getProperty("defaultPersonalBannerFile") || "banner-personal.webp",
-      defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "banner-team.webp",
-      defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "banner-team.webp",
+      defaultPersonalAvatarFile: getProperty("defaultPersonalAvatarFile") || "default-team-avatar.png",
+      defaultPersonalBannerFile: getProperty("defaultPersonalBannerFile") || "default-team-banner.png",
+      defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "default-team-avatar.png",
+      defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "default-team-banner.png",
       faviconName: getProperty("faviconName") || "fred",
       faviconNameDark: getProperty("faviconNameDark") || "fred-dark",
       logoName: getProperty("logoName") || "fred",

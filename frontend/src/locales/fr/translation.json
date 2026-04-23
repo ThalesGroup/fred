@@ -1346,7 +1346,8 @@
       },
       "chatList": {
         "title": "Conversations",
-        "emptyManaged": "Les sessions gérées apparaîtront ici une fois la migration des métadonnées de session du control-plane terminée."
+        "loading": "Chargement…",
+        "emptyManaged": "Aucune conversation pour l'instant. Démarrez un chat avec un agent géré."
       }
     },
     "userSettings": {

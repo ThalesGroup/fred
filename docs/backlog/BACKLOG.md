@@ -712,6 +712,39 @@ Rules:
 - runtime binding is an internal control-plane concern
 - frontend never receives cluster-internal runtime details
 
+#### 3.6.4 Lifecycle And Availability Rules
+
+This section freezes the simple managed-agent lifecycle model.
+
+Rules:
+
+- `AgentTemplate` means a live-discovered runtime capability and nothing more
+- `ManagedAgentInstance` means a DB-backed team enrollment created from one
+  template
+- deleting or unbinding a managed instance is a control-plane DB operation, not
+  a runtime operation
+- template discovery availability and enrolled instance availability are
+  different states and MUST NOT be conflated
+
+If a runtime pod becomes unavailable after enrollment:
+
+- its templates may disappear from `GET /teams/{team_id}/agent-templates`
+- already enrolled instances remain in
+  `GET /teams/{team_id}/agent-instances`
+- `prepare-execution` fails only if the runtime source is no longer configured,
+  disabled, or missing ingress data
+- if the source remains configured but the pod itself is down, the current
+  implementation may still return `ExecutionPreparation` and fail later on the
+  browser-to-runtime call
+- unbinding must continue to work because it does not depend on runtime liveness
+
+Frontend implication:
+
+- the user must still see the enrolled managed instance
+- the UI must be able to communicate that the instance exists but the runtime is
+  currently unavailable
+- delete / unbind remains available when permissions allow it
+
 ### 3.7 Phase 3a - Contract Freeze And Bootstrap Surface
 
 #### 3.7.1 Deliverable
@@ -801,9 +834,9 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
 - [ ] Expand bootstrap/config surface only if `FrontendBootstrap` becomes insufficient
 - [ ] Add permissions endpoint if frontend still needs a flat permission list
 - [x] Add agent template aggregation endpoint (→ Phase 3a)
-- [ ] Add agent instance CRUD endpoints (→ Phase 3b/3c)
+- [x] Add agent instance CRUD endpoints (→ Phase 3c — POST enroll + DELETE unenroll done)
 - [x] Add read-only team-scoped agent instance listing endpoint (→ Phase 3a)
-- [ ] Add session list/create/delete endpoints (→ Phase 3b)
+- [x] Add session create + list endpoints (→ Phase 5D — `POST/GET /teams/{team_id}/sessions`); delete deferred
 - [ ] Add session preference get/update endpoints (→ Phase 3b)
 - [ ] Add feedback CRUD endpoints (→ Phase 3b)
 - [ ] Add MCP server CRUD endpoints (→ Phase 3b)
@@ -1346,6 +1379,23 @@ Prepare one authorized runtime execution context for one managed agent instance.
 - transform runtime streaming events
 - expose cluster-internal topology
 
+#### Status note
+
+The current implementation already guarantees the control-plane-owned parts of
+the lifecycle:
+
+- team enrollment is DB-backed
+- managed instance listing is DB-backed
+- unbinding is DB-backed
+
+The remaining gap is availability clarity:
+
+- runtime catalog discovery is live
+- runtime liveness is not yet projected as a separate explicit managed-instance
+  availability state to the frontend
+- when a configured runtime pod is down, the failure may surface only on the
+  runtime call after `prepare-execution`
+
 ---
 
 ### 3c.11 Execution Grant Rules
@@ -1851,7 +1901,7 @@ The first required operating mode for Phase 5 is:
 | 3b – Backend completeness gate | Code ✓; validation items open | Run in parallel — not blocking Phase 4 |
 | 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking) |
 | 4 – Frontend SSE | ✓ Complete | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes |
-| 5 – Frontend adaptation | Planned | See `FRONTEND-BACKLOG.md`; start with no-security personal-only bootstrap |
+| 5 – Frontend adaptation | In progress | 5A bootstrap ✓; 5B no-security baseline ✓; 5C managed agent surface ✓; 5D session/chat convergence ✓ — see `FRONTEND-BACKLOG.md` |
 
 ### Phase 3c Remaining
 
@@ -1951,17 +2001,17 @@ isolated in the adapter layer (`react_message_codec.py`).
   - actual purge deletes both `session_history` rows AND checkpoint state
   - requires admin authorization
 
-#### D. Control-Plane Session Metadata (→ Phase 3b / 5D)
+#### D. Control-Plane Session Metadata (→ Phase 5D — partially done)
 
-- [ ] Control-plane creates a session metadata record at `prepare-execution`
-  time or on first turn:
-  ```
-  { session_id, user_id, team_id, agent_instance_id, created_at, title, status }
-  ```
-- [ ] `GET /control-plane/v1/sessions` — admin list of sessions with metadata
-- [ ] `PATCH /control-plane/v1/sessions/{session_id}` — update title, status
+- [x] Control-plane session metadata record created from the frontend on first turn:
+  `POST /teams/{team_id}/sessions` with `{ session_id, agent_instance_id, title? }` —
+  `ManagedChatPage` calls this (fire-and-forget) after generating `session_id`.
+  Backend: `session_metadata` table + `SessionMetadataStore` + Alembic migration `f1a2b3c4d5e6`.
+- [x] `GET /teams/{team_id}/sessions` — team-scoped session list for the sidebar (newest first).
+  `ChatList.tsx` consumes this with 30s polling and renders links to managed chat pages.
+- [ ] `PATCH /control-plane/v1/sessions/{session_id}` — update title, status (deferred)
 - [ ] `DELETE /control-plane/v1/sessions/{session_id}` — mark deleted, trigger
-  runtime purge via the purge queue
+  runtime purge via the purge queue (deferred)
 
 #### E. Legacy Purge Queue Cleanup
 

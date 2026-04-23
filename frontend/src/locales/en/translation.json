@@ -1346,7 +1346,8 @@
       "newChat": "New chat",
       "chatList": {
         "title": "Chat",
-        "emptyManaged": "Managed sessions will appear here once the control-plane session metadata migration is implemented."
+        "loading": "Loading…",
+        "emptyManaged": "No conversations yet. Start a new chat with a managed agent."
       }
     },
     "userSettings": {

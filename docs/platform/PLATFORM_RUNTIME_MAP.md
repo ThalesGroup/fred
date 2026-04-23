@@ -83,6 +83,164 @@ See:
 
 - [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](./CONFIGURATION_AND_POLICY_CONVENTIONS.md)
 
+## 4.1 Runtime Catalog Sources
+
+When the frontend uses managed agents, `control-plane-backend` needs a static
+list of reachable runtime pods in:
+
+- `platform.runtime_catalog_sources`
+
+This is the only deployment-time runtime catalog config that belongs in the
+control-plane product surface.
+
+Each entry has exactly three important fields:
+
+- `runtime_id`
+  - stable logical identifier for one runtime pod family
+  - stored on managed agent instances after enrollment
+- `base_url`
+  - server-side URL used by `control-plane-backend`
+  - must be reachable from the control-plane process
+  - must already include the runtime pod base path
+  - template discovery happens at `{base_url}/agents/templates`
+- `ingress_prefix`
+  - browser-facing relative URL prefix returned by `prepare-execution`
+  - must match the path exposed by your ingress, reverse proxy, or local Vite
+    proxy
+  - must already include the runtime pod base path
+
+Example:
+
+```yaml
+platform:
+  runtime_catalog_sources:
+    - runtime_id: fred-samples-agents
+      base_url: http://127.0.0.1:8010/samples/agents/v1
+      enabled: true
+      ingress_prefix: /samples/agents/v1
+    - runtime_id: fred-agents
+      base_url: http://127.0.0.1:8000/fred/agents/v2
+      enabled: true
+      ingress_prefix: /fred/agents/v2
+```
+
+Important rules:
+
+- `base_url` is for control-plane only; the frontend never uses it directly.
+- `ingress_prefix` is for the frontend only; it becomes:
+  - `{prefix}/agents/execute`
+  - `{prefix}/agents/execute/stream`
+  - `{prefix}/agents/sessions/{session_id}/messages`
+- `base_url` and `ingress_prefix` normally share the same base path suffix, but
+  may differ in host because one is server-side and the other is browser-side.
+- `ingress_prefix` must stay ingress-relative and must not expose
+  `*.svc.cluster.local`, pod IPs, or other cluster-internal topology.
+
+Local development checklist:
+
+1. Start the runtime pod on its local port.
+2. Copy the runtime pod `app.base_url` exactly into `runtime_catalog_sources.*.base_url`.
+3. Expose the same base path to the browser with Vite or your reverse proxy.
+4. Use that exposed browser path as `runtime_catalog_sources.*.ingress_prefix`.
+
+For local Vite development this usually means:
+
+- `base_url: http://127.0.0.1:<port>/<runtime-base-path>`
+- `ingress_prefix: /<runtime-base-path>`
+
+If templates are visible in `GET /teams/{team_id}/agent-templates` but managed
+chat fails, the usual cause is a correct `base_url` with a wrong
+`ingress_prefix` or missing frontend proxy rule.
+
+## 4.2 Managed Agent Lifecycle And Availability
+
+This is the canonical naming and lifecycle model for managed agents.
+
+Use these terms consistently in code, docs, UI labels, and backlog items.
+
+### Terms
+
+1. `AgentTemplate`
+   - a capability discovered live from one configured runtime pod
+   - public identity: `template_id = {runtime_id}:{source_agent_id}`
+   - used only for enrollment
+
+2. `ManagedAgentInstance`
+   - a team-scoped product object created by enrolling one template
+   - stored in the `control-plane-backend` database
+   - public execution identity: `agent_instance_id`
+
+3. `RuntimeBinding`
+   - the internal control-plane mapping from one managed instance to the
+     runtime source and runtime agent id it executes against
+   - not a separate user-facing product object
+
+### Lifecycle
+
+1. `control-plane-backend` discovers templates live from
+   `platform.runtime_catalog_sources[*]`.
+2. A team enrolls one discovered template.
+3. `control-plane-backend` creates one DB-backed `ManagedAgentInstance`.
+4. Later execution uses `agent_instance_id`, never `source_agent_id`.
+5. `prepare-execution` resolves the internal runtime binding and returns
+   ingress-safe runtime URLs.
+6. Unbinding deletes only the managed instance record from control-plane.
+
+### Availability Model
+
+Managed agents have two different availability dimensions. Keep them separate.
+
+1. Catalog availability
+   - asks: "is the template currently discoverable from a live runtime pod?"
+   - source of truth: `GET /teams/{team_id}/agent-templates`
+   - if the runtime pod is down, its templates disappear from discovery
+
+2. Instance availability
+   - asks: "does the team still own this enrolled managed agent instance?"
+   - source of truth: `GET /teams/{team_id}/agent-instances`
+   - enrollment persists in the DB even if the runtime pod is currently down
+
+### Required Behavior When A Runtime Pod Is Down
+
+If a runtime pod becomes unavailable after enrollment:
+
+1. template discovery from that pod may fail, so new enrollment from that pod is
+   unavailable
+2. already enrolled `ManagedAgentInstance` records remain visible in the
+   control-plane listing
+3. managed execution may fail at preparation time or at the subsequent runtime
+   call, depending on what exactly is unavailable
+4. unbinding must still work because it is a control-plane DB operation, not a
+   runtime call
+
+### Current Implementation Note
+
+Today the implementation behaves as follows:
+
+1. if a configured runtime source cannot be reached for template discovery, its
+   templates are omitted from the aggregated catalog
+2. an enrolled `ManagedAgentInstance` remains listed because it is DB-backed
+3. if the runtime source is removed or disabled in control-plane config,
+   `prepare-execution` fails with `503`
+4. if the runtime source remains configured but the runtime pod is down,
+   `prepare-execution` may still succeed and the later browser-to-runtime call
+   fails
+5. unbinding continues to work because delete is handled entirely by
+   `control-plane-backend`
+
+### Frontend Rule
+
+The frontend must not collapse discovery state and enrollment state into a
+single "agent exists / agent missing" concept.
+
+For one enrolled managed instance, the UI should be able to communicate:
+
+- the instance still exists for the team
+- the backing runtime is currently unavailable for new execution
+- delete / unbind is still allowed when the user has that permission
+
+This distinction is required for a simple and robust operator experience.
+
 ## 5) Related Docs
 
 - Repository contract: [`docs/DEVELOPER_CONTRACT.md`](./DEVELOPER_CONTRACT.md)

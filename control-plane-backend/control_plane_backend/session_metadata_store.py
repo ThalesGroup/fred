@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fred_core.common import TeamId
+from fred_core.sql import make_session_factory, use_session
+from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+class SessionMetadataRecord:
+    """In-memory projection of one DB session_metadata row."""
+
+    def __init__(
+        self,
+        *,
+        session_id: str,
+        team_id: TeamId,
+        agent_instance_id: str | None,
+        user_id: str | None,
+        title: str | None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+    ) -> None:
+        self.session_id = session_id
+        self.team_id = team_id
+        self.agent_instance_id = agent_instance_id
+        self.user_id = user_id
+        self.title = title
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+
+def _row_to_record(row: SessionMetadataRow) -> SessionMetadataRecord:
+    return SessionMetadataRecord(
+        session_id=row.session_id,
+        team_id=TeamId(row.team_id),
+        agent_instance_id=row.agent_instance_id,
+        user_id=row.user_id,
+        title=row.title,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+class SessionMetadataStore:
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._sessions = make_session_factory(engine)
+
+    async def create(
+        self,
+        record: SessionMetadataRecord,
+        session: AsyncSession | None = None,
+    ) -> SessionMetadataRecord:
+        now = _utcnow()
+        row = SessionMetadataRow(
+            session_id=record.session_id,
+            team_id=str(record.team_id),
+            agent_instance_id=record.agent_instance_id,
+            user_id=record.user_id,
+            title=record.title,
+            created_at=record.created_at or now,
+            updated_at=record.updated_at or now,
+        )
+        async with use_session(self._sessions, session) as s:
+            s.add(row)
+        result = await self.get(record.session_id)
+        assert result is not None
+        return result
+
+    async def get(
+        self,
+        session_id: str,
+        session: AsyncSession | None = None,
+    ) -> SessionMetadataRecord | None:
+        async with use_session(self._sessions, session) as s:
+            row = await s.get(SessionMetadataRow, session_id)
+        if row is None:
+            return None
+        return _row_to_record(row)
+
+    async def list_by_team(
+        self,
+        team_id: TeamId,
+        limit: int = 50,
+        session: AsyncSession | None = None,
+    ) -> list[SessionMetadataRecord]:
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(SessionMetadataRow)
+                        .where(SessionMetadataRow.team_id == str(team_id))
+                        .order_by(SessionMetadataRow.updated_at.desc())
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return [_row_to_record(row) for row in rows]
+
+    async def delete(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> bool:
+        """Delete one session scoped to team_id. Returns True if a row was removed."""
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                delete(SessionMetadataRow).where(
+                    SessionMetadataRow.session_id == session_id,
+                    SessionMetadataRow.team_id == str(team_id),
+                )
+            )
+        return result.rowcount > 0

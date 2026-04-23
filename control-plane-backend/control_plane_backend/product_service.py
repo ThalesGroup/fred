@@ -20,11 +20,17 @@ from control_plane_backend.common.structures import ManagedAgentTuning
 from control_plane_backend.product_structures import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
+    CreateSessionRequest,
     ExecutionPreparation,
     FrontendBootstrap,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PermissionSummary,
+    SessionListItem,
+)
+from control_plane_backend.session_metadata_store import (
+    SessionMetadataRecord,
+    SessionMetadataStore,
 )
 from control_plane_backend.teams_service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -372,4 +378,50 @@ async def get_runtime_binding(
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Session metadata
+# ---------------------------------------------------------------------------
+
+
+def _session_store() -> SessionMetadataStore:
+    return ApplicationContext.get_instance().get_session_metadata_store()
+
+
+async def create_session(
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: CreateSessionRequest,
+) -> SessionListItem:
+    """Register a new session metadata record in control-plane."""
+    record = SessionMetadataRecord(
+        session_id=request.session_id,
+        team_id=team_id,
+        agent_instance_id=request.agent_instance_id,
+        user_id=user.username if user else None,
+        title=request.title,
+    )
+    created = await _session_store().create(record)
+    return _record_to_item(created)
+
+
+async def list_sessions(
+    team_id: TeamId,
+    limit: int = 50,
+) -> list[SessionListItem]:
+    """List session metadata records for one team, newest first."""
+    records = await _session_store().list_by_team(team_id, limit=limit)
+    return [_record_to_item(r) for r in records]
+
+
+def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
+    return SessionListItem(
+        session_id=record.session_id,
+        team_id=record.team_id,
+        agent_instance_id=record.agent_instance_id,
+        title=record.title,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
     )
