@@ -2,7 +2,7 @@
 
 - **Features**
 
-  - Allow knoledge base of agent to be scopped at agent creation
+  - Allow knowledge base of agent to be scopped at agent creation
 
 **v1.4.1** — 2026-04-13
 
