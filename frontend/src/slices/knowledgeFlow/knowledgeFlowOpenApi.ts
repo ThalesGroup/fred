@@ -168,6 +168,14 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/raw_content/${queryArg.documentUid}` }),
     }),
+    downloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGet: build.query<
+      DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiResponse,
+      DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/markdown/${queryArg.documentUid}/artifact/${queryArg.artifactPath}`,
+      }),
+    }),
     streamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGet: build.query<
       StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse,
       StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg
@@ -522,6 +530,15 @@ const injectedRtkApi = api.injectEndpoints({
       SearchDocumentsUsingVectorizationApiArg
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
+    }),
+    getVisualEvidenceArtifact: build.query<GetVisualEvidenceArtifactApiResponse, GetVisualEvidenceArtifactApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/visual-evidence-artifact`,
+        params: {
+          document_uid: queryArg.documentUid,
+          artifact_path: queryArg.artifactPath,
+        },
+      }),
     }),
     testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
@@ -1259,6 +1276,12 @@ export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiResponse =
 export type DownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetApiArg = {
   documentUid: string;
 };
+export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type DownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetApiArg = {
+  documentUid: string;
+  artifactPath: string;
+};
 export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiResponse = unknown;
 export type StreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetApiArg = {
   documentUid: string;
@@ -1474,6 +1497,11 @@ export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
+};
+export type GetVisualEvidenceArtifactApiResponse = /** status 200 Successful Response */ VisualEvidenceArtifactResponse;
+export type GetVisualEvidenceArtifactApiArg = {
+  documentUid: string;
+  artifactPath: string;
 };
 export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type TestPostSuccessApiArg = void;
@@ -2380,6 +2408,9 @@ export type VectorSearchHit = {
   page?: number | null;
   section?: string | null;
   viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
   /** Document UID */
   uid: string;
   title: string;
@@ -2432,6 +2463,13 @@ export type SearchRequest = {
   include_session_scope?: boolean;
   /** If true, also search corpus/library vectors (non-session scope). */
   include_corpus_scope?: boolean;
+};
+export type VisualEvidenceArtifactResponse = {
+  document_uid: string;
+  artifact_path: string;
+  file_name: string;
+  content_type: string;
+  artifact_url: string;
 };
 export type RerankRequest = {
   question: string;
@@ -2909,6 +2947,8 @@ export const {
   useLazyDownloadDocumentMediaKnowledgeFlowV1MarkdownDocumentUidMediaMediaIdGetQuery,
   useDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
   useLazyDownloadDocumentKnowledgeFlowV1RawContentDocumentUidGetQuery,
+  useDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
+  useLazyDownloadPreviewArtifactKnowledgeFlowV1MarkdownDocumentUidArtifactArtifactPathGetQuery,
   useStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useLazyStreamDocumentKnowledgeFlowV1RawContentStreamDocumentUidGetQuery,
   useUploadAgentAssetKnowledgeFlowV1AgentAssetsAgentUploadPostMutation,
@@ -2962,6 +3002,8 @@ export const {
   useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useGetVisualEvidenceArtifactQuery,
+  useLazyGetVisualEvidenceArtifactQuery,
   useTestPostSuccessMutation,
   useRerankDocumentsMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,

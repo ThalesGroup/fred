@@ -271,6 +271,30 @@ class ContentController:
             )
 
         @router.get(
+            "/markdown/{document_uid}/artifact/{artifact_path:path}",
+            tags=["Content"],
+            summary="Download a generated preview artifact for a processed document",
+        )
+        async def download_preview_artifact(
+            document_uid: str,
+            artifact_path: str,
+            user: KeycloakUser = Depends(get_current_user),
+        ):
+            try:
+                stream, file_name, content_type = await self.service.get_preview_artifact(
+                    user,
+                    document_uid,
+                    artifact_path,
+                )
+                return StreamingResponse(
+                    content=stream,
+                    media_type=content_type,
+                    headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+                )
+            except FileNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+
+        @router.get(
             "/raw_content/stream/{document_uid}",
             tags=["Content"],
             summary="Stream original document content (optimized for PDF Viewer and Range Requests)",

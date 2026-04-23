@@ -60,13 +60,33 @@ from knowledge_flow_backend.features.scheduler.workflow import (
 logger = logging.getLogger(__name__)
 
 
-async def run_worker(config: TemporalSchedulerConfig):
+async def run_worker(
+    config: TemporalSchedulerConfig,
+    *,
+    max_concurrent_workflow_tasks: int = 1,
+    max_concurrent_activities: int = 1,
+):
     """
     Connect to Temporal and start the ingestion worker.
 
+    Why:
+        Workflow-task and activity concurrency have different runtime bottlenecks,
+        so they must be configured independently for predictable ingestion throughput.
+    How:
+        Apply dedicated limits to Temporal `Worker` workflow-task and activity-task
+        execution, and size the sync activity thread pool from activity concurrency.
+    Usage example:
+        `await run_worker(config, max_concurrent_workflow_tasks=8, max_concurrent_activities=16)`
+
     Args:
-        config (TemporalSchedulerConfig): Temporal connection + task queue config
+        config (TemporalSchedulerConfig): Temporal connection + task queue config.
+        max_concurrent_workflow_tasks (int): Max concurrent workflow tasks handled
+            by this worker process.
+        max_concurrent_activities (int): Max concurrent activity tasks handled by
+            this worker process.
     """
+    workflow_task_concurrency = max(1, int(max_concurrent_workflow_tasks))
+    activity_concurrency = max(1, int(max_concurrent_activities))
     logger.info(f"🔗 Connecting to Temporal at {config.host} (namespace={config.namespace})")
     client = await Client.connect(
         target_host=config.host,
@@ -75,7 +95,7 @@ async def run_worker(config: TemporalSchedulerConfig):
     logger.info(f"[SCHEDULER] Connected to Temporal. Registering worker on queue: '{config.task_queue}'")
 
     # Use thread pool executor for sync activities
-    executor = concurrent.futures.ThreadPoolExecutor()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=activity_concurrency)
     worker = Worker(
         client=client,
         task_queue=config.task_queue,
@@ -104,6 +124,8 @@ async def run_worker(config: TemporalSchedulerConfig):
             record_workflow_status,
         ],
         activity_executor=executor,
+        max_concurrent_workflow_tasks=workflow_task_concurrency,
+        max_concurrent_activities=activity_concurrency,
     )
 
     logger.info("[SCHEDULER] Temporal worker is now running and ready to receive ingestion jobs.")

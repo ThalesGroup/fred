@@ -540,7 +540,7 @@ class IngestionController:
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
         processing_cfg = ApplicationContext.get_instance().get_config().processing
-        max_parallelism = ApplicationContext.get_instance().get_config().app.max_ingestion_workers
+        max_parallelism = ApplicationContext.get_instance().get_config().scheduler.temporal.ingestion_workflow_parallelism
         self.scheduler_task_service: IngestionTaskService | None = None
         if scheduler_cfg.enabled:
             self.scheduler_task_service = IngestionTaskService(
@@ -795,9 +795,13 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Fast path for chat attachments:
-            - use fast text extractor
-            - store as a single vectorized document with user/session metadata
+            Why this exists:
+            - Chat attachments need a lightweight ingestion path that stays responsive for the UI.
+            - The route extracts compact text, splits oversized payloads, then stores session-scoped vectors.
+
+            How to use:
+            - Upload one file plus optional `options_json`, `session_id`, and `scope`.
+            - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
             """
             filename = file.filename or "uploaded"
 

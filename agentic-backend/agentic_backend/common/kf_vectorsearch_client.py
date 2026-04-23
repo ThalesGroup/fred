@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Collection, Dict, List, Optional, Sequence
 
 from fred_core.common import OwnerFilter
@@ -37,6 +38,14 @@ logger = logging.getLogger(__name__)
 _HITS = TypeAdapter(List[VectorSearchHit])
 
 
+@dataclass(frozen=True)
+class PreviewArtifactBlob:
+    bytes: bytes
+    content_type: str
+    filename: str
+    size: int
+
+
 class VectorSearchClient(KfBaseClient):
     """
     Minimal authenticated client for Knowledge Flow's vector search.
@@ -48,7 +57,7 @@ class VectorSearchClient(KfBaseClient):
     def __init__(self, agent: KnowledgeFlowAgentContext):
         super().__init__(
             agent=agent,
-            allowed_methods=frozenset({"POST"}),
+            allowed_methods=frozenset({"GET", "POST"}),
         )
 
     async def agent_search(
@@ -176,6 +185,30 @@ class VectorSearchClient(KfBaseClient):
             logger.warning("Unexpected vector search payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
+
+    async def fetch_preview_artifact(
+        self,
+        *,
+        document_uid: str,
+        artifact_path: str,
+    ) -> PreviewArtifactBlob:
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path=f"/markdown/{document_uid}/artifact/{artifact_path}",
+            phase_name="kf_preview_artifact_fetch",
+        )
+        r.raise_for_status()
+
+        content = r.content
+        content_type = r.headers.get("Content-Type", "application/octet-stream")
+        filename = artifact_path.split("/")[-1] or "artifact.bin"
+
+        return PreviewArtifactBlob(
+            bytes=content,
+            content_type=content_type,
+            filename=filename,
+            size=len(content),
+        )
 
     async def rerank(
         self,

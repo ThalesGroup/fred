@@ -79,8 +79,6 @@ async def await_with_heartbeat(
 
     try:
         if not should_heartbeat:
-            # In non-Temporal/standalone execution, just await the task directly
-            # to avoid periodic wakeups.
             return await task
 
         activity.heartbeat(details)
@@ -98,7 +96,6 @@ async def await_with_heartbeat(
         if not task.done():
             task.cancel()
             with suppress(asyncio.CancelledError):
-                # Drain the inner task so cancellation/cleanup is fully observed.
                 _ = await task
 
 
