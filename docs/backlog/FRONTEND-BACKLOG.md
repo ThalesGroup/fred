@@ -550,6 +550,28 @@ Consequences for the frontend:
   both the runtime (for execution) and control-plane (for metadata creation).
   The term `thread_id` must never appear in any frontend code or UI label.
 
+### 6.2.1 Managed Session Lifecycle
+
+The managed session flow is intentionally split between execution/history and
+management metadata.
+
+Lifecycle:
+
+1. frontend generates one `session_id`
+2. frontend calls `POST /teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution`
+3. frontend registers session metadata in control-plane for sidebar ownership
+4. frontend sends the managed turn directly to runtime
+5. runtime persists message content in `session_history`
+6. runtime serves later message-history reads for that `session_id`
+7. control-plane serves session list / title / status only
+
+Non-goals:
+
+- control-plane does not serve full message history
+- control-plane does not proxy runtime history for the chat page
+- the sidebar must not query runtime history endpoints just to render the
+  management shell
+
 ---
 
 ### 6.3 Current Mismatch
@@ -591,6 +613,10 @@ This creates a hybrid UX even when execution itself is migrated.
       `RuntimeExecuteRequest.session_id` — `ManagedChatPage` generates UUID upfront in `handleSend`
       if sessionId is null, persists it in URL query params (`?session=<uuid>`)
 - [x] Ensure `session_id` is never labeled `thread_id` anywhere in frontend code or UI
+- [ ] Keep sidebar freshness metadata-oriented:
+      if the session list should reorder by recent activity, define and implement
+      a control-plane metadata refresh path that does not require control-plane
+      to read or serve runtime message history
 
 ---
 

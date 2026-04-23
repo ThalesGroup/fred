@@ -68,6 +68,26 @@ Consequences for the frontend:
 - this backlog must never introduce a control-plane dependency for message
   content reads or writes
 
+### 0.5 Session Lifecycle Summary
+
+The managed chat page must follow this lifecycle exactly:
+
+1. the frontend generates a `session_id` before the first managed turn
+2. the frontend calls `prepare-execution` for the selected `agent_instance_id`
+3. the frontend sends the turn to runtime with `session_id`,
+   `agent_instance_id`, and `execution_grant`
+4. `fred-runtime` executes the turn and writes message content to
+   `session_history`
+5. `fred-runtime` owns later message-history reads for that `session_id`
+6. `control-plane-backend` stores only the session metadata needed by the
+   sidebar and management UI
+
+Simple ownership rule:
+
+- if the UI needs message content, the source is runtime
+- if the UI needs session list / title / status / team grouping, the source is
+  control-plane
+
 ---
 
 ## 1 Phase 6A — Page Architecture & Core Layout

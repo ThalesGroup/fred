@@ -2010,6 +2010,14 @@ isolated in the adapter layer (`react_message_codec.py`).
 - [x] `GET /teams/{team_id}/sessions` — team-scoped session list for the sidebar (newest first).
   `ChatList.tsx` consumes this with 30s polling and renders links to managed chat pages.
 - [ ] `PATCH /control-plane/v1/sessions/{session_id}` — update title, status (deferred)
+- [ ] Freeze how control-plane session metadata freshness is updated after each
+  managed turn, without making control-plane proxy or read runtime message
+  history.
+  Requirement:
+  - sidebar ordering and last-activity metadata must remain control-plane-owned
+  - runtime message content must remain runtime-owned
+  - the solution must preserve control-plane as a management-plane component,
+    not a conversation-history serving plane
 - [ ] `DELETE /control-plane/v1/sessions/{session_id}` — mark deleted, trigger
   runtime purge via the purge queue (deferred)
 

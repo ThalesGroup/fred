@@ -101,7 +101,24 @@
 **Status:** ✅
 **Files:** `agent_app.py:_resolve_agent_instance()` — fetches agent definition from control plane via HTTP.
 
-### 3.3 End-to-end validation
+### 3.3 Ownership boundary
+**Status:** ✅
+**Key distinction:**
+- `control-plane-backend` prepares managed execution and owns team/session metadata
+- `fred-runtime` executes the turn and owns runtime history
+- `control-plane-backend` is not the serving plane for conversation message history
+
+For the managed path, control-plane is involved in:
+- resolving `agent_instance_id`
+- issuing the `ExecutionGrant`
+- serving session metadata for the shell/sidebar
+
+Control-plane is not involved in:
+- writing turn message content
+- serving `GET /agents/sessions/{session_id}/messages`
+- storing LangGraph checkpoint state
+
+### 3.4 End-to-end validation
 **Status:** ❌ Not yet validated
 **Blocked by:** Requires running control-plane-backend + PostgreSQL.
 **Backlog:** 3b.7
@@ -137,7 +154,18 @@
 
 ### 4.4 History vs checkpoint relationship
 **Status:** ⚠️ Partially documented
-**Key distinction:** Checkpoints = LangGraph graph state (binary blobs, per step). History = human-readable turn messages (stored separately in history store).
+**Key distinction:**
+- Checkpoints = LangGraph graph state / resumability state ("memory"), stored per step
+- History = human-readable conversation messages, stored in `session_history`
+- Session metadata = sidebar / management metadata, owned by `control-plane-backend`
+
+These are three different things and must not be conflated.
+
+In particular:
+- history is not the checkpoint state
+- checkpoint state is not the user-facing conversation log
+- control-plane session metadata is neither history nor checkpoint state
+
 **🔥 Risk:** `DELETE /agents/checkpoints/{session_id}` does NOT delete history rows. This asymmetry is not visible to the caller.
 
 ---
@@ -145,6 +173,14 @@
 ## 5. Turn History
 
 > Human-readable conversation log. Written fire-and-forget after SSE stream closes.
+
+**Owner:** `fred-runtime`
+
+This section is about persisted message content only.
+
+It is not:
+- LangGraph checkpoint state / memory
+- control-plane session metadata
 
 ### 5.1 History write
 **Status:** ✅
@@ -157,6 +193,7 @@
 **Status:** ✅
 **Files:** `agent_app.py:_build_agent_router()` — `GET /agents/sessions/{session_id}/messages`
 **CLI:** `/history [session_id]`
+**Boundary:** Runtime serves history directly. Control-plane must not proxy or cache this payload for the chat page.
 
 ### 5.3 History team_id tagging
 **Status:** ✅ (fixed 2026-04-22, same commit as 1.2)
@@ -400,5 +437,9 @@ Run these manually with `make chat` in a fred-samples pod before any production 
 - [ ] `/history`: turn messages present for the current session
 - [ ] `/checkpoint <session_id>`: per-step checkpoint chain visible
 - [ ] `DELETE /agents/checkpoints/<session_id>` (via curl): session row disappears from `/checkpoints`; history row survives
+- [ ] Confirm the mental model locally:
+  - `/history` shows message content
+  - `/checkpoint <session_id>` shows graph/memory state
+  - deleting checkpoints does not delete history
 - [ ] Restart pod; re-use same `session_id` from CLI: agent resumes graph state (multi-turn continuity)
 - [ ] HITL: agent asks for confirmation; resume with `resume_payload`; continues correctly
