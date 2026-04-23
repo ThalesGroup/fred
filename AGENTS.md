@@ -6,7 +6,10 @@ All coding assistants working in this repository must follow:
 - [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md)
 - [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/design/RUNTIME-EXECUTION-CONTRACT.md) when touching `fred-sdk`, `fred-runtime`, runtime OpenAPI, frontend runtime typing, the CLI, or runtime observability/tracing/KPI/Langfuse metadata
 - [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) when touching control-plane product/session/admin APIs or frontend migration away from `agentic-backend`
-- [`BACKLOG.md`](./BACKLOG.md) for migration phase status and next-step sequencing
+- [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) for migration phase status and next-step sequencing
+- [`docs/WORKPLAN.md`](./docs/WORKPLAN.md) for current sprint assignments — read before starting any task to avoid duplicating in-progress work
+- [`docs/backlog/FRONTEND-BACKLOG.md`](./docs/backlog/FRONTEND-BACKLOG.md) when touching frontend bootstrap, session, or team identity
+- [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/backlog/CHAT-UI-BACKLOG.md) when touching `ManagedChatPage`, chat UI components, or SSE event rendering
 
 Mandatory defaults:
 

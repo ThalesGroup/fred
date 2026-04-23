@@ -1,48 +1,51 @@
 # AGENT.md
 
-Guidance for AI coding assistants working in the Fred repository. Follow these notes to get context quickly and stay aligned with existing workflows.
+Quick orientation for AI coding assistants. Read this first, then follow the
+links to the relevant contracts.
 
-## Project Snapshot
-- Fred is a production-ready, multi-agent AI platform.
-- Three top-level services: `agentic-backend/` (LangGraph orchestration), `knowledge_flow_backend/` (document ingestion + vector search), `frontend/` (React UI).
-- Python services target Python 3.12.8 with `pyenv` + `python3-venv`; frontend targets Node.js 22.13.0 via `nvm`.
+## What Fred Is
 
-## Getting Started
-1. Ensure prerequisites: Python 3.12.8, Node 22.13.0, Make, optional Temporal for ingestion workers.
-2. Copy `OPENAI_API_KEY=...` into both backends under `config/.env`.
-3. Launch services (separate terminals):
-   ```bash
-   cd agentic-backend && make run      # FastAPI on :8000
-   cd knowledge_flow_backend && make run  # FastAPI on :8111
-   cd frontend && make run             # Vite on :5173
-   ```
+Fred is a production-ready platform for building and operating multi-agent AI
+applications. It has three planes:
 
-## Common Commands
-- **agentic-backend**: `make run`, `make test`, `make test-one TEST=...`, `make clean`.
-- **knowledge_flow_backend**: `make run`, `make run-worker`, `make test`, `make lint`, `make lint-fix`, `make format`, `make sast`, `make code-quality`.
-- **frontend**: `make run`, `make format`, `make update-knowledge-flow-api`.
+- **Execution** — `libs/fred-runtime` + `apps/fred-agents` (FastAPI SSE pod)
+- **Product / tenancy** — `control-plane-backend` (team, sessions, enrollment)
+- **Knowledge** — `knowledge-flow-backend` (document ingestion + vector search)
+- **Frontend** — `frontend/` (React, rework design system)
 
-## Repository Orientation
-- `agentic-backend/` – LangGraph agents, configuration at `config/configuration.yaml`.
-- `knowledge_flow_backend/` – Document processors, storage adapters, Temporal workflows, configuration at `config/configuration.yaml`.
-- `frontend/` – React 18 + TypeScript app using Vite, Material UI, Redux Toolkit, and RTK Query.
-- `docs/`, `deploy/`, `developer_tools/`, `fred-core/`, `scripts/` – supporting assets, tooling, deployment helpers.
+`agentic-backend` is being migrated out. Do not add execution logic there.
 
-## Development Tips
-- Respect feature flags and MCP integrations defined in backend configuration files.
-- For document processing, align new processors with configuration mappings and update upload validation on the frontend when new file types are added.
-- Frontend API clients are generated; run `make update-knowledge-flow-api` after backend OpenAPI changes.
-- Use `useToast` for notifications and react-i18next for copy (`frontend/src/locales/...`).
-- Prefer repository `Makefile` targets over bespoke commands to stay consistent with existing automation.
+## Mandatory Context
 
-## Testing & Quality
-- Backends use pytest; add coverage for new logic and ensure async components are exercised.
-- `knowledge_flow_backend` runs ruff for lint/format and bandit for SAST; keep these clean.
-- Frontend relies on TypeScript checks and formatting via Prettier (through `make format`).
+Read in this order before making changes:
 
-## Security & Ops Notes
-- Never commit secrets; rely on `.env` files and documented configuration.
-- Production deployments should swap filesystem storage for durable backends (PostgreSQL/pgvector or OpenSearch) and object storage where appropriate.
-- Enable debug logging in `configuration.yaml` when diagnosing workflow/agent issues.
+1. [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/platform/DEVELOPER_CONTRACT.md) — build, test, PR rules
+2. [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md) — canonical service map
+3. [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) — migration phase status (Phases 0–7)
+4. [`docs/WORKPLAN.md`](./docs/WORKPLAN.md) — current sprint, who owns what
+5. [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/design/RUNTIME-EXECUTION-CONTRACT.md) — when touching fred-runtime, fred-sdk, SSE, CLI, KPI
+6. [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) — when touching control-plane APIs or sessions
+7. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/backlog/CHAT-UI-BACKLOG.md) — when touching ManagedChatPage or chat UI components
 
-Stay consistent with existing patterns, keep changes minimal and well-tested, and call out cross-service impacts in PR descriptions.
+## Key Rules
+
+- `agent_instance_id` is the only frontend execution identity — never raw `agent_id`
+- `session_id` is the only conversation identifier — never `thread_id`
+- Control-plane owns product/tenancy/authorization; runtime owns execution only
+- Frontend reads message history from runtime (`messages_url_template`), never from control-plane
+- Never hand-edit generated files (`runtimeOpenApi.ts`, `controlPlaneOpenApi.ts`) — regenerate from source
+- Run `make code-quality && make test` in every touched project
+
+## Common Make Targets
+
+| Project | Run | Test | Quality |
+|---|---|---|---|
+| `libs/fred-sdk` | — | `make test` | `make code-quality` |
+| `libs/fred-runtime` | `make run` | `make test` | `make code-quality` |
+| `control-plane-backend` | `make run` | `make test` | `make code-quality` |
+| `knowledge-flow-backend` | `make run` | `make test` | `make code-quality` |
+| `frontend` | `make run` | — | `make code-quality` |
+
+## Doc Index
+
+Full documentation index: [`docs/README.md`](./docs/README.md)

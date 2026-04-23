@@ -10,7 +10,10 @@ Repository-wide instructions for Claude Code.
 4. [`docs/platform/REBAC.md`](./docs/platform/REBAC.md) when access/team behavior is touched
 5. [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/design/RUNTIME-EXECUTION-CONTRACT.md) when touching execution contracts, `fred-sdk`, `fred-runtime`, runtime OpenAPI, frontend runtime typing, the CLI, or runtime observability/tracing/KPI/Langfuse metadata
 6. [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) when touching control-plane product/session/admin APIs or frontend migration away from `agentic-backend`
-7. [`BACKLOG.md`](./BACKLOG.md) for migration phase status and next-step sequencing
+7. [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) for migration phase status and next-step sequencing
+8. [`docs/WORKPLAN.md`](./docs/WORKPLAN.md) for current sprint assignments and parallel work — always read before starting any task to avoid duplicating in-progress work
+9. [`docs/backlog/FRONTEND-BACKLOG.md`](./docs/backlog/FRONTEND-BACKLOG.md) when touching frontend bootstrap, session, or team identity
+10. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/backlog/CHAT-UI-BACKLOG.md) when touching `ManagedChatPage`, chat UI components, or SSE event rendering
 
 ## Non-Negotiable Defaults
 
@@ -42,7 +45,7 @@ Fred is mid-migration from `agentic-backend` to `fred-runtime` + `control-plane-
 
 - New execution code → `fred-runtime` / `fred-sdk`
 - New product/session/admin code → `control-plane-backend`
-- Migration plan: [`BACKLOG.md`](./BACKLOG.md) (Phases 0–6)
+- Migration plan: [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) (Phases 0–6)
 - Phase 1 execution contracts frozen: [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/design/RUNTIME-EXECUTION-CONTRACT.md)
 - Phase 3a product boundary: [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
 
@@ -52,7 +55,7 @@ When continuing the migration:
 
 - treat `docs/design/RUNTIME-EXECUTION-CONTRACT.md` as the execution contract source of truth
 - treat `docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` as the product/session/admin source of truth for Phase 3a
-- treat `BACKLOG.md` as the sequencing and status source of truth
+- treat `docs/backlog/BACKLOG.md` as the sequencing and status source of truth
 - prefer editing contract source files over adding compatibility layers
 - if a needed type is missing, fix `fred-sdk` or the FastAPI schema first and regenerate instead of adding local mirror DTOs
 - do not recreate `agentic-backend` behavior inside `fred-runtime`
