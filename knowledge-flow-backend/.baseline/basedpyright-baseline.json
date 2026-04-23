@@ -9,16 +9,6 @@
                     "lineCount": 1
                 }
             }
-        ],
-        "./knowledge_flow_backend/features/tabular/structures.py": [
-            {
-                "code": "reportAssignmentType",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 19,
-                    "lineCount": 1
-                }
-            }
         ]
     }
 }

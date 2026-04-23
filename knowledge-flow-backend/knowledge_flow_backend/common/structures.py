@@ -508,6 +508,7 @@ class AppConfig(BaseModel):
         default=0,
         description="Top-N metrics to show in KPI summary logs. 0 means all / disabled.",
     )
+    gcu_version: str | None = None
 
 
 class PrometheusConfig(BaseModel):

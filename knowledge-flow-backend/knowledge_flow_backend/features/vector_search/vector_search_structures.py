@@ -103,3 +103,11 @@ class RerankRequest(BaseModel):
     question: str
     documents: List[VectorSearchHit]
     top_r: int = Field(default=6, ge=1, description="Number of top-reranked chunks to consider")
+
+
+class VisualEvidenceArtifactResponse(BaseModel):
+    document_uid: str
+    artifact_path: str
+    file_name: str
+    content_type: str
+    artifact_url: str

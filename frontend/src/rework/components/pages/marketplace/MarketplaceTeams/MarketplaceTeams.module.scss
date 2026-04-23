@@ -1,27 +1,27 @@
-.marketplace-teams-container {
+.marketplaceTeamsContainer {
   padding: 0 var(--spacing-l);
   height: 100%;
 }
 
-.marketplace-teams-header {
+.marketplaceTeamsHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   height: 4.5rem;
 }
 
-.marketplace-teams-title {
+.marketplaceTeamsTitle {
   margin: 0;
   padding: 0;
   color: var(--on-surface);
   font: var(--font-title-large-emphasized);
 }
 
-.marketplace-teams-content {
+.marketplaceTeamsContent {
   padding-bottom: var(--spacing-s);
 }
 
-.marketplace-teams-list-subtitle {
+.marketplaceTeamsListSubtitle {
   display: flex;
   align-items: center;
   height: 2.5rem;
@@ -29,7 +29,7 @@
   font: var(--font-title-medium);
 }
 
-.marketplace-teams-list {
+.marketplaceTeamsList {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;

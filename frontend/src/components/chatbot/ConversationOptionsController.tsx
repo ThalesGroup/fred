@@ -31,8 +31,8 @@ import ChatContextWidget from "./ChatContextWidget.tsx";
 import ChatDeepSearchWidget from "./ChatDeepSearchWidget.tsx";
 import ChatDocumentsWidget from "./ChatDocumentsWidget.tsx";
 import ChatKnowledge from "./ChatKnowledge.tsx";
-import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
+import ChatLogGeniusWidget from "./ChatLogGeniusWidget.tsx";
 import ChatSearchOptionsWidget from "./ChatSearchOptionsWidget.tsx";
 
 type SearchRagScope = NonNullable<RuntimeContext["search_rag_scope"]>;
@@ -112,6 +112,7 @@ export type ConversationOptionsState = {
   displayChatContextIds: string[];
   displayDocumentLibraryIds: string[];
   displayDocumentUids: string[];
+  creatorLibraryScope: string[] | null;
   chatContextWidgetOpenDisplay: boolean;
   attachmentsWidgetOpenDisplay: boolean;
   searchOptionsWidgetOpenDisplay: boolean;
@@ -227,6 +228,11 @@ export function useConversationOptionsController({
   const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
   const supportsLibrariesSelection = currentAgent?.chat_options?.libraries_selection === true;
   const supportsDocumentsSelection = currentAgent?.chat_options?.documents_selection === true;
+
+  const creatorLibraryScope = useMemo<string[] | null>(() => {
+    const ref = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search");
+    return ref?.params?.document_library_tags_ids ?? null;
+  }, [currentAgent]);
 
   const [persistSessionPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
   const {
@@ -495,7 +501,7 @@ export function useConversationOptionsController({
       setConversationPrefs((prev) => ({
         ...prev,
         chatContextIds: [],
-        documentLibraryIds: initialCtx.documentLibraryIds,
+        documentLibraryIds: creatorLibraryScope ?? initialCtx.documentLibraryIds,
         documentUids: initialCtx.documentUids,
         promptResourceIds: initialCtx.promptResourceIds,
         templateResourceIds: initialCtx.templateResourceIds,
@@ -536,7 +542,7 @@ export function useConversationOptionsController({
       setSearchOptionsWidgetOpen(false);
       setConversationPrefs({
         chatContextIds: [],
-        documentLibraryIds: [],
+        documentLibraryIds: creatorLibraryScope ?? [],
         documentUids: [],
         promptResourceIds: [],
         templateResourceIds: [],
@@ -553,7 +559,7 @@ export function useConversationOptionsController({
     if (prefsLoadState === "loading" && sessionPrefs) {
       const p = (sessionPrefs as PersistedCtx) || {};
       const nextChatContextIds = asStringArray(p.chatContextIds, []);
-      const nextLibs = asStringArray(p.documentLibraryIds, []);
+      const nextLibs = asStringArray(p.documentLibraryIds, creatorLibraryScope ?? []);
       const nextDocUids = asStringArray(p.documentUids, []);
       const nextPrompts = asStringArray(p.promptResourceIds, []);
       const nextTemplates = asStringArray(p.templateResourceIds, []);
@@ -735,6 +741,7 @@ export function useConversationOptionsController({
       displayChatContextIds,
       displayDocumentLibraryIds,
       displayDocumentUids,
+      creatorLibraryScope,
       chatContextWidgetOpenDisplay,
       attachmentsWidgetOpenDisplay,
       searchOptionsWidgetOpenDisplay,
@@ -836,6 +843,7 @@ export function ConversationOptionsPanel({
     contextOpen,
     hasContext,
     userInputContext,
+    creatorLibraryScope,
   } = controller.state;
   const {
     setChatContextIds,
@@ -954,6 +962,7 @@ export function ConversationOptionsPanel({
               disabledReason={librariesDisabledReason}
               onOpen={() => openWidget("libraries")}
               onClose={() => setLibrariesWidgetOpen(false)}
+              creatorScopeLibraryIds={creatorLibraryScope ?? undefined}
             />
           )}
           {supportsDocumentsSelection && (

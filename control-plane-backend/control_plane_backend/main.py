@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Literal
 from uuid import uuid4
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fred_core import (
     KeycloakUser,
+    get_config,
     get_current_user,
     initialize_user_security,
     log_setup,
@@ -18,7 +20,10 @@ from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
-from control_plane_backend.application_context import ApplicationContext
+from control_plane_backend.application_context import (
+    ApplicationContext,
+    get_configuration,
+)
 from control_plane_backend.common.config_loader import (
     get_loaded_config_file_path,
     get_loaded_env_file_path,
@@ -91,18 +96,33 @@ def create_app() -> FastAPI:
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
+    ctx = ApplicationContext(configuration)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI):
+        try:
+            yield
+        finally:
+            await ctx.shutdown()
+            logger.info("[MAIN] Lifespan exit: orderly shutdown.")
+
     app = FastAPI(
         docs_url=f"{configuration.app.base_url}/docs" if docs_enabled else None,
         redoc_url=f"{configuration.app.base_url}/redoc" if docs_enabled else None,
         openapi_url=f"{configuration.app.base_url}/openapi.json"
         if docs_enabled
         else None,
+        lifespan=lifespan,
     )
     initialize_user_security(configuration.security.user)
     allowed_origins = list(
         {_norm_origin(origin) for origin in configuration.security.authorized_origins}
     )
     logger.info("[CORS] allow_origins=%s", allowed_origins)
+
+    ctx = ApplicationContext(configuration)
+    app.dependency_overrides[get_config] = get_configuration
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -110,7 +130,6 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
 
-    ctx = ApplicationContext(configuration)
     router = APIRouter(prefix=configuration.app.base_url)
 
     @router.get("/healthz", summary="Liveness probe", response_model=HealthResponse)

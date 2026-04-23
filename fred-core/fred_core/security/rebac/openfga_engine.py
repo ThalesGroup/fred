@@ -347,6 +347,11 @@ class OpenFgaRebacEngine(RebacEngine):
 
         return self._cached_client
 
+    async def close(self) -> None:
+        if self._cached_client is not None:
+            await self._cached_client.close()
+            self._cached_client = None
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Helpers
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

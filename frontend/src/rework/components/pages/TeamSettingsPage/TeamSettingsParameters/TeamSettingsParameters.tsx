@@ -25,7 +25,7 @@ const MAX_BANNER_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export default function TeamSettingsParameters({ team }: TeamSettingsParametersProps) {
-  const { defaultTeamBannerFile, agentsNicknamePlural } = useFrontendProperties();
+  const { defaultTeamBannerFile } = useFrontendProperties();
   const { t } = useTranslation();
   const [updateTeam] = useUpdateTeamMutation();
   const [uploadBanner] = useUploadTeamBannerMutation();
@@ -129,6 +129,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
         {t("rework.teamSettings.parameters.privateTeam")}
         <Switch {...register("isPrivate", { onChange: handleSaveIsPrivate })} />
       </div>
+      {/*
       <div className={styles["form-section"]}>
         <TextArea
           label={t("rework.teamSettings.parameters.teamPrompt.label")}
@@ -137,6 +138,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           disabled={true}
         />
       </div>
+*/}
     </div>
   );
 }

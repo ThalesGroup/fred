@@ -1,3 +1,7 @@
+import AgentCreateEditModal from "@components/pages/TeamAgentsPage/AgentCreateEditModal/AgentCreateEditModal.tsx";
+import TeamAgentContent from "@components/pages/TeamAgentsPage/TeamAgentContent/TeamAgentContent.tsx";
+import TeamAgentEmptyState from "@components/pages/TeamAgentsPage/TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AnyAgent } from "../../../../common/agent.ts";
@@ -6,10 +10,6 @@ import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./TeamAgentsPage.module.css";
-import TeamAgentContent from "@components/pages/TeamAgentsPage/TeamAgentContent/TeamAgentContent.tsx";
-import TeamAgentEmptyState from "@components/pages/TeamAgentsPage/TeamAgentEmptyState/TeamAgentEmptyState.tsx";
-import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import AgentCreateEditModal from "@components/pages/TeamAgentsPage/AgentCreateEditModal/AgentCreateEditModal.tsx";
 
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
@@ -65,7 +65,7 @@ export default function TeamAgentsPage() {
           teamName={team?.name}
           agent={selected}
           canDelete={canUpdateAgents}
-          teamId={teamId}
+          teamId={isPersonalTeam ? undefined : teamId}
           onDeleted={refetch}
           onSaved={refetch}
         />

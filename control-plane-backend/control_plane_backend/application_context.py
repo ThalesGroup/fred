@@ -17,6 +17,7 @@ from fred_core.scheduler import (
 )
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
+from fred_core.users.store.postgres_user_store import init_user_store
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.common.config_loader import get_loaded_config_file_path
@@ -37,6 +38,16 @@ from control_plane_backend.team_metadata_store import TeamMetadataStore
 logger = logging.getLogger(__name__)
 
 
+def get_configuration() -> Configuration:
+    """
+    Retrieves the global application configuration.
+
+    Returns:
+        Configuration: The singleton application configuration.
+    """
+    return get_app_context().configuration
+
+
 class ApplicationContext:
     _instance: Optional["ApplicationContext"] = None
 
@@ -52,6 +63,7 @@ class ApplicationContext:
         self._content_store: ContentStore | None = None
         self._rebac_engine: RebacEngine | None = None
         ApplicationContext._instance = self
+        init_user_store(self.get_pg_async_engine())
 
     @classmethod
     def get_instance(cls) -> "ApplicationContext":
@@ -156,6 +168,20 @@ class ApplicationContext:
         if self._rebac_engine is None:
             self._rebac_engine = rebac_factory(self.configuration.security)
         return self._rebac_engine
+
+    async def shutdown(self) -> None:
+        """Best-effort cleanup of shared resources."""
+        if self._rebac_engine is not None:
+            try:
+                await self._rebac_engine.close()
+            except Exception:
+                logger.debug("[REBAC] Failed to close ReBAC engine", exc_info=True)
+
+        if self._pg_async_engine is not None:
+            try:
+                await self._pg_async_engine.dispose()
+            finally:
+                self._pg_async_engine = None
 
 
 def get_app_context() -> ApplicationContext:

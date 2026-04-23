@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Iterable
 from typing import Any, Callable, List, Optional, cast
 
 from langchain_core.tools import BaseTool
@@ -36,7 +35,7 @@ from agentic_backend.common.tool_node_utils import create_mcp_tool_node
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.tools.inprocess_toolkit_registry import (
-    create_inprocess_toolkit,
+    create_inprocess_tools,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,7 +91,7 @@ class MCPRuntime:
 
         self.mcp_client: Optional[MultiServerMCPClient] = None
         self.toolkit: Optional[McpToolkit] = None
-        self._inprocess_toolkits: list[Any] = []
+        self._inprocess_tools: list[BaseTool] = []
 
         # Lifecycle orchestration so enter/exit happen in the SAME task
         self._lifecycle_task: Optional[asyncio.Task] = None
@@ -125,11 +124,7 @@ class MCPRuntime:
             # We allow the agent to run, but without MCP tools.
             return
 
-        try:
-            self._init_inprocess_toolkits()
-        except Exception:
-            await self._aclose_inprocess_toolkits()
-            raise
+        self._init_inprocess_tools()
 
         if not self.remote_servers:
             logger.info(
@@ -162,7 +157,7 @@ class MCPRuntime:
                 attempt >= MCP_CONNECT_MAX_ATTEMPTS
                 or not self._is_retryable_connection_error(last_error)
             ):
-                await self._aclose_inprocess_toolkits()
+                self._inprocess_tools = []
                 if last_error is not None:
                     raise last_error
                 raise RuntimeError(
@@ -180,7 +175,6 @@ class MCPRuntime:
             )
             await asyncio.sleep(delay_secs)
 
-        await self._aclose_inprocess_toolkits()
         if last_error is not None:
             raise last_error
 
@@ -290,8 +284,7 @@ class MCPRuntime:
                 "[MCP] agent=%s get_tools: Toolkit is None. Returning empty list.",
                 self.agent_instance.get_id(),
             )
-        local_tools = self._get_inprocess_tools()
-        return self._dedupe_tools_by_name([*local_tools, *remote_tools])
+        return self._dedupe_tools_by_name([*self._inprocess_tools, *remote_tools])
 
     def get_tool_nodes(self) -> ToolNode:
         """
@@ -328,64 +321,24 @@ class MCPRuntime:
             await _close_mcp_client_quietly(self.mcp_client)
             self.mcp_client = None
             self.toolkit = None
-        await self._aclose_inprocess_toolkits()
         logger.info(
             "[MCP] agent=%s aclose: MCP shutdown complete.",
             self.agent_instance.get_id(),
         )
 
-    def _init_inprocess_toolkits(self) -> None:
-        if self._inprocess_toolkits:
+    def _init_inprocess_tools(self) -> None:
+        if self._inprocess_tools:
             return
         for server in self.inprocess_servers:
-            toolkit = create_inprocess_toolkit(server.provider)
-            self._inprocess_toolkits.append(toolkit)
+            tools = create_inprocess_tools(server.provider, agent=self.agent_instance)
+            self._inprocess_tools.extend(tools)
             logger.info(
-                "[MCP] agent=%s enabled inprocess provider=%s via server=%s",
+                "[MCP] agent=%s enabled inprocess provider=%s via server=%s (%d tools)",
                 self.agent_instance.get_id(),
                 server.provider,
                 server.id,
+                len(tools),
             )
-
-    def _get_inprocess_tools(self) -> list[BaseTool]:
-        tools: list[BaseTool] = []
-        for toolkit in self._inprocess_toolkits:
-            provider = getattr(toolkit, "tools", None)
-            if not callable(provider):
-                logger.warning(
-                    "[MCP] agent=%s local toolkit %s has no tools() method",
-                    self.agent_instance.get_id(),
-                    toolkit.__class__.__name__,
-                )
-                continue
-            try:
-                toolkit_tools = cast(Iterable[BaseTool] | None, provider())
-                if toolkit_tools:
-                    tools.extend(list(toolkit_tools))
-            except Exception:
-                logger.warning(
-                    "[MCP] agent=%s failed loading inprocess tools from %s",
-                    self.agent_instance.get_id(),
-                    toolkit.__class__.__name__,
-                    exc_info=True,
-                )
-        return tools
-
-    async def _aclose_inprocess_toolkits(self) -> None:
-        for toolkit in self._inprocess_toolkits:
-            aclose = getattr(toolkit, "aclose", None)
-            if callable(aclose):
-                try:
-                    aclose_coro = cast(Awaitable[Any], aclose())
-                    await aclose_coro
-                except Exception:
-                    logger.warning(
-                        "[MCP] agent=%s failed closing inprocess toolkit %s",
-                        self.agent_instance.get_id(),
-                        toolkit.__class__.__name__,
-                        exc_info=True,
-                    )
-        self._inprocess_toolkits = []
 
     @staticmethod
     def _dedupe_tools_by_name(tools: list[BaseTool]) -> list[BaseTool]:

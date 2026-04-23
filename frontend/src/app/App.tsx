@@ -15,7 +15,7 @@
 // FredUi.tsx
 import { Box, Typography, useTheme } from "@mui/material";
 import { ThemeProvider, keyframes } from "@mui/material/styles";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "../components/ConfirmationDialogProvider";
@@ -23,8 +23,9 @@ import { DrawerProvider } from "../components/DrawerProvider";
 import { ToastProvider } from "../components/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
-import { darkTheme, lightTheme } from "../styles/theme";
+import { createDarkTheme, createLightTheme } from "../styles/theme";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
+import GcuGuard from "@core/guards/GcuGuard.tsx";
 
 const pulse = keyframes`
   0% { transform: scale(1); opacity: 0.9; }
@@ -133,7 +134,6 @@ function FredUiContent() {
     document.title = displayName;
     const faviconElement = document.getElementById("favicon") as HTMLLinkElement;
     faviconElement.href = `${baseUrl}images/${darkMode ? faviconDark : favicon}.svg`;
-    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   }, [baseUrl, displayName, favicon, faviconDark, darkMode]);
 
   useEffect(() => {
@@ -164,14 +164,16 @@ function FredUiContent() {
       }
     >
       <AuthProvider>
-        {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
-        <ConfirmationDialogProvider>
-          <ToastProvider>
-            <DrawerProvider>
-              <RouterProvider router={router} />
-            </DrawerProvider>
-          </ToastProvider>
-        </ConfirmationDialogProvider>
+        <GcuGuard>
+          {/* Following providers (dialog, toast, drawer...) needs to be inside the ThemeProvider */}
+          <ConfirmationDialogProvider>
+            <ToastProvider>
+              <DrawerProvider>
+                <RouterProvider router={router} />
+              </DrawerProvider>
+            </ToastProvider>
+          </ConfirmationDialogProvider>
+        </GcuGuard>
       </AuthProvider>
     </React.Suspense>
   );
@@ -179,7 +181,12 @@ function FredUiContent() {
 
 function AppWithTheme() {
   const { darkMode } = useContext(ApplicationContext);
-  const theme = darkMode ? darkTheme : lightTheme;
+  const theme = useMemo(() => {
+    // data-theme must be set before cssVar() resolves CSS variables for the MUI palette.
+    // Effects run after render — too late for theme creation — so we set it synchronously here.
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    return darkMode ? createDarkTheme() : createLightTheme();
+  }, [darkMode]);
 
   return (
     <ThemeProvider theme={theme}>

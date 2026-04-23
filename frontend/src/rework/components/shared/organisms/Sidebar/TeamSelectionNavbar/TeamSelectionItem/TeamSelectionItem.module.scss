@@ -96,9 +96,9 @@
   height: 2.5rem;
   pointer-events: none;
   color: var(--on-surface);
-  text-wrap: nowrap;
 
   font: var(--font-title-medium);
+  text-wrap: nowrap;
 }
 
 .teamAvatarContainer:hover .teamTooltip {

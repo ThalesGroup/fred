@@ -89,7 +89,7 @@ class V2SessionAgent:
         *,
         config: RunnableConfig | None = None,
         stream_mode: Any = "updates",
-        **kwargs: Any,
+        context: object | None = None,
     ):
         self.run_config = config if config is not None else {}
         execution_config = _execution_config_from_runnable_config(
@@ -106,7 +106,7 @@ class V2SessionAgent:
             )
             executor = await self._runtime.get_executor()
             event_stream = executor.stream(
-                cast(ReActInput, input_model), execution_config
+                cast(ReActInput, input_model), execution_config, context=context
             )
         else:
             input_model = (
@@ -115,7 +115,9 @@ class V2SessionAgent:
                 else _v2_input_from_state(state, runtime=self._runtime)
             )
             executor = await self._runtime.get_executor()
-            event_stream = executor.stream(input_model, execution_config)
+            event_stream = executor.stream(
+                input_model, execution_config, context=context
+            )
 
         async for event in event_stream:
             for legacy_event in _legacy_events_from_runtime_event(

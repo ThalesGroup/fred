@@ -34,14 +34,14 @@
 }
 
 .title {
-  font: var(--font-body-medium);
   color: var(--on-surface);
+  font: var(--font-body-medium);
 }
 
 .metadata {
-  font: var(--font-label-small);
   display: flex;
   gap: var(--spacing-2xs);
+  font: var(--font-label-small);
 }
 
 .agent {
@@ -67,8 +67,8 @@
 }
 
 .date {
-  font: var(--font-label-small);
   color: var(--on-surface-muted);
+  font: var(--font-label-small);
 }
 
 .chatActions {

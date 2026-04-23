@@ -67,6 +67,7 @@ from fred_core.logs.log_structures import StdoutLogStorageConfig
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.sql import create_async_engine_from_config
+from fred_core.users.store.postgres_user_store import init_user_store
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from requests.auth import AuthBase
@@ -416,6 +417,13 @@ class ApplicationContext:
         except Exception:
             logger.warning("[HTTP] Failed to shutdown shared clients", exc_info=True)
 
+        # ReBAC engine (e.g. OpenFGA aiohttp session)
+        if self._rebac_engine is not None:
+            try:
+                await self._rebac_engine.close()
+            except Exception:
+                logger.warning("[REBAC] Failed to close ReBAC engine", exc_info=True)
+
         # Async PG engine
         if self._pg_async_engine is not None:
             try:
@@ -487,21 +495,23 @@ class ApplicationContext:
         Lazily create and cache a single async Postgres Engine for all the postgres async stores.
         """
         if self._pg_async_engine is None:
-            pg_cfg = self.configuration.storage.postgres
-            self._pg_async_engine = create_async_engine_from_config(pg_cfg)
-            engine = self._pg_async_engine
-
-            def _dispose_async_engine():
-                try:
-                    asyncio.run(engine.dispose())
-                except Exception:
-                    logger.debug(
-                        "[SQL] Async engine dispose at exit failed", exc_info=True
-                    )
-
-            atexit.register(_dispose_async_engine)
-            logger.info("[SQL] Shared Postgres async initialized.")
+            self._pg_async_engine = self._init_pg_async_engine()
         return self._pg_async_engine
+
+    def _init_pg_async_engine(self):
+        pg_cfg = self.configuration.storage.postgres
+        pg_async_engine = create_async_engine_from_config(pg_cfg)
+
+        def _dispose_async_engine():
+            try:
+                asyncio.run(pg_async_engine.dispose())
+            except Exception:
+                logger.debug("[SQL] Async engine dispose at exit failed", exc_info=True)
+
+        atexit.register(_dispose_async_engine)
+        logger.info("[SQL] Shared Postgres async initialized.")
+        init_user_store(pg_async_engine)
+        return pg_async_engine
 
     def begin_pg_transaction(self):
         """

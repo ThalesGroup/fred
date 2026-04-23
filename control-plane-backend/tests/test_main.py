@@ -651,7 +651,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     class _FakeAppContext:
         def __init__(self) -> None:
             scheduler = type("SchedulerCfg", (), {"enabled": True})()
-            self.configuration = type("Cfg", (), {"scheduler": scheduler})()
+            app = type("AppCfg", (), {"gcu_version": None})()
+            self.configuration = type("Cfg", (), {"scheduler": scheduler, "app": app})()
             self._rebac = _FakeRebac()
             self._session_store = _FakeSessionStore()
             self._queue_store = _FakeQueueStore()
