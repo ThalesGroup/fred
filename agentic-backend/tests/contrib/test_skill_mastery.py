@@ -4,8 +4,6 @@ import io
 import math
 
 import pytest
-from PIL import Image
-
 from agentic_backend.agents.contrib.ppt_filler.skill_mastery import (
     count_donut_segments,
     count_filled_dots,
@@ -14,6 +12,7 @@ from agentic_backend.agents.contrib.ppt_filler.skill_mastery import (
     is_raster_image,
     parse_image_refs,
 )
+from PIL import Image
 
 # Target blue used in CV skill bars.
 BLUE = (0, 174, 199)

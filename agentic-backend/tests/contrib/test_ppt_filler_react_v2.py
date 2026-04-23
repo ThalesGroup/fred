@@ -1,24 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage
-
 from agentic_backend.agents.v2.production.contrib.ppt_filler_react import (
     PptFillerReActV2Definition,
-)
-from agentic_backend.core.agents.agent_factory import AgentFactory
-from agentic_backend.core.agents.runtime_context import RuntimeContext
-from agentic_backend.core.agents.v2 import (
-    BoundRuntimeContext,
-    ExecutionConfig,
-    PortableContext,
-    PortableEnvironment,
-    RuntimeServices,
-    ToolContentBlock,
-    ToolContentKind,
-    ToolInvocationRequest,
-    ToolInvocationResult,
 )
 from agentic_backend.core.agents.v2.catalog import definition_to_agent_settings
 from agentic_backend.core.agents.v2.react_runtime import (
@@ -31,6 +15,22 @@ from agentic_backend.core.agents.v2.runtime import ChatModelFactoryPort, ToolInv
 from agentic_backend.core.agents.v2.toolset_registry import (
     ToolsetRuntimePorts,
     get_registered_tool_spec,
+)
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage
+
+from agentic_backend.core.agents.agent_factory import AgentFactory
+from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.core.agents.v2 import (
+    BoundRuntimeContext,
+    ExecutionConfig,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeServices,
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationRequest,
+    ToolInvocationResult,
 )
 from agentic_backend.integrations.v2_runtime.adapters import CompositeToolInvoker
 
