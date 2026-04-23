@@ -57,6 +57,7 @@ from fred_core.security.keycloak.keycloack_admin_client import (
 from fred_core.security.oidc import (
     decode_jwt,
     get_current_user,
+    get_current_user_without_gcu,
     get_keycloak_client_id,
     get_keycloak_url,
     initialize_user_security,
@@ -109,6 +110,7 @@ __all__ = [
     "LogStorageConfig",
     "InMemoryLogStorageConfig",
     "get_current_user",
+    "get_current_user_without_gcu",
     "decode_jwt",
     "initialize_user_security",
     "KeycloakUser",
