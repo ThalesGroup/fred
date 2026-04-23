@@ -37,7 +37,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
   }, [allLibraryIds, params, onParamsChange]);
 
   return (
-    <div className={styles["mainFormCard"]}>
+    <div className={styles.mainFormCard}>
       {/* Allow attaching files */}
       <SwitchRow
         label={t("agentTuning.fields.chat_options_attach_files.title")}
@@ -55,12 +55,12 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
       />
 
       {/* Directories selection */}
-      <div className={styles["directorySelectionCard"]}>
-        <div className={styles["directorySelectionLabelSection"]}>
-          <span className={styles["directorySelectionTitle"]}>
+      <div className={styles.directorySelectionCard}>
+        <div className={styles.directorySelectionLabelSection}>
+          <span className={styles.directorySelectionTitle}>
             {t("agentTuning.fields.chat_options_libraries_selection.library_selection")}
           </span>
-          <span className={styles["directorySelectionDescription"]}>
+          <span className={styles.directorySelectionDescription}>
             {t("agentTuning.fields.chat_options_libraries_selection.library_selection_description", {
               agentsNicknameSingular,
             })}

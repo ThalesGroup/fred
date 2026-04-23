@@ -10,10 +10,10 @@ export interface SwitchRowProps {
 
 export function SwitchRow({ label, description, checked, onChange }: SwitchRowProps) {
   return (
-    <label className={styles["switchRow"]}>
-      <div className={styles["text"]}>
-        <span className={styles["label"]}>{label}</span>
-        <span className={styles["description"]}>{description}</span>
+    <label className={styles.switchRow}>
+      <div className={styles.text}>
+        <span className={styles.label}>{label}</span>
+        <span className={styles.description}>{description}</span>
       </div>
       <Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />
     </label>
