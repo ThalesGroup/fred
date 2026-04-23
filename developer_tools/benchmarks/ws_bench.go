@@ -73,6 +73,7 @@ type config struct {
 	Token                 string
 	TokenInQuery          bool
 	AgentID               string
+	AgentUUID             string
 	AgentCreateURL        string
 	EnsureV2DefinitionRef string
 	EnsureV2ProfileID     string
@@ -131,7 +132,7 @@ func main() {
 	}
 
 	start := time.Now()
-	if cfg.EnsureV2DefinitionRef != "" || cfg.EnsureV2ProfileID != "" {
+	if shouldEnsureV2Agent(cfg) {
 		createdAgentID, err := ensureV2Agent(cfg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ensure v2 agent failed: %v\n", err)
@@ -260,6 +261,7 @@ func parseFlags() config {
 	tokenFlag := flag.String("token", "", "Bearer token (or set AGENTIC_TOKEN)")
 	tokenInQuery := flag.Bool("token-in-query", false, "Send token as ?token= query param")
 	agentFlag := flag.String("agent", "Georges", "Agent ID (matches configuration.yaml)")
+	agentUUIDFlag := flag.String("agent-uuid", "", "Existing agent UUID to reuse for the benchmark; skips auto-creation when set")
 	agentCreateURLFlag := flag.String("agent-create-url", "", "HTTP v2 agent creation endpoint URL override (optional)")
 	ensureV2DefinitionRefFlag := flag.String("ensure-v2-definition-ref", "", "Optionally create a v2 agent from a definition_ref before benchmarking, e.g. v2.react.rag_expert")
 	ensureV2ProfileIDFlag := flag.String("ensure-v2-profile-id", "", "Optionally create a Basic ReAct v2 agent from a react profile before benchmarking, e.g. rag_expert")
@@ -304,11 +306,18 @@ func parseFlags() config {
 		requests = *clientsFlag
 	}
 
+	agentUUID := strings.TrimSpace(*agentUUIDFlag)
+	agentID := strings.TrimSpace(*agentFlag)
+	if agentUUID != "" {
+		agentID = agentUUID
+	}
+
 	return config{
 		URL:                   strings.TrimSpace(*urlFlag),
 		Token:                 token,
 		TokenInQuery:          *tokenInQuery,
-		AgentID:               strings.TrimSpace(*agentFlag),
+		AgentID:               agentID,
+		AgentUUID:             agentUUID,
 		AgentCreateURL:        strings.TrimSpace(*agentCreateURLFlag),
 		EnsureV2DefinitionRef: strings.TrimSpace(*ensureV2DefinitionRefFlag),
 		EnsureV2ProfileID:     strings.TrimSpace(*ensureV2ProfileIDFlag),
@@ -468,10 +477,13 @@ func printConfigRecap(cfg config, perClientMode bool, totalRequests int, effecti
 	fmt.Printf("\n%s\n", style("WS BENCH CONFIG", colorBold, colorCyan))
 	fmt.Printf("%s %s\n", style("Target:", colorDim), cfg.URL)
 	fmt.Printf("%s %s\n", style("Agent ID:", colorDim), cfg.AgentID)
-	if cfg.EnsureV2DefinitionRef != "" {
+	if cfg.AgentUUID != "" {
+		fmt.Printf("%s %s\n", style("Agent source:", colorDim), "provided UUID")
+	}
+	if cfg.AgentUUID == "" && cfg.EnsureV2DefinitionRef != "" {
 		fmt.Printf("%s %s\n", style("Ensure v2 definition:", colorDim), cfg.EnsureV2DefinitionRef)
 	}
-	if cfg.EnsureV2ProfileID != "" {
+	if cfg.AgentUUID == "" && cfg.EnsureV2ProfileID != "" {
 		fmt.Printf("%s %s\n", style("Ensure v2 profile:", colorDim), cfg.EnsureV2ProfileID)
 	}
 	if len(cfg.DocumentLibraryIDs) > 0 {
@@ -682,6 +694,16 @@ func newExchangeID() string {
 		return fmt.Sprintf("ex-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// shouldEnsureV2Agent exists so an explicit benchmark target agent always wins
+// over the bench bootstrap flow. Use it before creating or deleting temporary
+// agents. Example: `if shouldEnsureV2Agent(cfg) { ... }`.
+func shouldEnsureV2Agent(cfg config) bool {
+	if strings.TrimSpace(cfg.AgentUUID) != "" {
+		return false
+	}
+	return cfg.EnsureV2DefinitionRef != "" || cfg.EnsureV2ProfileID != ""
 }
 
 // ensureV2Agent exists to create one dynamic v2 agent before the benchmark so

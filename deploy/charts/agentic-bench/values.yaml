@@ -14,10 +14,11 @@ job:
 
 # Benchmark client flags
 bench:
-  mode: rag                   # normal | rag
+  mode: rag                   # normal | rag | existing
   common:
     url: ws://agentic-backend:8000/agentic/v1/chatbot/query/ws
     agent: basic.react.v2
+    agentUUID: ""              # reuse an existing agent UUID instead of creating one
     agentCreateURL: ""
     message: "search please"
     clients: 20
@@ -49,6 +50,13 @@ bench:
       deleteCreatedAgent: true
       searchPolicy: hybrid
       searchRagScope: corpus_only
+    existing:
+      ensureV2DefinitionRef: ""
+      ensureV2ProfileID: ""
+      ensureAgentName: ""
+      deleteCreatedAgent: false
+      searchPolicy: ""
+      searchRagScope: ""
 
 # Secret that holds the bearer token. The chart expects the token as input and
 # does not try to mint one from Keycloak.

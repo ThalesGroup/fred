@@ -35,19 +35,23 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "-url={{ $common.url }}"
+            {{- if $common.agentUUID }}
+            - "-agent-uuid={{ $common.agentUUID }}"
+            {{- else }}
             - "-agent={{ $common.agent }}"
+            {{- end }}
             - "-message={{ $common.message }}"
             - "-clients={{ $common.clients }}"
             {{- if $common.agentCreateURL }}
             - "-agent-create-url={{ $common.agentCreateURL }}"
             {{- end }}
-            {{- if $modeConfig.ensureV2DefinitionRef }}
+            {{- if and (not $common.agentUUID) $modeConfig.ensureV2DefinitionRef }}
             - "-ensure-v2-definition-ref={{ $modeConfig.ensureV2DefinitionRef }}"
             {{- end }}
-            {{- if $modeConfig.ensureV2ProfileID }}
+            {{- if and (not $common.agentUUID) $modeConfig.ensureV2ProfileID }}
             - "-ensure-v2-profile-id={{ $modeConfig.ensureV2ProfileID }}"
             {{- end }}
-            {{- if $modeConfig.ensureAgentName }}
+            {{- if and (not $common.agentUUID) $modeConfig.ensureAgentName }}
             - "-ensure-agent-name={{ $modeConfig.ensureAgentName }}"
             {{- end }}
             {{- if gt (int $common.requestsPerClient) 0 }}
@@ -76,7 +80,7 @@ spec:
             {{- if not $common.prepareSessions }}
             - "-prepare-sessions=false"
             {{- end }}
-            {{- if $modeConfig.deleteCreatedAgent }}
+            {{- if and (not $common.agentUUID) $modeConfig.deleteCreatedAgent }}
             - "-delete-created-agent=true"
             {{- end }}
             {{- if $common.insecureTLS }}

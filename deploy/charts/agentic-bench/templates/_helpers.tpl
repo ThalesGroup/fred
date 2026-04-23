@@ -25,10 +25,10 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 
 {{- define "agentic-bench.mode" -}}
 {{- $mode := default "rag" .Values.bench.mode -}}
-{{- if or (eq $mode "normal") (eq $mode "rag") -}}
+{{- if or (eq $mode "normal") (eq $mode "rag") (eq $mode "existing") -}}
 {{- $mode -}}
 {{- else -}}
-{{- fail (printf "unsupported bench.mode %q (expected \"normal\" or \"rag\")" $mode) -}}
+{{- fail (printf "unsupported bench.mode %q (expected \"normal\", \"rag\", or \"existing\")" $mode) -}}
 {{- end -}}
 {{- end -}}
 
