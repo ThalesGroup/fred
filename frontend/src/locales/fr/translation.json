@@ -1364,7 +1364,7 @@
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
       },
       "accessGcu": "Accéder aux CGU",
-      "accessGdpr": "Que fait Prism AI Hub de mes données ?"
+      "accessGdpr": "Que fait {{siteTitle}} {{siteSubtitle}} de mes données ?"
     },
     "teamSettings": {
       "navigation": {

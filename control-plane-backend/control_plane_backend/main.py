@@ -109,8 +109,6 @@ def create_app() -> FastAPI:
     logger.info("[CORS] allow_origins=%s", allowed_origins)
 
     ctx = ApplicationContext(configuration)
-
-    app = FastAPI()
     app.dependency_overrides[get_config] = get_configuration
 
     app.add_middleware(

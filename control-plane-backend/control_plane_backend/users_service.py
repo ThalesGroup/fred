@@ -172,7 +172,6 @@ async def find_user_details_by_id(
 
 async def update_gcu_validation(user_id: UUID, user_store: BaseUserStore) -> None:
     cfg = get_configuration()
-    print(user_store)
     if cfg.app.gcu_version is None:
         return
 

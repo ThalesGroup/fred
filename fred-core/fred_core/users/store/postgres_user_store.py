@@ -59,9 +59,9 @@ class PostgresUserStore(BaseUserStore):
                 user = UserRow(
                     id=user_id,
                     gcuVersionAccepted=gcu_version,
-                    gcuAcceptedAt=datetime.now(timezone.utc),
+                    gcuAcceptedAt=datetime.now(),
                 )
                 s.add(user)
             else:
                 user.gcuVersionAccepted = gcu_version
-                user.gcuAcceptedAt = datetime.now(timezone.utc)
+                user.gcuAcceptedAt = datetime.now()

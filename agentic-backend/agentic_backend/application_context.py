@@ -156,10 +156,6 @@ def get_configuration() -> Configuration:
     return get_app_context().configuration
 
 
-app = FastAPI()
-app.dependency_overrides[get_config] = get_configuration
-
-
 def get_session_store() -> BaseSessionStore:
     return get_app_context().get_session_store()
 

@@ -393,10 +393,11 @@ async def get_current_user(
         )
         raise HTTPException(status_code=403, detail="user_not_whitelisted")
 
+    if configuration.app.gcu_version is None:
+      return user
+
     user_details = await user_store.find_user_by_id(UUID(user.uid))
 
-    if configuration.app.gcu_version is None:
-        return user
     if (
         not user_details
         or user_details.gcuVersionAccepted.value != configuration.app.gcu_version

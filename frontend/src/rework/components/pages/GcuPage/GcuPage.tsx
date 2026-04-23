@@ -12,8 +12,7 @@ import { Link } from "react-router-dom";
 export default function GcuPage() {
   const { t } = useTranslation();
   const [trigger, { isLoading }] = useValidateGcuControlPlaneV1GcuPostMutation();
-  const { refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
-  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
+  const { data: userDetails, refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const { gcuVersion } = useFrontendProperties();
 
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
