@@ -348,7 +348,7 @@ export default function GcuPage() {
         </div>
       </div>
       <div className={styles.gcuActions}>
-        {gcuVersion && userDetails && userDetails.cguValidated.toString() == gcuVersion ? (
+        {gcuVersion && userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion ? (
           <Link to={"/"}>
             <Button color={"primary"} variant={"filled"} size={"medium"}>
               {t("rework.gcu.backToApp")}

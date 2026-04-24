@@ -114,7 +114,7 @@ class UserDetails(BaseModel):
     summary="Return user informations.",
 )
 async def get_user_details(
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     user_details = await find_user_details_by_id(UUID(user.uid), user_store)
@@ -138,7 +138,7 @@ async def get_user_details(
 
 @router.post("/gcu")
 async def validate_gcu(
-    user: KeycloakUser = Depends(get_current_user),
-    user_store: BaseUserStore = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
     await update_gcu_validation(UUID(user.uid), user_store)
