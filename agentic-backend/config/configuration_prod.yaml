@@ -15,7 +15,7 @@ app:
   base_url: "/agentic/v1"
   address: "127.0.0.1"
   port: 8000
-  log_level: "debug"
+  log_level: "info"
   reload: false
   reload_dir: "."
   metrics_enabled: true
@@ -25,6 +25,7 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  gcu_version: "v1"
 
 scheduler:
   enabled: true
@@ -79,6 +80,7 @@ frontend_settings:
     defaultTeamAvatarFile: "default-team-avatar-prism.png"
     defaultPersonalBannerFile: "default-personal-banner.png"
     defaultPersonalAvatarFile: "default-personal-banner.png"
+    gcuVersion: "v1"
 
 ai:
   # In production  activate the configuration persistence mechanism

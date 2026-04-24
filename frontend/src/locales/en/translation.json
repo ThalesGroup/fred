@@ -21,7 +21,8 @@
     "dropHere": "Drop files here or click to browse",
     "loadingPreview": "Loading preview...",
     "loadingPreviewError": "Unable to load preview.",
-    "contactSupport": "Contact support team."
+    "contactSupport": "Contact support team.",
+    "failToLoad": "Fail to load resources"
   },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
@@ -395,7 +396,9 @@
       },
       "chat_options_libraries_selection": {
         "title": "Document libraries picker",
-        "description": "Let users select document libraries/knowledge sources for this agent."
+        "description": "Let users select document libraries/knowledge sources for this agent.",
+        "library_selection": "Knowledge base",
+        "library_selection_description": "Select resources the {{agentsNicknameSingular}} can use"
       }
     }
   },
@@ -645,7 +648,7 @@
       "placeholder": "Write your message…  Enter to send • Shift+Enter for newline"
     },
     "attachFiles": "Attach files",
-    "addLibraries": "Add libraries",
+    "addLibraries": "Select folders",
     "addDocuments": "Add documents",
     "attachments": {
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Please provide feedback to help us improve this feature.",
@@ -677,12 +680,12 @@
       }
     },
     "libraries": {
-      "disabledByDocuments": "Document scoping is active. Disable documents to use libraries.",
-      "includeToggle": "Toggle library retrieval",
-      "includeTooltipOn": "Libraries are included in retrieval for this conversation.",
-      "includeTooltipOff": "Libraries are excluded from retrieval for this conversation.",
-      "empty": "No libraries selected. All visible document libraries will be searched.",
-      "previewTitle": "Library",
+      "disabledByDocuments": "Document scoping is active. Disable documents to use folders.",
+      "includeToggle": "Toggle folder retrieval",
+      "includeTooltipOn": "Folders are included in retrieval for this conversation.",
+      "includeTooltipOff": "Folders are excluded from retrieval for this conversation.",
+      "empty": "No folder selected. Search will return no results.",
+      "previewTitle": "Folder",
       "noDescription": "No description available."
     },
     "uploadingFile": "Uploading {{name}}...",
@@ -865,7 +868,7 @@
     "title": "Document Library",
     "folders": "Folders",
     "failedToLoad": "Failed to load libraries",
-    "loadingLibraries": "Loading libraries",
+    "loadingLibraries": "Loading folders",
     "description": "Access the knowledge base documents",
     "upload": "Upload a document",
     "uploadAndProcess": "Upload and Process document",
@@ -1003,17 +1006,17 @@
     "title": "{{typePlural}}",
     "edit": "Edit",
     "preview": "Preview",
-    "createLibrary": "Create library",
+    "createLibrary": "Create folder",
     "createResource": "Add {{typeOne}} to library",
     "editResource": "Edit a {{typeOne}}",
     "importResource": "Import {{typeOne}} from file",
     "folders": "Folders",
     "loadingLibraries": "Loading libraries…",
-    "failedToLoad": "Failed to load libraries.",
+    "failedToLoad": "Failed to load folders.",
     "createSuccess": "Created",
-    "createDetail": "{{typeOne, capitalize}} added to the library.",
+    "createDetail": "{{typeOne, capitalize}} added to the folder.",
     "removeSuccess": "Removed",
-    "removeDetail": "{{typeOne, capitalize}} removed from the library.",
+    "removeDetail": "{{typeOne, capitalize}} removed from the folder.",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "folderDeleteSuccess": "Folder deleted",
@@ -1021,7 +1024,7 @@
     "folderDeleteForbiddenSummary": "Not allowed",
     "folderDeleteForbiddenDetail": "Only a library owner can delete the « {{name}} » library.",
     "removeForbiddenSummary": "Not allowed",
-    "removeForbiddenDetail": "Only library owners can remove items from the « {{folder}} » library.",
+    "removeForbiddenDetail": "Only library owners can remove items from the « {{folder}} » folder.",
     "searchPlaceholder": "Search a {{typeOne}}",
     "importDrawerTitle": "Import {{typeOne}}",
     "dropFiles": "Drop your {{typePlural}} here",
@@ -1036,9 +1039,9 @@
     "removedOneResource": "{{typeOne, capitalize}} removed from library.",
     "confirmRemoveTitle": "Remove from library?",
     "confirmRemoveMessage": "Remove « {{res}} » from « {{folder}} »?",
-    "emptyLibrariesTitle": "No libraries yet",
-    "emptyLibrariesDescription": "Create your first library to organize your {{typePlural}}.",
-    "emptyLibrariesAction": "Create library"
+    "emptyLibrariesTitle": "No folder yet",
+    "emptyLibrariesDescription": "Create your first folder to organize your {{typePlural}}.",
+    "emptyLibrariesAction": "Create folder"
   },
   "documentLibraryTree": {
     "shareFolder": "Share folder",
@@ -1095,24 +1098,24 @@
     "createLibrary": "Create folder",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
-    "emptyFoldersTitle": "No libraries yet",
-    "emptyFoldersDescription": "Create your first library to organize these documents and keep uploads tidy.",
-    "emptyFoldersAction": "Create library"
+    "emptyFoldersTitle": "No folder yet",
+    "emptyFoldersDescription": "Create your first folder to organize these documents and keep uploads tidy.",
+    "emptyFoldersAction": "Create folder"
   },
   "libraryCreateDrawer": {
-    "title": "Create New Library",
+    "title": "Create new folder",
     "libraryName": "Name",
     "libraryDescription": "Description",
     "cancel": "Cancel",
     "save": "Create",
-    "createUnder": "Create new library under",
+    "createUnder": "Create new folder under",
     "saving": "Creating...",
     "validationError": "Validation Error",
-    "nameRequired": "Library name is required",
-    "libraryCreated": "Library Created",
-    "libraryCreatedDetail": "Library \"{{name}}\" has been created successfully",
+    "nameRequired": "Folder name is required",
+    "libraryCreated": "Folder Created",
+    "libraryCreatedDetail": "Folder \"{{name}}\" has been created successfully",
     "creationFailed": "Creation Failed",
-    "creationFailedDetail": "Error creating library: {{error}}"
+    "creationFailedDetail": "Error creating folder: {{error}}"
   },
   "libraryEdit": {
     "edit": "Edit",
@@ -1292,8 +1295,7 @@
       "apps": "Apps",
       "members": "Members",
       "settings": "Settings"
-    },
-    "noAgents": "No team agents configured yet. Create your first team agent to get started."
+    }
   },
   "appCard": {
     "launch": "Start"
@@ -1310,6 +1312,9 @@
   },
   "rework": {
     "back": "Back",
+    "create": "Create",
+    "save": "Save",
+    "cancel": "Cancel",
     "agentCard": {
       "startChat": "New chat"
     },
@@ -1319,7 +1324,8 @@
       "owner": "Owner"
     },
     "teamCard": {
-      "memberCount": "{{count}} members"
+      "memberCount": "{{count}} members",
+      "join": "Apply to join"
     },
     "sidebar": {
       "team": {
@@ -1359,7 +1365,9 @@
       "conversationProfile": {
         "title": "Conversation profile",
         "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}."
-      }
+      },
+      "accessGcu": "Access to GCU",
+      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?"
     },
     "teamSettings": {
       "navigation": {
@@ -1405,9 +1413,28 @@
     "teams": {
       "agents": {
         "title": "Chat with your {{agentsNicknamePlural}}",
-        "create": "Create Agent",
+        "create": "Create {{agentsNicknameSingular}}",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
+        "noAgent": "No team {{agentsNicknameSingular}} configured yet. Create your first team {{agentsNicknameSingular}} to get started.",
         "firstCreate": "Create"
+      },
+      "formAgent": {
+        "titleCreate": "Create a new {{agentsNicknameSingular}}",
+        "titleEdit": "Edit {{agent}}",
+        "fields": {
+          "name": {
+            "placeholder": "Enter an original name",
+            "label": "Name"
+          },
+          "role": {
+            "placeholder": "What is the role of your {{agentsNicknameSingular}} ?",
+            "label": "Role"
+          },
+          "description": {
+            "placeholder": "Describe this {{agentsNicknameSingular}} for the team members",
+            "label": "Description"
+          }
+        }
       }
     },
     "marketplace": {
@@ -1416,6 +1443,16 @@
         "yourTeams": "Your teams",
         "otherTeams": "Discover other teams"
       }
+    },
+    "gcu": {
+      "title": "Terms of Service (ToS)",
+      "lockInformation": "Read the Terms of Service before you can accept them",
+      "validate": "Accept the TOS",
+      "backToApp": "Back to app"
+    },
+    "gdpr": {
+      "title": "Privacy policy",
+      "backToApp": "Back to app"
     }
   }
 }

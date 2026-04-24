@@ -1,0 +1,126 @@
+# =============================================================================
+# values-bench.yaml — benchmark-specific overrides for local k3d deployment
+# =============================================================================
+#
+# Why this file exists:
+#   Isolate the benchmark/mock-specific changes from values-local.yaml so bench
+#   runs can be enabled with an extra overlay instead of baking them into the
+#   default local deployment.
+#
+# How to use:
+#   Apply this file after values-local.yaml so only the benchmark overrides win.
+#
+# Usage example:
+#   helm upgrade --install fred-app deploy/charts/fred \
+#     --namespace fred \
+#     -f deploy/local/k3d/values-local.yaml \
+#     -f deploy/local/k3d/values-bench.yaml
+
+x-kf-embedding-model: &bench-kf-embedding-model
+  provider: openai
+  name: text-embedding-ada-002
+  settings:
+    base_url: http://mock-openai-server:8383/v1
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 120.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+x-kf-chat-model: &bench-kf-chat-model
+  provider: openai
+  name: gpt-4o
+  settings:
+    base_url: http://mock-openai-server:8383/v1
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 120.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+x-kf-vision-model: &bench-kf-vision-model
+  provider: openai
+  name: gpt-4o
+  settings:
+    base_url: http://mock-openai-server:8383/v1
+    temperature: 0
+    max_retries: 0
+    timeout:
+      connect: 10.0
+      read: 120.0
+    http_client_limits:
+      max_connections: 500
+      max_keepalive_connections: 0
+      keepalive_expiry_seconds: 10
+
+applications:
+  agentic-backend:
+    agents_catalog:
+      agents:
+        - id: "bench_agent"
+          name: "Bench"
+          type: "agent"
+          definition_ref: "v2.react.basic"
+          enabled: true
+
+    models_catalog:
+      default_profile_by_capability:
+        chat: default.chat.mock
+        language: default.language.mock
+      profiles:
+        - profile_id: default.chat.mock
+          capability: chat
+          model:
+            provider: openai
+            name: gpt-4o
+            settings:
+              base_url: http://mock-openai-server:8383/v1
+        - profile_id: default.language.mock
+          capability: language
+          model:
+            provider: openai
+            name: gpt-4o
+            settings:
+              base_url: http://mock-openai-server:8383/v1
+      rules:
+        - rule_id: bench-agent-chat-mock
+          capability: chat
+          target_profile_id: default.chat.mock
+          match:
+            agent_id: bench_agent
+        - rule_id: bench-agent-language-mock
+          capability: language
+          target_profile_id: default.language.mock
+          match:
+            agent_id: bench_agent
+    dotenv:
+      OPENAI_API_KEY: "key-1" # pragma: allowlist secret
+
+  knowledge-flow-backend:
+    configuration:
+      embedding_model: *bench-kf-embedding-model
+      chat_model: *bench-kf-chat-model
+      vision_model: *bench-kf-vision-model
+      storage:
+        vector_store:
+          index: vector-index-bench
+    dotenv:
+      OPENAI_API_KEY: "key-1" # pragma: allowlist secret
+
+  knowledge-flow-worker:
+    configuration:
+      embedding_model: *bench-kf-embedding-model
+      chat_model: *bench-kf-chat-model
+      vision_model: *bench-kf-vision-model
+      storage:
+        vector_store:
+          index: vector-index-bench
+    dotenv:
+      OPENAI_API_KEY: "key-1" # pragma: allowlist secret

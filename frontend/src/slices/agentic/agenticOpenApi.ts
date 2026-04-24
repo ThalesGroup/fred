@@ -617,9 +617,24 @@ export type FieldSpec = {
     | null;
   ui?: UiHints;
 };
+export type KfVectorSearchParams = {
+  provider?: "kf_vector_search";
+  /** Restrict semantic search to these document library tag IDs. User and LLM selections are intersected with this set at query time. */
+  document_library_tags_ids?: string[];
+  /** When True, expose the file-attachment control in the chat bar so users can attach local files (PDFs, images, text) to their messages. */
+  attach_files?: boolean;
+  /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. */
+  libraries_selection?: boolean;
+};
 export type McpServerRef = {
   id: string;
   require_tools?: string[];
+  /** Typed agent-level parameters for inprocess tools, discriminated by `provider`. Example: KfVectorSearchParams(document_library_tags_ids=['lib-123']) */
+  params?:
+    | ({
+        provider: "kf_vector_search";
+      } & KfVectorSearchParams)
+    | null;
 };
 export type AgentTuning = {
   /** The agent's mandatory role for discovery. */
@@ -852,6 +867,9 @@ export type VectorSearchHit = {
   page?: number | null;
   section?: string | null;
   viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
   /** Document UID */
   uid: string;
   title: string;
@@ -1149,6 +1167,7 @@ export type Properties = {
   defaultPersonalBannerFile?: string;
   defaultTeamAvatarFile?: string;
   defaultPersonalAvatarFile?: string;
+  gcuVersion?: string | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;

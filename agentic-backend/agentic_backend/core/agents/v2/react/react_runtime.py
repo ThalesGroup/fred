@@ -216,7 +216,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         self._services = services
 
     async def invoke(
-        self, input_model: ReActInput, config: ExecutionConfig
+        self,
+        input_model: ReActInput,
+        config: ExecutionConfig,
+        *,
+        context: object | None = None,
     ) -> ReActOutput:
         span = None
         if self._services.tracer is not None:
@@ -229,6 +233,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             result = await self._compiled_agent.ainvoke(
                 _graph_input(input_model, config),
                 config=_to_runnable_config(config),
+                context=context,
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -248,7 +253,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 span.end()
 
     async def stream(
-        self, input_model: ReActInput, config: ExecutionConfig
+        self,
+        input_model: ReActInput,
+        config: ExecutionConfig,
+        *,
+        context: object | None = None,
     ) -> AsyncIterator[RuntimeEvent]:
         span = None
         if self._services.tracer is not None:
@@ -275,6 +284,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 _graph_input(input_model, config),
                 config=_to_runnable_config(config),
                 stream_mode=["messages", "updates"],
+                context=context,
             ):
                 mode, update = _split_stream_event_mode(raw_event)
 

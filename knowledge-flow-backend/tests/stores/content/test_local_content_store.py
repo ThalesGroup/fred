@@ -185,3 +185,20 @@ def test_get_markdown_raises_and_logs(monkeypatch, tmp_store, tmp_path, caplog):
 def test_delete_nonexistent_content(tmp_store):
     """Delete the content if the file does not exists."""
     tmp_store.delete_content("nonexistent_doc")
+
+
+def test_put_file_stores_existing_local_file(tmp_store, tmp_path):
+    """Store one existing local file without going through an in-memory stream."""
+    source_file = tmp_path / "artifact.parquet"
+    source_file.write_bytes(b"parquet-bytes")
+
+    stored = tmp_store.put_file(
+        "tabular/doc-1/rev/data.parquet",
+        source_file,
+        content_type="application/vnd.apache.parquet",
+    )
+
+    stored_path = tmp_store.object_root / "tabular" / "doc-1" / "rev" / "data.parquet"
+    assert stored_path.read_bytes() == b"parquet-bytes"
+    assert stored.size == len(b"parquet-bytes")
+    assert stored.file_name == "data.parquet"

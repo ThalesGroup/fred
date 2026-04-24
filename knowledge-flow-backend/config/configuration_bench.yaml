@@ -24,7 +24,6 @@ app:
   kpi_process_metrics_interval_sec: 10
   kpi_log_summary_interval_sec: 10.0
   kpi_log_summary_top_n: 20
-  max_ingestion_workers: 3
 
 processing:
   default_profile: fast
@@ -174,6 +173,15 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+# attachment_processors:
+#   - suffix: ".pdf"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
+#   - suffix: ".docx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
+#   - suffix: ".pptx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
+#   - suffix: ".csv"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
 
 security:
   m2m:
@@ -201,6 +209,9 @@ scheduler:
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    ingestion_workflow_parallelism: 3
+    ingestion_max_concurrent_workflow_tasks: 3
+    ingestion_max_concurrent_activities: 3
 
 content_storage:
   type: minio
@@ -268,17 +279,6 @@ crossencoder_model:
       keepalive_expiry_seconds: 10
 
 storage:
-  tabular_stores:
-    base_database:
-      type: "sql"
-      mode: "read_and_write"
-      driver: "postgresql+psycopg2"
-      host: "localhost"
-      port: 5432
-      database: "data"
-      path: null # (important: remove the `path` default value)
-      username: "tabular"
-
   postgres:
     host: localhost
     port: 5432
@@ -318,6 +318,16 @@ storage:
     type: "postgres"
   task_store:
     type: "postgres"
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
 
   vector_store:
     type: opensearch

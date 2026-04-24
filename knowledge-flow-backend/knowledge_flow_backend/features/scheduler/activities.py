@@ -20,6 +20,10 @@ import tempfile
 from temporalio import activity, exceptions
 
 from knowledge_flow_backend.common.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from knowledge_flow_backend.features.scheduler.kpi_utils import (
+    emit_temporal_activity_result_kpis,
+    emit_temporal_workflow_status_kpi,
+)
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
@@ -28,6 +32,7 @@ logger = logging.getLogger(__name__)
 @activity.defn
 async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
     logger = activity.logger
+    started_at = asyncio.get_running_loop().time()
     logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] Starting uid={metadata.document_uid}")
 
     from knowledge_flow_backend.application_context import ApplicationContext
@@ -40,21 +45,25 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
         with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
             working_dir = pathlib.Path(tmpdir)
             output_dir = working_dir / "output"
+            document_name = metadata.document_name
 
             # For both push and pull, restore what was saved (input/output)
             await asyncio.to_thread(ingestion_service.get_local_copy, file.processed_by, metadata, working_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Locate preview file
-            preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
-            if ApplicationContext.get_instance().is_tabular_file(preview_file.name):
+            is_tabular_document = ApplicationContext.get_instance().is_tabular_file(document_name)
+            if is_tabular_document:
                 output_stage = ProcessingStage.SQL_INDEXED
+                file_name_for_processing = document_name
             else:
+                preview_file = await asyncio.to_thread(ingestion_service.get_preview_file, file.processed_by, metadata, output_dir)
                 output_stage = ProcessingStage.VECTORIZED
+                file_name_for_processing = preview_file.name
 
             metadata.set_stage_status(output_stage, ProcessingStatus.IN_PROGRESS)
             await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
-            if not ApplicationContext.get_instance().is_tabular_file(preview_file.name):
+            if not is_tabular_document:
                 from knowledge_flow_backend.common.structures import InMemoryVectorStorage
 
                 vector_store = ApplicationContext.get_instance().get_config().storage.vector_store
@@ -68,7 +77,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
             metadata = await asyncio.to_thread(
                 ingestion_service.process_output,
                 file.processed_by,
-                preview_file.name,
+                file_name_for_processing,
                 output_dir,
                 metadata,
                 file.profile,
@@ -78,6 +87,13 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
             await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
 
         logger.info(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] completed uid={metadata.document_uid}")
+        emit_temporal_activity_result_kpis(
+            phase="output",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            file=file,
+            status="success",
+        )
         return metadata
     except Exception as exc:
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
@@ -92,6 +108,14 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
                 exc_info=True,
             )
         logger.exception(f"[SCHEDULER][ACTIVITY][OUTPUT_PROCESS] failed uid={metadata.document_uid}", exc_info=True)
+        emit_temporal_activity_result_kpis(
+            phase="output",
+            started_at_monotonic=started_at,
+            metadata=metadata,
+            file=file,
+            status="error",
+            exc=exc,
+        )
         raise
 
 
@@ -146,6 +170,13 @@ async def record_workflow_status(
         workflow_id=workflow_id,
         status=parsed_status,
         last_error=error,
+    )
+    emit_temporal_workflow_status_kpi(
+        status=parsed_status.value,
+        workflow_id=workflow_id,
+        document_uid=document_uid,
+        filename=filename,
+        error=error,
     )
 
 

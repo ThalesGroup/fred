@@ -1,3 +1,18 @@
+**v1.5.0** — 2026-04-24
+
+- **Features**
+
+  - Allow knowledge base of agent to be scoped at agent creation
+  - Add join team mail to link on the teams marketplace
+  - Add mandatory CGU full screen modal (#1531)
+  - Add rich PPTX multimodal on basic react agent v2 with vector search tool (#1529)
+  - Add Vertex Model Garden for embedding models & update MODEL_CONFIGURATION.md (#1525)
+
+- **Improvements**
+
+  - Improve temporal worker concurrency and add appropriate metrics (#1521)
+
+
 **v1.4.1** — 2026-04-13
 
 - **Bug Fixes**

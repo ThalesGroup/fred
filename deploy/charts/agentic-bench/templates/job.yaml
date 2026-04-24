@@ -1,3 +1,6 @@
+{{- $mode := include "agentic-bench.mode" . -}}
+{{- $common := .Values.bench.common -}}
+{{- $modeConfig := index .Values.bench.modes $mode -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -31,37 +34,65 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - "-url={{ .Values.bench.url }}"
-            - "-agent={{ .Values.bench.agent }}"
-            - "-message={{ .Values.bench.message }}"
-            - "-clients={{ .Values.bench.clients }}"
-            {{- if gt (int .Values.bench.requestsPerClient) 0 }}
-            - "-requests-per-client={{ .Values.bench.requestsPerClient }}"
+            - "-url={{ $common.url }}"
+            {{- if $common.agentUUID }}
+            - "-agent-uuid={{ $common.agentUUID }}"
             {{- else }}
-            - "-requests={{ .Values.bench.requests }}"
+            - "-agent={{ $common.agent }}"
             {{- end }}
-            - "-timeout={{ .Values.bench.timeoutSeconds }}s"
-            - "-session-title={{ .Values.bench.sessionTitle }}"
-            - "-prepare-concurrency={{ .Values.bench.prepareConcurrency }}"
-            {{- if not .Values.bench.createSession }}
+            - "-message={{ $common.message }}"
+            - "-clients={{ $common.clients }}"
+            {{- if $common.agentCreateURL }}
+            - "-agent-create-url={{ $common.agentCreateURL }}"
+            {{- end }}
+            {{- if and (not $common.agentUUID) $modeConfig.ensureV2DefinitionRef }}
+            - "-ensure-v2-definition-ref={{ $modeConfig.ensureV2DefinitionRef }}"
+            {{- end }}
+            {{- if and (not $common.agentUUID) $modeConfig.ensureV2ProfileID }}
+            - "-ensure-v2-profile-id={{ $modeConfig.ensureV2ProfileID }}"
+            {{- end }}
+            {{- if and (not $common.agentUUID) $modeConfig.ensureAgentName }}
+            - "-ensure-agent-name={{ $modeConfig.ensureAgentName }}"
+            {{- end }}
+            {{- if gt (int $common.requestsPerClient) 0 }}
+            - "-requests-per-client={{ $common.requestsPerClient }}"
+            {{- else }}
+            - "-requests={{ $common.requests }}"
+            {{- end }}
+            - "-timeout={{ $common.timeoutSeconds }}s"
+            - "-session-title={{ $common.sessionTitle }}"
+            - "-prepare-concurrency={{ $common.prepareConcurrency }}"
+            {{- if $modeConfig.searchPolicy }}
+            - "-search-policy={{ $modeConfig.searchPolicy }}"
+            {{- end }}
+            {{- if $modeConfig.searchRagScope }}
+            - "-search-rag-scope={{ $modeConfig.searchRagScope }}"
+            {{- end }}
+            {{- if gt (int $common.readLimitBytes) 0 }}
+            - "-read-limit-bytes={{ int $common.readLimitBytes }}"
+            {{- end }}
+            {{- if not $common.createSession }}
             - "-create-session=false"
             {{- end }}
-            {{- if not .Values.bench.deleteSession }}
+            {{- if not $common.deleteSession }}
             - "-delete-session=false"
             {{- end }}
-            {{- if not .Values.bench.prepareSessions }}
+            {{- if not $common.prepareSessions }}
             - "-prepare-sessions=false"
             {{- end }}
-            {{- if .Values.bench.insecureTLS }}
+            {{- if and (not $common.agentUUID) $modeConfig.deleteCreatedAgent }}
+            - "-delete-created-agent=true"
+            {{- end }}
+            {{- if $common.insecureTLS }}
             - "-insecure"
             {{- end }}
-            {{- if .Values.bench.tokenInQuery }}
+            {{- if $common.tokenInQuery }}
             - "-token-in-query"
             {{- end }}
-            {{- if .Values.bench.allowEmptyToken }}
+            {{- if $common.allowEmptyToken }}
             - "-allow-empty-token"
             {{- end }}
-            {{- with .Values.bench.extraArgs }}
+            {{- with $common.extraArgs }}
 {{ toYaml . | indent 12 }}
             {{- end }}
           {{- if .Values.tokenSecret.name }}

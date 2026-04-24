@@ -299,13 +299,21 @@ DefinitionT = TypeVar("DefinitionT", bound=AgentDefinition)
 class Executor(ABC, Generic[InputModelT, OutputModelT]):
     @abstractmethod
     async def invoke(
-        self, input_model: InputModelT, config: ExecutionConfig
+        self,
+        input_model: InputModelT,
+        config: ExecutionConfig,
+        *,
+        context: object | None = None,
     ) -> OutputModelT:
         """Execute the agent once and return the final output."""
 
     @abstractmethod
     def stream(
-        self, input_model: InputModelT, config: ExecutionConfig
+        self,
+        input_model: InputModelT,
+        config: ExecutionConfig,
+        *,
+        context: object | None = None,
     ) -> AsyncIterator[RuntimeEvent]:
         """Execute the agent and yield runtime events."""
 

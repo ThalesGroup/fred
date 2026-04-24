@@ -1,0 +1,71 @@
+.agentCreateEditModalContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: var(--spacing-m) var(--spacing-m) 0 var(--spacing-m);
+  padding: var(--spacing-xs) var(--spacing-m) 0 var(--spacing-m);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agentCreateEditModalHeader {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-xs) var(--spacing-xs);
+  width: 800px;
+}
+
+.agentCreateEditModalPresentation {
+  display: flex;
+  gap: var(--spacing-s);
+
+  .icon {
+    color: var(--on-surface);
+    font-size: 2rem;
+  }
+}
+
+.agentCreateEditModalPresentationTitle {
+  display: flex;
+  flex-direction: column;
+}
+
+.agentCreateEditModalTitle {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.agentCreateEditModalTeam {
+  color: var(--primary);
+  font: var(--font-title-small);
+}
+
+.agentCreateEditModalActions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-left: auto;
+}
+
+.agentCreateEditModalContentWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-xl);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.agentCreateEditModalContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 800px;
+}
+
+.deleteAction {
+  display: flex;
+}

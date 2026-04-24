@@ -67,6 +67,33 @@ class PostgresMetadataStore(BaseMetadataStore):
             row = await s.get(MetadataRow, document_uid)
         return self._from_row(row) if row else None
 
+    async def get_metadata_by_uids(self, document_uids: list[str], session: AsyncSession | None = None) -> list[DocumentMetadata]:
+        """
+        Return metadata documents for one targeted uid list with one SQL query.
+
+        Why this exists:
+        - High-cardinality authorization paths should fetch only the documents
+          already authorized by ReBAC instead of scanning the full metadata
+          table and filtering afterwards.
+
+        How to use:
+        - Pass the readable document uids for one request.
+        - The returned list preserves the input uid order for the uids that
+          exist in storage.
+
+        Example:
+        - `docs = await store.get_metadata_by_uids(["doc-1", "doc-2"])`
+        """
+        unique_uids = list(dict.fromkeys(document_uids))
+        if not unique_uids:
+            return []
+
+        async with use_session(self._sessions, session) as s:
+            rows = (await s.execute(select(MetadataRow).where(MetadataRow.document_uid.in_(unique_uids)))).scalars().all()
+
+        row_by_uid = {row.document_uid: row for row in rows}
+        return [self._from_row(row_by_uid[document_uid]) for document_uid in unique_uids if document_uid in row_by_uid]
+
     async def list_by_source_tag(self, source_tag: str, session: AsyncSession | None = None) -> List[DocumentMetadata]:
         async with use_session(self._sessions, session) as s:
             rows = (await s.execute(select(MetadataRow).where(MetadataRow.source_tag == source_tag))).scalars().all()

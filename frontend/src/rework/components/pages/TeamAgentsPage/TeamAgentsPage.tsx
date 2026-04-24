@@ -1,14 +1,15 @@
+import AgentCreateEditModal from "@components/pages/TeamAgentsPage/AgentCreateEditModal/AgentCreateEditModal.tsx";
+import TeamAgentContent from "@components/pages/TeamAgentsPage/TeamAgentContent/TeamAgentContent.tsx";
+import TeamAgentEmptyState from "@components/pages/TeamAgentsPage/TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AnyAgent } from "../../../../common/agent.ts";
-import { AgentCreateEditDrawer } from "../../../../components/agentHub/AgentCreateEditDrawer.tsx";
 import { useAgentUpdater } from "../../../../hooks/useAgentUpdater.ts";
 import { useListAgentsAgenticV1AgentsGetQuery } from "../../../../slices/agentic/agenticOpenApi.ts";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import styles from "./TeamAgentsPage.module.scss";
-import TeamAgentContent from "@components/pages/TeamAgentsPage/TeamAgentContent/TeamAgentContent.tsx";
-import TeamAgentEmptyState from "@components/pages/TeamAgentsPage/TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import styles from "./TeamAgentsPage.module.css";
 
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
@@ -53,19 +54,22 @@ export default function TeamAgentsPage() {
           onCreateAgent={handleOpenCreateAgent}
           onEditAgent={handleEdit}
           onToggleAgent={handleToggleEnabled}
+          canUpdateAgents={canUpdateAgents}
         />
       ) : (
-        <TeamAgentEmptyState onCreateAgent={handleOpenCreateAgent} />
+        <TeamAgentEmptyState onCreateAgent={handleOpenCreateAgent} canUpdateAgents={canUpdateAgents} />
       )}
-      <AgentCreateEditDrawer
-        canDelete={canUpdateAgents}
-        open={editOpen}
-        agent={selected}
-        teamId={teamId}
-        onClose={() => setEditOpen(false)}
-        onSaved={refetch}
-        onDeleted={refetch}
-      />
+      <FullPageModal isOpen={editOpen} onClose={() => setEditOpen(false)} id={"create-edit-agent-modal"}>
+        <AgentCreateEditModal
+          modalInteraction={{ close: () => setEditOpen(false) }}
+          teamName={team?.name}
+          agent={selected}
+          canDelete={canUpdateAgents}
+          teamId={isPersonalTeam ? undefined : teamId}
+          onDeleted={refetch}
+          onSaved={refetch}
+        />
+      </FullPageModal>
     </div>
   );
 }

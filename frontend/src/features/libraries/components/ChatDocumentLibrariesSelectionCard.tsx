@@ -3,13 +3,13 @@ import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import { Box, Checkbox, IconButton, TextField, Typography, useTheme } from "@mui/material";
+import { Box, Checkbox, IconButton, Skeleton, TextField, Typography, useTheme } from "@mui/material";
 import { SimpleTreeView } from "@mui/x-tree-view/SimpleTreeView";
 import { TreeItem } from "@mui/x-tree-view/TreeItem";
 import * as React from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TagNode, buildTree, collectDescendantTagIds, fullPath } from "../../../shared/utils/tagTree";
+import { TagNode, buildTree, collectDescendantTagIds } from "../../../shared/utils/tagTree";
 import {
   TagType,
   TagWithItemsId,
@@ -22,6 +22,8 @@ export interface ChatDocumentLibrariesSelectionCardProps {
   libraryType: TagType;
   teamId?: string;
   onClose?: () => void;
+  /** When set, only libraries whose id is in this list are shown in the picker. */
+  allowedLibraryIds?: string[];
 }
 
 function computeCheck(n: TagNode, selected: Set<string>) {
@@ -38,19 +40,13 @@ function filterTree(root: TagNode, q: string): TagNode {
   if (!q) return root;
   const needle = q.toLowerCase();
   const dfs = (n: TagNode): TagNode | null => {
-    const labelHit =
-      n.name.toLowerCase().includes(needle) ||
-      n.full.toLowerCase().includes(needle) ||
-      n.tagsHere.some(
-        (t) => (t.description ?? "").toLowerCase().includes(needle) || fullPath(t).toLowerCase().includes(needle),
-      );
+    const labelHit = n.name.toLowerCase().includes(needle) || n.full.toLowerCase().includes(needle);
     const keptChildren = new Map<string, TagNode>();
     for (const [k, ch] of n.children) {
       const fc = dfs(ch);
       if (fc) keptChildren.set(k, fc);
     }
-    if (n.full === "" || labelHit || keptChildren.size > 0 || n.tagsHere.length > 0)
-      return { ...n, children: keptChildren };
+    if (n.full === "" || labelHit || keptChildren.size > 0) return { ...n, children: keptChildren };
     return null;
   };
   return dfs(root) ?? { ...root, children: new Map() };
@@ -70,10 +66,15 @@ export function ChatDocumentLibrariesSelectionCard({
   libraryType,
   teamId,
   onClose,
+  allowedLibraryIds,
 }: ChatDocumentLibrariesSelectionCardProps) {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { data: libraries = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+  const {
+    data: libraries = [],
+    isLoading,
+    isError,
+  } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
     type: libraryType,
     ownerFilter: teamId ? "team" : "personal",
     teamId: teamId,
@@ -81,7 +82,12 @@ export function ChatDocumentLibrariesSelectionCard({
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
 
-  const libs = useMemo<TagWithItemsId[]>(() => libraries as TagWithItemsId[], [libraries]);
+  const libs = useMemo<TagWithItemsId[]>(() => {
+    const all = libraries as TagWithItemsId[];
+    if (!allowedLibraryIds) return all;
+    const allowed = new Set(allowedLibraryIds);
+    return all.filter((lib) => allowed.has(lib.id));
+  }, [libraries, allowedLibraryIds]);
   const tree = useMemo(() => buildTree(libs), [libs]);
   const filtered = useMemo(() => filterTree(tree, search), [tree, search]);
   const selected = useMemo(() => new Set(selectedLibrariesIds), [selectedLibrariesIds]);
@@ -171,7 +177,6 @@ export function ChatDocumentLibrariesSelectionCard({
     <Box
       sx={{
         width: "100%",
-        maxWidth: 420,
         height: "min(70vh, 460px)",
         display: "flex",
         flexDirection: "column",
@@ -195,13 +200,25 @@ export function ChatDocumentLibrariesSelectionCard({
       </Box>
 
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", px: 1, pb: 1.5 }}>
-        <SimpleTreeView
-          expandedItems={search ? expandedWhenSearching : expanded}
-          onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
-          slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
-        >
-          {renderTree(filtered)}
-        </SimpleTreeView>
+        {isLoading ? (
+          <Box sx={{ px: 1, pt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} variant="rounded" height={34} />
+            ))}
+          </Box>
+        ) : isError ? (
+          <Typography variant="body2" sx={{ px: 2, py: 1, color: "error.main" }}>
+            {t("common.failToLoad")}
+          </Typography>
+        ) : (
+          <SimpleTreeView
+            expandedItems={search ? expandedWhenSearching : expanded}
+            onExpandedItemsChange={(_, ids) => setExpanded(ids as string[])}
+            slots={{ expandIcon: KeyboardArrowRightIcon, collapseIcon: KeyboardArrowDownIcon }}
+          >
+            {renderTree(filtered)}
+          </SimpleTreeView>
+        )}
       </Box>
     </Box>
   );

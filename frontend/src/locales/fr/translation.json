@@ -22,7 +22,8 @@
     "loadingPreview": "Aperçu en cours de chargement...",
     "loadingPreviewError": "Impossible de charger l'aperçu.",
     "view": "Aperçu",
-    "contactSupport": "Contacter l'équipe support."
+    "contactSupport": "Contacter l'équipe support.",
+    "failToLoad": "Impossible de charger les resources"
   },
   "dataHub": {
     "title": "Hub des Données - Lignage des documents",
@@ -396,7 +397,9 @@
       },
       "chat_options_libraries_selection": {
         "title": "Sélecteur de bibliothèques de documents",
-        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent."
+        "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent.",
+        "library_selection": "Base de connaissance",
+        "library_selection_description": "Sélectionner les ressources exploitables par le {{agentsNicknameSingular}}"
       }
     }
   },
@@ -646,7 +649,7 @@
       "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
     },
     "attachFiles": "Joindre des fichiers",
-    "addLibraries": "Ajouter des bibliothèques",
+    "addLibraries": "Sélectionner des dossiers",
     "addDocuments": "Ajouter des documents",
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
@@ -678,12 +681,12 @@
       }
     },
     "libraries": {
-      "disabledByDocuments": "La sélection de documents est active. Désactivez les documents pour utiliser les bibliothèques.",
-      "includeToggle": "Basculer la recherche sur les bibliothèques",
-      "includeTooltipOn": "Les bibliothèques sont incluses dans la recherche pour cette conversation.",
-      "includeTooltipOff": "Les bibliothèques sont exclues de la recherche pour cette conversation.",
-      "empty": "Aucune bibliothèque sélectionnée. Toutes les bibliothèques de documents visibles seront recherchées.",
-      "previewTitle": "Bibliothèque",
+      "disabledByDocuments": "La sélection de documents est active. Désactivez les documents pour utiliser les dossiers.",
+      "includeToggle": "Basculer la recherche sur les dossiers",
+      "includeTooltipOn": "Les dossiers sont incluses dans la recherche pour cette conversation.",
+      "includeTooltipOff": "Les dossiers sont exclues de la recherche pour cette conversation.",
+      "empty": "Aucun dossier sélectionnée. La recherche ne retournera aucun résultat.",
+      "previewTitle": "Dossiers",
       "noDescription": "Aucune description disponible."
     },
     "uploadingFile": "Téléversement de {{name}}...",
@@ -1004,17 +1007,17 @@
     "title": "{{typePlural}}",
     "edit": "Modifier",
     "preview": "Aperçu",
-    "createLibrary": "Créer une bibliothèque",
+    "createLibrary": "Créer un dossier",
     "createResource": "Créer un {{typeOne}}",
     "editResource": "Éditer un {{typeOne}}",
     "importResource": "Importer un {{typeOne}} depuis un fichier",
     "folders": "Dossiers",
-    "loadingLibraries": "Chargement des bibliothèques…",
-    "failedToLoad": "Échec du chargement des bibliothèques.",
+    "loadingLibraries": "Chargement des dossiers…",
+    "failedToLoad": "Échec du chargement des dossiers.",
     "createSuccess": "Créé",
-    "createDetail": "{{typeOne, capitalize}} ajouté à la bibliothèque.",
+    "createDetail": "{{typeOne, capitalize}} ajouté au dossier.",
     "removeSuccess": "Supprimé",
-    "removeDetail": "{{typeOne, capitalize}} supprimé de la bibliothèque.",
+    "removeDetail": "{{typeOne, capitalize}} supprimé du dossier.",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
     "folderDeleteSuccess": "Dossier supprimé",
@@ -1022,7 +1025,7 @@
     "folderDeleteForbiddenSummary": "Non autorisé",
     "folderDeleteForbiddenDetail": "Seul les propriétaires peuvent supprimer la bibliothèque « {{name}} ».",
     "removeForbiddenSummary": "Non autorisé",
-    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments de la bibliothèque « {{folder}} ».",
+    "removeForbiddenDetail": "Seul les propriétaires peuvent supprimer des éléments du dossier « {{folder}} ».",
     "searchPlaceholder": "Rechercher un(e) {{typeOne}}",
     "importDrawerTitle": "Importer un(e) {{typeOne}}",
     "dropFiles": "Déposez vos {{typePlural}} ici",
@@ -1037,9 +1040,9 @@
     "removedOneResource": "{{typeOne, capitalize}} supprimé(e) de la bibliothèque.",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
     "confirmRemoveMessage": "Supprimer « {{res}} » de « {{folder}} » ?",
-    "emptyLibrariesTitle": "Aucune bibliothèque pour le moment",
-    "emptyLibrariesDescription": "Créez votre première bibliothèque pour organiser vos {{typePlural}}.",
-    "emptyLibrariesAction": "Créer une bibliothèque"
+    "emptyLibrariesTitle": "Aucun dossier pour le moment",
+    "emptyLibrariesDescription": "Créez votre premier dossier pour organiser vos {{typePlural}}.",
+    "emptyLibrariesAction": "Créer un dossier"
   },
   "documentLibraryTree": {
     "shareFolder": "Partager le dossier",
@@ -1096,24 +1099,24 @@
     "createLibrary": "Créer dossier",
     "collapseAll": "Tout réduire",
     "expandAll": "Tout développer",
-    "emptyFoldersTitle": "Aucune bibliothèque pour le moment",
-    "emptyFoldersDescription": "Créez votre première bibliothèque pour organiser les documents et garder les ajouts rangés.",
-    "emptyFoldersAction": "Créer une bibliothèque"
+    "emptyFoldersTitle": "Aucun dossier pour le moment",
+    "emptyFoldersDescription": "Créez votre premier dossier pour organiser les documents et garder les ajouts rangés.",
+    "emptyFoldersAction": "Créer un dossier"
   },
   "libraryCreateDrawer": {
-    "title": "Créer une nouvelle bibliothèque",
+    "title": "Créer un nouveau dossier",
     "libraryName": "Nom",
     "libraryDescription": "Description",
     "cancel": "Annuler",
     "save": "Créer",
-    "createUnder": "Créer une  nouvelle bibliothèque sous",
+    "createUnder": "Créer un nouveau dossier sous",
     "saving": "Création en cours...",
     "validationError": "Erreur de validation",
-    "nameRequired": "Le nom de la bibliothèque est obligatoire",
-    "libraryCreated": "Bibliothèque créée",
-    "libraryCreatedDetail": "La bibliothèque \"{{name}}\" a été créée avec succès",
+    "nameRequired": "Le nom du dossier est obligatoire",
+    "libraryCreated": "Dossier créée",
+    "libraryCreatedDetail": "Le dossier \"{{name}}\" a été créée avec succès",
     "creationFailed": "Échec de la création",
-    "creationFailedDetail": "Erreur lors de la création de la bibliothèque : {{error}}"
+    "creationFailedDetail": "Erreur lors de la création de la dossier : {{error}}"
   },
   "libraryEdit": {
     "edit": "Modifier",
@@ -1294,7 +1297,7 @@
       "members": "Membres",
       "settings": "Paramètres"
     },
-    "noAgents": "Aucun agent d'équipe configuré pour le moment. Créez votre premier agent d'équipe pour commencer."
+    "noAgents": "Aucun {{agentsNicknameSingular}} d'équipe configuré pour le moment. Créez votre premier {{agentsNicknameSingular}} d'équipe pour commencer."
   },
   "appCard": {
     "launch": "Lancer"
@@ -1311,6 +1314,9 @@
   },
   "rework": {
     "back": "Retour",
+    "create": "Créer",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
     "agentCard": {
       "startChat": "Nouveau chat"
     },
@@ -1320,7 +1326,8 @@
       "owner": "Propriétaire"
     },
     "teamCard": {
-      "memberCount": "{{count}} membres"
+      "memberCount": "{{count}} membres",
+      "join": "Rejoindre"
     },
     "sidebar": {
       "team": {
@@ -1358,7 +1365,9 @@
       "conversationProfile": {
         "title": "Profil de conversation",
         "placeholder": "Indiquez ici qui vous êtes, ce que vous faites et comment vos {{agentsNicknamePlural}} doivent s’adresser à vous."
-      }
+      },
+      "accessGcu": "Accéder aux CGU",
+      "accessGdpr": "Que fait {{siteTitle}} {{siteSubtitle}} de mes données ?"
     },
     "teamSettings": {
       "navigation": {
@@ -1406,7 +1415,26 @@
         "title": "Sollicitez vos {{agentsNicknamePlural}}",
         "create": "Créer {{agentsNicknameSingular}}",
         "firstTitle": "Créez votre premier {{agentsNicknameSingular}} !",
+        "noAgent": "Aucun {{agentsNicknameSingular}} dans cette équipe !",
         "firstCreate": "Créer"
+      },
+      "formAgent": {
+        "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
+        "titleEdit": "Editer {{agent}}",
+        "fields": {
+          "name": {
+            "placeholder": "Entrez un nom original",
+            "label": "Nom"
+          },
+          "role": {
+            "placeholder": "Quel est le rôle qu’incarne votre {{agentsNicknameSingular}} ?",
+            "label": "Rôle"
+          },
+          "description": {
+            "placeholder": "Décrivez votre {{agentsNicknameSingular}} pour les autres utilisateurs",
+            "label": "Description"
+          }
+        }
       }
     },
     "marketplace": {
@@ -1415,6 +1443,16 @@
         "yourTeams": "Vos équipes",
         "otherTeams": "Découvrez d'autres équipes"
       }
+    },
+    "gcu": {
+      "title": "Conditions Générales d’Utilisation (CGU)",
+      "lockInformation": "Lire les CGU avant de pouvoir les accepter",
+      "validate": "Accepter les CGU",
+      "backToApp": "Retourner à l'application"
+    },
+    "gdpr": {
+      "title": "Politique de confidentialité",
+      "backToApp": "Retourner à l'application"
     }
   }
 }

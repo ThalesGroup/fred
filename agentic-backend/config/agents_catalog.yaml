@@ -63,10 +63,50 @@ agents:
     type: "agent"
     definition_ref: "v2.production.dva_risk_validator.qa"
 
+  - id: "Luigi"
+    name: "Luigi"
+    type: "agent"
+    class_path: "agentic_backend.agents.v1.production.contrib.ppt_filler.ppt_filler_agent.PptFillerAgent"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+      attach_files: true
+
+  - id: "Luigi v2"
+    name: "Luigi v2"
+    type: "agent"
+    definition_ref: "v2.production.ppt_filler"
+
+  - id: "Raph"
+    name: "Raph"
+    type: "agent"
+    class_path: "agentic_backend.agents.v1.production.contrib.reference_editor.reference_editor.ReferenceEditor"
+    enabled: true
+
+  - id: "Jim"
+    name: "Jim"
+    type: "agent"
+    class_path: "agentic_backend.agents.v1.production.contrib.jira.jira_agent.JiraAgent"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+      attach_files: true
+
+  - id: "Bid Mgr"
+    name: "Bid Mgr"
+    type: "agent"
+    class_path: "agentic_backend.agents.v1.production.contrib.bid_and_capture.bid_mgr.bid_mgr.BidMgr"
+    enabled: true
+    chat_options:
+      libraries_selection: true
+      attach_files: true
+
 react_profiles:
   - profile_id: "custodian"
     enabled: true
   - profile_id: "rag_expert"
     enabled: true
   - profile_id: "sentinel"
+    enabled: true
+  - profile_id: "log_genius"
     enabled: true

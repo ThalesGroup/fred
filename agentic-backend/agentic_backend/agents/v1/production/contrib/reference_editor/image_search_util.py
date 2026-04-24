@@ -16,7 +16,7 @@ import io
 import logging
 from typing import Optional
 
-from fred_core import OwnerFilter
+from fred_core.common import OwnerFilter
 
 logger = logging.getLogger(__name__)
 _ALLOWED_SEARCH_OPTION_KEYS = {

@@ -1,4 +1,4 @@
-# Copyright Thales 2025
+# Copyright Thales 2026
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,123 +12,375 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
+from __future__ import annotations
 
-FORBIDDEN_KEYWORDS_READ = [
-    # Locking / concurrency
-    " for update",
-    " for share",
-    " lock in share mode",
-    " for no key update",
-    " for key share",
-    # Select… into (creates objects)
-    "into temp",
-    "into temporary",
-    "into outfile",
-    "into dumpfile",
-    # DML
-    " insert ",
-    " update ",
-    " delete ",
-    " merge ",
-    " replace ",  # Myquery
-    # DDL
-    " alter ",
-    " drop ",
-    " create ",
-    " truncate ",
-    " rename ",
-    # Procedures / execution
-    " call ",
-    " exec ",
-    " execute ",
-    " do ",  # Postgres, query Server
-    " pragma ",  # queryite
-    # System/session modification
-    " set ",
-    " use ",  # Myquery
-    " attach database",
-    " detach database",
-    # File/IO
-    " load_file",
-    " load data",
-    " copy ",  # Postgres
-    # System schemas
-    "pg_",
-    "queryite_",
-    "sys.",
-    "information_schema",
-    "myquery.",
-    # Transactions
-    " begin ",
-    " commit ",
-    " rollback ",
-    " savepoint ",
-    " release savepoint",
-    # Dangerous maintenance ops
-    " vacuum ",
-    " analyze ",
-    " reindex ",
-    " optimize ",
-]
+import json
+from typing import Any, Iterable
 
-FORBIDDEN_KEYWORDS_WRITE = [
-    # DDL
-    "truncate",
-    # Procedures / execution
-    "call",
-    "exec",
-    "execute",
-    "do",
-    "pragma",
-    # System/session modification
-    "set",
-    "use",
-    "attach database",
-    "detach database",
-    # File/IO
-    "load_file",
-    "load data",
-    "copy",
-    # System schemas
-    "pg_",
-    "queryite_",
-    "sys.",
-    "information_schema",
-    "myquery.",
-    # Maintenance ops
-    "vacuum",
-    "analyze",
-    "reindex",
-    "optimize",
-]
+import duckdb
 
 
-def check_read_query(query: str) -> str:
-    # 1. Must start with "select" or "with"
-    if not (query.startswith("select") or query.startswith("with")):
+def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None = None) -> str:
+    """
+    Validate one read-only SQL query before execution.
+
+    Why this exists:
+    - The dataset-centric runtime accepts user/LLM SQL, so it must reject
+      writes, multi-statements, and unexpected relation references early.
+
+    How to use:
+    - Call this before mounting the query in DuckDB.
+    - Pass `allowed_relations` to ensure the query only references aliases that
+      the current session is allowed to expose.
+
+    Example:
+    ```python
+    sql_text = validate_read_query(
+        "SELECT city FROM d_doc_sales LIMIT 10",
+        allowed_relations={"d_doc_sales"},
+    )
+    ```
+    """
+
+    normalized = query.strip().rstrip(";").strip()
+    if not normalized:
+        raise ValueError("Empty SQL string provided")
+
+    statement = _parse_read_statement(normalized)
+
+    if allowed_relations is not None:
+        allowed_names = {_normalize_identifier(name) for name in allowed_relations}
+        cte_names = collect_cte_names(statement)
+        referenced_relations = collect_relation_names(statement)
+        disallowed_relations = sorted(relation_name for relation_name in referenced_relations if relation_name not in allowed_names and relation_name not in cte_names)
+        if disallowed_relations:
+            raise ValueError(f"Query references unauthorized datasets: {', '.join(disallowed_relations)}")
+
+    return normalized
+
+
+def collect_cte_names(statement: dict[str, Any]) -> set[str]:
+    """
+    Collect common-table-expression names declared in one DuckDB AST statement.
+
+    Why this exists:
+    - Read-only validation must allow references to local CTE names while still
+      blocking unknown dataset aliases.
+
+    How to use:
+    - Call this on the parsed statement returned by `_parse_read_statement(...)`
+      before checking relation references.
+
+    Example:
+    ```python
+    statement = _parse_read_statement("WITH scoped AS (SELECT * FROM d_sales) SELECT * FROM scoped")
+    cte_names = collect_cte_names(statement)
+    ```
+    """
+
+    names: set[str] = set()
+    for cte_entry in _cte_entries(statement):
+        cte_name = cte_entry.get("key")
+        if isinstance(cte_name, str) and cte_name.strip():
+            names.add(_normalize_identifier(cte_name))
+
+    return names
+
+
+def collect_relation_names(statement: dict[str, Any]) -> set[str]:
+    """
+    Collect relation names referenced anywhere in one DuckDB AST statement.
+
+    Why this exists:
+    - Authorization is enforced by the aliases mounted in DuckDB, but read
+      validation must reject any other relation source before execution.
+    - Walking the DuckDB AST closes gaps left by token-based checks, including
+      `NATURAL JOIN`, schema-qualified system tables, and nested subqueries.
+
+    How to use:
+    - Pass the parsed statement returned by `_parse_read_statement(...)`.
+
+    Example:
+    ```python
+    statement = _parse_read_statement("SELECT * FROM d_sales JOIN d_targets USING (city)")
+    relation_names = collect_relation_names(statement)
+    ```
+    """
+
+    return _collect_relation_names_from_ast(statement, visible_cte_names=frozenset())
+
+
+def quote_identifier(identifier: str) -> str:
+    """
+    Quote one SQL identifier for DuckDB statements.
+
+    Why this exists:
+    - Dataset aliases are generated by Fred, but quoting keeps the view creation
+      statements safe and readable.
+
+    How to use:
+    - Wrap temp view names before interpolating them in SQL.
+
+    Example:
+    ```python
+    sql_name = quote_identifier("d_doc_sales")
+    ```
+    """
+
+    escaped = identifier.replace('"', '""')
+    return f'"{escaped}"'
+
+
+def quote_string_literal(value: str) -> str:
+    """
+    Quote one SQL string literal for DuckDB statements.
+
+    Why this exists:
+    - Object-store paths and presigned URLs are runtime values that need safe
+      embedding inside `read_parquet(...)` calls.
+
+    How to use:
+    - Wrap file paths or URLs before interpolating them in SQL.
+    """
+
+    escaped = value.replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _parse_read_statement(query: str) -> dict[str, Any]:
+    """
+    Parse one read-only SQL statement with DuckDB and return its AST node.
+
+    Why this exists:
+    - DuckDB is the engine that will execute the query, so using its own parser
+      keeps validation aligned with the grammar actually accepted at runtime.
+    - The AST is needed to inspect every relation source structurally instead of
+      relying on keyword heuristics.
+
+    How to use:
+    - Pass the normalized SQL text from `validate_read_query(...)`.
+    - Use the returned node with `collect_cte_names(...)` and
+      `collect_relation_names(...)`.
+
+    Example:
+    ```python
+    statement = _parse_read_statement("SELECT * FROM d_sales")
+    ```
+    """
+
+    try:
+        statements = [statement for statement in duckdb.extract_statements(query) if statement.query.strip()]
+    except duckdb.Error as exc:
+        raise ValueError(f"Invalid SQL query: {exc}") from exc
+
+    if len(statements) != 1:
+        raise ValueError("Exactly one SQL statement is allowed")
+
+    if statements[0].type.name != "SELECT":
         raise ValueError("Only SELECT or WITH statements are allowed in read-only mode")
 
-    # 2. No multiple statements
-    if ";" in query.rstrip(";"):
-        raise ValueError("Multiple query statements are not allowed")
+    parser_connection = duckdb.connect(database=":memory:")
+    try:
+        serialized = parser_connection.execute("SELECT json_serialize_sql(?)", [query]).fetchone()
+    finally:
+        parser_connection.close()
 
-    # 3. Block dangerous keywords
-    for keyword in FORBIDDEN_KEYWORDS_READ:
-        if re.search(rf"\b{keyword}\b", query, flags=re.IGNORECASE):
-            raise ValueError("Forbidden query pattern in read-only mode")
+    if not serialized or serialized[0] is None:
+        raise ValueError("Unable to parse SQL query")
 
-    return query
+    payload = json.loads(serialized[0])
+    if payload.get("error"):
+        error_message = payload.get("error_message") or "Unable to parse SQL query"
+        raise ValueError(error_message)
+
+    serialized_statements = payload.get("statements", [])
+    if len(serialized_statements) != 1:
+        raise ValueError("Exactly one SQL statement is allowed")
+
+    statement = serialized_statements[0].get("node")
+    if not isinstance(statement, dict):
+        raise ValueError("Unable to parse SQL query")
+
+    return statement
 
 
-def check_write_query(query: str) -> str:
-    # 1. No multiple statements
-    if ";" in query.rstrip(";"):
-        raise ValueError("Multiple query statements are not allowed")
+def _cte_entries(statement: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Return normalized CTE entries from one DuckDB AST statement.
 
-    # 2. Block dangerous keywords
-    for keyword in FORBIDDEN_KEYWORDS_WRITE:
-        if re.search(rf"\b{keyword}\b", query, flags=re.IGNORECASE):
-            raise ValueError("Forbidden query pattern in write mode")
+    Why this exists:
+    - DuckDB stores CTE declarations under `cte_map.map`, and callers need one
+      safe helper so malformed payloads do not break validation.
 
-    return query
+    How to use:
+    - Pass the parsed statement returned by `_parse_read_statement(...)`.
+    """
+
+    cte_map = statement.get("cte_map")
+    if not isinstance(cte_map, dict):
+        return []
+
+    cte_entries = cte_map.get("map")
+    if not isinstance(cte_entries, list):
+        return []
+
+    return [entry for entry in cte_entries if isinstance(entry, dict)]
+
+
+def _collect_relation_names_from_ast(node: Any, *, visible_cte_names: frozenset[str]) -> set[str]:
+    """
+    Walk one DuckDB AST fragment and collect every referenced relation source.
+
+    Why this exists:
+    - Queries can hide relation reads inside joins, scalar subqueries, `EXISTS`,
+      or CTE definitions, so validation must recurse through the whole AST.
+
+    How to use:
+    - Pass the parsed statement node or any nested child node.
+    - Provide the CTE names visible in the current scope.
+    """
+
+    if isinstance(node, dict):
+        node_type = node.get("type")
+
+        if node_type == "SELECT_NODE":
+            local_cte_names = frozenset(collect_cte_names(node))
+            scoped_cte_names = visible_cte_names | local_cte_names
+            collected_names: set[str] = set()
+
+            for cte_entry in _cte_entries(node):
+                cte_query = _cte_query_node(cte_entry)
+                if cte_query is not None:
+                    collected_names.update(_collect_relation_names_from_ast(cte_query, visible_cte_names=scoped_cte_names))
+
+            for key, value in node.items():
+                if key == "cte_map":
+                    continue
+                collected_names.update(_collect_relation_names_from_ast(value, visible_cte_names=scoped_cte_names))
+            return collected_names
+
+        if node_type == "BASE_TABLE":
+            return _relation_names_from_base_table(node, visible_cte_names=visible_cte_names)
+
+        if node_type == "TABLE_FUNCTION":
+            return _relation_names_from_table_function(node)
+
+        child_names: set[str] = set()
+        for value in node.values():
+            child_names.update(_collect_relation_names_from_ast(value, visible_cte_names=visible_cte_names))
+        return child_names
+
+    if isinstance(node, list):
+        list_names: set[str] = set()
+        for item in node:
+            list_names.update(_collect_relation_names_from_ast(item, visible_cte_names=visible_cte_names))
+        return list_names
+
+    return set()
+
+
+def _cte_query_node(cte_entry: dict[str, Any]) -> dict[str, Any] | None:
+    """
+    Return the parsed query node stored inside one CTE entry.
+
+    Why this exists:
+    - DuckDB nests each CTE definition under `value.query.node`, and relation
+      validation needs one reusable extractor for that shape.
+
+    How to use:
+    - Pass one mapping from `_cte_entries(...)`.
+    """
+
+    cte_value = cte_entry.get("value")
+    if not isinstance(cte_value, dict):
+        return None
+
+    query = cte_value.get("query")
+    if not isinstance(query, dict):
+        return None
+
+    node = query.get("node")
+    return node if isinstance(node, dict) else None
+
+
+def _relation_names_from_base_table(node: dict[str, Any], *, visible_cte_names: frozenset[str]) -> set[str]:
+    """
+    Return one canonical relation name for a DuckDB `BASE_TABLE` node.
+
+    Why this exists:
+    - Dataset allowlisting should match only the Fred-mounted aliases, while
+      schema-qualified tables must stay distinguishable and rejectable.
+
+    How to use:
+    - Call for AST nodes whose `type` is `BASE_TABLE`.
+    """
+
+    table_name = node.get("table_name")
+    if not isinstance(table_name, str) or not table_name.strip():
+        return set()
+
+    normalized_table = _normalize_identifier(table_name)
+    schema_name = _optional_identifier(node.get("schema_name"))
+    catalog_name = _optional_identifier(node.get("catalog_name"))
+
+    if schema_name is None and catalog_name is None and normalized_table in visible_cte_names:
+        return set()
+
+    parts = [part for part in (catalog_name, schema_name, normalized_table) if part]
+    return {".".join(parts)}
+
+
+def _relation_names_from_table_function(node: dict[str, Any]) -> set[str]:
+    """
+    Return one canonical relation name for a DuckDB `TABLE_FUNCTION` node.
+
+    Why this exists:
+    - Table functions such as `read_parquet(...)` are external relation sources
+      and must never be mistaken for mounted dataset aliases.
+
+    How to use:
+    - Call for AST nodes whose `type` is `TABLE_FUNCTION`.
+    """
+
+    function = node.get("function")
+    if not isinstance(function, dict):
+        return {"table_function()"}
+
+    function_name = function.get("function_name")
+    if not isinstance(function_name, str) or not function_name.strip():
+        return {"table_function()"}
+
+    return {f"{_normalize_identifier(function_name)}()"}
+
+
+def _optional_identifier(value: object) -> str | None:
+    """
+    Normalize one optional AST identifier when it is present.
+
+    Why this exists:
+    - DuckDB AST fields such as `schema_name` and `catalog_name` can be empty,
+      and relation validation needs one helper to normalize or skip them.
+
+    How to use:
+    - Pass any raw AST field value and use the returned normalized identifier or
+      `None` when the field is empty.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return _normalize_identifier(value)
+
+
+def _normalize_identifier(value: str) -> str:
+    """
+    Normalize one SQL identifier for allowlist comparisons.
+
+    Why this exists:
+    - Dataset aliases and AST identifiers can arrive quoted or mixed-case, and
+      validation should compare them using one canonical representation.
+
+    How to use:
+    - Pass a raw identifier extracted from user SQL or the DuckDB AST.
+    """
+
+    return value.strip().strip('"').strip("`").strip("[").strip("]").lower()

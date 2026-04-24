@@ -71,6 +71,7 @@ class CompiledReActAgent(Protocol):
         input: object,
         *,
         config: Mapping[str, object] | None = None,
+        context: object | None = None,
     ) -> dict[str, list[BaseMessage]]: ...
 
     def astream(
@@ -78,6 +79,7 @@ class CompiledReActAgent(Protocol):
         input: object,
         *,
         config: Mapping[str, object] | None = None,
+        context: object | None = None,
         stream_mode: str | list[str],
     ) -> AsyncIterator[object]: ...
 

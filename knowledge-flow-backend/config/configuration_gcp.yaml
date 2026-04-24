@@ -173,6 +173,15 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
         - suffix: ".ico"
           class_path: knowledge_flow_backend.core.processors.input.image_processor.image_processor.ImageProcessor
+# attachment_processors:
+#   - suffix: ".pdf"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
+#   - suffix: ".docx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
+#   - suffix: ".pptx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
+#   - suffix: ".csv"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
 
 security:
   m2m:
@@ -199,6 +208,9 @@ scheduler:
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    ingestion_workflow_parallelism: 3
+    ingestion_max_concurrent_workflow_tasks: 3
+    ingestion_max_concurrent_activities: 3
 
 content_storage:
   type: "local"
@@ -270,15 +282,18 @@ storage:
     type: "postgres"
   task_store:
     type: "postgres"
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
   vector_store:
     type: chroma
-  tabular_stores:
-    base_database: # Minimal configuration to enable CSV document ingestion
-      type: "sql"
-      driver: "duckdb"
-      database: "base_database"
-      path: "~/.fred/knowledge-flow/db.duckdb"
-      mode: "read_and_write"
 
 # integrations:
 #   prometheus:

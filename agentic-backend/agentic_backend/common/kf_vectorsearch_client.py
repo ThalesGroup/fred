@@ -15,7 +15,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, Collection, Dict, List, Optional, Sequence
 
 from fred_core.common import OwnerFilter
 from fred_core.store import VectorSearchHit
@@ -25,10 +26,24 @@ from agentic_backend.common.kf_base_client import (
     KfBaseClient,
     KnowledgeFlowAgentContext,
 )
+from agentic_backend.common.structures import AgentSettings
+from agentic_backend.core.agents.runtime_context import RuntimeContext
+from agentic_backend.integrations.kf_vector_search.kf_vector_search_params import (
+    KF_VECTOR_SEARCH_PROVIDER,
+    KfVectorSearchParams,
+)
 
 logger = logging.getLogger(__name__)
 
 _HITS = TypeAdapter(List[VectorSearchHit])
+
+
+@dataclass(frozen=True)
+class PreviewArtifactBlob:
+    bytes: bytes
+    content_type: str
+    filename: str
+    size: int
 
 
 class VectorSearchClient(KfBaseClient):
@@ -42,7 +57,55 @@ class VectorSearchClient(KfBaseClient):
     def __init__(self, agent: KnowledgeFlowAgentContext):
         super().__init__(
             agent=agent,
-            allowed_methods=frozenset({"POST"}),
+            allowed_methods=frozenset({"GET", "POST"}),
+        )
+
+    async def agent_search(
+        self,
+        *,
+        agent_settings: AgentSettings,
+        runtime_context: RuntimeContext,
+        question: str,
+        top_k: int,
+        document_library_tags_ids: Optional[Collection[str]] = None,
+        document_uids: Optional[Collection[str]] = None,
+    ) -> List[VectorSearchHit]:
+        """Simplified search method for use within agent tools, which infers auth
+        and other parameters from the agent settings and runtime context.
+
+        Library scope is resolved as a three-level intersection (broadest → narrowest):
+          1. creator scope  — set at agent creation time via MCPServerRef.params
+          2. user scope     — runtime_context.selected_document_libraries_ids chosen by the user
+          3. LLM scope      — document_library_tags_ids chosen by the agent for this call
+        """
+        kf_params = _get_kf_vector_search_params(agent_settings)
+
+        # Apply the three-level intersection: creator ∩ user ∩ LLM.
+        final_document_library_tags_ids = _intersect_or_fallback(
+            _intersect_or_fallback(
+                kf_params.document_library_tags_ids,
+                runtime_context.selected_document_libraries_ids,
+            ),
+            document_library_tags_ids,
+        )
+        final_document_uids = _intersect_or_fallback(
+            document_uids, runtime_context.selected_document_uids
+        )
+
+        return await self.search(
+            question=question,
+            top_k=top_k,
+            document_library_tags_ids=final_document_library_tags_ids,
+            document_uids=final_document_uids,
+            # Inferred from agent settings and runtime context:
+            search_policy=runtime_context.search_policy,
+            owner_filter=OwnerFilter.TEAM
+            if agent_settings.team_id
+            else OwnerFilter.PERSONAL,
+            team_id=agent_settings.team_id,
+            session_id=runtime_context.session_id,
+            include_session_scope=runtime_context.include_session_scope or True,
+            include_corpus_scope=runtime_context.include_corpus_scope or True,
         )
 
     async def search(
@@ -50,8 +113,8 @@ class VectorSearchClient(KfBaseClient):
         *,
         question: str,
         top_k: int = 10,
-        document_library_tags_ids: Optional[Sequence[str]] = None,
-        document_uids: Optional[Sequence[str]] = None,
+        document_library_tags_ids: Optional[Collection[str]] = None,
+        document_uids: Optional[Collection[str]] = None,
         search_policy: Optional[str] = None,
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
@@ -79,7 +142,7 @@ class VectorSearchClient(KfBaseClient):
           }
         """
         payload: Dict[str, Any] = {"question": question, "top_k": top_k}
-        if document_library_tags_ids:
+        if document_library_tags_ids is not None:
             payload["document_library_tags_ids"] = list(document_library_tags_ids)
         if document_uids:
             payload["document_uids"] = list(document_uids)
@@ -123,6 +186,30 @@ class VectorSearchClient(KfBaseClient):
             return []
         return _HITS.validate_python(raw)
 
+    async def fetch_preview_artifact(
+        self,
+        *,
+        document_uid: str,
+        artifact_path: str,
+    ) -> PreviewArtifactBlob:
+        r = await self._request_with_token_refresh(
+            method="GET",
+            path=f"/markdown/{document_uid}/artifact/{artifact_path}",
+            phase_name="kf_preview_artifact_fetch",
+        )
+        r.raise_for_status()
+
+        content = r.content
+        content_type = r.headers.get("Content-Type", "application/octet-stream")
+        filename = artifact_path.split("/")[-1] or "artifact.bin"
+
+        return PreviewArtifactBlob(
+            bytes=content,
+            content_type=content_type,
+            filename=filename,
+            size=len(content),
+        )
+
     async def rerank(
         self,
         *,
@@ -161,3 +248,42 @@ class VectorSearchClient(KfBaseClient):
             logger.warning("Unexpected vector rerank payload type: %s", type(raw))
             return []
         return _HITS.validate_python(raw)
+
+
+def _intersect_or_fallback(
+    a: Optional[Collection[str]], b: Optional[Collection[str]]
+) -> Optional[Collection[str]]:
+    """Return the intersection when both sides are set, otherwise whichever is non-None.
+
+    Semantics:
+    - None means "no restriction at this level" — passes through whatever the other level sets.
+    - [] (empty collection) means "explicitly no libraries" — an explicit empty on either side
+      propagates through and results in no results when both sides are set.
+    - When both are non-None: return the intersection (may be an empty set).
+    - When one side is None: return the other side unchanged (preserving [] vs populated list).
+    """
+    if a is None and b is None:
+        return None
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return set(a) & set(b)
+
+
+def _get_kf_vector_search_params(agent_settings: AgentSettings) -> KfVectorSearchParams:
+    """
+    Extract KfVectorSearchParams from the agent's tuning refs.
+
+    Scans mcp_servers refs for one whose params are KfVectorSearchParams
+    (identified by provider == KF_VECTOR_SEARCH_PROVIDER). Returns default
+    (no scope restriction) if not found, so callers never need a None check.
+    """
+    if agent_settings.tuning:
+        for ref in agent_settings.tuning.mcp_servers:
+            if (
+                ref.params is not None
+                and ref.params.provider == KF_VECTOR_SEARCH_PROVIDER
+            ):
+                return ref.params
+    return KfVectorSearchParams()

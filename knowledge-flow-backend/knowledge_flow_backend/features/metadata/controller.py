@@ -154,8 +154,8 @@ class MetadataController:
             summary="Get processing graph for all documents",
             description=(
                 "Returns a lightweight graph describing how ingested documents relate to downstream artifacts "
-                "(per-document vector indexes and SQL tables). The graph is expressed as nodes and edges that can "
-                "be consumed directly by the UI for visualization."
+                "(per-document vector indexes and tabular artifacts). The graph is expressed as nodes and edges "
+                "that can be consumed directly by the UI for visualization."
             ),
         )
         async def get_processing_graph(user: KeycloakUser = Depends(get_current_user)):

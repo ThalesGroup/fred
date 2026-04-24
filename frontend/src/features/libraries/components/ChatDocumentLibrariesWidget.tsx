@@ -50,6 +50,8 @@ export type ChatDocumentLibrariesWidgetProps = {
   disabled?: boolean;
   onOpen: () => void;
   onClose: () => void;
+  /** When set, the library picker only shows libraries whose id is in this list (agent creator scope). */
+  creatorScopeLibraryIds?: string[];
 };
 
 const ChatDocumentLibrariesWidget = ({
@@ -67,6 +69,7 @@ const ChatDocumentLibrariesWidget = ({
   disabled = false,
   onOpen,
   onClose,
+  creatorScopeLibraryIds,
 }: ChatDocumentLibrariesWidgetProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -230,21 +233,12 @@ const ChatDocumentLibrariesWidget = ({
           >
             <TagTreeList
               tree={selectedTree}
-              emptyText={t(
-                "chatbot.libraries.empty",
-                "No libraries selected. All visible document libraries will be searched.",
-              )}
+              emptyText={t("chatbot.libraries.empty")}
               renderActions={(tag) => buildActions(tag.id)}
             />
           </Box>
         ) : (
-          <ChatWidgetList
-            items={fallbackItems}
-            emptyText={t(
-              "chatbot.libraries.empty",
-              "No libraries selected. All visible document libraries will be searched.",
-            )}
-          />
+          <ChatWidgetList items={fallbackItems} emptyText={t("chatbot.libraries.empty")} />
         )}
       </ChatWidgetShell>
       <Popper
@@ -262,6 +256,7 @@ const ChatDocumentLibrariesWidget = ({
               setSelectedLibrariesIds={onChangeSelectedLibraryIds}
               teamId={teamId}
               onClose={() => setPickerAnchor(null)}
+              allowedLibraryIds={creatorScopeLibraryIds}
             />
           </FloatingPanel>
         </ClickAwayListener>

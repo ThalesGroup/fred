@@ -63,8 +63,10 @@ TABULAR_TUNING = AgentTuning(
                 "- Assess datasets and choose the most relevant ones.\n"
                 "- Design queries and calculations intelligently; optimize for clarity and performance.\n"
                 "- Present results clearly in markdown tables.\n"
-                "- Ensure all answers are based on actual data; do not invent values. \n"
+                "- Ensure all answers are based on actual data; do not invent values, columns and datasets. \n"
                 "- Normalize text when comparing or filtering in SQL (use LOWER()).\n\n"
+                "### Required response formatting:\n"
+                "- When a user asks you to list datasets or to list the available data, always call the `list_tabular_datasets` tool and format your answer with columns names, types etc. using bullet points to make it easy to read.\n"
                 "Current date: {today}."
             ),
             ui=UIHints(group="Prompts", multiline=True, markdown=True),
@@ -206,25 +208,53 @@ class Tessa(AgentFlow):
     async def _ensure_database_context(
         self, state: TabularState
     ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Load the dataset inventory exposed by the tabular MCP tools.
+
+        Why this exists:
+        - The knowledge-flow tabular runtime is now dataset-centric and exposes
+          `list_tabular_datasets` instead of the legacy context tool.
+
+        How to use:
+        - Call before prompt construction; the returned payload preserves the
+          existing in-memory mapping shape expected by the v1 graph.
+        """
+
         if state.get("database_context"):
             return state["database_context"]
 
-        logger.info("Fetching database context via MCP (get_tabular_context)...")
+        logger.info("Fetching dataset context via MCP (list_tabular_datasets)...")
         try:
             tools = self.mcp.get_tools()
-            tool = next((t for t in tools if t.name == "get_context"), None)
+            tool = next((t for t in tools if t.name == "list_tabular_datasets"), None)
             if not tool:
-                logger.warning("Unable to find tool 'get_context' in MCP server.")
+                logger.warning(
+                    "Unable to find tool 'list_tabular_datasets' in MCP server."
+                )
                 return {}
 
             raw_context = await tool.ainvoke({})
 
-            # Parser la string JSON en liste de dicts
             context = (
                 json.loads(raw_context) if isinstance(raw_context, str) else raw_context
             )
+            if isinstance(context, list):
+                context = {
+                    "tabular": [
+                        {
+                            "table_name": item.get("query_alias"),
+                            "columns": item.get("columns", []),
+                            "row_count": item.get("row_count"),
+                            "document_uid": item.get("document_uid"),
+                            "document_name": item.get("document_name"),
+                            "source_tag": item.get("source_tag"),
+                        }
+                        for item in context
+                        if isinstance(item, dict)
+                        and isinstance(item.get("query_alias"), str)
+                    ]
+                }
 
-            # Sauvegarder dans l'état pour les appels suivants
             state["database_context"] = context
             return context
 

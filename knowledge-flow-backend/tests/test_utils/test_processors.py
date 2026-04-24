@@ -14,8 +14,6 @@
 
 from pathlib import Path
 
-import pandas as pd
-
 from knowledge_flow_backend.common.document_structures import DocumentMetadata
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, BaseTabularProcessor
 from knowledge_flow_backend.core.processors.output.base_output_processor import BaseOutputProcessor
@@ -53,9 +51,6 @@ class TestTabularProcessor(BaseTabularProcessor):
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         return {"title": "test-tabular"}
-
-    def convert_file_to_table(self, file_path: Path) -> pd.DataFrame:
-        return pd.DataFrame({"col1": [1, 2], "col2": ["A", "B"]})
 
 
 class TestOutputProcessor(BaseOutputProcessor):

@@ -5,15 +5,15 @@ import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
-import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
+import { Link } from "react-router-dom";
 
 interface UserSettingsPageProps {
   modalInteraction: ModalInteractionProps;
 }
 
 export default function UserSettingsPage({ modalInteraction }: UserSettingsPageProps) {
-  const { agentsNicknamePlural } = useFrontendProperties();
+  const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { t } = useTranslation();
   // TODO Enable when Light mode is complete
   // const { themeMode, setThemeMode } = useContext(ApplicationContext);
@@ -25,8 +25,8 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
   const userRoles = KeyCloakService.GetUserRoles();
 
   return (
-    <div className={styles["user-settings-page"]}>
-      <div className={styles["user-settings-header"]}>
+    <div className={styles.userSettingsPage}>
+      <div className={styles.userSettingsHeader}>
         <Button
           color={"primary"}
           variant={"text"}
@@ -36,7 +36,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
         >
           {t("rework.back")}
         </Button>
-        <span className={styles["user-settings-header-title"]}>{t("rework.userSettings.title")}</span>
+        <span className={styles.userSettingsHeaderTitle}>{t("rework.userSettings.title")}</span>
         <Button
           color={"error"}
           variant={"filled"}
@@ -47,16 +47,18 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
           {t("rework.userSettings.disconnect")}
         </Button>
       </div>
-      <div className={styles["user-settings-description"]}>
+      <div className={styles.userSettingsDescription}>
         <UserAvatar name={userFullName} size={"large"} />
-        <div className={styles["user-settings-identity"]}>
-          <span className={styles["user-settings-identity-name"]}>{username}</span>
-          <span className={styles["user-settings-identity-fullname"]}>{userFullName}</span>
-          <span className={styles["user-settings-identity-email"]}>{userEmail}</span>
-          <span className={styles["user-settings-identity-role"]}>{userRoles.join(", ")}</span>
+        <div className={styles.userSettingsIdentity}>
+          <span className={styles.userSettingsIdentityName}>{username}</span>
+          <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>
+          <span className={styles.userSettingsIdentityEmail}>{userEmail}</span>
+          {userRoles.includes("admin") && (
+            <span className={styles.userSettingsIdentityRole}>{userRoles.join(", ")}</span>
+          )}
         </div>
       </div>
-      <div className={styles["user-settings-application"]}>
+      <div className={styles.userSettingsApplication}>
         {/*
                 TODO Enable when Light mode is complete
                 <ButtonGroup
@@ -97,13 +99,25 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
           color={"secondary"}
         ></ButtonGroup>
       </div>
-      <div className={styles["user-settings-conversation"]}>
+      {/*  <div className={styles.userSettingsConversation}>
         <TextArea
           disabled={true}
           label={t("rework.userSettings.conversationProfile.title")}
           placeholder={t("rework.userSettings.conversationProfile.placeholder", { agentsNicknamePlural })}
           maxLength={300}
         ></TextArea>
+      </div>*/}
+      <div className={styles.userSettingsLegals}>
+        <Link to={"/gdpr"}>
+          <Button color={"primary"} variant={"text"} size={"medium"}>
+            {t("rework.userSettings.accessGdpr", { siteTitle, siteSubtitle })}
+          </Button>
+        </Link>
+        <Link to={"/gcu"}>
+          <Button color={"primary"} variant={"text"} size={"medium"}>
+            {t("rework.userSettings.accessGcu")}
+          </Button>
+        </Link>
       </div>
     </div>
   );

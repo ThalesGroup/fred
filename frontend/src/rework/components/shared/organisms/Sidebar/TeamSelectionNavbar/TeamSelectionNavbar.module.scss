@@ -1,5 +1,3 @@
-@use "src/index.scss" as *;
-
 .teamNavbarContainer {
   display: flex;
   flex-direction: column;
@@ -18,14 +16,12 @@
 
 .title {
   color: var(--on-surface);
-
-  @include typography("label", "large", true);
+  font: var(--font-label-large-emphasized);
 }
 
 .subTitle {
   color: var(--on-surface-retreat);
-
-  @include typography("body", "small", true);
+  font: var(--font-body-small-emphasized);
 }
 
 .teamContainer {

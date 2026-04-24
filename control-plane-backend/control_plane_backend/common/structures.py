@@ -21,6 +21,7 @@ class AppConfig(BaseModel):
     address: str = "127.0.0.1"
     port: int = 8222
     log_level: str = "info"
+    gcu_version: str | None = None
 
 
 class SchedulerConfig(BaseModel):

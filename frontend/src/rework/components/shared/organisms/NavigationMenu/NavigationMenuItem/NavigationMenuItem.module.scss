@@ -11,9 +11,9 @@
   cursor: pointer;
   border-radius: var(--spacing-xs);
   padding: 0 var(--spacing-xs);
-  @include typography("label", "large");
   height: 2rem;
   color: var(--on-surface-retreat);
+  font: var(--font-label-large);
 
   &:hover {
     background-color: var(--state-on-surface-hover);

@@ -164,6 +164,16 @@ x-profile-rich-worker: &profile-rich-worker
   <<: *profile-rich-backend
   generate_summary: true
 
+# x-fast-attachment-processors: &fast-attachment-processors
+#   - suffix: ".pdf"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor.FastLitePdfProcessor
+#   - suffix: ".docx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor.FastLiteDocxProcessor
+#   - suffix: ".pptx"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
+#   - suffix: ".csv"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor.FastLiteCsvProcessor
+
 # ── Shared knowledge-flow configuration (backend + worker) ──────────────────────────
 
 x-kf-security: &kf-security
@@ -200,6 +210,9 @@ x-kf-scheduler: &kf-scheduler
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    ingestion_workflow_parallelism: 3
+    ingestion_max_concurrent_workflow_tasks: 3
+    ingestion_max_concurrent_activities: 3
 
 x-kf-content-storage: &kf-content-storage
   type: local
@@ -286,13 +299,16 @@ x-kf-storage: &kf-storage
     prefix: "sched_"
   vector_store:
     type: in_memory
-  tabular_stores:
-    base_database: # Minimal configuration to enable CSV document ingestion
-      type: "sql"
-      driver: "duckdb"
-      database: "base_database"
-      path: "/home/fred-user/.fred/knowledge-flow/db.duckdb"
-      mode: "read_and_write"
+  tabular_store:
+    artifacts_prefix: "tabular/datasets"
+    format: "parquet"
+    compression: "snappy"
+    query:
+      engine: "duckdb"
+      access_mode: "presigned_url"
+      internal_presigned_ttl_seconds: 3600
+      default_max_rows: 200
+      max_rows: 1000
 
 x-kf-mcp: &kf-mcp
   reports_enabled: true
@@ -639,7 +655,7 @@ applications:
         max_concurrent_agents: 1024
 
         # Maximum number of concurrent sessions per user. This is used to prevent abuse and manage resource usage.
-        max_concurrent_sessions_per_user: 10
+        max_concurrent_sessions_per_user: 100
 
         # Maximum number of files a user can attach across all sessions
         max_attached_files_per_user: 20
@@ -1027,6 +1043,8 @@ applications:
         value: "http://knowledge-flow-backend:8000"
       - name: FRONTEND_CONTROL_PLANE_UPSTREAM
         value: "http://control-plane-backend:8222"
+      - name: FRONTEND_CLIENT_MAX_BODY_SIZE
+        value: "150m"
       - name: VITE_BACKEND_URL_KNOWLEDGE
         value: "{YOUR-KF-URL}"
       - name: VITE_USE_AUTH
@@ -1271,7 +1289,6 @@ applications:
         kpi_process_metrics_interval_sec: 0
         kpi_log_summary_interval_sec: 0.0
         kpi_log_summary_top_n: 0
-        max_ingestion_workers: 3
 
       # ── Ingestion profiles — see Section 1 for anchor definitions ──────────
       processing:
@@ -1280,6 +1297,7 @@ applications:
           fast:   *profile-fast
           medium: *profile-medium
           rich:   *profile-rich-backend
+      # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
 
       security:        *kf-security
       scheduler:       *kf-scheduler
@@ -1451,6 +1469,7 @@ applications:
           fast:   *profile-fast
           medium: *profile-medium
           rich:   *profile-rich-worker
+      # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
 
       security:        *kf-security
       scheduler:       *kf-scheduler

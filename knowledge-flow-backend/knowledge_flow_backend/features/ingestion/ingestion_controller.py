@@ -120,25 +120,26 @@ def _dynamic_import_processor(class_path: str):
 
 
 def uploadfile_to_path(file: UploadFile) -> pathlib.Path:
-    tmp_dir = tempfile.mkdtemp()
+    """
+    Persist one uploaded file into a single temporary work directory.
+
+    Why this exists:
+    - Large uploads should be written once to disk and then reused by the rest
+      of the ingestion pipeline.
+    - Keeping the file under `<temp>/input/` preserves the existing workdir
+      layout expected by downstream processors.
+
+    How to use:
+    - Pass the FastAPI `UploadFile`.
+    - The returned path always points to `<temp>/input/<filename>`.
+    """
+    tmp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     filename = file.filename or "uploaded_file"
-    tmp_path = pathlib.Path(tmp_dir) / filename
+    tmp_path = tmp_dir / filename
     with open(tmp_path, "wb") as f_out:
         shutil.copyfileobj(file.file, f_out)
     return tmp_path
-
-
-def save_file_to_temp(source_file_path: pathlib.Path) -> pathlib.Path:
-    """
-    Copies the given local file into a new temp folder and returns the new path.
-    """
-    temp_dir = pathlib.Path(tempfile.mkdtemp()) / "input"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    target_path = temp_dir / source_file_path.name
-    shutil.copyfile(source_file_path, target_path)
-    logger.info(f"File copied to temporary location: {target_path}")
-    return target_path
 
 
 class IngestionController:
@@ -185,8 +186,7 @@ class IngestionController:
         preloaded_files: list[tuple[str, pathlib.Path]] = []
         for file in files:
             filename = file.filename or "uploaded_file"
-            raw_path = uploadfile_to_path(file)
-            input_temp_file = save_file_to_temp(raw_path)
+            input_temp_file = uploadfile_to_path(file)
             logger.info(f"File {filename} saved to temp storage at {input_temp_file}")
             preloaded_files.append((filename, input_temp_file))
         return preloaded_files
@@ -540,7 +540,7 @@ class IngestionController:
         self.vector_store: BaseVectorStore = ApplicationContext.get_instance().get_create_vector_store(self.embedder)
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
         processing_cfg = ApplicationContext.get_instance().get_config().processing
-        max_parallelism = ApplicationContext.get_instance().get_config().app.max_ingestion_workers
+        max_parallelism = ApplicationContext.get_instance().get_config().scheduler.temporal.ingestion_workflow_parallelism
         self.scheduler_task_service: IngestionTaskService | None = None
         if scheduler_cfg.enabled:
             self.scheduler_task_service = IngestionTaskService(
@@ -755,6 +755,9 @@ class IngestionController:
                     parent = raw_path.parent
                     if parent.exists() and not any(parent.iterdir()):
                         parent.rmdir()
+                    grand_parent = parent.parent
+                    if grand_parent.exists() and not any(grand_parent.iterdir()):
+                        grand_parent.rmdir()
                 except Exception:
                     logger.warning(f"Failed to clean up temporary file: {raw_path}")
                     pass
@@ -792,9 +795,13 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
         ):
             """
-            Fast path for chat attachments:
-            - use fast text extractor
-            - store as a single vectorized document with user/session metadata
+            Why this exists:
+            - Chat attachments need a lightweight ingestion path that stays responsive for the UI.
+            - The route extracts compact text, splits oversized payloads, then stores session-scoped vectors.
+
+            How to use:
+            - Upload one file plus optional `options_json`, `session_id`, and `scope`.
+            - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
             """
             filename = file.filename or "uploaded"
 
@@ -863,6 +870,9 @@ class IngestionController:
                     parent = raw_path.parent
                     if parent.exists() and not any(parent.iterdir()):
                         parent.rmdir()
+                    grand_parent = parent.parent
+                    if grand_parent.exists() and not any(grand_parent.iterdir()):
+                        grand_parent.rmdir()
                 except Exception:
                     logger.warning(f"Failed to clean up temporary file: {raw_path}")
                     pass
