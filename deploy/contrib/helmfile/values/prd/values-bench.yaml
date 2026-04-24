@@ -1,0 +1,25 @@
+image:
+  repository: carma.corp.thales/proxy-docker-internal-c2/fred/benchmark-tools
+  tag: 1.1.0
+
+bench:
+  mode: existing
+  common:
+    url: ws://agentic-backend/agentic/v1/chatbot/query/ws
+    agentUUID: "TODO: change with real agent uuid in prd env"
+    message: "search"
+    clients: 1
+    requestsPerClient: 1
+    timeoutSeconds: 30
+    createSession: true
+    prepareSessions: false
+    deleteSession: true
+    prepareConcurrency: 20
+    readLimitBytes: 8388608
+
+tokenSecret:
+  # Create this secret first with a user token allowed to create sessions and
+  # read the target agent.
+  name: agentic-bench-token
+  key: token
+  optional: false

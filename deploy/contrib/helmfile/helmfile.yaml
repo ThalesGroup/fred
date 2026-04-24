@@ -21,3 +21,8 @@ releases:
       - values/{{ .Environment.Name }}/values-fred.yaml
     secrets:
       - values/{{ .Environment.Name }}/values-fred.sec.yaml
+  - name: agentic-bench
+    namespace: "{{ .Values.namespace }}"
+    chart: ../../charts/agentic-bench
+    values:
+      - values/{{ .Environment.Name }}/values-bench.yaml
