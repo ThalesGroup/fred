@@ -649,7 +649,7 @@
       "placeholder": "Écrivez votre message…  Entrée pour envoyer • Maj+Entrée pour un saut de ligne"
     },
     "attachFiles": "Joindre des fichiers",
-    "addLibraries": "Ajouter des bibliothèques",
+    "addLibraries": "Sélectionner des dossiers",
     "addDocuments": "Ajouter des documents",
     "attachments": {
       "betaNotice": "Les pièces jointes sont en version bêta. Formats pris en charge : PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Veuillez donner votre avis pour nous aider à améliorer cette fonctionnalité.",
