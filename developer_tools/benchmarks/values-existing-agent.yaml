@@ -1,0 +1,37 @@
+# values-existing-agent.yaml
+#
+# Why: provide a small Helm values overlay for benchmarking an already-created
+# agent instead of letting the benchmark chart bootstrap a temporary one.
+# How: pass this file after the chart defaults, then replace the placeholder
+# values below with your in-cluster websocket URL, agent UUID, and token secret.
+# Usage:
+#   helm upgrade --install agentic-bench deploy/charts/agentic-bench \
+#     -n fred \
+#     -f deploy/charts/agentic-bench/values.yaml \
+#     -f developer_tools/benchmarks/values-existing-agent.yaml
+
+image:
+  repository: agentic-bench
+  tag: dev
+
+bench:
+  mode: existing
+  common:
+    url: ws://agentic-backend/agentic/v1/chatbot/query/ws
+    agentUUID: "TODO: CHANGEME"
+    message: "search"
+    clients: 1
+    requestsPerClient: 1
+    timeoutSeconds: 30
+    createSession: true
+    prepareSessions: false
+    deleteSession: true
+    prepareConcurrency: 20
+    readLimitBytes: 8388608
+
+tokenSecret:
+  # Create this secret first with a user token allowed to create sessions and
+  # read the target agent.
+  name: agentic-bench-token
+  key: token
+  optional: false
