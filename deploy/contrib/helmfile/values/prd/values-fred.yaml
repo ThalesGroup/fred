@@ -188,7 +188,7 @@ global:
 
   # Enable whitelist
   whitelist:
-    enabled: true
+    enabled: false
     user_list_inline: |
       maxime.daragon@thalesgroup.com
       felix.page@thalesgroup.com
@@ -439,6 +439,7 @@ applications:
     configuration:
       app:
         log_level: "warning"
+        gcu_version: &gcu-version "v1"
 
       security: *common-security
 
@@ -466,6 +467,8 @@ applications:
           defaultTeamAvatarFile: "default-team-avatar-prism.png"
           defaultPersonalBannerFile: "default-personal-banner.png"
           defaultPersonalAvatarFile: "default-personal-banner.png"
+          gcuVersion: *gcu-version
+
 
       # todo: add scheduler to agentic ?
       # scheduler:
@@ -627,19 +630,19 @@ applications:
         - id: "mcp-knowledge-flow-mcp-text"
           name: "mcp.servers.search_documents.name"
           description: "mcp.servers.search_documents.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
-          sse_read_timeout: 2000
+          transport: "inprocess"
+          provider: "kf_vector_search"
           enabled: true
           auth_mode: "user_token"
-        - id: "mcp-knowledge-flow-mcp-tabular"
-          name: "mcp.servers.tabular.name"
-          description: "mcp.servers.tabular.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
-          sse_read_timeout: 2000
-          enabled: true
-          auth_mode: "user_token"
+        # - id: "mcp-knowledge-flow-mcp-tabular"
+        #   name: "mcp.servers.tabular.name"
+        #   description: "mcp.servers.tabular.description"
+        #   transport: "streamable_http"
+        #   url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
+        #   sse_read_timeout: 2000
+        #   enabled: true
+        #   auth_mode: "user_token"
+
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
@@ -708,6 +711,7 @@ applications:
     configuration:
       app:
         log_level: "warning"
+        gcu_version: *gcu-version
 
       processing:
         profiles:
@@ -798,6 +802,10 @@ applications:
     extraVolumeMounts: *ssl-extra-volume-mounts
 
     configuration:
+      app:
+        log_level: "warning"
+        gcu_version: *gcu-version
+
       security:  *common-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
