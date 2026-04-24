@@ -25,6 +25,7 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  gcu_version: "v1"
 
 scheduler:
   enabled: true
@@ -59,8 +60,27 @@ frontend_settings:
     # If true activate support for an electronic warfare demonstration
     enableElecWarfare: false
   properties:
-    logoName: "fred"
-    siteDisplayName: "Fred"
+    logoName: "logo_PRISM_light"
+    logoNameDark: "logo_PRISM_dark"
+    logoHeight: "24px"
+    logoWidth: "129px"
+    faviconName: "favicon_PRISM_light"
+    faviconNameDark: "favicon_PRISM_dark"
+    siteDisplayName: "Prism AI Hub"
+    siteTitle: "Prism"
+    siteSubtitle: "AI Hub"
+    agentsNicknameSingular: "Lumi"
+    agentsNicknamePlural: "Lumis"
+    contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
+    agentIconName: "customAgent"
+    showAgentRegisterA2A: false
+    showAgentRestoreFromConfiguration: false
+    showAgentCode: false
+    defaultTeamBannerFile: "default-team-banner-prism.png"
+    defaultTeamAvatarFile: "default-team-avatar-prism.png"
+    defaultPersonalBannerFile: "default-personal-banner.png"
+    defaultPersonalAvatarFile: "default-personal-banner.png"
+    gcuVersion: "v1"
 
 ai:
   # In production  activate the configuration persistence mechanism
