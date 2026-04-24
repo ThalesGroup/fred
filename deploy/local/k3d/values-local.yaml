@@ -83,59 +83,25 @@ x-kf-filesystem: &kf-filesystem
   bucket_name: "filesystem"
   secure: false
 
-x-azure-apim-settings: &azure-apim-settings
-  azure_apim_base_url: ""
-  azure_openai_api_version: ""
-  azure_tenant_id: ""
-  azure_ad_client_id: ""
-  azure_ad_client_scope: ""
 
 x-kf-embedding-model: &kf-embedding-model
-  provider: azure-apim
-  name: text-embedding-3-large
+  provider: openai
+  name: mistral-embed
   settings:
-    <<: *azure-apim-settings
-    azure_apim_resource_path: ""
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 30.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    base_url: https://api.mistral.ai/v1
+    check_embedding_ctx_length: false
 
 x-kf-chat-model: &kf-chat-model
-  provider: azure-apim
-  name: gpt-4o
+  provider: openai
+  name: mistral-medium-latest
   settings:
-    <<: *azure-apim-settings
-    azure_apim_resource_path: ""
-    temperature: 0
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 30.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    base_url: https://api.mistral.ai/v1
 
 x-kf-vision-model: &kf-vision-model
-  provider: azure-apim
-  name: gpt-4o
+  provider: openai
+  name: mistral-medium-latest
   settings:
-    <<: *azure-apim-settings
-    azure_apim_resource_path: ""
-    temperature: 0
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 30.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    base_url: https://api.mistral.ai/v1
 
 x-kf-crossencoder-model: &kf-crossencoder-model
   settings:
@@ -257,7 +223,7 @@ applications:
     # -------------------------------------------------------------------------
     configuration:
       app:
-        log_level: "warning"
+        log_level: "info"
       scheduler:
         enabled: true
         backend: temporal
@@ -343,6 +309,22 @@ applications:
           class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
           enabled: true
 
+        - id: "Spot"
+          name: "Spot"
+          type: "agent"
+          class_path: "agentic_backend.agents.v1.production.prometheus.prometheus_expert.Spot"
+          enabled: true
+
+        - id: "SQL Agent"
+          name: "SQL Agent"
+          type: "agent"
+          definition_ref: "v2.production.sql_analyst"
+ 
+      react_profiles:
+        - profile_id: "rag_expert"
+          enabled: true
+        - profile_id: "sentinel"
+          enabled: true
 
     # -------------------------------------------------------------------------
     # Agentic Backend — Models catalog (overrides default: only default profile)
@@ -362,27 +344,23 @@ applications:
           keepalive_expiry_seconds: 10
         temperature: 0.0
       default_profile_by_capability:
-        chat: chat.azure_apim.gpt4o
-        language: language.azure_apim.gpt4o
+        chat: default.chat.mistral
+        language: default.language.mistral
       profiles:
-        - profile_id: chat.azure_apim.gpt4o
+        - profile_id: default.chat.mistral
           capability: chat
-          description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
           model:
-            provider: azure-apim
-            name: gpt-4o
+            provider: openai
+            name: mistral-medium-latest
             settings:
-              <<: *azure-apim-settings
-              azure_apim_resource_path: ""
-        - profile_id: language.azure_apim.gpt4o
+              base_url: https://api.mistral.ai/v1
+        - profile_id: default.language.mistral
           capability: language
-          description: "GPT-4o served via Azure APIM endpoint for language tasks."
           model:
-            provider: azure-apim
-            name: gpt-4o
+            provider: openai
+            name: mistral-medium-latest
             settings:
-              <<: *azure-apim-settings
-              azure_apim_resource_path: ""
+              base_url: https://api.mistral.ai/v1
       rules: []
 
     # -------------------------------------------------------------------------

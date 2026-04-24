@@ -222,6 +222,7 @@ K3D_NAMESPACE  ?= fred
 HELM_RELEASE   ?= fred-app
 HELM_CHART     ?= deploy/charts/fred
 HELM_VALUES    ?= deploy/local/k3d/values-local.yaml
+HELM_VALUES_BENCH ?= deploy/local/k3d/values-bench.yaml
 
 # Image names (must match values-local.yaml)
 AGENTIC_IMAGE  ?= ghcr.io/thalesgroup/fred-agent/agentic-backend:0.1
@@ -267,6 +268,17 @@ k3d-deploy-only: ## Deploy/upgrade Helm chart (images must already be in k3d)
 		--namespace $(K3D_NAMESPACE) \
 		--create-namespace \
 		-f $(HELM_VALUES)
+	@echo "🔄 Forcing pods to restart to pick up newest local images..."
+	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
+
+.PHONY: k3d-deploy-only-bench
+k3d-deploy-only-bench: ## Deploy/upgrade Helm chart with local + bench values (images must already be in k3d)
+	@echo "🚀 Deploying $(HELM_RELEASE) bench to namespace $(K3D_NAMESPACE)..."
+	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
+		--namespace $(K3D_NAMESPACE) \
+		--create-namespace \
+		-f $(HELM_VALUES) \
+		-f $(HELM_VALUES_BENCH)
 	@echo "🔄 Forcing pods to restart to pick up newest local images..."
 	kubectl rollout restart deployment -n $(K3D_NAMESPACE) agentic-backend knowledge-flow-backend frontend control-plane-backend
 
