@@ -76,10 +76,10 @@ Three scenarios to validate from `fred-agent-chat`, in order:
 **Recommended starting point**: Option A — simplest, no new infra, correct for the current scale.
 
 **Tasks**:
-- [ ] Decide and document option in BACKLOG.md §6.4.D
-- [ ] If A: implement `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` (body: `{ updated_at }`)
+- [x] Decide and document option in BACKLOG.md §6.4.D
+- [x] If A: implement `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` (body: `{ updated_at }`)
 - [ ] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after F1 lands)
-- [ ] `make code-quality && make test` in `control-plane-backend`
+- [x] `make code-quality && make test` in `control-plane-backend`
 
 ---
 
@@ -89,11 +89,11 @@ Three scenarios to validate from `fred-agent-chat`, in order:
 
 **Ref**: `docs/backlog/BACKLOG.md` §7.3, §7.6.A
 
-- [ ] Remove `session_id` from `_kpi_base_dims()` Prometheus dims in `context_aware_tool.py`
-- [ ] Remove `user_id` from `_kpi_base_dims()` Prometheus dims
-- [ ] Keep both in structured KPI log output (OpenSearch / log backend)
-- [ ] Same cleanup in `_graph_phase_timer()` dims
-- [ ] `make code-quality && make test` in `fred-runtime`
+- [x] Remove `session_id` from Prometheus labels emitted from runtime KPI dims
+- [x] Remove `user_id` from Prometheus labels emitted from runtime KPI dims
+- [x] Keep both in structured KPI log output (OpenSearch / log backend)
+- [x] Same cleanup for graph/KF phase timers via the shared Prometheus KPI sink
+- [x] `make code-quality && make test` in `fred-runtime`
 
 Can be done in parallel with S1, shipped separately.
 

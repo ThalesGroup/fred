@@ -2010,7 +2010,7 @@ isolated in the adapter layer (`react_message_codec.py`).
 - [x] `GET /teams/{team_id}/sessions` — team-scoped session list for the sidebar (newest first).
   `ChatList.tsx` consumes this with 30s polling and renders links to managed chat pages.
 - [ ] `PATCH /control-plane/v1/sessions/{session_id}` — update title, status (deferred)
-- [ ] Freeze how control-plane session metadata freshness is updated after each
+- [x] Freeze how control-plane session metadata freshness is updated after each
   managed turn, without making control-plane proxy or read runtime message
   history.
   Requirement:
@@ -2018,6 +2018,15 @@ isolated in the adapter layer (`react_message_codec.py`).
   - runtime message content must remain runtime-owned
   - the solution must preserve control-plane as a management-plane component,
     not a conversation-history serving plane
+  Decision:
+  - Phase 6A uses the smallest control-plane metadata refresh path:
+    `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` with
+    `{ "updated_at": "<ISO datetime>" }`.
+  - The frontend calls it after a completed managed turn. The endpoint updates
+    only `session_metadata.updated_at`; it does not read, proxy, cache, or serve
+    runtime message history.
+  - Inline title/status editing remains deferred to the later session PATCH
+    scope.
 - [ ] `DELETE /control-plane/v1/sessions/{session_id}` — mark deleted, trigger
   runtime purge via the purge queue (deferred)
 
@@ -2054,6 +2063,118 @@ session_id            user_id      team_id     agent_instance_id  last_active   
 - [ ] A full session purge (history + checkpoint) can be performed from CLI
       without connecting to the database directly
 - [ ] `make code-quality` and `make test` pass in `fred-runtime` and `fred-sdk`
+
+---
+
+### 6.7 Admin Maintenance Stats Surface (spec only)
+
+#### Goal
+
+Add a compact, admin-only maintenance view for the two components that own the
+current migration state:
+
+- `control-plane-backend`
+- `fred-runtime`
+
+This surface exists to help operators and developers understand system size and
+data growth without opening a database, tracing through multiple tables, or
+reading sensitive content.
+
+This is **not** a product analytics endpoint, not a dashboard API, and not a
+cross-component aggregation layer.
+
+#### Endpoint Rule
+
+- [ ] `GET /control-plane/v1/admin/stats`
+- [ ] `GET /pod/v1/admin/stats` or equivalent runtime-base-path endpoint
+- [ ] Both endpoints require admin access when security is enabled.
+- [ ] Both endpoints must remain read-only and offline-friendly.
+- [ ] No endpoint may call the other component; each reports only data it owns.
+
+#### Data Rule
+
+Return maintenance statistics only:
+
+- counts
+- grouped counts
+- oldest/newest timestamps
+- queue sizes
+- storage/backend reachability and coarse size indicators when cheap locally
+
+Never return sensitive content:
+
+- no message text
+- no prompt text
+- no tool payloads
+- no checkpoint payloads
+- no document excerpts
+- no full conversation titles if they could leak user intent
+
+#### Control-Plane Stats
+
+Initial control-plane stats should include:
+
+- [ ] team count
+- [ ] managed agent instance count
+- [ ] managed agent instances by status
+- [ ] session metadata count
+- [ ] session metadata count by team
+- [ ] oldest/newest `session_metadata.created_at`
+- [ ] oldest/newest `session_metadata.updated_at`
+- [ ] `session_purge_queue` count if the legacy table still exists
+- [ ] oldest/newest purge queue item timestamp if the legacy table still exists
+
+#### Runtime Stats
+
+Initial runtime stats should include:
+
+- [ ] `session_history` row count
+- [ ] distinct runtime session count
+- [ ] session count by `team_id` when present
+- [ ] session count by `agent_instance_id` when present
+- [ ] oldest/newest history timestamp
+- [ ] checkpoint row count
+- [ ] distinct checkpoint session count
+- [ ] oldest/newest checkpoint timestamp when available
+- [ ] pending or resumable checkpoint count if this can be computed without
+      loading checkpoint payloads
+
+#### Response Shape
+
+Use one small typed response per component. Keep the top-level shape similar,
+but do not force a shared DTO until both implementations prove it useful.
+
+Minimum shape:
+
+```json
+{
+  "component": "fred-runtime",
+  "generated_at": "2026-04-23T12:00:00Z",
+  "storage": {
+    "backend": "sqlite",
+    "reachable": true
+  },
+  "counts": {},
+  "groups": {},
+  "oldest": {},
+  "newest": {}
+}
+```
+
+#### Implementation Order
+
+1. `fred-runtime` first, because session history and checkpoints can grow
+   silently and are hardest to inspect safely.
+2. `control-plane-backend` second, focused on product metadata and purge queue
+   visibility.
+
+#### Validation
+
+- [ ] Non-admin users are denied when security is enabled.
+- [ ] Default/offline tests require no Keycloak, OpenFGA, Postgres, MinIO,
+      OpenSearch, Prometheus, or runtime peer service.
+- [ ] Stats queries do not load message/checkpoint content payloads.
+- [ ] `make code-quality` and `make test` pass in each touched project.
 
 ---
 
@@ -2185,9 +2306,9 @@ time.
   `RuntimeContext`, and propagated to all tool calls within that turn
 - [x] Add `runtime_id` to `_kpi_base_dims()` — populated from `RuntimeConfig.service_name`
   which is set at pod startup from `config.app.name`
-- [ ] Remove `session_id` and `user_id` from Prometheus label dimensions in
-  `_kpi_base_dims()` — emit them only via the structured KPI store backend
-  (log / OpenSearch); document the cardinality policy in a comment
+- [x] Remove `session_id`, `user_id`, and `exchange_id` from Prometheus label
+  dimensions in the shared `PrometheusKPIStore` — keep them on the original
+  KPI event so structured delegates (log / OpenSearch) retain per-turn identity
 
 #### B. Add `agent.turn_completed` event emission
 
@@ -2277,13 +2398,15 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 - [ ] After one managed execution, `/kpi session <session_id>` in
   `fred-agent-chat` shows at least one `agent.turn_completed` row with
   correct `session_id`, `exchange_id`, `total_latency_ms`, and `tool_count`
-- [ ] After a tool-call-heavy turn, `agent.tool_latency_ms` histogram in
-  `/kpi` shows `exchange_id` in the label set
+- [ ] After a tool-call-heavy turn, `agent.tool_latency_ms` histogram in `/kpi`
+  does not expose unbounded identity labels; `exchange_id` remains structured
+  KPI-only
 - [ ] After a multi-tool turn, `agent.llm_call` rows appear in the structured
   KPI log for every model invocation within that turn
 - [ ] Prometheus `/kpi` scrape contains no `session_id` or `user_id` labels
-- [ ] `make code-quality` and `make test` pass in `fred-core`, `fred-sdk`,
-  and `fred-runtime`
+  (unit-covered in `fred-core`; full runtime scrape validation still pending)
+- [x] `make code-quality` and `make test` pass in `fred-core` and
+  `fred-runtime` for the Prometheus cardinality fix
 - [ ] Structured JSON logs confirm `agent.turn_completed` and tool KPI events
   appear in the log-based trace path (verifiable via fluentbit or local log grep)
 

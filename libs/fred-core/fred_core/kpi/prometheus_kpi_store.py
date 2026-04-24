@@ -26,6 +26,14 @@ from fred_core.kpi.kpi_writer_structures import KPIEvent
 
 logger = logging.getLogger(__name__)
 
+PROMETHEUS_HIGH_CARDINALITY_LABELS = frozenset(
+    {
+        "session_id",
+        "user_id",
+        "exchange_id",
+    }
+)
+
 
 def _sanitize_metric_name(name: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in name)
@@ -39,6 +47,29 @@ def _sanitize_label_name(name: str) -> str:
     if not safe or safe[0].isdigit():
         safe = f"dim_{safe}"
     return safe
+
+
+def _prometheus_label_dims(event: KPIEvent) -> Dict[str, str]:
+    """
+    Return the bounded subset of KPI dims that may become Prometheus labels.
+
+    Why this exists:
+    - KPI events can carry per-user/per-turn identifiers for structured stores,
+      but Prometheus labels must stay low-cardinality.
+
+    How to use it:
+    - call before resolving or emitting Prometheus labels; do not mutate the
+      original event because delegates such as OpenSearch still need full dims.
+
+    Example:
+    - `_prometheus_label_dims(event)` drops `session_id`, `user_id`, and
+      `exchange_id` from the label candidate set.
+    """
+    return {
+        k: str(v)
+        for k, v in (event.dims or {}).items()
+        if v is not None and k not in PROMETHEUS_HIGH_CARDINALITY_LABELS
+    }
 
 
 # Buckets for metrics in milliseconds (e.g. LLM latencies).
@@ -179,12 +210,27 @@ class PrometheusKPIStore(BaseKPIStore):
     def _resolve_labeling(
         self, metric_name: str, metric_type: str, event: KPIEvent
     ) -> Dict[str, str]:
+        """
+        Resolve stable Prometheus labels for a KPI event.
+
+        Why this exists:
+        - Prometheus collectors require a fixed label set per metric name/type,
+          while Fred KPI events may carry richer structured dimensions.
+
+        How to use it:
+        - pass the sanitized metric name, metric type, and original KPI event;
+          this method filters high-cardinality labels for Prometheus only.
+
+        Example:
+        - `_resolve_labeling("agent_tool_latency_ms", "timer", event)` returns
+          label values without per-session or per-user identifiers.
+        """
         key = (metric_name, metric_type)
         label_names = self._label_names.get(key)
         label_map = self._label_maps.get(key)
         if label_names is None or label_map is None:
             # Use only the dims provided on the event (no global defaults).
-            raw_keys = set(event.dims.keys() if event.dims else [])
+            raw_keys = set(_prometheus_label_dims(event).keys())
             label_map = {}
             for raw_key in sorted(raw_keys):
                 safe_key = _sanitize_label_name(raw_key)
@@ -193,7 +239,7 @@ class PrometheusKPIStore(BaseKPIStore):
             label_names = tuple(label_map.keys())
             self._label_maps[key] = label_map
             self._label_names[key] = label_names
-        dims = {k: v for k, v in (event.dims or {}).items() if v is not None}
+        dims = _prometheus_label_dims(event)
         label_values: Dict[str, str] = {}
         for safe_key, raw_key in label_map.items():
             value = dims.get(raw_key)

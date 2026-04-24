@@ -21,6 +21,7 @@ from control_plane_backend.common.structures import (
 )
 from control_plane_backend.main import create_app
 from control_plane_backend.product_service import _RuntimeTemplatePayload
+from control_plane_backend.session_metadata_store import SessionMetadataRecord
 from control_plane_backend.team_metadata_store import TeamMetadata
 from control_plane_backend.teams_structures import (
     KeycloakGroupSummary,
@@ -110,6 +111,35 @@ def _patch_store(
 ) -> None:
     monkeypatch.setattr(
         "control_plane_backend.application_context.ApplicationContext.get_agent_instance_store",
+        lambda _self: store,
+    )
+
+
+class _FakeSessionMetadataStore:
+    """In-memory stand-in for SessionMetadataStore used in offline tests."""
+
+    def __init__(self, records: list[SessionMetadataRecord] | None = None) -> None:
+        self._records: list[SessionMetadataRecord] = list(records or [])
+
+    async def update_last_activity(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        updated_at: datetime,
+    ) -> SessionMetadataRecord | None:
+        for record in self._records:
+            if record.session_id == session_id and record.team_id == team_id:
+                record.updated_at = updated_at
+                return record
+        return None
+
+
+def _patch_session_store(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakeSessionMetadataStore,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.application_context.ApplicationContext.get_session_metadata_store",
         lambda _self: store,
     )
 
@@ -693,6 +723,81 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
         assert created.updated_at is not None
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_patch_team_session_updates_last_activity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    initial = datetime.fromisoformat("2026-04-23T08:00:00+00:00")
+    refreshed = datetime.fromisoformat("2026-04-23T08:05:00+00:00")
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title="First turn",
+                created_at=initial,
+                updated_at=initial,
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            json={"updated_at": refreshed.isoformat()},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["session_id"] == "session-1"
+    assert payload["team_id"] == "personal"
+    assert payload["updated_at"] == "2026-04-23T08:05:00Z"
+    assert store._records[0].updated_at == refreshed
+
+
+@pytest.mark.asyncio
+async def test_patch_team_session_returns_404_for_other_team_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product_controller.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("other-team"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title=None,
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            json={"updated_at": "2026-04-23T08:05:00+00:00"},
+        )
+
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

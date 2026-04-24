@@ -188,6 +188,16 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: build.mutation<
+      PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiResponse,
+      PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
+        method: "PATCH",
+        body: queryArg.updateSessionRequest,
+      }),
+    }),
     postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
@@ -308,6 +318,13 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
   /** status 200 Successful Response */ SessionListItem[];
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
+};
+export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiResponse =
+  /** status 200 Successful Response */ SessionListItem;
+export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiArg = {
+  teamId: string;
+  sessionId: string;
+  updateSessionRequest: UpdateSessionRequest;
 };
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
   /** status 200 Successful Response */ ExecutionPreparation;
@@ -567,6 +584,10 @@ export type CreateSessionRequest = {
   agent_instance_id?: string | null;
   title?: string | null;
 };
+export type UpdateSessionRequest = {
+  /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
+  updated_at: string;
+};
 export type ExecutionGrantAction = "execute" | "resume";
 export type ExecutionGrant = {
   user_id: string;
@@ -645,5 +666,6 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
 } = injectedRtkApi;

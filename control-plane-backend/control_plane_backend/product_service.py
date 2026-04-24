@@ -27,6 +27,7 @@ from control_plane_backend.product_structures import (
     ManagedAgentRuntimeBinding,
     PermissionSummary,
     SessionListItem,
+    UpdateSessionRequest,
 )
 from control_plane_backend.session_metadata_store import (
     SessionMetadataRecord,
@@ -414,6 +415,35 @@ async def list_sessions(
     """List session metadata records for one team, newest first."""
     records = await _session_store().list_by_team(team_id, limit=limit)
     return [_record_to_item(r) for r in records]
+
+
+async def update_session_activity(
+    team_id: TeamId,
+    session_id: str,
+    request: UpdateSessionRequest,
+) -> SessionListItem | None:
+    """
+    Refresh control-plane metadata for one completed managed turn.
+
+    Why this function exists:
+    - The sidebar sorts sessions by control-plane-owned `updated_at`, while
+      runtime remains the only owner of message content.
+
+    How to use it:
+    - call from the PATCH session metadata endpoint after runtime reports a
+      completed turn.
+
+    Example:
+    - `await update_session_activity(team_id, session_id, request)`
+    """
+    record = await _session_store().update_last_activity(
+        session_id=session_id,
+        team_id=team_id,
+        updated_at=request.updated_at,
+    )
+    if record is None:
+        return None
+    return _record_to_item(record)
 
 
 def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:

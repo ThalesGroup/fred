@@ -18,6 +18,7 @@ from control_plane_backend.product_service import (
     list_sessions,
     prepare_execution,
     unenroll_agent_instance,
+    update_session_activity,
 )
 from control_plane_backend.product_structures import (
     AgentTemplateSummary,
@@ -28,6 +29,7 @@ from control_plane_backend.product_structures import (
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     SessionListItem,
+    UpdateSessionRequest,
 )
 from control_plane_backend.teams_service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -207,6 +209,45 @@ async def get_team_sessions(
     """Return the most recent sessions for this team, newest first."""
     del user
     return await list_sessions(team_id)
+
+
+@router.patch(
+    "/teams/{team_id}/sessions/{session_id}",
+    response_model=SessionListItem,
+    response_model_exclude_none=True,
+    summary="Refresh session metadata after a managed turn.",
+)
+async def patch_team_session(
+    team_id: Annotated[TeamId, Path()],
+    session_id: Annotated[str, Path(min_length=1)],
+    body: UpdateSessionRequest,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SessionListItem:
+    """
+    Update control-plane-owned metadata for one team-scoped session.
+
+    Why this endpoint exists:
+    - The sidebar is sorted from control-plane session metadata, but runtime
+      remains the owner of message history and the hot execution path.
+
+    How to use it:
+    - after a managed turn completes, PATCH `{ "updated_at": "<ISO datetime>" }`
+      for the active team/session.
+
+    Returns 404 if the session does not exist for the given team.
+    """
+    await get_team_by_id_from_service(user, team_id)
+    updated = await update_session_activity(
+        team_id=team_id,
+        session_id=session_id,
+        request=body,
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session {session_id!r} not found for team {team_id!r}.",
+        )
+    return updated
 
 
 @router.post(

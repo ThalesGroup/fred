@@ -129,6 +129,18 @@ class CreateSessionRequest(BaseModel):
     title: str | None = Field(default=None, max_length=500)
 
 
+class UpdateSessionRequest(BaseModel):
+    """Refresh control-plane-owned session metadata after a managed turn."""
+
+    updated_at: datetime = Field(
+        ...,
+        description=(
+            "Frontend-observed last activity timestamp. Used only for "
+            "control-plane session metadata freshness, not runtime message history."
+        ),
+    )
+
+
 class CreateAgentInstanceRequest(BaseModel):
     """Request body for enrolling a discovered template for a team."""
 

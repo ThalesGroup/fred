@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -106,6 +106,52 @@ class SessionMetadataStore:
                 .all()
             )
         return [_row_to_record(row) for row in rows]
+
+    async def update_last_activity(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        updated_at: datetime,
+        session: AsyncSession | None = None,
+    ) -> SessionMetadataRecord | None:
+        """
+        Refresh the sidebar ordering timestamp for one team-scoped session.
+
+        Why this exists:
+        - Runtime owns message history, while control-plane owns lightweight
+          session metadata used by the sidebar.
+
+        How to use it:
+        - call after a managed turn completes with the frontend-observed
+          activity timestamp.
+
+        Example:
+        - `await store.update_last_activity(session_id, team_id, updated_at)`
+        """
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(SessionMetadataRow)
+                .where(
+                    SessionMetadataRow.session_id == session_id,
+                    SessionMetadataRow.team_id == str(team_id),
+                )
+                .values(updated_at=updated_at)
+            )
+            if result.rowcount == 0:
+                return None
+            row = (
+                (
+                    await s.execute(
+                        select(SessionMetadataRow).where(
+                            SessionMetadataRow.session_id == session_id,
+                            SessionMetadataRow.team_id == str(team_id),
+                        )
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            return _row_to_record(row)
 
     async def delete(
         self,

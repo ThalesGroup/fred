@@ -567,6 +567,9 @@ Implemented runtime-side today:
 - `fred-runtime` now restores a concrete KPI pipeline at pod startup:
   `KPIWriter`, Prometheus export when configured, and process/SQL pool KPI
   background emitters for scrape-based local validation and laptop benchmarks
+- Prometheus export filters unbounded runtime identity labels (`session_id`,
+  `user_id`, `exchange_id`) at the KPI sink; the original KPI event still carries
+  those dimensions for structured delegates such as log/OpenSearch stores
 - `fred-agent-chat` can now inspect that same runtime metrics surface directly
   via `/kpi [pattern]`, so backend KPI validation no longer depends on a local
   Grafana/Prometheus stack
