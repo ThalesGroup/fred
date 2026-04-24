@@ -335,6 +335,17 @@ applications:
           libraries_selection: true
           attach_files: true      
 
+      - id: "Bench"
+        name: "Bench"
+        type: "agent"
+        definition_ref: "v2.react.basic"
+        enabled: true
+        tuning:
+          role: "Load testing agent — answers questions using document search via MCP"
+          description: "Agent de benchmark utilisant le mock OpenAI et le RAG via MCP"
+          mcp_servers:
+            - id: "mcp-knowledge-flow-mcp-text"
+
       # SQL Agent
       - id: "SQL Agent"
         name: "SQL Agent"
@@ -345,7 +356,7 @@ applications:
       - profile_id: "rag_expert"
         enabled: true
 
-    # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
+    # ── Models catalog (TGS Mistral Medium + Mock OpenAI for load testing) ─────
     models_catalog:
       version: v1
       common_model_settings:
@@ -378,7 +389,39 @@ applications:
               base_url: "https://api.corp.thales/corp/genai/llm/medium/v1"
               request_timeout: 300
               stream_usage: false
-      rules: []
+        - profile_id: chat.mock.gpt-4o
+          capability: chat
+          description: "Mock OpenAI server for load testing — internal cluster only"
+          model:
+            provider: openai
+            name: gpt-4o
+            settings:
+              base_url: "http://mock-openai-server:8383/v1"
+              # openai_api_key: "key-1"
+              request_timeout: 30
+              stream_usage: false
+        - profile_id: language.mock.gpt-4o
+          capability: language
+          description: "Mock OpenAI server for load testing — internal cluster only"
+          model:
+            provider: openai
+            name: gpt-4o
+            settings:
+              base_url: "http://mock-openai-server:8383/v1"
+              # openai_api_key: "key-1"
+              request_timeout: 30
+              stream_usage: false
+      rules:
+        - rule_id: "bench.chat"
+          capability: chat
+          target_profile_id: chat.mock.gpt-4o
+          match:
+            agent_id: "85ec4440-cc7f-4371-a048-bda09b974b31"
+        - rule_id: "bench.language"
+          capability: language
+          target_profile_id: language.mock.gpt-4o
+          match:
+            agent_id: "85ec4440-cc7f-4371-a048-bda09b974b31"
 
     # ── MCP catalog (text search only) ────────────────────────────────────────
     mcp_catalog:
