@@ -35,6 +35,12 @@ x-common-postgres: &common-postgres
 x-common-opensearch: &common-opensearch
   host: https://prism-opensearch-int.six.cloud.thales
 
+x-common-migration: &common-migration
+  migration:
+  enabled: true
+  scaleDown: true
+  backoffLimit: 3
+
 x-kf-scheduler: &kf-scheduler
   enabled: true
   backend: "temporal"
@@ -197,6 +203,7 @@ applications:
     configuration:
       app:
         log_level: "info"
+        gcu_version: &gcu-version "v1"
 
       security: *common-security
 
@@ -224,6 +231,7 @@ applications:
           defaultTeamAvatarFile: "default-team-avatar-prism.png"
           defaultPersonalBannerFile: "default-personal-banner.png"
           defaultPersonalAvatarFile: "default-personal-banner.png"
+          gcuVersion: *gcu-version
 
       scheduler:
         backend: "temporal"
@@ -236,6 +244,7 @@ applications:
 
       ai:
         max_concurrent_sessions_per_user: 9999
+        max_attached_files_per_user: 9999
         knowledge_flow_url: "https://prism-ui-int.six.cloud.thales/knowledge-flow/v1"
 
       storage:
@@ -430,9 +439,8 @@ applications:
         - id: "mcp-knowledge-flow-mcp-text"
           name: "mcp.servers.search_documents.name"
           description: "mcp.servers.search_documents.description"
-          transport: "streamable_http"
-          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-text"
-          sse_read_timeout: 2000
+          transport: "inprocess"
+          provider: "kf_vector_search"
           enabled: true
           auth_mode: "user_token"
         - id: "mcp-knowledge-flow-mcp-tabular"
@@ -443,11 +451,14 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
+
   # ===========================================================================
   # FRONTEND
   # ===========================================================================
   frontend:
     image:
+      # repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend@sha256
+      # tag: 052720b10002fe96a7fc02adbac4458055adcd581c6a7b9d26f00c0d4c936655
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend
       tag: *prism-tag
       pullPolicy: *prism-pullPolicy
@@ -514,6 +525,7 @@ applications:
     configuration:
       app:
         log_level: "info"
+        gcu_version: *gcu-version
 
       processing:
         profiles:
@@ -596,6 +608,7 @@ applications:
   # CONTROL PLANE BACKEND
   # ===========================================================================
   control-plane-backend:
+    replicaCount: 2
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/control-plane-backend
       tag: *prism-tag
@@ -607,6 +620,10 @@ applications:
     extraVolumeMounts: *ssl-extra-volume-mounts
 
     configuration:
+      app:
+        log_level: "info"
+        gcu_version: *gcu-version
+
       security:  *common-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
@@ -618,6 +635,7 @@ applications:
     enabled: true
     deployment:
       enabled: true
+    replicaCount: 1
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/control-plane-backend
       tag: *prism-tag
