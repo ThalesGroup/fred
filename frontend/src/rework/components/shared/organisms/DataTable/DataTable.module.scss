@@ -36,9 +36,9 @@
     min-width: 0;
     overflow-x: hidden;
     color: var(--on-surface-retreat);
+    font: var(--font-label-large);
     text-overflow: ellipsis;
     white-space: nowrap;
-    font: var(--font-label-large);
   }
 }
 

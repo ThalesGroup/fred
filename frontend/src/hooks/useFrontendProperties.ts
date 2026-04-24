@@ -27,6 +27,7 @@ export interface FrontendProperties {
   defaultTeamBannerFile: string;
   faviconName: string;
   faviconNameDark: string;
+  gcuVersion: string | null;
   logoName: string;
   logoNameDark: string;
   siteDisplayName: string;
@@ -67,12 +68,13 @@ export function useFrontendProperties(): FrontendProperties {
       defaultTeamBannerFile: getProperty("defaultTeamBannerFile") || "default-team-banner.png",
       faviconName: getProperty("faviconName") || "fred",
       faviconNameDark: getProperty("faviconNameDark") || "fred-dark",
+      gcuVersion: bootstrap?.gcu_version ?? (getProperty("gcuVersion") || null),
       logoName: getProperty("logoName") || "fred",
       logoNameDark: getProperty("logoNameDark") || "fred-dark",
       siteDisplayName: ui?.siteDisplayName || getProperty("siteDisplayName") || "Fred",
       siteSubtitle: getProperty("siteSubtitle") || "",
       siteTitle: getProperty("siteTitle") || ui?.siteDisplayName || "Fred",
     }),
-    [ui],
+    [bootstrap?.gcu_version, ui],
   );
 }

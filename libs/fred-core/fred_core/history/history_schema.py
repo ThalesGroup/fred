@@ -33,7 +33,7 @@ Example:
         session_id="s1",
         exchange_id="ex1",
         rank=0,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         role=Role.user,
         channel=Channel.final,
         parts=[TextPart(text="Hello")],
@@ -49,7 +49,7 @@ Note on MessagePart coverage:
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypeAlias, Union
 
@@ -277,7 +277,7 @@ def make_user_text(
         session_id=session_id,
         exchange_id=exchange_id,
         rank=rank,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         role=Role.user,
         channel=Channel.final,
         parts=[TextPart(text=text)],
@@ -305,7 +305,7 @@ def make_assistant_final(
         session_id=session_id,
         exchange_id=exchange_id,
         rank=rank,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         role=Role.assistant,
         channel=Channel.final,
         parts=[TextPart(text=text)] if text else [],
@@ -336,7 +336,7 @@ def make_tool_call(
         session_id=session_id,
         exchange_id=exchange_id,
         rank=rank,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         role=Role.assistant,
         channel=Channel.tool_call,
         parts=[ToolCallPart(call_id=call_id, name=name, args=args)],
@@ -363,7 +363,7 @@ def make_tool_result(
         session_id=session_id,
         exchange_id=exchange_id,
         rank=rank,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         role=Role.tool,
         channel=Channel.tool_result,
         parts=[

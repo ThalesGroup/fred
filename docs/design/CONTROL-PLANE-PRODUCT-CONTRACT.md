@@ -93,6 +93,7 @@ Phase 3a uses one control-plane-owned bootstrap payload:
   - `current_user`
   - `active_team`
   - `available_teams`
+  - `gcu_version`
   - `feature_flags`
   - `ui_settings`
   - `permissions`

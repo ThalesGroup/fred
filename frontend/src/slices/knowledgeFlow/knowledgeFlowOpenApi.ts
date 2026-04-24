@@ -531,6 +531,15 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/knowledge-flow/v1/vector/search`, method: "POST", body: queryArg.searchRequest }),
     }),
+    getVisualEvidenceArtifact: build.query<GetVisualEvidenceArtifactApiResponse, GetVisualEvidenceArtifactApiArg>({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vector/visual-evidence-artifact`,
+        params: {
+          document_uid: queryArg.documentUid,
+          artifact_path: queryArg.artifactPath,
+        },
+      }),
+    }),
     testPostSuccess: build.mutation<TestPostSuccessApiResponse, TestPostSuccessApiArg>({
       query: () => ({ url: `/knowledge-flow/v1/vector/test`, method: "POST" }),
     }),
@@ -1488,6 +1497,11 @@ export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
 export type SearchDocumentsUsingVectorizationApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type SearchDocumentsUsingVectorizationApiArg = {
   searchRequest: SearchRequest;
+};
+export type GetVisualEvidenceArtifactApiResponse = /** status 200 Successful Response */ VisualEvidenceArtifactResponse;
+export type GetVisualEvidenceArtifactApiArg = {
+  documentUid: string;
+  artifactPath: string;
 };
 export type TestPostSuccessApiResponse = /** status 200 Successful Response */ VectorSearchHit[];
 export type TestPostSuccessApiArg = void;
@@ -2450,6 +2464,13 @@ export type SearchRequest = {
   /** If true, also search corpus/library vectors (non-session scope). */
   include_corpus_scope?: boolean;
 };
+export type VisualEvidenceArtifactResponse = {
+  document_uid: string;
+  artifact_path: string;
+  file_name: string;
+  content_type: string;
+  artifact_url: string;
+};
 export type RerankRequest = {
   question: string;
   documents: VectorSearchHit[];
@@ -2981,6 +3002,8 @@ export const {
   useBackfillRebacRelationsKnowledgeFlowV1TagsRebacBackfillPostMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
+  useGetVisualEvidenceArtifactQuery,
+  useLazyGetVisualEvidenceArtifactQuery,
   useTestPostSuccessMutation,
   useRerankDocumentsMutation,
   useQueryKnowledgeFlowV1KpiQueryPostMutation,

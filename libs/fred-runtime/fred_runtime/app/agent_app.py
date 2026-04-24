@@ -44,7 +44,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
@@ -1045,7 +1045,7 @@ async def _resolve_agent_instance(
 
 
 def _make_user_dependency(
-    get_current_user_fn: Callable[..., KeycloakUser],
+    get_current_user_fn: Callable[..., KeycloakUser | Awaitable[KeycloakUser]],
     security_enabled: bool,
 ) -> Callable[..., KeycloakUser | None]:
     """

@@ -132,6 +132,7 @@ This payload is the single source of truth for:
 - current user
 - active team
 - available teams
+- GCU version gating when the product enables it
 - frontend feature flags
 - frontend UI settings
 - flattened permissions

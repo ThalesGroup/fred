@@ -105,7 +105,7 @@ class StoreEmitHandler(logging.Handler):
 
             # Never block the app on logging:
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 loop.call_soon_threadsafe(self.store.index_event, e)
             except RuntimeError:
                 # no running loop (sync context) → call directly

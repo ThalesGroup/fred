@@ -258,6 +258,7 @@ async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
 async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     app = create_app()
     app_context = ApplicationContext.get_instance()
+    app_context.configuration.app.gcu_version = "V1"
     app_context.configuration.platform.frontend.ui_settings.siteDisplayName = (
         "Fred Control Plane"
     )
@@ -272,6 +273,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["current_user"]["id"] == "admin"
     assert payload["active_team"]["id"] == "personal"
     assert payload["available_teams"][0]["id"] == "personal"
+    assert payload["gcu_version"] == "V1"
     assert payload["feature_flags"]["enableK8Features"] is False
     assert payload["ui_settings"]["siteDisplayName"] == "Fred Control Plane"
     assert "agents:read" in payload["permissions"]["items"]
@@ -1461,7 +1463,8 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     class _FakeAppContext:
         def __init__(self) -> None:
             scheduler = type("SchedulerCfg", (), {"enabled": True})()
-            self.configuration = type("Cfg", (), {"scheduler": scheduler})()
+            app = type("AppCfg", (), {"gcu_version": None})()
+            self.configuration = type("Cfg", (), {"scheduler": scheduler, "app": app})()
             self._rebac = _FakeRebac()
             self._session_store = _FakeSessionStore()
             self._queue_store = _FakeQueueStore()

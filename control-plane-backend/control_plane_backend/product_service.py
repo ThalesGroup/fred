@@ -116,6 +116,7 @@ async def build_frontend_bootstrap(user: KeycloakUser) -> FrontendBootstrap:
         current_user=UserSummary.from_keycloak_user(user),
         active_team=active_team,
         available_teams=available_teams,
+        gcu_version=app_context.configuration.app.gcu_version,
         feature_flags=app_context.configuration.platform.frontend.feature_flags,
         ui_settings=app_context.configuration.platform.frontend.ui_settings,
         permissions=_build_permission_summary(user),

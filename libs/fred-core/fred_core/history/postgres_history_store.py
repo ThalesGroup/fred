@@ -91,7 +91,7 @@ def _normalize_ts(ts: datetime | str) -> datetime:
             dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         except Exception:
             logger.warning("[history][pg] Failed to parse timestamp %r — using now", ts)
-            dt = datetime.utcnow().replace(tzinfo=timezone.utc)
+            dt = datetime.now(timezone.utc)
     else:
         dt = ts
     if dt.tzinfo is None:

@@ -9,6 +9,7 @@ import asyncio
 import atexit
 import logging
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
@@ -17,6 +18,32 @@ import httpx
 from fred_core.common import ModelConfiguration
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _silence_asyncio_debug_logs():
+    """
+    Temporarily suppress asyncio logger output during teardown-only loop creation.
+
+    Why this exists:
+    - synchronous shutdown may need a short-lived event loop to close the shared
+      async HTTPX client
+    - pytest may already have closed captured log streams at process teardown,
+      and asyncio emits a debug line when constructing a new loop
+
+    How to use it:
+    - wrap `asyncio.run(...)` calls used purely for teardown
+
+    Example:
+    - `with _silence_asyncio_debug_logs(): asyncio.run(_close())`
+    """
+    asyncio_logger = logging.getLogger("asyncio")
+    previous_disabled = asyncio_logger.disabled
+    asyncio_logger.disabled = True
+    try:
+        yield
+    finally:
+        asyncio_logger.disabled = previous_disabled
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +314,14 @@ def get_shared_stack(
 def shutdown_shared_clients() -> None:
     """
     Best-effort shutdown. Never raises.
+
+    Why this function exists:
+    - tests and short-lived processes must close shared HTTPX clients without
+      producing teardown noise once pytest has already closed captured streams
+
+    How to use it:
+    - call during synchronous teardown; successful shutdown stays silent, while
+      close failures are still logged
     """
     global _SYNC_CLIENT, _ASYNC_CLIENT
 
@@ -299,7 +334,6 @@ def shutdown_shared_clients() -> None:
     if sync_client is not None:
         try:
             sync_client.close()
-            logger.info("[NET] Sync HTTPX client closed.")
         except Exception:
             logger.exception("[NET] Error closing Sync HTTPX client.")
 
@@ -310,7 +344,7 @@ def shutdown_shared_clients() -> None:
 
         try:
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = None
 
@@ -318,9 +352,8 @@ def shutdown_shared_clients() -> None:
                 # Best-effort scheduling; avoids blocking shutdown in async servers.
                 loop.create_task(_close())
             else:
-                asyncio.run(_close())
-
-            logger.info("[NET] Async HTTPX client closed.")
+                with _silence_asyncio_debug_logs():
+                    asyncio.run(_close())
         except Exception:
             logger.exception("[NET] Error closing Async HTTPX client.")
 
@@ -328,6 +361,10 @@ def shutdown_shared_clients() -> None:
 async def async_shutdown_shared_clients() -> None:
     """
     Async variant that awaits async client closure when a running loop is available.
+
+    Why this function exists:
+    - async teardown paths should await shared client closure directly without
+      adding success-only log noise to tests
     """
     global _SYNC_CLIENT, _ASYNC_CLIENT
 
@@ -340,13 +377,11 @@ async def async_shutdown_shared_clients() -> None:
     if sync_client is not None:
         try:
             sync_client.close()
-            logger.info("[NET] Sync HTTPX client closed.")
         except Exception:
             logger.exception("[NET] Error closing Sync HTTPX client.")
 
     if async_client is not None:
         try:
             await async_client.aclose()
-            logger.info("[NET] Async HTTPX client closed.")
         except Exception:
             logger.exception("[NET] Error closing Async HTTPX client.")

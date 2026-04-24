@@ -62,6 +62,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/user` }),
     }),
+    validateGcuControlPlaneV1GcuPost: build.mutation<
+      ValidateGcuControlPlaneV1GcuPostApiResponse,
+      ValidateGcuControlPlaneV1GcuPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/gcu`, method: "POST" }),
+    }),
     listTeamsControlPlaneV1TeamsGet: build.query<
       ListTeamsControlPlaneV1TeamsGetApiResponse,
       ListTeamsControlPlaneV1TeamsGetApiArg
@@ -240,6 +246,8 @@ export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
 };
 export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
+export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
+export type ValidateGcuControlPlaneV1GcuPostApiArg = void;
 export type ListTeamsControlPlaneV1TeamsGetApiResponse = /** status 200 Successful Response */ Team[];
 export type ListTeamsControlPlaneV1TeamsGetApiArg = void;
 export type GetTeamControlPlaneV1TeamsTeamIdGetApiResponse = /** status 200 Successful Response */ TeamWithPermissions;
@@ -397,6 +405,7 @@ export type UserSummary = {
   first_name?: string | null;
   last_name?: string | null;
   username?: string | null;
+  email?: string | null;
 };
 export type CreateUserRequest = {
   username: string;
@@ -406,6 +415,7 @@ export type CreateUserRequest = {
   last_name?: string | null;
   enabled?: boolean;
 };
+export type GcuVersionsType = "v1";
 export type TeamPermission =
   | "can_read"
   | "can_update_info"
@@ -428,6 +438,7 @@ export type TeamWithPermissions = {
   permissions?: TeamPermission[];
 };
 export type UserDetails = {
+  cguValidated: GcuVersionsType | null;
   personalTeam: TeamWithPermissions;
 };
 export type Team = {
@@ -494,6 +505,7 @@ export type FrontendBootstrap = {
   current_user: UserSummary;
   active_team: TeamWithPermissions;
   available_teams?: Team[];
+  gcu_version?: string | null;
   feature_flags: FrontendFeatureFlags;
   ui_settings: FrontendUiSettings;
   permissions: PermissionSummary;
@@ -642,6 +654,7 @@ export const {
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
+  useValidateGcuControlPlaneV1GcuPostMutation,
   useListTeamsControlPlaneV1TeamsGetQuery,
   useLazyListTeamsControlPlaneV1TeamsGetQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery,

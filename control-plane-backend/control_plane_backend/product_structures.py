@@ -34,6 +34,7 @@ class FrontendBootstrap(BaseModel):
     current_user: UserSummary
     active_team: TeamWithPermissions
     available_teams: list[Team] = Field(default_factory=list)
+    gcu_version: str | None = None
     feature_flags: FrontendFeatureFlags
     ui_settings: FrontendUiSettings
     permissions: PermissionSummary

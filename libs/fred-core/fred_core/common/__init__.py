@@ -14,6 +14,7 @@
 
 from .config_files import ConfigFiles
 from .config_loader import (
+    get_config,
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
 )
@@ -60,4 +61,5 @@ __all__ = [
     "raise_internal_error",
     "read_env_bool",
     "register_exception_handlers",
+    "get_config",
 ]

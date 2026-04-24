@@ -30,9 +30,12 @@
 
 ### 1.1 Mock user injection
 **Status:** ✅
-**Files:** `agent_app.py:_make_user_dependency()` (~line 1049–1075)
-**How:** When `security_enabled=False`, `get_current_user` returns `None`; all route handlers that accept `authenticated_user` receive `None` and skip identity checks.
-**Tests:** Covered implicitly by all no-security route tests.
+**Files:**
+- `agent_app.py:_make_user_dependency()` (~line 1049–1075)
+- `fred_core/security/oidc.py:get_current_user_without_gcu()` / `get_current_user()`
+**How:** When `security_enabled=False`, runtime routes receive `authenticated_user=None` and skip identity checks. In shared `fred-core` auth helpers, no-security mode returns a mock admin user with `uid="admin"`.
+**Important boundary:** That mock admin uid is **not** a UUID-backed persisted user record. No-security helpers must not force it through the new `fred_core.users` GCU/user store. GCU persistence is for real Keycloak-backed users only.
+**Tests:** Covered implicitly by no-security route tests; control-plane `/user` also relies on this when auth is disabled.
 
 ### 1.2 Default team_id = "personal"
 **Status:** ✅ (fixed 2026-04-22, commit `dce5e33f`)

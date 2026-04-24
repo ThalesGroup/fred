@@ -12,25 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
+import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
+import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
+import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
+import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouteObject } from "react-router-dom";
+import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 import Chat from "../pages/Chat";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
+import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
 import { Profile } from "../pages/Profile";
-import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { getConfig } from "./config";
-import DesignSystemPage from "../pages/DesignSystemPage/DesignSystemPage.tsx";
-import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
-import React, { lazy, Suspense } from "react";
-import LoadingWithProgress from "../components/LoadingWithProgress";
-import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
-import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
-import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -56,10 +57,6 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: <Navigate to="/team/personal/agents" replace />,
-      },
-      {
-        path: "/design-system",
-        element: <DesignSystemPage />,
       },
       {
         path: "team/:teamId/new-chat/:agent-id",
@@ -190,6 +187,14 @@ export const routes: RouteObject[] = [
         element: <PageError />,
       },
     ].filter(Boolean),
+  },
+  {
+    path: "/gcu",
+    element: <GcuPage />,
+  },
+  {
+    path: "/gdpr",
+    element: <GdprPage />,
   },
   {
     path: "unauthorized",

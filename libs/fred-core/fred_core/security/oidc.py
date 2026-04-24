@@ -19,18 +19,22 @@ import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
+from uuid import UUID
 
 import jwt
-from fastapi import HTTPException, Security
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWKClient
 
-from fred_core.common import ThreadSafeLRUCache, read_env_bool
+from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.security.structure import KeycloakUser, UserSecurity
 from fred_core.security.whitelist_access_control.access_control import (
     is_user_whitelisted,
     is_whitelist_active,
 )
+
+from ..users.store import BaseUserStore
+from ..users.store.postgres_user_store import get_user_store
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +220,29 @@ def _cache_user(token: str, payload: Dict[str, Any], user: KeycloakUser) -> None
     _JWT_CACHE.set(token, (expires_at, user))
 
 
+def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
+    """
+    Return the Keycloak subject as a UUID when the deployment uses UUID subjects.
+
+    Why this function exists:
+    - GCU enforcement now relies on the shared `fred_core.users` store keyed by
+      UUID
+    - no-security mode still injects a mock admin user with `uid="admin"`, and
+      that mock subject must not be forced into the persisted user store path
+
+    How to use it:
+    - call before GCU store reads or writes; handle `None` according to the
+      current security mode
+
+    Example:
+    - `user_uuid = _parse_user_uuid(user)`
+    """
+    try:
+        return UUID(user.uid)
+    except ValueError:
+        return None
+
+
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -354,7 +381,52 @@ def decode_jwt(token: str) -> KeycloakUser:
     return user
 
 
-def get_current_user(token: str = Security(oauth2_scheme)) -> KeycloakUser:
+async def get_current_user(
+    token: str = Security(oauth2_scheme),
+    user_store: BaseUserStore = Depends(get_user_store),
+    configuration=Depends(get_config),
+) -> KeycloakUser:
+    """
+    Return the authenticated user and enforce persisted GCU acceptance when enabled.
+
+    Why this function exists:
+    - secured deployments must gate access on the configured GCU version
+    - no-security mode still needs a lightweight mock admin without requiring a
+      UUID-backed persisted user row
+
+    How to use it:
+    - use as the default dependency for endpoints that require a fully admitted
+      user; pair with `get_current_user_without_gcu()` for the `/gcu` acceptance
+      flow itself
+
+    Example:
+    - `user: KeycloakUser = Depends(get_current_user)`
+    """
+    user = await get_current_user_without_gcu(token)
+    if configuration.app.gcu_version is None or not KEYCLOAK_ENABLED:
+        return user
+
+    user_uuid = _parse_user_uuid(user)
+    if user_uuid is None:
+        logger.warning(
+            "[SECURITY] Authenticated subject %r is not UUID-backed; rejecting GCU lookup.",
+            user.uid,
+        )
+        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
+
+    user_details = await user_store.find_user_by_id(user_uuid)
+
+    if (
+        not user_details
+        or user_details.gcuVersionAccepted.value != configuration.app.gcu_version
+    ):
+        raise HTTPException(status_code=403, detail="user_not_accept_gcu")
+    return user
+
+
+async def get_current_user_without_gcu(
+    token: str = Security(oauth2_scheme),
+) -> KeycloakUser:
     """Fetches the current user from Keycloak token with robust diagnostics."""
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")

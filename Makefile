@@ -1,6 +1,6 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents agentic-backend knowledge-flow-backend control-plane-backend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents agentic-backend knowledge-flow-backend control-plane-backend
-DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backend frontend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents knowledge-flow-backend control-plane-backend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents knowledge-flow-backend control-plane-backend
+DOCKER_BUILD_DIRS := knowledge-flow-backend control-plane-backend frontend
 
 .DEFAULT_GOAL := help
 
