@@ -648,7 +648,7 @@
       "placeholder": "Write your message…  Enter to send • Shift+Enter for newline"
     },
     "attachFiles": "Attach files",
-    "addLibraries": "Add libraries",
+    "addLibraries": "Select folders",
     "addDocuments": "Add documents",
     "attachments": {
       "betaNotice": "File attachments are in beta. Supported formats: PDF, DOC, DOCX, PPT, PPTX, TXT, MD, CSV, TSV, RTF, HTML, JSON, JSONL, XLS, XLSX. Please provide feedback to help us improve this feature.",
