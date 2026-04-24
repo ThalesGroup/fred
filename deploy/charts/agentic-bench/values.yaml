@@ -14,24 +14,52 @@ job:
 
 # Benchmark client flags
 bench:
-  url: ws://agentic-backend:8000/agentic/v1/chatbot/query/ws
-  agent: Georges
-  message: Hello
-  clients: 5
-  requests: 50
-  requestsPerClient: 0         # if >0, per-client mode; otherwise uses requests
-  timeoutSeconds: 90
-  insecureTLS: false
-  tokenInQuery: false
-  allowEmptyToken: false
-  sessionTitle: Benchmark
-  createSession: true
-  deleteSession: true
-  prepareSessions: true
-  prepareConcurrency: 20
-  extraArgs: []                # additional raw args, e.g. ["-session","abc"]
+  mode: rag                   # normal | rag | existing
+  common:
+    url: ws://agentic-backend:8000/agentic/v1/chatbot/query/ws
+    agent: basic.react.v2
+    agentUUID: ""              # reuse an existing agent UUID instead of creating one
+    agentCreateURL: ""
+    message: "search please"
+    clients: 20
+    requests: 0
+    requestsPerClient: 5       # if >0, per-client mode; otherwise uses requests
+    timeoutSeconds: 90
+    insecureTLS: false
+    tokenInQuery: false
+    allowEmptyToken: false
+    sessionTitle: Benchmark
+    createSession: true
+    deleteSession: true
+    prepareSessions: true
+    prepareConcurrency: 20
+    readLimitBytes: 8388608
+    extraArgs: []              # additional raw args, e.g. ["-session","abc"]
+  modes:
+    normal:
+      ensureV2DefinitionRef: v2.react.basic
+      ensureV2ProfileID: ""
+      ensureAgentName: Bench Basic ReAct
+      deleteCreatedAgent: true
+      searchPolicy: ""
+      searchRagScope: ""
+    rag:
+      ensureV2DefinitionRef: ""
+      ensureV2ProfileID: rag_expert
+      ensureAgentName: Bench RAG Expert
+      deleteCreatedAgent: true
+      searchPolicy: hybrid
+      searchRagScope: corpus_only
+    existing:
+      ensureV2DefinitionRef: ""
+      ensureV2ProfileID: ""
+      ensureAgentName: ""
+      deleteCreatedAgent: false
+      searchPolicy: ""
+      searchRagScope: ""
 
-# Secret that holds the bearer token
+# Secret that holds the bearer token. The chart expects the token as input and
+# does not try to mint one from Keycloak.
 tokenSecret:
   name: ""                     # set to an existing Secret to populate AGENTIC_TOKEN
   key: token
