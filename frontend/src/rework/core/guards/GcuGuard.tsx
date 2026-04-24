@@ -16,7 +16,7 @@ export default function GcuGuard({ children }: PropsWithChildren) {
   }
   const userDetails: UserDetails = result.data;
 
-  if (!gcuVersion || userDetails && userDetails.cguValidated.toString() == gcuVersion) {
+  if (!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion)) {
     return <>{children}</>;
   }
 

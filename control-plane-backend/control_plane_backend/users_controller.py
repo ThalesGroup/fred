@@ -141,7 +141,7 @@ class UserDetails(BaseModel):
     summary="Return user informations.",
 )
 async def get_user_details(
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     """Return the personal team through the shared team resolver.
