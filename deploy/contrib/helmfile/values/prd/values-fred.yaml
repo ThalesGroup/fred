@@ -54,9 +54,9 @@ x-kf-scheduler: &kf-scheduler
     # INTERNAL CONCURRENCY SETUP: These are set to 10 in the integration values file, so depending on 
     # how it goes we maybe can set them to 10 as well (or more if we feel like it is low risk)
     ##################################################################################################
-    # ingestion_workflow_parallelism: 5 # TODO: see how much we can bump it, default is 3
-    # ingestion_max_concurrent_workflow_tasks: 5 # TODO: see how much we can bump it, default is 3
-    # ingestion_max_concurrent_activities: 5 # TODO: see how much we can bump it, default is 3
+    ingestion_workflow_parallelism: 5 # TODO: see how much we can bump it, default is 3
+    ingestion_max_concurrent_workflow_tasks: 5 # TODO: see how much we can bump it, default is 3
+    ingestion_max_concurrent_activities: 5 # TODO: see how much we can bump it, default is 3
     ##################################################################################################
 
 x-kf-content-storage: &kf-content-storage
@@ -125,7 +125,7 @@ x-kf-storage: &kf-storage
 x-kf-mcp: &kf-mcp
   reports_enabled: false
   kpi_enabled: false
-  tabular_enabled: false
+  tabular_enabled: true
   statistic_enabled: false
   text_enabled: true
   templates_enabled: false
@@ -575,7 +575,15 @@ applications:
       #     libraries_selection: true
       #     attach_files: true      
 
-      react_profiles: []
+      # SQL Agent
+      - id: "SQL Agent"
+        name: "SQL Agent"
+        type: "agent"
+        definition_ref: "v2.production.sql_analyst"
+        
+      react_profiles:
+      - profile_id: "rag_expert"
+        enabled: true
 
     # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
     models_catalog:
@@ -624,7 +632,14 @@ applications:
           sse_read_timeout: 2000
           enabled: true
           auth_mode: "user_token"
-
+        - id: "mcp-knowledge-flow-mcp-tabular"
+          name: "mcp.servers.tabular.name"
+          description: "mcp.servers.tabular.description"
+          transport: "streamable_http"
+          url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
+          sse_read_timeout: 2000
+          enabled: true
+          auth_mode: "user_token"
   # ===========================================================================
   # FRONTEND
   # ===========================================================================

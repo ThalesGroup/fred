@@ -335,7 +335,15 @@ applications:
           libraries_selection: true
           attach_files: true      
 
-      react_profiles: []
+      # SQL Agent
+      - id: "SQL Agent"
+        name: "SQL Agent"
+        type: "agent"
+        definition_ref: "v2.production.sql_analyst"
+        
+      react_profiles:
+      - profile_id: "rag_expert"
+        enabled: true
 
     # ── Models catalog (TGS Mistral Medium) ───────────────────────────────────
     models_catalog:
