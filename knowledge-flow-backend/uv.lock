@@ -1039,7 +1039,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "1.4.1+prism.1.post"
+version = "1.5.0+prism.1.post"
 source = { editable = "../fred-core" }
 dependencies = [
     { name = "aiosqlite", marker = "sys_platform == 'linux'" },
@@ -1775,7 +1775,7 @@ wheels = [
 
 [[package]]
 name = "knowledge-flow-backend"
-version = "1.4.1+prism.1.post"
+version = "1.5.0+prism.1.post"
 source = { editable = "." }
 dependencies = [
     { name = "alembic", marker = "sys_platform == 'linux'" },
@@ -4496,7 +4496,7 @@ dependencies = [
     { name = "typing-extensions", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:8f8b3cfc53010a4b4a3c7ecb88c212e9decc4f5eeb6af75c3c803937d2d60947" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:8f8b3cfc53010a4b4a3c7ecb88c212e9decc4f5eeb6af75c3c803937d2d60947", upload-time = "2025-06-03T18:27:57Z" },
 ]
 
 [[package]]
@@ -4530,7 +4530,7 @@ dependencies = [
     { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.22.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:b5fa7044bd82c6358e8229351c98070cf3a7bf4a6e89ea46352ae6c65745ef94" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.22.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:b5fa7044bd82c6358e8229351c98070cf3a7bf4a6e89ea46352ae6c65745ef94", upload-time = "2025-06-03T18:37:22Z" },
 ]
 
 [[package]]
