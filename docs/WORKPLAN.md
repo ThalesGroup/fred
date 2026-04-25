@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-04-23
+Last updated: 2026-04-25
 
 ---
 
@@ -181,6 +181,40 @@ Current state: RFC exists, no implementation started.
 
 ---
 
+## D1 — Control-Plane Developer CLI · Important next backend ergonomics track
+
+**Ref**: `docs/backlog/CONTROL-PLANE-CLI-BACKLOG.md`
+
+**Why**: `fred-agent-chat` gives us a first-class runtime validation console, but
+we still lack an equivalent terminal workflow for the control-plane product and
+admin surface. As `control-plane-backend` becomes the sole authority for
+managed-agent lifecycle, runtime binding, and execution preparation, this gap is
+becoming operationally expensive.
+
+**Intent**:
+- give `control-plane-backend` its own `make cli` developer/operator console
+- keep runtime-specific chat behavior in `fred-runtime`
+- move only truly shared CLI primitives into `fred-core`
+- explicitly defer the `knowledge-flow` CLI until after `knowledge-flow-backend`
+  is moved under `apps/`
+
+**Current status (2026-04-25)**:
+- [x] Freeze placement rules: shared CLI primitives in `fred-core`, runtime
+      chat in `fred-runtime`, control-plane commands in
+      `control-plane-backend`
+- [x] Add one dedicated control-plane console script + `make cli`
+- [x] Deliver MVP commands for templates, instances, enrollment, runtime
+      binding, sessions, execution preparation, and lifecycle/policy inspection
+- [x] Keep `knowledge-flow` CLI out of scope for this track
+- [x] `make code-quality` and `make test` pass in `control-plane-backend`
+- [x] `make code-quality` and `make test` pass in `libs/fred-core`
+- [x] `make code-quality` and `make test` pass in `libs/fred-runtime`
+- [ ] Run one live stack validation in no-security mode
+- [ ] Run one live stack validation in Keycloak-enabled mode
+- [ ] Run one operator happy path for enroll / unbind / prepare-execution
+
+---
+
 ## Sequence Summary
 
 ```
@@ -189,7 +223,8 @@ NOW (parallel)
 ├── Simon:   S2 Prometheus cardinality fix ──────────────────────► ship anytime
 ├── Florian: F1 updated_at strategy + PATCH impl ────────────────► unblocks 6A
 ├── Florian: F2 PATCH session endpoint ──────────────────────────► unblocks 6C
-└── Olélia:  O1 Evaluation RFC → harness ────────────────────────► independent
+├── Olélia:  O1 Evaluation RFC → harness ────────────────────────► independent
+└── Parallel: D1 Control-plane CLI live validation + closeout ───► backend ergonomics track
 
 AFTER S1 + F1 CLOSED
 └── Félix:   6A Chat UI architecture ──────────────────────────────────────┐

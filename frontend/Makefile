@@ -101,7 +101,7 @@ update-control-plane-api: ## update the generated hooks used in UI based on cont
 	@echo "🔧 Installing frontend dependencies..."
 	npm ci
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
-	cd ../control-plane-backend && make generate-openapi
+	cd ../apps/control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
 	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 

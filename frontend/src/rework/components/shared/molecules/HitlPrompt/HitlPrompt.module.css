@@ -1,0 +1,35 @@
+.card {
+  align-self: flex-start;
+  max-width: 72%;
+  padding: var(--spacing-m, 1rem);
+  border: 1px solid var(--outline, #cac4d0);
+  border-radius: var(--radius-s, 0.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s, 0.75rem);
+  background: var(--surface-container, #f3edf7);
+}
+
+.title {
+  margin: 0;
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
+  color: var(--on-surface, #1c1b1f);
+}
+
+.question {
+  margin: 0;
+  font: var(--font-body-large, 1rem/1.5 sans-serif);
+  color: var(--on-surface, #1c1b1f);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs, 0.5rem);
+}
+
+.freeText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 0.5rem);
+}

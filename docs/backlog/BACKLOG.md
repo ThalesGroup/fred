@@ -759,7 +759,7 @@ A small, typed control-plane product surface that lets the frontend:
 #### 3.7.2 Status Note
 
 Phase 3a now has a concrete read-only backend surface in `control-plane-backend`
-and regenerated frontend typing from `control-plane-backend/openapi.json`.
+and regenerated frontend typing from `apps/control-plane-backend/openapi.json`.
 
 Implemented public read-only endpoints:
 
@@ -792,7 +792,7 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
 - [x] Add `GET /frontend/bootstrap` in `control-plane-backend`
 - [x] Add read-only agent template aggregation endpoint
 - [x] Add read-only team-scoped managed agent instance listing endpoint
-- [x] Regenerate `control-plane-backend/openapi.json`
+- [x] Regenerate `apps/control-plane-backend/openapi.json`
 - [x] Regenerate frontend `controlPlaneOpenApi.ts`
 
 #### 3.7.4 Validation
@@ -857,7 +857,7 @@ Additional Phase 3 guardrails:
 
 ### 3.12 Files to inspect
 
-- `control-plane-backend/control_plane_backend/main.py`
+- `apps/control-plane-backend/control_plane_backend/main.py`
 - `docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`
 - `agentic-backend/agentic_backend/core/agents/agent_controller.py`
 - `agentic-backend/agentic_backend/core/chatbot/chatbot_controller.py`
@@ -1724,7 +1724,7 @@ This is the correct bridge between:
 
 #### E. Regenerate contracts
 
-- [x] Regenerate `control-plane-backend/openapi.json`
+- [x] Regenerate `apps/control-plane-backend/openapi.json`
 - [x] Regenerate frontend `controlPlaneOpenApi.ts`
 - [x] Verify the frontend receives typed `ExecutionPreparation`
 

@@ -25,6 +25,12 @@ PORT_RANGE = (9300, 9999)
 
 PYTHON_SERVICES = ["agentic-backend", "knowledge-flow-backend", "control-plane-backend"]
 ALL_SERVICES = [*PYTHON_SERVICES, "frontend"]
+SERVICE_DIRS = {
+    "agentic-backend": Path("agentic-backend"),
+    "knowledge-flow-backend": Path("knowledge-flow-backend"),
+    "control-plane-backend": Path("apps/control-plane-backend"),
+    "frontend": Path("frontend"),
+}
 
 DEFAULT_PORTS = {
     "agentic-backend": 8000,
@@ -115,6 +121,12 @@ def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 def run_quiet(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     """Run a command silently."""
     return subprocess.run(cmd, check=True, capture_output=True, text=True, **kwargs)
+
+
+def service_dir(service: str) -> Path:
+    """Return the repository-relative directory for one service name."""
+
+    return SERVICE_DIRS.get(service, Path(service))
 
 
 def worktree_dir(branch: str) -> Path:
@@ -441,12 +453,13 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
     # Copy .env files
     step("Copying .env files...")
     for svc in PYTHON_SERVICES:
-        src = FRED_ROOT / svc / "config" / ".env"
-        dst = wt / svc / "config" / ".env"
+        relative_dir = service_dir(svc)
+        src = FRED_ROOT / relative_dir / "config" / ".env"
+        dst = wt / relative_dir / "config" / ".env"
         if src.exists():
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
-            info(f"{svc}/config/.env")
+            info(f"{relative_dir}/config/.env")
 
     # Configure LLM provider
     if provider:
@@ -462,7 +475,7 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
 
     # Disable prometheus metrics in prod configs (avoids port collisions between worktrees)
     for svc in PYTHON_SERVICES:
-        prod_cfg = wt / svc / "config" / "configuration_prod.yaml"
+        prod_cfg = wt / service_dir(svc) / "config" / "configuration_prod.yaml"
         if prod_cfg.exists():
             content = prod_cfg.read_text()
             content = content.replace("metrics_enabled: true", "metrics_enabled: false")
@@ -507,7 +520,10 @@ def create(branch: str | None, from_issue: str | None, provider: str | None, aut
 
     # Hide worktree-local patches from git status (skip-worktree per worktree)
     skip_paths = [
-        *[f"{svc}/config/configuration_prod.yaml" for svc in PYTHON_SERVICES],
+        *[
+            f"{service_dir(svc)}/config/configuration_prod.yaml"
+            for svc in PYTHON_SERVICES
+        ],
         "agentic-backend/config/mcp_catalog.yaml",
         "agentic-backend/config/models_catalog.yaml",
         "knowledge-flow-backend/config/configuration_worker.yaml",

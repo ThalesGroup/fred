@@ -76,6 +76,13 @@ When ReBAC is enabled:
 
 Both backends validate the same user tokens. `security.user` is therefore identical, while `security.m2m` remains available for service-account automation.
 
+> Terms Of Use / CGU note
+> - Keycloak login alone does not enable Terms acceptance gating.
+> - That behavior is controlled separately by the deployment's active
+>   `gcu_version`.
+> - See [TERMS_OF_USE.md](./TERMS_OF_USE.md) for the operational contract and
+>   current limitation around deployment-provided Terms text.
+
 ### 2.1 Agentic `configuration.yaml`
 ```yaml
 app:

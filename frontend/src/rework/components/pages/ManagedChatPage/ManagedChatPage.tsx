@@ -1,4 +1,4 @@
-// Copyright Thales 2025
+// Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,167 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 
-import { useToast } from "../../../../components/ToastProvider";
-import { useChatSse, ChatSseCallbacks } from "../../../../hooks/useChatSse";
-import { KeyCloakService } from "../../../../security/KeycloakService";
-import type { AwaitingHumanEvent, ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
-import {
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
-  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import Button from "@shared/atoms/Button/Button";
 import TextArea from "@shared/atoms/TextArea/TextArea";
+import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
+import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
+import { useToast } from "../../../../components/ToastProvider";
+import { ChatSseCallbacks, useChatSse } from "../../../../hooks/useChatSse";
+import type { AwaitingHumanEvent, ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import {
+  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { isTraceChannel } from "../../../../rework/utils/traceUtils";
+import { MessageBubble } from "./MessageBubble/MessageBubble";
+import { useSessionHistory } from "./useSessionHistory";
 
 import styles from "./ManagedChatPage.module.css";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function textOf(msg: ChatMessage): string {
-  return (msg.parts ?? [])
-    .filter((p) => p.type === "text")
-    .map((p) => (p as { type: "text"; text: string }).text)
-    .join("");
+interface Turn {
+  exchangeId: string;
+  userMessages: ChatMessage[];
+  traceMessages: ChatMessage[];
+  finalMessages: ChatMessage[];
 }
 
-function roleLabel(msg: ChatMessage): string {
-  if (msg.role === "user") return "You";
-  if (msg.role === "tool") return "Tool";
-  return "Agent";
+function groupIntoTurns(messages: ChatMessage[]): Turn[] {
+  const order: string[] = [];
+  const map = new Map<string, Turn>();
+
+  for (const msg of messages) {
+    const eid = msg.exchange_id;
+    if (!map.has(eid)) {
+      order.push(eid);
+      map.set(eid, { exchangeId: eid, userMessages: [], traceMessages: [], finalMessages: [] });
+    }
+    const turn = map.get(eid)!;
+    if (msg.role === "user") {
+      turn.userMessages.push(msg);
+    } else if (isTraceChannel(msg.channel)) {
+      turn.traceMessages.push(msg);
+    } else {
+      turn.finalMessages.push(msg);
+    }
+  }
+
+  return order.map((eid) => map.get(eid)!);
 }
-
-/** Expand a RFC 6570 Level 1 URI template for a single {session_id} variable. */
-function expandMessagesUrl(template: string, sessionId: string): string {
-  return template.replace("{session_id}", encodeURIComponent(sessionId));
-}
-
-// ---------------------------------------------------------------------------
-// HITL inline prompt
-// ---------------------------------------------------------------------------
-
-interface HitlPromptProps {
-  event: AwaitingHumanEvent;
-  onAnswer: (answer: string | boolean, freeText?: string) => void;
-}
-
-function HitlPrompt({ event, onAnswer }: HitlPromptProps) {
-  const payload = event.payload as {
-    title?: string | null;
-    question?: string | null;
-    choices?: { id: string; label: string }[] | null;
-    free_text?: boolean | null;
-  };
-
-  const [freeText, setFreeText] = useState("");
-
-  return (
-    <div className={styles.hitlCard} role="group" aria-label="Agent is waiting for your input">
-      {payload.title && <p className={styles.hitlTitle}>{payload.title}</p>}
-      {payload.question && <p className={styles.hitlQuestion}>{payload.question}</p>}
-
-      {payload.choices && payload.choices.length > 0 && (
-        <div className={styles.hitlChoices}>
-          {payload.choices.map((c) => (
-            <Button
-              key={c.id}
-              color="secondary"
-              variant="outlined"
-              size="small"
-              onClick={() => onAnswer(c.id)}
-            >
-              {c.label}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {payload.free_text && (
-        <div className={styles.hitlFreeText}>
-          <TextArea
-            label="Your answer"
-            value={freeText}
-            onChange={(e) => setFreeText(e.target.value)}
-            rows={2}
-          />
-          <Button
-            color="primary"
-            variant="filled"
-            size="small"
-            disabled={!freeText.trim()}
-            onClick={() => onAnswer(undefined, freeText)}
-          >
-            Send
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Message bubble
-// ---------------------------------------------------------------------------
-
-interface MessageBubbleProps {
-  msg: ChatMessage;
-}
-
-function MessageBubble({ msg }: MessageBubbleProps) {
-  const text = textOf(msg);
-  const isUser = msg.role === "user";
-  const isDelta =
-    (msg.metadata?.extras as { streaming_delta?: boolean } | undefined)?.streaming_delta === true;
-
-  if (!text && msg.channel !== "tool_call" && msg.channel !== "tool_result") return null;
-
-  return (
-    <div
-      className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleAgent}`}
-      aria-label={`${roleLabel(msg)} message`}
-    >
-      <span className={styles.bubbleRole}>{roleLabel(msg)}</span>
-      {msg.channel === "tool_call" || msg.channel === "tool_result" ? (
-        <span className={styles.bubbleTool}>
-          {msg.channel === "tool_call" ? "⚙ Tool call" : "✓ Tool result"}
-          {text ? `: ${text}` : ""}
-        </span>
-      ) : (
-        <p className={`${styles.bubbleText} ${isDelta ? styles.streaming : ""}`}>{text}</p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 export default function ManagedChatPage() {
-  const { teamId, agentInstanceId } = useParams<{
-    teamId: string;
-    agentInstanceId: string;
-  }>();
+  const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-
   const { showError } = useToast();
 
-  const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
-  // sessionId is kept in URL query params (?session=<uuid>) for persistence across refreshes.
   const [sessionId, setSessionId] = useState<string | null>(() => searchParams.get("session"));
   const [input, setInput] = useState("");
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const historyLoadedRef = useRef<string | null>(null);
 
-  const [prepareExecution] =
-    usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
-  const [registerSession] =
-    usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
+  // Agent display name — never show the raw agent_instance_id to the user.
+  const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
+    { teamId: teamId ?? "" },
+    { skip: !teamId },
+  );
+  const agentDisplayName =
+    agentInstances?.find((i) => i.agent_instance_id === agentInstanceId)?.display_name ?? "Agent";
+
+  const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
 
   const bindSessionId = useCallback(
     (sid: string) => {
@@ -198,52 +107,21 @@ export default function ManagedChatPage() {
     ...sseCallbacks,
   });
 
-  // Load history from runtime when the page mounts with a known sessionId.
-  useEffect(() => {
-    const sid = sessionId;
-    if (!sid || !teamId || !agentInstanceId) return;
-    if (historyLoadedRef.current === sid) return;
-    historyLoadedRef.current = sid;
+  const turns = useMemo(() => groupIntoTurns(messages), [messages]);
 
-    const loadHistory = async () => {
-      setIsLoadingHistory(true);
-      try {
-        await KeyCloakService.ensureFreshToken(30);
-        const token = KeyCloakService.GetToken() ?? "";
-        const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
-        const historyUrl = new URL(
-          expandMessagesUrl(prep.messages_url_template, sid),
-          window.location.origin,
-        );
-        const resp = await fetch(historyUrl.toString(), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!resp.ok) return;
-        const msgs: ChatMessage[] = await resp.json();
-        if (msgs.length > 0) {
-          replaceAllMessages(msgs);
-        }
-      } catch {
-        // History load failure is non-fatal — user continues with empty view.
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    };
+  const { isLoading: isLoadingHistory } = useSessionHistory({
+    sessionId,
+    teamId,
+    agentInstanceId,
+    onLoaded: replaceAllMessages,
+  });
 
-    loadHistory();
-  }, [sessionId, teamId, agentInstanceId, prepareExecution, replaceAllMessages]);
-
-  // Scroll to bottom on new messages.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
   if (!teamId || !agentInstanceId) {
-    return (
-      <div className={styles.error}>
-        Missing <code>teamId</code> or <code>agentInstanceId</code> in URL.
-      </div>
-    );
+    return <div className={styles.error}>Missing team or agent context in URL.</div>;
   }
 
   const handleSend = () => {
@@ -252,22 +130,14 @@ export default function ManagedChatPage() {
     setInput("");
     setPendingHitl(null);
 
-    // Generate session_id upfront so the runtime receives it from the first turn.
-    // The turn_persisted event will confirm the binding via onBindDraftAgentToSessionId.
     let sid = sessionId;
     if (!sid) {
       sid = uuidv4();
       bindSessionId(sid);
-      // Register session metadata in control-plane (fire-and-forget — non-fatal).
       registerSession({
-        teamId: teamId,
-        createSessionRequest: {
-          session_id: sid,
-          agent_instance_id: agentInstanceId ?? undefined,
-        },
-      }).catch(() => {
-        // Session registration failure is non-fatal; chat execution continues.
-      });
+        teamId,
+        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId },
+      }).catch(() => {});
     }
 
     send(text, sid);
@@ -290,7 +160,6 @@ export default function ManagedChatPage() {
     reset();
     setSessionId(null);
     setPendingHitl(null);
-    historyLoadedRef.current = null;
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("session");
@@ -301,29 +170,50 @@ export default function ManagedChatPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.headerTitle}>Managed Agent Chat</span>
-        <span className={styles.headerMeta}>
-          instance: <code>{agentInstanceId}</code>
-        </span>
-        <Button
-          color="on-surface"
-          variant="text"
-          size="small"
-          onClick={handleNewConversation}
-        >
+        <span className={styles.headerTitle}>{agentDisplayName}</span>
+        <Button color="on-surface" variant="text" size="small" onClick={handleNewConversation}>
           New conversation
         </Button>
       </header>
 
       <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation">
-        {isLoadingHistory && <p className={styles.thinking}>Loading conversation history…</p>}
-        {!isLoadingHistory && messages.length === 0 && !waitResponse && (
+        {isLoadingHistory && <p className={styles.hint}>Loading conversation history…</p>}
+        {!isLoadingHistory && turns.length === 0 && !waitResponse && (
           <p className={styles.empty}>Send a message to start the conversation.</p>
         )}
-        {messages.map((msg, i) => (
-          <MessageBubble key={`${msg.session_id}|${msg.exchange_id}|${msg.rank}|${msg.role}|${msg.channel}|${i}`} msg={msg} />
+
+        {turns.map((turn) => (
+          <div key={turn.exchangeId} className={styles.turn}>
+            {turn.userMessages.map((msg, i) => (
+              <MessageBubble
+                key={`${msg.exchange_id}|user|${i}`}
+                msg={msg}
+              />
+            ))}
+            {(turn.traceMessages.length > 0 || turn.finalMessages.length > 0) && (
+              <div className={styles.agentRow}>
+                {turn.traceMessages.length > 0 && (
+                  <div className={styles.traceColumn}>
+                    <ThoughtTrace
+                      messages={turn.traceMessages}
+                      done={turn.finalMessages.length > 0}
+                    />
+                  </div>
+                )}
+                <div className={styles.responseColumn}>
+                  {turn.finalMessages.map((msg, i) => (
+                    <MessageBubble
+                      key={`${msg.exchange_id}|final|${msg.rank}|${i}`}
+                      msg={msg}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         ))}
-        {waitResponse && <p className={styles.thinking}>Agent is thinking…</p>}
+
+        {waitResponse && <p className={styles.hint}>Agent is thinking…</p>}
         {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={handleHitlAnswer} />}
         <div ref={bottomRef} />
       </div>

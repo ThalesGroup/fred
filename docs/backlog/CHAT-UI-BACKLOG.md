@@ -32,6 +32,9 @@ surface.
 
 ### 0.3 Guiding Constraints
 
+> **Per-component visual and interaction specs:** [`docs/design/CHAT-COMPONENT-SPECS.md`](../design/CHAT-COMPONENT-SPECS.md).
+> That file is the implementation authority for each named component.
+
 - All new components live under `src/rework/components/shared/` following the
   atoms → molecules → organisms hierarchy.
 - CSS modules only. Use existing design tokens (`--spacing-*`, `--radius-*`,
@@ -42,6 +45,12 @@ surface.
   WebSocket or REST polling for message content.
 - Keep existing `HitlPrompt` component unchanged in Phase 6A.
 - Never hand-edit `runtimeOpenApi.ts` — it is generated.
+- **Never show technical identifiers in user-facing UI.** `agent_instance_id`, session UUIDs,
+  runtime IDs, and any other internal key must never appear as visible text in a label,
+  header, badge, or tooltip. Every user-facing surface must use human-readable display names
+  sourced from the control-plane product surface (`ManagedAgentInstanceSummary.display_name`,
+  team name, etc.). Technical IDs remain internal — for routing, API calls, and `data-*`
+  attributes only.
 
 ### 0.4 History Ownership Contract
 
@@ -108,7 +117,7 @@ architectural correctness and visual alignment with OpenWebUI conventions.
 │  (existing)    │  ┌─ ChatMessagesArea (scrollable flex) ─┐ │
 │                │  │                                       │ │
 │                │  │         ┌─── AssistantTurn ────────┐ │ │
-│                │  │         │  ThinkingAccordion        │ │ │
+│                │  │         │  ThoughtTrace        │ │ │
 │                │  │         │  AssistantMessage         │ │ │
 │                │  │         │  SourcesPanel             │ │ │
 │                │  │         └──────────────────────────┘ │ │
@@ -125,6 +134,11 @@ Alignment convention (OpenWebUI / OpenAI):
 
 - **User message**: right-aligned, max-width 65%, background `--surface-container-high`
 - **Agent turn**: left-aligned, max-width 75%, background `--surface-container`
+
+> **Three-column layout note (Phase 6C prerequisite):** the page must be built with three
+> columns from Phase 6A — left sidebar, centre chat area, right options panel. The right
+> panel returns `null` while Phase 6C is not yet landed, so no structural refactor is needed
+> later. See §3.7 for the full three-column spec.
 
 ---
 
@@ -145,9 +159,9 @@ Alignment convention (OpenWebUI / OpenAI):
 |---|---|---|
 | `UserMessage` | `molecules/UserMessage/` | Right-aligned bubble + timestamp |
 | `AssistantMessage` | `molecules/AssistantMessage/` | Left-aligned bubble, streaming cursor, plain text (markdown deferred) |
-| `ThinkingAccordion` | `molecules/ThinkingAccordion/` | Collapsible reasoning trace container |
-| `ToolCallStep` | `molecules/ThinkingAccordion/ToolCallStep/` | Tool name + args (collapsed JSON) |
-| `ToolResultStep` | `molecules/ThinkingAccordion/ToolResultStep/` | Result status + latency + preview |
+| `ThoughtTrace` | `molecules/ThoughtTrace/` | Collapsible reasoning trace — entry grouping, status chips, detail drawer (see §1.6 for full spec) |
+| `TraceEntryRow` | `molecules/ThoughtTrace/TraceEntryRow/` | One step row: index, status chip, channel/node/tool badges, primary text, detail-open trigger |
+| `TraceDetailDrawer` | `molecules/ThoughtTrace/TraceDetailDrawer/` | Slide-in Monaco JSON drawer for full step or call+result payload; theme-aware |
 | `SourceCard` | `molecules/SourcesPanel/SourceCard/` | One citation: index, title, score, excerpt |
 | `SourcesPanel` | `molecules/SourcesPanel/` | List of SourceCards, visible after `final` event |
 | `ChatInputBar` | `molecules/ChatInputBar/` | TextArea atom + send IconButton, disabled during streaming |
@@ -157,7 +171,8 @@ Alignment convention (OpenWebUI / OpenAI):
 | Component | Path | Purpose |
 |---|---|---|
 | `ChatMessagesArea` | `organisms/ChatMessagesArea/` | Scrollable message list, auto-scroll, empty state |
-| `AssistantTurn` | `organisms/AssistantTurn/` | Groups ThinkingAccordion + AssistantMessage + SourcesPanel for one exchange |
+| `AssistantTurn` | `organisms/AssistantTurn/` | Groups ThoughtTrace + AssistantMessage + SourcesPanel for one exchange |
+| `AgentOptionsPanel` | `organisms/AgentOptionsPanel/` | Right-side collapsible panel: agent-specific options + admin debug tools (Phase 6C) |
 
 ---
 
@@ -201,7 +216,7 @@ type ThinkingStep =
 | Runtime event | State mutation | Visible effect |
 |---|---|---|
 | `assistant_delta` | Append delta to current assistant message | Text grows, `StreamingCursor` pulses |
-| `tool_call` | Push `ThinkingStep {kind:'tool_call', status:'running'}` | `ThinkingAccordion` appears (open by default), `ToolCallStep` with spinner |
+| `tool_call` | Push `ThinkingStep {kind:'tool_call', status:'running'}` | `ThoughtTrace` appears (open by default), `ToolCallStep` with spinner |
 | `tool_result` | Match `call_id`, update to `status:'done'` or `status:'error'`, add `tool_result` step | `ToolCallStep` → `ToolResultStep` |
 | `final` | Replace text with final content, attach sources, clear `isStreaming` | `StreamingCursor` disappears, `SourcesPanel` appears if sources present |
 | `status` | Set `statusText` on current message | Italic status line below bubble |
@@ -211,37 +226,143 @@ type ThinkingStep =
 
 ---
 
-### 1.6 ThinkingAccordion Behaviour
+### 1.6 ThoughtTrace Behaviour
 
-- Opens automatically when the first `tool_call` event arrives.
-- Stays open during streaming.
-- **Auto-closes** when `final` event arrives (collapsed by default after turn completes).
-- User can re-open manually by clicking the header.
-- Header label: `N step(s)` where N = total count of steps.
-- During streaming, shows a spinner next to the label.
+> **Full visual and interaction spec:** [`docs/design/CHAT-COMPONENT-SPECS.md §1`](../design/CHAT-COMPONENT-SPECS.md).
+> The spec file is the authority — the summary below covers the data model only.
+
+**Reference implementation:** `frontend/src/components/chatbot/ReasoningStepsAccordion.tsx` and
+`ReasoningStepBadge.tsx`. Port the logic and enrich the visual presentation for the rework
+design system. Do not delete the legacy component until `ManagedChatPage` fully replaces the
+old chat surface.
+
+#### Entry grouping model
+
+Steps are not rendered one-to-one from SSE events. They are first grouped into `TraceEntry`
+objects before rendering:
+
+```typescript
+type TraceEntry =
+  | { kind: 'solo';  message: ChatMessage }
+  | { kind: 'combo'; call: ChatMessage; result?: ChatMessage }
+```
+
+Rules:
+- every `tool_call` message opens a `combo` entry
+- its matching `tool_result` (matched by `toolId`) closes the combo in-place
+- all other channel types (`plan`, `thought`, `observation`, `system_note`, `error`) are `solo`
+- only messages whose `channel` is in `TRACE_CHANNELS` are included:
+  `plan | thought | observation | tool_call | tool_result | system_note | error`
+- entries are ordered by `rank` ascending
+
+#### Per-entry display (`TraceEntryRow`)
+
+| Field | Source |
+|---|---|
+| Index | Sequential position (1-based), fixed-width column |
+| Status chip | `ok` / `error` / `pending` — see status table below |
+| Channel badge | `message.channel` with underscores replaced by spaces |
+| Node chip | `extras.node` string when present |
+| Task chip | `extras.task` string when present and no node chip |
+| Tool name chip | `tool_call.name` for combo entries |
+| Primary text | Smart summary — see derivation rules below |
+| Detail button | Opens `TraceDetailDrawer` for this entry |
+
+**Primary text — combo entry:**
+1. `extras.summary` on the result if it is a non-empty string
+2. `N result(s) in Xms` if source count > 0 and latency known
+3. `N result(s)` if source count > 0 and latency unknown
+4. `Completed in Xms` / `Failed in Xms` if latency known
+5. `waiting for result…` while result is absent
+
+Latency is read from `tool_result.latency_ms` first, then `message.metadata.latency_ms`.
+Source count is `message.metadata.sources.length`.
+
+**Primary text — solo entry:**
+1. `tool_result` channel: same compact summary as combo result above
+2. all others: `textPreview(message)` → `extras.node` → `extras.task` → channel label
+
+#### Status chip values
+
+| Chip | Condition |
+|---|---|
+| `ok` | combo with `result.ok === true`; solo tool_result with `ok === true` |
+| `error` | combo with `result.ok === false`; solo tool_result with `ok === false`; channel `error` |
+| `pending` | combo with no result yet (streaming) |
+| _(none)_ | non-tool solo entries |
+
+#### Detail drawer (`TraceDetailDrawer`)
+
+- slides in from the right (640 px, full screen on mobile)
+- header: `channel · tool name · node/task` joined by ` · `, with a close button
+- body: Monaco editor — read-only, JSON language, `wordWrap: on`, `minimap: off`,
+  `scrollBeyondLastLine: off`, `automaticLayout: on`
+- theme: `vs-dark` when MUI palette mode is `dark`, `vs` otherwise
+- payload for combo: `{ tool_call: <ChatMessage>, tool_result: <ChatMessage | null> }`
+- payload for solo: full `ChatMessage`
+- closed by the × button or clicking the backdrop
+
+#### Accordion lifecycle
+
+- opens automatically when the first trace step arrives during streaming
+- stays open while streaming
+- **auto-closes** when `final` event arrives (collapsed by default after turn completes)
+- user can re-open manually
+- header: info icon + `Trace` label + `N step(s)` count
+- spinner visible next to the label while streaming
 
 ---
 
 ### 1.7 Tasks
 
-- [ ] Create `MessageBubble` atom with `role` variant prop
-- [ ] Create `StreamingCursor` atom (CSS blink animation)
+**Atoms**
+
+- [ ] Create `MessageBubble` atom with `role` variant prop — temp scaffold exists at `MessageBubble/MessageBubble.tsx`
+- [x] Create `StreamingCursor` atom (CSS blink animation) — `atoms/StreamingCursor/StreamingCursor.tsx`
 - [ ] Create `ToolBadge` atom (running / success / error variants)
 - [ ] Create `SourceBadge` atom (superscript index, onClick scroll)
+
+**Molecules**
+
 - [ ] Create `UserMessage` molecule
 - [ ] Create `AssistantMessage` molecule (StreamingCursor + ToolBadge when streaming)
-- [ ] Create `ToolCallStep` molecule (name + collapsed JSON args + ToolBadge)
-- [ ] Create `ToolResultStep` molecule (ok/error icon + latency + 2-line preview)
-- [ ] Create `ThinkingAccordion` molecule (accordion open/close, steps list)
+- [x] Extract trace entry grouping logic (`TraceEntry`, `toolId`, `isToolCall`, `isToolResult`,
+  `TRACE_CHANNELS`, `groupTraceEntries`, `statusForEntry`) to `src/rework/utils/traceUtils.ts`
+- [x] Extract primary-text helpers (`summarizeToolResultCompact`, `primaryTextForEntry`,
+  `formatLatencyMs`, `thoughtSummaryLabel`, `entryLabel`) to `traceUtils.ts`
+- [x] Create `TraceEntryRow` molecule (index column, status dot, channel label chip,
+  primary text, click-to-open detail trigger) — at `molecules/ThoughtTrace/TraceEntryRow/`
+- [x] Create `TraceDetailDrawer` molecule (slide-in drawer, Monaco read-only JSON,
+  close on backdrop click or × button, Escape key) — at `molecules/ThoughtTrace/TraceDetailDrawer/`
+- [x] Create `ThoughtTrace` molecule using `TraceEntry[]` model + `TraceEntryRow` list
+  (toggle open/close, `done` prop auto-collapses on final, streaming pulse animation)
+- [x] Wire `TraceDetailDrawer` inside `ThoughtTrace` (open/close via selected-entry state in `TraceEntryRow`)
 - [ ] Create `SourceCard` molecule (index + title + score % + 2-line excerpt)
 - [ ] Create `SourcesPanel` molecule (stack of SourceCards with "Sources" header)
 - [ ] Create `ChatInputBar` molecule (TextArea + send IconButton, Shift+Enter = newline)
+
+**Organisms**
+
 - [ ] Create `ChatMessagesArea` organism (scroll container, auto-scroll to bottom, empty state)
-- [ ] Create `AssistantTurn` organism (ThinkingAccordion + AssistantMessage + SourcesPanel)
-- [ ] Refactor `ManagedChatPage` to use all new components
+- [ ] Create `AssistantTurn` organism (ThoughtTrace + AssistantMessage + SourcesPanel)
+
+**Page wiring**
+
+- [x] Display the agent's human-readable name in the chat header — sourced from
+  `ManagedAgentInstanceSummary.display_name`; **never display `agent_instance_id` or any UUID**
+- [x] Group `messages[]` by `exchange_id` into turns in `ManagedChatPage`; render `ThoughtTrace`
+  per turn for trace-channel messages alongside user / final reply bubbles
+- [ ] Replace temp `MessageBubble` with `UserMessage` + `AssistantMessage` + `AssistantTurn`
+- [ ] Establish three-column layout in `ManagedChatPage` (left sidebar, chat area, right panel
+  slot) — right slot renders `null` until Phase 6C; no structural refactor needed later
+- [ ] Add `TogglePanelButton` atom to the chat header (wires to `rightPanelOpen: boolean` state)
 - [ ] Map SSE events to `ConversationMessage` state (replace current flat state)
 - [ ] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`
 - [ ] Run `make code-quality` on frontend
+
+> **UX refinements** for all implemented components are tracked separately in
+> [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md). Implementation tasks here track
+> functional completeness only.
 
 ---
 
@@ -250,8 +371,13 @@ type ThinkingStep =
 - [ ] User messages appear right-aligned with `--surface-container-high` background
 - [ ] Agent messages appear left-aligned with `--surface-container` background
 - [ ] `StreamingCursor` visible during delta streaming, gone on `final`
-- [ ] `ThinkingAccordion` opens on first `tool_call`, closes on `final`
-- [ ] `ToolCallStep` transitions to `ToolResultStep` when matching `tool_result` received
+- [ ] `ThoughtTrace` opens on first trace step, auto-closes on `final`
+- [ ] `tool_call` + matching `tool_result` rendered as a single combo `TraceEntryRow`
+- [ ] Combo row shows `pending` chip while result absent; switches to `ok`/`error` on result
+- [ ] Solo `thought`/`plan`/`observation` entries render with channel badge and preview text
+- [ ] Primary text shows latency + source count summary when available from result metadata
+- [ ] Detail icon opens `TraceDetailDrawer` with Monaco JSON payload for the selected entry
+- [ ] Drawer theme follows MUI palette mode (`vs` / `vs-dark`)
 - [ ] `SourcesPanel` appears below final message when `sources` non-empty
 - [ ] `ChatInputBar` is disabled (send button + textarea) while streaming
 - [ ] Existing HITL flow (`HitlPrompt`) is unaffected
@@ -304,35 +430,244 @@ text.
 
 ---
 
-## 3 Phase 6C — Agent Options & Chat Controls
+## 3 Phase 6C — Agent Options Panel & Debug Tools
 
 ### 3.1 Goal
 
-Add the controls that surround the conversation: session title, new chat,
-model/temperature settings if exposed by the agent, copy message, and
-conversation-level actions.
+Fill the right-side `AgentOptionsPanel` slot established in Phase 6A with two concerns:
+
+1. **Agent-specific options** — configurable parameters declared by the agent and rendered
+   generically by the frontend (folder/subfolder scope for RAG, model override if exposed, etc.)
+2. **Debug tools** — admin-gated shortcuts to investigate the current session without
+   polluting the main chat conversation
+
+The main `ChatMessagesArea` must remain focused on the business exchange. Debug output
+always opens in a separate `DebugDrawer`.
 
 ---
 
-### 3.2 Scope (to be refined)
+### 3.2 Core Design Rules
 
-- Session title editable inline in the header (PATCH to control-plane session).
-- "New chat" button clears state and generates a new `session_id`.
-- Per-message copy button on `AssistantMessage` (copy markdown as plain text).
-- Agent runtime options panel (temperature, system prompt override) — only if
-  `ExecutionPreparation` exposes configurable parameters.
-- Conversation export (future, not Phase 6C).
+- `ChatMessagesArea` never contains debug output — ever.
+- Debug results always render in `DebugDrawer`, which is a separate DOM subtree.
+- Agent options are described by the agent (via `ExecutionPreparation` metadata or a
+  dedicated options endpoint) — they are never hardcoded per agent name or ID in frontend code.
+- Debug tools are visible only when `FrontendBootstrap.permissions` includes `debug_tools`.
+  The section is fully absent when the permission is missing — no placeholder shown.
+- The panel is collapsible. The toggle button lives in the chat header (`TogglePanelButton`).
+- All components use design tokens only. No hardcoded colours or spacing. This makes
+  future Figma revisions structural changes only, not paint-over work.
 
 ---
 
-### 3.3 Tasks
+### 3.3 Component Map
 
-- [ ] Define which agent runtime options are exposable from `ExecutionPreparation`
-- [ ] Add inline editable session title to chat header
-- [ ] Wire PATCH `/teams/{team_id}/sessions/{session_id}` for title updates
-- [ ] Add "New chat" button
+#### Atoms
+
+| Component | Path | Purpose |
+|---|---|---|
+| `TogglePanelButton` | `atoms/TogglePanelButton/` | Header icon button that shows/hides the right panel |
+| `OptionChip` | `atoms/OptionChip/` | Small interactive chip for enum-type agent options |
+| `DebugActionButton` | `atoms/DebugActionButton/` | Icon + label button for one debug action; has loading state |
+
+#### Molecules
+
+| Component | Path | Purpose |
+|---|---|---|
+| `AgentOptionSection` | `molecules/AgentOptionsPanel/AgentOptionSection/` | Renders one named group of controls from an `AgentOptionDescriptor` |
+| `FolderScopeSelector` | `molecules/AgentOptionsPanel/FolderScopeSelector/` | Breadcrumb-style folder/subfolder picker — first concrete option kind |
+| `DebugToolsSection` | `molecules/AgentOptionsPanel/DebugToolsSection/` | Admin-only block with the three `DebugActionButton` items |
+| `DebugDrawer` | `molecules/DebugDrawer/` | Slide-in drawer for debug output; body slot accepts any renderer |
+
+#### Organism
+
+`AgentOptionsPanel` (already declared in §1.3): header, list of `AgentOptionSection`, optional
+`DebugToolsSection`.
+
+---
+
+### 3.4 Agent Options Contract
+
+Agent-specific options are described by an `AgentOptionDescriptor` union. The frontend
+renders options generically — it must never branch on agent name or instance ID.
+
+```typescript
+// Discriminated union — add new kinds here as agents declare them
+type AgentOptionDescriptor =
+  | FolderScopeDescriptor
+  // | ModelOverrideDescriptor  ← future
+  // | TemperatureDescriptor    ← future
+
+type FolderScopeDescriptor = {
+  kind: 'folder_scope'
+  label: string
+  multiSelect: boolean
+  options: { id: string; label: string; parentId?: string }[]
+}
+```
+
+**Source:** the descriptor is returned by the agent via `ExecutionPreparation` metadata
+(field name TBD — document the contract here when the backend defines it). Until that
+endpoint exists, use a local typed stub for development. Unknown `kind` values are silently
+skipped (forward-compatible).
+
+**Effect:** selected option values are passed to `RuntimeExecuteRequest` (in `runtime_context`
+or a dedicated `options` field — to be defined with the backend). Until the wire protocol is
+defined, the selection is held in local state and logged.
+
+---
+
+### 3.5 Debug Tools
+
+Three tools, all gated by `debug_tools` permission.
+
+| Tool | `DebugActionButton` label | `DebugDrawer` content |
+|---|---|---|
+| Log Genius | "Investigate with Log Genius" | Markdown result of a log analysis call |
+| Session performance | "Session performance" | KPI table: exchange, latency, LLM latency, tool count, tokens |
+| Response detail | "Raw response detail" | Monaco JSON viewer of the full `ChatMessage[]` for the session |
+
+#### Log Genius
+
+- Calls an external log investigation agent or API (endpoint TBD — stub the contract here
+  when the team defines it; use a typed placeholder in the meantime).
+- `DebugDrawer` shows a spinner while the call is in-flight, the markdown result on completion,
+  and a typed error state on failure.
+
+#### Session Performance
+
+- Fetches structured KPI events for the current `session_id` (Phase 7 —
+  `agent.turn_completed` and `agent.llm_call` rows).
+- Renders a compact table: `exchange_id`, `total_latency_ms`, `llm_latency_ms`,
+  `tool_count`, `model_name`, `input_tokens`, `output_tokens`.
+- Falls back to "No KPI data available for this session" while Phase 7 KPI store is not
+  yet populated.
+
+#### Response Detail
+
+- Fetches `GET {messages_url_template}` (already used by `ManagedChatPage` for history
+  loading — reuse the same call, no new endpoint).
+- Renders the raw `ChatMessage[]` in a Monaco JSON viewer inside `DebugDrawer`, using the
+  same Monaco configuration as `TraceDetailDrawer` (read-only, wordWrap, theme-aware).
+- Useful during agent development to inspect every channel, rank, and part without
+  filtering.
+
+---
+
+### 3.6 DebugDrawer Contract
+
+- Slides in from the right (width ≥ 720 px; full screen on mobile via MUI Drawer `anchor="right"`).
+- Layered above `AgentOptionsPanel` — both can coexist in the layout tree.
+- Header: tool label + `session_id` (truncated to 8 chars) + close button.
+- Body: tool-specific renderer (markdown / table / Monaco).
+- `ManagedChatPage` owns the drawer state:
+  ```typescript
+  type DebugTool = 'log_genius' | 'performance' | 'response_detail'
+  const [debugDrawer, setDebugDrawer] = useState<{ open: boolean; tool: DebugTool | null }>
+  ```
+- Closing: × button or MUI `onClose` (backdrop click).
+
+---
+
+### 3.7 Three-Column Layout (reference)
+
+```
+┌─ Left Sidebar ──┬──── Chat Area ────────────────────────────┬─ Right Panel (collapsible) ──┐
+│ ChatList        │                                           │                              │
+│                 │  ChatMessagesArea (scrollable)            │  AgentOptionsPanel            │
+│                 │    AssistantTurn × N                      │  ├─ AgentOptionSection(s)    │
+│                 │      ThoughtTrace                    │  │   FolderScopeSelector …   │
+│                 │      AssistantMessage                     │  └─ DebugToolsSection        │
+│                 │      SourcesPanel                         │     [admin only]             │
+│                 │    UserMessage × N                        │     DebugActionButton × 3    │
+│                 │                                           │                              │
+│                 │  ChatInputBar                             │  (DebugDrawer overlaid)       │
+└─────────────────┴───────────────────────────────────────────┴──────────────────────────────┘
+```
+
+The toggle (`TogglePanelButton`) lives in the chat header. On viewport `< sm` the right
+panel behaviour (bottom sheet vs hidden) is deferred to Figma confirmation.
+
+---
+
+### 3.8 Chat Header Design
+
+The chat header is the primary identity surface of the conversation. It must answer in
+plain language: **"who am I talking to, and in what context?"**
+
+Required header content:
+
+| Element | Source | Rule |
+|---|---|---|
+| Agent display name | `ManagedAgentInstanceSummary.display_name` | Prominent, always visible — never the `agent_instance_id` |
+| Team context | `FrontendBootstrap.active_team.display_name` | Secondary, e.g. "Personal" or the team name |
+| Session title | `SessionMetadata.title` (control-plane) | Editable inline; defaults to a generated label if absent |
+| `TogglePanelButton` | local state | Shows/hides the right options panel |
+| "New chat" button | local action | Clears state, generates new `session_id` |
+
+**Agent switching — explicitly deferred.**
+Switching the active agent within an open conversation is not in scope for Phase 6C.
+The entry point for changing agents remains the team agents page (`TeamAgentsPage`).
+A future phase may add an in-chat agent picker — the header slot is reserved for it,
+but no implementation is started now.
+
+Additional per-message controls:
+
+- Copy button on `AssistantMessage` (copies markdown as plain text)
+
+---
+
+### 3.9 Tasks
+
+#### Layout
+
+- [ ] Confirm three-column layout slot is properly wired in `ManagedChatPage` (from Phase 6A)
+- [ ] Mount `AgentOptionsPanel` in the right slot; verify panel open/close does not reflow
+  `ChatMessagesArea`
+
+#### Agent Options
+
+- [ ] Define `AgentOptionDescriptor` TypeScript union (start with `FolderScopeDescriptor`)
+- [ ] Create `OptionChip` atom
+- [ ] Create `FolderScopeSelector` molecule (breadcrumb folder picker from descriptor options)
+- [ ] Create `AgentOptionSection` molecule (renders one descriptor group generically)
+- [ ] Create `AgentOptionsPanel` organism (header + section list + debug section)
+- [ ] Wire descriptor from `ExecutionPreparation` metadata (typed stub until backend ready)
+- [ ] Hold selected option values in `ManagedChatPage` state; pass to `RuntimeExecuteRequest`
+  when the wire protocol is defined
+
+#### Debug Tools
+
+- [ ] Add `debug_tools` permission check from `FrontendBootstrap.permissions`
+- [ ] Create `DebugActionButton` atom (icon + label + loading spinner state)
+- [ ] Create `DebugToolsSection` molecule (three buttons, visible only with permission)
+- [ ] Create `DebugDrawer` molecule (slide-in, header, body slot, open/close state)
+- [ ] Implement "Response detail": fetch `messages_url_template`, render in Monaco inside drawer
+- [ ] Implement "Session performance": fetch KPI by `session_id`, render table; stub fallback
+- [ ] Implement "Log Genius": define call stub, render markdown result; loading + error states
+- [ ] Wire `debugDrawer` open/close state in `ManagedChatPage`
+
+#### Header Controls
+
+- [ ] Add inline-editable session title to chat header
+- [ ] Wire `PATCH /teams/{team_id}/sessions/{session_id}` for title save
+- [ ] Add "New chat" button (clears state, new `session_id`)
 - [ ] Add per-message copy button on `AssistantMessage`
-- [ ] Decide agent options panel scope based on runtime contract
+
+---
+
+### 3.10 Validation
+
+- [ ] Toggling the right panel does not reflow or scroll `ChatMessagesArea`
+- [ ] `AgentOptionsPanel` renders `null` cleanly when no options and no `debug_tools` permission
+- [ ] `DebugToolsSection` is fully absent for users without `debug_tools` permission
+- [ ] Opening a debug drawer injects nothing into `ChatMessagesArea`
+- [ ] "Response detail" drawer shows raw `ChatMessage[]` in Monaco for the active session
+- [ ] "Session performance" drawer shows a table or graceful "no KPI data" fallback
+- [ ] "Log Genius" drawer shows spinner while in-flight, result on completion
+- [ ] `DebugDrawer` and `AgentOptionsPanel` coexist without z-index conflicts
+- [ ] All new components use design tokens only — no hardcoded colours or spacing
+- [ ] `make code-quality` passes on the frontend
 
 ---
 
@@ -353,7 +688,9 @@ Features deferred until Phases 6A–6C are stable:
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6A – Architecture & layout | Planned | Starting point |
+| 6A – Architecture & layout | 🟡 In progress | `traceUtils`, `ThoughtTrace`, `StreamingCursor`, `TraceEntryRow`, `TraceDetailDrawer` done; `UserMessage`, `AssistantMessage`, `AssistantTurn`, three-column layout pending |
 | 6B – Markdown & content | Planned | Depends on 6A |
-| 6C – Agent options & controls | Planned | Depends on 6A |
+| 6C – Agent options & debug tools | Planned | AgentOptionsPanel + DebugDrawer; depends on 6A |
 | 6D – Advanced parts | Deferred | After 6C |
+
+> **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

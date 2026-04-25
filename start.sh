@@ -4,7 +4,7 @@
 trap "echo 'Stopping...'; kill 0" SIGINT
 
 # agentic backend
-(cd control-plane-backend && make run 2>&1 | sed "s/^/[CONTROL-PLANE] /") &
+(cd apps/control-plane-backend && make run 2>&1 | sed "s/^/[CONTROL-PLANE] /") &
 
 # agentic backend
 (cd agentic-backend && make run 2>&1 | sed "s/^/[AGENTIC] /") &

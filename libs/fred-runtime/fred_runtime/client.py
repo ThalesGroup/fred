@@ -33,35 +33,47 @@ Example:
 from __future__ import annotations
 
 import argparse
-import base64
 import getpass
 import glob as _glob
-import hashlib
 import json
 import logging
 import os
 import re
-import secrets
 import sys
-import threading
-import time
 import uuid
-import webbrowser
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 import yaml
-from fred_core.common import ConfigFiles
-
-try:
-    import readline
-except ImportError:  # pragma: no cover - readline is available on Linux/macOS only.
-    readline = None
+from fred_core.cli.auth import (
+    KeycloakLoginConfig,
+    KeycloakUserSessionManager,
+    build_cli_token_provider,
+    default_configuration_file,
+    default_keycloak_token_file,
+    default_pkce_callback_host,
+    default_pkce_callback_port,
+    load_cli_environment,
+    load_configuration_yaml,
+    resolve_keycloak_login_config,
+)
+from fred_core.cli.ui import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_GREEN,
+    ANSI_RED,
+    ANSI_WHITE,
+    ANSI_YELLOW,
+    colorize,
+    colors_enabled,
+    complete_slash_commands,
+    install_readline_completion,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,793 +100,18 @@ _COMMANDS: tuple[str, ...] = (
     "/quit",
     "/whoami",
 )
-_ANSI_RESET = "\033[0m"
-_ANSI_BOLD = "\033[1m"
-_ANSI_CYAN = "\033[36m"
-_ANSI_GREEN = "\033[32m"
-_ANSI_RED = "\033[31m"
-_ANSI_YELLOW = "\033[33m"
-_ANSI_DIM = "\033[2m"
-_ANSI_WHITE = "\033[97m"
-DEFAULT_KEYCLOAK_TOKEN_FILE = (  # nosec B105 - local cache file path, not a credential
-    "~/.config/fred/agent-chat-session.json"
-)
-DEFAULT_PKCE_CALLBACK_HOST = "127.0.0.1"
-DEFAULT_PKCE_CALLBACK_PORT = 8765
+_ANSI_BOLD = ANSI_BOLD
+_ANSI_CYAN = ANSI_CYAN
+_ANSI_GREEN = ANSI_GREEN
+_ANSI_RED = ANSI_RED
+_ANSI_YELLOW = ANSI_YELLOW
+_ANSI_DIM = ANSI_DIM
+_ANSI_WHITE = ANSI_WHITE
 _PROM_SAMPLE_RE = re.compile(
     r"^(?P<name>[^{\s]+)(?:\{(?P<labels>[^}]*)\})?\s+"
     r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
     r"(?:\s+\d+)?$"
 )
-
-
-@dataclass(slots=True)
-class KeycloakPkceLoginRequest:
-    """
-    One prepared Keycloak PKCE authorization request for the CLI.
-
-    Why this class exists:
-    - browser login needs a few tightly related values that must stay aligned:
-      authorization URL, redirect URI, state, and PKCE verifier
-    - keeping them together makes the browser flow easier to test and reuse
-
-    How to use it:
-    - build it with `KeycloakUserSessionManager.build_pkce_login_request(...)`
-    - pass it to `login_with_pkce(...)` or inspect the URL manually
-
-    Example:
-    - `req = auth.build_pkce_login_request(callback_host="127.0.0.1", callback_port=8765)`
-    """
-
-    authorization_url: str
-    redirect_uri: str
-    state: str
-    code_verifier: str
-
-
-@dataclass(slots=True)
-class KeycloakLoginConfig:
-    """
-    Minimal Keycloak settings required for CLI user login.
-
-    Why this class exists:
-    - the chat client should authenticate real users without depending on the
-      frontend UI
-    - grouping the Keycloak coordinates keeps login, refresh, and cache logic
-      explicit and testable
-
-    How to use it:
-    - build it from CLI flags, env vars, or `configuration.yaml`
-    - pass it to `KeycloakUserSessionManager`
-
-    Example:
-    - `cfg = KeycloakLoginConfig(realm_url="http://localhost:8080/realms/fred", client_id="fred-ui")`
-    """
-
-    realm_url: str
-    client_id: str
-    client_secret: str | None = None
-
-
-@dataclass(slots=True)
-class KeycloakUserSession:
-    """
-    Serializable user-token session cached by the CLI.
-
-    Why this class exists:
-    - manual secured testing should survive client restarts without requiring
-      repeated password entry
-    - access and refresh token lifecycle belongs to the client session, not the
-      pod transport code
-
-    How to use it:
-    - created by `KeycloakUserSessionManager.login(...)`
-    - persisted to disk and refreshed automatically before expiry
-
-    Example:
-    - `session = KeycloakUserSession(username="alice", access_token="...", refresh_token="...", expires_at_timestamp=123.0, realm_url="...", client_id="...")`
-    """
-
-    username: str
-    access_token: str
-    refresh_token: str | None
-    expires_at_timestamp: float
-    realm_url: str
-    client_id: str
-
-    def to_payload(self) -> dict[str, Any]:
-        """
-        Convert the cached session into a JSON-serializable payload.
-
-        Why this exists:
-        - the CLI stores the user session in a small local cache file
-
-        How to use it:
-        - call before writing the session to disk
-
-        Example:
-        - `payload = session.to_payload()`
-        """
-
-        return {
-            "username": self.username,
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token,
-            "expires_at_timestamp": self.expires_at_timestamp,
-            "realm_url": self.realm_url,
-            "client_id": self.client_id,
-        }
-
-    @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "KeycloakUserSession":
-        """
-        Restore one cached session from a JSON payload.
-
-        Why this exists:
-        - cached login state must be rehydrated when the CLI starts
-
-        How to use it:
-        - pass the decoded JSON object from the token cache file
-
-        Example:
-        - `session = KeycloakUserSession.from_payload(raw_payload)`
-        """
-
-        return cls(
-            username=str(payload["username"]),
-            access_token=str(payload["access_token"]),
-            refresh_token=(
-                str(payload["refresh_token"])
-                if payload.get("refresh_token") is not None
-                else None
-            ),
-            expires_at_timestamp=float(payload["expires_at_timestamp"]),
-            realm_url=str(payload["realm_url"]),
-            client_id=str(payload["client_id"]),
-        )
-
-
-class KeycloakUserSessionManager:
-    """
-    Manage Keycloak user login, refresh, and local token caching for the CLI.
-
-    Why this class exists:
-    - `fred-agent-chat` needs a production-like developer login path without
-      relying on the frontend
-    - repeated secured pod testing should reuse and refresh a cached user
-      session automatically
-
-    How to use it:
-    - instantiate it with resolved Keycloak settings and a cache file path
-    - call `login(...)` once, then pass `get_access_token` into `AgentPodClient`
-
-    Example:
-    - `auth = KeycloakUserSessionManager(config=cfg, cache_file=Path("~/.config/fred/agent-chat-token.json").expanduser())`
-    """
-
-    def __init__(
-        self,
-        *,
-        config: KeycloakLoginConfig,
-        cache_file: Path,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self._config = config
-        self._cache_file = cache_file
-        self._http_client = http_client or httpx.Client(timeout=10.0)
-        self._owns_http_client = http_client is None
-        self._session: KeycloakUserSession | None = self._load_cached_session()
-
-    def close(self) -> None:
-        """
-        Close the internal HTTP client when this manager owns it.
-
-        Why this exists:
-        - the login manager may create a private `httpx.Client` for token calls
-        - the CLI should release those connections cleanly on shutdown
-
-        How to use it:
-        - call from the main CLI `finally:` block
-
-        Example:
-        - `auth.close()`
-        """
-
-        if self._owns_http_client:
-            self._http_client.close()
-
-    def is_logged_in(self) -> bool:
-        """
-        Tell whether the client currently has a cached user session.
-
-        Why this exists:
-        - the REPL needs a quick way to render auth status and gate commands
-
-        How to use it:
-        - call before rendering `/whoami` or deciding whether `/logout` should
-          remove anything
-
-        Example:
-        - `if auth.is_logged_in(): ...`
-        """
-
-        return self._session is not None
-
-    def current_username(self) -> str | None:
-        """
-        Return the logged-in username when a cached session exists.
-
-        Why this exists:
-        - the REPL should show the active user identity in a simple way
-
-        How to use it:
-        - call after login or from `/whoami`
-
-        Example:
-        - `username = auth.current_username()`
-        """
-
-        return self._session.username if self._session is not None else None
-
-    def describe(self) -> str:
-        """
-        Return a short human-readable description of the current auth state.
-
-        Why this exists:
-        - the interactive client should expose auth status without dumping raw
-          token details
-
-        How to use it:
-        - print its result in the REPL header or from `/whoami`
-
-        Example:
-        - `print(auth.describe())`
-        """
-
-        if self._session is None:
-            return "not logged in"
-        expires = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(self._session.expires_at_timestamp)
-        )
-        return (
-            f"{self._session.username} "
-            f"(client={self._session.client_id}, expires={expires})"
-        )
-
-    def login(self, *, username: str, password: str) -> None:
-        """
-        Authenticate one real Keycloak user with the password grant.
-
-        Why this exists:
-        - developers need a frontend-free way to test secured pods with real
-          users in local and production-like environments
-
-        How to use it:
-        - call with a username and password gathered by the CLI
-        - the method stores the resulting access and refresh tokens locally
-
-        Example:
-        - `auth.login(username="alice", password="<prompted-secret>")`
-        """
-
-        form = {
-            "grant_type": "password",
-            "client_id": self._config.client_id,
-            "username": username,
-            "password": password,
-        }
-        if self._config.client_secret:
-            form["client_secret"] = self._config.client_secret
-
-        print(
-            f"[chat] connecting to keycloak: POST {self._token_url()} (password grant)"
-        )
-        response = self._http_client.post(self._token_url(), data=form)
-        response.raise_for_status()
-        payload = response.json()
-        self._session = self._build_session_from_token_payload(
-            payload,
-            username=username,
-        )
-        self._save_cached_session()
-
-    def build_pkce_login_request(
-        self,
-        *,
-        callback_host: str = DEFAULT_PKCE_CALLBACK_HOST,
-        callback_port: int = DEFAULT_PKCE_CALLBACK_PORT,
-    ) -> KeycloakPkceLoginRequest:
-        """
-        Prepare one browser-based PKCE authorization request for the CLI.
-
-        Why this exists:
-        - the CLI should support the same browser login family as the frontend,
-          not only password grants
-        - separating request construction from execution keeps the flow easy to
-          inspect and test
-
-        How to use it:
-        - call before launching the browser-based login flow
-        - ensure the Keycloak client allows the returned redirect URI
-
-        Example:
-        - `request = auth.build_pkce_login_request(callback_host="127.0.0.1", callback_port=8765)`
-        """
-
-        redirect_uri = f"http://{callback_host}:{callback_port}/callback"
-        state = secrets.token_urlsafe(24)
-        code_verifier = secrets.token_urlsafe(64)
-        code_challenge = self._pkce_code_challenge(code_verifier)
-        params = {
-            "client_id": self._config.client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": "openid profile email",
-            "state": state,
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-        }
-        return KeycloakPkceLoginRequest(
-            authorization_url=f"{self._authorization_url()}?{urlencode(params)}",
-            redirect_uri=redirect_uri,
-            state=state,
-            code_verifier=code_verifier,
-        )
-
-    def login_with_pkce(
-        self,
-        *,
-        callback_host: str = DEFAULT_PKCE_CALLBACK_HOST,
-        callback_port: int = DEFAULT_PKCE_CALLBACK_PORT,
-        timeout_seconds: int = 300,
-        url_opener: Callable[[str], bool] | None = None,
-    ) -> None:
-        """
-        Authenticate one user through Keycloak's authorization-code PKCE flow.
-
-        Why this exists:
-        - production-like debug and admin workflows should use the same browser
-          login family as the frontend when possible
-        - PKCE avoids requiring direct-access grants on the Keycloak client
-
-        How to use it:
-        - ensure the Keycloak client allows the loopback redirect URI
-        - call from the CLI, which opens the browser and waits for the callback
-
-        Example:
-        - `auth.login_with_pkce(callback_host="127.0.0.1", callback_port=8765)`
-        """
-
-        request = self.build_pkce_login_request(
-            callback_host=callback_host,
-            callback_port=callback_port,
-        )
-        print(
-            "Complete login in your browser. If it does not open automatically, "
-            "open this URL:"
-        )
-        print(request.authorization_url)
-        opener = url_opener or webbrowser.open
-        try:
-            opener(request.authorization_url)
-        except Exception:
-            logger.exception(
-                "[fred-agent-chat] Failed to open the browser automatically"
-            )
-        authorization_code = self._wait_for_pkce_callback(
-            request,
-            timeout_seconds=timeout_seconds,
-        )
-        payload = self._exchange_authorization_code(
-            authorization_code=authorization_code,
-            pkce_request=request,
-        )
-        self._session = self._build_session_from_token_payload(
-            payload,
-            username=self._username_from_access_token(payload.get("access_token")),
-        )
-        self._save_cached_session()
-
-    def logout(self) -> None:
-        """
-        Clear the cached login session and remove the local token file.
-
-        Why this exists:
-        - developers should be able to drop the current user session explicitly
-          when switching identities or cleaning up a local environment
-
-        How to use it:
-        - call from the REPL `/logout` command or after a failed refresh
-
-        Example:
-        - `auth.logout()`
-        """
-
-        self._session = None
-        if self._cache_file.exists():
-            self._cache_file.unlink()
-
-    def get_access_token(self) -> str | None:
-        """
-        Return a valid access token, refreshing it when needed.
-
-        Why this exists:
-        - the shared pod client needs a simple bearer-token provider callback
-        - refresh should stay transparent during long manual testing sessions
-
-        How to use it:
-        - pass this method directly to `AgentPodClient(token_provider=...)`
-
-        Example:
-        - `token = auth.get_access_token()`
-        """
-
-        if self._session is None:
-            return None
-        if time.time() < self._session.expires_at_timestamp - 30:
-            return self._session.access_token
-        self._refresh_session()
-        return self._session.access_token if self._session is not None else None
-
-    def _token_url(self) -> str:
-        """Return the Keycloak token endpoint for the configured realm URL."""
-
-        return f"{self._config.realm_url.rstrip('/')}/protocol/openid-connect/token"
-
-    def _authorization_url(self) -> str:
-        """
-        Return the Keycloak authorization endpoint for the configured realm URL.
-
-        Why this exists:
-        - browser PKCE login needs the authorization endpoint alongside the
-          token endpoint
-
-        How to use it:
-        - called internally when building a PKCE login request
-
-        Example:
-        - `url = self._authorization_url()`
-        """
-
-        return f"{self._config.realm_url.rstrip('/')}/protocol/openid-connect/auth"
-
-    def _load_cached_session(self) -> KeycloakUserSession | None:
-        """
-        Restore a previously saved CLI session from disk.
-
-        Why this exists:
-        - login should persist between chat client runs
-
-        How to use it:
-        - called internally during manager construction
-
-        Example:
-        - `session = self._load_cached_session()`
-        """
-
-        if not self._cache_file.exists():
-            return None
-        payload = json.loads(self._cache_file.read_text(encoding="utf-8"))
-        session = KeycloakUserSession.from_payload(payload)
-        if (
-            session.realm_url != self._config.realm_url
-            or session.client_id != self._config.client_id
-        ):
-            return None
-        return session
-
-    def _save_cached_session(self) -> None:
-        """
-        Persist the current CLI login session to disk.
-
-        Why this exists:
-        - repeated secured testing should not require logging in every time the
-          client process starts
-
-        How to use it:
-        - called internally after login and refresh
-
-        Example:
-        - `self._save_cached_session()`
-        """
-
-        if self._session is None:
-            return
-        self._cache_file.parent.mkdir(parents=True, exist_ok=True)
-        self._cache_file.write_text(
-            json.dumps(self._session.to_payload(), indent=2),
-            encoding="utf-8",
-        )
-
-    def _refresh_session(self) -> None:
-        """
-        Refresh the cached user session using the stored refresh token.
-
-        Why this exists:
-        - long-lived manual sessions should keep working after access-token
-          expiry without forcing a fresh password prompt every time
-
-        How to use it:
-        - called internally by `get_access_token()` when the token is near
-          expiry
-
-        Example:
-        - `self._refresh_session()`
-        """
-
-        if self._session is None or not self._session.refresh_token:
-            self.logout()
-            raise RuntimeError("No refresh token is available. Please /login again.")
-
-        form = {
-            "grant_type": "refresh_token",
-            "client_id": self._config.client_id,
-            "refresh_token": self._session.refresh_token,
-        }
-        if self._config.client_secret:
-            form["client_secret"] = self._config.client_secret
-
-        try:
-            print(
-                f"[chat] connecting to keycloak: POST {self._token_url()} (refresh grant)"
-            )
-            response = self._http_client.post(self._token_url(), data=form)
-            response.raise_for_status()
-        except httpx.HTTPError:
-            self.logout()
-            raise
-
-        payload = response.json()
-        self._session = self._build_session_from_token_payload(
-            payload,
-            username=self._session.username,
-            fallback_refresh_token=self._session.refresh_token,
-        )
-        self._save_cached_session()
-
-    def _wait_for_pkce_callback(
-        self,
-        request: KeycloakPkceLoginRequest,
-        *,
-        timeout_seconds: int,
-    ) -> str:
-        """
-        Wait for one loopback-browser callback carrying the authorization code.
-
-        Why this exists:
-        - the CLI must receive the browser redirect locally to finish the PKCE
-          exchange without a custom web app
-
-        How to use it:
-        - called internally by `login_with_pkce(...)`
-        - raises `RuntimeError` on timeout, state mismatch, or callback errors
-
-        Example:
-        - `code = self._wait_for_pkce_callback(request, timeout_seconds=300)`
-        """
-
-        callback = urlparse(request.redirect_uri)
-        result: dict[str, str] = {}
-        result_ready = threading.Event()
-        expected_path = callback.path or "/"
-
-        class _PkceCallbackHandler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
-                parsed = urlparse(self.path)
-                if parsed.path != expected_path:
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-
-                params = parse_qs(parsed.query)
-                if params.get("state", [""])[0] != request.state:
-                    result["error"] = "State mismatch in PKCE callback."
-                    self.send_response(400)
-                    self.end_headers()
-                    self.wfile.write(b"PKCE state mismatch. You can close this window.")
-                    result_ready.set()
-                    return
-                if "error" in params:
-                    result["error"] = params["error"][0]
-                    self.send_response(400)
-                    self.end_headers()
-                    self.wfile.write(b"Login failed. You can close this window.")
-                    result_ready.set()
-                    return
-                code = params.get("code", [""])[0]
-                if not code:
-                    result["error"] = "Missing authorization code in PKCE callback."
-                    self.send_response(400)
-                    self.end_headers()
-                    self.wfile.write(
-                        b"Missing authorization code. You can close this window."
-                    )
-                    result_ready.set()
-                    return
-
-                result["code"] = code
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(
-                    b"<html><body><h1>Login complete</h1>"
-                    b"<p>You can close this window and return to fred-agent-chat.</p>"
-                    b"</body></html>"
-                )
-                result_ready.set()
-
-            def log_message(
-                self,
-                format: str,
-                *args: Any,  # noqa: A002 - stdlib signature
-            ) -> None:
-                return
-
-        server = HTTPServer(
-            (callback.hostname or "", callback.port or 0), _PkceCallbackHandler
-        )
-        server.timeout = timeout_seconds
-        server_thread = threading.Thread(target=server.handle_request, daemon=True)
-        server_thread.start()
-        try:
-            if not result_ready.wait(timeout_seconds):
-                raise RuntimeError(
-                    "Timed out waiting for the browser login callback. Please try /login again."
-                )
-            if "error" in result:
-                raise RuntimeError(result["error"])
-            code = result.get("code")
-            if not code:
-                raise RuntimeError("PKCE login did not return an authorization code.")
-            return code
-        finally:
-            server.server_close()
-            server_thread.join(timeout=1)
-
-    def _exchange_authorization_code(
-        self,
-        *,
-        authorization_code: str,
-        pkce_request: KeycloakPkceLoginRequest,
-    ) -> dict[str, Any]:
-        """
-        Exchange one PKCE authorization code for access and refresh tokens.
-
-        Why this exists:
-        - the browser login flow still needs a final token exchange step at the
-          Keycloak token endpoint
-
-        How to use it:
-        - called internally by `login_with_pkce(...)`
-
-        Example:
-        - `payload = self._exchange_authorization_code(authorization_code=code, pkce_request=request)`
-        """
-
-        form = {
-            "grant_type": "authorization_code",
-            "client_id": self._config.client_id,
-            "code": authorization_code,
-            "redirect_uri": pkce_request.redirect_uri,
-            "code_verifier": pkce_request.code_verifier,
-        }
-        if self._config.client_secret:
-            form["client_secret"] = self._config.client_secret
-
-        print(
-            f"[chat] connecting to keycloak: POST {self._token_url()} (authorization_code grant)"
-        )
-        response = self._http_client.post(self._token_url(), data=form)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError("Keycloak PKCE token response must be a JSON object.")
-        return payload
-
-    def _build_session_from_token_payload(
-        self,
-        payload: dict[str, Any],
-        *,
-        username: str | None,
-        fallback_refresh_token: str | None = None,
-    ) -> KeycloakUserSession:
-        """
-        Convert one Keycloak token payload into the cached CLI session model.
-
-        Why this exists:
-        - password login, PKCE login, and refresh flows all produce the same
-          token payload shape and should build sessions consistently
-
-        How to use it:
-        - pass the JSON payload returned by Keycloak plus the known username
-
-        Example:
-        - `session = self._build_session_from_token_payload(payload, username="alice")`
-        """
-
-        resolved_username = username or "unknown-user"
-        return KeycloakUserSession(
-            username=resolved_username,
-            access_token=str(payload["access_token"]),
-            refresh_token=(
-                str(payload["refresh_token"])
-                if payload.get("refresh_token") is not None
-                else fallback_refresh_token
-            ),
-            expires_at_timestamp=self._expires_at_from_payload(payload),
-            realm_url=self._config.realm_url,
-            client_id=self._config.client_id,
-        )
-
-    @staticmethod
-    def _expires_at_from_payload(payload: dict[str, Any]) -> float:
-        """
-        Compute the cached token expiry timestamp from a Keycloak token payload.
-
-        Why this exists:
-        - the CLI needs a single normalized expiry timestamp for both login and
-          refresh flows
-
-        How to use it:
-        - pass the decoded JSON body returned by Keycloak
-
-        Example:
-        - `expires_at = KeycloakUserSessionManager._expires_at_from_payload(payload)`
-        """
-
-        expires_in = int(payload.get("expires_in", 60))
-        return time.time() + max(0, expires_in - 10)
-
-    @staticmethod
-    def _pkce_code_challenge(code_verifier: str) -> str:
-        """
-        Derive the S256 PKCE code challenge from a verifier string.
-
-        Why this exists:
-        - Keycloak's PKCE flow requires a deterministic S256 challenge derived
-          from the generated verifier
-
-        How to use it:
-        - pass the random verifier used for the authorization request
-
-        Example:
-        - `challenge = KeycloakUserSessionManager._pkce_code_challenge(verifier)`
-        """
-
-        digest = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-        return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
-
-    @staticmethod
-    def _username_from_access_token(access_token: Any) -> str | None:
-        """
-        Extract a human-friendly username from an access-token JWT payload.
-
-        Why this exists:
-        - browser PKCE login does not prompt for a username, but the REPL still
-          needs a friendly identity label for `/whoami`
-
-        How to use it:
-        - pass the raw `access_token` string returned by Keycloak
-
-        Example:
-        - `username = KeycloakUserSessionManager._username_from_access_token(token)`
-        """
-
-        if not isinstance(access_token, str):
-            return None
-        parts = access_token.split(".")
-        if len(parts) < 2:
-            return None
-        padded = parts[1] + "=" * (-len(parts[1]) % 4)
-        try:
-            claims = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
-        except Exception:
-            return None
-        for key in ("preferred_username", "name", "sub"):
-            value = claims.get(key)
-            if isinstance(value, str) and value:
-                return value
-        return None
 
 
 @dataclass(slots=True)
@@ -1360,185 +597,6 @@ def normalize_base_url(base_url: str) -> str:
     return cleaned.rstrip("/")
 
 
-def default_keycloak_token_file() -> Path:
-    """
-    Return the default local cache file used for CLI user-token sessions.
-
-    Why this function exists:
-    - developers need login state to persist between `fred-agent-chat` runs
-    - the cache location should be explicit and overridable by env var
-
-    How to use it:
-    - export `FRED_AGENT_TOKEN_FILE` to override the default cache file path
-    - otherwise the function uses a stable XDG-style location under the home dir
-
-    Example:
-    - `cache_file = default_keycloak_token_file()`
-    """
-
-    return Path(
-        os.getenv("FRED_AGENT_TOKEN_FILE", DEFAULT_KEYCLOAK_TOKEN_FILE)
-    ).expanduser()
-
-
-def default_pkce_callback_host() -> str:
-    """
-    Return the loopback host used for browser-based PKCE callbacks.
-
-    Why this function exists:
-    - the CLI needs one stable loopback address for browser redirects
-    - an env override helps when local networking or port-forwarding differs
-
-    How to use it:
-    - export `FRED_AGENT_KEYCLOAK_CALLBACK_HOST` to override the default
-
-    Example:
-    - `host = default_pkce_callback_host()`
-    """
-
-    return os.getenv("FRED_AGENT_KEYCLOAK_CALLBACK_HOST", DEFAULT_PKCE_CALLBACK_HOST)
-
-
-def default_pkce_callback_port() -> int:
-    """
-    Return the loopback port used for browser-based PKCE callbacks.
-
-    Why this function exists:
-    - the CLI needs a predictable callback port that can be registered in
-      Keycloak redirect-URI settings
-    - an env override keeps it adjustable without changing code
-
-    How to use it:
-    - export `FRED_AGENT_KEYCLOAK_CALLBACK_PORT` to override the default
-
-    Example:
-    - `port = default_pkce_callback_port()`
-    """
-
-    return int(
-        os.getenv("FRED_AGENT_KEYCLOAK_CALLBACK_PORT", str(DEFAULT_PKCE_CALLBACK_PORT))
-    )
-
-
-def load_cli_environment(dotenv_path: str | None = None) -> str:
-    """
-    Load CLI environment variables using the same env-file convention as pods.
-
-    Why this function exists:
-    - `fred-agent-chat` should resolve `ENV_FILE` and `CONFIG_FILE` the same
-      way as the pod it is testing
-    - loading the env file before parser construction keeps CLI defaults and
-      Keycloak discovery aligned with the selected pod profile
-
-    How to use it:
-    - call once at process startup before building the argument parser
-    - optionally pass an explicit env file path in tests
-
-    Example:
-    - `load_cli_environment()`
-    """
-
-    config_files = ConfigFiles(logger=logger, log_prefix="[CHAT CONFIG]")
-    return config_files.load_environment(dotenv_path)
-
-
-def load_configuration_yaml(path: Path) -> dict[str, Any] | None:
-    """
-    Load one pod `configuration.yaml` file when it exists.
-
-    Why this function exists:
-    - the chat client should auto-discover Keycloak login settings from the same
-      pod configuration developers already maintain
-
-    How to use it:
-    - pass the candidate config path and inspect the returned mapping, or `None`
-      when the file does not exist
-
-    Example:
-    - `payload = load_configuration_yaml(Path("./config/configuration.yaml"))`
-    """
-
-    if not path.exists():
-        return None
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return payload if isinstance(payload, dict) else None
-
-
-def default_configuration_file() -> Path:
-    """
-    Resolve the pod configuration file path used for auth auto-discovery.
-
-    Why this function exists:
-    - developers typically run the chat client from a pod project checkout
-    - reusing the standard `CONFIG_FILE` convention avoids duplicating Keycloak
-      coordinates in separate CLI flags for common local workflows
-
-    How to use it:
-    - export `CONFIG_FILE` to point at a non-default pod configuration
-    - otherwise the function falls back to `./config/configuration.yaml`
-
-    Example:
-    - `config_file = default_configuration_file()`
-    """
-
-    return Path(os.getenv("CONFIG_FILE", "./config/configuration.yaml"))
-
-
-def resolve_keycloak_login_config(
-    *,
-    realm_url: str | None,
-    client_id: str | None,
-    client_secret: str | None,
-    config_file: Path | None = None,
-) -> KeycloakLoginConfig | None:
-    """
-    Resolve CLI Keycloak login settings from flags, env vars, or pod config.
-
-    Why this function exists:
-    - secure pod testing should work without making developers retype the same
-      Keycloak realm and client settings on every run
-
-    How to use it:
-    - pass optional explicit values from CLI flags
-    - unset values fall back to env vars and then `configuration.yaml`
-
-    Example:
-    - `cfg = resolve_keycloak_login_config(realm_url=None, client_id=None, client_secret=None)`
-    """
-
-    resolved_realm_url = realm_url or os.getenv("FRED_AGENT_KEYCLOAK_REALM_URL")
-    resolved_client_id = client_id or os.getenv("FRED_AGENT_KEYCLOAK_CLIENT_ID")
-    resolved_client_secret = client_secret or os.getenv(
-        "FRED_AGENT_KEYCLOAK_CLIENT_SECRET"
-    )
-
-    payload = load_configuration_yaml(config_file or default_configuration_file())
-    if isinstance(payload, dict):
-        security = payload.get("security")
-        if isinstance(security, dict):
-            user_security = security.get("user")
-            if isinstance(user_security, dict):
-                if not user_security.get("enabled", True):
-                    # security.user.enabled: false — no Keycloak required
-                    return None
-                if resolved_realm_url is None:
-                    raw_realm_url = user_security.get("realm_url")
-                    if isinstance(raw_realm_url, str) and raw_realm_url.strip():
-                        resolved_realm_url = raw_realm_url.strip()
-                if resolved_client_id is None:
-                    raw_client_id = user_security.get("client_id")
-                    if isinstance(raw_client_id, str) and raw_client_id.strip():
-                        resolved_client_id = raw_client_id.strip()
-
-    if not resolved_realm_url or not resolved_client_id:
-        return None
-    return KeycloakLoginConfig(
-        realm_url=resolved_realm_url,
-        client_id=resolved_client_id,
-        client_secret=resolved_client_secret,
-    )
-
-
 def completion_candidates(
     line_buffer: str,
     *,
@@ -1570,7 +628,7 @@ def completion_candidates(
         partial = stripped.removeprefix("/scenario ").strip()
         return _complete_scenario_path(partial)
     if stripped.startswith("/"):
-        return [command for command in _COMMANDS if command.startswith(stripped)]
+        return complete_slash_commands(stripped, commands=_COMMANDS)
     return []
 
 
@@ -1615,55 +673,6 @@ def _complete_scenario_path(partial: str) -> list[str]:
             seen.add(c)
             result.append(c)
     return result
-
-
-def install_readline_completion(
-    agent_ids_provider: Callable[[], Sequence[str]],
-) -> None:
-    """
-    Enable shell-style tab completion for chat commands and agent ids.
-
-    Why this function exists:
-    - interactive testing is much faster when agent switching is discoverable
-    - `readline` gives a small dependency-free completion layer on developer
-      machines that already use bash/zsh
-
-    How to use it:
-    - call once before entering the REPL
-    - provide a callable returning the current agent id list
-
-    Example:
-    - `install_readline_completion(lambda: agents)`
-    """
-
-    if readline is None:
-        return
-
-    def _complete(text: str, state: int) -> str | None:
-        """
-        Resolve the nth readline completion candidate for the active prompt.
-
-        Why this function exists:
-        - readline asks for one completion item at a time by index
-        - keeping the logic nested avoids leaking TTY-specific plumbing outside
-          this setup function
-
-        How to use it:
-        - called automatically by readline after `install_readline_completion`
-
-        Example:
-        - `candidate = _complete("sent", 0)`
-        """
-
-        line_buffer = readline.get_line_buffer() if readline is not None else text
-        matches = completion_candidates(line_buffer, agent_ids=agent_ids_provider())
-        if state >= len(matches):
-            return None
-        return matches[state]
-
-    readline.set_completer_delims(" \t\n")
-    readline.set_completer(_complete)
-    readline.parse_and_bind("tab: complete")
 
 
 def print_help() -> None:
@@ -1853,47 +862,6 @@ def parse_mode_command(message: str) -> bool | None:
     if requested_mode == "final":
         return False
     raise ValueError("Unknown mode. Use `/mode`, `/mode final`, or `/mode stream`.")
-
-
-def colors_enabled(*, no_color: bool) -> bool:
-    """
-    Decide whether ANSI terminal colors should be used.
-
-    Why this function exists:
-    - color should improve readability without polluting redirected output
-    - developers may want to disable it explicitly in some terminals
-
-    How to use it:
-    - pass the parsed `--no-color` flag from the CLI
-
-    Example:
-    - `enabled = colors_enabled(no_color=False)`
-    """
-
-    if no_color or os.getenv("NO_COLOR"):
-        return False
-    return sys.stdout.isatty()
-
-
-def colorize(text: str, *, color: str, enabled: bool, bold: bool = False) -> str:
-    """
-    Wrap one string in ANSI escape codes when terminal colors are enabled.
-
-    Why this function exists:
-    - the client should highlight important labels without taking a dependency
-      on a full TUI framework
-
-    How to use it:
-    - pass one of the local `_ANSI_*` color constants and the color-enabled flag
-
-    Example:
-    - `label = colorize("sentinel.react.v2", color=_ANSI_CYAN, enabled=True, bold=True)`
-    """
-
-    if not enabled:
-        return text
-    prefix = f"{_ANSI_BOLD if bold else ''}{color}"
-    return f"{prefix}{text}{_ANSI_RESET}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -2842,7 +1810,9 @@ def run_interactive_chat(
             print(f"  {available_agent}")
         return 1
 
-    install_readline_completion(lambda: known_agents)
+    install_readline_completion(
+        lambda line: completion_candidates(line, agent_ids=known_agents)
+    )
 
     print(
         f"Connected to {colorize(client.base_url, color=_ANSI_DIM, enabled=color_enabled)}"
@@ -3846,7 +2816,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     - `main(["--agent", "sentinel.react.v2", "hello"])`
     """
 
-    env_file = load_cli_environment()
+    env_file = load_cli_environment(log_prefix="[CHAT CONFIG]")
     parser = build_parser()
     args = parser.parse_args(argv)
     base_url = normalize_base_url(args.base_url)
@@ -3878,6 +2848,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         auth_session = KeycloakUserSessionManager(
             config=login_config,
             cache_file=default_keycloak_token_file(),
+            log_prefix="[chat]",
         )
     else:
         print("[chat] auth      : none  (standalone mode — security disabled)")
@@ -3890,18 +2861,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     static_token = os.getenv("FRED_AGENT_TOKEN")
 
-    def _token_provider() -> str | None:
-        if auth_session is not None:
-            token = auth_session.get_access_token()
-            if token:
-                return token
-        return static_token
-
     client = AgentPodClient(
         base_url=base_url,
         http_client=http_client,
         metrics_url=metrics_url,
-        token_provider=_token_provider
+        token_provider=build_cli_token_provider(
+            auth_session=auth_session,
+            static_token=static_token,
+            log_prefix="[chat]",
+        )
         if auth_session is not None or static_token
         else None,
     )
@@ -3990,6 +2958,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 __all__ = [
     "AgentPodClient",
     "DEFAULT_AGENT_POD_BASE_URL",
+    "KeycloakLoginConfig",
+    "KeycloakUserSessionManager",
     "build_parser",
     "completion_candidates",
     "default_agent_metrics_url",

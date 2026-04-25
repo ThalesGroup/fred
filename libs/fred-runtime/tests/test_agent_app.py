@@ -6,9 +6,11 @@ import time
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from fred_core.common.config_loader import get_config
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.users.store import postgres_user_store
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
@@ -479,6 +481,73 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     payload = response.json()
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+
+
+def test_create_agent_app_initializes_user_store_during_startup(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Ensure pod startup initializes the shared UserStore before secured requests.
+
+    Why this test exists:
+    - secured pod routes depend on `get_current_user()`, which now always asks
+      for a `UserStore`
+    - a missing startup initialization caused real `POST /agents/execute/stream`
+      requests to fail with `StoreNotInitializedError`
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+    - the test resets the module-global store first, then starts a pod app and
+      asserts startup rebuilt it from the pod SQL configuration
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="startup ready")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    postgres_user_store._user_store = None
+
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app):
+        assert postgres_user_store.get_user_store() is not None
+
+
+def test_create_agent_app_overrides_shared_config_dependency(tmp_path) -> None:
+    """
+    Ensure agent pods expose the shared config dependency expected by security.
+
+    Why this test exists:
+    - `fred_core.security.oidc.get_current_user()` resolves configuration
+      through `Depends(get_config)`
+    - without a pod-level override, secured `/agents/execute*` routes fail at
+      request time with `NotImplementedError`
+
+    How to use it:
+    - run via the default offline `make test` suite in `fred-runtime`
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    config = _build_test_config(tmp_path)
+    app = create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=config,
+    )
+
+    provider = app.dependency_overrides[get_config]
+    resolved = provider()
+    assert resolved is config
+    assert resolved.app.gcu_version is None
 
 
 def test_create_agent_app_bootstraps_prometheus_kpis_and_background_emitters(

@@ -15,7 +15,7 @@ Its purpose is to make Phase 3 codable without improvisation:
 - `docs/platform/PLATFORM_RUNTIME_MAP.md`
 - `docs/design/RUNTIME-EXECUTION-CONTRACT.md`
 - `BACKLOG.md`
-- `control-plane-backend/control_plane_backend/main.py`
+- `apps/control-plane-backend/control_plane_backend/main.py`
 - `frontend/src/common/config.tsx`
 - `frontend/src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
 - `frontend/src/rework/components/shared/organisms/ChatList/ChatList.tsx`
@@ -94,6 +94,7 @@ Phase 3a uses one control-plane-owned bootstrap payload:
   - `active_team`
   - `available_teams`
   - `gcu_version`
+    - optional Terms of Use / CGU gating switch exposed by deployment config
   - `feature_flags`
   - `ui_settings`
   - `permissions`
@@ -107,6 +108,9 @@ Permissions are exposed via:
 
 Keep this contract small and frontend-oriented. If it becomes insufficient,
 extend `FrontendBootstrap`; do not add parallel bootstrap DTOs.
+
+Terms-gating behavior and current deployment limitations are documented in
+[`docs/platform/TERMS_OF_USE.md`](../platform/TERMS_OF_USE.md).
 
 ### 3.2 Managed agent discovery
 

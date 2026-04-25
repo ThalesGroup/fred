@@ -14,7 +14,7 @@ Fred is composed of four components:
 
 - a **Python agentic backend** (`agentic-backend`) — multi-agent runtime, session orchestration, streaming, MCP tool integration
 - a **Python knowledge flow backend** (`knowledge-flow-backend`) — document ingestion, vectorization, and retrieval
-- a **Python control plane backend** (`control-plane-backend`) — team and user management, access policy, agent registry
+- a **Python control plane backend** (`apps/control-plane-backend`) — team and user management, access policy, agent registry
 - a **React frontend** (`frontend`) — chat interface and agent management UI
 
 The repository also includes an [academy](./academy/README.md) with sample MCP servers and agents to get started quickly.
@@ -38,13 +38,15 @@ The repository also includes an [academy](./academy/README.md) with sample MCP s
 > | App | Role |
 > |-----|------|
 > | `apps/fred-agents` | First-party agent pod (RAG expert, general assistant, sentinel) — replaces `agentic-backend` agent execution |
+> | `apps/control-plane-backend` | Control-plane service for team, session, enrollment, and product/admin APIs |
 >
 > **What this means in practice:**
 >
 > - `libs/fred-sdk` + `libs/fred-runtime` are the new way to build an independent agent pod without pulling in the full Fred platform. See [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](./libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) and the [bootstrap guide](./docs/authoring/BOOTSTRAP.md).
 > - `apps/fred-agents` is production-ready and can already replace `agentic-backend` for agent execution. Both coexist in this branch.
-> - `knowledge-flow-backend` and `control-plane-backend` will progressively move into `apps/` in follow-up commits.
-> - The existing `agentic-backend`, `knowledge-flow-backend`, and `control-plane-backend` directories remain **fully operational** throughout the migration. Nothing is removed until the replacement is validated.
+> - `apps/fred-agents` and `apps/control-plane-backend` now live under `apps/` as promoted application packages.
+> - `knowledge-flow-backend` will progressively move into `apps/` in a follow-up commit.
+> - The existing `agentic-backend` and `knowledge-flow-backend` directories remain **fully operational** throughout the migration. Nothing is removed until the replacement is validated.
 >
 > If you want to experiment with the new model today, start with `apps/fred-agents` or the [fred-samples](https://github.com/ThalesGroup/fred-samples) reference pod.
 
@@ -539,7 +541,7 @@ cd agentic-backend && make run
 
 ```bash
 # control-plane backend
-cd control-plane-backend && make run
+cd apps/control-plane-backend && make run
 ```
 
 ```bash
@@ -664,7 +666,7 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | Frontend UI            | `./frontend`                | React chat interface and agent management UI                         |
 | Agentic backend        | `./agentic-backend`         | Multi-agent runtime, session orchestration, streaming, MCP tools     |
 | Knowledge Flow backend | `./knowledge-flow-backend`  | Document ingestion, vectorization, and retrieval                     |
-| Control Plane backend  | `./control-plane-backend`   | Team and user management, access policy, agent registry              |
+| Control Plane backend  | `./apps/control-plane-backend`   | Team and user management, access policy, agent registry              |
 
 **New libraries and apps (migration in progress — see notice above):**
 
@@ -681,10 +683,10 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
 | `agentic-backend/config/.env`                       | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and fill in any missing values.      |
 | `knowledge-flow-backend/config/.env`                | Same as above                                           | Same as above                                                       |
-| `control-plane-backend/config/.env`                 | Same as above                                           | Same as above                                                       |
+| `apps/control-plane-backend/config/.env`            | Same as above                                           | Same as above                                                       |
 | `agentic-backend/config/configuration.yaml`         | Functional settings (providers, agents, feature flags). | -                                                                   |
 | `knowledge-flow-backend/config/configuration.yaml`  | Same as above                                           | -                                                                   |
-| `control-plane-backend/config/configuration.yaml`   | Team/user policy settings.                              | -                                                                   |
+| `apps/control-plane-backend/config/configuration.yaml`   | Team/user policy settings.                              | -                                                                   |
 
 ### Supported Model Providers
 

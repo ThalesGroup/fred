@@ -16,5 +16,4 @@ run: dev ## Run the standalone Fred agents pod locally
 
 .PHONY: chat
 chat: dev ## Open the local interactive chat client for a running agent pod
-	VIRTUAL_ENV= $(UV) run fred-agent-chat
-
+	ENV_FILE=$(CURDIR)/config/.env VIRTUAL_ENV= $(UV) run fred-agent-chat

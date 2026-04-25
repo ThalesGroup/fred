@@ -14,7 +14,7 @@ A quick, skimmable overview of what Fred offers — with links to deeper docs.
 | **Retrieval** | Hybrid (AI + keywords), Semantic (AI only), Strict (precision-first) | [Retrievers Quick Guide](../knowledge-flow-backend/docs/RETRIEVERS.md) · [Hybrid](../knowledge-flow-backend/docs/HYBRID_RETRIEVER.md) · [Semantic](../knowledge-flow-backend/docs/SEMANTIC_RETRIEVER.md) · [Strict](../knowledge-flow-backend/docs/STRICT_RETRIEVER.md) |
 | **Agentic backend** | Multi-agent orchestration (FastAPI + LangGraph), tool use, policies | [Agentic design](../agentic-backend/docs/AGENTS.md)                                                                                                                                                                                                                     |
 | **Knowledge flow** | Ingestion, chunking, embeddings, vector search | [Knowledge Flow README](../knowledge-flow-backend/README.md)                                                                                                                                                                                                            |
-| **Auth & Security** | Keycloak/OIDC-ready, scoped search (by libraries/tags), safe defaults | [Keycloak](./docs/KEYCLOAK.md) · [Security](./docs/SECURITY.md)                                                                                                                                                                                                         |
+| **Auth & Security** | Keycloak/OIDC-ready, scoped search (by libraries/tags), safe defaults | [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Terms Of Use / CGU](./TERMS_OF_USE.md)                                                                                                                                                                       |
 | **Storage options** | Local FS + **SQLite + ChromaDB** by default; production: PostgreSQL/pgvector; optional OpenSearch + object store | [Design](./docs/DESIGN.md)                                                                                                                                                                                                                                              |
 | **Licensing** | Apache 2.0; optional integrations configured externally | [License](./docs/LICENSE.md)                                                                                                                                                                                                                                            |
 | **Roadmap** | What’s next & priorities | [ROADMAP](./docs/ROADMAP.md)                                                                                                                                                                                                                                            |
@@ -51,9 +51,10 @@ See the big picture: [Design](./docs/DESIGN.md)
 
 - OIDC/Keycloak integration out of the box.  
 - Scoped retrieval (libraries/tags → document IDs) to prevent cross-library leakage.  
+- Optional Terms of Use / CGU acceptance gating driven by deployment config.  
 - Deployment-time hardening guidance.
 
-Learn more: [Keycloak](./docs/KEYCLOAK.md) · [Security](./docs/SECURITY.md)
+Learn more: [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Terms Of Use / CGU](./TERMS_OF_USE.md)
 
 ---
 

@@ -1,0 +1,66 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 200;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 90vw);
+  background: var(--surface-container-lowest);
+  border-left: 1px solid var(--outline-muted);
+  display: flex;
+  flex-direction: column;
+  z-index: 201;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
+  border-bottom: 1px solid var(--outline-muted);
+  flex-shrink: 0;
+  gap: var(--spacing-s, 0.75rem);
+}
+
+.drawerTitle {
+  flex: 1;
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
+  color: var(--on-surface);
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--on-surface-retreat);
+  padding: 4px 8px;
+  border-radius: var(--radius-s, 4px);
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  background: var(--surface-container);
+  color: var(--on-surface);
+}
+
+.drawerBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fallback {
+  padding: var(--spacing-m, 1rem);
+  font: 0.75rem/1.5 monospace;
+  color: var(--on-surface);
+  white-space: pre-wrap;
+  overflow: auto;
+  height: 100%;
+}

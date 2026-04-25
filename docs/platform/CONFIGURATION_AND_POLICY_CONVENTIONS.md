@@ -64,7 +64,7 @@ Current policy sources:
 
 - Model/routing policy catalogs (agentic + knowledge-flow usage paths)
 - Conversation lifecycle policy catalog in control-plane:
-  - `control-plane-backend/config/conversation_policy_catalog.yaml`
+  - `apps/control-plane-backend/config/conversation_policy_catalog.yaml`
 
 When implementing behavior (for example purge delays), read from policy config and apply.
 Do not embed retention windows or team-specific rules in code.

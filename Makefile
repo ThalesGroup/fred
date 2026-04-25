@@ -1,6 +1,6 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents knowledge-flow-backend control-plane-backend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents knowledge-flow-backend control-plane-backend
-DOCKER_BUILD_DIRS := knowledge-flow-backend control-plane-backend frontend
+CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend
+TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime apps/fred-agents apps/control-plane-backend knowledge-flow-backend
+DOCKER_BUILD_DIRS := knowledge-flow-backend apps/control-plane-backend frontend
 
 .DEFAULT_GOAL := help
 
@@ -56,7 +56,7 @@ run-knowledge-flow: ## Run knowledge-flow backend API only
 
 .PHONY: run-control-plane
 run-control-plane: ## Run control-plane backend API only
-	$(MAKE) -C control-plane-backend run
+	$(MAKE) -C apps/control-plane-backend run
 
 .PHONY: dev
 dev:  ## Start development environment in all submodules
@@ -86,7 +86,7 @@ use-mistral: ## Switch all config files to use Mistral as LLM provider (usage: m
 	python3 scripts/use_mistral.py
 	@if [ -n "$(MISTRAL_API_KEY)" ]; then \
 		echo "--- .env files: setting OPENAI_API_KEY to Mistral API key ---"; \
-		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env control-plane-backend/config/.env; do \
+		for env_file in agentic-backend/config/.env knowledge-flow-backend/config/.env apps/control-plane-backend/config/.env; do \
 			if [ -f "$$env_file" ]; then \
 				if grep -q '^OPENAI_API_KEY=' "$$env_file"; then \
 					sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY="$(MISTRAL_API_KEY)"|' "$$env_file"; \
@@ -135,8 +135,8 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' knowledge-flow-backend/pyproject.toml
 	cd knowledge-flow-backend && uv lock
 	@echo "--- control-plane-backend ---"
-	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' control-plane-backend/pyproject.toml
-	cd control-plane-backend && uv lock
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' apps/control-plane-backend/pyproject.toml
+	cd apps/control-plane-backend && uv lock
 	@echo "--- frontend ---"
 	cd frontend && npm version $(VERSION) --no-git-tag-version
 	@echo "Version updated to $(VERSION) in all components."
@@ -148,7 +148,7 @@ SNAPSHOTS_DIR ?= $(CURDIR)/target/migration-snapshots
 .PHONY: db-snapshots
 db-snapshots: ## Dump schema after each migration for all backends into target/migration-snapshots/
 	@set -e; \
-	for dir in agentic-backend control-plane-backend knowledge-flow-backend; do \
+	for dir in agentic-backend apps/control-plane-backend knowledge-flow-backend; do \
 		echo "************ Snapshotting $$dir ************"; \
 		$(MAKE) -C $$dir db-snapshots DB_SNAPSHOTS_DIR=$(SNAPSHOTS_DIR); \
 	done
@@ -159,13 +159,13 @@ MIGRATION_COMPOSE    := scripts/docker-compose.postgres.yml
 PG_COMBINED_URL      := postgresql+asyncpg://test:test@localhost:5433/test_migrations
 SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 AGENTIC_UV           := agentic-backend/.venv/bin/uv
-CP_UV                := control-plane-backend/.venv/bin/uv
+CP_UV                := apps/control-plane-backend/.venv/bin/uv
 KF_UV                := knowledge-flow-backend/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each backend has exactly one Alembic head (no branch conflicts)
 	$(MAKE) -C agentic-backend db-check-heads
-	$(MAKE) -C control-plane-backend db-check-heads
+	$(MAKE) -C apps/control-plane-backend db-check-heads
 	$(MAKE) -C knowledge-flow-backend db-check-heads
 
 .PHONY: db-check-combined-postgres-up
@@ -181,15 +181,15 @@ db-check-combined-sqlite: ## upgrade all backends against the same SQLite DB, ch
 	@echo "=== Combined SQLite migration check: upgrade ==="
 	@rm -f $(SQLITE_COMBINED_DB)
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic check
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
-	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
 	@rm -f $(SQLITE_COMBINED_DB)
 	@echo "=== Combined SQLite migration check passed ==="
@@ -198,15 +198,15 @@ db-check-combined-sqlite: ## upgrade all backends against the same SQLite DB, ch
 db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-postgres-up ## upgrade all backends against the same DB, check for drift, then downgrade
 	@echo "=== Combined migration check: upgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic upgrade head
-	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic check
-	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic check
 	@echo "=== Combined migration check: downgrade ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory knowledge-flow-backend alembic downgrade base
-	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory control-plane-backend alembic downgrade base
+	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory apps/control-plane-backend alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(AGENTIC_UV) run --directory agentic-backend alembic downgrade base
 	@echo "=== Combined migration check passed ==="
 	$(MAKE) db-check-combined-postgres-down
@@ -251,7 +251,7 @@ build-frontend:
 
 .PHONY: build-cp
 build-cp:
-	$(MAKE) -C control-plane-backend docker-build
+	$(MAKE) -C apps/control-plane-backend docker-build
 
 .PHONY: k3d-import
 k3d-import: ## Import Docker images into k3d cluster

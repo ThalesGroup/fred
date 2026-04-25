@@ -11,6 +11,7 @@ from fred_runtime.client import (
     KeycloakLoginConfig,
     KeycloakUserSessionManager,
     _complete_scenario_path,
+    build_cli_token_provider,
     build_parser,
     build_hitl_resume_payload,
     completion_candidates,
@@ -978,6 +979,60 @@ def test_keycloak_user_session_manager_supports_browser_pkce_login(
     assert requests_seen[0]["code"] == "auth-code-123"
     assert requests_seen[0]["redirect_uri"] == "http://127.0.0.1:8765/callback"
     assert requests_seen[0]["code_verifier"]
+
+    manager.close()
+    auth_http.close()
+
+
+def test_build_cli_token_provider_falls_back_after_refresh_failure(
+    tmp_path, capsys
+) -> None:
+    """
+    Verify the CLI still starts when the cached Keycloak session cannot refresh.
+
+    Why this test exists:
+    - developers expect `fred-agent-chat` to remain usable even when the local
+      refresh token was revoked or expired
+    - public pod endpoints such as `/agents` should still work, and the user
+      should be able to recover with `/login`
+
+    How to use it:
+    - run with the offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_client.py -q`
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant"})
+
+    auth_http = httpx.Client(transport=httpx.MockTransport(handler), timeout=10.0)
+    manager = KeycloakUserSessionManager(
+        config=KeycloakLoginConfig(
+            realm_url="http://localhost:8080/realms/fred",
+            client_id="fred-ui",
+        ),
+        cache_file=tmp_path / "token.json",
+        http_client=auth_http,
+    )
+    manager._session = manager._build_session_from_token_payload(
+        {
+            "access_token": "expired-access",
+            "refresh_token": "expired-refresh",
+            "expires_in": 0,
+        },
+        username="alice",
+    )
+    manager._session.expires_at_timestamp = 0
+
+    token_provider = build_cli_token_provider(
+        auth_session=manager,
+        static_token=None,
+    )
+
+    assert token_provider() is None
+    assert manager.is_logged_in() is False
+    assert "Use /login to authenticate again." in capsys.readouterr().out
 
     manager.close()
     auth_http.close()

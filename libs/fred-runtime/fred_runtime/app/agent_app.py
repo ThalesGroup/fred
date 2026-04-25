@@ -55,6 +55,7 @@ import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fred_core.common.config_loader import get_config
 from fred_core.history.history_schema import ChatMessage
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -129,6 +130,64 @@ from .config import AgentPodConfig, MetricsBackend
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
+
+
+def _build_sql_runtime_dependencies(
+    config: AgentPodConfig,
+) -> tuple[Any, Any, Any]:
+    """
+    Build the shared SQL runtime services for an agent pod.
+
+    Why this function exists:
+    - pod startup already centralizes SQL-backed services in one place, and the
+      user admission path now depends on the same engine via `UserStore`
+    - keeping engine, checkpointer, history store, and user-store bootstrap
+      together avoids pods forgetting one of the required startup steps
+
+    How to use it:
+    - call once during FastAPI lifespan startup
+    - pass the pod `config` so the helper can build the configured SQL engine
+      and initialize the dependent runtime services
+
+    Example:
+    - `sql_engine, checkpointer, history_store = _build_sql_runtime_dependencies(config)`
+    """
+
+    from fred_core.history.postgres_history_store import PostgresHistoryStore
+    from fred_core.sql.base_sql import create_async_engine_from_config
+    from fred_core.users.store.postgres_user_store import init_user_store
+
+    from ..runtime_support.sql_checkpointer import FredSqlCheckpointer
+
+    sql_engine = create_async_engine_from_config(config.storage.postgres)
+    init_user_store(sql_engine)
+    checkpointer = FredSqlCheckpointer(sql_engine)
+    history_store = PostgresHistoryStore(sql_engine)
+    return sql_engine, checkpointer, history_store
+
+
+def _build_config_provider(config: AgentPodConfig) -> Callable[[], AgentPodConfig]:
+    """
+    Expose the pod configuration through the shared FastAPI config dependency.
+
+    Why this function exists:
+    - shared security helpers in `fred-core` resolve configuration through
+      `Depends(get_config)`, even when they are mounted inside an agent pod
+    - agent pods must therefore provide the same dependency override contract
+      as the other Fred backends
+
+    How to use it:
+    - call once from `create_agent_app(...)`
+    - assign the returned callable to `app.dependency_overrides[get_config]`
+
+    Example:
+    - `app.dependency_overrides[get_config] = _build_config_provider(config)`
+    """
+
+    def _provide_config() -> AgentPodConfig:
+        return config
+
+    return _provide_config
 
 
 def _build_runtime_kpi_writer(config: AgentPodConfig) -> BaseKPIWriter:
@@ -2386,14 +2445,9 @@ def create_agent_app(
         history_store = None
         background_kpi_tasks: list[asyncio.Task[None]] = []
         try:
-            from fred_core.history.postgres_history_store import PostgresHistoryStore
-            from fred_core.sql.base_sql import create_async_engine_from_config
-
-            from ..runtime_support.sql_checkpointer import FredSqlCheckpointer
-
-            sql_engine = create_async_engine_from_config(config.storage.postgres)
-            checkpointer = FredSqlCheckpointer(sql_engine)
-            history_store = PostgresHistoryStore(sql_engine)
+            sql_engine, checkpointer, history_store = _build_sql_runtime_dependencies(
+                config
+            )
             logger.info(
                 "[fred-runtime] SQL checkpointer and history store ready (dialect=%s)",
                 sql_engine.dialect.name,
@@ -2456,6 +2510,7 @@ def create_agent_app(
         openapi_url=f"{base_url}/openapi.json" if base_url else "/openapi.json",
         lifespan=lifespan,
     )
+    app.dependency_overrides[get_config] = _build_config_provider(config)
 
     # CORS — only added when security is provided so local-dev pods stay simple.
     if authorized_origins:

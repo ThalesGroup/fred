@@ -5,6 +5,38 @@ Start here, then follow the links to the relevant section.
 
 ---
 
+## Who are you?
+
+| I am… | Start here |
+|---|---|
+| **A developer** setting up the environment | [`platform/DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) |
+| **A developer** touching an API boundary or execution path | [`design/`](#design--architecture-contracts) |
+| **A developer** working on the chat UI | [`backlog/CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) then [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) |
+| **A UX designer** reviewing component rendering | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
+| **A product manager** tracking progress | [`WORKPLAN.md`](WORKPLAN.md) → [`backlog/BACKLOG.md`](backlog/BACKLOG.md) |
+| **An architect** reviewing or proposing a change | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts) |
+| **Writing an agent** with the SDK | [`authoring/`](#authoring--agent-sdk) |
+| **Deploying** the platform | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md) |
+| **An AI assistant** (Claude Code) | See [`../CLAUDE.md`](../CLAUDE.md) — mandatory read order defined there |
+
+---
+
+## Document taxonomy
+
+Four types of documents, each with a distinct purpose and lifecycle:
+
+| Type | Folder | Lifecycle | Who writes it |
+|---|---|---|---|
+| **Architecture contracts** | `design/` | Stable — change only via RFC | Tech leads |
+| **Backlogs** | `backlog/` | Append-only historical log — never delete past entries | Dev team |
+| **UX state** | `ux/` | Living — updated each implementation cycle and UX session | Dev + Designer |
+| **RFCs** | `rfc/` | Proposal lifecycle — open → decided → archived | Tech leads |
+
+**Cross-reference rule:** only this `README.md` points to everything. Other documents only
+reference documents in the same folder or in `design/`. This prevents circular reference chains.
+
+---
+
 ## Where to start
 
 | I want to… | Go to |
@@ -12,10 +44,11 @@ Start here, then follow the links to the relevant section.
 | Understand the system architecture | [`design/`](#design--architecture-contracts) |
 | Set up a dev environment | [`platform/DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) |
 | Deploy Fred | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md) |
-| Write an agent with the SDK | [`authoring/`](#authoring) |
+| Write an agent with the SDK | [`authoring/`](#authoring--agent-sdk) |
 | See what the team is working on now | [`WORKPLAN.md`](WORKPLAN.md) |
-| Understand the migration backlog | [`backlog/`](#backlog) |
-| Read a technical proposal | [`rfc/`](#rfc) |
+| Understand the migration backlog | [`backlog/`](#backlog--project-state-and-sequencing) |
+| Check UX status of a chat component | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) |
+| Read a technical proposal | [`rfc/`](#rfc--technical-proposals) |
 
 ---
 
@@ -81,7 +114,7 @@ guides. Read the developer contract first.
 
 ---
 
-### `authoring/` — Agent SDK authoring
+### `authoring/` — Agent SDK
 
 For engineers building agents with `fred-sdk`.
 
@@ -103,6 +136,18 @@ Current migration state, feature backlogs, and audit reports.
 | [`FRONTEND-BACKLOG.md`](backlog/FRONTEND-BACKLOG.md) | Frontend Phase 5 adaptation plan |
 | [`CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) | Chat UI quality build-out (Phases 6A→6D) |
 | [`RUNTIME-FEATURE-AUDIT.md`](backlog/RUNTIME-FEATURE-AUDIT.md) | Current runtime feature inventory against target architecture |
+
+---
+
+### `ux/` — UX review state
+
+Per-component UX status for the chat interface: open issues, designer notes, and the agenda
+for the next UX review session. Separate from implementation tasks (tracked in `backlog/`)
+and from visual specs (defined in `design/CHAT-COMPONENT-SPECS.md`).
+
+| File | Purpose |
+|---|---|
+| [`COMPONENT-UX.md`](ux/COMPONENT-UX.md) | Status (Functional / Needs revision / Approved) + open issues per component |
 
 ---
 

@@ -12,13 +12,13 @@ outside `agentic-backend`.
 That base path must stay aligned across three places during local development:
 
 1. `apps/fred-agents/config/configuration*.yaml`
-2. `control-plane-backend` `platform.runtime_catalog_sources.*`
+2. `apps/control-plane-backend` `platform.runtime_catalog_sources.*`
 3. the frontend reverse proxy (`frontend/vite.config.ts` or nginx ingress)
 
 Minimal local example:
 
 ```yaml
-# control-plane-backend/config/configuration*.yaml
+# apps/control-plane-backend/config/configuration*.yaml
 platform:
   runtime_catalog_sources:
     - runtime_id: fred-agents

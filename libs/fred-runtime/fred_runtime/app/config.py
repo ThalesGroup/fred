@@ -107,6 +107,7 @@ class PodAppConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
+    gcu_version: str | None = None
     metrics_address: str = "127.0.0.1"
     metrics_port: int = 9000
     kpi_process_metrics_interval_sec: int = Field(
