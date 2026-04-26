@@ -19,7 +19,7 @@
 			"path": "../apps/fred-agents"
 		},
 		{
-			"path": "../control-plane-backend"
+			"path": "../apps/control-plane-backend"
 		},
 		{
 			"path": "../knowledge-flow-backend"

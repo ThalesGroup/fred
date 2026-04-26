@@ -6,9 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from fred_core import KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
 
+from control_plane_backend.product.dependencies import (
+    ProductServiceDependencies,
+    get_product_service_dependencies,
+)
 from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
+    SessionAlreadyExistsError,
     build_frontend_bootstrap,
     create_session,
     enroll_agent_instance,
@@ -36,6 +41,10 @@ from control_plane_backend.teams.service import (
 )
 
 router = APIRouter(tags=["Product"])
+ProductDependencies = Annotated[
+    ProductServiceDependencies,
+    Depends(get_product_service_dependencies),
+]
 
 
 @router.get(
@@ -45,9 +54,23 @@ router = APIRouter(tags=["Product"])
     summary="Get the Phase 3a frontend bootstrap surface.",
 )
 async def get_frontend_bootstrap(
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> FrontendBootstrap:
-    return await build_frontend_bootstrap(user)
+    """
+    Return the typed frontend bootstrap payload owned by control-plane.
+
+    Why this endpoint exists:
+    - the frontend needs one small, control-plane-owned bootstrap surface for
+      current user, team context, feature flags, and permissions
+
+    How to use it:
+    - call after user authentication during frontend startup
+
+    Example:
+    - `GET /control-plane/v1/frontend/bootstrap`
+    """
+    return await build_frontend_bootstrap(user, deps)
 
 
 @router.get(
@@ -58,10 +81,24 @@ async def get_frontend_bootstrap(
 )
 async def get_team_agent_templates(
     team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[AgentTemplateSummary]:
+    """
+    Return the instantiable runtime templates visible from configured sources.
+
+    Why this endpoint exists:
+    - enrollment starts from live runtime catalogs, but the frontend should see
+      one aggregated control-plane view
+
+    How to use it:
+    - call with one team id after authentication
+
+    Example:
+    - `GET /control-plane/v1/teams/personal/agent-templates`
+    """
     del user
-    return await list_agent_templates(team_id)
+    return await list_agent_templates(team_id, deps)
 
 
 @router.get(
@@ -72,10 +109,24 @@ async def get_team_agent_templates(
 )
 async def get_team_agent_instances(
     team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[ManagedAgentInstanceSummary]:
+    """
+    Return the managed agent instances enrolled for one team.
+
+    Why this endpoint exists:
+    - the frontend needs a stable product list keyed by `agent_instance_id`,
+      independent from runtime template availability
+
+    How to use it:
+    - call with one team id after authentication
+
+    Example:
+    - `GET /control-plane/v1/teams/personal/agent-instances`
+    """
     del user
-    return await list_managed_agent_instances(team_id)
+    return await list_managed_agent_instances(team_id, deps)
 
 
 @router.post(
@@ -88,6 +139,7 @@ async def get_team_agent_instances(
 async def post_team_agent_instance(
     team_id: Annotated[TeamId, Path()],
     body: CreateAgentInstanceRequest,
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ManagedAgentInstanceSummary:
     """
@@ -106,9 +158,14 @@ async def post_team_agent_instance(
     Returns 404 if the template_id references an unknown or disabled runtime source.
     Returns 400 if template_id is malformed.
     """
-    await get_team_by_id_from_service(user, team_id)
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
-        return await enroll_agent_instance(user=user, team_id=team_id, request=body)
+        return await enroll_agent_instance(
+            user=user,
+            team_id=team_id,
+            request=body,
+            deps=deps,
+        )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
@@ -122,6 +179,7 @@ async def post_team_agent_instance(
 async def delete_team_agent_instance(
     team_id: Annotated[TeamId, Path()],
     agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     """
@@ -132,9 +190,11 @@ async def delete_team_agent_instance(
 
     Returns 404 if the instance is not found for the given team.
     """
-    await get_team_by_id_from_service(user, team_id)
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     deleted = await unenroll_agent_instance(
-        team_id=team_id, agent_instance_id=agent_instance_id
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        deps=deps,
     )
     if not deleted:
         raise HTTPException(
@@ -151,10 +211,24 @@ async def delete_team_agent_instance(
 )
 async def get_agent_instance_runtime(
     agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ManagedAgentRuntimeBinding:
+    """
+    Return the runtime-facing binding for one managed agent instance.
+
+    Why this endpoint exists:
+    - operators sometimes need to inspect the runtime identity behind one
+      managed agent instance without exposing that binding broadly in the UI
+
+    How to use it:
+    - call as an admin with one `agent_instance_id`
+
+    Example:
+    - `GET /control-plane/v1/agent-instances/instance-1/runtime`
+    """
     require_admin(user)
-    binding = await get_runtime_binding(agent_instance_id)
+    binding = await get_runtime_binding(agent_instance_id, deps)
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:
@@ -174,6 +248,7 @@ async def get_agent_instance_runtime(
 async def post_team_session(
     team_id: Annotated[TeamId, Path()],
     body: CreateSessionRequest,
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> SessionListItem:
     """
@@ -184,16 +259,16 @@ async def post_team_session(
 
     Returns 409 if the session_id already exists.
     """
-    await get_team_by_id_from_service(user, team_id)
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     try:
-        return await create_session(user=user, team_id=team_id, request=body)
-    except Exception as exc:
-        if "UNIQUE constraint" in str(exc) or "unique" in str(exc).lower():
-            raise HTTPException(
-                status_code=409,
-                detail=f"Session {body.session_id!r} already exists.",
-            ) from exc
-        raise
+        return await create_session(
+            user=user,
+            team_id=team_id,
+            request=body,
+            deps=deps,
+        )
+    except SessionAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get(
@@ -204,11 +279,24 @@ async def post_team_session(
 )
 async def get_team_sessions(
     team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[SessionListItem]:
-    """Return the most recent sessions for this team, newest first."""
+    """
+    Return the most recent control-plane session metadata for one team.
+
+    Why this endpoint exists:
+    - the sidebar needs a lightweight team-scoped session list without loading
+      runtime-owned message history
+
+    How to use it:
+    - call with one team id after authentication
+
+    Example:
+    - `GET /control-plane/v1/teams/personal/sessions`
+    """
     del user
-    return await list_sessions(team_id)
+    return await list_sessions(team_id, deps=deps)
 
 
 @router.patch(
@@ -221,6 +309,7 @@ async def patch_team_session(
     team_id: Annotated[TeamId, Path()],
     session_id: Annotated[str, Path(min_length=1)],
     body: UpdateSessionRequest,
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> SessionListItem:
     """
@@ -236,11 +325,12 @@ async def patch_team_session(
 
     Returns 404 if the session does not exist for the given team.
     """
-    await get_team_by_id_from_service(user, team_id)
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
     updated = await update_session_activity(
         team_id=team_id,
         session_id=session_id,
         request=body,
+        deps=deps,
     )
     if updated is None:
         raise HTTPException(
@@ -259,6 +349,7 @@ async def patch_team_session(
 async def post_prepare_execution(
     team_id: Annotated[TeamId, Path()],
     agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> ExecutionPreparation:
     """
@@ -269,13 +360,14 @@ async def post_prepare_execution(
     Returns an ExecutionPreparation with ingress-relative URLs and a short-lived
     ExecutionGrant scoped to the user/team/instance.
     """
-    await get_team_by_id_from_service(user, team_id)
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
 
     try:
         return await prepare_execution(
             user=user,
             team_id=team_id,
             agent_instance_id=agent_instance_id,
+            deps=deps,
         )
     except ExecutionPreparationError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc

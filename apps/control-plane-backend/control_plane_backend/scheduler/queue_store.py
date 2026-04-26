@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.purge_queue_models import PurgeQueueRow
 
 logger = logging.getLogger(__name__)
@@ -53,13 +54,29 @@ class PurgeQueueStore:
         limit: int,
         session: AsyncSession | None = None,
     ) -> list[PurgeQueueItem]:
+        """
+        Return pending purge-queue items whose due time is in the past.
+
+        Why this function exists:
+        - lifecycle runners need one ordered source of pending purge work
+        - queue filtering should use the same timezone-aware UTC policy as the
+          ORM defaults
+
+        How to use it:
+        - call with a bounded `limit` from the lifecycle candidate listing path
+        - callers decide whether to dry-run, delete, or mark items done later
+
+        Example:
+        - `due_items = await store.list_due(limit=100)`
+        """
+
         async with use_session(self._sessions, session) as s:
             rows = (
                 (
                     await s.execute(
                         select(PurgeQueueRow)
                         .where(PurgeQueueRow.status == _PENDING)
-                        .where(PurgeQueueRow.due_at <= datetime.utcnow())
+                        .where(PurgeQueueRow.due_at <= utcnow())
                         .order_by(
                             PurgeQueueRow.due_at.asc(), PurgeQueueRow.session_id.asc()
                         )

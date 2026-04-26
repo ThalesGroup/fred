@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from control_plane_backend.models.base import Base
+from control_plane_backend.models.base import Base, utcnow
 
 
 class PurgeQueueRow(Base):
@@ -21,12 +21,12 @@ class PurgeQueueRow(Base):
     )
     status: Mapped[str] = mapped_column(String, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, index=True, default=utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         index=True,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utcnow,
+        onupdate=utcnow,
     )

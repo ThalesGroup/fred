@@ -15,6 +15,23 @@ list of those issues, organized per component. It feeds the UX review session ag
 
 ---
 
+## Design token reference
+
+Token names confirmed from `src/styles/colors-semantic-{light,dark}.css`.
+Use **only** these names — no hardcoded hex fallbacks for color tokens.
+
+| Purpose | Correct token | Common wrong names |
+|---|---|---|
+| Elevated surface (hover states) | `--surface-container-hight` | ~~`--surface-container-high`~~ (missing `h`) |
+| Surfaces | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` | |
+| Text | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted` | ~~`--on-surface-variant`~~ (doesn't exist) |
+| Status colours | `--success`, `--error`, `--warning`, `--primary` | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
+| Borders | `--outline-muted` | |
+
+Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
+
+---
+
 ## How to use this file
 
 - When you implement a component, add a row here with status `Functional`.

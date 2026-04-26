@@ -6,6 +6,7 @@ from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import delete, select, update
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
@@ -13,6 +14,10 @@ from control_plane_backend.models.session_metadata_models import SessionMetadata
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+class SessionMetadataAlreadyExistsError(Exception):
+    """Raised when one session metadata row already exists for the session id."""
 
 
 class SessionMetadataRecord:
@@ -59,6 +64,24 @@ class SessionMetadataStore:
         record: SessionMetadataRecord,
         session: AsyncSession | None = None,
     ) -> SessionMetadataRecord:
+        """
+        Persist one new control-plane session metadata record.
+
+        Why this function exists:
+        - control-plane owns the lightweight sidebar/session metadata surface
+          independently from runtime message history
+        - duplicate `session_id` creation should fail explicitly instead of
+          leaking raw SQL errors to higher layers
+
+        How to use it:
+        - pass a fully prepared `SessionMetadataRecord`
+        - catch `SessionMetadataAlreadyExistsError` when callers want to map a
+          duplicate create to a domain conflict
+
+        Example:
+        - `created = await store.create(record)`
+        """
+
         now = _utcnow()
         row = SessionMetadataRow(
             session_id=record.session_id,
@@ -69,8 +92,11 @@ class SessionMetadataStore:
             created_at=record.created_at or now,
             updated_at=record.updated_at or now,
         )
-        async with use_session(self._sessions, session) as s:
-            s.add(row)
+        try:
+            async with use_session(self._sessions, session) as s:
+                s.add(row)
+        except IntegrityError as exc:
+            raise SessionMetadataAlreadyExistsError(record.session_id) from exc
         result = await self.get(record.session_id)
         assert result is not None
         return result

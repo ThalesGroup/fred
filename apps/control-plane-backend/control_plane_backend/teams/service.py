@@ -20,15 +20,12 @@ from fred_core import (
     Resource,
     SessionSchema,
     TeamPermission,
-    create_keycloak_admin,
 )
 from fred_core.common import TeamId
 from fred_core.scheduler import SchedulerBackend
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakPutError
 
-from control_plane_backend.app.context import ApplicationContext
-from control_plane_backend.scheduler.memory import run_lifecycle_manager_once_in_memory
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
 )
@@ -43,6 +40,7 @@ from control_plane_backend.teams.system import (
     to_team_summary,
 )
 from control_plane_backend.teams.metadata_store import TeamMetadataPatch
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
@@ -60,7 +58,6 @@ from control_plane_backend.teams.schemas import (
     UserTeamRelation,
 )
 from control_plane_backend.users.schemas import UserSummary
-from control_plane_backend.users.service import get_users_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +76,10 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
-async def list_teams(user: KeycloakUser) -> list[Team]:
+async def list_teams(
+    user: KeycloakUser,
+    deps: TeamServiceDependencies,
+) -> list[Team]:
     """List all selectable teams, including reserved system teams.
 
     Why this function exists:
@@ -91,17 +91,15 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
       list
 
     Example:
-    - `teams = await list_teams(user)`
+    - `teams = await list_teams(user, deps)`
     """
-
     selectable_teams: dict[str, Team] = {
         str(team.id): to_team_summary(team) for team in list_system_teams(user)
     }
 
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    rebac = deps.rebac
 
-    admin = create_keycloak_admin(app_context.configuration.security.m2m)
+    admin = deps.create_keycloak_admin_client()
     if isinstance(admin, KeycloackDisabled):
         logger.info(
             "Keycloak admin client not configured; returning system teams only."
@@ -125,14 +123,22 @@ async def list_teams(user: KeycloakUser) -> list[Team]:
         ]
 
     collaborative_teams = await _enrich_groups_with_team_data(
-        admin, rebac, user, root_groups
+        admin,
+        rebac,
+        user,
+        root_groups,
+        deps,
     )
     for team in collaborative_teams:
         selectable_teams[str(team.id)] = team
     return list(selectable_teams.values())
 
 
-async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermissions:
+async def get_team_by_id(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+) -> TeamWithPermissions:
     """Resolve one selectable team, including reserved system teams.
 
     Why this function exists:
@@ -144,21 +150,20 @@ async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermiss
       `TeamWithPermissions`
 
     Example:
-    - `team = await get_team_by_id(user, TeamId("personal"))`
+    - `team = await get_team_by_id(user, TeamId("personal"), deps)`
     """
-
     system_team = get_system_team(user, team_id)
     if system_team is not None:
         return system_team
 
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    rebac = deps.rebac
 
     admin, raw_group, consistency_token = await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [TeamPermission.CAN_READ],
+        deps,
     )
     group_summary = KeycloakGroupSummary(
         id=team_id,
@@ -166,7 +171,13 @@ async def get_team_by_id(user: KeycloakUser, team_id: TeamId) -> TeamWithPermiss
         member_count=0,
     )
 
-    teams = await _enrich_groups_with_team_data(admin, rebac, user, [group_summary])
+    teams = await _enrich_groups_with_team_data(
+        admin,
+        rebac,
+        user,
+        [group_summary],
+        deps,
+    )
     if not teams:
         raise TeamNotFoundError(team_id)
 
@@ -183,21 +194,36 @@ async def update_team(
     user: KeycloakUser,
     team_id: TeamId,
     request: UpdateTeamRequest,
+    deps: TeamServiceDependencies,
 ) -> TeamWithPermissions:
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    """
+    Update one team metadata document and visibility settings.
+
+    Why this function exists:
+    - collaborative teams need a single business path for editable metadata and
+      public/private visibility toggles
+
+    How to use it:
+    - call it from the team PATCH route after authenticating the current user
+    - pass request-scoped team dependencies when available
+
+    Example:
+    - `team = await update_team(user, TeamId("fredlab"), request, deps)`
+    """
+    rebac = deps.rebac
 
     admin, raw_group, consistency_token = await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [TeamPermission.CAN_UPDATE_INFO],
+        deps,
     )
 
     # PATCH with no fields is a no-op.
     if request.model_fields_set:
         patch = TeamMetadataPatch.model_validate(request.model_dump(exclude_unset=True))
-        await app_context.get_team_metadata_store().upsert(team_id, patch)
+        await deps.get_team_metadata_store().upsert(team_id, patch)
 
         if "is_private" in request.model_fields_set:
             public_relation = Relation(
@@ -215,7 +241,13 @@ async def update_team(
         name=raw_group.get("name"),
         member_count=0,
     )
-    teams = await _enrich_groups_with_team_data(admin, rebac, user, [group_summary])
+    teams = await _enrich_groups_with_team_data(
+        admin,
+        rebac,
+        user,
+        [group_summary],
+        deps,
+    )
     if not teams:
         raise TeamNotFoundError(team_id)
 
@@ -232,15 +264,31 @@ async def upload_team_banner(
     user: KeycloakUser,
     team_id: TeamId,
     file: UploadFile,
+    deps: TeamServiceDependencies,
 ) -> None:
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    """
+    Validate and upload one team banner image to the configured content store.
+
+    Why this function exists:
+    - team customization needs one backend-owned upload path with size and MIME
+      validation before metadata is persisted
+
+    How to use it:
+    - call from the banner upload route with the authenticated user and the raw
+      FastAPI `UploadFile`
+    - pass request-scoped dependencies when available
+
+    Example:
+    - `await upload_team_banner(user, TeamId("fredlab"), file, deps)`
+    """
+    rebac = deps.rebac
 
     await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [TeamPermission.CAN_UPDATE_INFO],
+        deps,
     )
 
     try:
@@ -273,13 +321,13 @@ async def upload_team_banner(
             file_ext = _BANNER_EXTENSION_BY_MIME[detected_content_type]
 
         object_storage_key = f"teams/{team_id}/banner-{uuid4().hex}{file_ext}"
-        app_context.get_content_store().put_object(
+        deps.get_content_store().put_object(
             object_storage_key,
             BytesIO(payload),
             content_type=detected_content_type,
         )
 
-        await app_context.get_team_metadata_store().upsert(
+        await deps.get_team_metadata_store().upsert(
             team_id,
             TeamMetadataPatch(banner_object_storage_key=object_storage_key),
         )
@@ -288,22 +336,40 @@ async def upload_team_banner(
         await file.close()
 
 
-async def list_team_members(user: KeycloakUser, team_id: TeamId) -> list[TeamMember]:
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+async def list_team_members(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: TeamServiceDependencies,
+) -> list[TeamMember]:
+    """
+    Resolve one team member list with role decoration for the current operator.
+
+    Why this function exists:
+    - the frontend and CLI need one rendered member list that merges Keycloak
+      group membership with ReBAC role relations
+
+    How to use it:
+    - call from `/teams/{team_id}/members`
+    - pass request-scoped dependencies when available
+
+    Example:
+    - `members = await list_team_members(user, TeamId("fredlab"), deps)`
+    """
+    rebac = deps.rebac
 
     admin, _, _ = await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
         [TeamPermission.CAN_READ_MEMEBERS],
+        deps,
     )
     owner_ids, manager_ids, member_ids = await asyncio.gather(
         _get_team_users_by_relation(rebac, team_id, RelationType.OWNER),
         _get_team_users_by_relation(rebac, team_id, RelationType.MANAGER),
         _fetch_group_member_ids(admin, team_id),
     )
-    user_summaries = await get_users_by_ids(member_ids)
+    user_summaries = await deps.get_users_by_ids(member_ids)
 
     team_members: list[TeamMember] = []
     for member_id in member_ids:
@@ -323,9 +389,23 @@ async def add_team_member(
     user: KeycloakUser,
     team_id: TeamId,
     request: AddTeamMemberRequest,
+    deps: TeamServiceDependencies,
 ) -> None:
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    """
+    Add one user to a team and persist the requested team role relation.
+
+    Why this function exists:
+    - team administration needs one business path that keeps Keycloak group
+      membership and ReBAC role relations in sync
+
+    How to use it:
+    - call from the team-membership POST route
+    - pass request-scoped dependencies when available
+
+    Example:
+    - `await add_team_member(user, TeamId("fredlab"), request, deps)`
+    """
+    rebac = deps.rebac
 
     permission_to_check = _get_administer_permission_for_team_role_relation(
         request.relation
@@ -335,6 +415,7 @@ async def add_team_member(
         team_id,
         rebac,
         [permission_to_check],
+        deps,
     )
     await _add_keycloak_user_to_group(admin, request.user_id, team_id)
     await _add_team_member_relation(rebac, team_id, request.user_id, request.relation)
@@ -351,9 +432,23 @@ async def remove_team_member(
     user: KeycloakUser,
     team_id: TeamId,
     user_id: str,
+    deps: TeamServiceDependencies,
 ) -> RemoveTeamMemberResponse:
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    """
+    Remove one team member and enqueue any matching session lifecycle cleanup.
+
+    Why this function exists:
+    - membership removal must keep Keycloak/ReBAC state consistent and trigger
+      the configured session-retention policy for the removed user
+
+    How to use it:
+    - call from the team-membership DELETE route
+    - pass request-scoped dependencies when available
+
+    Example:
+    - `result = await remove_team_member(user, TeamId("swiftpost"), "user-1", deps)`
+    """
+    rebac = deps.rebac
 
     target_role = await _get_user_role_in_team(rebac, team_id, user_id)
     await _ensure_team_keeps_at_least_one_owner(
@@ -370,6 +465,7 @@ async def remove_team_member(
         team_id,
         rebac,
         [permission_to_check],
+        deps,
     )
     await _remove_keycloak_user_from_group(admin, user_id, team_id)
     await _remove_all_team_member_relations(rebac, team_id, user_id)
@@ -379,12 +475,12 @@ async def remove_team_member(
             team_id=team_id,
             trigger=LifecycleTrigger.MEMBER_REMOVED,
         ),
-        app_context.get_policy_catalog(),
+        deps.get_policy_catalog(),
     )
     scheduled_delete_at = _utcnow() + timedelta(seconds=policy.retention_seconds)
 
-    session_store = app_context.get_session_store()
-    queue_store = app_context.get_purge_queue_store()
+    session_store = deps.get_session_store()
+    queue_store = deps.get_purge_queue_store()
     sessions: list[SessionSchema] = await session_store.get_for_user(user_id, team_id)
 
     sessions_enqueued = 0
@@ -404,7 +500,7 @@ async def remove_team_member(
         sessions_enqueued,
     )
     if sessions_enqueued > 0:
-        await _run_lifecycle_if_in_memory_scheduler(app_context)
+        await _run_lifecycle_if_in_memory_scheduler(deps)
 
     return RemoveTeamMemberResponse(
         team_id=team_id,
@@ -418,14 +514,14 @@ async def remove_team_member(
 
 
 async def _run_lifecycle_if_in_memory_scheduler(
-    app_context: ApplicationContext,
+    deps: TeamServiceDependencies,
 ) -> None:
-    if not app_context.configuration.scheduler.enabled:
+    if not deps.configuration.scheduler.enabled:
         return
-    if app_context.get_scheduler_backend() != SchedulerBackend.MEMORY:
+    if deps.scheduler_backend != SchedulerBackend.MEMORY:
         return
 
-    result = await run_lifecycle_manager_once_in_memory(LifecycleManagerInput())
+    result = await deps.run_lifecycle_manager_once_in_memory(LifecycleManagerInput())
     logger.info(
         "[LIFECYCLE][IN_MEMORY] post-member-removal pass scanned=%s deleted=%s dry_run_actions=%s",
         result.scanned,
@@ -439,9 +535,23 @@ async def update_team_member(
     team_id: TeamId,
     user_id: str,
     request: UpdateTeamMemberRequest,
+    deps: TeamServiceDependencies,
 ) -> None:
-    app_context = ApplicationContext.get_instance()
-    rebac = app_context.get_rebac_engine()
+    """
+    Change one team member role while enforcing owner-safety constraints.
+
+    Why this function exists:
+    - role updates must check both the current and target permissions while
+      preserving the invariant that a team always keeps at least one owner
+
+    How to use it:
+    - call from the team-membership PATCH route
+    - pass request-scoped dependencies when available
+
+    Example:
+    - `await update_team_member(user, TeamId("fredlab"), "user-1", request, deps)`
+    """
+    rebac = deps.rebac
 
     target_current_role = await _get_user_role_in_team(rebac, team_id, user_id)
     target_wanted_role = request.relation
@@ -462,6 +572,7 @@ async def update_team_member(
         team_id,
         rebac,
         permissions_to_check,
+        deps,
     )
     await _remove_all_team_member_relations(rebac, team_id, user_id)
     await _add_team_member_relation(rebac, team_id, user_id, request.relation)
@@ -479,16 +590,14 @@ async def _enrich_groups_with_team_data(
     rebac: RebacEngine,
     user: KeycloakUser,
     groups: list[KeycloakGroupSummary],
+    deps: TeamServiceDependencies,
 ) -> list[Team]:
     if not groups:
         return []
 
-    app_context = ApplicationContext.get_instance()
-    content_store = app_context.get_content_store()
+    content_store = deps.get_content_store()
     team_ids: list[TeamId] = [group.id for group in groups]
-    team_metadata_by_id = await app_context.get_team_metadata_store().get_by_team_ids(
-        team_ids
-    )
+    team_metadata_by_id = await deps.get_team_metadata_store().get_by_team_ids(team_ids)
     owner_ids_list, member_ids_list = await asyncio.gather(
         asyncio.gather(
             *[
@@ -508,7 +617,7 @@ async def _enrich_groups_with_team_data(
         team_id: member_ids for team_id, member_ids in zip(team_ids, member_ids_list)
     }
     all_owner_ids: set[str] = set().union(*owner_ids_list)
-    user_summaries = await get_users_by_ids(all_owner_ids)
+    user_summaries = await deps.get_users_by_ids(all_owner_ids)
 
     teams: list[Team] = []
     for group_summary in groups:
@@ -720,9 +829,24 @@ async def _validate_team_and_check_permission(
     team_id: TeamId,
     rebac: RebacEngine,
     permissions: list[TeamPermission],
+    deps: TeamServiceDependencies,
 ) -> tuple[KeycloakAdmin, dict[str, Any], str | None]:
-    app_context = ApplicationContext.get_instance()
-    admin = create_keycloak_admin(app_context.configuration.security.m2m)
+    """
+    Load one Keycloak team and verify the caller has the requested permissions.
+
+    Why this function exists:
+    - team write and read operations all need the same validation path for
+      Keycloak existence checks plus ReBAC permission enforcement
+
+    How to use it:
+    - pass the current user, target team id, required permissions, and the
+      explicit team-service dependency bundle
+    - expect `TeamNotFoundError` or `KeycloakM2MDisabledError` on invalid teams
+
+    Example:
+    - `admin, group, token = await _validate_team_and_check_permission(user, team_id, rebac, permissions, deps)`
+    """
+    admin = deps.create_keycloak_admin_client()
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; cannot validate team.")
         raise KeycloakM2MDisabledError()

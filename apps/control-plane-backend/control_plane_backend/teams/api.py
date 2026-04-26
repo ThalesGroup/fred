@@ -5,6 +5,10 @@ from fastapi.responses import JSONResponse
 from fred_core import AuthorizationError, KeycloakUser, get_current_user
 from fred_core.common import TeamId
 
+from control_plane_backend.teams.dependencies import (
+    TeamServiceDependencies,
+    get_team_service_dependencies,
+)
 from control_plane_backend.teams.service import (
     add_team_member as add_team_member_from_service,
 )
@@ -41,6 +45,10 @@ from control_plane_backend.teams.schemas import (
 )
 
 router = APIRouter(tags=["Teams"])
+TeamDependencies = Annotated[
+    TeamServiceDependencies,
+    Depends(get_team_service_dependencies),
+]
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -90,8 +98,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     response_model_exclude_none=True,
     summary="List teams the user has access to",
 )
-async def list_teams(user: KeycloakUser = Depends(get_current_user)) -> list[Team]:
-    return await list_teams_from_service(user)
+async def list_teams(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[Team]:
+    return await list_teams_from_service(user, deps)
 
 
 @router.get(
@@ -102,9 +113,10 @@ async def list_teams(user: KeycloakUser = Depends(get_current_user)) -> list[Tea
 )
 async def get_team(
     team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
-    return await get_team_by_id_from_service(user, team_id)
+    return await get_team_by_id_from_service(user, team_id, deps)
 
 
 @router.patch(
@@ -116,9 +128,10 @@ async def get_team(
 async def update_team(
     team_id: Annotated[TeamId, Path()],
     request: UpdateTeamRequest,
+    deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> TeamWithPermissions:
-    return await update_team_from_service(user, team_id, request)
+    return await update_team_from_service(user, team_id, request, deps)
 
 
 @router.post(
@@ -128,12 +141,13 @@ async def update_team(
 )
 async def upload_team_banner(
     team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
     file: UploadFile = File(
         ..., description="Banner image file (max 5MB, JPEG/PNG/WebP)"
     ),
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    await upload_team_banner_from_service(user, team_id, file)
+    await upload_team_banner_from_service(user, team_id, file, deps)
 
 
 @router.get(
@@ -144,9 +158,10 @@ async def upload_team_banner(
 )
 async def list_team_members(
     team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[TeamMember]:
-    return await list_team_members_from_service(user, team_id)
+    return await list_team_members_from_service(user, team_id, deps)
 
 
 @router.post(
@@ -157,9 +172,10 @@ async def list_team_members(
 async def add_team_member(
     team_id: Annotated[TeamId, Path()],
     request: AddTeamMemberRequest,
+    deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    await add_team_member_from_service(user, team_id, request)
+    await add_team_member_from_service(user, team_id, request, deps)
 
 
 @router.delete(
@@ -171,9 +187,10 @@ async def add_team_member(
 async def remove_team_member(
     team_id: Annotated[TeamId, Path()],
     user_id: Annotated[str, Path(min_length=1)],
+    deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> RemoveTeamMemberResponse:
-    return await remove_team_member_from_service(user, team_id, user_id)
+    return await remove_team_member_from_service(user, team_id, user_id, deps)
 
 
 @router.patch(
@@ -185,6 +202,7 @@ async def update_team_member(
     team_id: Annotated[TeamId, Path()],
     user_id: Annotated[str, Path(min_length=1)],
     request: UpdateTeamMemberRequest,
+    deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    await update_team_member_from_service(user, team_id, user_id, request)
+    await update_team_member_from_service(user, team_id, user_id, request, deps)

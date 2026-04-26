@@ -276,8 +276,6 @@ class KeycloakUserSessionManager:
         - call with a prompted username/password pair
         - the resulting session is cached automatically
 
-        Example:
-        - `auth.login(username="alice", password="dummy-password")`
         """
 
         form = {

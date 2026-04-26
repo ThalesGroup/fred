@@ -20,9 +20,13 @@ from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
-from control_plane_backend.app.context import (
-    ApplicationContext,
-    get_configuration,
+from control_plane_backend.app.container import (
+    build_application_container,
+    initialize_shared_stores,
+)
+from control_plane_backend.app.dependencies import (
+    attach_application_container,
+    get_application_configuration,
 )
 from control_plane_backend.config.loader import (
     get_loaded_config_file_path,
@@ -31,6 +35,9 @@ from control_plane_backend.config.loader import (
 )
 from control_plane_backend.config.models import AppState
 from control_plane_backend.product.api import router as product_router
+from control_plane_backend.scheduler.dependencies import (
+    build_lifecycle_action_dependencies,
+)
 from control_plane_backend.scheduler.memory import run_lifecycle_manager_once_in_memory
 from control_plane_backend.scheduler.policies.policy_engine import (
     evaluate_policy_for_request,
@@ -86,6 +93,22 @@ def _norm_origin(origin: object) -> str:
 
 
 def create_app() -> FastAPI:
+    """
+    Build the FastAPI application for the control-plane HTTP surface.
+
+    Why this function exists:
+    - the API needs one centralized bootstrap path for configuration, security,
+      middleware, routers, and shared application state
+    - tests and local startup should use the same application factory
+
+    How to use it:
+    - call it from Uvicorn with `--factory`
+    - use the returned app in offline ASGI tests
+
+    Example:
+    - `app = create_app()`
+    """
+
     configuration = load_configuration()
     env_file = get_loaded_env_file_path() or "<unset>"
     config_file = get_loaded_config_file_path() or "<unset>"
@@ -97,14 +120,15 @@ def create_app() -> FastAPI:
     logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
 
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
-    ctx = ApplicationContext(configuration)
+    container = build_application_container(configuration)
+    initialize_shared_stores(container)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         try:
             yield
         finally:
-            await ctx.shutdown()
+            await container.shutdown()
             logger.info("[MAIN] Lifespan exit: orderly shutdown.")
 
     app = FastAPI(
@@ -115,14 +139,14 @@ def create_app() -> FastAPI:
         else None,
         lifespan=lifespan,
     )
+    attach_application_container(app, container)
     initialize_user_security(configuration.security.user)
     allowed_origins = list(
         {_norm_origin(origin) for origin in configuration.security.authorized_origins}
     )
     logger.info("[CORS] allow_origins=%s", allowed_origins)
 
-    ctx = ApplicationContext(configuration)
-    app.dependency_overrides[get_config] = get_configuration
+    app.dependency_overrides[get_config] = get_application_configuration
 
     app.add_middleware(
         CORSMiddleware,
@@ -154,13 +178,13 @@ def create_app() -> FastAPI:
         user: KeycloakUser = Depends(get_current_user),
     ) -> PolicySummaryResponse:
         require_admin(user)
-        catalog = ctx.get_policy_catalog()
+        catalog = container.get_policy_catalog()
         policy = catalog.conversation_policies.purge
         resolved = evaluate_policy_for_request(PolicyResolutionRequest(), catalog)
         return PolicySummaryResponse(
             **resolved.model_dump(),
             default_rule_count=len(policy.rules),
-            catalog_path=str(ctx.get_policy_catalog_path()),
+            catalog_path=str(container.get_policy_catalog_path()),
         )
 
     @router.post("/policies/purge/resolve", response_model=PolicyEvaluationResult)
@@ -169,7 +193,7 @@ def create_app() -> FastAPI:
         user: KeycloakUser = Depends(get_current_user),
     ) -> PolicyEvaluationResult:
         require_admin(user)
-        catalog = ctx.get_policy_catalog()
+        catalog = container.get_policy_catalog()
         return evaluate_policy_for_request(request, catalog)
 
     @router.post(
@@ -188,16 +212,19 @@ def create_app() -> FastAPI:
                 detail="Scheduler is disabled. Enable configuration.scheduler.enabled.",
             )
 
-        backend = ctx.get_scheduler_backend()
+        backend = container.get_scheduler_backend()
         if backend == SchedulerBackend.MEMORY:
-            result = await run_lifecycle_manager_once_in_memory(payload)
+            result = await run_lifecycle_manager_once_in_memory(
+                payload,
+                deps=build_lifecycle_action_dependencies(container),
+            )
             return WorkflowStartResponse(
                 status="completed",
                 backend=SchedulerBackend.MEMORY,
                 result=result,
             )
 
-        provider = ctx.get_temporal_client_provider()
+        provider = container.get_temporal_client_provider()
         client = await provider.get_client()
         workflow_id = (
             f"{configuration.scheduler.temporal.workflow_id_prefix}-manual-{uuid4()}"

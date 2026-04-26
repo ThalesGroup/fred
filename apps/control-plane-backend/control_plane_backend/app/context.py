@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fred_core import (
     BaseSessionStore,
@@ -17,7 +16,6 @@ from fred_core.scheduler import (
 )
 from fred_core.sql import create_async_engine_from_config
 from fred_core.store import ContentStore, LocalContentStore, MinioContentStore
-from fred_core.users.store.postgres_user_store import init_user_store
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from control_plane_backend.agent_instances.store import AgentInstanceStore
@@ -40,20 +38,41 @@ from control_plane_backend.teams.metadata_store import TeamMetadataStore
 logger = logging.getLogger(__name__)
 
 
-def get_configuration() -> Configuration:
-    """
-    Retrieves the global application configuration.
-
-    Returns:
-        Configuration: The singleton application configuration.
-    """
-    return get_app_context().configuration
-
-
 class ApplicationContext:
-    _instance: Optional["ApplicationContext"] = None
+    """
+    Shared control-plane dependency container used by API and worker bootstrap.
+
+    Why this class exists:
+    - control-plane needs one place to lazily create shared stores, gateways,
+      and scheduler clients from the loaded configuration
+    - Slice 5 removes the old global singleton pattern while keeping the
+      existing lazy resource layout stable and easy to understand
+
+    How to use it:
+    - build one instance from `build_application_container(...)` at startup
+    - attach it to FastAPI app state or pass it directly to worker bootstrap
+
+    Example:
+    - `container = ApplicationContext(configuration)`
+    """
 
     def __init__(self, configuration: Configuration):
+        """
+        Build the shared control-plane container around one configuration.
+
+        Why this function exists:
+        - API and worker startup need one typed object that owns the lazy store
+          and gateway factories derived from configuration
+        - object construction stays side-effect free so bootstrap ordering
+          remains explicit in the composition root
+
+        How to use it:
+        - create it from API or worker bootstrap
+        - keep the instance alive for the whole process lifetime
+
+        Example:
+        - `container = ApplicationContext(configuration)`
+        """
         self.configuration = configuration
         self._temporal_client_provider: TemporalClientProvider | None = None
         self._policy_catalog: ConversationPolicyCatalog | None = None
@@ -66,14 +85,6 @@ class ApplicationContext:
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
-        ApplicationContext._instance = self
-        init_user_store(self.get_pg_async_engine())
-
-    @classmethod
-    def get_instance(cls) -> "ApplicationContext":
-        if cls._instance is None:
-            raise RuntimeError("ApplicationContext is not initialized yet.")
-        return cls._instance
 
     def _resolve_policy_catalog_path(self) -> Path:
         configured = Path(self.configuration.policies.purge_catalog_path)
@@ -188,19 +199,33 @@ class ApplicationContext:
         return self._session_metadata_store
 
     async def shutdown(self) -> None:
-        """Best-effort cleanup of shared resources."""
+        """
+        Best-effort cleanup for the shared control-plane container.
+
+        Why this function exists:
+        - FastAPI lifespan shutdown and worker exits must release shared
+          resources such as ReBAC clients and SQLAlchemy engines
+        - releasing those resources here keeps startup wiring explicit while
+          still centralizing teardown in one place
+
+        How to use it:
+        - call once on shutdown after request handling is complete
+        - discard the container instance after shutdown and build a fresh one
+          for the next process lifetime
+
+        Example:
+        - `await container.shutdown()`
+        """
         if self._rebac_engine is not None:
             try:
                 await self._rebac_engine.close()
             except Exception:
                 logger.debug("[REBAC] Failed to close ReBAC engine", exc_info=True)
+            finally:
+                self._rebac_engine = None
 
         if self._pg_async_engine is not None:
             try:
                 await self._pg_async_engine.dispose()
             finally:
                 self._pg_async_engine = None
-
-
-def get_app_context() -> ApplicationContext:
-    return ApplicationContext.get_instance()

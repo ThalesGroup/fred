@@ -11,12 +11,9 @@ from fred_core import KeycloakUser, RBACProvider
 from fred_core.common import PERSONAL_TEAM_ID, TeamId
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 
-from control_plane_backend.agent_instances.store import (
-    AgentInstanceRecord,
-    AgentInstanceStore,
-)
-from control_plane_backend.app.context import ApplicationContext
+from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.config.models import ManagedAgentTuning
+from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
@@ -30,8 +27,8 @@ from control_plane_backend.product.schemas import (
     UpdateSessionRequest,
 )
 from control_plane_backend.sessions.store import (
+    SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
-    SessionMetadataStore,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
@@ -105,7 +102,10 @@ def _build_permission_summary(user: KeycloakUser) -> PermissionSummary:
     )
 
 
-async def build_frontend_bootstrap(user: KeycloakUser) -> FrontendBootstrap:
+async def build_frontend_bootstrap(
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+) -> FrontendBootstrap:
     """Build the frontend bootstrap from the shared selectable-team services.
 
     Why this function exists:
@@ -116,21 +116,23 @@ async def build_frontend_bootstrap(user: KeycloakUser) -> FrontendBootstrap:
     - call from the frontend bootstrap controller after authentication
 
     Example:
-    - `payload = await build_frontend_bootstrap(user)`
+    - `payload = await build_frontend_bootstrap(user, deps)`
     """
-
-    app_context = ApplicationContext.get_instance()
     active_team, available_teams = await asyncio.gather(
-        get_team_by_id_from_service(user, PERSONAL_TEAM_ID),
-        list_teams_from_service(user),
+        get_team_by_id_from_service(
+            user,
+            PERSONAL_TEAM_ID,
+            deps.team_dependencies,
+        ),
+        list_teams_from_service(user, deps.team_dependencies),
     )
     return FrontendBootstrap(
         current_user=UserSummary.from_keycloak_user(user),
         active_team=active_team,
         available_teams=available_teams,
-        gcu_version=app_context.configuration.app.gcu_version,
-        feature_flags=app_context.configuration.platform.frontend.feature_flags,
-        ui_settings=app_context.configuration.platform.frontend.ui_settings,
+        gcu_version=deps.configuration.app.gcu_version,
+        feature_flags=deps.configuration.platform.frontend.feature_flags,
+        ui_settings=deps.configuration.platform.frontend.ui_settings,
         permissions=_build_permission_summary(user),
     )
 
@@ -144,11 +146,26 @@ async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayloa
     return [_RuntimeTemplatePayload.model_validate(item) for item in payload]
 
 
-async def list_agent_templates(team_id: TeamId) -> list[AgentTemplateSummary]:
-    """Aggregate template summaries from all enabled configured runtime pods."""
-    app_context = ApplicationContext.get_instance()
+async def list_agent_templates(
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> list[AgentTemplateSummary]:
+    """
+    Aggregate template summaries from all enabled configured runtime pods.
+
+    Why this function exists:
+    - template discovery is a control-plane product concern that must merge the
+      live catalogs exposed by configured runtime pods
+
+    How to use it:
+    - call from the team template-listing route for one team context
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `templates = await list_agent_templates(team_id, deps)`
+    """
     templates: list[AgentTemplateSummary] = []
-    for source in app_context.configuration.platform.runtime_catalog_sources:
+    for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
         try:
@@ -179,11 +196,23 @@ async def list_agent_templates(team_id: TeamId) -> list[AgentTemplateSummary]:
 
 async def list_managed_agent_instances(
     team_id: TeamId,
+    deps: ProductServiceDependencies,
 ) -> list[ManagedAgentInstanceSummary]:
-    """Return the enrolled managed agent instances for one team from the DB."""
-    store: AgentInstanceStore = (
-        ApplicationContext.get_instance().get_agent_instance_store()
-    )
+    """
+    Return the enrolled managed agent instances for one team from the DB.
+
+    Why this function exists:
+    - the product surface must expose managed agent instances by stable
+      `agent_instance_id`, separate from live runtime catalog discovery
+
+    How to use it:
+    - call from the team agent-instances route
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `instances = await list_managed_agent_instances(team_id, deps)`
+    """
+    store = deps.get_agent_instance_store()
     records = await store.list_by_team(team_id)
     return [
         ManagedAgentInstanceSummary(
@@ -220,18 +249,35 @@ class EnrollmentError(Exception):
         self.http_status = http_status
 
 
+class SessionAlreadyExistsError(Exception):
+    """Raised when control-plane session metadata already exists."""
+
+    def __init__(self, session_id: str) -> None:
+        super().__init__(f"Session {session_id!r} already exists.")
+        self.session_id = session_id
+
+
 async def enroll_agent_instance(
     *,
     user: KeycloakUser,
     team_id: TeamId,
     request: CreateAgentInstanceRequest,
+    deps: ProductServiceDependencies,
 ) -> ManagedAgentInstanceSummary:
     """
     Enroll one discovered template for a team, creating a DB-backed managed instance.
 
-    template_id must be '{source_runtime_id}:{source_agent_id}'.
-    The runtime source must be configured and enabled.
-    Any discovered template can be enrolled — no admin approval required.
+    Why this function exists:
+    - enrollment turns one live template into a DB-backed managed instance that
+      can later be prepared for team-scoped execution
+
+    How to use it:
+    - pass a validated team, the authenticated user, and the typed enrollment
+      request
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
     """
     parts = request.template_id.split(":", 1)
     if len(parts) != 2:
@@ -241,11 +287,10 @@ async def enroll_agent_instance(
         )
     source_runtime_id, source_agent_id = parts
 
-    app_context = ApplicationContext.get_instance()
     source = next(
         (
             s
-            for s in app_context.configuration.platform.runtime_catalog_sources
+            for s in deps.configuration.platform.runtime_catalog_sources
             if s.runtime_id == source_runtime_id and s.enabled
         ),
         None,
@@ -292,7 +337,7 @@ async def enroll_agent_instance(
         tuning=tuning,
     )
 
-    store: AgentInstanceStore = app_context.get_agent_instance_store()
+    store = deps.get_agent_instance_store()
     created = await store.create(record)
     return ManagedAgentInstanceSummary(
         agent_instance_id=created.agent_instance_id,
@@ -311,15 +356,23 @@ async def unenroll_agent_instance(
     *,
     team_id: TeamId,
     agent_instance_id: str,
+    deps: ProductServiceDependencies,
 ) -> bool:
     """
     Unenroll (delete) one managed agent instance for a team.
 
-    Returns True if the record was found and deleted, False if not found.
+    Why this function exists:
+    - managed agent lifecycle stays in control-plane, so unbinding is a local
+      metadata deletion rather than a runtime call
+
+    How to use it:
+    - call after team authorization has already been checked
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
-    store: AgentInstanceStore = (
-        ApplicationContext.get_instance().get_agent_instance_store()
-    )
+    store = deps.get_agent_instance_store()
     return await store.delete(agent_instance_id, team_id)
 
 
@@ -328,15 +381,23 @@ async def prepare_execution(
     user: KeycloakUser,
     team_id: TeamId,
     agent_instance_id: str,
+    deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
 
-    Raises ExecutionPreparationError when the instance is unknown, disabled,
-    or when its runtime source is not configured with an ingress prefix.
+    Why this function exists:
+    - control-plane must issue team-scoped execution context and ingress-safe
+      runtime URLs without taking over runtime execution itself
+
+    How to use it:
+    - call after team membership has already been validated
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
-    app_context = ApplicationContext.get_instance()
-    store: AgentInstanceStore = app_context.get_agent_instance_store()
+    store = deps.get_agent_instance_store()
 
     instance = await store.get_for_team(agent_instance_id, team_id)
     if instance is None:
@@ -352,7 +413,7 @@ async def prepare_execution(
     source = next(
         (
             s
-            for s in app_context.configuration.platform.runtime_catalog_sources
+            for s in deps.configuration.platform.runtime_catalog_sources
             if s.runtime_id == instance.source_runtime_id and s.enabled
         ),
         None,
@@ -396,11 +457,23 @@ async def prepare_execution(
 
 async def get_runtime_binding(
     agent_instance_id: str,
+    deps: ProductServiceDependencies,
 ) -> ManagedAgentRuntimeBinding | None:
-    """Resolve one managed agent instance into the runtime-facing binding payload."""
-    store: AgentInstanceStore = (
-        ApplicationContext.get_instance().get_agent_instance_store()
-    )
+    """
+    Resolve one managed agent instance into the runtime-facing binding payload.
+
+    Why this function exists:
+    - operators and internal flows need a typed way to inspect how one managed
+      instance maps back to its runtime-facing identity
+
+    How to use it:
+    - call with one `agent_instance_id`
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `binding = await get_runtime_binding("inst-1", deps)`
+    """
+    store = deps.get_agent_instance_store()
     instance = await store.get(agent_instance_id)
     if instance is None:
         return None
@@ -418,16 +491,28 @@ async def get_runtime_binding(
 # ---------------------------------------------------------------------------
 
 
-def _session_store() -> SessionMetadataStore:
-    return ApplicationContext.get_instance().get_session_metadata_store()
-
-
 async def create_session(
     user: KeycloakUser,
     team_id: TeamId,
     request: CreateSessionRequest,
+    deps: ProductServiceDependencies,
 ) -> SessionListItem:
-    """Register a new session metadata record in control-plane."""
+    """
+    Register one new control-plane-owned session metadata record.
+
+    Why this function exists:
+    - the frontend needs a lightweight control-plane row as soon as a team
+      session starts, before later activity refreshes
+    - duplicate `session_id` creation should surface as a domain conflict
+      rather than a storage-specific exception
+
+    How to use it:
+    - call once when a team starts a brand-new session id
+    - catch `SessionAlreadyExistsError` when a duplicate should map to HTTP 409
+
+    Example:
+    - `item = await create_session(user, team_id, request, deps)`
+    """
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
@@ -435,16 +520,36 @@ async def create_session(
         user_id=user.username if user else None,
         title=request.title,
     )
-    created = await _session_store().create(record)
+    try:
+        created = await deps.get_session_metadata_store().create(record)
+    except SessionMetadataAlreadyExistsError as exc:
+        raise SessionAlreadyExistsError(request.session_id) from exc
     return _record_to_item(created)
 
 
 async def list_sessions(
     team_id: TeamId,
+    deps: ProductServiceDependencies,
     limit: int = 50,
 ) -> list[SessionListItem]:
-    """List session metadata records for one team, newest first."""
-    records = await _session_store().list_by_team(team_id, limit=limit)
+    """
+    List session metadata records for one team, newest first.
+
+    Why this function exists:
+    - the frontend sidebar needs a lightweight control-plane list, separate from
+      runtime-owned message history
+
+    How to use it:
+    - call from the team sessions route
+    - pass request-scoped product dependencies when available
+
+    Example:
+    - `sessions = await list_sessions(team_id, limit=50, deps=deps)`
+    """
+    records = await deps.get_session_metadata_store().list_by_team(
+        team_id,
+        limit=limit,
+    )
     return [_record_to_item(r) for r in records]
 
 
@@ -452,6 +557,7 @@ async def update_session_activity(
     team_id: TeamId,
     session_id: str,
     request: UpdateSessionRequest,
+    deps: ProductServiceDependencies,
 ) -> SessionListItem | None:
     """
     Refresh control-plane metadata for one completed managed turn.
@@ -465,9 +571,9 @@ async def update_session_activity(
       completed turn.
 
     Example:
-    - `await update_session_activity(team_id, session_id, request)`
+    - `await update_session_activity(team_id, session_id, request, deps)`
     """
-    record = await _session_store().update_last_activity(
+    record = await deps.get_session_metadata_store().update_last_activity(
         session_id=session_id,
         team_id=team_id,
         updated_at=request.updated_at,

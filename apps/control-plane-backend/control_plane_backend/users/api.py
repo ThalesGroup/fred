@@ -15,11 +15,19 @@ from fred_core.common import PERSONAL_TEAM_ID
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
+from control_plane_backend.teams.dependencies import (
+    TeamServiceDependencies,
+    get_team_service_dependencies,
+)
 from control_plane_backend.teams.schemas import (
     TeamWithPermissions,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,
+)
+from control_plane_backend.users.dependencies import (
+    UserServiceDependencies,
+    get_user_service_dependencies,
 )
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
@@ -44,6 +52,14 @@ from control_plane_backend.users.service import (
 
 router = APIRouter(tags=["Users"])
 logger = logging.getLogger(__name__)
+UserDependencies = Annotated[
+    UserServiceDependencies,
+    Depends(get_user_service_dependencies),
+]
+TeamDependencies = Annotated[
+    TeamServiceDependencies,
+    Depends(get_team_service_dependencies),
+]
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
@@ -98,9 +114,24 @@ def register_exception_handlers(app: FastAPI) -> None:
     summary="List users registered in Keycloak.",
 )
 async def list_users(
+    deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[UserSummary]:
-    return await list_users_from_service(user)
+    """
+    Return the user-administration list surface backed by explicit DI wiring.
+
+    Why this endpoint exists:
+    - temporary admin tooling still needs one typed user-list route while the
+      platform bootstrap migrates toward stronger ownership boundaries
+
+    How to use it:
+    - call as an authenticated admin user
+    - the response is empty when Keycloak M2M is not configured
+
+    Example:
+    - `GET /control-plane/v1/users`
+    """
+    return await list_users_from_service(user, deps)
 
 
 @router.post(
@@ -112,10 +143,24 @@ async def list_users(
 )
 async def create_user(
     request: CreateUserRequest,
+    deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> UserSummary:
-    """Create a user in Keycloak for temporary bootstrap and testing flows."""
-    return await create_user_from_service(user, request)
+    """
+    Create a Keycloak user for temporary bootstrap and testing flows.
+
+    Why this endpoint exists:
+    - control-plane still owns a short-lived admin bootstrap surface for local
+      setup and migration testing
+
+    How to use it:
+    - call as an authenticated admin user with username, email, and password
+    - expect HTTP 409 on duplicate usernames
+
+    Example:
+    - `POST /control-plane/v1/users`
+    """
+    return await create_user_from_service(user, request, deps)
 
 
 @router.delete(
@@ -125,10 +170,24 @@ async def create_user(
 )
 async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
+    deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """Delete a user in Keycloak for temporary bootstrap and testing flows."""
-    await delete_user_from_service(user, user_id)
+    """
+    Delete a Keycloak user for temporary bootstrap and testing flows.
+
+    Why this endpoint exists:
+    - control-plane still needs one temporary cleanup surface for bootstrap
+      users created during local and migration flows
+
+    How to use it:
+    - call as an authenticated admin user with the Keycloak user id
+    - expect HTTP 404 when the target user does not exist
+
+    Example:
+    - `DELETE /control-plane/v1/users/user-123`
+    """
+    await delete_user_from_service(user, user_id, deps)
 
 
 class UserDetails(BaseModel):
@@ -141,6 +200,7 @@ class UserDetails(BaseModel):
     summary="Return user informations.",
 )
 async def get_user_details(
+    team_deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
@@ -160,7 +220,7 @@ async def get_user_details(
         if user_uuid is not None
         else None
     )
-    personal_team = await get_team_by_id_from_service(user, PERSONAL_TEAM_ID)
+    personal_team = await get_team_by_id_from_service(user, PERSONAL_TEAM_ID, team_deps)
 
     return UserDetails(
         cguValidated=user_details.gcuVersionAccepted if user_details else None,
@@ -170,6 +230,7 @@ async def get_user_details(
 
 @router.post("/gcu")
 async def validate_gcu(
+    deps: UserDependencies,
     user: KeycloakUser = Depends(get_current_user_without_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
@@ -196,4 +257,4 @@ async def validate_gcu(
             user.uid,
         )
         return
-    await update_gcu_validation(user_uuid, user_store)
+    await update_gcu_validation(user_uuid, user_store, deps)

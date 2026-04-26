@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.agent_instances.store import AgentInstanceStore
-from control_plane_backend.app.context import ApplicationContext
+from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.config.models import (
     ManagedMcpServerRef,
     ManagedAgentTuning,
@@ -136,6 +136,18 @@ class _FakeSessionMetadataStore:
         return None
 
 
+class _DuplicateSessionMetadataStore:
+    """Offline stand-in that always reproduces one duplicate session conflict."""
+
+    async def create(self, _record: SessionMetadataRecord) -> SessionMetadataRecord:
+        """Raise the duplicate-session store error expected by the API layer."""
+        from control_plane_backend.sessions.store import (
+            SessionMetadataAlreadyExistsError,
+        )
+
+        raise SessionMetadataAlreadyExistsError("session-duplicate")
+
+
 def _patch_session_store(
     monkeypatch: pytest.MonkeyPatch,
     store: _FakeSessionMetadataStore,
@@ -146,7 +158,11 @@ def _patch_session_store(
     )
 
 
-async def _fake_get_team_by_id(_user: Any, _team_id: Any) -> TeamWithPermissions:
+async def _fake_get_team_by_id(
+    _user: Any,
+    _team_id: Any,
+    _deps: Any | None = None,
+) -> TeamWithPermissions:
     return TeamWithPermissions(
         id=TeamId("personal"),
         name="Personal",
@@ -167,6 +183,54 @@ async def test_healthz_endpoint() -> None:
 
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
+
+
+def test_create_app_initializes_application_container_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verify the app factory builds and wires one application container.
+
+    Why this test exists:
+    - Slice 1 moves startup registration out of `ApplicationContext.__init__()`
+      and into explicit composition-root wiring
+    - the FastAPI factory should still build only one container and attach it to
+      the app state for future DI-based dependencies
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_main.py -q`
+    """
+
+    created_configurations: list[object] = []
+    initialized_containers: list[object] = []
+
+    class _FakeContainer:
+        def __init__(self, configuration: object) -> None:
+            created_configurations.append(configuration)
+
+        async def shutdown(self) -> None:
+            return None
+
+    def _build_application_container(configuration: object) -> _FakeContainer:
+        return _FakeContainer(configuration)
+
+    monkeypatch.setattr(
+        "control_plane_backend.main.build_application_container",
+        _build_application_container,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.main.initialize_shared_stores",
+        lambda container: initialized_containers.append(container),
+    )
+
+    app = create_app()
+
+    assert len(created_configurations) == 1
+    assert len(initialized_containers) == 1
+    assert get_application_container_from_app(app) is initialized_containers[0]
 
 
 @pytest.mark.asyncio
@@ -259,9 +323,9 @@ async def test_list_teams_returns_personal_without_keycloak_m2m() -> None:
 @pytest.mark.asyncio
 async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     app = create_app()
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.app.gcu_version = "V1"
-    app_context.configuration.platform.frontend.ui_settings.siteDisplayName = (
+    container = get_application_container_from_app(app)
+    container.configuration.app.gcu_version = "V1"
+    container.configuration.platform.frontend.ui_settings.siteDisplayName = (
         "Fred Control Plane"
     )
 
@@ -355,8 +419,8 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
     )
 
     app = create_app()
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.platform.runtime_catalog_sources = [
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
         RuntimeCatalogSourceConfig(
             runtime_id="runtime-a",
             base_url="http://runtime-a/pod/v1",
@@ -457,8 +521,8 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     )
     app = create_app()
     _patch_store(monkeypatch, store)
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.platform.runtime_catalog_sources = [
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
         RuntimeCatalogSourceConfig(
             runtime_id="agents-v2",
             base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
@@ -566,8 +630,8 @@ async def test_prepare_execution_returns_503_when_ingress_prefix_missing(
     )
     app = create_app()
     _patch_store(monkeypatch, store)
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.platform.runtime_catalog_sources = [
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
         RuntimeCatalogSourceConfig(
             runtime_id="agents-v2",
             base_url="http://agents-v2-svc.fred.svc.cluster.local/api/v1",
@@ -605,8 +669,8 @@ async def test_prepare_execution_team_mismatch_returns_404(
     )
     app = create_app()
     _patch_store(monkeypatch, store)
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.platform.runtime_catalog_sources = [
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
         RuntimeCatalogSourceConfig(
             runtime_id="agents-v2",
             base_url="http://agents-v2-svc/api/v1",
@@ -636,8 +700,8 @@ async def test_enroll_agent_instance_creates_db_record(
     store = _FakeAgentInstanceStore([])
     app = create_app()
     _patch_store(monkeypatch, store)
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.platform.runtime_catalog_sources = [
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
         RuntimeCatalogSourceConfig(
             runtime_id="runtime-a",
             base_url="http://runtime-a/pod/v1",
@@ -832,6 +896,50 @@ async def test_patch_team_session_returns_404_for_other_team_session(
 
 
 @pytest.mark.asyncio
+async def test_post_team_session_returns_conflict_for_duplicate_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verify duplicate control-plane session creation returns HTTP 409.
+
+    Why this test exists:
+    - API conflict handling should rely on explicit store/domain errors instead
+      of brittle string parsing of SQL exceptions
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_main.py -q`
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    _patch_session_store(
+        monkeypatch,
+        cast(Any, _DuplicateSessionMetadataStore()),
+    )
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/sessions",
+            json={
+                "session_id": "session-duplicate",
+                "agent_instance_id": "instance-1",
+                "title": "Existing session",
+            },
+        )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Session 'session-duplicate' already exists."
+
+
+@pytest.mark.asyncio
 async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -842,8 +950,8 @@ async def test_enroll_agent_instance_returns_404_for_unknown_runtime(
     store = _FakeAgentInstanceStore([])
     app = create_app()
     _patch_store(monkeypatch, store)
-    app_context = ApplicationContext.get_instance()
-    app_context.configuration.platform.runtime_catalog_sources = []
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = []
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1099,6 +1207,7 @@ async def test_update_team_checks_can_update_info_permission(
 async def test_enrich_groups_uses_team_metadata_store(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from control_plane_backend.teams.service import _enrich_groups_with_team_data
 
     class _FakeMetadataStore:
@@ -1134,21 +1243,19 @@ async def test_enrich_groups_uses_team_metadata_store(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
     )
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service.get_users_by_ids",
-        _fake_get_users_by_ids,
+    fake_deps = TeamServiceDependencies(
+        configuration=cast(Any, object()),
+        rebac=cast(Any, object()),
+        scheduler_backend=cast(Any, object()),
+        create_keycloak_admin_client=cast(Any, lambda: object()),
+        get_team_metadata_store=lambda: cast(Any, _FakeMetadataStore()),
+        get_content_store=lambda: cast(Any, _FakeContentStore()),
+        get_session_store=cast(Any, lambda: object()),
+        get_purge_queue_store=cast(Any, lambda: object()),
+        get_policy_catalog=cast(Any, lambda: object()),
+        get_users_by_ids=_fake_get_users_by_ids,
+        run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
-    monkeypatch.setattr(
-        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
-        lambda _self: _FakeMetadataStore(),
-    )
-    monkeypatch.setattr(
-        "control_plane_backend.app.context.ApplicationContext.get_content_store",
-        lambda _self: _FakeContentStore(),
-    )
-
-    app = create_app()
-    _ = app  # keep app/context alive for this test
 
     teams = await _enrich_groups_with_team_data(
         cast(Any, _FakeAdmin()),
@@ -1159,6 +1266,7 @@ async def test_enrich_groups_uses_team_metadata_store(
         groups=[
             KeycloakGroupSummary(id=TeamId("team-1"), name="Team 1", member_count=0)
         ],
+        deps=fake_deps,
     )
 
     assert len(teams) == 1
@@ -1171,6 +1279,7 @@ async def test_enrich_groups_uses_team_metadata_store(
 async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from control_plane_backend.teams.dependencies import TeamServiceDependencies
     from control_plane_backend.teams.service import _enrich_groups_with_team_data
 
     class _FakeMetadataStore:
@@ -1202,21 +1311,19 @@ async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
         "control_plane_backend.teams.service._get_team_users_by_relation",
         _fake_get_team_users_by_relation,
     )
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service.get_users_by_ids",
-        _fake_get_users_by_ids,
+    fake_deps = TeamServiceDependencies(
+        configuration=cast(Any, object()),
+        rebac=cast(Any, object()),
+        scheduler_backend=cast(Any, object()),
+        create_keycloak_admin_client=cast(Any, lambda: object()),
+        get_team_metadata_store=lambda: cast(Any, _FakeMetadataStore()),
+        get_content_store=lambda: cast(Any, _FakeContentStore()),
+        get_session_store=cast(Any, lambda: object()),
+        get_purge_queue_store=cast(Any, lambda: object()),
+        get_policy_catalog=cast(Any, lambda: object()),
+        get_users_by_ids=_fake_get_users_by_ids,
+        run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
-    monkeypatch.setattr(
-        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
-        lambda _self: _FakeMetadataStore(),
-    )
-    monkeypatch.setattr(
-        "control_plane_backend.app.context.ApplicationContext.get_content_store",
-        lambda _self: _FakeContentStore(),
-    )
-
-    app = create_app()
-    _ = app
 
     teams = await _enrich_groups_with_team_data(
         cast(Any, _FakeAdmin()),
@@ -1225,6 +1332,7 @@ async def test_enrich_groups_dedupes_owner_alias_and_canonical_user(
         groups=[
             KeycloakGroupSummary(id=TeamId("team-1"), name="fredlab", member_count=0)
         ],
+        deps=fake_deps,
     )
 
     assert len(teams) == 1
@@ -1511,6 +1619,7 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
 async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from fred_core.scheduler import SchedulerBackend
     from control_plane_backend.scheduler.policies.policy_models import (
         PolicyEvaluationResult,
         PurgeMode,
@@ -1518,6 +1627,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     from control_plane_backend.scheduler.temporal.structures import (
         LifecycleManagerResult,
     )
+    from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
     class _FakeKeycloakAdmin:
         async def a_group_user_remove(self, _user_id: str, _group_id: str) -> None:
@@ -1553,33 +1663,10 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         ) -> None:
             _ = (session_id, team_id, user_id, due_at)
 
-    class _FakeAppContext:
-        def __init__(self) -> None:
-            scheduler = type("SchedulerCfg", (), {"enabled": True})()
-            app = type("AppCfg", (), {"gcu_version": None})()
-            self.configuration = type("Cfg", (), {"scheduler": scheduler, "app": app})()
-            self._rebac = _FakeRebac()
-            self._session_store = _FakeSessionStore()
-            self._queue_store = _FakeQueueStore()
-
-        def get_rebac_engine(self):
-            return self._rebac
-
-        def get_session_store(self):
-            return self._session_store
-
-        def get_purge_queue_store(self):
-            return self._queue_store
-
-        def get_policy_catalog(self):
-            return object()
-
-        def get_scheduler_backend(self):
-            from fred_core.scheduler import SchedulerBackend
-
-            return SchedulerBackend.MEMORY
-
     lifecycle_calls: list[int] = []
+    fake_rebac = _FakeRebac()
+    fake_session_store = _FakeSessionStore()
+    fake_queue_store = _FakeQueueStore()
 
     async def _fake_get_user_role_in_team(*_args, **_kwargs):
         from control_plane_backend.teams.schemas import UserTeamRelation
@@ -1603,9 +1690,28 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
             matched_rule_specificity=2,
         )
 
+    async def _fake_get_users_by_ids(_user_ids):
+        return {}
+
+    fake_scheduler = type("SchedulerCfg", (), {"enabled": True})()
+    fake_configuration = type("Cfg", (), {"scheduler": fake_scheduler})()
+    fake_team_deps = TeamServiceDependencies(
+        configuration=cast(Any, fake_configuration),
+        rebac=cast(Any, fake_rebac),
+        scheduler_backend=SchedulerBackend.MEMORY,
+        create_keycloak_admin_client=cast(Any, lambda: _FakeKeycloakAdmin()),
+        get_team_metadata_store=lambda: cast(Any, object()),
+        get_content_store=lambda: cast(Any, object()),
+        get_session_store=cast(Any, lambda: fake_session_store),
+        get_purge_queue_store=cast(Any, lambda: fake_queue_store),
+        get_policy_catalog=cast(Any, lambda: object()),
+        get_users_by_ids=_fake_get_users_by_ids,
+        run_lifecycle_manager_once_in_memory=_fake_run_lifecycle_manager_once_in_memory,
+    )
+
     monkeypatch.setattr(
-        "control_plane_backend.teams.service.ApplicationContext.get_instance",
-        lambda: _FakeAppContext(),
+        "control_plane_backend.teams.dependencies.build_team_service_dependencies",
+        lambda *_args, **_kwargs: fake_team_deps,
     )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_user_role_in_team",
@@ -1619,11 +1725,6 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         "control_plane_backend.teams.service.evaluate_policy_for_request",
         _fake_evaluate_policy_for_request,
     )
-    monkeypatch.setattr(
-        "control_plane_backend.teams.service.run_lifecycle_manager_once_in_memory",
-        _fake_run_lifecycle_manager_once_in_memory,
-    )
-
     app = create_app()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -1652,7 +1753,8 @@ async def test_lifecycle_run_once_executes_in_memory_backend(
     payload["scheduler"]["backend"] = "memory"
     config = Configuration.model_validate(payload)
 
-    async def _fake_run_lifecycle_manager_once_in_memory(_input_data):
+    async def _fake_run_lifecycle_manager_once_in_memory(_input_data, *, deps=None):
+        _ = deps
         return LifecycleManagerResult(scanned=2, deleted=2, dry_run_actions=0)
 
     monkeypatch.setattr(
