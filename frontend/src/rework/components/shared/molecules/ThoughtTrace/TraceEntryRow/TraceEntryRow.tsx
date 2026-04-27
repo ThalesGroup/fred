@@ -62,9 +62,7 @@ export function TraceEntryRow({ entry }: TraceEntryRowProps) {
         {secondary && <span className={styles.secondary}>{secondary}</span>}
       </div>
 
-      {drawerOpen && (
-        <TraceDetailDrawer entry={entry} onClose={() => setDrawerOpen(false)} />
-      )}
+      {drawerOpen && <TraceDetailDrawer entry={entry} onClose={() => setDrawerOpen(false)} />}
     </>
   );
 }

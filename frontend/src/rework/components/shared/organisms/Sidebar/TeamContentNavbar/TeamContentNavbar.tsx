@@ -38,12 +38,9 @@ export default function TeamContentNavbar() {
   const personalTeamId = activeTeam?.id ?? "personal";
   const isPersonalTeam = teamId === personalTeamId;
 
-  const { data: team } = useGetTeamQuery(
-    { teamId: teamId },
-    { skip: !teamId || isPersonalTeam },
-  );
+  const { data: team } = useGetTeamQuery({ teamId: teamId }, { skip: !teamId || isPersonalTeam });
   const bootstrapTeam = isPersonalTeam ? activeTeam : availableTeams.find((candidate) => candidate.id === teamId);
-  const selectedTeam = isPersonalTeam ? activeTeam : team ?? bootstrapTeam;
+  const selectedTeam = isPersonalTeam ? activeTeam : (team ?? bootstrapTeam);
   const canOpenTeamSettings =
     selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions)
       ? selectedTeam.permissions.includes("can_administer_owners")
@@ -65,10 +62,9 @@ export default function TeamContentNavbar() {
   ];
 
   const bannerStyle = {
-    "--banner-img":
-      isPersonalTeam
-        ? `url("/images/${defaultPersonalBannerFile}")`
-        : `url("${selectedTeam?.banner_image_url ?? `/images/${defaultTeamBannerFile}`}")`,
+    "--banner-img": isPersonalTeam
+      ? `url("/images/${defaultPersonalBannerFile}")`
+      : `url("${selectedTeam?.banner_image_url ?? `/images/${defaultTeamBannerFile}`}")`,
   } as React.CSSProperties;
 
   return (

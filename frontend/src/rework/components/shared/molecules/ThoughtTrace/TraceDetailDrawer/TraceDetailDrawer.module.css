@@ -1,47 +1,47 @@
 .overlay {
   position: fixed;
+  z-index: 200;
   inset: 0;
   background: rgba(0, 0, 0, 0.25);
-  z-index: 200;
 }
 
 .drawer {
+  display: flex;
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(480px, 90vw);
-  background: var(--surface-container-lowest);
-  border-left: 1px solid var(--outline-muted);
-  display: flex;
   flex-direction: column;
   z-index: 201;
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
+  border-left: 1px solid var(--outline-muted);
+  background: var(--surface-container-lowest);
+  width: min(480px, 90vw);
 }
 
 .drawerHeader {
   display: flex;
-  align-items: center;
-  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
-  border-bottom: 1px solid var(--outline-muted);
   flex-shrink: 0;
+  align-items: center;
   gap: var(--spacing-s, 0.75rem);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
 }
 
 .drawerTitle {
   flex: 1;
-  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
   color: var(--on-surface);
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
 }
 
 .closeBtn {
-  background: none;
-  border: none;
   cursor: pointer;
-  font-size: 1rem;
-  color: var(--on-surface-retreat);
-  padding: 4px 8px;
+  border: none;
   border-radius: var(--radius-s, 4px);
+  background: none;
+  padding: 4px 8px;
+  color: var(--on-surface-retreat);
+  font-size: 1rem;
   line-height: 1;
 }
 
@@ -58,9 +58,9 @@
 
 .fallback {
   padding: var(--spacing-m, 1rem);
-  font: 0.75rem/1.5 monospace;
-  color: var(--on-surface);
-  white-space: pre-wrap;
-  overflow: auto;
   height: 100%;
+  overflow: auto;
+  color: var(--on-surface);
+  font: 0.75rem/1.5 monospace;
+  white-space: pre-wrap;
 }

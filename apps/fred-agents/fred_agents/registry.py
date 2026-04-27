@@ -26,14 +26,15 @@ Example:
 - `from fred_agents.agents import REGISTRY`
 """
 
-from fred_sdk.contracts.models import ReActAgentDefinition
+from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
+from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
 
 
-def build_registry() -> dict[str, ReActAgentDefinition]:
+def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     """
     Build the pod agent registry.
 
@@ -56,7 +57,9 @@ def build_registry() -> dict[str, ReActAgentDefinition]:
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
+        # No-LLM test agent for UI validation — exercises all SSE event types.
+        TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
     }
 
 
-REGISTRY: dict[str, ReActAgentDefinition] = build_registry()
+REGISTRY: dict[str, ReActAgentDefinition | GraphAgentDefinition] = build_registry()

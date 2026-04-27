@@ -278,8 +278,10 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     Why this test exists:
     - HITL pauses and node errors are distinct runtime events; they must be
       persisted so the history view reflects the full agent execution trace
+    - awaiting_human now uses Channel.hitl_request and stores the full choices
+      list (HitlRequestPart) rather than a flat system_note text
     """
-    from fred_core.history.history_schema import Channel, Role
+    from fred_core.history.history_schema import Channel, HitlRequestPart, Role
 
     store = AsyncMock()
     store.next_rank = AsyncMock(return_value=5)
@@ -288,7 +290,15 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     payloads = [
         {
             "kind": "awaiting_human",
-            "request": {"question": "Approve deployment?"},
+            "request": {
+                "question": "Approve deployment?",
+                "stage": "approve",
+                "title": "Confirm",
+                "choices": [
+                    {"id": "yes", "label": "Yes, deploy"},
+                    {"id": "no", "label": "No, abort"},
+                ],
+            },
         },
         {
             "kind": "node_error",
@@ -321,9 +331,15 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     assert messages[0].role == Role.user
     assert messages[0].rank == 5  # base_rank returned by next_rank mock
 
+    # awaiting_human → hitl_request channel with full structured HitlRequestPart
     assert messages[1].role == Role.system
-    assert messages[1].channel == Channel.system_note
-    assert "Approve deployment?" in messages[1].parts[0].text
+    assert messages[1].channel == Channel.hitl_request
+    hitl_part = messages[1].parts[0]
+    assert isinstance(hitl_part, HitlRequestPart)
+    assert hitl_part.question == "Approve deployment?"
+    assert len(hitl_part.choices) == 2
+    assert hitl_part.choices[0].id == "yes"
+    assert hitl_part.choices[1].label == "No, abort"
 
     assert messages[2].role == Role.system
     assert messages[2].channel == Channel.error
@@ -353,7 +369,7 @@ def test_postgres_history_store_satisfies_history_store_port() -> None:
     """
     from fred_core.history.postgres_history_store import PostgresHistoryStore
 
-    required = {"save", "get", "list_sessions"}
+    required = {"save", "get", "list_sessions", "delete_session"}
 
     # Implementation must have all required methods.
     impl_attrs = set(dir(PostgresHistoryStore))

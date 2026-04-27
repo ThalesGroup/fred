@@ -8,26 +8,26 @@
 /* User message: compact pill on the right */
 .user {
   align-self: flex-end;
-  max-width: 72%;
-  padding: var(--spacing-s, 0.625rem) var(--spacing-m, 1rem);
   border-radius: var(--radius-m, 12px);
   background: var(--surface-container-hight);
+  padding: var(--spacing-s, 0.625rem) var(--spacing-m, 1rem);
+  max-width: 72%;
   color: var(--on-surface);
 }
 
 /* Agent final reply: clean text block, no bubble chrome */
 .agent {
+  background: transparent;
   padding: 0;
   max-width: 680px;
-  background: transparent;
   color: var(--on-surface);
 }
 
 .role {
-  font: var(--font-label-small, 600 0.6875rem/1.25 sans-serif);
   color: var(--on-surface-retreat);
-  text-transform: uppercase;
+  font: var(--font-label-small, 600 0.6875rem/1.25 sans-serif);
   letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .text {
@@ -42,7 +42,7 @@
 }
 
 .tool {
-  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
   color: var(--on-surface-retreat);
+  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
   font-style: italic;
 }

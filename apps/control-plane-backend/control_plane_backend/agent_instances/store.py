@@ -181,6 +181,42 @@ class AgentInstanceStore:
             return None
         return _row_to_record(rows[0])
 
+    async def update(
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        *,
+        display_name: str | None = None,
+        description: str | None = None,
+        tuning: ManagedAgentTuning | None = None,
+        session: AsyncSession | None = None,
+    ) -> AgentInstanceRecord | None:
+        """Update one instance scoped to team_id. Returns None if not found."""
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(AgentInstanceRow).where(
+                            AgentInstanceRow.agent_instance_id == agent_instance_id,
+                            AgentInstanceRow.team_id == str(team_id),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not rows:
+                return None
+            row = rows[0]
+            if display_name is not None:
+                row.display_name = display_name
+            if description is not None:
+                row.description = description
+            if tuning is not None:
+                row.tuning_json = tuning.model_dump_json()
+            row.updated_at = _utcnow()
+        return await self.get(agent_instance_id)
+
     async def delete(
         self,
         agent_instance_id: str,

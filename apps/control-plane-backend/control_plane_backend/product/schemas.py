@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fred_core.common import TeamId
 from fred_sdk.contracts.execution import ExecutionGrant
@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
     FrontendUiSettings,
+    ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
@@ -53,6 +54,14 @@ class AgentTemplateSummary(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     team_instantiable: bool = True
     status: Literal["available", "unavailable"] = "available"
+    default_tuning_fields: list[ManagedAgentFieldSpec] = Field(
+        default_factory=list,
+        description=(
+            "Tunable field descriptors declared by the template. "
+            "The frontend renders these dynamically at enrollment time. "
+            "Empty when the template declares no tunable fields."
+        ),
+    )
 
 
 class ManagedAgentInstanceSummary(BaseModel):
@@ -67,6 +76,13 @@ class ManagedAgentInstanceSummary(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     created_by: str | None = None
+    tuning_field_values: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Current user-set values for this instance's tunable fields. "
+            "Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised."
+        ),
+    )
 
 
 class ExecutionPreparation(BaseModel):
@@ -155,6 +171,30 @@ class CreateAgentInstanceRequest(BaseModel):
     )
     display_name: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=500)
+    tuning_field_values: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional initial values for the template's tunable fields. "
+            "Keys must match ManagedAgentFieldSpec.key values from the template. "
+            "Unknown keys are silently dropped."
+        ),
+    )
+
+
+class UpdateAgentInstanceRequest(BaseModel):
+    """Request body for patching a managed agent instance's metadata and field values."""
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    tuning_field_values: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Replaces the stored field values for this instance. "
+            "Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. "
+            "Unknown keys are silently dropped. "
+            "Pass null to leave existing values unchanged."
+        ),
+    )
 
 
 class ManagedAgentRuntimeBinding(BaseModel):

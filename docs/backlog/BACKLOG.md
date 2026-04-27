@@ -1082,7 +1082,14 @@ implementation until the TTL policy is agreed.
 - [ ] Langfuse-visible trace metadata includes the required managed execution identity fields
 - [x] one runtime pod can expose a scrapeable Prometheus metrics surface again when configured
 - [x] one developer can inspect pod KPIs locally from `fred-agent-chat` without Grafana/Prometheus dashboards
-- [ ] no frontend code is required to validate these backend guarantees
+- [x] no frontend code is required to validate these backend guarantees — S1 scenarios run via `make test-integration-only`
+
+**S1 scenario automation (2026-04-26):**
+- `run_scenario_file()` extended: `${env:VAR}` substitution → `ScenarioSkipped`; `history_has_messages` and `kpi_turn_recorded` check kinds; `agent_instance_id` propagation; `hitl` step type (two-phase pause/resume)
+- `apps/fred-agents/tests/scenarios/s1_raw_echo.yaml` — raw `agent_id` path, no env var required
+- `apps/fred-agents/tests/scenarios/s1_managed_echo.yaml` — managed path, requires `FRED_AGENT_INSTANCE_ID`
+- `apps/fred-agents/tests/scenarios/s1_hitl_resume.yaml` — HITL two-phase flow with `fred.test.assistant`
+- `test_scenarios.py` catches `ScenarioSkipped` → `pytest.skip()`
 
 ---
 
@@ -1981,15 +1988,18 @@ isolated in the adapter layer (`react_message_codec.py`).
     `{ session_id, user_id, team_id, agent_instance_id, message_count, first_at, last_at }`
 - [ ] Add CLI command `/sessions --all` (all users, admin) and
   `/sessions --team <team_id>` and `/sessions --agent <agent_instance_id>`
-- [ ] Add CLI command `/checkpoint delete <session_id>` to purge checkpoint
-  state for a session from the terminal
+- [x] Add CLI command to purge checkpoint state for a session → `/delete-checkpoint [id]`
+  (done 2026-04-26; see §6.4.G)
 
-#### B. Session History Purge
+#### B. Session History Purge (Fixed 2026-04-26)
 
-- [ ] Add `DELETE /agents/sessions/{session_id}` to remove all `session_history`
-  rows for a session (irreversible)
-- [ ] Document that deleting history does NOT delete checkpoint state and vice
-  versa; both must be deleted explicitly for a full purge
+- [x] Added `delete_session(session_id) -> int` to `BaseHistoryStore`, `NoOpHistoryStore`,
+  `PostgresHistoryStore`, and `HistoryStorePort` (fred-sdk Protocol)
+- [x] Added `DELETE /agents/sessions/{session_id}` → removes all `session_history` rows,
+  returns `{"deleted": N}` (203 on success, 503 when no history store configured)
+- [x] History delete and checkpoint delete are deliberately separate operations:
+  `/delete-session` touches only history; `/delete-checkpoint` touches only checkpoint;
+  `/purge-session` does both — see §6.4.G for CLI details
 
 #### C. Bulk Retention Purge
 
@@ -2037,6 +2047,80 @@ isolated in the adapter layer (`react_message_codec.py`).
 - [ ] Either remove it or repurpose it as the control-plane-initiated purge
   request queue that feeds the runtime bulk purge endpoint above; do not mix
   the two concerns until a concrete policy is defined
+
+#### G. CLI Developer Ergonomics (Fixed 2026-04-26)
+
+A series of `fred-agent-chat` improvements to make the CLI fully self-contained for
+developer testing and devops session management.
+
+**Session navigation:**
+- [x] `/sessions` — now shows message count, first user message preview, and last bot
+  reply preview per session; refreshes the tab-completion index for session IDs
+- [x] `/session` (bare) — shows current session + usage hint (was a no-op)
+- [x] `/session <N>` — switches by 1-based index from last `/sessions` list (was broken:
+  used the literal string `"2"` as session ID)
+- [x] `/session <id>` — switches by exact ID (unchanged)
+- [x] `/session-new` — generates a fresh `dev-session-<hex8>` and switches to it
+- [x] `/session-info [id]` — shows session metadata derived from history: title (first user
+  message), created_at, last_at, exchange count, message count, HITL gate count, agents
+  used, models used, total token usage (input/output)
+- [x] Tab-completion for `/session ` prefix — populated after each `/sessions` call
+
+**Identity & context:**
+- [x] `/whoami` — now shows a full structured identity panel: user, auth mode, team, agent,
+  session, execution mode, pod URL
+- [x] Standalone-mode warning: shows that CLI stores history under the Unix username
+  (`getpass.getuser()`) while the UI may use a different user_id (e.g. `admin`); suggests
+  `--user-id admin` to align
+
+**History inspection:**
+- [x] `/history --raw [id]` — dumps the full `ChatMessage[]` JSON payload exactly as the UI
+  receives it from `GET {messages_url_template}`, one message per labelled block
+- [x] HITL gate rendering in `/history`: box-drawing style with numbered choices and `[id]`
+  labels; `hitl_response` shows `✓ label [choice_id]`
+- [x] `[HITL ask]` channel label renamed to `[HITL gate]` for clarity
+
+**Cleanup (irreversible — all prompt `Type 'yes' to confirm`):**
+- [x] `/delete-session [id]` — deletes all `session_history` rows; checkpoint kept
+- [x] `/delete-checkpoint [id]` — purges checkpoint state via `DELETE /agents/checkpoints/{id}`; history kept
+- [x] `/purge-session [id]` — deletes BOTH history rows and checkpoint state
+- [x] After a successful delete, the session is removed from the in-memory tab-completion index
+- [x] `delete_session_messages()` and `delete_checkpoint()` added to `AgentPodClient`
+
+#### F. History Schema — HITL and Sources (Fixed 2026-04-26)
+
+Two gaps in `_write_turn_history` were identified and closed:
+
+**Sources were dropped from history.**
+The `final` SSE event carries `sources: VectorSearchHit[]` but the persistence code
+never extracted them. `make_assistant_final` was called without `sources=`, so
+`ChatMetadata.sources` was always empty. Fixed: `final` payload now extracts
+`sources`, deserializes them as `VectorSearchHit`, and passes them to
+`make_assistant_final`.
+
+**HITL choices were not stored.**
+`awaiting_human` was stored as a flat `system_note` text (question only); the
+structured choices list was silently dropped. This broke audit trails and prevented
+the UI from reconstructing the HITL card from history. Fixed with a proper design:
+
+- [x] Added `Channel.hitl_request` and `Channel.hitl_response` to `fred_core.history.history_schema.Channel`
+- [x] Added `HitlChoiceRecord(id, label)` model
+- [x] Added `HitlRequestPart(type="hitl_request", stage, title, question, choices)` — full gate definition
+- [x] Added `HitlResponsePart(type="hitl_response", choice_id, label)` — user's selection
+- [x] Both added to the `MessagePart` discriminated union
+- [x] Added `make_hitl_request(...)` and `make_hitl_response(...)` factory helpers
+- [x] `awaiting_human` events now stored as `Role.system / Channel.hitl_request / HitlRequestPart`
+- [x] HITL resume turns now stored as `Role.user / Channel.hitl_response / HitlResponsePart`
+- [x] `resume_payload` threaded into both `_write_turn_history` call sites (SSE stream + sync execute)
+- [x] CLI `print_history` renders `hitl_request` parts (question + options list) and `hitl_response` parts (selected choice)
+- [x] `make code-quality` and `make test` green in `fred-core` and `fred-runtime`
+
+**Audit coverage after the fix:**
+Every HITL exchange now produces two history rows per gate:
+1. `[system / hitl_request]` — what was asked + all choices presented
+2. `[user / hitl_response]` — which choice the user made (or typed text for free-text gates)
+
+---
 
 ### 6.5 CLI Display Standard (mandatory for all session/checkpoint commands)
 
@@ -2211,13 +2295,15 @@ Grafana or Prometheus.
 | Graph phase latency (`app.phase_latency_ms`) | `graph_runtime._graph_phase_timer()` | ✅ emitted with full identity dims |
 | Process / SQL pool metrics | `fred-runtime` boot | ✅ emitted (system-level, no identity needed) |
 | LLM call latency (`agent.llm_latency_ms`) | `KPIWriter.log_llm()` defined | ❌ never called |
-| Per-turn exchange summary (`agent.turn_completed`) | — | ❌ missing entirely |
-| `exchange_id` in tool KPI dims | `_kpi_base_dims()` | ❌ missing |
-| `runtime_id` / service name in any KPI dim | — | ❌ missing everywhere |
-| `session_id` as Prometheus label | `ContextAwareTool` + `_graph_phase_timer` | ⚠️ high cardinality |
-| `user_id` as Prometheus label | `ContextAwareTool` + `_graph_phase_timer` | ⚠️ high cardinality |
-| KF client HTTP call KPIs (phase latency) | `kf_base_client.phase_timer` | ⚠️ emits only `{phase}` — identity lost |
-| ReAct runtime phase latency | `react_runtime`, `react_tool_loop` | ❌ no KPI at all (graph has it, ReAct doesn't) |
+| Per-turn exchange summary (`agent.turn_completed`) | `agent_app._emit_turn_completed()` | ✅ emitted from both SSE and non-streaming paths |
+| `exchange_id` in tool KPI dims | `_kpi_base_dims()`, injected via `RuntimeContext` | ✅ emitted |
+| `runtime_id` / service name in any KPI dim | `_kpi_base_dims()` | ✅ emitted |
+| `session_id` as Prometheus label | `ContextAwareTool` + `_graph_phase_timer` | ✅ removed (cardinality fix) |
+| `user_id` as Prometheus label | `ContextAwareTool` + `_graph_phase_timer` | ✅ removed (cardinality fix) |
+| `exchange_id` in Langfuse trace metadata | `LangfuseTracerAdapter.start_span()` | ✅ propagated via `context.baggage` |
+| Security audit log channel | `fred.security.audit` logger + ring buffer | ✅ grant_validated / grant_validation_failed / grant_user_mismatch |
+| KF client HTTP call KPIs (phase latency) | `kf_base_client` | ✅ fixed — carries full identity dims |
+| ReAct runtime phase latency | `react_runtime` | ✅ added `app.phase_latency_ms` timer |
 
 **Note on KF client:** `kf_base_client._kpi_dims()` is well-implemented (captures `session_id`, `user_id`,
 `team_id`, `agent_instance_id`, etc.) but is **never called** — it is dead code. The `phase_timer`
@@ -2321,6 +2407,26 @@ time.
 - [x] `exchange_id` generated at turn start in `_stream()`, propagated into
   `RuntimeContext` via `_iterate_runtime_event_payloads()`, and passed to
   `_write_turn_history()` (no longer generated independently there)
+- [x] Same emission added to the **non-streaming `execute()` path**: `exchange_id`
+  generated at turn start, passed to `_iterate_runtime_event_payloads()` and
+  `_write_turn_history()`, `_emit_turn_completed()` called after the loop
+- [x] `KpiLogStore.index_event()` fixed: was a silent no-op (`pass`); now logs
+  a structured JSON line at INFO level for all three structured event names
+  (`agent.turn_completed`, `agent.turn_error_total`, `agent.tool_failed_total`)
+- [x] `exchange_id` propagated to **Langfuse trace metadata** via
+  `context.baggage.get("exchange_id")` in `LangfuseTracerAdapter.start_span()`
+- [x] **`Quantities` model fixed** (`fred_core/kpi/kpi_writer_structures.py`): added
+  `tool_count`, `input_tokens`, `output_tokens` fields (all `Optional[int] = None`);
+  changed existing `bytes_in/bytes_out/chunks/vectors` from `= 0` to `= None` so
+  `model_dump(exclude_none=True)` correctly omits unset fields — turn KPI quantities
+  were previously silently discarded and replaced with zeroed pipeline fields
+- [x] `_emit_audit_event(level, name, **fields)` helper centralises all audit
+  event emission: builds timestamped event, appends to `_AUDIT_EVENTS_BUFFER`, and
+  calls `_audit_logger.<level>` — replaces all duplicated inline blocks
+- [x] `grant_validation_failed` events now correctly appear in `_AUDIT_EVENTS_BUFFER`
+  (ring buffer was missing from both `execute()` and `execute_stream()` audit paths)
+- [x] `datetime.utcnow()` → `datetime.now(timezone.utc)` at all 4 sites in `agent_app.py`
+- [x] `asyncio.ensure_future` → `asyncio.create_task` for history write background task
 
 #### C. Wire `KPIWriter.log_llm()` for LLM call KPIs
 
@@ -2334,13 +2440,14 @@ time.
 
 #### D. CLI per-session KPI view
 
-- [ ] Add CLI command `/kpi session <session_id>` that queries the structured
-  KPI log store for all `agent.turn_completed` and `agent.llm_call` events
-  for the given session and renders them as a table
-- [ ] Output should include: `exchange_id`, `timestamp`, `total_latency_ms`,
-  `llm_latency_ms`, `tool_count`, `model_name`, `input_tokens`, `output_tokens`
-- [ ] This is distinct from `/kpi [pattern]` (Prometheus aggregate view);
-  both must coexist — one for aggregate monitoring, one for per-session debugging
+- [x] Added `/kpi [limit]` CLI command (default limit 30): shows the last N
+  `agent.turn_completed` events from the pod-side in-memory ring buffer
+  (200-event deque); columns: Timestamp, ms, model, tools, in tok, out tok,
+  status, session (current session row highlighted with ◀)
+- [x] `/kpi prom [pattern]` continues to show Prometheus aggregate view
+- [x] Added `GET /agents/kpi-turns` pod endpoint returning the ring buffer
+- [ ] Add `/kpi session <session_id>` command querying structured KPI log store
+  (deferred — requires OpenSearch/log-store query support not yet wired)
 
 #### D. Fix `kf_base_client` identity dims (dead-code `_kpi_dims`)
 
@@ -2365,7 +2472,54 @@ time.
   `exchange_id` as a required field in every KPI emission (not just
   `session_history`)
 
-### 7.7 Observability Completion Target and Deferred Work
+### 7.7 Security Audit Channel
+
+Security-relevant events are separated from technical KPIs through a dedicated
+audit logging channel so that SIEM tools, log shippers, and operations teams
+can filter them independently of debug or KPI output.
+
+**Implementation (completed 2026-04-26):**
+
+- [x] Dedicated logger `fred.security.audit` (`_audit_logger`) in
+  `agent_app.py` — distinct from the `fred.runtime` technical logger
+- [x] Module-level in-memory ring buffer `_AUDIT_EVENTS_BUFFER` (200 events,
+  thread-safe with `_AUDIT_EVENTS_LOCK`) — CLI-queryable without log file access
+- [x] Audit events emitted at all authentication/authorization boundaries:
+  - `grant_user_mismatch` — execution grant user != authenticated user (logged + ring buffer)
+  - `grant_validation_failed` — grant validation raised an exception (logged + ring buffer)
+  - `grant_validated` — execution grant passed user correlation check (logged + ring buffer)
+  - `grant_user_correlated` — user correlation confirmed at `_validate_grant_user_correlation()` (logged + ring buffer)
+- [x] `GET /agents/audit-events` pod endpoint returning the ring buffer
+- [x] `/audit [limit]` CLI command in `fred-agent-chat` — shows table of recent
+  security audit events with columns: Timestamp, event (red=failure, green=success),
+  user_id, agent_instance_id, execution_action, reason
+
+**Audit event schema:**
+
+```json
+{
+  "ts": "2026-04-26T12:00:00Z",
+  "audit_event": "grant_validated",
+  "user_id": "alice",
+  "agent_instance_id": "inst-abc",
+  "team_id": "team-xyz",
+  "execution_action": "prepare_execution",
+  "reason": "grant user matches authenticated user"
+}
+```
+
+**Log channel separation:**
+
+| Logger | Purpose | Sink |
+|---|---|---|
+| `fred.runtime` | Technical / debug logs | Standard app logging |
+| `KPI` | Structured KPI events | KPI store (log/Prometheus/OpenSearch) |
+| `fred.security.audit` | Security audit events | Dedicated audit sink (+ ring buffer) |
+
+To route `fred.security.audit` to a dedicated SIEM sink, configure the Python
+logging handler for this logger name in the pod's logging config.
+
+### 7.9 Observability Completion Target and Deferred Work
 
 **Current completion target (this phase):**
 
@@ -2393,22 +2547,32 @@ A future OTLP phase would require:
 OTLP is **not a dependency for Phase 7 completion**. Do not block the current observability
 revamp on OTLP. Open a dedicated backlog phase when needed.
 
-### 7.8 Validation
+### 7.10 Validation
 
-- [ ] After one managed execution, `/kpi session <session_id>` in
-  `fred-agent-chat` shows at least one `agent.turn_completed` row with
-  correct `session_id`, `exchange_id`, `total_latency_ms`, and `tool_count`
-- [ ] After a tool-call-heavy turn, `agent.tool_latency_ms` histogram in `/kpi`
-  does not expose unbounded identity labels; `exchange_id` remains structured
-  KPI-only
+- [x] `/kpi [limit]` in `fred-agent-chat` shows `agent.turn_completed` rows from
+  the pod-side ring buffer with ms, model, tools, token counts, and session highlight
+- [x] `/audit [limit]` in `fred-agent-chat` shows security audit events from the
+  pod-side ring buffer with event name colour-coded (red=failure, green=success)
+- [x] `make code-quality` and `make test` pass in `fred-core` (31 tests) and
+  `fred-runtime` (62 tests), including:
+  - `test_emit_audit_event_populates_ring_buffer` — `_emit_audit_event` fills buffer, filters None
+  - `test_ring_buffer_endpoints_return_seeded_events` — `/agents/kpi-turns` and `/agents/audit-events` endpoints
+  - `test_emit_turn_completed_populates_kpi_turns_buffer` — `/execute` adds record to ring buffer
+  - `test_index_event_logs_structured_json_for_turn_completed` — `KpiLogStore` structured log output
+  - `test_index_event_logs_structured_json_for_turn_error` — `agent.turn_error_total` log
+  - `test_index_event_ignores_unknown_event_names` — unknown events not logged
+- [x] `Quantities` model correctly produces `{"tool_count": N, "input_tokens": N, "output_tokens": N}`
+  (verified by `make test` in fred-core — no zeroed pipeline fields in turn KPI dumps)
+- [ ] After one managed execution, `/kpi [limit]` shows at least one
+  `agent.turn_completed` row for the active session (live stack validation pending)
+- [ ] `/audit [limit]` after a successful execution shows `grant_validated` row
+  (live stack validation pending)
+- [ ] After a tool-call-heavy turn, `agent.tool_latency_ms` histogram in `/kpi prom`
+  does not expose unbounded identity labels; `exchange_id` remains structured KPI-only
 - [ ] After a multi-tool turn, `agent.llm_call` rows appear in the structured
-  KPI log for every model invocation within that turn
-- [ ] Prometheus `/kpi` scrape contains no `session_id` or `user_id` labels
-  (unit-covered in `fred-core`; full runtime scrape validation still pending)
-- [x] `make code-quality` and `make test` pass in `fred-core` and
-  `fred-runtime` for the Prometheus cardinality fix
-- [ ] Structured JSON logs confirm `agent.turn_completed` and tool KPI events
-  appear in the log-based trace path (verifiable via fluentbit or local log grep)
+  KPI log for every model invocation within that turn (deferred — `log_llm()` not yet called)
+- [ ] Structured JSON logs confirm `agent.turn_completed` and security audit events
+  appear in the log-based trace path (verifiable via local log grep)
 
 ---
 
@@ -2421,8 +2585,8 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 - [ ] frontend no longer depends on `agentic-backend` chat schemas
 - [ ] control-plane owns agent/session/admin/product APIs
 - [ ] backend managed execution is fully team-scoped and trace-enriched before frontend cutover
-- [ ] every turn emits `agent.turn_completed` with session_id, exchange_id, latency, token usage
-- [ ] Prometheus labels contain no unbounded-cardinality dims (session_id, user_id removed)
+- [x] every turn emits `agent.turn_completed` with session_id, exchange_id, latency, token usage
+- [x] Prometheus labels contain no unbounded-cardinality dims (session_id, user_id removed)
 - [ ] frontend runtime reachability comes from `ExecutionPreparation`, not bootstrap-side routing inference
 - [ ] `agentic-backend` is no longer on the critical frontend path
 

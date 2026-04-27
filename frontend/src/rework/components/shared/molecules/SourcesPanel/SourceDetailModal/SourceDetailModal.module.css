@@ -1,0 +1,139 @@
+.overlay {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.modal {
+  display: flex;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  flex-direction: column;
+  transform: translate(-50%, -50%);
+  z-index: 301;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m, 12px);
+  background: var(--surface-container-lowest);
+  width: min(640px, 92vw);
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: var(--spacing-s, 0.75rem);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-m, 1rem);
+}
+
+.titleRow {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--spacing-xs, 0.375rem);
+  min-width: 0;
+}
+
+.index {
+  flex-shrink: 0;
+  color: var(--primary);
+  font: var(--font-label-small, 600 0.6875rem/1 monospace);
+  font-family: monospace;
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-title-small, 600 1rem/1.4 sans-serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score {
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small, 0.6875rem/1 sans-serif);
+}
+
+.closeBtn {
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s, 4px);
+  background: none;
+  padding: 4px 8px;
+  color: var(--on-surface-retreat);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  background: var(--surface-container);
+  color: var(--on-surface);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m, 1rem);
+  padding: var(--spacing-m, 1rem);
+  overflow-y: auto;
+}
+
+/* Metadata key/value grid */
+.meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 2px var(--spacing-m, 1rem);
+}
+
+.metaRow {
+  display: contents;
+}
+
+.metaLabel {
+  color: var(--on-surface-retreat);
+  font: 600 var(--font-label-small, 0.6875rem/1.6 sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.metaValue {
+  color: var(--on-surface);
+  font: var(--font-body-small, 0.8125rem/1.5 sans-serif);
+  word-break: break-word;
+}
+
+/* Full content extract */
+.contentSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 0.375rem);
+}
+
+.contentLabel {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: 600 var(--font-label-small, 0.6875rem/1.4 sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.content {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium, 0.875rem/1.6 sans-serif);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -106,6 +106,14 @@ class ManagedAgentTuning(BaseModel):
     tags: list[str] = Field(default_factory=list)
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
     mcp_servers: list[ManagedMcpServerRef] = Field(default_factory=list)
+    values: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "User-set field values keyed by ManagedAgentFieldSpec.key. "
+            "Only keys present in `fields` are stored. "
+            "Frozen snapshot — not re-merged when the template evolves."
+        ),
+    )
 
 
 class PlatformConfig(BaseModel):

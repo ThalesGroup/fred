@@ -34,15 +34,9 @@ export function ThoughtTrace({ messages, done = false }: ThoughtTraceProps) {
 
   return (
     <div className={styles.root} aria-label="Agent reasoning trace">
-      <button
-        className={styles.toggle}
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
+      <button className={styles.toggle} onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
         <span className={`${styles.chevron} ${expanded ? styles.chevronOpen : ""}`}>›</span>
-        <span className={`${styles.summary} ${!done ? styles.summaryStreaming : ""}`}>
-          {summary}
-        </span>
+        <span className={`${styles.summary} ${!done ? styles.summaryStreaming : ""}`}>{summary}</span>
       </button>
 
       {expanded && (
@@ -50,11 +44,7 @@ export function ThoughtTrace({ messages, done = false }: ThoughtTraceProps) {
           <div className={styles.guideline} aria-hidden="true" />
           <div className={styles.entries}>
             {entries.map((entry, i) => (
-              <TraceEntryRow
-                key={i}
-                entry={entry}
-                index={i}
-              />
+              <TraceEntryRow key={i} entry={entry} index={i} />
             ))}
           </div>
         </div>

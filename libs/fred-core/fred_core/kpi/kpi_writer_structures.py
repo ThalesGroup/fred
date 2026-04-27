@@ -1,4 +1,4 @@
-# Copyright Thales 2025
+# Copyright Thales 2026
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -115,10 +115,15 @@ class Cost(BaseModel):
 
 
 class Quantities(BaseModel):
-    bytes_in: Optional[int] = 0
-    bytes_out: Optional[int] = 0
-    chunks: Optional[int] = 0
-    vectors: Optional[int] = 0
+    # Data-pipeline fields
+    bytes_in: Optional[int] = None
+    bytes_out: Optional[int] = None
+    chunks: Optional[int] = None
+    vectors: Optional[int] = None
+    # LLM turn fields
+    tool_count: Optional[int] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
 
 
 class Trace(BaseModel):

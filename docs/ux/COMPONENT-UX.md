@@ -149,6 +149,133 @@ _(none yet)_
 
 ---
 
+### `MessageBubble`
+
+**Location:** `src/rework/components/shared/atoms/MessageBubble/MessageBubble.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Assistant variant padding** — currently `padding: 0` (no bubble chrome). Confirm with designer
+  whether the `assistant` role needs any left padding or border-left accent to visually distinguish it from
+  plain prose text in the page.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ToolBadge`
+
+**Location:** `src/rework/components/shared/atoms/ToolBadge/ToolBadge.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **`color-mix` fallback** — uses `color-mix(in srgb, ...)` for background tints. Verify browser
+  support in the target deployment (Firefox 113+, Chrome 111+). Add a plain-color fallback if
+  older browsers are in scope.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `UserMessage`
+
+**Location:** `src/rework/components/shared/molecules/UserMessage/UserMessage.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Timestamp** — `UserMessage` accepts no timestamp yet. Decide whether to show relative time
+  (e.g. "2 min ago") or ISO time on hover, and from which source (optimistic client time vs.
+  `ChatMessage.timestamp`).
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `AssistantMessage`
+
+**Location:** `src/rework/components/shared/molecules/AssistantMessage/AssistantMessage.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Thinking indicator** — when streaming starts but no delta text has arrived yet (tools running),
+  `AssistantMessage` shows a bare blinking cursor. Confirm whether a label ("Thinking…") or a
+  three-dot animation would be a clearer affordance.
+
+- **Markdown** — Phase 6B will replace the `<p>` with `MarkdownRenderer`. No UX issue yet.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ChatInputBar`
+
+**Location:** `src/rework/components/shared/molecules/ChatInputBar/ChatInputBar.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Send icon alignment** — `IconButton` (filled, primary) is `align-items: flex-end` with the
+  `TextArea`. Validate that the button bottom-aligns cleanly with the textarea bottom when the
+  textarea is at its minimum 2-row height.
+
+- **Disabled state** — both `TextArea` and `IconButton` are disabled while `waitResponse` is true.
+  Confirm the disabled visual is perceptible enough (contrast on send icon button in particular).
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ChatMessagesArea`
+
+**Location:** `src/rework/components/shared/organisms/ChatMessagesArea/ChatMessagesArea.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Auto-scroll override** — currently always scrolls to bottom on any `scrollVersion` bump.
+  If the user has scrolled up to read history and the agent produces a new delta, it will yank them
+  back to the bottom. Discuss: should auto-scroll be paused while the user is scrolled up?
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `AssistantTurn`
+
+**Location:** `src/rework/components/shared/organisms/AssistantTurn/AssistantTurn.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **`ThoughtTrace` + `AssistantMessage` stacking** — components now stack vertically (trace on top,
+  reply below) per spec §1.2. Previous implementation placed them side-by-side. Validate on a real
+  conversation that the vertical flow reads well, particularly when `ThoughtTrace` is long.
+
+- **`max-width: 75%`** on `AssistantTurn` — validates alignment with the `MessageBubble` assistant
+  variant. Confirm both are visually consistent across viewport widths.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ### `StreamingCursor`
 
 **Location:** `src/rework/components/shared/atoms/StreamingCursor/StreamingCursor.tsx`
@@ -161,6 +288,30 @@ _(none yet)_
 
 - **Colour** — `currentColor`. Confirm it is visually distinct on all background variants
   (streaming inside `ThoughtTrace` vs inside final reply bubble).
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `SourcesPanel` + `SourceCard`
+
+**Location:** `src/rework/components/shared/molecules/SourcesPanel/`
+**Spec:** [`CHAT-COMPONENT-SPECS.md §7`](../design/CHAT-COMPONENT-SPECS.md)
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Max-width alignment** — `SourcesPanel` sits inside `.responseColumn` (flex: 1) without its own `max-width`. Validate whether the cards should be constrained to the same `680px` as the agent response text, or whether a wider layout is acceptable for sources.
+
+- **Card density** — on turns with many sources (> 5), the panel becomes long. Discuss whether to cap at N visible cards with a "Show more" affordance.
+
+- **Score display threshold** — currently shows score for all sources. Discuss whether to hide scores below a relevance threshold (e.g. < 40%) to reduce noise.
+
+- **Detail modal design** — clicking a card opens `SourceDetailModal` (centered overlay, title/score/meta + full extract). The modal is functional but not yet design-reviewed: typography, spacing, and the metadata grid layout all need a designer pass.
+
+- **Grouping by document** — the old `Sources.tsx` grouped multiple hits from the same `uid` into one `SourceRow` (best score, page count, tag chips). The new `SourceCard` renders one card per `VectorSearchHit`. Discuss with designer: group by document UID or keep flat by hit?
 
 #### Resolved
 
@@ -188,6 +339,73 @@ _(none yet)_
 
 ---
 
+---
+
+### Session title in `ChatList`
+
+**Location:** `src/rework/components/shared/organisms/ChatList/ChatList.tsx`
+**Status:** `Functional` (fallback only — awaiting backend)
+
+#### Open UX issues
+
+- **Fallback label** — when `SessionListItem.title` is null the list shows
+  `abc12345…` (first 8 chars of UUID). This is readable but not meaningful.
+  The backend needs to generate a title after the first exchange; once it does,
+  `ChatList` will display it automatically — no frontend change needed.
+  Discuss with PM whether the fallback should be `"New conversation"` + date
+  instead of the UUID fragment while waiting for the backend feature.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### Agent card — whole-card click
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
+**Status:** `Functional`
+
+The develop branch had the entire agent card as a `<Link>` for enabled instances (action buttons used `e.preventDefault()`). This was lost in the agentic-pod migration, which replaced it with a standalone "Start Chat" button. Restored: card is now a `<Link>` for enabled instances; Delete and Settings buttons call `e.preventDefault() + e.stopPropagation()`.
+
+#### Open UX issues
+
+- **Hover state** — `.chatLink:hover .agentCard` gets `border-color: --primary` and `background: --surface-container-low`. Validate that the contrast is sufficient and consistent with other interactive cards in the design system.
+- **Disabled card appearance** — disabled agents render a plain div (no hover, no cursor). Confirm whether a `not-allowed` cursor or a muted overlay would better communicate non-interactivity.
+
+#### Resolved
+
+- Whole-card clickability restored (was a regression from develop).
+
+---
+
+### Agent card — Settings button
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
+**Status:** `Functional` — Settings button opens `AgentFormModal` in edit mode.
+
+#### Open UX issues
+
+- **Tuning field group visual** — when a template declares many fields, there is no
+  accordion or collapsible section yet. Long forms scroll within the modal.
+
+- **Required field validation** — `ManagedAgentFieldSpec.required` is respected on
+  individual `TextInput` props but there is no cross-field guard on submit beyond
+  the existing `displayName.trim()` check.
+
+#### Resolved
+
+- **Settings button wired** — button now calls `setEditingInstance(instance)`;
+  `AgentFormModal` opens pre-filled with `display_name`, `description`, and
+  `tuning_field_values`. Saves via `PATCH /teams/{id}/agent-instances/{id}`.
+- **Dynamic tuning fields** — `AgentFormModal` renders `default_tuning_fields`
+  from the selected template at creation time. Supports text, number, boolean,
+  enum (select), and multiline (textarea) field types. In edit mode the current
+  template catalog is used for rendering (frozen-snapshot policy enforced by
+  the backend — unknown keys silently dropped).
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
@@ -196,4 +414,8 @@ _Priority order for the next UX session. Update before each session._
 2. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
 3. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
 4. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
-5. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)
+5. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
+6. **SourceDetailModal — full design pass** (metadata grid, typography, size — functional but unreviewed)
+7. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
+8. **Agent tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision)
+9. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)

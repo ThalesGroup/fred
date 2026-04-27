@@ -1,4 +1,4 @@
-# Copyright Thales 2025
+# Copyright Thales 2026
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import logging
 from typing import List
 
@@ -22,6 +23,14 @@ from fred_core.kpi.kpi_reader_structures import (
 )
 from fred_core.kpi.kpi_writer_structures import (
     KPIEvent,
+)
+
+_STRUCTURED_EVENT_NAMES = frozenset(
+    {
+        "agent.turn_completed",
+        "agent.turn_error_total",
+        "agent.tool_failed_total",
+    }
 )
 
 
@@ -47,7 +56,22 @@ class KpiLogStore(BaseKPIStore):
         self._log("[KPI][LOG] ensure_ready called")
 
     def index_event(self, event: KPIEvent) -> None:
-        pass
+        if event.metric and event.metric.name in _STRUCTURED_EVENT_NAMES:
+            dims = dict(event.dims or {})
+            quantities = (
+                event.quantities.model_dump(exclude_none=True)
+                if event.quantities
+                else {}
+            )
+            payload: dict = {
+                "event": event.metric.name,
+                "value_ms": event.metric.value,
+            }
+            if dims:
+                payload["dims"] = dims
+            if quantities:
+                payload["quantities"] = quantities
+            self.logger.info("[KPI] %s", json.dumps(payload, default=str))
 
     def bulk_index(self, events: List[KPIEvent]) -> None:
         self._log(f"[KPI][LOG] bulk_index: {len(events)} events")

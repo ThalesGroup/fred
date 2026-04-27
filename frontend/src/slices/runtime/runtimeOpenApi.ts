@@ -104,7 +104,8 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
 };
-export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful Response */
+export type ExecutePodV1AgentsExecutePostApiResponse =
+  /** status 200 Successful Response */
   | (
       | ({
           kind: "assistant_delta";

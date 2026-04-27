@@ -51,6 +51,7 @@ class BaseHistoryStore(ABC):
     - ``save``: persist a batch of messages for one turn
     - ``get``: retrieve all messages for a session, ordered by rank
     - ``list_sessions``: return distinct session IDs for a user, most recent first
+    - ``delete_session``: permanently remove all history rows for a session
     """
 
     @abstractmethod
@@ -106,6 +107,21 @@ class BaseHistoryStore(ABC):
         - call from the ``GET /sessions?user_id=<user_id>`` endpoint
         """
 
+    @abstractmethod
+    async def delete_session(self, session_id: str) -> int:
+        """
+        Permanently remove all history rows for a session.
+
+        Why this exists:
+        - developers need to clean up test sessions without restarting the pod
+        - devops need to reclaim storage from stale or abandoned conversations
+        - this is irreversible; callers should confirm with the user before invoking
+
+        How to use it:
+        - call from ``DELETE /agents/sessions/{session_id}``
+        - returns the number of rows deleted (0 when the session had no history)
+        """
+
 
 class NoOpHistoryStore(BaseHistoryStore):
     """
@@ -142,3 +158,6 @@ class NoOpHistoryStore(BaseHistoryStore):
         user_id: str,
     ) -> List[str]:
         return []
+
+    async def delete_session(self, session_id: str) -> int:
+        return 0

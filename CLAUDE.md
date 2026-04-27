@@ -27,7 +27,28 @@ Repository-wide instructions for Claude Code.
 - Keep default tests offline. Any external dependency test must be marked `integration`.
 - Prefer stronger typing on existing contracts over new wrappers or ad hoc payloads.
 - Never hand-edit generated files such as `frontend/src/slices/runtime/runtimeOpenApi.ts`; regenerate them from source contracts.
-- If docs and code diverge, update the docs in the same change.
+- **Docs are part of the definition of done. Every task is incomplete until the relevant docs are updated.** See "Mandatory Doc Updates" below.
+
+## Mandatory Doc Updates
+
+> **This is not optional.** Updating docs is part of every task — not a follow-up, not a nice-to-have. A task is not done until these steps are complete.
+
+After completing any implementation task, you MUST update every applicable file below **in the same session, before reporting the task as done**:
+
+| What changed | Files to update |
+|---|---|
+| A backlog item is completed (feature, fix, gate) | Mark it `[x]` or **Fixed** in the relevant backlog file (`BACKLOG.md`, `CHAT-UI-BACKLOG.md`, `FRONTEND-BACKLOG.md`) |
+| A new behaviour is introduced (SSE event, API call, state shape) | Update the relevant spec table or behaviour description in the backlog or design doc |
+| A UX component is implemented or its status changes | Update status + resolved/open issues in `docs/ux/COMPONENT-UX.md` |
+| A phase progress row exists for the area | Update the progress table at the bottom of the relevant backlog file |
+| Code and a design doc diverge | Fix the design doc in the same change — do not leave them out of sync |
+| A WORKPLAN sprint item is finished | Mark it done in `docs/WORKPLAN.md` |
+
+**Minimum check at end of every task:**
+1. Open each backlog file that covers the touched area.
+2. Find every `[ ]` item or "pending" row that the task closes — mark it done.
+3. Find every status or behaviour description that no longer matches reality — update it.
+4. If the change introduces something not yet tracked anywhere, add it.
 
 ## Fred Runtime Topology
 

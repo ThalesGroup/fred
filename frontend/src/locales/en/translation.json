@@ -1316,7 +1316,8 @@
     "save": "Save",
     "cancel": "Cancel",
     "agentCard": {
-      "startChat": "New chat"
+      "startChat": "New chat",
+      "settings": "Settings"
     },
     "teamRoles": {
       "member": "Member",
@@ -1423,6 +1424,8 @@
       "formAgent": {
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
         "titleEdit": "Edit {{agent}}",
+        "tunableFields": "Parameters",
+        "noTunableFields": "No custom parameters for this template.",
         "fields": {
           "name": {
             "placeholder": "Enter an original name",

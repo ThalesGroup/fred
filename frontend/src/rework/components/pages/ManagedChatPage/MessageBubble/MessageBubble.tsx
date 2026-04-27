@@ -37,16 +37,12 @@ interface MessageBubbleProps {
 export function MessageBubble({ msg }: MessageBubbleProps) {
   const text = textOf(msg);
   const isUser = msg.role === "user";
-  const isDelta =
-    (msg.metadata?.extras as { streaming_delta?: boolean } | undefined)?.streaming_delta === true;
+  const isDelta = (msg.metadata?.extras as { streaming_delta?: boolean } | undefined)?.streaming_delta === true;
 
   if (!text && msg.channel !== "tool_call" && msg.channel !== "tool_result") return null;
 
   return (
-    <div
-      className={`${styles.bubble} ${isUser ? styles.user : styles.agent}`}
-      aria-label={`${roleLabel(msg)} message`}
-    >
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.agent}`} aria-label={`${roleLabel(msg)} message`}>
       <span className={styles.role}>{roleLabel(msg)}</span>
       {msg.channel === "tool_call" || msg.channel === "tool_result" ? (
         <span className={styles.tool}>

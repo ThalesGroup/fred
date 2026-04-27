@@ -46,16 +46,8 @@ export default function ChatList({ teamId }: ChatListProps) {
     <div className={styles.chatListContainer} data-team-id={teamId}>
       <div className={styles.chatListHeader}>{t("rework.sidebar.chatList.title")}</div>
       <div className={styles.chatListItems}>
-        {isLoading && (
-          <div className={styles.chatListPlaceholder}>
-            {t("rework.sidebar.chatList.loading")}
-          </div>
-        )}
-        {isEmpty && (
-          <div className={styles.chatListPlaceholder}>
-            {t("rework.sidebar.chatList.emptyManaged")}
-          </div>
-        )}
+        {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
+        {isEmpty && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.emptyManaged")}</div>}
         {sessions?.map((session) => {
           const href = session.agent_instance_id
             ? `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`

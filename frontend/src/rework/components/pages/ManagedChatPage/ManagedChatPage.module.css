@@ -1,111 +1,59 @@
-/* Layout ------------------------------------------------------------------ */
-
+/* Page shell */
 .page {
   display: flex;
   flex-direction: column;
+  background: var(--surface-container-lowest);
   height: 100%;
   min-height: 0;
-  background: var(--surface-container-lowest);
 }
 
-/* Header ------------------------------------------------------------------ */
-
+/* ── Header ────────────────────────────────────────────────────────────── */
 .header {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-m, 1rem);
-  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
-  border-bottom: 1px solid var(--outline-muted);
   flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-s, 0.75rem);
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
 }
 
 .headerTitle {
   flex: 1;
-  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
   color: var(--on-surface);
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
 }
 
-/* Messages area ----------------------------------------------------------- */
-
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-l, 1.5rem) var(--spacing-m, 1rem);
+/* ── Body: chat column + optional right panel ──────────────────────────── */
+.body {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m, 1rem);
+  flex: 1;
+  min-height: 0;
 }
 
-/* One exchange (user message + optional agent row) */
+/* Centre column — takes all remaining width */
+.chatColumn {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Right panel slot — Phase 6C (AgentOptionsPanel) fills this */
+.rightPanel {
+  flex-shrink: 0;
+  border-left: 1px solid var(--outline-muted);
+  width: 320px;
+}
+
+/* ── One exchange (user + optional agent turn) ─────────────────────────── */
 .turn {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s, 0.75rem);
 }
 
-/* Agent row: ThoughtTrace (left, narrow) + response (flex, max-width) */
-.agentRow {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-m, 1rem);
-}
-
-/* Narrow, fixed-width column for the reasoning trace */
-.traceColumn {
-  width: 210px;
-  flex-shrink: 0;
-}
-
-/* Response column: takes remaining space */
-.responseColumn {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-/* -------------------------------------------------------------------------
-   Hints / empty state
-------------------------------------------------------------------------- */
-
-.empty {
-  margin: auto;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-large, 1rem/1.5 sans-serif);
-  text-align: center;
-}
-
-.hint {
-  align-self: flex-start;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
-  font-style: italic;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-/* Footer / input area ----------------------------------------------------- */
-
-.footer {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--spacing-s, 0.75rem);
-  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
-  border-top: 1px solid var(--outline-muted);
-  flex-shrink: 0;
-}
-
-.footer > :first-child {
-  flex: 1;
-}
-
-/* Error state ------------------------------------------------------------- */
-
+/* ── Error state ───────────────────────────────────────────────────────── */
 .error {
   padding: var(--spacing-m, 1rem);
   color: var(--error);

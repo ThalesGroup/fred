@@ -1318,7 +1318,8 @@
     "save": "Sauvegarder",
     "cancel": "Annuler",
     "agentCard": {
-      "startChat": "Nouveau chat"
+      "startChat": "Nouveau chat",
+      "settings": "Paramètres"
     },
     "teamRoles": {
       "member": "Membre",
@@ -1423,6 +1424,8 @@
       "formAgent": {
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",
+        "tunableFields": "Paramètres",
+        "noTunableFields": "Aucun paramètre personnalisable pour ce modèle.",
         "fields": {
           "name": {
             "placeholder": "Entrez un nom original",

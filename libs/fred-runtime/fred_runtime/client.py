@@ -79,12 +79,16 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_AGENT_POD_BASE_URL = "http://127.0.0.1:8000/api/v1"
 _COMMANDS: tuple[str, ...] = (
+    "/audit",
     "/help",
     "/agents",
     "/agent",
     "/checkpoints",
     "/checkpoint",
     "/context",
+    "/delete-session",
+    "/delete-checkpoint",
+    "/purge-session",
     "/execution-context",
     "/history",
     "/kpi",
@@ -93,6 +97,8 @@ _COMMANDS: tuple[str, ...] = (
     "/mode",
     "/scenario",
     "/session",
+    "/session-info",
+    "/session-new",
     "/sessions",
     "/stats",
     "/team",
@@ -197,6 +203,8 @@ class AgentPodClient:
         session_id: str,
         user_id: str,
         team_id: str | None = None,
+        agent_instance_id: str | None = None,
+        checkpoint_id: str | None = None,
         resume_payload: Any = None,
     ) -> dict[str, Any]:
         """
@@ -210,7 +218,8 @@ class AgentPodClient:
         How to use it:
         - pass the target agent id and user message
         - inspect the returned JSON payload for `kind="final"` or `error`
-        - pass `resume_payload` to resume a graph agent paused at a HITL gate
+        - pass `agent_instance_id` for managed execution via control-plane
+        - pass `checkpoint_id` + `resume_payload` to resume a HITL gate
 
         Example:
         - `payload = client.execute(agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice", team_id="fredlab")`
@@ -224,6 +233,10 @@ class AgentPodClient:
             "session_id": session_id,
             "runtime_context": runtime_context,
         }
+        if agent_instance_id is not None:
+            payload["agent_instance_id"] = agent_instance_id
+        if checkpoint_id is not None:
+            payload["checkpoint_id"] = checkpoint_id
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
         response = self.http_client.post(
@@ -245,6 +258,8 @@ class AgentPodClient:
         session_id: str,
         user_id: str,
         team_id: str | None = None,
+        agent_instance_id: str | None = None,
+        checkpoint_id: str | None = None,
         resume_payload: Any = None,
     ) -> list[dict[str, Any]]:
         """
@@ -257,7 +272,8 @@ class AgentPodClient:
 
         How to use it:
         - pass the target agent id and user message
-        - inspect the returned events for `final` content or runtime errors
+        - pass `agent_instance_id` for managed execution via control-plane
+        - pass `checkpoint_id` + `resume_payload` to resume a HITL gate
 
         Example:
         - `events = client.stream_events(agent_id="sentinel.react.v2", message="hello", session_id="demo", user_id="alice", team_id="fredlab")`
@@ -270,6 +286,8 @@ class AgentPodClient:
             session_id=session_id,
             user_id=user_id,
             team_id=team_id,
+            agent_instance_id=agent_instance_id,
+            checkpoint_id=checkpoint_id,
             resume_payload=resume_payload,
         ):
             events.append(event)
@@ -283,6 +301,8 @@ class AgentPodClient:
         session_id: str,
         user_id: str,
         team_id: str | None = None,
+        agent_instance_id: str | None = None,
+        checkpoint_id: str | None = None,
         resume_payload: Any = None,
     ) -> Iterator[dict[str, Any]]:
         """
@@ -310,6 +330,10 @@ class AgentPodClient:
             "session_id": session_id,
             "runtime_context": runtime_context,
         }
+        if agent_instance_id is not None:
+            payload["agent_instance_id"] = agent_instance_id
+        if checkpoint_id is not None:
+            payload["checkpoint_id"] = checkpoint_id
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
         with self.http_client.stream(
@@ -387,6 +411,45 @@ class AgentPodClient:
             raise RuntimeError("Messages response must be a JSON array.")
         return payload
 
+    def delete_session_messages(self, session_id: str) -> int:
+        """
+        Permanently delete all history rows for a session.
+
+        Why this function exists:
+        - developers and devops need to reclaim storage from stale sessions
+        - the pod exposes this as ``DELETE /agents/sessions/{session_id}``
+
+        How to use it:
+        - always confirm with the user before calling — this is irreversible
+        - checkpoint state is NOT affected; call ``delete_checkpoint`` separately
+
+        Example:
+        - `n = client.delete_session_messages("session-abc")  # returns row count`
+        """
+        url = f"{self.base_url}/agents/sessions/{session_id}"
+        response = self.http_client.delete(url, headers=self._auth_headers())
+        response.raise_for_status()
+        return int(response.json().get("deleted", 0))
+
+    def delete_checkpoint(self, session_id: str) -> None:
+        """
+        Purge all checkpoint state for a session.
+
+        Why this function exists:
+        - the pod exposes this as ``DELETE /agents/checkpoints/{session_id}``
+        - history rows are NOT affected; call ``delete_session_messages`` separately
+
+        How to use it:
+        - always confirm with the user before calling — this is irreversible
+        - returns None on success (204 No Content from the pod)
+
+        Example:
+        - `client.delete_checkpoint("session-abc")`
+        """
+        url = f"{self.base_url}/agents/checkpoints/{session_id}"
+        response = self.http_client.delete(url, headers=self._auth_headers())
+        response.raise_for_status()
+
     def get_checkpoint_stats(self) -> dict[str, Any]:
         """
         Fetch aggregate checkpoint storage statistics from the pod.
@@ -454,6 +517,59 @@ class AgentPodClient:
         response = self.http_client.get(url, headers=self._auth_headers())
         response.raise_for_status()
         return response.json()
+
+    def get_kpi_turns(self, *, limit: int = 30) -> list[dict[str, Any]]:
+        """
+        Fetch recent agent.turn_completed KPI events from the pod ring buffer.
+
+        Why this function exists:
+        - the pod stores the last 200 turn events in memory for CLI inspection
+        - no Prometheus or Grafana needed to validate KPI emission locally
+
+        How to use it:
+        - call from the ``/kpi`` REPL command
+        - returns events newest-first, each with: ts, session_id, exchange_id,
+          total_ms, model_name, finish_reason, tool_count, input_tokens, etc.
+
+        Example:
+        - `events = client.get_kpi_turns(limit=10)`
+        """
+        url = f"{self.base_url}/agents/kpi-turns"
+        response = self.http_client.get(
+            url, params={"limit": limit}, headers=self._auth_headers()
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise RuntimeError("KPI turns response must be a JSON array.")
+        return payload
+
+    def get_audit_events(self, *, limit: int = 30) -> list[dict[str, Any]]:
+        """
+        Fetch recent security audit events from the pod ring buffer.
+
+        Why this function exists:
+        - the pod records grant_validated, grant_validation_failed, and
+          grant_user_mismatch events in an in-memory ring buffer (last 200)
+        - the CLI can query them directly without reading log files
+
+        How to use it:
+        - call from the ``/audit`` REPL command
+        - returns events newest-first, each with: ts, audit_event, user_id,
+          agent_instance_id, action, reason (when applicable)
+
+        Example:
+        - `events = client.get_audit_events(limit=20)`
+        """
+        url = f"{self.base_url}/agents/audit-events"
+        response = self.http_client.get(
+            url, params={"limit": limit}, headers=self._auth_headers()
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise RuntimeError("Audit events response must be a JSON array.")
+        return payload
 
     def get_metrics_text(self) -> str:
         """
@@ -601,6 +717,7 @@ def completion_candidates(
     line_buffer: str,
     *,
     agent_ids: Sequence[str],
+    session_ids: Sequence[str] = (),
 ) -> list[str]:
     """
     Return tab-completion candidates for one chat prompt line.
@@ -610,17 +727,21 @@ def completion_candidates(
     - a pure helper keeps completion logic testable without interactive TTY code
 
     How to use it:
-    - pass the current input line and the latest known agent ids
+    - pass the current input line and the latest known agent ids and session ids
     - use the returned strings inside a readline completer
 
     Example:
     - `completion_candidates("/agent sent", agent_ids=["sentinel.react.v2"])`
+    - `completion_candidates("/session dev-", agent_ids=[], session_ids=["dev-session-abc"])`
     """
 
     stripped = line_buffer.lstrip()
     if stripped.startswith("/agent "):
         prefix = stripped.removeprefix("/agent ").strip()
         return [agent_id for agent_id in agent_ids if agent_id.startswith(prefix)]
+    if stripped.startswith("/session "):
+        prefix = stripped.removeprefix("/session ").strip()
+        return [sid for sid in session_ids if sid.startswith(prefix)]
     if stripped.startswith("/mode "):
         prefix = stripped.removeprefix("/mode ").strip()
         return [mode for mode in ("final", "stream") if mode.startswith(prefix)]
@@ -702,23 +823,44 @@ def print_help() -> None:
     print(
         "  /login-password [user]   Use direct username/password login as a local fallback"
     )
-    print("  /whoami                  Show the current login state")
+    print(
+        "  /whoami                  Show identity, auth, team, agent, session, pod URL"
+    )
     print("  /logout                  Clear the cached login session")
     print("  /mode [final|stream]     Show or change the execution mode")
     print("  /scenario <file>         Run a YAML scenario file against the pod")
-    print("  /session <id>            Change the current session id")
+    print(
+        "  /session [<N>|<id>]      Show current session, or switch by index / exact id"
+    )
+    print("  /session-new             Start a fresh session with a generated id")
+    print(
+        "  /session-info [id]       Show session metadata (timestamps, agents, tokens, title)"
+    )
     print("  /team [team_id|clear]    Show, set, or clear the current team scope")
     print(
-        "  /sessions                List all sessions for the current user (most recent first)"
+        "  /sessions                List sessions with message count and first/last preview"
     )
-    print("  /history [session_id]    Show the conversation history for a session")
-    print("  /kpi [pattern]           Show a KPI/Prometheus snapshot from the pod")
+    print(
+        "  /history [--raw] [id]    Show conversation history (--raw: full JSON payload)"
+    )
+    print(
+        "  /kpi [limit]             Show recent agent.turn_completed events from the pod"
+    )
+    print(
+        "  /kpi prom [pattern]      Show Prometheus metrics snapshot (optional filter)"
+    )
+    print("  /audit [limit]           Show recent security audit events from the pod")
     print(
         "  /checkpoints [limit]     List checkpoint threads with sizes (default limit=20)"
     )
     print("  /checkpoint <session_id> Inspect all checkpoints for one session")
     print("  /stats                   Show aggregate checkpoint storage statistics")
     print("  /context                 Show current execution context summary")
+    print()
+    print("Cleanup commands (irreversible — always prompt for confirmation):")
+    print("  /delete-session [id]     Delete history rows only (checkpoint kept)")
+    print("  /delete-checkpoint [id]  Delete checkpoint only (history kept)")
+    print("  /purge-session [id]      Delete BOTH history and checkpoint")
     print("  /quit                    Exit the chat client")
 
 
@@ -732,19 +874,26 @@ _CLI_HELP_CONTEXT = (
     "  /agent <agent_id>        Switch the active agent\n"
     "  /login                   Log in through browser PKCE and cache the user session\n"
     "  /login-password [user]   Use direct username/password login as a local fallback\n"
-    "  /whoami                  Show the current login state\n"
+    "  /whoami                  Show identity, auth, team, agent, session, pod URL\n"
     "  /logout                  Clear the cached login session\n"
     "  /mode [final|stream]     Show or change the execution mode (default: stream)\n"
     "  /scenario <file>         Run a YAML scenario file against the pod\n"
-    "  /session <id>            Change the current session id\n"
+    "  /session [<N>|<id>]      Show current session, or switch by index / exact id\n"
+    "  /session-new             Start a fresh session with a generated id\n"
+    "  /session-info [id]       Show session metadata (timestamps, agents, tokens, title)\n"
     "  /team [team_id|clear]    Show, set, or clear the current team scope\n"
-    "  /sessions                List all sessions for the current user (most recent first)\n"
-    "  /history [session_id]    Show the conversation history for a session\n"
-    "  /kpi [pattern]           Show a KPI/Prometheus snapshot from the pod\n"
+    "  /sessions                List sessions with message count and first/last preview\n"
+    "  /history [--raw] [id]    Show conversation history (--raw: full JSON payload)\n"
+    "  /kpi [limit]             Show recent agent.turn_completed events from the pod\n"
+    "  /kpi prom [pattern]      Show Prometheus metrics snapshot (optional filter)\n"
+    "  /audit [limit]           Show recent security audit events from the pod\n"
     "  /checkpoints [limit]     List checkpoint threads with sizes (default limit=20)\n"
     "  /checkpoint <session_id> Inspect all checkpoints for one session\n"
     "  /stats                   Show aggregate checkpoint storage statistics\n"
     "  /context                 Show current execution context summary\n"
+    "  /delete-session [id]     Delete history rows only (checkpoint kept) — irreversible\n"
+    "  /delete-checkpoint [id]  Delete checkpoint only (history kept) — irreversible\n"
+    "  /purge-session [id]      Delete BOTH history and checkpoint — irreversible\n"
     "  /quit                    Exit the chat client\n\n"
     "Any text that does not start with / is sent as a message to the current agent.\n\n"
     "User question: "
@@ -1394,6 +1543,8 @@ _HISTORY_CHANNEL_LABELS: dict[str, str] = {
     "observation": "observation",
     "error": "error",
     "system_note": "note",
+    "hitl_request": "HITL gate",
+    "hitl_response": "HITL reply",
 }
 
 
@@ -1402,6 +1553,7 @@ def print_history(
     *,
     session_id: str,
     color_enabled: bool,
+    raw: bool = False,
 ) -> None:
     """
     Render a conversation history to the terminal in a readable form.
@@ -1414,13 +1566,16 @@ def print_history(
     How to use it:
     - pass the list returned by ``AgentPodClient.get_session_messages``
     - call from the ``/history`` REPL command
+    - pass ``raw=True`` to dump the full ChatMessage JSON (as the UI receives it)
 
     Example:
     - ``print_history(messages, session_id="abc", color_enabled=True)``
+    - ``print_history(messages, session_id="abc", color_enabled=True, raw=True)``
 
-    Output format per message:
+    Output format per message (default):
     - ``[rank]  Role [channel]  content…``
     - Tool-call messages show the function name and first 80 chars of args
+    - HITL gate messages render as a structured box with numbered choices
     - Metadata (model, token_usage) appended in dim style when present
     """
 
@@ -1432,6 +1587,21 @@ def print_history(
     )
     print(header)
     print(colorize("  " + "─" * 60, color=_ANSI_DIM, enabled=color_enabled))
+
+    if raw:
+        for msg in messages:
+            rank = msg.get("rank", "?")
+            print(
+                colorize(
+                    f"\n  ── message [{rank}] ──",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
+            print(json.dumps(msg, indent=2, ensure_ascii=False, default=str))
+        print()
+        return
 
     # Group by exchange_id so turns are visually separated
     current_exchange: str | None = None
@@ -1489,6 +1659,59 @@ def print_history(
                 code = part.get("code", "")
                 preview = code.split("\n")[0][:80]
                 lines.append(f"[code:{lang}] {preview}")
+            elif ptype == "hitl_request":
+                title = part.get("title") or part.get("stage") or "HITL gate"
+                question = part.get("question", "")
+                choices: list[dict[str, Any]] = part.get("choices") or []
+
+                def _dim(s: str) -> str:
+                    return colorize(s, color=_ANSI_DIM, enabled=color_enabled)
+
+                def _bold_white(s: str) -> str:
+                    return colorize(
+                        s, color=_ANSI_WHITE, enabled=color_enabled, bold=True
+                    )
+
+                box_width = 52
+                top = (
+                    _dim("┌─ ")
+                    + _bold_white(title)
+                    + _dim(" " + "─" * max(0, box_width - len(title) - 4) + "┐")
+                )
+                q_display = question[:68] + ("…" if len(question) > 68 else "")
+                q_line = _dim("│ ") + q_display
+                choice_lines = [
+                    _dim("│  ")
+                    + colorize(
+                        f"{i + 1}.", color=_ANSI_CYAN, enabled=color_enabled, bold=True
+                    )
+                    + f" {c.get('label', c.get('id', '?'))}  "
+                    + _dim(f"[{c.get('id', '?')}]")
+                    for i, c in enumerate(choices)
+                ]
+                bottom = _dim("└" + "─" * box_width + "┘")
+                sep = "\n           "
+                box = sep.join(["", top, q_line] + choice_lines + [bottom])
+                lines.append(box)
+            elif ptype == "hitl_response":
+                choice_id = part.get("choice_id", "")
+                label = part.get("label")
+                if label:
+                    check = colorize(
+                        "✓", color=_ANSI_GREEN, enabled=color_enabled, bold=True
+                    )
+                    label_str = colorize(
+                        f" {label}", color=_ANSI_GREEN, enabled=color_enabled
+                    )
+                    id_hint = colorize(
+                        f"  [{choice_id}]", color=_ANSI_DIM, enabled=color_enabled
+                    )
+                    lines.append(check + label_str + id_hint)
+                else:
+                    check = colorize(
+                        "✓", color=_ANSI_GREEN, enabled=color_enabled, bold=True
+                    )
+                    lines.append(check + f" {choice_id}")
             else:
                 lines.append(f"[{ptype}]")
 
@@ -1810,8 +2033,12 @@ def run_interactive_chat(
             print(f"  {available_agent}")
         return 1
 
+    # Mutable list — mutated in-place so the closure sees updates without reinstalling
+    known_sessions: list[str] = []
     install_readline_completion(
-        lambda line: completion_candidates(line, agent_ids=known_agents)
+        lambda line: completion_candidates(
+            line, agent_ids=known_agents, session_ids=known_sessions
+        )
     )
 
     print(
@@ -1918,10 +2145,46 @@ def run_interactive_chat(
             )
             continue
         if message == "/whoami":
+
+            def _wfield(label: str, value: str, color: str) -> str:
+                return colorize(
+                    f"  {label:<10}", color=_ANSI_DIM, enabled=color_enabled
+                ) + colorize(value, color=color, enabled=color_enabled, bold=True)
+
+            print(
+                colorize(
+                    "  Identity", color=_ANSI_DIM, enabled=color_enabled, bold=True
+                )
+            )
+            print(colorize("  " + "─" * 54, color=_ANSI_DIM, enabled=color_enabled))
+            print(_wfield("User:", user_id, _ANSI_GREEN))
             if auth_session is None:
-                print("Auth: not configured")
+                print(_wfield("Auth:", "standalone (no authentication)", _ANSI_DIM))
             else:
-                print(f"Auth: {auth_session.describe()}")
+                print(_wfield("Auth:", auth_session.describe(), _ANSI_GREEN))
+            print(_wfield("Team:", current_team_id or "personal", _ANSI_CYAN))
+            print(_wfield("Agent:", current_agent, _ANSI_CYAN))
+            print(_wfield("Session:", current_session_id, _ANSI_DIM))
+            print(
+                _wfield(
+                    "Mode:",
+                    execution_mode_label(stream=current_stream),
+                    _ANSI_GREEN if current_stream else _ANSI_YELLOW,
+                )
+            )
+            print(_wfield("Pod:", client.base_url, _ANSI_DIM))
+            if auth_session is None:
+                print()
+                print(
+                    colorize(
+                        "  ⚠  Standalone mode: history is stored under user_id = "
+                        f'"{user_id}" (your Unix username).\n'
+                        '     The local UI may send a different user_id (e.g. "admin").\n'
+                        "     Override with: fred-agent-chat --user-id admin",
+                        color=_ANSI_YELLOW,
+                        enabled=color_enabled,
+                    )
+                )
             continue
         if message == "/logout":
             if auth_session is None:
@@ -1981,12 +2244,288 @@ def run_interactive_chat(
             except (AssertionError, ValueError, FileNotFoundError) as exc:
                 print(f"Scenario failed: {exc}")
             continue
-        if message.startswith("/session "):
-            current_session_id = message.removeprefix("/session ").strip()
+        if message == "/session-new":
+            current_session_id = f"dev-session-{uuid.uuid4().hex[:8]}"
             print(
-                f"Session set to {colorize(current_session_id, color=_ANSI_DIM, enabled=color_enabled)}"
+                "New session: "
+                + colorize(
+                    current_session_id,
+                    color=_ANSI_CYAN,
+                    enabled=color_enabled,
+                    bold=True,
+                )
             )
             continue
+        if message == "/session":
+            print(
+                "Current session: "
+                + colorize(
+                    current_session_id,
+                    color=_ANSI_CYAN,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
+            print(
+                colorize(
+                    "  /session <N>   switch by index from last /sessions list\n"
+                    "  /session <id>  switch by exact session id\n"
+                    "  /session-new   start a fresh session",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                )
+            )
+            continue
+        if message.startswith("/session "):
+            arg = message.removeprefix("/session ").strip()
+            # Numeric index → resolve from last /sessions list
+            if arg.isdigit():
+                idx = int(arg) - 1
+                if known_sessions and 0 <= idx < len(known_sessions):
+                    current_session_id = known_sessions[idx]
+                    print(
+                        "Switched to session "
+                        + colorize(
+                            f"[{idx + 1}] {current_session_id}",
+                            color=_ANSI_CYAN,
+                            enabled=color_enabled,
+                            bold=True,
+                        )
+                    )
+                else:
+                    total = len(known_sessions)
+                    hint = (
+                        f"valid range: 1–{total}"
+                        if total
+                        else "run /sessions first to load the list"
+                    )
+                    print(f"Index {arg!r} out of range ({hint}).")
+            else:
+                current_session_id = arg
+                print(
+                    "Session set to "
+                    + colorize(
+                        current_session_id,
+                        color=_ANSI_CYAN,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
+            continue
+        if message.startswith("/session-info"):
+            target_sid = (
+                message.removeprefix("/session-info").strip() or current_session_id
+            )
+            if not target_sid:
+                print(
+                    "No session active. Use /session <id> or /session-info <session_id>."
+                )
+                continue
+            try:
+                info_msgs = client.get_session_messages(target_sid)
+            except Exception as exc:
+                print(f"Error fetching session: {exc}")
+                continue
+            if not info_msgs:
+                print(
+                    colorize(
+                        f"  Session {target_sid} has no stored messages.",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                continue
+
+            # Derive metadata from stored messages
+            timestamps = [
+                m["timestamp"] for m in info_msgs if isinstance(m.get("timestamp"), str)
+            ]
+            created_at = min(timestamps) if timestamps else "unknown"
+            updated_at = max(timestamps) if timestamps else "unknown"
+            exchange_ids = {
+                m.get("exchange_id", "") for m in info_msgs if m.get("exchange_id")
+            }
+            agents_used = sorted(
+                {
+                    m["metadata"]["agent_id"]
+                    for m in info_msgs
+                    if isinstance(m.get("metadata"), dict)
+                    and m["metadata"].get("agent_id")
+                }
+            )
+            models_used = sorted(
+                {
+                    m["metadata"]["model"]
+                    for m in info_msgs
+                    if isinstance(m.get("metadata"), dict)
+                    and m["metadata"].get("model")
+                }
+            )
+            total_input = sum(
+                ((m.get("metadata") or {}).get("token_usage") or {}).get(
+                    "input_tokens", 0
+                )
+                for m in info_msgs
+                if isinstance(m.get("metadata"), dict)
+            )
+            total_output = sum(
+                ((m.get("metadata") or {}).get("token_usage") or {}).get(
+                    "output_tokens", 0
+                )
+                for m in info_msgs
+                if isinstance(m.get("metadata"), dict)
+            )
+            hitl_count = sum(1 for m in info_msgs if m.get("channel") == "hitl_request")
+            # De-facto title: first user/final text
+            title = None
+            for m in info_msgs:
+                if m.get("role") == "user" and m.get("channel") == "final":
+                    for p in m.get("parts") or []:
+                        if p.get("type") == "text":
+                            t = p.get("text", "").strip().replace("\n", " ")
+                            title = (t[:72] + "…") if len(t) > 72 else t
+                            break
+                if title:
+                    break
+
+            def _ifield(label: str, value: str, color: str) -> str:
+                return colorize(
+                    f"  {label:<18}", color=_ANSI_DIM, enabled=color_enabled
+                ) + colorize(value, color=color, enabled=color_enabled, bold=True)
+
+            print(
+                colorize(
+                    f"  Session info — {target_sid}",
+                    color=_ANSI_DIM,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
+            print(colorize("  " + "─" * 60, color=_ANSI_DIM, enabled=color_enabled))
+            if title:
+                print(_ifield("Title (first msg):", title, _ANSI_WHITE))
+            print(_ifield("Created:", created_at, _ANSI_DIM))
+            print(_ifield("Last activity:", updated_at, _ANSI_DIM))
+            print(_ifield("Exchanges:", str(len(exchange_ids)), _ANSI_CYAN))
+            print(_ifield("Messages:", str(len(info_msgs)), _ANSI_DIM))
+            if hitl_count:
+                print(_ifield("HITL gates:", str(hitl_count), _ANSI_YELLOW))
+            if agents_used:
+                print(_ifield("Agents used:", ", ".join(agents_used), _ANSI_CYAN))
+            if models_used:
+                print(_ifield("Models used:", ", ".join(models_used), _ANSI_DIM))
+            if total_input or total_output:
+                print(
+                    _ifield(
+                        "Tokens:",
+                        f"{total_input}↑ in  {total_output}↓ out  "
+                        f"({total_input + total_output} total)",
+                        _ANSI_DIM,
+                    )
+                )
+            print()
+            continue
+
+        # ------------------------------------------------------------------
+        # Destructive cleanup commands — all require explicit confirmation
+        # ------------------------------------------------------------------
+
+        if (
+            message.startswith("/delete-session")
+            or message.startswith("/delete-checkpoint")
+            or message.startswith("/purge-session")
+        ):
+            if message.startswith("/purge-session"):
+                cmd, do_history, do_checkpoint = "purge-session", True, True
+            elif message.startswith("/delete-session"):
+                cmd, do_history, do_checkpoint = "delete-session", True, False
+            else:
+                cmd, do_history, do_checkpoint = "delete-checkpoint", False, True
+
+            target_sid = message.removeprefix(f"/{cmd}").strip() or current_session_id
+            if not target_sid:
+                print(f"Usage: /{cmd} [session_id]  (defaults to current session)")
+                continue
+
+            scope = []
+            if do_history:
+                scope.append("history rows")
+            if do_checkpoint:
+                scope.append("checkpoint state")
+            scope_str = " + ".join(scope)
+            warn = colorize(
+                f"  ⚠  This will permanently delete {scope_str} for:\n"
+                f"     {target_sid}\n"
+                "     This cannot be undone.",
+                color=_ANSI_YELLOW,
+                enabled=color_enabled,
+            )
+            print(warn)
+            try:
+                confirm = input("  Type 'yes' to confirm: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\n  Aborted.")
+                continue
+            if confirm != "yes":
+                print("  Aborted.")
+                continue
+
+            errors: list[str] = []
+            if do_history:
+                try:
+                    n = client.delete_session_messages(target_sid)
+                    print(
+                        colorize(
+                            f"  History: deleted {n} row(s).",
+                            color=_ANSI_GREEN,
+                            enabled=color_enabled,
+                        )
+                    )
+                    if target_sid in known_sessions:
+                        known_sessions.remove(target_sid)
+                    if (
+                        target_sid == current_session_id
+                        and do_history
+                        and not do_checkpoint
+                    ):
+                        print(
+                            colorize(
+                                "  Tip: use /session-new to start a fresh session.",
+                                color=_ANSI_DIM,
+                                enabled=color_enabled,
+                            )
+                        )
+                except Exception as exc:
+                    errors.append(f"history: {exc}")
+            if do_checkpoint:
+                try:
+                    client.delete_checkpoint(target_sid)
+                    print(
+                        colorize(
+                            "  Checkpoint: purged.",
+                            color=_ANSI_GREEN,
+                            enabled=color_enabled,
+                        )
+                    )
+                except Exception as exc:
+                    errors.append(f"checkpoint: {exc}")
+            if errors:
+                for err in errors:
+                    print(
+                        colorize(
+                            f"  Error — {err}", color=_ANSI_RED, enabled=color_enabled
+                        )
+                    )
+            elif do_history and target_sid == current_session_id:
+                print(
+                    colorize(
+                        "  Tip: use /session-new to start a fresh session.",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+            continue
+
         if message == "/team":
             if current_team_id:
                 print(f"Current team: {current_team_id}")
@@ -2019,8 +2558,11 @@ def run_interactive_chat(
             except Exception as exc:
                 print(f"Error fetching sessions: {exc}")
                 continue
+            # Refresh the known_sessions list in-place so the completion closure picks up
+            known_sessions.clear()
+            known_sessions.extend(sessions)
             if not sessions:
-                print("No sessions found for this user.")
+                print("  No sessions found for this user.")
             else:
                 print(
                     colorize(
@@ -2030,25 +2572,73 @@ def run_interactive_chat(
                         bold=True,
                     )
                 )
-                for i, sid in enumerate(sessions):
-                    marker = " ◀ current" if sid == current_session_id else ""
-                    prefix_color = (
-                        _ANSI_CYAN if sid == current_session_id else _ANSI_DIM
+                print(colorize("  " + "─" * 60, color=_ANSI_DIM, enabled=color_enabled))
+
+                def _first_text(msgs: list[dict[str, Any]], role: str) -> str | None:
+                    it = (
+                        msgs if role == "user" else reversed(msgs)  # type: ignore[arg-type]
                     )
-                    line = colorize(
-                        f"  {i + 1:>3}.  {sid}",
-                        color=prefix_color,
+                    for m in it:
+                        if m.get("role") == role and m.get("channel") == "final":
+                            for p in m.get("parts") or []:
+                                if p.get("type") == "text":
+                                    t = p.get("text", "").strip()
+                                    t = t.replace("\n", " ")
+                                    return (t[:65] + "…") if len(t) > 65 else t
+                    return None
+
+                for i, sid in enumerate(sessions):
+                    is_current = sid == current_session_id
+                    marker = (
+                        colorize(" ◀", color=_ANSI_GREEN, enabled=color_enabled)
+                        if is_current
+                        else ""
+                    )
+                    # Fetch preview (localhost — fast enough for dev use)
+                    try:
+                        preview_msgs = client.get_session_messages(sid)
+                    except Exception:
+                        preview_msgs = []
+                    msg_count = len(preview_msgs)
+                    first_user = _first_text(preview_msgs, "user")
+                    last_asst = _first_text(preview_msgs, "assistant")
+
+                    sid_str = colorize(
+                        sid,
+                        color=_ANSI_CYAN if is_current else _ANSI_DIM,
+                        enabled=color_enabled,
+                        bold=is_current,
+                    )
+                    count_str = colorize(
+                        f"({msg_count} msgs)",
+                        color=_ANSI_DIM,
                         enabled=color_enabled,
                     )
-                    print(
-                        line
-                        + colorize(marker, color=_ANSI_GREEN, enabled=color_enabled)
-                    )
+                    print(f"\n  {i + 1:>3}.  {sid_str}  {count_str}{marker}")
+                    if first_user:
+                        print(
+                            colorize(
+                                "        You: ", color=_ANSI_DIM, enabled=color_enabled
+                            )
+                            + f'"{first_user}"'
+                        )
+                    if last_asst:
+                        print(
+                            colorize(
+                                "        Bot: ", color=_ANSI_DIM, enabled=color_enabled
+                            )
+                            + colorize(
+                                f'"{last_asst}"', color=_ANSI_DIM, enabled=color_enabled
+                            )
+                        )
+                print()
             continue
         if message.startswith("/history"):
-            target_session = (
-                message.removeprefix("/history").strip() or current_session_id
-            )
+            remainder = message.removeprefix("/history").strip()
+            show_raw = "--raw" in remainder
+            if show_raw:
+                remainder = remainder.replace("--raw", "").strip()
+            target_session = remainder or current_session_id
             if not target_session:
                 print("No session active. Use /session <id> or /history <session_id>.")
                 continue
@@ -2067,23 +2657,170 @@ def run_interactive_chat(
                 )
             else:
                 print_history(
-                    msgs, session_id=target_session, color_enabled=color_enabled
+                    msgs,
+                    session_id=target_session,
+                    color_enabled=color_enabled,
+                    raw=show_raw,
                 )
             continue
-        if message.startswith("/kpi"):
-            pattern = message.removeprefix("/kpi").strip() or None
+        if message.startswith("/audit"):
+            arg = message.removeprefix("/audit").strip()
             try:
-                metrics_text = client.get_metrics_text()
-                metric_samples = parse_prometheus_text_exposition(metrics_text)
+                limit_audit = int(arg) if arg else 30
+            except ValueError:
+                limit_audit = 30
+            try:
+                events = client.get_audit_events(limit=limit_audit)
             except Exception as exc:
-                print(f"Error fetching KPI metrics: {exc}")
+                print(f"Error fetching audit events: {exc}")
                 continue
-            for line in render_kpi_report(
-                metric_samples,
-                color_enabled=color_enabled,
-                pattern=pattern,
-            ):
-                print(line)
+            if not events:
+                print(
+                    colorize(
+                        "  No security audit events recorded since pod started.",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+            else:
+                print(
+                    colorize(
+                        f"  Security audit events ({len(events)} shown):",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
+                for ev in events:
+                    ev_name = ev.get("audit_event", "?")
+                    ts = (ev.get("ts") or "-")[:19].replace("T", " ")
+                    ev_color = (
+                        _ANSI_RED
+                        if "mismatch" in ev_name or "failed" in ev_name
+                        else _ANSI_GREEN
+                    )
+                    parts = [
+                        colorize(f"  {ts}", color=_ANSI_DIM, enabled=color_enabled),
+                        colorize(
+                            f"  {ev_name:<28}", color=ev_color, enabled=color_enabled
+                        ),
+                    ]
+                    for key in ("user_id", "agent_instance_id", "action", "reason"):
+                        val = ev.get(key)
+                        if val:
+                            parts.append(
+                                colorize(
+                                    f"  {key}={val!r}",
+                                    color=_ANSI_DIM,
+                                    enabled=color_enabled,
+                                )
+                            )
+                    print("".join(parts))
+            continue
+        if message.startswith("/kpi"):
+            arg = message.removeprefix("/kpi").strip()
+            # /kpi prom [pattern] → Prometheus metrics; /kpi [limit] → turn events
+            if arg.startswith("prom"):
+                pattern = arg.removeprefix("prom").strip() or None
+                try:
+                    metrics_text = client.get_metrics_text()
+                    metric_samples = parse_prometheus_text_exposition(metrics_text)
+                except Exception as exc:
+                    print(f"Error fetching KPI metrics: {exc}")
+                    continue
+                for line in render_kpi_report(
+                    metric_samples,
+                    color_enabled=color_enabled,
+                    pattern=pattern,
+                ):
+                    print(line)
+                continue
+            # Default: show recent turn events from the pod ring buffer
+            try:
+                limit_kpi = int(arg) if arg else 20
+            except ValueError:
+                limit_kpi = 20
+            try:
+                turns = client.get_kpi_turns(limit=limit_kpi)
+            except Exception as exc:
+                print(f"Error fetching KPI turns: {exc}")
+                continue
+            if not turns:
+                print(
+                    colorize(
+                        "  No agent.turn_completed events since pod started.",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+            else:
+                print(
+                    colorize(
+                        f"  Recent turns ({len(turns)} shown, /kpi prom [pattern] for Prometheus):",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
+                print(
+                    colorize(
+                        f"  {'Timestamp':<19}  {'ms':>6}  {'model':<20}  {'tools':>5}  {'in tok':>6}  {'out tok':>7}  {'status':<12}  session",
+                        color=_ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                print(
+                    colorize("  " + "─" * 100, color=_ANSI_DIM, enabled=color_enabled)
+                )
+                for t in turns:
+                    ts = (t.get("ts") or "-")[:19].replace("T", " ")
+                    total_ms = t.get("total_ms") or 0
+                    model = str(t.get("model_name") or "-")[:20]
+                    tool_count = t.get("tool_count") or 0
+                    in_tok = t.get("input_tokens") or "-"
+                    out_tok = t.get("output_tokens") or "-"
+                    finish = str(t.get("finish_reason") or "ok")[:12]
+                    session = str(t.get("session_id") or "-")[:36]
+                    is_err = t.get("is_error", False)
+                    row_color = _ANSI_RED if is_err else _ANSI_DIM
+                    mark = (
+                        current_session_id and t.get("session_id") == current_session_id
+                    )
+                    print(
+                        colorize(f"  {ts}", color=_ANSI_DIM, enabled=color_enabled)
+                        + colorize(
+                            f"  {total_ms:>6}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {model:<20}", color=row_color, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {tool_count:>5}", color=_ANSI_DIM, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {str(in_tok):>6}",
+                            color=_ANSI_DIM,
+                            enabled=color_enabled,
+                        )
+                        + colorize(
+                            f"  {str(out_tok):>7}",
+                            color=_ANSI_DIM,
+                            enabled=color_enabled,
+                        )
+                        + colorize(
+                            f"  {finish:<12}", color=row_color, enabled=color_enabled
+                        )
+                        + colorize(
+                            f"  {session}",
+                            color=_ANSI_CYAN if mark else _ANSI_DIM,
+                            enabled=color_enabled,
+                        )
+                        + (
+                            colorize(" ◀", color=_ANSI_GREEN, enabled=color_enabled)
+                            if mark
+                            else ""
+                        )
+                    )
             continue
         if message.startswith("/checkpoints"):
             arg = message.removeprefix("/checkpoints").strip()
@@ -2492,9 +3229,24 @@ def run_interactive_chat(
 # ---------------------------------------------------------------------------
 
 
+class ScenarioSkipped(RuntimeError):
+    """Raised by run_scenario_file when a required env var is absent — callers should skip."""
+
+
 def _scenario_resolve(value: str, *, run_id: str) -> str:
-    """Substitute ${run_id} placeholders in one string."""
-    return value.replace("${run_id}", run_id)
+    """Substitute ${run_id} and ${env:VAR} placeholders; raises ScenarioSkipped when a required env var is absent."""
+    result = value.replace("${run_id}", run_id)
+
+    def _env_sub(m: re.Match) -> str:
+        var = m.group(1)
+        val = os.environ.get(var)
+        if val is None:
+            raise ScenarioSkipped(
+                f"Scenario requires env var {var!r} — set it and re-run to include this scenario."
+            )
+        return val
+
+    return re.sub(r"\$\{env:([^}]+)\}", _env_sub, result)
 
 
 def _scenario_apply_checks(
@@ -2503,6 +3255,8 @@ def _scenario_apply_checks(
     events: list[dict[str, Any]],
     final_event: dict[str, Any],
     step_id: str,
+    client: "AgentPodClient | None" = None,
+    session_id: str | None = None,
 ) -> None:
     """
     Assert every declared check against one step's events.
@@ -2512,6 +3266,8 @@ def _scenario_apply_checks(
       no_error: true               — no event has key "error"
       content_contains: <text>     — text in final_event["content"]
       content_not_contains: <text> — text not in final_event["content"]
+      history_has_messages: true   — session history is non-empty (requires client + session_id)
+      kpi_turn_recorded: true      — KPI ring buffer has a record for this session
     """
     for check in checks:
         if not isinstance(check, dict) or len(check) != 1:
@@ -2542,10 +3298,39 @@ def _scenario_apply_checks(
                 f"[step:{step_id}] Expected content NOT to contain {expected!r}.\n"
                 f"  Actual content: {content!r}"
             )
+        elif check_name == "history_has_messages":
+            assert client and session_id, (
+                f"[step:{step_id}] history_has_messages requires a client and session_id"
+            )
+            messages = client.get_session_messages(session_id)
+            if expected:
+                assert messages, (
+                    f"[step:{step_id}] Expected session {session_id!r} to have history, got empty list"
+                )
+            else:
+                assert not messages, (
+                    f"[step:{step_id}] Expected empty history for {session_id!r}, got {len(messages)} messages"
+                )
+        elif check_name == "kpi_turn_recorded":
+            assert client and session_id, (
+                f"[step:{step_id}] kpi_turn_recorded requires a client and session_id"
+            )
+            turns = client.get_kpi_turns(limit=50)
+            has_turn = any(t.get("session_id") == session_id for t in turns)
+            if expected:
+                assert has_turn, (
+                    f"[step:{step_id}] Expected a KPI turn record for session {session_id!r}; "
+                    f"found none among {len(turns)} buffered turns"
+                )
+            else:
+                assert not has_turn, (
+                    f"[step:{step_id}] Expected no KPI turn for session {session_id!r} but found one"
+                )
         else:
             raise ValueError(
                 f"[step:{step_id}] Unknown check {check_name!r}. "
-                "Supported: kind, no_error, content_contains, content_not_contains"
+                "Supported: kind, no_error, content_contains, content_not_contains, "
+                "history_has_messages, kpi_turn_recorded"
             )
 
 
@@ -2577,6 +3362,7 @@ def _scenario_run_turn(
     step: dict[str, Any],
     *,
     agent_id: str,
+    agent_instance_id: str | None,
     user_id: str,
     team_id: str | None,
     run_id: str,
@@ -2598,6 +3384,7 @@ def _scenario_run_turn(
             session_id=session_id,
             user_id=user_id,
             team_id=team_id,
+            agent_instance_id=agent_instance_id,
         )
     elif mode == "final":
         events = [
@@ -2607,6 +3394,7 @@ def _scenario_run_turn(
                 session_id=session_id,
                 user_id=user_id,
                 team_id=team_id,
+                agent_instance_id=agent_instance_id,
             )
         ]
     else:
@@ -2619,7 +3407,98 @@ def _scenario_run_turn(
         f"content={str(final_event.get('content', ''))[:120]}"
     )
     _scenario_apply_checks(
-        checks, events=events, final_event=final_event, step_id=step_id
+        checks,
+        events=events,
+        final_event=final_event,
+        step_id=step_id,
+        client=client,
+        session_id=session_id,
+    )
+
+
+def _scenario_run_hitl(
+    client: AgentPodClient,
+    step: dict[str, Any],
+    *,
+    agent_id: str,
+    agent_instance_id: str | None,
+    user_id: str,
+    team_id: str | None,
+    run_id: str,
+    step_id: str,
+) -> None:
+    """
+    Execute a two-phase HITL flow: trigger → awaiting_human → resume → final.
+
+    Step YAML keys:
+      message:        trigger message (e.g. "hitl choice")
+      session_id:     session identifier (supports ${run_id} placeholder)
+      resume_choice:  choice id to select on resume (e.g. "option_a" or "1")
+      checks:         applied to the resume events (same vocabulary as turn checks)
+    """
+    session_id = _scenario_resolve(step["session_id"], run_id=run_id)
+    message = _scenario_resolve(step["message"], run_id=run_id)
+    resume_choice = str(step.get("resume_choice", "1"))
+    checks = step.get("checks", [])
+
+    print(f"\n[step:{step_id}] HITL  session={session_id}")
+    print(f"  >> trigger: {message[:80]}")
+
+    # Phase 1 — trigger: expect awaiting_human as the last meaningful event
+    trigger_events = client.stream_events(
+        agent_id=agent_id,
+        message=message,
+        session_id=session_id,
+        user_id=user_id,
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+    )
+    hitl_event = next(
+        (e for e in reversed(trigger_events) if e.get("kind") == "awaiting_human"),
+        None,
+    )
+    assert hitl_event is not None, (
+        f"[step:{step_id}] Expected an awaiting_human event; "
+        f"got kinds: {[e.get('kind') for e in trigger_events]}"
+    )
+    hitl_request = hitl_event.get("request", {})
+    checkpoint_id = hitl_request.get("checkpoint_id")
+    choices = hitl_request.get("choices", [])
+    assert checkpoint_id, (
+        f"[step:{step_id}] awaiting_human event missing request.checkpoint_id"
+    )
+    print(
+        f"  << awaiting_human  checkpoint_id={checkpoint_id}  choices={[c.get('id') for c in choices]}"
+    )
+
+    # Phase 2 — resume with the selected choice
+    resume_payload = build_hitl_resume_payload(
+        raw_response=resume_choice, choices=choices
+    )
+    print(f"  >> resume: {resume_payload}")
+    resume_events = client.stream_events(
+        agent_id=agent_id,
+        message="",
+        session_id=session_id,
+        user_id=user_id,
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        checkpoint_id=checkpoint_id,
+        resume_payload=resume_payload,
+    )
+    assert resume_events, f"[step:{step_id}] Pod returned no events on HITL resume."
+    final_event = resume_events[-1]
+    print(
+        f"  << kind={final_event.get('kind')} "
+        f"content={str(final_event.get('content', ''))[:120]}"
+    )
+    _scenario_apply_checks(
+        checks,
+        events=resume_events,
+        final_event=final_event,
+        step_id=step_id,
+        client=client,
+        session_id=session_id,
     )
 
 
@@ -2653,9 +3532,19 @@ def run_scenario_file(
     user_id = raw.get("user_id", "test-user")
     team_id = team_id_override or raw.get("team_id")
 
+    # Resolve agent_instance_id — may contain ${env:VAR} which raises ScenarioSkipped
+    raw_instance_id = raw.get("agent_instance_id")
+    agent_instance_id = (
+        _scenario_resolve(str(raw_instance_id), run_id=run_id)
+        if raw_instance_id
+        else None
+    )
+
     print(f"\n{'=' * 60}")
     print(f"Scenario : {name}")
     print(f"run_id   : {run_id}")
+    if agent_instance_id:
+        print(f"instance : {agent_instance_id}")
     print(f"{'=' * 60}")
 
     for step in raw["steps"]:
@@ -2669,6 +3558,18 @@ def run_scenario_file(
                 client,
                 step,
                 agent_id=agent_id,
+                agent_instance_id=agent_instance_id,
+                user_id=user_id,
+                team_id=team_id,
+                run_id=run_id,
+                step_id=step_id,
+            )
+        elif step_type == "hitl":
+            _scenario_run_hitl(
+                client,
+                step,
+                agent_id=agent_id,
+                agent_instance_id=agent_instance_id,
                 user_id=user_id,
                 team_id=team_id,
                 run_id=run_id,

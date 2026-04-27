@@ -1,8 +1,8 @@
 .teamAgentContainer {
   display: flex;
   flex-direction: column;
-  min-height: 0;
   height: 100%;
+  min-height: 0;
 }
 
 .title {
@@ -18,9 +18,9 @@
 
 .bannerNotice {
   margin: 0 auto var(--spacing-l);
-  padding: var(--spacing-s) var(--spacing-m);
   border-radius: var(--radius-s, 0.75rem);
   background: var(--surface-container-low, #f5f5f8);
+  padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-surface-retreat, #666);
   font: var(--font-body-medium);
 }
@@ -38,11 +38,11 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 260px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
   border: 1px solid var(--outline, #d6d6de);
   border-radius: var(--radius-m, 1rem);
   background: var(--surface-container-lowest, #fff);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  min-height: 260px;
 }
 
 .agentIdentity {
@@ -54,18 +54,18 @@
 
 .agentPresentation {
   display: flex;
-  gap: var(--spacing-m);
   align-items: center;
+  gap: var(--spacing-m);
 }
 
 .agentIcon {
   display: flex;
-  align-items: center;
   justify-content: center;
-  width: 3rem;
-  height: 3rem;
+  align-items: center;
   border-radius: 999px;
   background: var(--primary-container, #e8def8);
+  width: 3rem;
+  height: 3rem;
   color: var(--primary, #6750a4);
   font-size: 1.5rem;
 }
@@ -84,16 +84,16 @@
 
 .agentMeta {
   display: flex;
-  gap: var(--spacing-xs);
-  align-items: center;
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
   color: var(--on-surface-retreat, #666);
   font: var(--font-body-small);
 }
 
 .agentStatus {
-  padding: 0.1rem 0.5rem;
   border-radius: 999px;
+  padding: 0.1rem 0.5rem;
   font: var(--font-label-small);
   text-transform: uppercase;
 }
@@ -118,8 +118,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  padding: var(--spacing-m) var(--spacing-l) var(--spacing-l);
   border-top: 1px solid var(--outline-variant, #ececf2);
+  padding: var(--spacing-m) var(--spacing-l) var(--spacing-l);
 }
 
 .agentTemplate {
@@ -129,21 +129,35 @@
 
 .agentActions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--spacing-s);
-  flex-wrap: wrap;
 }
 
 .chatLink {
+  display: block;
   text-decoration: none;
+}
+
+.chatLink .agentCard {
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+  height: 100%;
+}
+
+.chatLink:hover .agentCard {
+  cursor: pointer;
+  border-color: var(--primary, #6750a4);
+  background: var(--surface-container-low);
 }
 
 .emptyState {
   display: flex;
   flex: 1;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   gap: var(--spacing-l);
   padding: var(--spacing-l);
   color: var(--on-surface);
@@ -153,8 +167,8 @@
 .emptyStatePresentation {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
   align-items: center;
+  gap: var(--spacing-xs);
   font: var(--font-title-large);
 }
 
@@ -176,21 +190,21 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  width: min(48rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
   margin: 1rem auto;
-  padding: var(--spacing-l);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
   border-radius: var(--radius-l, 1.25rem);
   background: var(--surface-container-lowest, #fff);
+  padding: var(--spacing-l);
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
   overflow: auto;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
 }
 
 .modalHeader {
   display: flex;
   justify-content: space-between;
-  gap: var(--spacing-m);
   align-items: flex-start;
+  gap: var(--spacing-m);
 }
 
 .modalPresentation {
@@ -203,10 +217,10 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
   border-radius: 999px;
   background: var(--primary-container, #e8def8);
+  width: 3.25rem;
+  height: 3.25rem;
   color: var(--primary, #6750a4);
   font-size: 1.75rem;
 }
@@ -229,9 +243,9 @@
 
 .modalActions {
   display: flex;
-  gap: var(--spacing-xs);
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: var(--spacing-xs);
 }
 
 .modalContent {
@@ -246,12 +260,12 @@
 }
 
 .templateSelect {
-  width: 100%;
-  min-height: 3rem;
-  padding: 0.75rem 1rem;
   border: 1px solid var(--outline, #d6d6de);
   border-radius: var(--radius-s, 0.75rem);
   background: var(--surface-container-lowest, #fff);
+  padding: 0.75rem 1rem;
+  width: 100%;
+  min-height: 3rem;
   color: var(--on-surface);
   font: var(--font-body-large);
 }
@@ -260,6 +274,45 @@
   margin: 0;
   color: var(--on-surface-retreat, #666);
   font: var(--font-body-medium);
+}
+
+.templateReadonly {
+  margin: 0 0 4px;
+  padding: 6px 0;
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-body-medium);
+  font-style: italic;
+}
+
+.tuningSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.tuningSectionHeader {
+  border-bottom: 1px solid var(--outline-muted, #ccc);
+  padding-bottom: 6px;
+  color: var(--on-surface-retreat, #666);
+  font: var(--font-label-medium);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tuningField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tuningBooleanLabel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
 }
 
 @media (max-width: 720px) {
@@ -272,8 +325,8 @@
   }
 
   .modalActions {
-    width: 100%;
     justify-content: flex-start;
+    width: 100%;
   }
 
   .agentActions {

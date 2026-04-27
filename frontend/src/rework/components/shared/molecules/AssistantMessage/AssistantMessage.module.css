@@ -1,0 +1,15 @@
+.text {
+  margin: 0;
+  font: var(--font-body-large, 1rem/1.6 sans-serif);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Shown only when streaming starts but no text has arrived yet */
+.thinking {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  min-height: 1.4em;
+}

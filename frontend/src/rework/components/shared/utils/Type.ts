@@ -56,7 +56,10 @@ export type MaterialIconType =
   | "reviews"
   | "delete_forever"
   | "lock"
-  | "mail";
+  | "mail"
+  | "send"
+  | "chevron_right"
+  | "chevron_left";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

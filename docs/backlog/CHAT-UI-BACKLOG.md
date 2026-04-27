@@ -222,7 +222,32 @@ type ThinkingStep =
 | `status` | Set `statusText` on current message | Italic status line below bubble |
 | `awaiting_human` | Existing `HitlPrompt` path — unchanged | HITL inline prompt |
 | `node_error` | Set `error` on current message | Error chip in bubble |
-| `turn_persisted` | Update `sessionId` in URL — existing logic | Silent |
+| `turn_persisted` | Update `sessionId` in URL + call `PATCH /teams/{teamId}/sessions/{sessionId}` with `updated_at` to keep sidebar sorted | Silent — fire-and-forget, failure does not interrupt chat |
+
+#### HITL History Schema (fixed 2026-04-26)
+
+When loading history from `messages_url_template`, HITL interactions appear as structured
+`ChatMessage` rows rather than flat text — the runtime persists them this way since 2026-04-26.
+
+| Channel | Role | Part type | Content |
+|---|---|---|---|
+| `hitl_request` | `system` | `HitlRequestPart` | Full gate definition: `question`, `choices[]{id, label}`, optional `stage` and `title` |
+| `hitl_response` | `user` | `HitlResponsePart` | User's selection: `choice_id` + optional `label` |
+
+These are **main-conversation rows**, not trace entries. Rendering contract:
+
+- `hitl_request` — render as an interactive choice card (or a frozen read-only version during
+  history replay): question text + list of labelled choices. Use the same `HitlPrompt` visual
+  shape, but in read-only mode (choices not clickable when replaying).
+- `hitl_response` — render as a right-aligned user bubble with the selected label (or `choice_id`
+  if `label` is absent). It looks like a regular user message and is positioned where the user
+  made their choice in the conversation timeline.
+- Do NOT include `hitl_request` or `hitl_response` in `TRACE_CHANNELS`.
+
+**Sources in history (fixed 2026-04-26):** the `final` event payload now carries a `sources`
+array; `_write_turn_history` extracts it and stores it in `ChatMetadata.sources`. When
+normalising history, the sources for an exchange come from the `assistant / final` row's
+`metadata.sources` field — not from a separate event.
 
 ---
 
@@ -253,6 +278,8 @@ Rules:
 - all other channel types (`plan`, `thought`, `observation`, `system_note`, `error`) are `solo`
 - only messages whose `channel` is in `TRACE_CHANNELS` are included:
   `plan | thought | observation | tool_call | tool_result | system_note | error`
+- `hitl_request` and `hitl_response` are **excluded** from `TRACE_CHANNELS` — they are
+  main-conversation rows rendered inline (see §1.5 HITL History Schema above)
 - entries are ordered by `rank` ascending
 
 #### Per-entry display (`TraceEntryRow`)
@@ -317,15 +344,15 @@ Source count is `message.metadata.sources.length`.
 
 **Atoms**
 
-- [ ] Create `MessageBubble` atom with `role` variant prop — temp scaffold exists at `MessageBubble/MessageBubble.tsx`
+- [x] Create `MessageBubble` atom with `role` variant prop — `atoms/MessageBubble/MessageBubble.tsx`
 - [x] Create `StreamingCursor` atom (CSS blink animation) — `atoms/StreamingCursor/StreamingCursor.tsx`
-- [ ] Create `ToolBadge` atom (running / success / error variants)
-- [ ] Create `SourceBadge` atom (superscript index, onClick scroll)
+- [x] Create `ToolBadge` atom (running / success / error variants) — `atoms/ToolBadge/ToolBadge.tsx`
+- [ ] Create `SourceBadge` atom (superscript index, onClick scroll) — Phase 6B prerequisite
 
 **Molecules**
 
-- [ ] Create `UserMessage` molecule
-- [ ] Create `AssistantMessage` molecule (StreamingCursor + ToolBadge when streaming)
+- [x] Create `UserMessage` molecule — `molecules/UserMessage/UserMessage.tsx`
+- [x] Create `AssistantMessage` molecule (StreamingCursor inline) — `molecules/AssistantMessage/AssistantMessage.tsx`
 - [x] Extract trace entry grouping logic (`TraceEntry`, `toolId`, `isToolCall`, `isToolResult`,
   `TRACE_CHANNELS`, `groupTraceEntries`, `statusForEntry`) to `src/rework/utils/traceUtils.ts`
 - [x] Extract primary-text helpers (`summarizeToolResultCompact`, `primaryTextForEntry`,
@@ -337,14 +364,14 @@ Source count is `message.metadata.sources.length`.
 - [x] Create `ThoughtTrace` molecule using `TraceEntry[]` model + `TraceEntryRow` list
   (toggle open/close, `done` prop auto-collapses on final, streaming pulse animation)
 - [x] Wire `TraceDetailDrawer` inside `ThoughtTrace` (open/close via selected-entry state in `TraceEntryRow`)
-- [ ] Create `SourceCard` molecule (index + title + score % + 2-line excerpt)
-- [ ] Create `SourcesPanel` molecule (stack of SourceCards with "Sources" header)
-- [ ] Create `ChatInputBar` molecule (TextArea + send IconButton, Shift+Enter = newline)
+- [x] Create `SourceCard` molecule (index + title + score % + 2-line excerpt) — `molecules/SourcesPanel/SourceCard/`
+- [x] Create `SourcesPanel` molecule (collapsible, stack of SourceCards, "Sources (N)" header) — `molecules/SourcesPanel/`
+- [x] Create `ChatInputBar` molecule (TextArea + send IconButton, Shift+Enter = newline) — `molecules/ChatInputBar/ChatInputBar.tsx`
 
 **Organisms**
 
-- [ ] Create `ChatMessagesArea` organism (scroll container, auto-scroll to bottom, empty state)
-- [ ] Create `AssistantTurn` organism (ThoughtTrace + AssistantMessage + SourcesPanel)
+- [x] Create `ChatMessagesArea` organism (scroll container, auto-scroll to bottom, empty state) — `organisms/ChatMessagesArea/`
+- [x] Create `AssistantTurn` organism (ThoughtTrace + AssistantMessage + SourcesPanel) — `organisms/AssistantTurn/`
 
 **Page wiring**
 
@@ -352,13 +379,17 @@ Source count is `message.metadata.sources.length`.
   `ManagedAgentInstanceSummary.display_name`; **never display `agent_instance_id` or any UUID**
 - [x] Group `messages[]` by `exchange_id` into turns in `ManagedChatPage`; render `ThoughtTrace`
   per turn for trace-channel messages alongside user / final reply bubbles
-- [ ] Replace temp `MessageBubble` with `UserMessage` + `AssistantMessage` + `AssistantTurn`
-- [ ] Establish three-column layout in `ManagedChatPage` (left sidebar, chat area, right panel
+- [x] Wire `turn_persisted` → `PATCH /teams/{teamId}/sessions/{sessionId}` with `updated_at`
+  (`onTurnPersisted` callback added to `ChatSseCallbacks`; `ManagedChatPage` owns the PATCH call)
+- [x] Replace temp `MessageBubble` with `UserMessage` + `AssistantMessage` + `AssistantTurn`
+- [x] Establish three-column layout in `ManagedChatPage` (left sidebar, chat area, right panel
   slot) — right slot renders `null` until Phase 6C; no structural refactor needed later
-- [ ] Add `TogglePanelButton` atom to the chat header (wires to `rightPanelOpen: boolean` state)
-- [ ] Map SSE events to `ConversationMessage` state (replace current flat state)
-- [ ] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`
-- [ ] Run `make code-quality` on frontend
+- [x] Add `TogglePanelButton` atom to the chat header (wires to `rightPanelOpen: boolean` state)
+- [ ] Map SSE events to `ConversationMessage` state (replace current `Turn[]` grouping model)
+- [ ] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`;
+  handle `hitl_request` (`HitlRequestPart`) and `hitl_response` (`HitlResponsePart`) channels as
+  main-conversation rows (not trace entries); read sources from `assistant/final` row `metadata.sources`
+- [x] Run `make format` (Prettier) + `tsc --noEmit` on frontend — both pass (frontend has no `make code-quality` target)
 
 > **UX refinements** for all implemented components are tracked separately in
 > [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md). Implementation tasks here track
@@ -367,6 +398,11 @@ Source count is `message.metadata.sources.length`.
 ---
 
 ### 1.8 Validation
+
+> **Test agent:** `fred.test.assistant` — a no-LLM, no-MCP graph agent in `apps/fred-agents`
+> that exercises all major SSE event types without any external service.
+> Keyword-prefix routing: `echo` | `hitl choice` | `hitl text` | `trace` | `error` | `long`.
+> Enroll it in a local pod and use `fred-agent-chat` or the managed chat UI to run each scenario.
 
 - [ ] User messages appear right-aligned with `--surface-container-high` background
 - [ ] Agent messages appear left-aligned with `--surface-container` background
@@ -382,6 +418,9 @@ Source count is `message.metadata.sources.length`.
 - [ ] `ChatInputBar` is disabled (send button + textarea) while streaming
 - [ ] Existing HITL flow (`HitlPrompt`) is unaffected
 - [ ] History loaded from runtime renders identically to streamed messages
+- [ ] `hitl_request` history rows render as read-only choice cards (question + labelled options, not clickable)
+- [ ] `hitl_response` history rows render as right-aligned user bubbles showing the selected label
+- [ ] Sources from history (`assistant/final` row `metadata.sources`) populate `SourcesPanel` correctly
 - [ ] No regressions in `ChatList` sidebar session links
 
 ---
@@ -684,11 +723,27 @@ Features deferred until Phases 6A–6C are stable:
 
 ---
 
-## 5 Progress
+## 5 Known gaps — requires backend work before unblocking frontend
+
+These items are **not** implementation gaps in the frontend — the UI is ready to
+display the data once the backend provides it. Each is blocked on a specific API
+change.
+
+| Gap | What the UI does today | What's needed | Blocking |
+|---|---|---|---|
+| Session title | Shows `abc12345…` (first 8 chars of UUID) when `title` is null | Control-plane auto-generates a title after first exchange (e.g. from LLM summary) and writes it to `SessionListItem.title`. `UpdateSessionRequest` must accept a `title` field. | Backend: `PATCH /teams/{id}/sessions/{id}` body + auto-title generation |
+| Agent card — whole-card click | Only the "Start Chat" button at the bottom is clickable. The develop branch had the entire card as a `<Link>` with `e.preventDefault()` on action buttons. | ~~Restore card as `<Link>` for enabled instances — frontend only, no backend change.~~ **Fixed.** | ~~None~~ Done |
+| Agent settings / edit | ~~Button visible but disabled on agent card~~ **Fixed.** | `EnrollManagedAgentModal` renamed to `AgentFormModal`, pre-fills from instance, dispatches PATCH via `usePatchTeamAgentInstance…` mutation. Frozen-snapshot policy in place (no re-merge with current template). | ~~Backend + frontend~~ Done |
+| Agent tuning fields at creation | ~~Modal only captures `display_name` + `description`~~ **Fixed.** | `AgentFormModal` now renders `default_tuning_fields` from the selected template dynamically (text, number, boolean, enum, multiline). `tuning_field_values` sent in `CreateAgentInstanceRequest`. | ~~Backend + frontend~~ Done |
+| Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist but nothing imports them. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). | ~~Remove or integrate once tuning fields work is scoped.~~ Tuning fields are now implemented. These remain dead code; safe to delete in a separate cleanup pass. | None — defer cleanup |
+
+---
+
+## 6 Progress
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6A – Architecture & layout | 🟡 In progress | `traceUtils`, `ThoughtTrace`, `StreamingCursor`, `TraceEntryRow`, `TraceDetailDrawer` done; `UserMessage`, `AssistantMessage`, `AssistantTurn`, three-column layout pending |
+| 6A – Architecture & layout | 🟡 In progress | All atoms + molecules + organisms created; three-column layout + `TogglePanelButton` done; Prettier + `tsc` pass. `fred.test.assistant` graph agent added to `apps/fred-agents` for UI scenario testing (no LLM). Remaining: validation criteria sign-off |
 | 6B – Markdown & content | Planned | Depends on 6A |
 | 6C – Agent options & debug tools | Planned | AgentOptionsPanel + DebugDrawer; depends on 6A |
 | 6D – Advanced parts | Deferred | After 6C |

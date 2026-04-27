@@ -673,6 +673,120 @@ def test_create_agent_app_keeps_log_kpis_when_prometheus_is_disabled(
     assert observed["metrics_server"] is False
 
 
+def test_emit_audit_event_populates_ring_buffer() -> None:
+    """_emit_audit_event must append to the ring buffer and filter None fields."""
+    with agent_app_module._AUDIT_EVENTS_LOCK:
+        agent_app_module._AUDIT_EVENTS_BUFFER.clear()
+
+    agent_app_module._emit_audit_event(
+        "info",
+        "grant_validated",
+        agent_instance_id="inst-1",
+        user_id="alice",
+        absent_field=None,
+    )
+
+    with agent_app_module._AUDIT_EVENTS_LOCK:
+        events = list(agent_app_module._AUDIT_EVENTS_BUFFER)
+
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["audit_event"] == "grant_validated"
+    assert ev["agent_instance_id"] == "inst-1"
+    assert ev["user_id"] == "alice"
+    assert "ts" in ev
+    assert "absent_field" not in ev
+
+
+def test_ring_buffer_endpoints_return_seeded_events(monkeypatch, tmp_path) -> None:
+    """GET /agents/kpi-turns and /agents/audit-events return pod ring buffer contents."""
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app) as client:
+        with agent_app_module._AUDIT_EVENTS_LOCK:
+            agent_app_module._AUDIT_EVENTS_BUFFER.clear()
+        with agent_app_module._KPI_TURNS_LOCK:
+            agent_app_module._KPI_TURNS_BUFFER.clear()
+
+        agent_app_module._emit_audit_event("info", "grant_validated", user_id="bob")
+        with agent_app_module._KPI_TURNS_LOCK:
+            agent_app_module._KPI_TURNS_BUFFER.append(
+                {
+                    "ts": "2026-01-01T00:00:00+00:00",
+                    "session_id": "s-seed",
+                    "total_ms": 42,
+                }
+            )
+
+        audit_resp = client.get("/pod/v1/agents/audit-events?limit=10")
+        kpi_resp = client.get("/pod/v1/agents/kpi-turns?limit=10")
+
+    assert audit_resp.status_code == 200
+    assert any(e["audit_event"] == "grant_validated" for e in audit_resp.json())
+
+    assert kpi_resp.status_code == 200
+    assert any(t["session_id"] == "s-seed" for t in kpi_resp.json())
+
+
+def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -> None:
+    """One /execute call must add exactly one record to the KPI turns ring buffer."""
+
+    async def _fake_iterate(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+    ):
+        yield {"kind": "final", "sequence": 0, "content": "pong"}
+
+    monkeypatch.setattr(
+        agent_app_module, "_iterate_runtime_event_payloads", _fake_iterate
+    )
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+
+    with TestClient(app) as client:
+        with agent_app_module._KPI_TURNS_LOCK:
+            agent_app_module._KPI_TURNS_BUFFER.clear()
+
+        resp = client.post(
+            "/pod/v1/agents/execute",
+            json={"agent_id": "rags.sample.echo", "input": "ping"},
+        )
+        assert resp.status_code == 200
+
+        with agent_app_module._KPI_TURNS_LOCK:
+            turns = list(agent_app_module._KPI_TURNS_BUFFER)
+
+    assert len(turns) == 1
+    assert "ts" in turns[0]
+    assert "exchange_id" in turns[0]
+    assert turns[0]["is_error"] is False
+
+
 def test_managed_resume_requires_resume_grant(monkeypatch, tmp_path) -> None:
     """
     Ensure managed HITL resume calls require a `resume` execution grant.
@@ -752,7 +866,13 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
     seen: dict[str, object] = {}
 
     async def _fake_iterate_runtime_event_payloads(
-        definition, request, access_token=None, *, team_id=None, registry=None
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
     ):
         seen["checkpoint_id"] = request.checkpoint_id
         seen["context"] = dict(request.context or {})

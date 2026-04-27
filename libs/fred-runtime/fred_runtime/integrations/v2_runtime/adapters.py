@@ -204,6 +204,7 @@ class LangfuseTracerAdapter(TracerPort):
             "agent_name": context.agent_name,
             "session_id": context.session_id,
             "fred_session_id": context.session_id,
+            "exchange_id": context.baggage.get("exchange_id"),
             "checkpoint_id": context.baggage.get("checkpoint_id"),
             "correlation_id": context.correlation_id,
             "trace_id": context.trace_id,

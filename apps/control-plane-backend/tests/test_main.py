@@ -16,6 +16,7 @@ from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.config.models import (
+    ManagedAgentFieldSpec,
     ManagedMcpServerRef,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
@@ -95,6 +96,33 @@ class _FakeAgentInstanceStore:
 
     async def create(self, record: AgentInstanceRecord) -> AgentInstanceRecord:
         self._records.append(record)
+        return record
+
+    async def update(
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        *,
+        display_name: str | None = None,
+        description: str | None = None,
+        tuning: ManagedAgentTuning | None = None,
+    ) -> AgentInstanceRecord | None:
+        record = next(
+            (
+                r
+                for r in self._records
+                if r.agent_instance_id == agent_instance_id and r.team_id == team_id
+            ),
+            None,
+        )
+        if record is None:
+            return None
+        if display_name is not None:
+            record.display_name = display_name
+        if description is not None:
+            record.description = description
+        if tuning is not None:
+            record.tuning = tuning
         return record
 
     async def delete(self, agent_instance_id: str, team_id: TeamId) -> bool:
@@ -447,6 +475,7 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "capabilities": ["assistant"],
             "team_instantiable": True,
             "status": "available",
+            "default_tuning_fields": [],
         }
     ]
 
@@ -474,6 +503,7 @@ async def test_team_agent_instances_returns_managed_identity(
             "description": "Managed echo agent",
             "status": "enabled",
             "created_by": "internal-admin",
+            "tuning_field_values": {},
         }
     ]
 
@@ -1866,3 +1896,250 @@ async def test_remove_team_member_blocks_removing_last_owner(
         resp.json()["detail"]
         == "Operation denied: a team must keep at least one owner."
     )
+
+
+def _make_template_with_fields() -> "_RuntimeTemplatePayload":
+    """Return a fake template payload that declares one tunable field."""
+    return _RuntimeTemplatePayload(
+        template_agent_id="rags.sample.echo",
+        title="Echo Agent",
+        description="Echo with fields",
+        kind="assistant",
+        default_tuning=ManagedAgentTuning(
+            role="Echo Agent",
+            description="Echo with fields",
+            fields=[
+                ManagedAgentFieldSpec(
+                    key="persona",
+                    type="string",
+                    title="Persona",
+                    description="Agent persona prompt",
+                )
+            ],
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_team_agent_templates_exposes_non_empty_tuning_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_fetch_runtime_templates(_base_url: str):
+        return [_make_template_with_fields()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-templates")
+
+    assert resp.status_code == 200
+    fields = resp.json()[0]["default_tuning_fields"]
+    assert len(fields) == 1
+    assert fields[0]["key"] == "persona"
+    assert fields[0]["type"] == "string"
+    assert fields[0]["title"] == "Persona"
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_stores_provided_field_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch_runtime_templates(_base_url: str):
+        return [_make_template_with_fields()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "My Echo",
+                "tuning_field_values": {"persona": "You are a helpful assistant."},
+            },
+        )
+
+    assert resp.status_code == 201
+    assert resp.json()["tuning_field_values"] == {
+        "persona": "You are a helpful assistant."
+    }
+    assert store._records[0].tuning.values == {
+        "persona": "You are a helpful assistant."
+    }
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_silently_drops_unknown_field_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch_runtime_templates(_base_url: str):
+        return [_make_template_with_fields()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.echo",
+                "display_name": "My Echo",
+                "tuning_field_values": {
+                    "persona": "valid",
+                    "unknown_key": "should be dropped",
+                },
+            },
+        )
+
+    assert resp.status_code == 201
+    assert resp.json()["tuning_field_values"] == {"persona": "valid"}
+    assert "unknown_key" not in store._records[0].tuning.values
+
+
+@pytest.mark.asyncio
+async def test_patch_agent_instance_updates_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([_make_record()])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"display_name": "Renamed Echo Agent"},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["display_name"] == "Renamed Echo Agent"
+    assert payload["agent_instance_id"] == "instance-1"
+    assert payload["status"] == "enabled"
+
+
+@pytest.mark.asyncio
+async def test_patch_agent_instance_updates_tuning_field_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="instance-fields",
+        team_id=TeamId("personal"),
+        template_id="runtime-a:rags.sample.echo",
+        source_runtime_id="runtime-a",
+        source_agent_id="rags.sample.echo",
+        display_name="Echo",
+        description=None,
+        enabled=True,
+        created_by="admin",
+        tuning=ManagedAgentTuning(
+            role="Echo",
+            description="Echo",
+            fields=[
+                ManagedAgentFieldSpec(key="persona", type="string", title="Persona")
+            ],
+            values={"persona": "old value"},
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-fields",
+            json={"tuning_field_values": {"persona": "new persona value"}},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["tuning_field_values"] == {"persona": "new persona value"}
+    assert store._records[0].tuning.values == {"persona": "new persona value"}
+
+
+@pytest.mark.asyncio
+async def test_patch_agent_instance_returns_404_for_unknown_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/no-such",
+            json={"display_name": "Whatever"},
+        )
+
+    assert resp.status_code == 404

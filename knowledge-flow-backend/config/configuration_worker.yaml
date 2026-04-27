@@ -18,7 +18,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: true
+  metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9112
   kpi_process_metrics_interval_sec: 0

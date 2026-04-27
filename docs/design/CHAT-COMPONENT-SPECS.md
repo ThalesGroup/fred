@@ -13,17 +13,180 @@ Legacy `ChatBot.tsx` components are not covered here.
 
 ---
 
+## §0. Visual Design Reference — fredk8\_chat\_v5
+
+> **Authority:** this section takes precedence over any visual spec in §1–9 where they
+> diverge. Behavioural and data-model specs (props, SSE mapping, state shape) remain
+> in their original sections.
+
+### 0.1 Token Mapping
+
+The mockup uses short token names. The canonical codebase tokens are below.
+**Never add new CSS variables** — use only what exists in
+`src/styles/colors-semantic-{light,dark}.css`, `radius.css`, `typography.css`.
+
+| Mockup token | Codebase token | Value (light) |
+|---|---|---|
+| `--color-text-primary` | `--on-surface` | cold-grey-10 |
+| `--color-text-secondary` | `--on-surface-retreat` | cold-grey-30 |
+| `--color-text-tertiary` | `--on-surface-muted` | cold-grey-40 |
+| `--color-background-primary` | `--surface-main` | cold-grey-98 |
+| `--color-background-secondary` | `--surface-container` | cold-grey-94 |
+| `--color-border-tertiary` | `--outline-muted` | cold-grey-80 |
+| `--color-border-secondary` | `--outline-retreat` | cold-grey-80 |
+| `--font-sans` | `--font-family-base` | "Geist", sans-serif |
+| `--border-radius-lg` (12 px) | `--radius-m` (16 px) | closest available |
+| `--border-radius-md` (8 px) | `--radius-s` (8 px) | exact |
+
+### 0.2 Hardcoded Accent Colors (accepted exceptions)
+
+These two accent values are stable in both light and dark themes and
+are the only permitted hardcoded colors:
+
+| Usage | Value | Where |
+|---|---|---|
+| Chain-of-thought / ThoughtTrace left border | `#9FE1CB` (teal-200) | `.thoughtBorder` |
+| Source card active / selected border | `#5DCAA5` (teal-400) | `.sourceCardActive` |
+| AgentOptionsPanel modified-value dot | `#EF9F27` (amber-400) | `.dotModified` |
+| AgentOptionsPanel checkbox / multicheck accent | `#1D9E75` (teal-600) | `accent-color` |
+
+### 0.3 Divergences from Previous Specs
+
+The following sections of this document are **superseded** by the mockup design:
+
+| Section | Old spec | New direction |
+|---|---|---|
+| §1 ThoughtTrace visual | Vertical timeline with dots | Left-border accordion — see §0.4 |
+| §7 SourcesPanel layout | Vertical card stack | Horizontal scrollable row — see §0.5 |
+| §8 ChatInputBar | TextArea + send IconButton | Borderless textarea, no send button — see §0.6 |
+| §6 UserMessage | `background: --primary-container` | `background: --surface-container`, `border: 0.5px solid --outline-muted`, `border-radius: 16px 16px 4px 16px` |
+
+Behavioural specs (data model, SSE wiring, props) remain unchanged in §1–9.
+
+### 0.4 ThoughtTrace — Updated Visual
+
+Replaces the "vertical timeline with dots" described in §1.4–1.8.
+
+```css
+.thoughtTrace {
+  border-left: 1.5px solid #9FE1CB;
+  padding: 5px 10px;
+  margin-bottom: var(--spacing-m);
+  cursor: pointer;
+}
+
+.thoughtHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--font-label-small);           /* 11px, weight 500 */
+  color: var(--on-surface-retreat);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.chevron {
+  transition: transform 0.18s ease;
+}
+.chevron[data-open="true"] { transform: rotate(180deg); }
+
+.thoughtBody {
+  font-size: 12px;
+  color: var(--on-surface-retreat);
+  line-height: 1.6;
+  padding-top: 4px;
+}
+```
+
+- Header label: `"Raisonnement"` while streaming, `"Raisonnement (Xms)"` after `final`.
+- Collapsed by default after `final`. Open by default while streaming.
+- `▾` chevron rotates to `▴` when expanded.
+
+### 0.5 SourcesPanel — Updated Visual
+
+Replaces the vertical stack in §7.1.
+
+- Label: `font-size: 11px`, `color: var(--on-surface-muted)`, `margin-top: var(--spacing-s)`
+- Cards: **horizontal scrollable row**, `display: flex`, `gap: 6px`, `overflow-x: auto`
+- Each card: `width: 148px`, `flex-shrink: 0`, `border: 0.5px solid var(--outline-muted)`,
+  `border-radius: var(--radius-s)`, `padding: 8px 10px`
+- Active card (selected): `border-color: #5DCAA5`
+- Click on a card → inline extract panel expands **below the full card row**
+  (`border-radius: var(--radius-s)`, `background: var(--surface-container)`, collapsible)
+
+### 0.6 ChatInputBar — Updated Visual
+
+Replaces the TextArea+IconButton layout in §8.1.
+
+**No border on the textarea. No send button. `Enter` submits.**
+
+```css
+.inputArea {
+  padding: 12px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-top: 0.5px solid var(--outline-muted);
+}
+
+.inputBox {
+  width: 100%;
+  max-width: 560px;
+}
+
+textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 15px;
+  font-family: var(--font-family-base);
+  color: var(--on-surface);
+  line-height: 1.6;
+}
+
+textarea::placeholder {
+  color: var(--on-surface-muted);
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--on-surface-muted);
+  text-align: center;
+}
+```
+
+Hint text: `"Les agents Fred peuvent faire des erreurs · Shift+Entrée pour sauter une ligne"`
+
+### 0.7 Responsive Breakpoints
+
+| Breakpoint | Behaviour |
+|---|---|
+| `> 1024px` | Full layout, right panel can expand |
+| `640–1024px` | Right panel collapsed by default, input `max-width: 100%` |
+| `< 640px` | Right panel as overlay drawer, padding `12px 16px`, user bubble `max-width: 85%` |
+
+- Use `height: 100dvh` (not `100vh`) — mobile Safari fix.
+- `overflow-x: hidden` on the page shell.
+
+---
+
 ## Table of Contents
 
-1. [ThoughtTrace](#1-thoughttrace)
+- [§0. Visual Design Reference](#0-visual-design-reference--fredk8_chat_v5) ← **start here**
+1. [ThoughtTrace](#1-thoughttrace) *(visual superseded by §0.4)*
 2. [TraceEntryRow](#2-traceentryrow)
 3. [TraceDetailDrawer](#3-tracedetaildrawer)
 4. [AssistantTurn](#4-assistantturn)
 5. [AssistantMessage](#5-assistantmessage)
-6. [UserMessage](#6-usermessage)
-7. [SourcesPanel & SourceCard](#7-sourcespanel--sourcecard)
-8. [ChatInputBar](#8-chatinputbar)
+6. [UserMessage](#6-usermessage) *(visual superseded by §0.3)*
+7. [SourcesPanel & SourceCard](#7-sourcespanel--sourcecard) *(layout superseded by §0.5)*
+8. [ChatInputBar](#8-chatinputbar) *(visual superseded by §0.6)*
 9. [ChatMessagesArea](#9-chatmessagesarea)
+10. [Page Layout — ManagedChatPage](#10-page-layout--managedchatpage)
+11. [AgentOptionsPanel](#11-agentoptionspanel-right-sidebar)
 
 ---
 
@@ -113,7 +276,7 @@ guideline.
 ```
 
 **Guideline:**
-- `1.5px` solid `var(--outline-variant)`, positioned `10px` from the left edge
+- `1.5px` solid `var(--outline-muted)`, positioned `10px` from the left edge
 - runs from the centre of the first dot to the centre of the last dot
 - implemented as a pseudo-element on the container (avoids layout side effects)
 
@@ -129,14 +292,14 @@ Each `TraceEntryRow` has an 8 px circle centred on the guideline.
 
 | State | Colour | Animation |
 |---|---|---|
-| Active (streaming, no result yet) | `var(--primary-main)` | `pulse` keyframe, 1.2 s ease-in-out |
-| Success | `var(--outline-variant)` | None |
-| Error | `var(--error-main)` | None |
-| Neutral (non-tool solo) | `var(--outline-variant)` | None |
+| Active (streaming, no result yet) | `var(--primary)` | `pulse` keyframe, 1.2 s ease-in-out |
+| Success | `var(--outline-muted)` | None |
+| Error | `var(--error)` | None |
+| Neutral (non-tool solo) | `var(--outline-muted)` | None |
 
 ```css
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary-main) 40%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent); }
   50%       { box-shadow: 0 0 0 4px transparent; }
 }
 ```
@@ -167,7 +330,7 @@ Each `TraceEntryRow` has an 8 px circle centred on the guideline.
   top: 12px;
   bottom: 12px;
   width: 1.5px;
-  background: var(--outline-variant, #cac4d0);
+  background: var(--outline-muted, #cac4d0);
 }
 
 .summaryLine {
@@ -213,7 +376,7 @@ Single-line row, `min-height: 28px`, `align-items: center`.
 | Column | Width | Content |
 |---|---|---|
 | Dot | `20px` fixed | Entry dot (see §1.6) |
-| Index | `auto`, hover-only | `12px` monospace, `var(--on-surface-disabled)`, `opacity: 0` → `1` on row hover |
+| Index | `auto`, hover-only | `12px` monospace, `var(--on-surface-muted)`, `opacity: 0` → `1` on row hover |
 | Label chip | `auto` | `"TOOL"` / `"THOUGHT"` / `"PLAN"` / `"OBS"` / `"ERROR"` — 10 px all-caps, `var(--on-surface-retreat)` |
 | Primary text | `flex: 1`, max 400px, ellipsis | Summary string (see `CHAT-UI-BACKLOG.md §1.6` derivation rules) |
 | Secondary text | `auto` | Latency or `"waiting…"`, `var(--on-surface-retreat)` |
@@ -248,20 +411,20 @@ While a `combo` has no result yet (`combo.result === undefined`):
   position: relative;
   min-height: 28px;
   font-size: 13px;
-  font-family: var(--font-family-sans);
+  font-family: var(--font-family-base);
   padding: var(--spacing-2xs, 0.25rem) var(--spacing-xs, 0.5rem);
   border-radius: var(--radius-xs, 0.25rem);
   transition: background 0.1s;
 }
 
 .row:hover {
-  background: var(--surface-container-hover, rgba(0,0,0,0.04));
+  background: var(--surface-container-low);
 }
 
 .index {
   font-family: monospace;
   font-size: 12px;
-  color: var(--on-surface-disabled);
+  color: var(--on-surface-muted);
   opacity: 0;
   transition: opacity 0.1s;
   min-width: 2ch;
@@ -318,10 +481,10 @@ While a `combo` has no result yet (`combo.result === undefined`):
   z-index: 1;
 }
 
-.dotNeutral  { background: var(--outline-variant, #cac4d0); }
-.dotSuccess  { background: var(--outline-variant, #cac4d0); }
-.dotError    { background: var(--error-main, #b3261e); }
-.dotActive   { background: var(--primary-main, #6750a4); animation: pulse 1.2s ease-in-out infinite; }
+.dotNeutral  { background: var(--outline-muted, #cac4d0); }
+.dotSuccess  { background: var(--outline-muted, #cac4d0); }
+.dotError    { background: var(--error, #b3261e); }
+.dotActive   { background: var(--primary, #6750a4); animation: pulse 1.2s ease-in-out infinite; }
 ```
 
 ---
@@ -342,10 +505,10 @@ While a `combo` has no result yet (`combo.result === undefined`):
 [channel · tool name · node/task]                              ×
 ```
 
-- Typography: `var(--font-subtitle-1)`, weight `600`
+- Typography: `var(--font-title-medium)`, weight `600`
 - Parts joined by ` · `, built from: `formatChannel(channel)`, tool name (combo
   entries), `extras.node` or `extras.task`
-- Background: `var(--background-paper)` — solid readable surface
+- Background: `var(--surface-container)` — solid readable surface
 - `color: var(--on-surface)` — explicit to survive MUI Drawer theme inheritance
 
 ### 3.3 Body
@@ -418,10 +581,25 @@ interface AssistantTurnProps {
 
 ### 5.1 Layout
 
-Left-aligned bubble, `background: var(--surface-container)`,
-`color: var(--on-surface)`, `border-radius: var(--radius-s)`.
+Left-aligned bubble. Above the bubble, the agent display name is shown as a small
+label — this is the only place a role/name label appears in the message stream.
 
-No role label — the position (left) conveys the speaker.
+```
+fred-doc-hr                          ← agent name label
+┌────────────────────────────────┐
+│  Response text…                │  ← bubble
+└────────────────────────────────┘
+```
+
+**Agent name label:**
+- `font-size: 11px`, `font-weight: 500`, `letter-spacing: 0.04em`
+- `color: var(--on-surface-muted)`
+- Source: `ManagedAgentInstanceSummary.display_name` — never the UUID
+
+**Bubble:**
+- `background: var(--surface-container)`, `color: var(--on-surface)`
+- `border-radius: var(--radius-s)` (8 px)
+- No border.
 
 ### 5.2 Content
 
@@ -460,7 +638,7 @@ text instead of (or alongside) the cursor:
 ⚠ Agent error: {error message}
 ```
 
-- `color: var(--error-main)`, `font: var(--font-label-small)`
+- `color: var(--error)`, `font: var(--font-label-small)`
 
 ---
 
@@ -470,14 +648,16 @@ text instead of (or alongside) the cursor:
 
 ### 6.1 Layout
 
-Right-aligned bubble.
+Right-aligned bubble. *(Visual spec from §0.3 — supersedes original.)*
 
 - `align-self: flex-end`
-- `max-width: 65%`
-- `background: var(--primary-container)`
-- `color: var(--on-primary-container)`
-- `border-radius: var(--radius-s)`
+- `max-width: 65%` (85% on mobile < 640px)
+- `background: var(--surface-container)`
+- `color: var(--on-surface)`
+- `border: 0.5px solid var(--outline-muted)`
+- `border-radius: 16px 16px 4px 16px`   ← top-right stays round, bottom-right pointed
 - `padding: var(--spacing-s) var(--spacing-m)`
+- `font-size: 14px`, `line-height: 1.5`
 
 ### 6.2 Content
 
@@ -527,7 +707,7 @@ One citation per card.
 
 | Element | Spec |
 |---|---|
-| Index badge | `[N]` — `var(--font-label-small)`, monospace, `var(--primary-main)` |
+| Index badge | `[N]` — `var(--font-label-small)`, monospace, `var(--primary)` |
 | Title | `var(--font-body-medium)`, weight `500`, single line with ellipsis |
 | Score | `N%` right-aligned, `var(--font-label-small)`, `var(--on-surface-retreat)` |
 | Excerpt | 2-line clamp, `var(--font-body-small)`, `var(--on-surface-retreat)` |
@@ -628,13 +808,222 @@ This prevents the view jumping while the user reviews earlier messages.
 
 ---
 
+## 10. Page Layout — ManagedChatPage
+
+**Path:** `src/rework/components/pages/ManagedChatPage/ManagedChatPage.tsx`
+
+### 10.1 Shell Structure
+
+```
+┌──────────────────────────────────────────┬────────────┐
+│                                          │            │
+│         ChatMessagesArea                 │  Agent     │
+│         (flex: 1, overflow-y: auto)      │  Options   │
+│                                          │  Panel     │
+│                                          │  (right,   │
+│                                          │  fixed w)  │
+├──────────────────────────────────────────┴────────────┤
+│              ChatInputBar (centred, max-w 560px)       │
+└────────────────────────────────────────────────────────┘
+```
+
+```css
+.shell {
+  display: flex;
+  flex-direction: row;
+  height: 100dvh;          /* dvh for mobile Safari */
+  overflow: hidden;
+}
+
+.chatColumn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ChatMessagesArea fills remaining height */
+/* ChatInputBar sits at the bottom of .chatColumn */
+```
+
+- The left `ChatList` sidebar is **outside** this shell — it belongs to the parent
+  route layout, not `ManagedChatPage`.
+- The right `AgentOptionsPanel` is a sibling of `.chatColumn` inside `.shell`.
+- The input bar is inside `.chatColumn` and is **not** affected by the right panel width —
+  it centres within `.chatColumn`, not the full viewport.
+
+### 10.2 Message Padding and Spacing
+
+| Zone | Desktop | Mobile (< 640px) |
+|---|---|---|
+| Messages area padding | `20px 24px` | `16px` |
+| Gap between exchanges | `20px` | `16px` |
+| Input bar padding | `12px 24px 14px` | `12px 16px` |
+
+### 10.3 Header
+
+The chat header sits at the top of `.chatColumn`.
+
+| Element | Source | Note |
+|---|---|---|
+| Agent name | `ManagedAgentInstanceSummary.display_name` | Prominent — never show UUID |
+| Team context | `FrontendBootstrap.active_team.display_name` | Secondary label |
+| "New chat" button | Local action | Clears state, generates new `session_id` |
+| Panel toggle button | `AgentOptionsPanel` open/close | Hidden when `options === null` |
+
+---
+
+## 11. AgentOptionsPanel (Right Sidebar)
+
+**Path:** `src/rework/components/shared/organisms/AgentOptionsPanel/AgentOptionsPanel.tsx`
+
+### 11.1 Concept
+
+A collapsible right panel that renders agent-declared options generically.
+The panel knows nothing about specific agents — it receives `AgentOption[]` as props
+and renders controls. Options are serialised and injected into each runtime request.
+
+### 11.2 Props
+
+```typescript
+interface AgentOption {
+  id: string
+  icon: string          // single unicode character
+  label: string
+  type: 'select' | 'multicheck' | 'slider' | 'file' | 'action'
+  default?: unknown
+  value?: unknown
+  tooltip?: string      // shown below the control when present
+  // for type 'select'
+  choices?: string[]
+  // for type 'multicheck'
+  items?: string[]
+  // for type 'slider'
+  min?: number
+  max?: number
+  step?: number
+  // for type 'action'
+  hint?: string         // text shown/hidden on click
+}
+
+interface AgentOptionsPanelProps {
+  options: AgentOption[] | null
+  values: Record<string, unknown>
+  onChange: (id: string, value: unknown) => void
+}
+```
+
+`values` and `onChange` are owned by `ManagedChatPage`. They are passed to the runtime
+request at send time (field name TBD with backend — document here when defined).
+
+### 11.3 Presence Rule
+
+`options === null || options.length === 0` → panel is **completely absent** from the DOM.
+The panel toggle button in the header is also hidden.
+
+### 11.4 Collapsed State (28 px wide)
+
+```css
+.panelCollapsed {
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  background: transparent;
+}
+```
+
+- Toggle chevron at the top
+- One `6px × 6px` dot per option, `border-radius: 50%`, `background: var(--outline-muted)`
+- If `value !== default` for that option: orange indicator dot `4px`, `background: #EF9F27`,
+  `position: absolute; top: -1px; right: -1px`
+
+### 11.5 Expanded State (200 px wide)
+
+```css
+.panelExpanded {
+  width: 200px;
+  transition: width 0.22s ease;
+  background: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 6px;
+  overflow-y: auto;
+}
+```
+
+No column background, no left border. Cards float on the page background.
+
+On mobile (< 640px): overlay drawer from the right, semi-transparent backdrop,
+closed by tap outside.
+
+### 11.6 Option Cards (select / multicheck / slider / file)
+
+```css
+.optionCard {
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-m);      /* 16px */
+  background: var(--surface-container-lowest);
+}
+
+.optionCard:hover {
+  border-color: var(--outline-retreat);
+}
+
+.optionCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.optionIcon   { font-size: 12px; opacity: 0.5; }
+.optionLabel  { font-size: 11px; color: var(--on-surface-retreat); flex: 1; }
+.optionChevron { transition: transform 0.15s; }
+/* rotate 180° when expanded */
+
+.optionBody {
+  padding: 0 8px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.optionTooltip {
+  font-size: 10px;
+  color: var(--on-surface-muted);
+  border-top: 0.5px solid var(--outline-muted);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+```
+
+- Card body is **collapsed by default**; click header to expand.
+- Orange dot (`#EF9F27`, 4 px) appears on header AND on the current value
+  display when `value !== default`.
+- `multicheck` uses `accent-color: #1D9E75` on checkboxes.
+
+### 11.7 Action Cards (type: action)
+
+- No chevron, no dot.
+- Icon `opacity: 0.35`.
+- Click → hint text appears/disappears below the title (toggle).
+- Hover: `color: var(--on-surface)` on the title.
+
+---
+
 ## Cross-Cutting Rules
 
 These rules apply to every component in this document.
 
-1. **Design tokens only.** No hardcoded hex colours or pixel values. Every
-   visual property uses a `var(--…)` token. This is the contract that makes
-   future Figma revisions structural rather than a search-and-replace exercise.
+1. **Design tokens only.** No hardcoded hex values except the four functional
+   accents listed in §0.2. Every other visual property uses a `var(--…)` token
+   from the existing codebase — never invent new variables.
 
 2. **No technical IDs in visible text.** `agent_instance_id`, session UUIDs,
    exchange IDs — never rendered as user-visible strings.
@@ -648,3 +1037,7 @@ These rules apply to every component in this document.
 
 5. **Accessibility.** Meaningful `aria-label` on icon-only buttons. `role="log"`
    on the messages area. `aria-live="polite"` for streaming updates.
+
+6. **Both themes.** Every component must be tested in light and dark mode before
+   marking done. The four hardcoded accent colors in §0.2 are the only values
+   validated for both themes — all others must use tokens.

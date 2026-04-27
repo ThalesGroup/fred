@@ -23,6 +23,7 @@ from control_plane_backend.product.service import (
     list_sessions,
     prepare_execution,
     unenroll_agent_instance,
+    update_agent_instance,
     update_session_activity,
 )
 from control_plane_backend.product.schemas import (
@@ -34,6 +35,7 @@ from control_plane_backend.product.schemas import (
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     SessionListItem,
+    UpdateAgentInstanceRequest,
     UpdateSessionRequest,
 )
 from control_plane_backend.teams.service import (
@@ -168,6 +170,49 @@ async def post_team_agent_instance(
         )
     except EnrollmentError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}",
+    response_model=ManagedAgentInstanceSummary,
+    response_model_exclude_none=True,
+    summary="Update display metadata or tuning field values for a managed agent instance.",
+)
+async def patch_team_agent_instance(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    body: UpdateAgentInstanceRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> ManagedAgentInstanceSummary:
+    """
+    Update display_name, description, or tuning field values for one managed instance.
+
+    Why this endpoint exists:
+    - teams need to be able to customise an enrolled agent's display name,
+      description, and per-instance field values without re-enrolling
+
+    Policy — frozen snapshot:
+    - field specs (ManagedAgentFieldSpec) are frozen at enrollment time and are
+      never re-merged with the current template when the instance is edited
+    - only field keys present in the instance's tuning.fields are accepted;
+      unknown keys are silently dropped
+
+    Returns 404 if the instance is not found for the given team.
+    """
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    result = await update_agent_instance(
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        request=body,
+        deps=deps,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent instance {agent_instance_id!r} not found for team {team_id!r}.",
+        )
+    return result
 
 
 @router.delete(

@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.history.base_history_store import BaseHistoryStore
@@ -382,6 +382,40 @@ class PostgresHistoryStore(BaseHistoryStore):
                 .order_by(func.max(SessionHistoryRow.timestamp).desc())
             )
             return [row[0] for row in result.all()]
+
+    async def delete_session(
+        self,
+        session_id: str,
+        session: AsyncSession | None = None,
+    ) -> int:
+        """
+        Permanently remove all history rows for a session.
+
+        Why this exists:
+        - developers and devops need to reclaim storage from stale sessions
+        - this is the only place in the codebase that deletes history rows
+
+        How to use it:
+        - call from ``DELETE /agents/sessions/{session_id}``
+        - returns the number of rows deleted (0 if the session had no history)
+
+        Example:
+            n = await store.delete_session(session_id="dev-session-abc")
+            # n = 4 when four rows existed for that session
+        """
+        await self._ensure_tables()
+        async with use_session(self._sessions, session) as s:
+            count_row = await s.execute(
+                select(func.count()).where(SessionHistoryRow.session_id == session_id)
+            )
+            count: int = count_row.scalar() or 0
+            await s.execute(
+                delete(SessionHistoryRow).where(
+                    SessionHistoryRow.session_id == session_id
+                )
+            )
+            await s.commit()
+            return count
 
     # ------------------------------------------------------------------
     # Rank helper

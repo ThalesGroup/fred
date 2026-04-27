@@ -43,11 +43,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 import time
+from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -130,6 +132,29 @@ from .config import AgentPodConfig, MetricsBackend
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
+_audit_logger = logging.getLogger("fred.security.audit")
+
+# ---------------------------------------------------------------------------
+# In-memory ring buffers for CLI-queryable observability events
+# ---------------------------------------------------------------------------
+
+_KPI_TURNS_LOCK = threading.Lock()
+_KPI_TURNS_BUFFER: deque[dict[str, Any]] = deque(maxlen=200)
+
+_AUDIT_EVENTS_LOCK = threading.Lock()
+_AUDIT_EVENTS_BUFFER: deque[dict[str, Any]] = deque(maxlen=200)
+
+
+def _emit_audit_event(level: str, name: str, **fields: object) -> None:
+    """Append one security audit event to the ring buffer and emit it to the audit logger."""
+    event: dict[str, Any] = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "audit_event": name,
+        **{k: v for k, v in fields.items() if v is not None},
+    }
+    with _AUDIT_EVENTS_LOCK:
+        _AUDIT_EVENTS_BUFFER.append(event)
+    getattr(_audit_logger, level)("[SECURITY] %s", name, extra=event)
 
 
 def _build_sql_runtime_dependencies(
@@ -1165,6 +1190,12 @@ def _validate_grant_user_correlation(
         # Direct template execution — no grant to correlate.
         return
     if grant.user_id != authenticated_user.uid:
+        _emit_audit_event(
+            "warning",
+            "grant_user_mismatch",
+            grant_user_id=grant.user_id,
+            token_user_id=authenticated_user.uid,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
@@ -1172,6 +1203,12 @@ def _validate_grant_user_correlation(
                 f"authenticated user {authenticated_user.uid!r}"
             ),
         )
+    _emit_audit_event(
+        "info",
+        "grant_user_correlated",
+        user_id=authenticated_user.uid,
+        agent_instance_id=request.agent_instance_id,
+    )
 
 
 def _expected_execution_action(
@@ -1296,6 +1333,7 @@ async def _write_turn_history(
     team_id: str | None = None,
     agent_instance_id: str | None = None,
     exchange_id: str | None = None,
+    resume_payload: Any | None = None,
 ) -> None:
     """
     Persist one agent turn to the history store.
@@ -1306,22 +1344,25 @@ async def _write_turn_history(
       ``ChatMessage`` rows and writes them in one batch
 
     Why this is a separate async function and not inline:
-    - the streaming endpoint calls it with ``asyncio.ensure_future`` so the DB
+    - the streaming endpoint calls it with ``asyncio.create_task`` so the DB
       write does not block the SSE response to the client
     - the non-streaming endpoint can ``await`` it directly before returning
 
     How to use it:
     - call after the executor generator is exhausted
     - ``payloads`` is the list of ``dict`` produced by ``_iterate_runtime_event_payloads``
+    - ``resume_payload`` is set for HITL resume turns; the user's choice is stored
+      as a ``Channel.hitl_response`` row instead of a plain user text row
     - silently no-ops when ``session_id`` or ``history_store`` is absent
 
     Event-to-message mapping:
-    - ``tool_call`` → ``Role.assistant / Channel.tool_call``
-    - ``tool_result`` → ``Role.tool / Channel.tool_result``
-    - ``awaiting_human`` → ``Role.system / Channel.system_note``
-    - ``node_error`` → ``Role.system / Channel.error``
-    - ``final`` → ``Role.assistant / Channel.final`` (terminal answer)
-    - user request → ``Role.user / Channel.final`` (prepended)
+    - ``tool_call``      → ``Role.assistant / Channel.tool_call``
+    - ``tool_result``    → ``Role.tool    / Channel.tool_result``
+    - ``awaiting_human`` → ``Role.system  / Channel.hitl_request`` (full choices)
+    - ``node_error``     → ``Role.system  / Channel.error``
+    - ``final``          → ``Role.assistant / Channel.final`` (answer + sources)
+    - user request       → ``Role.user   / Channel.final`` (prepended)
+    - HITL resume        → ``Role.user   / Channel.hitl_response`` (choice made)
     """
     from fred_core.history.history_schema import (
         Channel,
@@ -1330,10 +1371,13 @@ async def _write_turn_history(
         Role,
         TextPart,
         make_assistant_final,
+        make_hitl_request,
+        make_hitl_response,
         make_tool_call,
         make_tool_result,
         make_user_text,
     )
+    from fred_core.store.vector_search import VectorSearchHit
 
     try:
         base_rank: int = await history_store.next_rank(session_id)
@@ -1348,13 +1392,27 @@ async def _write_turn_history(
     messages: list[ChatMessage] = []
     rank = base_rank
 
-    # 1. User message — prepended before any agent events
-    if request_message:
+    # 1. Opening row: user text on normal turns, HITL response on resume turns.
+    if resume_payload is not None:
+        # Extract choice_id from whatever shape the resume payload takes.
+        if isinstance(resume_payload, dict):
+            choice_id = str(resume_payload.get("choice_id") or "")
+        elif isinstance(resume_payload, str):
+            choice_id = resume_payload
+        else:
+            choice_id = str(resume_payload)
+        if choice_id:
+            messages.append(
+                make_hitl_response(session_id, exchange_id, rank, choice_id=choice_id)
+            )
+            rank += 1
+    elif request_message:
         messages.append(make_user_text(session_id, exchange_id, rank, request_message))
         rank += 1
 
     # 2. Map runtime events to messages
     final_content = ""
+    final_sources: list[VectorSearchHit] = []
     final_token_usage: ChatTokenUsage | None = None
     final_model: str | None = None
     final_finish_reason: str | None = None
@@ -1389,17 +1447,27 @@ async def _write_turn_history(
             rank += 1
 
         elif kind == "awaiting_human":
+            # Store the full HITL gate definition — question and all choices —
+            # so audit logs and UI replay have the complete structured record.
             req = payload.get("request", {})
             question = req.get("question") or req.get("title") or "HITL pause"
+            raw_choices = req.get("choices") or []
             messages.append(
-                ChatMessage(
-                    session_id=session_id,
-                    exchange_id=exchange_id,
-                    rank=rank,
-                    timestamp=datetime.utcnow(),
-                    role=Role.system,
-                    channel=Channel.system_note,
-                    parts=[TextPart(text=question)],
+                make_hitl_request(
+                    session_id,
+                    exchange_id,
+                    rank,
+                    question=question,
+                    choices=[
+                        {
+                            "id": c.get("id", ""),
+                            "label": c.get("label", c.get("id", "")),
+                        }
+                        for c in raw_choices
+                        if isinstance(c, dict)
+                    ],
+                    stage=req.get("stage"),
+                    title=req.get("title"),
                 )
             )
             rank += 1
@@ -1410,7 +1478,7 @@ async def _write_turn_history(
                     session_id=session_id,
                     exchange_id=exchange_id,
                     rank=rank,
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     role=Role.system,
                     channel=Channel.error,
                     parts=[TextPart(text=payload.get("error_message", "node error"))],
@@ -1420,6 +1488,12 @@ async def _write_turn_history(
 
         elif kind == "final":
             final_content = payload.get("content", "")
+            raw_sources = payload.get("sources") or []
+            final_sources = [
+                VectorSearchHit.model_validate(s)
+                for s in raw_sources
+                if isinstance(s, dict)
+            ]
             tu = payload.get("token_usage")
             if tu:
                 final_token_usage = ChatTokenUsage(
@@ -1440,6 +1514,7 @@ async def _write_turn_history(
                 text=final_content,
                 model=final_model,
                 usage=final_token_usage,
+                sources=final_sources if final_sources else None,
                 finish_reason=final_finish_reason,
             )
         )
@@ -1547,6 +1622,22 @@ def _emit_turn_completed(
                 dims=prom_dims,
                 actor=KPIActor(type="system"),
             )
+
+        # Append to CLI-queryable ring buffer (high-cardinality fields safe here).
+        record: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "exchange_id": exchange_id,
+            "user_id": user_id,
+            "total_ms": total_ms,
+            "is_error": is_error,
+            **prom_dims,
+            "tool_count": tool_count,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        }
+        with _KPI_TURNS_LOCK:
+            _KPI_TURNS_BUFFER.append(record)
     except Exception:
         logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
 
@@ -1617,7 +1708,7 @@ async def _stream(
     if session_id:
         history_store = get_runtime_context().config.history_store
         if history_store is not None:
-            asyncio.ensure_future(
+            asyncio.create_task(
                 _write_turn_history(
                     session_id=session_id,
                     user_id=user_id,
@@ -1627,6 +1718,7 @@ async def _stream(
                     team_id=resolved_team_id,
                     agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
+                    resume_payload=request.resume_payload,
                 )
             )
 
@@ -1691,6 +1783,7 @@ async def _iterate_runtime_event_payloads(
                 "template_agent_id": definition.agent_id,
                 "checkpoint_id": resolved_checkpoint_id,
                 "execution_action": execution_action,
+                "exchange_id": exchange_id,
             }.items()
             if isinstance(value, str) and value
         },
@@ -1856,6 +1949,47 @@ def _build_agent_router(
         """Return the agent IDs registered in this pod."""
         return list(registry.keys())
 
+    @router.get("/kpi-turns", dependencies=_auth_deps)
+    async def get_kpi_turns(limit: int = 50) -> list[dict[str, Any]]:
+        """
+        Return recent agent.turn_completed KPI events, newest first.
+
+        GET <base_url>/agents/kpi-turns?limit=50
+
+        Each entry includes: ts, session_id, exchange_id, user_id, total_ms,
+        is_error, team_id, template_agent_id, runtime_id, model_name,
+        finish_reason, tool_count, input_tokens, output_tokens.
+
+        Why this endpoint exists:
+        - developers need to validate KPI emission from the CLI without
+          Grafana or Prometheus; this exposes the pod-local ring buffer
+        - max 200 entries retained in memory (oldest evicted automatically)
+        """
+        with _KPI_TURNS_LOCK:
+            events = list(_KPI_TURNS_BUFFER)
+        events.reverse()
+        return events[: max(1, limit)]
+
+    @router.get("/audit-events", dependencies=_auth_deps)
+    async def get_audit_events(limit: int = 50) -> list[dict[str, Any]]:
+        """
+        Return recent security audit events, newest first.
+
+        GET <base_url>/agents/audit-events?limit=50
+
+        Audit events include: grant_validated, grant_validation_failed,
+        grant_user_mismatch, grant_user_correlated.
+
+        Why this endpoint exists:
+        - security audit events go to the fred.security.audit logger AND to
+          this ring buffer so the CLI can query them directly
+        - max 200 entries retained in memory
+        """
+        with _AUDIT_EVENTS_LOCK:
+            events = list(_AUDIT_EVENTS_BUFFER)
+        events.reverse()
+        return events[: max(1, limit)]
+
     @router.get("/templates")
     async def list_agent_templates() -> list[_AgentTemplateSummary]:
         """
@@ -1939,6 +2073,36 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         return await history_store.get(session_id=session_id)
+
+    @router.delete(
+        "/sessions/{session_id}",
+        dependencies=_auth_deps,
+        status_code=status.HTTP_200_OK,
+    )
+    async def delete_session_history(session_id: str) -> dict[str, int]:
+        """
+        Permanently delete all history rows for a session.
+
+        DELETE <base_url>/agents/sessions/{session_id}
+
+        Why this endpoint exists:
+        - developers need to clean up test sessions from the CLI without
+          restarting the pod or connecting to the database directly
+        - devops need to reclaim storage from stale or abandoned conversations
+        - checkpoint state is NOT touched; delete the checkpoint separately
+          via DELETE /agents/checkpoints/{session_id} if required
+
+        Returns {"deleted": N} where N is the number of rows removed.
+        Returns 503 when no history store is configured.
+        """
+        history_store = get_runtime_context().config.history_store
+        if history_store is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No history store configured — session history is unavailable.",
+            )
+        count = await history_store.delete_session(session_id=session_id)
+        return {"deleted": count}
 
     # ------------------------------------------------------------------
     # Checkpoint admin endpoints
@@ -2242,10 +2406,28 @@ def _build_agent_router(
         try:
             validate_execution_grant(request, expected_action=expected_action)
         except ExecutionGrantViolation as exc:
+            _emit_audit_event(
+                "warning",
+                "grant_validation_failed",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+                action=expected_action.value,
+                reason=str(exc),
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        if request.execution_grant is not None:
+            _emit_audit_event(
+                "info",
+                "grant_validated",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+                action=expected_action.value,
+            )
         _validate_grant_user_correlation(request, authenticated_user)
         await _validate_session_checkpoint_access(request)
 
+        exchange_id = str(uuid4())
+        turn_start = time.monotonic()
         internal_req = _to_internal_request(request)
         target = await _resolve_agent_instance(
             request=internal_req,
@@ -2261,22 +2443,36 @@ def _build_agent_router(
                 access_token=access_token,
                 team_id=target.team_id,
                 registry=registry,
+                exchange_id=exchange_id,
             )
         ]
+        session_id: str | None = request.effective_session_id()
+        user_id_str = request.effective_user_id() or "unknown"
+        _emit_turn_completed(
+            session_id=session_id,
+            exchange_id=exchange_id,
+            user_id=user_id_str,
+            team_id=target.team_id,
+            agent_instance_id=request.agent_instance_id,
+            template_agent_id=target.definition.agent_id,
+            payloads=payloads,
+            turn_start=turn_start,
+        )
         # Write history after generator is fully consumed.
         # Can await here — no SSE response to block.
-        session_id: str | None = request.effective_session_id()
         if session_id:
             history_store = get_runtime_context().config.history_store
             if history_store is not None:
                 await _write_turn_history(
                     session_id=session_id,
-                    user_id=request.effective_user_id() or "unknown",
+                    user_id=user_id_str,
                     request_message=request.input,
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
                     agent_instance_id=request.agent_instance_id,
+                    exchange_id=exchange_id,
+                    resume_payload=request.resume_payload,
                 )
         return _terminal_execute_payload(payloads)
 
@@ -2327,7 +2523,23 @@ def _build_agent_router(
         try:
             validate_execution_grant(request, expected_action=expected_action)
         except ExecutionGrantViolation as exc:
+            _emit_audit_event(
+                "warning",
+                "grant_validation_failed",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+                action=expected_action.value,
+                reason=str(exc),
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        if request.execution_grant is not None:
+            _emit_audit_event(
+                "info",
+                "grant_validated",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+                action=expected_action.value,
+            )
         _validate_grant_user_correlation(request, authenticated_user)
         await _validate_session_checkpoint_access(request)
 

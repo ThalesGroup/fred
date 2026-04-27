@@ -46,10 +46,7 @@ export function useSessionHistory({ sessionId, teamId, agentInstanceId, onLoaded
         await KeyCloakService.ensureFreshToken(30);
         const token = KeyCloakService.GetToken() ?? "";
         const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
-        const url = new URL(
-          expandMessagesUrl(prep.messages_url_template, sessionId),
-          window.location.origin,
-        );
+        const url = new URL(expandMessagesUrl(prep.messages_url_template, sessionId), window.location.origin);
         const resp = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
         if (!resp.ok) return;
         const msgs: ChatMessage[] = await resp.json();

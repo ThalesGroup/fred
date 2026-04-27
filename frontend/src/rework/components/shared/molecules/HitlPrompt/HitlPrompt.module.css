@@ -1,25 +1,25 @@
 .card {
-  align-self: flex-start;
-  max-width: 72%;
-  padding: var(--spacing-m, 1rem);
-  border: 1px solid var(--outline, #cac4d0);
-  border-radius: var(--radius-s, 0.5rem);
   display: flex;
   flex-direction: column;
+  align-self: flex-start;
   gap: var(--spacing-s, 0.75rem);
+  border: 1px solid var(--outline, #cac4d0);
+  border-radius: var(--radius-s, 0.5rem);
   background: var(--surface-container, #f3edf7);
+  padding: var(--spacing-m, 1rem);
+  max-width: 72%;
 }
 
 .title {
   margin: 0;
-  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
   color: var(--on-surface, #1c1b1f);
+  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
 }
 
 .question {
   margin: 0;
-  font: var(--font-body-large, 1rem/1.5 sans-serif);
   color: var(--on-surface, #1c1b1f);
+  font: var(--font-body-large, 1rem/1.5 sans-serif);
 }
 
 .choices {

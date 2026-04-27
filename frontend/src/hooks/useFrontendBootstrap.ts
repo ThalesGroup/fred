@@ -33,10 +33,12 @@ export type FrontendBootstrapState = {
  * - `const { activeTeam, availableTeams, isLoading } = useFrontendBootstrap();`
  */
 export function useFrontendBootstrap(): FrontendBootstrapState {
-  const { data, isLoading, isFetching, refetch } =
-    useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery(undefined, {
+  const { data, isLoading, isFetching, refetch } = useGetFrontendBootstrapControlPlaneV1FrontendBootstrapGetQuery(
+    undefined,
+    {
       refetchOnMountOrArgChange: true,
-    });
+    },
+  );
 
   return {
     bootstrap: data,

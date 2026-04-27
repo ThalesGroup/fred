@@ -1,0 +1,8 @@
+.turn {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  gap: var(--spacing-s, 0.75rem);
+  width: 100%;
+  max-width: 75%;
+}

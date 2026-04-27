@@ -1,0 +1,24 @@
+name: "S1.3 — Raw agent_id execution (no managed path)"
+description: >
+  Verify that fred.test.assistant works via the direct agent_id path:
+  echo turn produces a final event, history is written, and the KPI
+  ring buffer records the turn.
+
+  This is the simplest S1 gate — no control-plane, no execution grant.
+  Run it first to confirm the basic SSE chain is healthy.
+
+agent_id: fred.test.assistant
+user_id: s1-test-user
+
+steps:
+  - id: raw-echo-stream
+    type: turn
+    mode: stream
+    message: "echo S1 raw path check"
+    session_id: "s1-raw-${run_id}"
+    checks:
+      - kind: final
+      - no_error: true
+      - content_contains: "S1 raw path check"
+      - history_has_messages: true
+      - kpi_turn_recorded: true

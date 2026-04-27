@@ -422,6 +422,10 @@ class HistoryStorePort(Protocol):
         """Return distinct session IDs for a user, most recent first."""
         ...
 
+    async def delete_session(self, session_id: str) -> int:
+        """Permanently remove all history rows for a session. Returns row count deleted."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:

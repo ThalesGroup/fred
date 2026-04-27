@@ -67,7 +67,10 @@ function drawerPayload(entry: TraceEntry): unknown {
     };
   }
   const callPayload = {
-    call_id: entry.call.parts?.[0] && "call_id" in entry.call.parts[0] ? (entry.call.parts[0] as { call_id: string }).call_id : undefined,
+    call_id:
+      entry.call.parts?.[0] && "call_id" in entry.call.parts[0]
+        ? (entry.call.parts[0] as { call_id: string }).call_id
+        : undefined,
     tool: toolName(entry.call),
     args: toolArgs(entry.call),
   };
@@ -98,12 +101,7 @@ export function TraceDetailDrawer({ entry, onClose }: TraceDetailDrawerProps) {
   return (
     <>
       <div className={styles.overlay} onClick={onClose} aria-hidden="true" />
-      <aside
-        className={styles.drawer}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${label} detail`}
-      >
+      <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label={`${label} detail`}>
         <header className={styles.drawerHeader}>
           <span className={styles.drawerTitle}>{label}</span>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Close">

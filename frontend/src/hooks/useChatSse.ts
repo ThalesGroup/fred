@@ -17,11 +17,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { upsertOne } from "../components/chatbot/ChatBotUtils";
 import { KeyCloakService } from "../security/KeycloakService";
-import type {
-  AwaitingHumanEvent,
-  ChatMessage,
-  RuntimeContext,
-} from "../slices/agentic/agenticOpenApi";
+import type { AwaitingHumanEvent, ChatMessage, RuntimeContext } from "../slices/agentic/agenticOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
@@ -46,6 +42,7 @@ type AnyRuntimeEvent =
 
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
+  onTurnPersisted?: (sessionId: string) => void;
   onAwaitingHuman?: (event: AwaitingHumanEvent) => void;
   onError?: (message: string) => void;
 };
@@ -59,11 +56,13 @@ export type ChatSseCallbacks = {
  * - Maps RuntimeEvent frames (assistant_delta, final, tool_call, etc.) to ChatMessage[]
  * - Supports HITL resume via sendHitlResume()
  */
-export function useChatSse(params: {
-  agentInstanceId: string;
-  teamId: string;
-} & ChatSseCallbacks) {
-  const { agentInstanceId, teamId, onBindDraftAgentToSessionId, onAwaitingHuman, onError } = params;
+export function useChatSse(
+  params: {
+    agentInstanceId: string;
+    teamId: string;
+  } & ChatSseCallbacks,
+) {
+  const { agentInstanceId, teamId, onBindDraftAgentToSessionId, onTurnPersisted, onAwaitingHuman, onError } = params;
 
   const [prepareExecution] =
     usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
@@ -232,6 +231,7 @@ export function useChatSse(params: {
 
         case "turn_persisted": {
           onBindDraftAgentToSessionId?.(event.session_id);
+          onTurnPersisted?.(event.session_id);
           break;
         }
 
@@ -245,7 +245,7 @@ export function useChatSse(params: {
           break;
       }
     },
-    [onAwaitingHuman, onBindDraftAgentToSessionId, onError],
+    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onError],
   );
 
   const streamToMessages = useCallback(

@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 ---
 
@@ -39,23 +39,24 @@ All UI work that follows rests on this foundation.
 
 **Ref**: `docs/backlog/BACKLOG.md` §3b.7
 
-Three scenarios to validate from `fred-agent-chat`, in order:
+**Scenario automation complete (2026-04-26)** — scenarios now run via `pytest -m integration` or
+`make test-integration-only` in `apps/fred-agents`. No manual CLI replay needed.
 
-1. **Managed execution end-to-end**
-   - `--team-id personal`, one `agent_instance_id` enrolled in control-plane
-   - Full cycle: prepare-execution → SSE stream → session_history written
+| Scenario file | Description | Env var required |
+|---|---|---|
+| `s1_raw_echo.yaml` | Raw `agent_id` path, echo turn | none |
+| `s1_managed_echo.yaml` | Managed path via `agent_instance_id` | `FRED_AGENT_INSTANCE_ID` |
+| `s1_hitl_resume.yaml` | HITL two-phase pause + resume | none |
+
+Three scenarios to validate, in order:
+
+1. **[x] Scenario automation wired** — `run_scenario_file()` supports `agent_instance_id`, HITL steps, env-var substitution, `history_has_messages` + `kpi_turn_recorded` checks
+2. **[ ] Live stack validation** — run `make test-integration-only` with pod up + `FRED_AGENT_INSTANCE_ID` set
    - Tick `[ ] one managed execution works end-to-end from fred-agent-chat`
-
-2. **Managed HITL resume**
-   - One turn paused on `awaiting_human`, resumed with `sendHitlResume`
-   - Validate session_id + checkpoint_id consistency across pause/resume
    - Tick `[ ] one managed HITL resume flow works end-to-end from fred-agent-chat`
-
-3. **Raw agent_id path still works through team-scoped managed path**
-   - Same pod, same agent capability, accessed via `agent_instance_id` vs raw
    - Tick `[ ] one runtime capability reachable through raw agent_id also works correctly through team-scoped managed execution`
 
-**Done when**: all three ticked in BACKLOG.md §3b.7, `make test` green.
+**Done when**: all three ticked in BACKLOG.md §3b.7 after live stack run.
 
 ---
 
@@ -83,19 +84,35 @@ Three scenarios to validate from `fred-agent-chat`, in order:
 
 ---
 
-## S2 — Prometheus Cardinality Fix (Simon) · Parallel, no gate
+## S2 — Prometheus Cardinality Fix + Observability Hardening (Simon/Dimitri) · Closed 2026-04-26
 
-**Why**: `session_id` and `user_id` as Prometheus label dimensions create unbounded cardinality. Safe to fix now, independent of everything else.
+**Why**: `session_id` and `user_id` as Prometheus label dimensions create unbounded cardinality. Also closes the turn-level KPI gap and opens a dedicated security audit channel.
 
-**Ref**: `docs/backlog/BACKLOG.md` §7.3, §7.6.A
+**Ref**: `docs/backlog/BACKLOG.md` §7.3, §7.6, §7.7
 
 - [x] Remove `session_id` from Prometheus labels emitted from runtime KPI dims
 - [x] Remove `user_id` from Prometheus labels emitted from runtime KPI dims
 - [x] Keep both in structured KPI log output (OpenSearch / log backend)
 - [x] Same cleanup for graph/KF phase timers via the shared Prometheus KPI sink
-- [x] `make code-quality && make test` in `fred-runtime`
-
-Can be done in parallel with S1, shipped separately.
+- [x] `exchange_id` propagated to Langfuse trace metadata via `context.baggage`
+- [x] `_emit_turn_completed()` wired to **non-streaming `execute()` path** (was streaming-only)
+- [x] `KpiLogStore.index_event()` fixed: now logs structured JSON for `agent.turn_completed`,
+  `agent.turn_error_total`, `agent.tool_failed_total` (was silent no-op)
+- [x] Pod ring buffers (`_KPI_TURNS_BUFFER`, `_AUDIT_EVENTS_BUFFER`) + endpoints
+  `GET /agents/kpi-turns` and `GET /agents/audit-events`
+- [x] `/kpi [limit]` CLI command — per-turn ring buffer view with current-session highlight
+- [x] Dedicated `fred.security.audit` logger + audit ring buffer; events emitted at all
+  auth boundaries (`grant_validated`, `grant_validation_failed`, `grant_user_mismatch`)
+- [x] `/audit [limit]` CLI command — security audit event table with colour coding
+- [x] `_emit_audit_event()` helper: mutualize all audit event emission (ring buffer + logger);
+  fixes `grant_validation_failed` not reaching the ring buffer
+- [x] `Quantities` model: add `tool_count`, `input_tokens`, `output_tokens` with `None` defaults;
+  change pipeline fields from `= 0` to `= None` — turn KPI quantities were silently discarded
+- [x] `datetime.utcnow()` → `datetime.now(timezone.utc)` at all 4 sites
+- [x] `asyncio.ensure_future` → `asyncio.create_task`
+- [x] Unit tests: `_emit_audit_event`, ring buffer endpoints, `_emit_turn_completed` via execute,
+  `KpiLogStore.index_event()` (structured JSON, error events, unknown name filter)
+- [x] `make code-quality && make test` in `fred-core` (31 tests) and `fred-runtime` (62 tests)
 
 ---
 
@@ -108,21 +125,22 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 **Component build order** (sequential within Félix's track):
 
 ```
-Step 1 — Atoms (no deps):
-  MessageBubble · StreamingCursor · ToolBadge · SourceBadge
+[x] Step 1 — Atoms (no deps):
+      MessageBubble · StreamingCursor · ToolBadge · TogglePanelButton
+      (SourceBadge deferred to Phase 6B)
 
-Step 2 — Molecules (need atoms):
-  UserMessage · AssistantMessage
-  ToolCallStep · ToolResultStep · ThinkingAccordion
-  SourceCard · SourcesPanel
-  ChatInputBar
+[x] Step 2 — Molecules (need atoms):
+      UserMessage · AssistantMessage · ChatInputBar
+      TraceEntryRow · TraceDetailDrawer · ThoughtTrace
+      SourceCard · SourcesPanel
 
-Step 3 — Organisms (need molecules):
-  ChatMessagesArea · AssistantTurn
+[x] Step 3 — Organisms (need molecules):
+      ChatMessagesArea · AssistantTurn
 
-Step 4 — Refactor ManagedChatPage to use all new components
-Step 5 — Map SSE events to ConversationMessage state
-Step 6 — Normalise history from runtime messages_url_template
+[x] Step 4 — Refactor ManagedChatPage (new components + three-column layout)
+
+[ ] Step 5 — Map SSE events to ConversationMessage state
+[ ] Step 6 — Normalise history from runtime messages_url_template
 ```
 
 **Validation criteria** (must pass before 6B starts):
@@ -215,12 +233,33 @@ becoming operationally expensive.
 
 ---
 
+## S3 — Runtime CLI Ergonomics + Session Purge (Simon/Dimitri) · Closed 2026-04-26
+
+**Ref**: `docs/backlog/BACKLOG.md` §6.4.B, §6.4.G
+
+Completed in one session — no outstanding items.
+
+- [x] `fred.test.assistant` graph agent (no LLM): exercises `echo`, `hitl choice`, `hitl text`,
+  `trace`+sources, `error`, `long` scenarios; registered in `apps/fred-agents` registry
+- [x] History schema: `Channel.hitl_request` / `Channel.hitl_response`, `HitlRequestPart`,
+  `HitlResponsePart`, `make_hitl_request` / `make_hitl_response` factories; sources extracted
+  from `final` payload and stored in `ChatMetadata.sources` (see BACKLOG.md §6.4.F)
+- [x] Session purge stack: `delete_session()` on `BaseHistoryStore`, `PostgresHistoryStore`,
+  `HistoryStorePort`; `DELETE /agents/sessions/{session_id}` pod endpoint; client methods
+  `delete_session_messages()` + `delete_checkpoint()` (see BACKLOG.md §6.4.B)
+- [x] CLI commands: `/session-info`, `/session-new`, `/session <N>` index switching,
+  `/sessions` with preview, `/whoami` full identity panel, `/history --raw`,
+  `/delete-session`, `/delete-checkpoint`, `/purge-session` (see BACKLOG.md §6.4.G)
+- [x] `make code-quality` and `make test` green in `fred-core` and `fred-runtime`
+
+---
+
 ## Sequence Summary
 
 ```
 NOW (parallel)
 ├── Simon:   S1 E2E validation ──────────────────────────────────► unblocks 6A
-├── Simon:   S2 Prometheus cardinality fix ──────────────────────► ship anytime
+├── Simon:   S2 Observability hardening ── CLOSED 2026-04-26 ───► shipped
 ├── Florian: F1 updated_at strategy + PATCH impl ────────────────► unblocks 6A
 ├── Florian: F2 PATCH session endpoint ──────────────────────────► unblocks 6C
 ├── Olélia:  O1 Evaluation RFC → harness ────────────────────────► independent

@@ -24,6 +24,7 @@ from control_plane_backend.product.schemas import (
     ManagedAgentRuntimeBinding,
     PermissionSummary,
     SessionListItem,
+    UpdateAgentInstanceRequest,
     UpdateSessionRequest,
 )
 from control_plane_backend.sessions.store import (
@@ -189,6 +190,7 @@ async def list_agent_templates(
                     description=template.description,
                     category=template.kind,
                     capabilities=[template.kind],
+                    default_tuning_fields=template.default_tuning.fields,
                 )
             )
     return templates
@@ -214,20 +216,23 @@ async def list_managed_agent_instances(
     """
     store = deps.get_agent_instance_store()
     records = await store.list_by_team(team_id)
-    return [
-        ManagedAgentInstanceSummary(
-            agent_instance_id=record.agent_instance_id,
-            team_id=record.team_id,
-            template_id=record.template_id,
-            display_name=record.display_name,
-            description=record.description,
-            status="enabled" if record.enabled else "disabled",
-            created_at=record.created_at,
-            updated_at=record.updated_at,
-            created_by=record.created_by,
-        )
-        for record in records
-    ]
+    return [_record_to_summary(record) for record in records]
+
+
+def _record_to_summary(record: AgentInstanceRecord) -> ManagedAgentInstanceSummary:
+    """Build a frontend-facing summary from a DB-backed agent instance record."""
+    return ManagedAgentInstanceSummary(
+        agent_instance_id=record.agent_instance_id,
+        team_id=record.team_id,
+        template_id=record.template_id,
+        display_name=record.display_name,
+        description=record.description,
+        status="enabled" if record.enabled else "disabled",
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        created_by=record.created_by,
+        tuning_field_values=record.tuning.values,
+    )
 
 
 _EXECUTION_GRANT_TTL_SECONDS = 300  # 5 minutes
@@ -324,6 +329,17 @@ async def enroll_agent_instance(
             "description": request.description or request.display_name,
         }
     )
+    if request.tuning_field_values:
+        valid_keys = {f.key for f in tuning.fields}
+        tuning = tuning.model_copy(
+            update={
+                "values": {
+                    k: v
+                    for k, v in request.tuning_field_values.items()
+                    if k in valid_keys
+                }
+            }
+        )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -339,17 +355,62 @@ async def enroll_agent_instance(
 
     store = deps.get_agent_instance_store()
     created = await store.create(record)
-    return ManagedAgentInstanceSummary(
-        agent_instance_id=created.agent_instance_id,
-        team_id=created.team_id,
-        template_id=created.template_id,
-        display_name=created.display_name,
-        description=created.description,
-        status="enabled" if created.enabled else "disabled",
-        created_at=created.created_at,
-        updated_at=created.updated_at,
-        created_by=created.created_by,
+    return _record_to_summary(created)
+
+
+async def update_agent_instance(
+    *,
+    team_id: TeamId,
+    agent_instance_id: str,
+    request: UpdateAgentInstanceRequest,
+    deps: ProductServiceDependencies,
+) -> ManagedAgentInstanceSummary | None:
+    """
+    Update display_name, description, or tuning field values for one managed instance.
+
+    Why this function exists:
+    - teams need to be able to customise display metadata and per-instance field
+      values after enrollment without re-enrolling from scratch
+
+    How to use it:
+    - pass only the fields to change; None fields are left unchanged
+    - tuning_field_values replaces the stored values dict entirely (filtered to
+      known keys); pass None to leave existing values untouched
+
+    Policy — frozen snapshot:
+    - field specs (ManagedAgentFieldSpec) are frozen at enrollment time
+    - they are never re-merged with the current template when the instance is edited
+    - only known keys (present in instance.tuning.fields) are accepted
+
+    Example:
+    - `result = await update_agent_instance(team_id=team_id, agent_instance_id=id, request=req, deps=deps)`
+    """
+    store = deps.get_agent_instance_store()
+    record = await store.get_for_team(agent_instance_id, team_id)
+    if record is None:
+        return None
+
+    new_tuning: ManagedAgentTuning | None = None
+    if request.tuning_field_values is not None:
+        valid_keys = {f.key for f in record.tuning.fields}
+        new_tuning = record.tuning.model_copy(
+            update={
+                "values": {
+                    k: v
+                    for k, v in request.tuning_field_values.items()
+                    if k in valid_keys
+                }
+            }
+        )
+
+    updated = await store.update(
+        agent_instance_id=agent_instance_id,
+        team_id=team_id,
+        display_name=request.display_name,
+        description=request.description,
+        tuning=new_tuning,
     )
+    return _record_to_summary(updated) if updated is not None else None
 
 
 async def unenroll_agent_instance(

@@ -26,7 +26,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fred_runtime.client import AgentPodClient, run_scenario_file
+from fred_runtime.client import AgentPodClient, ScenarioSkipped, run_scenario_file
 
 pytestmark = pytest.mark.integration
 
@@ -46,5 +46,11 @@ def test_scenario(scenario_path: Path, pod_client: AgentPodClient) -> None:
     - placing the logic in fred_runtime.client means the same contract can be
       run with `fred-agent-chat --scenario FILE` or via pytest
     - adding a new scenario requires only a new YAML file, no Python changes
+    - ScenarioSkipped is raised when a required env var is absent (e.g.
+      FRED_AGENT_INSTANCE_ID for managed-path scenarios); pytest marks the
+      test as skipped rather than failing
     """
-    run_scenario_file(scenario_path, client=pod_client)
+    try:
+        run_scenario_file(scenario_path, client=pod_client)
+    except ScenarioSkipped as exc:
+        pytest.skip(str(exc))

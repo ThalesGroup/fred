@@ -12,23 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 
 import Button from "@shared/atoms/Button/Button";
-import TextArea from "@shared/atoms/TextArea/TextArea";
+import { TogglePanelButton } from "@shared/atoms/TogglePanelButton/TogglePanelButton";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
-import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
+import { ChatInputBar } from "@shared/molecules/ChatInputBar/ChatInputBar";
+import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
+import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
+import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { useToast } from "../../../../components/ToastProvider";
 import { ChatSseCallbacks, useChatSse } from "../../../../hooks/useChatSse";
-import type { AwaitingHumanEvent, ChatMessage } from "../../../../slices/agentic/agenticOpenApi";
+import type { AwaitingHumanEvent, ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
 import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
+  usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { isTraceChannel } from "../../../../rework/utils/traceUtils";
-import { MessageBubble } from "./MessageBubble/MessageBubble";
 import { useSessionHistory } from "./useSessionHistory";
 
 import styles from "./ManagedChatPage.module.css";
@@ -38,6 +41,22 @@ interface Turn {
   userMessages: ChatMessage[];
   traceMessages: ChatMessage[];
   finalMessages: ChatMessage[];
+  sources: VectorSearchHit[];
+}
+
+function textOf(msg: ChatMessage): string {
+  return (msg.parts ?? [])
+    .filter((p) => p.type === "text")
+    .map((p) => (p as { type: "text"; text: string }).text)
+    .join("");
+}
+
+function extractSources(messages: ChatMessage[]): VectorSearchHit[] {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const srcs = messages[i].metadata?.sources;
+    if (srcs && srcs.length > 0) return srcs;
+  }
+  return [];
 }
 
 function groupIntoTurns(messages: ChatMessage[]): Turn[] {
@@ -48,7 +67,7 @@ function groupIntoTurns(messages: ChatMessage[]): Turn[] {
     const eid = msg.exchange_id;
     if (!map.has(eid)) {
       order.push(eid);
-      map.set(eid, { exchangeId: eid, userMessages: [], traceMessages: [], finalMessages: [] });
+      map.set(eid, { exchangeId: eid, userMessages: [], traceMessages: [], finalMessages: [], sources: [] });
     }
     const turn = map.get(eid)!;
     if (msg.role === "user") {
@@ -60,7 +79,11 @@ function groupIntoTurns(messages: ChatMessage[]): Turn[] {
     }
   }
 
-  return order.map((eid) => map.get(eid)!);
+  const turns = order.map((eid) => map.get(eid)!);
+  for (const turn of turns) {
+    turn.sources = extractSources(turn.finalMessages);
+  }
+  return turns;
 }
 
 export default function ManagedChatPage() {
@@ -71,7 +94,7 @@ export default function ManagedChatPage() {
   const [sessionId, setSessionId] = useState<string | null>(() => searchParams.get("session"));
   const [input, setInput] = useState("");
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
   // Agent display name — never show the raw agent_instance_id to the user.
   const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
@@ -82,21 +105,33 @@ export default function ManagedChatPage() {
     agentInstances?.find((i) => i.agent_instance_id === agentInstanceId)?.display_name ?? "Agent";
 
   const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
+  const [refreshSession] = usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation();
 
   const bindSessionId = useCallback(
     (sid: string) => {
       setSessionId(sid);
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("session", sid);
-        return next;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("session", sid);
+          return next;
+        },
+        { replace: true },
+      );
     },
     [setSearchParams],
   );
 
   const sseCallbacks: ChatSseCallbacks = {
     onBindDraftAgentToSessionId: bindSessionId,
+    onTurnPersisted: (sid) => {
+      if (!teamId) return;
+      refreshSession({
+        teamId,
+        sessionId: sid,
+        updateSessionRequest: { updated_at: new Date().toISOString() },
+      }).catch(() => {});
+    },
     onAwaitingHuman: (event) => setPendingHitl(event),
     onError: (msg) => showError({ summary: "Agent error", detail: msg }),
   };
@@ -115,10 +150,6 @@ export default function ManagedChatPage() {
     agentInstanceId,
     onLoaded: replaceAllMessages,
   });
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
 
   if (!teamId || !agentInstanceId) {
     return <div className={styles.error}>Missing team or agent context in URL.</div>;
@@ -143,13 +174,6 @@ export default function ManagedChatPage() {
     send(text, sid);
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   const handleHitlAnswer = (answer: string | boolean, freeText?: string) => {
     if (!pendingHitl) return;
     setPendingHitl(null);
@@ -160,11 +184,14 @@ export default function ManagedChatPage() {
     reset();
     setSessionId(null);
     setPendingHitl(null);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("session");
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("session");
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   return (
@@ -174,70 +201,48 @@ export default function ManagedChatPage() {
         <Button color="on-surface" variant="text" size="small" onClick={handleNewConversation}>
           New conversation
         </Button>
+        <TogglePanelButton open={rightPanelOpen} onClick={() => setRightPanelOpen((p) => !p)} />
       </header>
 
-      <div className={styles.messages} role="log" aria-live="polite" aria-label="Conversation">
-        {isLoadingHistory && <p className={styles.hint}>Loading conversation history…</p>}
-        {!isLoadingHistory && turns.length === 0 && !waitResponse && (
-          <p className={styles.empty}>Send a message to start the conversation.</p>
-        )}
-
-        {turns.map((turn) => (
-          <div key={turn.exchangeId} className={styles.turn}>
-            {turn.userMessages.map((msg, i) => (
-              <MessageBubble
-                key={`${msg.exchange_id}|user|${i}`}
-                msg={msg}
-              />
-            ))}
-            {(turn.traceMessages.length > 0 || turn.finalMessages.length > 0) && (
-              <div className={styles.agentRow}>
-                {turn.traceMessages.length > 0 && (
-                  <div className={styles.traceColumn}>
-                    <ThoughtTrace
-                      messages={turn.traceMessages}
-                      done={turn.finalMessages.length > 0}
-                    />
-                  </div>
-                )}
-                <div className={styles.responseColumn}>
-                  {turn.finalMessages.map((msg, i) => (
-                    <MessageBubble
-                      key={`${msg.exchange_id}|final|${msg.rank}|${i}`}
-                      msg={msg}
-                    />
+      <div className={styles.body}>
+        <div className={styles.chatColumn}>
+          <ChatMessagesArea
+            isEmpty={turns.length === 0 && !waitResponse}
+            isLoading={isLoadingHistory}
+            scrollVersion={messages.length}
+          >
+            {turns.map((turn, i) => {
+              const isStreaming = waitResponse && i === turns.length - 1;
+              return (
+                <div key={turn.exchangeId} className={styles.turn}>
+                  {turn.userMessages.map((msg, j) => (
+                    <UserMessage key={`${msg.exchange_id}|user|${j}`} text={textOf(msg)} />
                   ))}
+                  {(turn.traceMessages.length > 0 || turn.finalMessages.length > 0 || isStreaming) && (
+                    <AssistantTurn
+                      traceMessages={turn.traceMessages}
+                      finalMessages={turn.finalMessages}
+                      sources={turn.sources}
+                      isStreaming={isStreaming}
+                    />
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              );
+            })}
+            {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={handleHitlAnswer} />}
+          </ChatMessagesArea>
 
-        {waitResponse && <p className={styles.hint}>Agent is thinking…</p>}
-        {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={handleHitlAnswer} />}
-        <div ref={bottomRef} />
+          <ChatInputBar
+            value={input}
+            onChange={setInput}
+            onSend={handleSend}
+            disabled={waitResponse || isLoadingHistory}
+          />
+        </div>
+
+        {/* Right panel slot — Phase 6C (AgentOptionsPanel) mounts here */}
+        {rightPanelOpen && <div className={styles.rightPanel} />}
       </div>
-
-      <footer className={styles.footer}>
-        <TextArea
-          label="Message"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={waitResponse || isLoadingHistory}
-          rows={2}
-          placeholder="Press Enter to send, Shift+Enter for newline"
-        />
-        <Button
-          color="primary"
-          variant="filled"
-          size="medium"
-          disabled={!input.trim() || waitResponse || isLoadingHistory}
-          onClick={handleSend}
-        >
-          Send
-        </Button>
-      </footer>
     </div>
   );
 }

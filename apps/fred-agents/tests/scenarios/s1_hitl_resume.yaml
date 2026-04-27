@@ -1,0 +1,22 @@
+name: "S1.2 — HITL pause and resume (fred.test.assistant)"
+description: >
+  Verify the HITL two-phase flow via fred.test.assistant:
+  1. Send "hitl choice" — agent pauses on awaiting_human, returns a checkpoint_id.
+  2. Resume with choice "option_a" — agent emits a final event containing "approved".
+
+  History must be written after the resume turn. No control-plane or env var needed.
+
+agent_id: fred.test.assistant
+user_id: s1-test-user
+
+steps:
+  - id: hitl-flow
+    type: hitl
+    message: "hitl choice"
+    session_id: "s1-hitl-${run_id}"
+    resume_choice: "option_a"
+    checks:
+      - kind: final
+      - no_error: true
+      - content_contains: "approved"
+      - history_has_messages: true

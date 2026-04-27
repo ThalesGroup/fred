@@ -86,6 +86,10 @@ class Channel(str, Enum):
     error = "error"
     # Injected context, tips, HITL events
     system_note = "system_note"
+    # Full structured record of a HITL pause (question + choices presented)
+    hitl_request = "hitl_request"
+    # User's selection after a HITL gate (choice_id + optional label)
+    hitl_response = "hitl_response"
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +187,75 @@ class ToolResultPart(BaseModel):
         return v
 
 
+class HitlChoiceRecord(BaseModel):
+    """
+    One option that was presented to the user in a HITL gate.
+
+    Why this exists:
+    - the full choice list must survive in history for audit and UI replay;
+      storing only the question text loses the structured options that were shown
+    """
+
+    id: str
+    label: str
+
+
+class HitlRequestPart(BaseModel):
+    """
+    Full structured record of a HITL pause presented to the user.
+
+    Why this exists:
+    - the ``awaiting_human`` SSE event carries the complete gate definition
+      (question, choices, stage, title); storing it verbatim lets audit logs
+      show exactly what the agent asked and what options were available
+    - the UI can reconstruct an interactive choice card from this record when
+      replaying history, instead of showing a flat system note
+
+    How to use it:
+    - one ``HitlRequestPart`` per ``awaiting_human`` event, stored in a
+      ``Channel.hitl_request`` message with ``Role.system``
+    """
+
+    type: Literal["hitl_request"] = "hitl_request"
+    stage: Optional[str] = None
+    title: Optional[str] = None
+    question: str
+    choices: List[HitlChoiceRecord]
+
+
+class HitlResponsePart(BaseModel):
+    """
+    User's selection after a HITL gate.
+
+    Why this exists:
+    - the resume payload (which option was picked, or what text was typed) is
+      the user's half of the HITL exchange; omitting it from history breaks
+      audit trails and makes replay incomplete
+    - for free-text HITL gates, ``choice_id`` carries the typed text directly
+      (the runtime convention from ``choice_step``)
+
+    How to use it:
+    - one ``HitlResponsePart`` per HITL resume turn, stored in a
+      ``Channel.hitl_response`` message with ``Role.user``
+    - ``label`` is denormalized from the matching ``HitlChoiceRecord`` when
+      known; it may be absent for free-text responses
+    """
+
+    type: Literal["hitl_response"] = "hitl_response"
+    choice_id: str
+    label: Optional[str] = None
+
+
 MessagePart: TypeAlias = Annotated[
-    Union[TextPart, CodePart, ImageUrlPart, ToolCallPart, ToolResultPart],
+    Union[
+        TextPart,
+        CodePart,
+        ImageUrlPart,
+        ToolCallPart,
+        ToolResultPart,
+        HitlRequestPart,
+        HitlResponsePart,
+    ],
     Field(discriminator="type"),
 ]
 """
@@ -371,4 +442,87 @@ def make_tool_result(
                 call_id=call_id, ok=ok, latency_ms=latency_ms, content=content
             )
         ],
+    )
+
+
+def make_hitl_request(
+    session_id: str,
+    exchange_id: str,
+    rank: int,
+    *,
+    question: str,
+    choices: List[Dict[str, str]],
+    stage: Optional[str] = None,
+    title: Optional[str] = None,
+) -> ChatMessage:
+    """
+    Build the HITL gate record from an ``awaiting_human`` SSE event.
+
+    Why this exists:
+    - the full gate definition (question + all presented options) must survive
+      in history for audit and UI replay; a flat text note loses the choices
+
+    How to use it:
+    - call when an ``awaiting_human`` runtime event is received
+    - pass ``choices`` as the raw list of ``{id, label}`` dicts from the event
+      payload; extra keys are ignored
+
+    Example:
+    - ``make_hitl_request(sid, xid, rank, question="Proceed?",
+        choices=[{"id": "yes", "label": "Yes"}, {"id": "no", "label": "No"}])``
+    """
+    choice_records = [
+        HitlChoiceRecord(id=c["id"], label=c.get("label", c["id"]))
+        for c in choices
+        if "id" in c
+    ]
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=datetime.now(timezone.utc),
+        role=Role.system,
+        channel=Channel.hitl_request,
+        parts=[
+            HitlRequestPart(
+                stage=stage,
+                title=title,
+                question=question,
+                choices=choice_records,
+            )
+        ],
+    )
+
+
+def make_hitl_response(
+    session_id: str,
+    exchange_id: str,
+    rank: int,
+    *,
+    choice_id: str,
+    label: Optional[str] = None,
+) -> ChatMessage:
+    """
+    Build the user's HITL selection record from a resume turn.
+
+    Why this exists:
+    - the user's choice is the second half of the HITL exchange; without it
+      the audit record is incomplete and the UI cannot show what was selected
+
+    How to use it:
+    - call at the start of a HITL resume turn, before processing agent events
+    - ``choice_id`` is the raw id selected (or the typed text for free-text gates)
+    - ``label`` is denormalized from the matching choice when known
+
+    Example:
+    - ``make_hitl_response(sid, xid, rank, choice_id="yes", label="Yes")``
+    """
+    return ChatMessage(
+        session_id=session_id,
+        exchange_id=exchange_id,
+        rank=rank,
+        timestamp=datetime.now(timezone.utc),
+        role=Role.user,
+        channel=Channel.hitl_response,
+        parts=[HitlResponsePart(choice_id=choice_id, label=label)],
     )

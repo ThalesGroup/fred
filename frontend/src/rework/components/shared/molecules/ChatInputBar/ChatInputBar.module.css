@@ -1,0 +1,13 @@
+.bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-end;
+  gap: var(--spacing-s, 0.75rem);
+  border-top: 1px solid var(--outline-muted);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
+}
+
+.input {
+  flex: 1;
+}

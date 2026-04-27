@@ -163,6 +163,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createAgentInstanceRequest,
       }),
     }),
+    patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: build.mutation<
+      PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse,
+      PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}`,
+        method: "PATCH",
+        body: queryArg.updateAgentInstanceRequest,
+      }),
+    }),
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: build.mutation<
       DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiResponse,
       DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiArg
@@ -305,6 +315,13 @@ export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiR
 export type PostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostApiArg = {
   teamId: string;
   createAgentInstanceRequest: CreateAgentInstanceRequest;
+};
+export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  updateAgentInstanceRequest: UpdateAgentInstanceRequest;
 };
 export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiResponse = unknown;
 export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteApiArg = {
@@ -510,35 +527,6 @@ export type FrontendBootstrap = {
   ui_settings: FrontendUiSettings;
   permissions: PermissionSummary;
 };
-export type AgentTemplateSummary = {
-  template_id: string;
-  source_runtime_id: string;
-  source_agent_id: string;
-  display_name: string;
-  description: string;
-  category: string;
-  tags?: string[];
-  capabilities?: string[];
-  team_instantiable?: boolean;
-  status?: "available" | "unavailable";
-};
-export type ManagedAgentInstanceSummary = {
-  agent_instance_id: string;
-  team_id: string;
-  template_id: string;
-  display_name: string;
-  description?: string | null;
-  status: "enabled" | "disabled";
-  created_at?: string | null;
-  updated_at?: string | null;
-  created_by?: string | null;
-};
-export type CreateAgentInstanceRequest = {
-  /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
-  template_id: string;
-  display_name: string;
-  description?: string | null;
-};
 export type ManagedAgentUiHints = {
   multiline?: boolean;
   max_lines?: number;
@@ -562,6 +550,53 @@ export type ManagedAgentFieldSpec = {
   item_type?: string | null;
   ui?: ManagedAgentUiHints;
 };
+export type AgentTemplateSummary = {
+  template_id: string;
+  source_runtime_id: string;
+  source_agent_id: string;
+  display_name: string;
+  description: string;
+  category: string;
+  tags?: string[];
+  capabilities?: string[];
+  team_instantiable?: boolean;
+  status?: "available" | "unavailable";
+  /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
+  default_tuning_fields?: ManagedAgentFieldSpec[];
+};
+export type ManagedAgentInstanceSummary = {
+  agent_instance_id: string;
+  team_id: string;
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  status: "enabled" | "disabled";
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+  /** Current user-set values for this instance's tunable fields. Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised. */
+  tuning_field_values?: {
+    [key: string]: any;
+  };
+};
+export type CreateAgentInstanceRequest = {
+  /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
+  template_id: string;
+  display_name: string;
+  description?: string | null;
+  /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are silently dropped. */
+  tuning_field_values?: {
+    [key: string]: any;
+  } | null;
+};
+export type UpdateAgentInstanceRequest = {
+  display_name?: string | null;
+  description?: string | null;
+  /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are silently dropped. Pass null to leave existing values unchanged. */
+  tuning_field_values?: {
+    [key: string]: any;
+  } | null;
+};
 export type ManagedMcpServerRef = {
   id: string;
   require_tools?: string[];
@@ -572,6 +607,10 @@ export type ManagedAgentTuning = {
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
   mcp_servers?: ManagedMcpServerRef[];
+  /** User-set field values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
+  values?: {
+    [key: string]: any;
+  };
 };
 export type ManagedAgentRuntimeBinding = {
   agent_instance_id: string;
@@ -673,6 +712,7 @@ export const {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
+  usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
   useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,

@@ -14,7 +14,15 @@
 
 import type { Channel, ChatMessage, ToolCallPart, ToolResultPart } from "../../slices/agentic/agenticOpenApi";
 
-export const TRACE_CHANNELS: Channel[] = ["plan", "thought", "observation", "tool_call", "tool_result", "system_note", "error"];
+export const TRACE_CHANNELS: Channel[] = [
+  "plan",
+  "thought",
+  "observation",
+  "tool_call",
+  "tool_result",
+  "system_note",
+  "error",
+];
 export const FINAL_CHANNELS: Channel[] = ["final"];
 
 // Discriminated union representing one visual row in ThoughtTrace
@@ -104,14 +112,22 @@ export function summarizeToolResultCompact(result: ChatMessage, maxLen = 120): s
 export function entryLabel(entry: TraceEntry): string {
   const channel = entry.kind === "combo" ? entry.call.channel : entry.message.channel;
   switch (channel) {
-    case "thought": return "Thought";
-    case "plan": return "Plan";
-    case "observation": return "Observation";
-    case "tool_call": return entry.kind === "combo" ? toolName(entry.call) || "Tool" : "Tool call";
-    case "tool_result": return "Tool result";
-    case "system_note": return "System";
-    case "error": return "Error";
-    default: return channel;
+    case "thought":
+      return "Thought";
+    case "plan":
+      return "Plan";
+    case "observation":
+      return "Observation";
+    case "tool_call":
+      return entry.kind === "combo" ? toolName(entry.call) || "Tool" : "Tool call";
+    case "tool_result":
+      return "Tool result";
+    case "system_note":
+      return "System";
+    case "error":
+      return "Error";
+    default:
+      return channel;
   }
 }
 
