@@ -1075,7 +1075,10 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
     )
 
     new_access_token = payload.get("access_token")
-    new_refresh_token = payload.get("refresh_token") or refresh_token
+    raw_refresh = payload.get("refresh_token")
+    new_refresh_token: str = (
+        raw_refresh if isinstance(raw_refresh, str) and raw_refresh else refresh_token
+    )
     if not isinstance(new_access_token, str) or not new_access_token:
         raise RuntimeError(
             "Keycloak refresh response did not include a valid access_token."
@@ -1085,13 +1088,8 @@ def _refresh_runtime_context_access_token(runtime_context: RuntimeContext) -> st
     runtime_context.refresh_token = new_refresh_token
 
     expires_at = payload.get("expires_at_timestamp")
-    if expires_at is not None:
-        try:
-            runtime_context.access_token_expires_at = int(expires_at)
-        except (TypeError, ValueError) as exc:
-            raise RuntimeError(
-                "Keycloak refresh response returned an invalid expires_at_timestamp."
-            ) from exc
+    if isinstance(expires_at, (int, float)):
+        runtime_context.access_token_expires_at = int(expires_at)
 
     return new_access_token
 

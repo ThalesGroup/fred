@@ -14,18 +14,21 @@
 
 import logging
 import time
-from typing import Any, Dict
 
-import requests
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 def refresh_user_access_token_from_keycloak(
     keycloak_url: str, client_id: str, refresh_token: str
-) -> Dict[str, Any]:
-    """Exchanges a user's refresh token for a new access token and refresh token pair."""
+) -> dict[str, object]:
+    """Exchanges a user's refresh token for a new access token and refresh token pair.
 
+    Intentionally synchronous: all callers are sync `def` methods used as
+    LangChain token-refresh callbacks. Converting to async would require
+    propagating async through the media-client adapter chain.
+    """
     token_url = f"{keycloak_url.rstrip('/')}/protocol/openid-connect/token"
 
     form = {
@@ -35,25 +38,23 @@ def refresh_user_access_token_from_keycloak(
     }
 
     try:
-        r = requests.post(token_url, data=form, timeout=10)
-        r.raise_for_status()  # Raise HTTPError on 4xx/5xx responses
-    except requests.exceptions.HTTPError as e:
-        error_details = {
-            "error": e.response.text[:200]
-            if e.response is not None
-            else "Unknown error"
-        }
+        r = httpx.post(token_url, data=form, timeout=10.0)
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code if e.response is not None else "N/A"
+        error_text = (
+            e.response.text[:200] if e.response is not None else "Unknown error"
+        )
         logger.error(
             "Keycloak refresh request failed (status=%s): %s",
-            e.response.status_code if e.response is not None else "N/A",
-            error_details,
+            status,
+            error_text,
         )
-        raise RuntimeError(f"Token refresh failed: {error_details['error']}") from e
+        raise RuntimeError(f"Token refresh failed: {error_text}") from e
 
-    payload = r.json()
+    payload: dict[str, object] = r.json()
 
-    # Calculate expiry timestamp (optional but good practice)
-    expires_in = int(payload.get("expires_in", 300))
+    expires_in = int(payload.get("expires_in", 300))  # type: ignore[arg-type]
     payload["expires_at_timestamp"] = time.time() + max(0, expires_in - 5)
 
     return payload

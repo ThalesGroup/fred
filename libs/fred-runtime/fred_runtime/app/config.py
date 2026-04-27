@@ -64,7 +64,10 @@ Example `config/configuration.yaml`:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from fred_runtime.runtime_context import McpConfigurationLike
 
 from fred_core.common import (
     OpenSearchStoreConfig,
@@ -333,7 +336,7 @@ class AgentPodConfig(BaseModel):
     """
 
     _models_catalog_path: str | None = PrivateAttr(default=None)
-    _mcp_configuration: Any | None = PrivateAttr(default=None)
+    _mcp_configuration: McpConfigurationLike | None = PrivateAttr(default=None)
 
     app: PodAppConfig = Field(default_factory=PodAppConfig)
     security: SecurityConfiguration
@@ -380,7 +383,7 @@ class AgentPodConfig(BaseModel):
 
         return self._models_catalog_path
 
-    def set_mcp_configuration(self, configuration: Any | None) -> None:
+    def set_mcp_configuration(self, configuration: McpConfigurationLike | None) -> None:
         """
         Attach the resolved MCP catalog to this config as internal runtime data.
 
@@ -398,7 +401,7 @@ class AgentPodConfig(BaseModel):
 
         self._mcp_configuration = configuration
 
-    def get_mcp_configuration(self) -> Any | None:
+    def get_mcp_configuration(self) -> McpConfigurationLike | None:
         """
         Return the resolved MCP catalog attached during pod bootstrap.
 

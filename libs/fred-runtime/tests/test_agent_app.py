@@ -15,74 +15,16 @@ from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.models import ReActAgentDefinition
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app import context as context_module
+from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.runtime_context import get_runtime_context
 
-
-class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
-    """
-    Tiny fake chat model that supports tool binding for offline runtime tests.
-
-    Why this exists:
-    - the stock fake model is good for scripted responses but does not expose
-      `bind_tools(...)`, which the ReAct runtime expects
-
-    How to use it:
-    - script a list of `AIMessage` responses and pass it through
-      `StaticChatModelFactory`
-
-    Example:
-    - `model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")])`
-    """
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # type: ignore[override]
-        return self
-
-
-class StaticChatModelFactory:
-    """
-    Minimal chat-model factory that always returns the same fake model.
-
-    Why this exists:
-    - the pod app factory expects a `chat_model_factory` runtime service
-    - this test only needs one deterministic offline model instance
-
-    How to use it:
-    - inject it by monkeypatching `_build_chat_model_factory(...)`
-
-    Example:
-    - `factory = StaticChatModelFactory(model)`
-    """
-
-    def __init__(self, model: ToolFriendlyFakeChatModel) -> None:
-        self._model = model
-
-    def build(self, definition, binding):  # type: ignore[override]
-        return self._model
-
-    def build_for_operation(
-        self, *, definition, binding, purpose: str, operation: str | None
-    ):
-        """
-        Return the same deterministic fake model for operation-specific routing.
-
-        Why this exists:
-        - the ReAct runtime now asks the factory for per-operation models before
-          falling back to `build(...)`
-
-        How to use it:
-        - the regression test keeps one scripted model for the whole turn, so
-          this simply delegates to `build(...)`
-
-        Example:
-        - `factory.build_for_operation(definition=definition, binding=binding, purpose="react", operation="reasoner")`
-        """
-
-        return self.build(definition, binding)
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -601,9 +543,9 @@ def test_create_agent_app_bootstraps_prometheus_kpis_and_background_emitters(
         "_build_chat_model_factory",
         lambda config: StaticChatModelFactory(model),
     )
-    monkeypatch.setattr(agent_app_module, "start_http_server", _fake_start_http_server)
-    monkeypatch.setattr(agent_app_module, "emit_process_kpis", _neverending_process)
-    monkeypatch.setattr(agent_app_module, "emit_sql_pool_kpis", _neverending_pool)
+    monkeypatch.setattr(context_module, "start_http_server", _fake_start_http_server)
+    monkeypatch.setattr(context_module, "emit_process_kpis", _neverending_process)
+    monkeypatch.setattr(context_module, "emit_sql_pool_kpis", _neverending_pool)
 
     definition = _EchoAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
@@ -658,7 +600,7 @@ def test_create_agent_app_keeps_log_kpis_when_prometheus_is_disabled(
         lambda config: StaticChatModelFactory(model),
     )
     monkeypatch.setattr(
-        agent_app_module, "start_http_server", _unexpected_start_http_server
+        context_module, "start_http_server", _unexpected_start_http_server
     )
 
     definition = _EchoAgent()
@@ -673,12 +615,12 @@ def test_create_agent_app_keeps_log_kpis_when_prometheus_is_disabled(
     assert observed["metrics_server"] is False
 
 
-def test_emit_audit_event_populates_ring_buffer() -> None:
+def test_emit_audit_event_populates_ring_buffer(minimal_config) -> None:
     """_emit_audit_event must append to the ring buffer and filter None fields."""
-    with agent_app_module._AUDIT_EVENTS_LOCK:
-        agent_app_module._AUDIT_EVENTS_BUFFER.clear()
+    container = PodApplicationContext(minimal_config)
 
     agent_app_module._emit_audit_event(
+        container,
         "info",
         "grant_validated",
         agent_instance_id="inst-1",
@@ -686,14 +628,14 @@ def test_emit_audit_event_populates_ring_buffer() -> None:
         absent_field=None,
     )
 
-    with agent_app_module._AUDIT_EVENTS_LOCK:
-        events = list(agent_app_module._AUDIT_EVENTS_BUFFER)
+    with container._audit_events_lock:
+        events = list(container.audit_events_buffer)
 
     assert len(events) == 1
     ev = events[0]
     assert ev["audit_event"] == "grant_validated"
-    assert ev["agent_instance_id"] == "inst-1"
-    assert ev["user_id"] == "alice"
+    assert ev.get("agent_instance_id") == "inst-1"
+    assert ev.get("user_id") == "alice"
     assert "ts" in ev
     assert "absent_field" not in ev
 
@@ -713,19 +655,29 @@ def test_ring_buffer_endpoints_return_seeded_events(monkeypatch, tmp_path) -> No
     )
 
     with TestClient(app) as client:
-        with agent_app_module._AUDIT_EVENTS_LOCK:
-            agent_app_module._AUDIT_EVENTS_BUFFER.clear()
-        with agent_app_module._KPI_TURNS_LOCK:
-            agent_app_module._KPI_TURNS_BUFFER.clear()
+        container = get_pod_container_from_app(app)
+        container.audit_events_buffer.clear()
+        container.kpi_turns_buffer.clear()
 
-        agent_app_module._emit_audit_event("info", "grant_validated", user_id="bob")
-        with agent_app_module._KPI_TURNS_LOCK:
-            agent_app_module._KPI_TURNS_BUFFER.append(
-                {
-                    "ts": "2026-01-01T00:00:00+00:00",
-                    "session_id": "s-seed",
-                    "total_ms": 42,
-                }
+        agent_app_module._emit_audit_event(
+            container, "info", "grant_validated", user_id="bob"
+        )
+        from fred_runtime.app.context import KpiTurnRecord
+        from typing import cast as _cast
+
+        with container._kpi_turns_lock:
+            container.kpi_turns_buffer.append(
+                _cast(
+                    KpiTurnRecord,
+                    {
+                        "ts": "2026-01-01T00:00:00+00:00",
+                        "exchange_id": "ex-seed",
+                        "session_id": "s-seed",
+                        "user_id": "test",
+                        "total_ms": 42,
+                        "is_error": False,
+                    },
+                )
             )
 
         audit_resp = client.get("/pod/v1/agents/audit-events?limit=10")
@@ -769,8 +721,8 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
     )
 
     with TestClient(app) as client:
-        with agent_app_module._KPI_TURNS_LOCK:
-            agent_app_module._KPI_TURNS_BUFFER.clear()
+        container = get_pod_container_from_app(app)
+        container.kpi_turns_buffer.clear()
 
         resp = client.post(
             "/pod/v1/agents/execute",
@@ -778,8 +730,8 @@ def test_emit_turn_completed_populates_kpi_turns_buffer(monkeypatch, tmp_path) -
         )
         assert resp.status_code == 200
 
-        with agent_app_module._KPI_TURNS_LOCK:
-            turns = list(agent_app_module._KPI_TURNS_BUFFER)
+        with container._kpi_turns_lock:
+            turns = list(container.kpi_turns_buffer)
 
     assert len(turns) == 1
     assert "ts" in turns[0]

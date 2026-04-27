@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-04-26
+Last updated: 2026-04-27
 
 ---
 
@@ -79,7 +79,7 @@ Three scenarios to validate, in order:
 **Tasks**:
 - [x] Decide and document option in BACKLOG.md §6.4.D
 - [x] If A: implement `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` (body: `{ updated_at }`)
-- [ ] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after F1 lands)
+- [x] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after F1 lands)
 - [x] `make code-quality && make test` in `control-plane-backend`
 
 ---
@@ -139,8 +139,8 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 
 [x] Step 4 — Refactor ManagedChatPage (new components + three-column layout)
 
-[ ] Step 5 — Map SSE events to ConversationMessage state
-[ ] Step 6 — Normalise history from runtime messages_url_template
+[x] Step 5 — Map SSE events to ConversationMessage state
+[x] Step 6 — Normalise history from runtime messages_url_template
 ```
 
 **Validation criteria** (must pass before 6B starts):
@@ -179,6 +179,35 @@ Needed for inline session title editing in Phase 6C.
 - [ ] Regenerate `controlPlaneOpenApi.ts`
 
 Can be implemented in parallel with Phase 6A/6B (no frontend dependency yet).
+
+---
+
+## R1 — fred-runtime Quality Refactor (Simon/Dimitri) · Parallel, independent
+
+**Ref**: `docs/backlog/FRED-RUNTIME-QUALITY.md`
+
+**Why**: Code-quality audit (2026-04-27) identified five structural problems:
+monolithic `client.py` (3 880 lines), no dependency container, blocking I/O
+in async paths, untyped `Any` boundaries, no shared test fixtures.
+
+**Target**: `control-plane-backend` structural quality — full async, no `Any`
+at boundaries, `PodApplicationContext` container, ≥ 70% offline unit coverage.
+
+| Phase | Goal | Effort | Status |
+|---|---|---|---|
+| P1 | Fix async/sync correctness (`kf_workspace_client.py`, `user_token_refresher.py`) | 1 h | `[x]` ✅ 2026-04-27 |
+| P2 | Shared test fixtures (`tests/conftest.py`) | 1 h | `[x]` ✅ 2026-04-27 |
+| P3 | Split `client.py` → `fred_runtime/cli/` package | 3 h | `[x]` ✅ 2026-04-27 |
+| P4 | Introduce `PodApplicationContext` container | 4 h | `[x]` ✅ 2026-04-27 |
+| P5 | Eliminate `Any` at all typed boundaries | 2 h | `[x]` ✅ 2026-04-27 |
+
+**Done when**: all gates in `FRED-RUNTIME-QUALITY.md §Definition of Done` are ticked.
+
+**Status (2026-04-27):** P1–P5 all complete. Two DoD gates deferred to **R1b**:
+- `Any` zero at function boundaries: `runtime_context.py` + `cli/pod_client.py` need typed DTOs and circular-import analysis
+- No file > 600 lines: `agent_app.py` (2 578 lines) needs router extraction into `fred_runtime/app/routers/`
+
+See `FRED-RUNTIME-QUALITY.md §R1b` for exact file-by-file breakdown and fix approach.
 
 ---
 
@@ -227,9 +256,9 @@ becoming operationally expensive.
 - [x] `make code-quality` and `make test` pass in `control-plane-backend`
 - [x] `make code-quality` and `make test` pass in `libs/fred-core`
 - [x] `make code-quality` and `make test` pass in `libs/fred-runtime`
-- [ ] Run one live stack validation in no-security mode
-- [ ] Run one live stack validation in Keycloak-enabled mode
-- [ ] Run one operator happy path for enroll / unbind / prepare-execution
+- [x] Run one live stack validation in no-security mode
+- [x] Run one live stack validation in Keycloak-enabled mode
+- [x] Run one operator happy path for enroll / unbind / prepare-execution
 
 ---
 

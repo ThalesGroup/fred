@@ -35,7 +35,6 @@ from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.models import ReActAgentDefinition
 from fred_sdk.contracts.runtime import HistoryStorePort
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
 from fred_runtime.app import AgentPodConfig, create_agent_app
@@ -43,43 +42,7 @@ from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.agent_app import _write_turn_history
 from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
 
-# ---------------------------------------------------------------------------
-# Shared test helpers
-# ---------------------------------------------------------------------------
-
-
-class _ToolFriendlyFakeModel(FakeMessagesListChatModel):
-    """
-    Minimal fake model that supports ``bind_tools`` for offline runtime tests.
-
-    Why this exists:
-    - ``FakeMessagesListChatModel`` does not expose ``bind_tools``; the ReAct
-      runtime requires it to register authored tools
-
-    How to use it:
-    - pass a list of scripted ``AIMessage`` responses; ``bind_tools`` is a no-op
-    """
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # type: ignore[override]
-        return self
-
-
-class _StaticChatModelFactory:
-    """
-    Deterministic chat-model factory that always returns the same fake model.
-
-    How to use it:
-    - monkeypatch ``_build_chat_model_factory`` to return an instance of this class
-    """
-
-    def __init__(self, model: _ToolFriendlyFakeModel) -> None:
-        self._model = model
-
-    def build(self, definition, binding):  # type: ignore[override]
-        return self._model
-
-    def build_for_operation(self, *, definition, binding, purpose, operation):
-        return self.build(definition, binding)
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 
 
 @tool("noop.ping", description="Return pong.")
@@ -145,11 +108,11 @@ def _make_app(monkeypatch, tmp_path):
     How to use it:
     - call before ``with TestClient(app) as client:``
     """
-    model = _ToolFriendlyFakeModel(responses=[AIMessage(content="pong")])
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="pong")])
     monkeypatch.setattr(
         agent_app_module,
         "_build_chat_model_factory",
-        lambda config: _StaticChatModelFactory(model),
+        lambda config: StaticChatModelFactory(model),
     )
     definition = _PingAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}

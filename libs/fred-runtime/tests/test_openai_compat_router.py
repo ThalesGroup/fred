@@ -18,35 +18,12 @@ from fastapi.testclient import TestClient
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.models import ReActAgentDefinition
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 
-# ---------------------------------------------------------------------------
-# Shared test fixtures (mirrors test_agent_app.py conventions)
-# ---------------------------------------------------------------------------
-
-
-class ToolFriendlyFakeChatModel(FakeMessagesListChatModel):
-    """Fake chat model with bind_tools support for offline runtime tests."""
-
-    def bind_tools(self, tools, *, tool_choice=None, **kwargs):  # type: ignore[override]
-        return self
-
-
-class StaticChatModelFactory:
-    """Minimal chat-model factory that always returns the same fake model."""
-
-    def __init__(self, model: ToolFriendlyFakeChatModel) -> None:
-        self._model = model
-
-    def build(self, definition, binding):  # type: ignore[override]
-        return self._model
-
-    def build_for_operation(self, *, definition, binding, purpose, operation=None):
-        return self.build(definition, binding)
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 
 
 @tool("demo.hello", description="Return a greeting.")

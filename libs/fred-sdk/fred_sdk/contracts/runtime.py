@@ -426,6 +426,10 @@ class HistoryStorePort(Protocol):
         """Permanently remove all history rows for a session. Returns row count deleted."""
         ...
 
+    async def next_rank(self, session_id: str) -> int:
+        """Return the next available rank for a session (MAX(rank) + 1, or 0 if empty)."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:

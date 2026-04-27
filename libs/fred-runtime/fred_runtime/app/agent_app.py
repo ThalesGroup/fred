@@ -43,14 +43,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import threading
 import time
-from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -59,13 +57,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.history.history_schema import ChatMessage
-from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
-from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
-from fred_core.kpi.kpi_writer import KPIDefaults, KPIWriter
-from fred_core.kpi.log_kpi_store import KpiLogStore
-from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
@@ -94,7 +86,9 @@ from fred_sdk.contracts.models import (
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
+    ChatModelFactoryPort,
     ExecutionConfig,
+    HistoryStorePort,
     RuntimeErrorEvent,
     RuntimeEvent,
     RuntimeServices,
@@ -107,8 +101,6 @@ from fred_sdk.support.authored_toolsets import (
     build_authored_tool_handlers,
 )
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
-from prometheus_client import start_http_server
-
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 
 from ..common.structures import AgentSettingsLike
@@ -128,67 +120,34 @@ from ..runtime_context import (
 )
 from ..runtime_context import RuntimeContext as FredRuntimeContext
 from ..runtime_support import refresh_user_access_token_from_keycloak
-from .config import AgentPodConfig, MetricsBackend
+from .config import AgentPodConfig
+from .container import build_pod_container
+from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
+from .dependencies import attach_pod_container, get_pod_container
 from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
 _audit_logger = logging.getLogger("fred.security.audit")
 
-# ---------------------------------------------------------------------------
-# In-memory ring buffers for CLI-queryable observability events
-# ---------------------------------------------------------------------------
 
-_KPI_TURNS_LOCK = threading.Lock()
-_KPI_TURNS_BUFFER: deque[dict[str, Any]] = deque(maxlen=200)
-
-_AUDIT_EVENTS_LOCK = threading.Lock()
-_AUDIT_EVENTS_BUFFER: deque[dict[str, Any]] = deque(maxlen=200)
-
-
-def _emit_audit_event(level: str, name: str, **fields: object) -> None:
-    """Append one security audit event to the ring buffer and emit it to the audit logger."""
-    event: dict[str, Any] = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "audit_event": name,
-        **{k: v for k, v in fields.items() if v is not None},
-    }
-    with _AUDIT_EVENTS_LOCK:
-        _AUDIT_EVENTS_BUFFER.append(event)
-    getattr(_audit_logger, level)("[SECURITY] %s", name, extra=event)
-
-
-def _build_sql_runtime_dependencies(
-    config: AgentPodConfig,
-) -> tuple[Any, Any, Any]:
-    """
-    Build the shared SQL runtime services for an agent pod.
-
-    Why this function exists:
-    - pod startup already centralizes SQL-backed services in one place, and the
-      user admission path now depends on the same engine via `UserStore`
-    - keeping engine, checkpointer, history store, and user-store bootstrap
-      together avoids pods forgetting one of the required startup steps
-
-    How to use it:
-    - call once during FastAPI lifespan startup
-    - pass the pod `config` so the helper can build the configured SQL engine
-      and initialize the dependent runtime services
-
-    Example:
-    - `sql_engine, checkpointer, history_store = _build_sql_runtime_dependencies(config)`
-    """
-
-    from fred_core.history.postgres_history_store import PostgresHistoryStore
-    from fred_core.sql.base_sql import create_async_engine_from_config
-    from fred_core.users.store.postgres_user_store import init_user_store
-
-    from ..runtime_support.sql_checkpointer import FredSqlCheckpointer
-
-    sql_engine = create_async_engine_from_config(config.storage.postgres)
-    init_user_store(sql_engine)
-    checkpointer = FredSqlCheckpointer(sql_engine)
-    history_store = PostgresHistoryStore(sql_engine)
-    return sql_engine, checkpointer, history_store
+def _emit_audit_event(
+    container: PodApplicationContext,
+    level: str,
+    name: str,
+    **fields: object,
+) -> None:
+    """Append one security audit event to the container ring buffer and audit logger."""
+    event = cast(
+        AuditEventRecord,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "audit_event": name,
+            **{k: v for k, v in fields.items() if v is not None},
+        },
+    )
+    with container._audit_events_lock:
+        container.audit_events_buffer.append(event)
+    getattr(_audit_logger, level)("[SECURITY] %s", name, extra=dict(event))
 
 
 def _build_config_provider(config: AgentPodConfig) -> Callable[[], AgentPodConfig]:
@@ -213,138 +172,6 @@ def _build_config_provider(config: AgentPodConfig) -> Callable[[], AgentPodConfi
         return config
 
     return _provide_config
-
-
-def _build_runtime_kpi_writer(config: AgentPodConfig) -> BaseKPIWriter:
-    """
-    Build the pod KPI writer from the runtime observability configuration.
-
-    Why this exists:
-    - `fred-runtime` already emits rich KPI events, but pods previously kept a
-      `NoOpKPIWriter`, which dropped Prometheus/log outputs entirely
-    - startup should decide once whether KPIs go to logs, Prometheus, or are
-      intentionally disabled
-
-    How to use it:
-    - call once during pod startup before `bootstrap_observability(...)`
-    - pass the returned writer into `RuntimeConfig.kpi_writer`
-
-    Example:
-    - `writer = _build_runtime_kpi_writer(config)`
-    """
-
-    backend = config.observability.metrics
-    if backend == MetricsBackend.null:
-        return NoOpKPIWriter()
-
-    store = KpiLogStore(level=config.app.log_level)
-    if backend == MetricsBackend.prometheus:
-        store = PrometheusKPIStore(delegate=store)
-
-    return KPIWriter(
-        store=store,
-        defaults=KPIDefaults(static_dims={"service": "fred-runtime"}),
-        summary_interval_s=config.app.kpi_log_summary_interval_sec,
-        summary_top_n=config.app.kpi_log_summary_top_n,
-    )
-
-
-def _start_runtime_metrics_exporter(config: AgentPodConfig) -> Any | None:
-    """
-    Start the Prometheus scrape endpoint when the pod uses the Prometheus backend.
-
-    Why this exists:
-    - local benches and cluster scrapes need a stable `/metrics` endpoint
-      without requiring FastAPI-specific controller code
-    - keeping exporter startup in one helper avoids repeating the backend check
-
-    How to use it:
-    - call once during pod startup after the KPI writer has been created
-    - keep the returned exporter handle for best-effort shutdown
-
-    Example:
-    - `exporter = _start_runtime_metrics_exporter(config)`
-    """
-
-    if config.observability.metrics != MetricsBackend.prometheus:
-        return None
-
-    exporter = start_http_server(
-        config.app.metrics_port,
-        addr=config.app.metrics_address,
-    )
-    logger.info(
-        "[fred-runtime] Prometheus metrics exporter ready at %s:%s",
-        config.app.metrics_address,
-        config.app.metrics_port,
-    )
-    return exporter
-
-
-def _stop_runtime_metrics_exporter(exporter: Any | None) -> None:
-    """
-    Stop the Prometheus scrape server when the backend exposes a shutdown hook.
-
-    Why this exists:
-    - app-factory tests create and dispose pods repeatedly, so best-effort
-      exporter cleanup avoids lingering bound ports across lifespans
-
-    How to use it:
-    - pass the handle returned by `_start_runtime_metrics_exporter(...)`
-    - safe to call with `None`
-
-    Example:
-    - `_stop_runtime_metrics_exporter(exporter)`
-    """
-
-    if exporter is None:
-        return
-    server = exporter[0] if isinstance(exporter, tuple) and exporter else exporter
-    shutdown = getattr(server, "shutdown", None)
-    if callable(shutdown):
-        shutdown()
-
-
-def _start_runtime_kpi_tasks(
-    *,
-    config: AgentPodConfig,
-    kpi_writer: BaseKPIWriter,
-    sql_engine: Any | None,
-) -> list[asyncio.Task[None]]:
-    """
-    Start optional background KPI emitters for process and SQL pool health.
-
-    Why this exists:
-    - Prometheus/log sinks are only useful if pods also publish the process and
-      pool KPIs developers use for laptop benchmarks and runtime debugging
-
-    How to use it:
-    - call once during startup after SQL storage is initialized
-    - cancel the returned tasks during FastAPI shutdown
-
-    Example:
-    - `tasks = _start_runtime_kpi_tasks(config=config, kpi_writer=writer, sql_engine=engine)`
-    """
-
-    interval_s = float(config.app.kpi_process_metrics_interval_sec)
-    if interval_s <= 0 or isinstance(kpi_writer, NoOpKPIWriter):
-        return []
-
-    tasks: list[asyncio.Task[None]] = [
-        asyncio.create_task(emit_process_kpis(interval_s, kpi_writer))
-    ]
-    if sql_engine is not None:
-        tasks.append(
-            asyncio.create_task(
-                emit_sql_pool_kpis(
-                    interval_s,
-                    kpi_writer,
-                    sql_engine,
-                    pool_name="fred-runtime-postgres",
-                )
-            )
-        )
-    return tasks
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +285,7 @@ _EXECUTE_RESPONSE_ADAPTER = TypeAdapter(RuntimeEvent | _RuntimeErrorPayload)
 # ---------------------------------------------------------------------------
 
 
-def _build_chat_model_factory(config: AgentPodConfig) -> Any:
+def _build_chat_model_factory(config: AgentPodConfig) -> ChatModelFactoryPort:
     """
     Build a ChatModelFactoryPort for the configured model backend.
 
@@ -583,7 +410,12 @@ class _MediaClientAgentAdapter:
             refresh_token=refresh_token,
         )
         new_access_token = payload.get("access_token")
-        new_refresh_token = payload.get("refresh_token") or refresh_token
+        raw_refresh = payload.get("refresh_token")
+        new_refresh_token: str = (
+            raw_refresh
+            if isinstance(raw_refresh, str) and raw_refresh
+            else refresh_token
+        )
         if not isinstance(new_access_token, str) or not new_access_token:
             raise RuntimeError(
                 "Keycloak refresh response did not include a valid access_token."
@@ -1163,6 +995,7 @@ def _make_user_dependency(
 def _validate_grant_user_correlation(
     request: RuntimeExecuteRequest,
     authenticated_user: KeycloakUser | None,
+    container: PodApplicationContext,
 ) -> None:
     """
     Enforce the bearer-token / grant user_id correlation check.
@@ -1191,6 +1024,7 @@ def _validate_grant_user_correlation(
         return
     if grant.user_id != authenticated_user.uid:
         _emit_audit_event(
+            container,
             "warning",
             "grant_user_mismatch",
             grant_user_id=grant.user_id,
@@ -1204,6 +1038,7 @@ def _validate_grant_user_correlation(
             ),
         )
     _emit_audit_event(
+        container,
         "info",
         "grant_user_correlated",
         user_id=authenticated_user.uid,
@@ -1329,7 +1164,7 @@ async def _write_turn_history(
     user_id: str,
     request_message: str | None,
     payloads: list[dict[str, Any]],
-    history_store: Any,
+    history_store: HistoryStorePort,
     team_id: str | None = None,
     agent_instance_id: str | None = None,
     exchange_id: str | None = None,
@@ -1542,6 +1377,7 @@ def _sse(payload: str) -> str:
 
 
 def _emit_turn_completed(
+    container: PodApplicationContext,
     *,
     session_id: str | None,
     exchange_id: str,
@@ -1623,21 +1459,24 @@ def _emit_turn_completed(
                 actor=KPIActor(type="system"),
             )
 
-        # Append to CLI-queryable ring buffer (high-cardinality fields safe here).
-        record: dict[str, Any] = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "session_id": session_id,
-            "exchange_id": exchange_id,
-            "user_id": user_id,
-            "total_ms": total_ms,
-            "is_error": is_error,
-            **prom_dims,
-            "tool_count": tool_count,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-        }
-        with _KPI_TURNS_LOCK:
-            _KPI_TURNS_BUFFER.append(record)
+        # Append to container ring buffer (high-cardinality fields safe here).
+        record = cast(
+            KpiTurnRecord,
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "session_id": session_id,
+                "exchange_id": exchange_id,
+                "user_id": user_id,
+                "total_ms": total_ms,
+                "is_error": is_error,
+                **prom_dims,
+                "tool_count": tool_count,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+        )
+        with container._kpi_turns_lock:
+            container.kpi_turns_buffer.append(record)
     except Exception:
         logger.exception("[fred-runtime][kpi] Failed to emit agent.turn_completed")
 
@@ -1650,6 +1489,7 @@ async def _stream(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     security_enabled: bool = False,
+    container: PodApplicationContext,
 ) -> AsyncIterator[str]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
@@ -1693,6 +1533,7 @@ async def _stream(
         yield _sse(json.dumps(payload, ensure_ascii=False))
 
     _emit_turn_completed(
+        container,
         session_id=session_id,
         exchange_id=exchange_id,
         user_id=user_id,
@@ -1950,7 +1791,10 @@ def _build_agent_router(
         return list(registry.keys())
 
     @router.get("/kpi-turns", dependencies=_auth_deps)
-    async def get_kpi_turns(limit: int = 50) -> list[dict[str, Any]]:
+    async def get_kpi_turns(
+        limit: int = 50,
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> list[KpiTurnRecord]:
         """
         Return recent agent.turn_completed KPI events, newest first.
 
@@ -1965,13 +1809,16 @@ def _build_agent_router(
           Grafana or Prometheus; this exposes the pod-local ring buffer
         - max 200 entries retained in memory (oldest evicted automatically)
         """
-        with _KPI_TURNS_LOCK:
-            events = list(_KPI_TURNS_BUFFER)
+        with container._kpi_turns_lock:
+            events = list(container.kpi_turns_buffer)
         events.reverse()
         return events[: max(1, limit)]
 
     @router.get("/audit-events", dependencies=_auth_deps)
-    async def get_audit_events(limit: int = 50) -> list[dict[str, Any]]:
+    async def get_audit_events(
+        limit: int = 50,
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> list[AuditEventRecord]:
         """
         Return recent security audit events, newest first.
 
@@ -1985,8 +1832,8 @@ def _build_agent_router(
           this ring buffer so the CLI can query them directly
         - max 200 entries retained in memory
         """
-        with _AUDIT_EVENTS_LOCK:
-            events = list(_AUDIT_EVENTS_BUFFER)
+        with container._audit_events_lock:
+            events = list(container.audit_events_buffer)
         events.reverse()
         return events[: max(1, limit)]
 
@@ -2377,6 +2224,7 @@ def _build_agent_router(
         request: RuntimeExecuteRequest,
         http_request: Request,
         authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> RuntimeEvent | _RuntimeErrorPayload:
         """
         Execute one agent turn and return the terminal RuntimeEvent as JSON.
@@ -2407,6 +2255,7 @@ def _build_agent_router(
             validate_execution_grant(request, expected_action=expected_action)
         except ExecutionGrantViolation as exc:
             _emit_audit_event(
+                container,
                 "warning",
                 "grant_validation_failed",
                 agent_instance_id=request.agent_instance_id,
@@ -2417,13 +2266,14 @@ def _build_agent_router(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
         if request.execution_grant is not None:
             _emit_audit_event(
+                container,
                 "info",
                 "grant_validated",
                 agent_instance_id=request.agent_instance_id,
                 user_id=request.effective_user_id(),
                 action=expected_action.value,
             )
-        _validate_grant_user_correlation(request, authenticated_user)
+        _validate_grant_user_correlation(request, authenticated_user, container)
         await _validate_session_checkpoint_access(request)
 
         exchange_id = str(uuid4())
@@ -2449,6 +2299,7 @@ def _build_agent_router(
         session_id: str | None = request.effective_session_id()
         user_id_str = request.effective_user_id() or "unknown"
         _emit_turn_completed(
+            container,
             session_id=session_id,
             exchange_id=exchange_id,
             user_id=user_id_str,
@@ -2483,6 +2334,7 @@ def _build_agent_router(
         request: RuntimeExecuteRequest,
         http_request: Request,
         authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> StreamingResponse:
         """
         Stream RuntimeEvent JSON over SSE for a single agent invocation.
@@ -2524,6 +2376,7 @@ def _build_agent_router(
             validate_execution_grant(request, expected_action=expected_action)
         except ExecutionGrantViolation as exc:
             _emit_audit_event(
+                container,
                 "warning",
                 "grant_validation_failed",
                 agent_instance_id=request.agent_instance_id,
@@ -2534,13 +2387,14 @@ def _build_agent_router(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
         if request.execution_grant is not None:
             _emit_audit_event(
+                container,
                 "info",
                 "grant_validated",
                 agent_instance_id=request.agent_instance_id,
                 user_id=request.effective_user_id(),
                 action=expected_action.value,
             )
-        _validate_grant_user_correlation(request, authenticated_user)
+        _validate_grant_user_correlation(request, authenticated_user, container)
         await _validate_session_checkpoint_access(request)
 
         internal_req = _to_internal_request(request)
@@ -2558,6 +2412,7 @@ def _build_agent_router(
                 team_id=target.team_id,
                 registry=registry,
                 security_enabled=security_enabled,
+                container=container,
             ),
             media_type="text/event-stream",
         )
@@ -2623,96 +2478,63 @@ def create_agent_app(
     )
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        # --- Observability bootstrap ---
-        # Must happen first so every subsequent logger call uses the correct
-        # formatter, handlers (Rich + StoreEmitHandler), and noisy-lib filters —
-        # the same stack that agentic-backend uses via the same log_setup call.
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Boot order (must be preserved — each step depends on the previous):
+        # 1. log_setup         — formatter/handlers ready for all subsequent logs
+        # 2. initialize_kpi_writer — needed by bootstrap_observability
+        # 3. bootstrap_observability — global tracer + metrics provider
+        # 4. attach_pod_container — container in app.state before any request
+        # 5. initialize_sql    — async, may take time
+        # 6. start_metrics_exporter — prometheus thread, after KPI writer exists
+        # 7. start_kpi_tasks   — asyncio tasks, after SQL engine is known
+        # 8. set_runtime_context — wires all built parts into the global config
         log_setup(
             service_name=config.app.name,
             log_level=config.app.log_level,
             store=RamLogStore(),
         )
-        kpi_writer = _build_runtime_kpi_writer(config)
-        metrics_exporter = _start_runtime_metrics_exporter(config)
-        # Bootstrap the global tracer and metrics provider from pod config.
-        # The backend (logging, null, langfuse, …) is declared in configuration.yaml.
-        # Credentials stay in .env.
-        bootstrap_observability(config.observability, kpi_writer=kpi_writer)
-
-        # Initialize Keycloak inbound validation before any request is handled.
+        container = build_pod_container(config)
+        container.initialize_kpi_writer()
+        bootstrap_observability(
+            config.observability, kpi_writer=container.get_kpi_writer()
+        )
+        attach_pod_container(app, container)
         if security_enabled and user_security is not None:
             from fred_core.security.oidc import initialize_user_security
 
             initialize_user_security(user_security)
-
         chat_factory = _build_chat_model_factory(config)
-
-        # SQL checkpointer — always initialized from config.storage.postgres.
-        # Uses SQLite (via aiosqlite) when no Postgres host is set (local dev).
-        # Uses asyncpg Postgres in production.
-        # Provides durable LangGraph session state keyed by session_id.
-        sql_engine = None
-        checkpointer = None
-        history_store = None
-        background_kpi_tasks: list[asyncio.Task[None]] = []
-        try:
-            sql_engine, checkpointer, history_store = _build_sql_runtime_dependencies(
-                config
+        await container.initialize_sql()
+        container.start_metrics_exporter()
+        await container.start_kpi_tasks()
+        set_runtime_context(
+            FredRuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url=config.ai.knowledge_flow_url,
+                    service_name=config.app.name,
+                    timeouts=config.ai.timeout,
+                    chat_model_factory=chat_factory,
+                    checkpointer=container.get_checkpointer(),
+                    history_store=container.get_history_store(),
+                    mcp_configuration=config.get_mcp_configuration(),
+                    control_plane_url=config.platform.control_plane_url,
+                    kpi_writer=container.get_kpi_writer(),
+                )
             )
-            logger.info(
-                "[fred-runtime] SQL checkpointer and history store ready (dialect=%s)",
-                sql_engine.dialect.name,
-            )
-        except Exception:
-            logger.exception(
-                "[fred-runtime] Failed to initialize SQL storage — running stateless"
-            )
-
-        background_kpi_tasks = _start_runtime_kpi_tasks(
-            config=config,
-            kpi_writer=kpi_writer,
-            sql_engine=sql_engine,
         )
-
-        # MCP catalog — resolved during config bootstrap from `mcp_catalog.yaml`
-        # and attached internally to the typed pod config.
-        mcp_configuration = config.get_mcp_configuration()
-
-        runtime_config = RuntimeConfig(
-            knowledge_flow_url=config.ai.knowledge_flow_url,
-            service_name=config.app.name,
-            timeouts=config.ai.timeout,
-            chat_model_factory=chat_factory,
-            checkpointer=checkpointer,
-            history_store=history_store,
-            mcp_configuration=mcp_configuration,
-            control_plane_url=config.platform.control_plane_url,
-            kpi_writer=kpi_writer,
-        )
-        set_runtime_context(FredRuntimeContext(runtime_config))
         logger.info(
             "[fred-runtime] agent pod started — base_url=%s kf=%s security=%s "
             "checkpointer=%s history=%s metrics=%s agents=%s",
             base_url or "/",
             config.ai.knowledge_flow_url,
             "enabled" if security_enabled else "disabled",
-            "sql" if checkpointer is not None else "none",
-            "sql" if history_store is not None else "none",
+            "sql" if container.get_checkpointer() is not None else "none",
+            "sql" if container.get_history_store() is not None else "none",
             config.observability.metrics.value,
             list(registry.keys()),
         )
         yield
-
-        # Graceful shutdown — dispose the SQL engine connection pool.
-        for task in background_kpi_tasks:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-        _stop_runtime_metrics_exporter(metrics_exporter)
-        if sql_engine is not None:
-            await sql_engine.dispose()
-            logger.info("[fred-runtime] SQL engine disposed")
+        await container.shutdown()
 
     app = FastAPI(
         title=config.app.name,

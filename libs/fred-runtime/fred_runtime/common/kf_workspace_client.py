@@ -17,10 +17,9 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, BinaryIO, Callable, Optional
+from typing import BinaryIO, Callable
 
 import httpx
-import requests
 
 from fred_runtime.common.kf_base_client import KfBaseClient, KnowledgeFlowAgentContext
 
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 class WorkspaceRetrievalError(Exception):
     """Raised when an agent configuration file cannot be retrieved."""
 
-    def __init__(self, message: str, status_code: Optional[int] = None):
+    def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
 
@@ -38,7 +37,7 @@ class WorkspaceRetrievalError(Exception):
 class WorkspaceUploadError(Exception):
     """Raised when an asset cannot be uploaded."""
 
-    def __init__(self, message: str, status_code: Optional[int] = None):
+    def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
 
@@ -56,8 +55,8 @@ class UserStorageUploadResult:
     key: str
     file_name: str
     size: int
-    document_uid: Optional[str] = None
-    download_url: Optional[str] = None
+    document_uid: str | None = None
+    download_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,10 +94,10 @@ class KfWorkspaceClient(KfBaseClient):
 
     def __init__(
         self,
-        agent: Optional[KnowledgeFlowAgentContext] = None,
+        agent: KnowledgeFlowAgentContext | None = None,
         *,
-        access_token: Optional[str] = None,
-        refresh_user_access_token: Optional[Callable[[], str]] = None,
+        access_token: str | None = None,
+        refresh_user_access_token: Callable[[], str] | None = None,
     ):
         """
         Why: keep workspace access bound to the caller's runtime identity.
@@ -141,7 +140,7 @@ class KfWorkspaceClient(KfBaseClient):
 
     # ---------------- Core operations ----------------
     async def _get_file_stream(
-        self, path: str, access_token: Optional[str] = None
+        self, path: str, access_token: str | None = None
     ) -> httpx.Response:
         r = await self._request_with_token_refresh(
             "GET",
@@ -154,7 +153,7 @@ class KfWorkspaceClient(KfBaseClient):
         return r
 
     async def _fetch_text_at_path(
-        self, path: str, access_token: Optional[str] = None
+        self, path: str, access_token: str | None = None
     ) -> str:
         """Fetch the complete text content of a user file."""
         try:
@@ -166,7 +165,7 @@ class KfWorkspaceClient(KfBaseClient):
             await response.aclose()
             return bytes(content).decode("utf-8")
 
-        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
+        except httpx.HTTPStatusError as e:
             status = e.response.status_code
             logger.error(
                 f"HTTP error ({status}) reading asset at {path}: {e}", exc_info=True
@@ -186,9 +185,7 @@ class KfWorkspaceClient(KfBaseClient):
             ) from e
 
     # -------------- Public dedicated methods --------------
-    async def fetch_user_text(
-        self, key: str, access_token: Optional[str] = None
-    ) -> str:
+    async def fetch_user_text(self, key: str, access_token: str | None = None) -> str:
         """Read a user-space exchange file (for example a generated report) as plain text."""
         return await self._fetch_text_at_path(
             self._path_user_download(key), access_token
@@ -197,8 +194,8 @@ class KfWorkspaceClient(KfBaseClient):
     async def fetch_agent_config_text(
         self,
         key: str,
-        access_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        access_token: str | None = None,
+        agent_id: str | None = None,
     ) -> str:
         """Read an agent configuration file (for example template or prompt) as plain text."""
         if not agent_id:
@@ -210,9 +207,9 @@ class KfWorkspaceClient(KfBaseClient):
     async def fetch_agent_user_text(
         self,
         key: str,
-        access_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        target_user_id: Optional[str] = None,
+        access_token: str | None = None,
+        agent_id: str | None = None,
+        target_user_id: str | None = None,
     ) -> str:
         """Read a private agent memo for one specific user (agent-only scope)."""
         if not agent_id or not target_user_id:
@@ -224,7 +221,7 @@ class KfWorkspaceClient(KfBaseClient):
         )
 
     async def _fetch_blob_at_path(
-        self, path: str, access_token: Optional[str] = None
+        self, path: str, access_token: str | None = None
     ) -> UserStorageBlob:
         """
         Why: Return raw bytes + HTTP metadata. The agent decides if it will:
@@ -255,7 +252,7 @@ class KfWorkspaceClient(KfBaseClient):
                 bytes=content, content_type=ctype, filename=filename, size=total
             )
 
-        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
+        except httpx.HTTPStatusError as e:
             status = e.response.status_code
             logger.error(
                 f"HTTP error ({status}) reading asset {path}: {e}", exc_info=True
@@ -275,7 +272,7 @@ class KfWorkspaceClient(KfBaseClient):
             ) from e
 
     async def fetch_user_blob(
-        self, key: str, access_token: Optional[str] = None
+        self, key: str, access_token: str | None = None
     ) -> UserStorageBlob:
         """Fetch a user-space exchange file (binary content + metadata)."""
         return await self._fetch_blob_at_path(
@@ -285,8 +282,8 @@ class KfWorkspaceClient(KfBaseClient):
     async def fetch_agent_config_blob(
         self,
         key: str,
-        access_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        access_token: str | None = None,
+        agent_id: str | None = None,
     ) -> UserStorageBlob:
         """Fetch an agent configuration file (binary content + metadata)."""
         if not agent_id:
@@ -298,9 +295,9 @@ class KfWorkspaceClient(KfBaseClient):
     async def fetch_agent_user_blob(
         self,
         key: str,
-        access_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        target_user_id: Optional[str] = None,
+        access_token: str | None = None,
+        agent_id: str | None = None,
+        target_user_id: str | None = None,
     ) -> UserStorageBlob:
         """Fetch a private agent↔user note (binary content + metadata)."""
         if not agent_id or not target_user_id:
@@ -318,7 +315,7 @@ class KfWorkspaceClient(KfBaseClient):
         key: str,
         file_content: bytes | BinaryIO,
         filename: str,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> UserStorageUploadResult:
         logger.info(
             "UPLOADING_ASSET: Attempting to upload asset to %s key=%s", path, key
@@ -344,12 +341,12 @@ class KfWorkspaceClient(KfBaseClient):
                 document_uid=_coerce_optional_document_uid(meta.get("document_uid")),
                 download_url=meta.get("download_url"),
             )
-        except requests.exceptions.HTTPError as e:
+        except httpx.HTTPStatusError as e:
             status = e.response.status_code
             detail = (
                 e.response.json().get("detail", "No detail provided")
                 if e.response.content
-                else e.response.reason
+                else e.response.reason_phrase
             )
             logger.error(
                 f"HTTP error ({status}) uploading asset {key}: {detail}", exc_info=True
@@ -369,7 +366,7 @@ class KfWorkspaceClient(KfBaseClient):
         key: str,
         file_content: bytes | BinaryIO,
         filename: str,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> UserStorageUploadResult:
         """Upload a user-space file (for example a downloadable report)."""
         path = self._path_user_upload()
@@ -381,7 +378,7 @@ class KfWorkspaceClient(KfBaseClient):
         file_content: bytes | BinaryIO,
         filename: str,
         agent_id: str,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> UserStorageUploadResult:
         """Upload an agent configuration file (for example template or prompt)."""
         path = self._path_agent_config_upload(agent_id)
@@ -394,14 +391,14 @@ class KfWorkspaceClient(KfBaseClient):
         filename: str,
         agent_id: str,
         target_user_id: str,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> UserStorageUploadResult:
         """Upload a private note for one specific user (agent notebook scope)."""
         path = self._path_agent_user_upload(agent_id, target_user_id)
         return await self._upload_blob(path, key, file_content, filename, content_type)
 
     async def list_user_blobs(
-        self, prefix: str = "", access_token: Optional[str] = None
+        self, prefix: str = "", access_token: str | None = None
     ) -> list[UserStorageResourceInfo]:
         """List user-space resources (typed) optionally filtered by prefix."""
         r = await self._request_with_token_refresh(
@@ -423,9 +420,7 @@ class KfWorkspaceClient(KfBaseClient):
                 items.append(parsed)
         return items
 
-    async def delete_user_blob(
-        self, key: str, access_token: Optional[str] = None
-    ) -> None:
+    async def delete_user_blob(self, key: str, access_token: str | None = None) -> None:
         """Delete a file from user-space storage."""
         path = self._path_user_download(key)
         r = await self._request_with_token_refresh(
@@ -439,8 +434,8 @@ class KfWorkspaceClient(KfBaseClient):
     async def delete_agent_config_blob(
         self,
         key: str,
-        access_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        access_token: str | None = None,
+        agent_id: str | None = None,
     ) -> None:
         """Delete an agent configuration file."""
         if not agent_id:
@@ -457,9 +452,9 @@ class KfWorkspaceClient(KfBaseClient):
     async def delete_agent_user_blob(
         self,
         key: str,
-        access_token: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        target_user_id: Optional[str] = None,
+        access_token: str | None = None,
+        agent_id: str | None = None,
+        target_user_id: str | None = None,
     ) -> None:
         """Delete a private agent↔user note."""
         if not agent_id or not target_user_id:
@@ -476,7 +471,7 @@ class KfWorkspaceClient(KfBaseClient):
         r.raise_for_status()
 
     @staticmethod
-    def _normalize_resource_type(value: Any) -> str:
+    def _normalize_resource_type(value: object) -> str:
         raw = str(value or "").strip().lower()
         if not raw:
             return "unknown"
@@ -492,7 +487,7 @@ class KfWorkspaceClient(KfBaseClient):
 
     @classmethod
     def _parse_user_storage_resource(
-        cls, payload: Any
+        cls, payload: object
     ) -> UserStorageResourceInfo | None:
         if not isinstance(payload, dict):
             return None
@@ -524,7 +519,7 @@ class KfWorkspaceClient(KfBaseClient):
         )
 
 
-def _coerce_optional_document_uid(value: object) -> Optional[str]:
+def _coerce_optional_document_uid(value: object) -> str | None:
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, str):
