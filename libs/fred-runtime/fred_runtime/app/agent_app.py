@@ -62,6 +62,7 @@ from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.structure import KeycloakUser
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -1757,6 +1758,86 @@ def _terminal_execute_payload(
     return _EXECUTE_RESPONSE_ADAPTER.validate_python(payloads[-1])
 
 
+def _build_eval_trace(
+    *,
+    payloads: list[dict[str, Any]],
+    session_id: str,
+    agent_id: str,
+    user_input: str,
+    latency_ms: int,
+) -> EvalTrace:
+    steps: list[EvalStep] = []
+    output: str | None = None
+    error: str | None = None
+    model_name: str | None = None
+    token_usage: dict[str, int] | None = None
+    finish_reason: str | None = None
+
+    for payload in payloads:
+        kind = payload.get("kind")
+
+        if kind == "tool_call":
+            steps.append(
+                EvalStep(
+                    kind="tool_call",
+                    tool_name=payload.get("tool_name"),
+                    call_id=payload.get("call_id"),
+                    arguments=payload.get("arguments"),
+                )
+            )
+
+        elif kind == "tool_result":
+            steps.append(
+                EvalStep(
+                    kind="tool_result",
+                    tool_name=payload.get("tool_name"),
+                    call_id=payload.get("call_id"),
+                    content=payload.get("content"),
+                    is_error=payload.get("is_error"),
+                )
+            )
+
+        elif kind == "node_error":
+            steps.append(
+                EvalStep(
+                    kind="node_error",
+                    node_id=payload.get("node_id"),
+                    error_message=payload.get("error_message"),
+                )
+            )
+
+        elif kind == "awaiting_human":
+            steps.append(EvalStep(kind="awaiting_human"))
+
+        elif kind == "final":
+            output = payload.get("content")
+            model_name = payload.get("model_name")
+            token_usage = payload.get("token_usage")
+            finish_reason = payload.get("finish_reason")
+            steps.append(
+                EvalStep(
+                    kind="final",
+                    content=payload.get("content"),
+                )
+            )
+
+        elif kind == "execution_error":
+            error = payload.get("message")
+
+    return EvalTrace(
+        session_id=session_id,
+        agent_id=agent_id,
+        input=user_input,
+        output=output,
+        error=error,
+        latency_ms=latency_ms,
+        model_name=model_name,
+        token_usage=token_usage,
+        finish_reason=finish_reason,
+        steps=tuple(steps),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Router builder
 # ---------------------------------------------------------------------------
@@ -2416,6 +2497,82 @@ def _build_agent_router(
                 container=container,
             ),
             media_type="text/event-stream",
+        )
+
+    @router.post(
+        "/evaluate",
+        response_model=EvalTrace,
+    )
+    async def evaluate(
+        request: RuntimeExecuteRequest,
+        http_request: Request,
+        authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> EvalTrace:
+        auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+
+        expected_action = _expected_execution_action(request)
+
+        try:
+            validate_execution_grant(request, expected_action=expected_action)
+        except ExecutionGrantViolation as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+        _validate_grant_user_correlation(request, authenticated_user, container)
+        await _validate_session_checkpoint_access(request)
+
+        session_id = request.effective_session_id() or str(uuid4())
+        request_for_eval = request
+        if not request.effective_session_id():
+            request_for_eval = request.model_copy(update={"session_id": session_id})
+
+        internal_req = _to_internal_request(request_for_eval)
+
+        target = await _resolve_agent_instance(
+            request=internal_req,
+            registry=registry,
+            access_token=access_token,
+            control_plane_url=get_runtime_context().config.control_plane_url,
+        )
+
+        started_at = time.monotonic()
+        payloads = [
+            payload
+            async for payload in _iterate_runtime_event_payloads(
+                target.definition,
+                internal_req,
+                access_token=access_token,
+                team_id=target.team_id,
+                registry=registry,
+            )
+        ]
+        latency_ms = int((time.monotonic() - started_at) * 1000)
+
+        history_store = get_runtime_context().config.history_store
+        if history_store is not None:
+            await _write_turn_history(
+                session_id=session_id,
+                user_id=request_for_eval.effective_user_id() or "unknown",
+                request_message=request_for_eval.input,
+                payloads=payloads,
+                history_store=history_store,
+                team_id=target.team_id,
+                agent_instance_id=request_for_eval.agent_instance_id,
+            )
+
+        resolved_agent_id = (
+            request_for_eval.agent_id
+            if request_for_eval.agent_id is not None
+            else target.definition.agent_id
+        )
+
+        return _build_eval_trace(
+            payloads=payloads,
+            session_id=session_id,
+            agent_id=resolved_agent_id,
+            user_input=request_for_eval.input,
+            latency_ms=latency_ms,
         )
 
     return router

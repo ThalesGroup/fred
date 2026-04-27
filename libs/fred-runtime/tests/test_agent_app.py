@@ -247,9 +247,14 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
         ]["content"]["application/json"]["schema"]
         components = openapi_spec["components"]["schemas"]
 
+        evaluate_schema = openapi_spec["paths"]["/pod/v1/agents/evaluate"]["post"][
+            "responses"
+        ]["200"]["content"]["application/json"]["schema"]
         assert "anyOf" in execute_schema
         assert messages_schema["items"]["$ref"] == "#/components/schemas/ChatMessage"
         assert list_models_schema["$ref"] == "#/components/schemas/OpenAIModelList"
+        assert evaluate_schema["$ref"] == "#/components/schemas/EvalTrace"
+
         for schema_name in (
             "RuntimeExecuteRequest",
             "ExecutionGrant",
@@ -262,6 +267,8 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
             "TurnPersistedEvent",
             "ChatMessage",
             "OpenAIModelList",
+            "EvalTrace",
+            "EvalStep",
         ):
             assert schema_name in components
 
@@ -289,16 +296,41 @@ def test_create_agent_app_executes_local_authored_tools_and_honors_base_url(
         )
         assert stream_response.status_code == 200
 
-    payloads = [
-        json.loads(line.removeprefix("data: "))
-        for line in stream_response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    assert payloads
-    assert not any("error" in payload for payload in payloads)
-    assert any(payload.get("kind") == "tool_result" for payload in payloads)
-    assert payloads[-1]["kind"] == "final"
-    assert payloads[-1]["content"] == "Echo complete."
+        payloads = [
+            json.loads(line.removeprefix("data: "))
+            for line in stream_response.text.splitlines()
+            if line.startswith("data: ")
+        ]
+        assert payloads
+        assert not any("error" in payload for payload in payloads)
+        assert any(payload.get("kind") == "tool_result" for payload in payloads)
+        assert payloads[-1]["kind"] == "final"
+        assert payloads[-1]["content"] == "Echo complete."
+
+        evaluate_response = client.post(
+            "/pod/v1/agents/evaluate",
+            json={
+                "agent_id": "rags.sample.echo",
+                "input": "hello",
+                "session_id": "session-evaluate",
+                "runtime_context": {"user_id": "alice"},
+            },
+        )
+        assert evaluate_response.status_code == 200
+
+        eval_payload = evaluate_response.json()
+        assert eval_payload["session_id"] == "session-evaluate"
+        assert eval_payload["agent_id"] == "rags.sample.echo"
+        assert eval_payload["input"] == "hello"
+        assert eval_payload["output"] == "Echo complete."
+        assert eval_payload["error"] is None
+        assert eval_payload["model_name"] is None or isinstance(
+            eval_payload["model_name"], str
+        )
+        assert isinstance(eval_payload["latency_ms"], int)
+        assert any(step["kind"] == "tool_call" for step in eval_payload["steps"])
+        assert any(step["kind"] == "tool_result" for step in eval_payload["steps"])
+        assert any(step["kind"] == "final" for step in eval_payload["steps"])
 
 
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(

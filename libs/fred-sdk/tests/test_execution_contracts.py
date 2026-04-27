@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 
 import pytest
 
@@ -107,6 +108,23 @@ def test_execution_target_with_agent_ref() -> None:
         underlying_agent_ref="v2.sample.react",
     )
     assert target.underlying_agent_ref == "v2.sample.react"
+
+
+def test_eval_step_minimal() -> None:
+    step = EvalStep(kind="final")
+    assert step.kind == "final"
+
+
+def test_eval_trace_minimal() -> None:
+    trace = EvalTrace(
+        session_id="s-1",
+        agent_id="agent-1",
+        input="hello",
+        latency_ms=42,
+        steps=(EvalStep(kind="final", content="ok"),),
+    )
+    assert trace.session_id == "s-1"
+    assert trace.steps[0].kind == "final"
 
 
 # ---------------------------------------------------------------------------

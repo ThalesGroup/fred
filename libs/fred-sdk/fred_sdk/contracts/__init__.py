@@ -24,6 +24,7 @@ How to use:
 """
 
 from .context import GeoPart, LinkKind, LinkPart, RuntimeContext
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from .execution import (
     ActorContext,
     ExecutionGrant,
@@ -69,4 +70,6 @@ __all__ = [
     "OpenAIModelList",
     "OpenAIToolCall",
     "OpenAIToolCallFunction",
+    "EvalStep",
+    "EvalTrace",
 ]
