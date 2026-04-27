@@ -95,6 +95,7 @@ from fred_sdk.contracts.models import (
     ToolRefRequirement,
 )
 from fred_sdk.contracts.runtime import HumanChoiceOption, HumanInputRequest
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 
 # ---------------------------------------------------------------------------
 # Graph agent authoring
@@ -224,4 +225,6 @@ __all__ = [
     "TOOL_REF_LOGS_QUERY",
     "TOOL_REF_RESOURCES_FETCH_TEXT",
     "TOOL_REF_TRACES_SUMMARIZE_CONVERSATION",
+    "EvalStep",
+    "EvalTrace",
 ]
