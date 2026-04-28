@@ -360,24 +360,44 @@ class SessionOrchestrator:
 
     async def _ensure_next_rank(self, session: SessionSchema) -> int:
         """
-        Seed next_rank only when missing. Avoids history scans on the hot path.
+        Return the authoritative next_rank for this session.
+
+        Always re-reads from the session store (DB) rather than trusting the
+        in-memory per-pod cache.  With N pods each maintaining an independent
+        SessionCache, a pod that previously handled exchange K for this session
+        would return a stale next_rank after exchanges K+1…M were handled by
+        other pods — causing rank collisions and out-of-order UI rendering.
+        One extra primary-key SELECT per exchange is the accepted trade-off.
+
+        Falls back to a full history count only when next_rank has never been
+        persisted (brand-new session or pre-migration data).
         """
-        if session.next_rank is not None:
+        async with phase_timer(self.kpi, "session_read_next_rank"):
+            fresh = await self.session_store.get(session.id)
+
+        if fresh is not None and fresh.next_rank is not None:
+            session.next_rank = fresh.next_rank
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[SESSIONS] next_rank=%s from store session=%s",
+                    session.next_rank,
+                    session.id,
+                )
             return session.next_rank
 
+        # next_rank not yet persisted — seed from message count (first exchange only).
         async with phase_timer(self.kpi, "history_get_seed_rank"):
             prior_msgs = await self.history_store.get(session.id)
         session.next_rank = len(prior_msgs)
         async with phase_timer(self.kpi, "session_write_seed_rank"):
             await self.session_store.save(session)
         self.session_cache.touch_session(session.id, session)
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "[SESSIONS] seeded next_rank=%s from history_count=%d session=%s",
-                session.next_rank,
-                len(prior_msgs),
-                session.id,
-            )
+        logger.debug(
+            "[SESSIONS] seeded next_rank=%s from history_count=%d session=%s",
+            session.next_rank,
+            len(prior_msgs),
+            session.id,
+        )
         return session.next_rank
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)

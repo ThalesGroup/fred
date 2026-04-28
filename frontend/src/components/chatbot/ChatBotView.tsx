@@ -66,6 +66,7 @@ type ChatBotViewProps = {
   onAttachmentsUpdated: () => void;
   isUploadingAttachments: boolean;
   libraryNameMap: Record<string, string>;
+  isLibsFetching?: boolean;
   libraryById: Record<string, TagWithItemsId>;
   promptNameMap: Record<string, string>;
   templateNameMap: Record<string, string>;
@@ -122,6 +123,7 @@ const ChatBotView = ({
   onAttachmentsUpdated,
   isUploadingAttachments,
   libraryNameMap,
+  isLibsFetching,
   libraryById,
   promptNameMap,
   templateNameMap,
@@ -255,6 +257,7 @@ const ChatBotView = ({
         isUploadingAttachments={isUploadingAttachments}
         onRequestLogGenius={onRequestLogGenius}
         libraryNameMap={libraryNameMap}
+        isLibsFetching={isLibsFetching}
         libraryById={libraryById}
         promptNameMap={promptNameMap}
         templateNameMap={templateNameMap}
