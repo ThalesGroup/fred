@@ -17,13 +17,6 @@ export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps<K
         onChange={(checked) => onParamsChange({ ...params, attach_files: checked })}
       />
 
-      {/* Allow library selection */}
-      <SwitchRow
-        label={t("agentTuning.fields.chat_options_libraries_selection.title")}
-        description={t("agentTuning.fields.chat_options_libraries_selection.description")}
-        checked={Boolean(params.libraries_selection)}
-        onChange={(checked) => onParamsChange({ ...params, libraries_selection: checked })}
-      />
     </div>
   );
 }
