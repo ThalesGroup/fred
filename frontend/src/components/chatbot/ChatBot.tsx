@@ -1470,7 +1470,8 @@ const ChatBot = ({
     const includeCorpusScope = documentsScopeActive ? true : conversationPrefs.includeCorpusScope;
 
     if (!documentsScopeActive) {
-      runtimeContext.selected_document_libraries_ids = conversationPrefs.documentLibraryIds;
+      const ids = conversationPrefs.documentLibraryIds;
+      runtimeContext.selected_document_libraries_ids = ids.length > 0 ? ids : undefined;
     }
     if (documentsScopeActive) {
       runtimeContext.selected_document_libraries_ids = undefined;

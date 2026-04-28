@@ -253,22 +253,25 @@ class VectorSearchClient(KfBaseClient):
 def _intersect_or_fallback(
     a: Optional[Collection[str]], b: Optional[Collection[str]]
 ) -> Optional[Collection[str]]:
-    """Return the intersection when both sides are set, otherwise whichever is non-None.
+    """Return the intersection when both sides carry an explicit non-empty list,
+    otherwise whichever side is non-empty (or None if neither restricts).
 
     Semantics:
-    - None means "no restriction at this level" — passes through whatever the other level sets.
-    - [] (empty collection) means "explicitly no libraries" — an explicit empty on either side
-      propagates through and results in no results when both sides are set.
-    - When both are non-None: return the intersection (may be an empty set).
-    - When one side is None: return the other side unchanged (preserving [] vs populated list).
+    - None and [] both mean "no restriction at this level" and are treated identically.
+    - A non-empty list means "restrict to exactly these libraries".
+    - When both sides are non-empty: return their intersection (may be empty → deny all).
+    - When only one side is non-empty: return that side unchanged.
+    - When neither side is non-empty: return None (no restriction).
     """
-    if a is None and b is None:
+    effective_a = a if a else None
+    effective_b = b if b else None
+    if effective_a is None and effective_b is None:
         return None
-    if a is None:
-        return b
-    if b is None:
-        return a
-    return set(a) & set(b)
+    if effective_a is None:
+        return effective_b
+    if effective_b is None:
+        return effective_a
+    return set(effective_a) & set(effective_b)
 
 
 def _get_kf_vector_search_params(agent_settings: AgentSettings) -> KfVectorSearchParams:
