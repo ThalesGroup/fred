@@ -623,7 +623,7 @@ export type KfVectorSearchParams = {
   document_library_tags_ids?: string[];
   /** When True, expose the file-attachment control in the chat bar so users can attach local files (PDFs, images, text) to their messages. */
   attach_files?: boolean;
-  /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. */
+  /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. Defaults to True because conversation-level scoping is the only scoping mechanism. */
   libraries_selection?: boolean;
 };
 export type McpServerRef = {
