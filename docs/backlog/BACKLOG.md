@@ -834,6 +834,8 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
 - [ ] Expand bootstrap/config surface only if `FrontendBootstrap` becomes insufficient
 - [ ] Add permissions endpoint if frontend still needs a flat permission list
 - [x] Add agent template aggregation endpoint (→ Phase 3a)
+- [x] Extend `AgentTemplateSummary` with `mcp_servers: list[ManagedMcpServerRef]` — enriched with `display_name` from runtime MCP catalog (→ 2026-04-28)
+- [x] Extend `ManagedMcpServerRef` with `display_name` + `config_fields` for Phase 2 MCP configuration (→ 2026-04-28)
 - [x] Add agent instance CRUD endpoints (→ Phase 3c — POST enroll + DELETE unenroll done)
 - [x] Add read-only team-scoped agent instance listing endpoint (→ Phase 3a)
 - [x] Add session create + list endpoints (→ Phase 5D — `POST/GET /teams/{team_id}/sessions`); delete deferred
@@ -1904,7 +1906,7 @@ The first required operating mode for Phase 5 is:
 | 0 – Direction RFC | ✓ Complete | |
 | 1 – Runtime contracts | ✓ Complete | `fred-sdk` + `fred-runtime` |
 | 2 – OpenAPI / codegen | ✓ Complete | `runtimeOpenApi.ts` generated |
-| 3a – Control-plane product surface | ✓ Complete | bootstrap, templates, instances endpoints |
+| 3a – Control-plane product surface | ✓ Complete | bootstrap, templates (+ `mcp_servers`), instances endpoints |
 | 3b – Backend completeness gate | Code ✓; validation items open | Run in parallel — not blocking Phase 4 |
 | 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking) |
 | 4 – Frontend SSE | ✓ Complete | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes |

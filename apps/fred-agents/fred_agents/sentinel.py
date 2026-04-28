@@ -28,7 +28,12 @@ Example:
 - `from fred_agents.sentinel.profile import SENTINEL_AGENT`
 """
 
-from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS, MCPServerRef
+from fred_sdk import (
+    FieldSpec,
+    MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
+    MCPServerRef,
+    UIHints,
+)
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 from fred_sdk.resources import load_agent_prompt_markdown
 
@@ -64,6 +69,20 @@ class SentinelReActDefinition(ReActAgentDefinition):
     )
     default_mcp_servers: tuple[MCPServerRef, ...] = (
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
+    )
+
+    fields: tuple[FieldSpec, ...] = (
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="System prompt",
+            description=(
+                "Override the default Sentinel monitoring instructions. "
+                "Leave blank to use the built-in OpenSearch diagnostics prompt."
+            ),
+            required=False,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
+        ),
     )
 
     def policy(self) -> ReActPolicy:

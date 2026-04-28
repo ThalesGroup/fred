@@ -28,7 +28,13 @@ Example:
 - `from fred_agents.rag_expert import RAG_EXPERT_AGENT`
 """
 
-from fred_sdk import TOOL_REF_KNOWLEDGE_SEARCH, GuardrailDefinition, ToolRefRequirement
+from fred_sdk import (
+    FieldSpec,
+    TOOL_REF_KNOWLEDGE_SEARCH,
+    GuardrailDefinition,
+    ToolRefRequirement,
+    UIHints,
+)
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 from fred_sdk.resources import load_agent_prompt_markdown
 
@@ -76,6 +82,36 @@ class RagExpertReActDefinition(ReActAgentDefinition):
                 "Search the selected document libraries and session attachments "
                 "and return relevant grounded snippets."
             ),
+        ),
+    )
+
+    fields: tuple[FieldSpec, ...] = (
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="System prompt",
+            description=(
+                "Override the default RAG expert grounding instructions. "
+                "Leave blank to use the built-in document-grounded reasoning prompt."
+            ),
+            required=False,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description="Users can attach files to ground answers against session uploads.",
+            default=False,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.libraries_selection",
+            type="boolean",
+            title="Document library picker",
+            description="Show a document library selector in the chat interface.",
+            default=False,
+            ui=UIHints(group="Chat options"),
         ),
     )
 

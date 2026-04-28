@@ -478,8 +478,9 @@ The agent selection surface is now fully migrated:
 - `TeamAgentsPage` reads managed instances from control-plane (no more `agentic-backend`)
 - `agent_instance_id` is the route and execution identity throughout the managed path
 
-Remaining open item: decide which legacy authoring/editing capabilities (if any) remain
-supported during migration and which are intentionally deferred (see task below).
+Legacy authoring capabilities resolved: the `AgentFormModal` now reflects the control-plane model
+(template browser → enrollment; edit mode pre-fills from instance). V1/V2 versioning, workspace files,
+and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`.
 
 ---
 
@@ -489,8 +490,8 @@ supported during migration and which are intentionally deferred (see task below)
 - [x] Replace enrollable catalog listing with control-plane agent templates
 - [x] Use `agent_instance_id` as the route and selection identity everywhere in
   the managed path
-- [ ] Decide which legacy authoring/editing capabilities remain supported during
-  migration and which are intentionally deferred
+- [x] Decide which legacy authoring/editing capabilities remain supported during
+  migration and which are intentionally deferred — resolved: `AgentFormModal` refactored per RFC; legacy capabilities (V1/V2, workspace files, raw MCP selection) explicitly out of scope
 - [x] Keep the page usable when no runtime templates are currently reachable
 - [x] Define the empty/loading/error states for:
   - no enrolled managed instances

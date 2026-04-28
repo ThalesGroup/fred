@@ -58,7 +58,7 @@ export function useFrontendProperties(): FrontendProperties {
 
   return useMemo(
     () => ({
-      agentIconName: getProperty("agentIconName") || "widgets",
+      agentIconName: getProperty("agentIconName") || "person",
       agentsNicknamePlural: ui?.agentsNicknamePlural || "Agents",
       agentsNicknameSingular: ui?.agentsNicknameSingular || "Agent",
       allowAgentSwitchInOneConversation: getProperty("allowAgentSwitchInOneConversation") === "true",

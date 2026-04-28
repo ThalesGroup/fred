@@ -1,0 +1,14 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-m);
+}
+
+.emptyNotice {
+  margin: 0;
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}

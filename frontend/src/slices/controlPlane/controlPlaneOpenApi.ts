@@ -551,6 +551,12 @@ export type ManagedAgentFieldSpec = {
   item_type?: string | null;
   ui?: ManagedAgentUiHints;
 };
+export type ManagedMcpServerRef = {
+  id: string;
+  display_name?: string;
+  require_tools?: string[];
+  config_fields?: ManagedAgentFieldSpec[];
+};
 export type AgentTemplateSummary = {
   template_id: string;
   source_runtime_id: string;
@@ -564,6 +570,8 @@ export type AgentTemplateSummary = {
   status?: "available" | "unavailable";
   /** Tunable field descriptors declared by the template. The frontend renders these dynamically at enrollment time. Empty when the template declares no tunable fields. */
   default_tuning_fields?: ManagedAgentFieldSpec[];
+  /** MCP server references advertised by this template. Empty when the template declares no MCP dependencies. */
+  mcp_servers?: ManagedMcpServerRef[];
 };
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
@@ -597,10 +605,6 @@ export type UpdateAgentInstanceRequest = {
   tuning_field_values?: {
     [key: string]: any;
   } | null;
-};
-export type ManagedMcpServerRef = {
-  id: string;
-  require_tools?: string[];
 };
 export type ManagedAgentTuning = {
   role: string;

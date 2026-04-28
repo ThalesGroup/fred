@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-04-27
+Last updated: 2026-04-28
 
 ---
 
@@ -113,6 +113,35 @@ Three scenarios to validate, in order:
 - [x] Unit tests: `_emit_audit_event`, ring buffer endpoints, `_emit_turn_completed` via execute,
   `KpiLogStore.index_event()` (structured JSON, error events, unknown name filter)
 - [x] `make code-quality && make test` in `fred-core` (31 tests) and `fred-runtime` (62 tests)
+
+---
+
+## AgentFormModal Refactor (Dimitri) · Done 2026-04-28
+
+Per `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`.
+
+- [x] Backend: `ManagedMcpServerRef` extended with `display_name` + `config_fields`
+- [x] Backend: `AgentTemplateSummary` now includes `mcp_servers`
+- [x] Backend: runtime's `available_mcp_servers` enriched into `ManagedMcpServerRef.display_name`
+- [x] Frontend: OpenAPI client regenerated
+- [x] Frontend: `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted
+- [x] Frontend: all field types implemented (secret, url, number, integer, boolean, enum, prompt, multiline)
+- [x] Frontend: field grouping via `ui.group`; inline validation; edit mode context bar + metadata footer
+- [x] Frontend: MCP tools read-only section in form body
+
+---
+
+## Agent FieldSpec Declarations (Dimitri) · Done 2026-04-28
+
+Wires the control-plane form with actual tunable fields for all three production agents.
+
+- [x] `fred-sdk`: added `MCP_SERVER_KNOWLEDGE_FLOW_TEXT` + `MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS` constants
+- [x] `GeneralAssistantDefinition`: full KF MCP toolkit in `default_mcp_servers` (7 servers); `prompts.system`, `chat_options.attach_files`, `chat_options.libraries_selection` fields
+- [x] `SentinelReActDefinition`: `prompts.system` field (optional override of built-in monitoring prompt)
+- [x] `RagExpertReActDefinition`: `prompts.system` + `chat_options.attach_files` + `chat_options.libraries_selection` fields
+- [x] `make code-quality && make test` in `fred-agents` and `fred-sdk`
+
+**Next step**: apply `prompts.system` field value at runtime in `_apply_runtime_tuning` (currently only structural metadata is overlaid; field *values* from control-plane are not yet applied to `system_prompt_template`).
 
 ---
 

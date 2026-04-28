@@ -65,18 +65,36 @@ class _RuntimeTemplatePayload:
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
+        tuning = ManagedAgentTuning.model_validate(
+            data.get("default_tuning")
+            or {
+                "role": data["title"],
+                "description": data["description"],
+            }
+        )
+        # Enrich mcp_server refs with display_name from the resolved MCP catalog
+        catalog_names: dict[str, str] = {
+            s["id"]: s.get("name", s["id"])
+            for s in data.get("available_mcp_servers", [])
+            if isinstance(s, dict) and "id" in s
+        }
+        if catalog_names:
+            tuning = tuning.model_copy(
+                update={
+                    "mcp_servers": [
+                        ref.model_copy(
+                            update={"display_name": catalog_names.get(ref.id, ref.id)}
+                        )
+                        for ref in tuning.mcp_servers
+                    ]
+                }
+            )
         return cls(
             template_agent_id=data["template_agent_id"],
             title=data["title"],
             description=data["description"],
             kind=data["kind"],
-            default_tuning=ManagedAgentTuning.model_validate(
-                data.get("default_tuning")
-                or {
-                    "role": data["title"],
-                    "description": data["description"],
-                }
-            ),
+            default_tuning=tuning,
         )
 
 
@@ -191,6 +209,7 @@ async def list_agent_templates(
                     category=template.kind,
                     capabilities=[template.kind],
                     default_tuning_fields=template.default_tuning.fields,
+                    mcp_servers=template.default_tuning.mcp_servers,
                 )
             )
     return templates

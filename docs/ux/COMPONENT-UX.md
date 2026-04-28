@@ -368,48 +368,65 @@ _(none yet)_
 
 ---
 
-### Agent card — whole-card click
+### `AgentCard`
 
-**Location:** `src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
+**Location:** `src/rework/components/shared/organisms/AgentCard/AgentCard.tsx`
 **Status:** `Functional`
 
-The develop branch had the entire agent card as a `<Link>` for enabled instances (action buttons used `e.preventDefault()`). This was lost in the agentic-pod migration, which replaced it with a standalone "Start Chat" button. Restored: card is now a `<Link>` for enabled instances; Delete and Settings buttons call `e.preventDefault() + e.stopPropagation()`.
+Displays one managed agent instance. Enabled cards are wrapped by `TeamAgentsPage` in a `<Link>` to the managed-chat route. On hover: descriptive content blurs, a "Start Chat" overlay appears, and the border plays a rotating conic-gradient animation. Footer action buttons (Settings, Delete) stay unblurred so they remain accessible during the hover state. Disabled cards render with muted colours and no hover effects, driven by a `data-enabled` CSS custom-property cascade.
 
 #### Open UX issues
 
-- **Hover state** — `.chatLink:hover .agentCard` gets `border-color: --primary` and `background: --surface-container-low`. Validate that the contrast is sufficient and consistent with other interactive cards in the design system.
-- **Disabled card appearance** — disabled agents render a plain div (no hover, no cursor). Confirm whether a `not-allowed` cursor or a muted overlay would better communicate non-interactivity.
+- **Gradient animation colours** — the conic-gradient uses hardcoded hex stops (`#65e0f6`, `#9299ff`, `#e1c39c`, `#d665b4`). These are intentional branding colours not in the design token system. Confirm with designer whether they should be tokenised or kept as-is.
+
+- **Status badge — `color-mix`** — uses `color-mix(in srgb, var(--success) 12%, transparent)` for the badge background. Verify browser support aligns with deployment targets (Chrome 111+, Firefox 113+).
+
+- **Disabled card affordance** — renders with `cursor: default` and dimmed icon. Confirm whether a `not-allowed` cursor or a muted overlay label (e.g. "Disabled") would better communicate non-interactivity to end users.
+
+- **Card height** — no `min-height` set; height is driven by content. Validate grid row alignment when instances have very short vs. very long descriptions.
+
+- **"Start Chat" label** — uses i18n key `rework.agentCard.startChat`. Confirm translation exists in all supported locales.
 
 #### Resolved
 
-- Whole-card clickability restored (was a regression from develop).
+- **Gradient animation + "Start Chat" overlay restored** — the rotating conic-gradient border and blur/overlay hover interaction from the develop branch were lost in the agentic-pod migration. Both are restored in `AgentCard.module.scss`.
+- **`data-enabled` CSS cascade restored** — enabled/disabled state drives name colour, icon opacity, and background via CSS custom properties, matching develop branch behaviour.
+- **Extracted to reusable organism** — card logic was previously inlined (575 lines) in `TeamAgentsPage.tsx`. Now in `shared/organisms/AgentCard/` with a clean prop interface against `ManagedAgentInstanceSummary`.
+- **Whole-card click** — enabled cards are wrapped in `<Link>`; action buttons call `e.stopPropagation()` so they don't trigger navigation.
 
 ---
 
-### Agent card — Settings button
+### `AgentFormModal`
 
-**Location:** `src/rework/components/pages/TeamAgentsPage/TeamAgentsPage.tsx`
-**Status:** `Functional` — Settings button opens `AgentFormModal` in edit mode.
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/`
+**Status:** `Functional`
+
+Complete create / edit modal for managed agent instances. Refactored per `docs/rfc/AGENT-INSTANCE-FORM-RFC.md` into a clean sub-component tree:
+
+- `AgentFormModal.tsx` — modal shell + `FormState` ownership; no field rendering
+- `AgentFormBody.tsx` — controlled form body; create or edit layout
+- `TemplateBrowser/` — responsive card grid for template selection
+- `TemplateCard/` — single selectable card with category pill, name, clamped description
+- `TuningFieldRenderer.tsx` — handles all field types: string, number/integer, boolean (`SwitchRow`), enum (`<select>`), secret (password+reveal), url, prompt/multiline (`TextArea`)
+
+Create mode: template browser → display name → description → tuning fields (grouped by `ui.group`) → MCP tools (read-only list). Edit mode: context bar (template name + category) → same editable fields → metadata footer (created_by · relative date).
 
 #### Open UX issues
 
-- **Tuning field group visual** — when a template declares many fields, there is no
-  accordion or collapsible section yet. Long forms scroll within the modal.
-
-- **Required field validation** — `ManagedAgentFieldSpec.required` is respected on
-  individual `TextInput` props but there is no cross-field guard on submit beyond
-  the existing `displayName.trim()` check.
+- **Tuning field groups** — flat scroll within modal; no accordion. Decide if needed for agents with many fields.
+- **Template browser on mobile** — grid collapses to single column below ~480px; confirm whether list layout is preferable.
+- **Single-template auto-select** — single available template is auto-selected; browser is still shown. Decide if it should collapse to a context bar immediately.
 
 #### Resolved
 
-- **Settings button wired** — button now calls `setEditingInstance(instance)`;
-  `AgentFormModal` opens pre-filled with `display_name`, `description`, and
-  `tuning_field_values`. Saves via `PATCH /teams/{id}/agent-instances/{id}`.
-- **Dynamic tuning fields** — `AgentFormModal` renders `default_tuning_fields`
-  from the selected template at creation time. Supports text, number, boolean,
-  enum (select), and multiline (textarea) field types. In edit mode the current
-  template catalog is used for rendering (frozen-snapshot policy enforced by
-  the backend — unknown keys silently dropped).
+- **Template browser** — replaced raw `<select>` with responsive card grid; selected state uses `--primary` border.
+- **All field types** — secret, url, prompt, number/integer, enum, boolean (`SwitchRow`), multiline all implemented.
+- **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields appear first.
+- **MCP tools section** — read-only list of tools advertised by the selected template (display_name or id + require_tools).
+- **Edit mode context bar** — template name + category pill; no interaction.
+- **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
+- **Inline validation** — `submitAttempted` gates required-field errors; no toast for validation.
+- **State isolation** — `FormState` resets fully on modal close; template change resets tuning values.
 
 ---
 
@@ -417,12 +434,16 @@ The develop branch had the entire agent card as a `<Link>` for enabled instances
 
 _Priority order for the next UX session. Update before each session._
 
-1. **ThoughtTrace — mobile column collapse** (210px column stacks badly on small viewports — breakpoint decision needed)
-2. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
-3. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
-4. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
-5. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
-6. **SourceDetailModal — full design pass** (metadata grid, typography, size — functional but unreviewed)
-7. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
-8. **Agent tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision)
-9. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)
+1. **AgentCard — gradient colours** (are the hardcoded conic-gradient hex stops final branding or should they be tokenised?)
+2. **AgentCard — disabled card affordance** (`cursor: default` + dimmed icon — confirm whether a label or overlay is needed)
+3. **ThoughtTrace — mobile column collapse** (210px column stacks badly on small viewports — breakpoint decision needed)
+4. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
+5. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
+6. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
+7. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
+8. **SourceDetailModal — full design pass** (metadata grid, typography, size — functional but unreviewed)
+9. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
+10. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
+11. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
+12. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
+11. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)

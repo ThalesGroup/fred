@@ -18,318 +18,52 @@
 
 .bannerNotice {
   margin: 0 auto var(--spacing-l);
-  border-radius: var(--radius-s, 0.75rem);
-  background: var(--surface-container-low, #f5f5f8);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
   padding: var(--spacing-s) var(--spacing-m);
-  color: var(--on-surface-retreat, #666);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
 }
 
 .agentList {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 360px));
+  grid-template-columns: repeat(auto-fit, 320px);
   justify-content: center;
   gap: var(--spacing-m);
   padding: 0 var(--spacing-l) var(--spacing-l);
   overflow: auto;
 }
 
-.agentCard {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
-  border: 1px solid var(--outline, #d6d6de);
-  border-radius: var(--radius-m, 1rem);
-  background: var(--surface-container-lowest, #fff);
-  min-height: 260px;
-}
-
-.agentIdentity {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  padding: var(--spacing-l);
-}
-
-.agentPresentation {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-m);
-}
-
-.agentIcon {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--primary-container, #e8def8);
-  width: 3rem;
-  height: 3rem;
-  color: var(--primary, #6750a4);
-  font-size: 1.5rem;
-}
-
-.agentHeading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  min-width: 0;
-}
-
-.agentName {
-  color: var(--on-surface);
-  font: var(--font-title-medium);
-}
-
-.agentMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-xs);
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-body-small);
-}
-
-.agentStatus {
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-  font: var(--font-label-small);
-  text-transform: uppercase;
-}
-
-.agentStatus[data-status="enabled"] {
-  background: rgba(46, 125, 50, 0.12);
-  color: #2e7d32;
-}
-
-.agentStatus[data-status="disabled"] {
-  background: rgba(176, 0, 32, 0.12);
-  color: #b00020;
-}
-
-.agentDescription {
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-body-medium);
-  white-space: pre-wrap;
-}
-
-.agentFooter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s);
-  border-top: 1px solid var(--outline-variant, #ececf2);
-  padding: var(--spacing-m) var(--spacing-l) var(--spacing-l);
-}
-
-.agentTemplate {
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-body-small);
-}
-
-.agentActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacing-s);
-}
-
+/* Enabled cards are wrapped in <Link> — remove link decoration and fill the cell height */
 .chatLink {
   display: block;
   text-decoration: none;
-}
-
-.chatLink .agentCard {
-  transition:
-    border-color 150ms ease,
-    background 150ms ease;
   height: 100%;
 }
 
-.chatLink:hover .agentCard {
-  cursor: pointer;
-  border-color: var(--primary, #6750a4);
-  background: var(--surface-container-low);
+/* Disabled card wrapper — same cell sizing, no link */
+.disabledCard {
+  height: 100%;
 }
 
-.emptyState {
+.loadingState {
   display: flex;
   flex: 1;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-l);
   padding: var(--spacing-l);
-  color: var(--on-surface);
-  text-align: center;
-}
-
-.emptyStatePresentation {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font: var(--font-title-large);
-}
-
-.emptyStateIcon {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: var(--primary);
-  font-size: 4.5rem;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
 }
 
 .pageError {
   padding: var(--spacing-l);
-  color: var(--error, #b00020);
+  color: var(--error);
   font: var(--font-body-large);
-}
-
-.modalCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-  margin: 1rem auto;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
-  border-radius: var(--radius-l, 1.25rem);
-  background: var(--surface-container-lowest, #fff);
-  padding: var(--spacing-l);
-  width: min(48rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
-  overflow: auto;
-}
-
-.modalHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-m);
-}
-
-.modalPresentation {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-m);
-}
-
-.modalIcon {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 999px;
-  background: var(--primary-container, #e8def8);
-  width: 3.25rem;
-  height: 3.25rem;
-  color: var(--primary, #6750a4);
-  font-size: 1.75rem;
-}
-
-.modalTitleBlock {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-}
-
-.modalTitle {
-  color: var(--on-surface);
-  font: var(--font-title-large);
-}
-
-.modalSubtitle {
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-body-medium);
-}
-
-.modalActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
-}
-
-.modalContent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-}
-
-.fieldLabel {
-  color: var(--on-surface);
-  font: var(--font-label-large);
-}
-
-.templateSelect {
-  border: 1px solid var(--outline, #d6d6de);
-  border-radius: var(--radius-s, 0.75rem);
-  background: var(--surface-container-lowest, #fff);
-  padding: 0.75rem 1rem;
-  width: 100%;
-  min-height: 3rem;
-  color: var(--on-surface);
-  font: var(--font-body-large);
-}
-
-.templateHint {
-  margin: 0;
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-body-medium);
-}
-
-.templateReadonly {
-  margin: 0 0 4px;
-  padding: 6px 0;
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-body-medium);
-  font-style: italic;
-}
-
-.tuningSection {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 20px;
-}
-
-.tuningSectionHeader {
-  border-bottom: 1px solid var(--outline-muted, #ccc);
-  padding-bottom: 6px;
-  color: var(--on-surface-retreat, #666);
-  font: var(--font-label-medium);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.tuningField {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.tuningBooleanLabel {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
 }
 
 @media (max-width: 720px) {
   .title {
     flex-direction: column;
-  }
-
-  .modalHeader {
-    flex-direction: column;
-  }
-
-  .modalActions {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
-  .agentActions {
-    justify-content: stretch;
   }
 }

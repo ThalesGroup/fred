@@ -12,6 +12,7 @@ from control_plane_backend.config.models import (
     FrontendUiSettings,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
+    ManagedMcpServerRef,
 )
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import UserSummary
@@ -60,6 +61,13 @@ class AgentTemplateSummary(BaseModel):
             "Tunable field descriptors declared by the template. "
             "The frontend renders these dynamically at enrollment time. "
             "Empty when the template declares no tunable fields."
+        ),
+    )
+    mcp_servers: list[ManagedMcpServerRef] = Field(
+        default_factory=list,
+        description=(
+            "MCP server references advertised by this template. "
+            "Empty when the template declares no MCP dependencies."
         ),
     )
 

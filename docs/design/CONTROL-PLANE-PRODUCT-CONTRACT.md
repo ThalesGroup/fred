@@ -114,28 +114,40 @@ Terms-gating behavior and current deployment limitations are documented in
 
 ### 3.2 Managed agent discovery
 
-Freeze two distinct concepts:
+Two distinct concepts:
 
-- `AgentTemplateSummary`
-  - describes what can be instantiated
-  - template/reference metadata only
-- `ManagedAgentInstanceSummary`
-  - describes a team-scoped managed instance
-  - must use `agent_instance_id` as the primary identifier
+**`AgentTemplateSummary`** — what can be instantiated (read-only, derived from runtime pod catalog):
 
-Recommended minimum fields for `ManagedAgentInstanceSummary`:
+- `template_id` — composite `"{source_runtime_id}:{source_agent_id}"`
+- `source_runtime_id`, `source_agent_id`
+- `display_name`, `description`, `category`
+- `tags`, `capabilities`, `team_instantiable`, `status`
+- `default_tuning_fields: list[ManagedAgentFieldSpec]` — field descriptors the frontend renders dynamically at enrollment
+- `mcp_servers: list[ManagedMcpServerRef]` — MCP tool references advertised by the template; `display_name` enriched from the pod's MCP catalog; `config_fields` for per-instance tool configuration (Phase 2, currently empty)
 
-- `agent_instance_id`
-- `team_id`
-- `template_id`
-- `display_name`
-- `description`
-- `status`
-- `created_at`
-- `updated_at`
-- `created_by`
+The control plane is a **pure proxy** for these values — it does not interpret them. The runtime pod is the author; the control plane aggregates and forwards.
+
+**`ManagedAgentInstanceSummary`** — a team-scoped enrolled instance (DB-backed):
+
+- `agent_instance_id` — primary identifier
+- `team_id`, `template_id`
+- `display_name`, `description`, `status`
+- `created_at`, `updated_at`, `created_by`
+- `tuning_field_values: dict[str, Any]` — frozen snapshot of user-set field values at enrollment; keys constrained to `ManagedAgentFieldSpec.key`
 
 Do not expose runtime pod URLs or Kubernetes topology to the frontend.
+
+**`ManagedAgentFieldSpec`** — field descriptor (shared between tuning fields and MCP `config_fields`):
+
+- `key`, `type`, `title`, `description`, `required`, `default`, `enum`, `min`, `max`, `pattern`, `item_type`
+- `ui: ManagedAgentUiHints` — `hide`, `group`, `multiline`, `textarea`, `max_lines`, `placeholder`, `markdown`
+
+**`ManagedMcpServerRef`** — MCP tool reference in a template:
+
+- `id` — logical server id
+- `display_name` — human label (enriched from runtime MCP catalog at proxy time)
+- `require_tools: list[str]` — tool names the agent requires
+- `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters (Phase 2; empty today)
 
 ### 3.3 Runtime binding stays internal
 
@@ -212,23 +224,32 @@ team chooses between:
 
 ---
 
-## 4. Implemented Phase 3a Surface
+## 4. Implemented Surface (Phase 3a + 3c)
 
-Implemented public read-only endpoints:
+**Agent template discovery (read-only, runtime proxy):**
+- `GET /teams/{team_id}/agent-templates` → `AgentTemplateSummary[]`
+  - Aggregates live catalogs from all configured `runtime_catalog_sources`
+  - `mcp_servers` enriched with `display_name` from runtime MCP catalog
 
-- `GET /frontend/bootstrap`
-- `GET /teams/{team_id}/agent-templates`
-- `GET /teams/{team_id}/agent-instances`
+**Agent instance CRUD (DB-backed, team-scoped):**
+- `GET /teams/{team_id}/agent-instances` → `ManagedAgentInstanceSummary[]`
+- `POST /teams/{team_id}/agent-instances` → `ManagedAgentInstanceSummary`
+- `PATCH /teams/{team_id}/agent-instances/{id}` → `ManagedAgentInstanceSummary`
+- `DELETE /teams/{team_id}/agent-instances/{id}` → 204
 
-Implemented internal runtime helper:
+**Execution preparation:**
+- `POST /teams/{team_id}/agent-instances/{id}/prepare-execution` → `ExecutionPreparation`
 
-- `GET /agent-instances/{agent_instance_id}/runtime`
+**Session metadata:**
+- `GET /teams/{team_id}/sessions`, `POST`, `PATCH`, `DELETE`
 
-Phase 3a intentionally remains:
+**Bootstrap:**
+- `GET /frontend/bootstrap` → `FrontendBootstrap`
 
-- read-only
-- metadata/product-oriented
-- independent from runtime message transport
+**Internal runtime helper (admin/ops only):**
+- `GET /agent-instances/{agent_instance_id}/runtime` → `ManagedAgentRuntimeBinding`
+
+All public endpoints are product/metadata-oriented and independent of runtime message transport.
 
 ---
 

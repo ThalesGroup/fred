@@ -163,6 +163,7 @@ the resulting decisions get encoded in the `design/` contracts.
 |---|---|
 | [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md) | Agentic pod architecture and migration direction |
 | [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md) | Agent evaluation framework (deepeval) |
+| [`AGENT-INSTANCE-FORM-RFC.md`](rfc/AGENT-INSTANCE-FORM-RFC.md) | Agent instance management form — template browser, tuning fields, MCP tools |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md) | SDK v2 design proposal |
 | [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture |
 

@@ -734,8 +734,9 @@ change.
 | Session title | Shows `abc12345…` (first 8 chars of UUID) when `title` is null | Control-plane auto-generates a title after first exchange (e.g. from LLM summary) and writes it to `SessionListItem.title`. `UpdateSessionRequest` must accept a `title` field. | Backend: `PATCH /teams/{id}/sessions/{id}` body + auto-title generation |
 | Agent card — whole-card click | Only the "Start Chat" button at the bottom is clickable. The develop branch had the entire card as a `<Link>` with `e.preventDefault()` on action buttons. | ~~Restore card as `<Link>` for enabled instances — frontend only, no backend change.~~ **Fixed.** | ~~None~~ Done |
 | Agent settings / edit | ~~Button visible but disabled on agent card~~ **Fixed.** | `EnrollManagedAgentModal` renamed to `AgentFormModal`, pre-fills from instance, dispatches PATCH via `usePatchTeamAgentInstance…` mutation. Frozen-snapshot policy in place (no re-merge with current template). | ~~Backend + frontend~~ Done |
-| Agent tuning fields at creation | ~~Modal only captures `display_name` + `description`~~ **Fixed.** | `AgentFormModal` now renders `default_tuning_fields` from the selected template dynamically (text, number, boolean, enum, multiline). `tuning_field_values` sent in `CreateAgentInstanceRequest`. | ~~Backend + frontend~~ Done |
-| Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist but nothing imports them. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). | ~~Remove or integrate once tuning fields work is scoped.~~ Tuning fields are now implemented. These remain dead code; safe to delete in a separate cleanup pass. | None — defer cleanup |
+| Agent tuning fields at creation | ~~Modal only captures `display_name` + `description`~~ **Fixed.** | `AgentFormModal` fully refactored per RFC. `TemplateBrowser` card grid replaces raw `<select>`. All field types implemented: string, number/integer, boolean (`SwitchRow`), enum, secret, url, prompt/multiline. Field grouping via `ui.group`. Inline validation. Edit mode context bar + metadata footer. MCP tools read-only section. | ~~Backend + frontend~~ Done |
+| `mcp_servers` pass-through | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response. | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section. | ~~Backend + frontend~~ Done |
+| Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`. | `KfVectorSearchForm` still dead code; safe to delete in a separate cleanup pass. | None — defer cleanup |
 
 ---
 
@@ -743,6 +744,7 @@ change.
 
 | Phase | Status | Notes |
 |---|---|---|
+| AgentFormModal refactor | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`. |
 | 6A – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
 | 6B – Markdown & content | Planned | Depends on 6A |
 | 6C – Agent options & debug tools | Planned | AgentOptionsPanel + DebugDrawer; depends on 6A |

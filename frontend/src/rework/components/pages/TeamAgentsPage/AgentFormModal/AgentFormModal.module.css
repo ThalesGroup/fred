@@ -1,0 +1,78 @@
+.modalCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin: 1rem auto;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-l);
+  width: min(52rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-m);
+}
+
+.modalPresentation {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.modalIcon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--primary-container);
+  width: 3.25rem;
+  height: 3.25rem;
+  color: var(--primary);
+  font-size: 1.75rem;
+}
+
+.modalTitleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.modalTitle {
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}
+
+.modalSubtitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.modalActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.modalContent {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 720px) {
+  .modalHeader {
+    flex-direction: column;
+  }
+
+  .modalActions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}

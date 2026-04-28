@@ -1424,16 +1424,16 @@
       "formAgent": {
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
         "titleEdit": "Edit {{agent}}",
+        "templateSection": "Template",
+        "noTemplates": "No agent templates available — start a runtime pod.",
+        "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
         "tunableFields": "Parameters",
-        "noTunableFields": "No custom parameters for this template.",
+        "mcpTools": "Tools",
+        "createdBy": "Created by {{user}}",
         "fields": {
           "name": {
             "placeholder": "Enter an original name",
             "label": "Name"
-          },
-          "role": {
-            "placeholder": "What is the role of your {{agentsNicknameSingular}} ?",
-            "label": "Role"
           },
           "description": {
             "placeholder": "Describe this {{agentsNicknameSingular}} for the team members",

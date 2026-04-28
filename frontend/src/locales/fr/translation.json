@@ -1424,16 +1424,16 @@
       "formAgent": {
         "titleCreate": "Créer un nouveau {{agentsNicknameSingular}}",
         "titleEdit": "Editer {{agent}}",
+        "templateSection": "Modèle",
+        "noTemplates": "Aucun modèle d’agent disponible — démarrez un pod runtime.",
+        "templateUnavailable": "Modèle indisponible — les définitions de champs peuvent être incomplètes.",
         "tunableFields": "Paramètres",
-        "noTunableFields": "Aucun paramètre personnalisable pour ce modèle.",
+        "mcpTools": "Outils",
+        "createdBy": "Créé par {{user}}",
         "fields": {
           "name": {
             "placeholder": "Entrez un nom original",
             "label": "Nom"
-          },
-          "role": {
-            "placeholder": "Quel est le rôle qu’incarne votre {{agentsNicknameSingular}} ?",
-            "label": "Rôle"
           },
           "description": {
             "placeholder": "Décrivez votre {{agentsNicknameSingular}} pour les autres utilisateurs",

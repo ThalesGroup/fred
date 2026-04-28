@@ -12,36 +12,67 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-General-purpose assistant ReAct agent — zero external dependencies.
+General-purpose assistant ReAct agent — configurable with any Knowledge Flow tool.
 
 Why this module exists:
-- all other agents in this pod require external services (MCP, knowledge flow)
-- this agent works with only a model configured; it is the minimal smoke-test
-  for a running pod and the reference example for the BOOTSTRAP guide
+- all other agents in this pod are scoped to a specific task (monitoring, RAG)
+- this agent is the generic configurable template: team admins equip it with the
+  Knowledge Flow MCP tools their use case needs and guide it via a system prompt
+- it is also the minimal smoke-test for a running pod (no external service required
+  if mcp servers are not reachable — the agent falls back gracefully)
 
 How to use it:
 - import `GENERAL_ASSISTANT_AGENT` and add it to a pod registry
-- chat with it using `fred-agents-cli` without starting any other service
+- chat with it using `fred-agents-cli`; add KF tools via the control-plane form
 
 Example:
 - `from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT`
 """
 
+from fred_sdk import (
+    FieldSpec,
+    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
+    MCP_SERVER_KNOWLEDGE_FLOW_FS,
+    MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
+    MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
+    MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS,
+    MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
+    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
+    MCPServerRef,
+    UIHints,
+)
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
+
+_SYSTEM_PROMPT = """\
+You are a helpful, knowledgeable, and concise assistant.
+Answer questions clearly and directly. When you are uncertain, say so.
+If tools are available, use them to ground your answers in real data before responding.
+"""
 
 
 class GeneralAssistantDefinition(ReActAgentDefinition):
     """
-    Conversational ReAct agent with no tool dependencies.
+    Configurable general-purpose ReAct agent served by the standalone agents pod.
 
     Why this class exists:
-    - it is the simplest possible Fred agent: a system prompt and nothing else
-    - it lets developers verify the pod, the model catalog, and the chat client
-      work end-to-end without standing up any supporting service
+    - it is the generic Fred agent: team admins configure it with any combination
+      of Knowledge Flow MCP tools and a custom system prompt for their use case
+    - it works with zero external services (the model alone is enough) and scales
+      up to the full Knowledge Flow toolkit without code changes
+
+    Key design choices:
+    - all Knowledge Flow MCP servers are declared in `default_mcp_servers` so the
+      control-plane enrolls them when a team creates an instance; team admins
+      can review which tools are active from the agent form
+    - `prompts.system` field lets team admins specialise the agent role (search
+      assistant, monitoring assistant, data analyst …) without creating a new
+      template
+    - `chat_options.*` fields are frontend configuration hints — they are read by
+      the chat UI to show or hide file attachments and library selection
 
     How to use it:
     - instantiate once and register it in the pod registry
-    - extend with `declared_tool_refs` or `default_mcp_servers` when ready
+    - team admins then create instances via the control-plane form
 
     Example:
     - `definition = GeneralAssistantDefinition()`
@@ -50,15 +81,51 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     agent_id: str = "fred.github.assistant"
     role: str = "General-purpose assistant"
     description: str = (
-        "A helpful, concise assistant for general questions and conversation. "
-        "No external tools or document retrieval required."
+        "A helpful, concise assistant configurable with any Knowledge Flow tool. "
+        "Equip it with search, monitoring, or data tools and guide it via its system prompt."
     )
     tags: tuple[str, ...] = ("general", "react")
-    system_prompt_template: str = """\
-You are a helpful, knowledgeable, and concise assistant.
-Answer questions clearly and directly. When you are uncertain, say so.
-You have no access to external tools or documents — work only from your own knowledge.
-"""
+    system_prompt_template: str = _SYSTEM_PROMPT
+
+    default_mcp_servers: tuple[MCPServerRef, ...] = (
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS),
+    )
+
+    fields: tuple[FieldSpec, ...] = (
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="System prompt",
+            description=(
+                "Instructions that define the assistant's role and focus. "
+                "Leave blank to use the default general-purpose prompt."
+            ),
+            required=False,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description="Users can attach files to messages in the chat interface.",
+            default=False,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.libraries_selection",
+            type="boolean",
+            title="Document library picker",
+            description="Show a document library selector in the chat interface.",
+            default=False,
+            ui=UIHints(group="Chat options"),
+        ),
+    )
 
     def policy(self) -> ReActPolicy:
         return ReActPolicy(system_prompt_template=self.system_prompt_template)

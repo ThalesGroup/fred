@@ -1,0 +1,104 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.sectionHeader {
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.contextBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.contextName {
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.contextCategory {
+  border-radius: 999px;
+  background: var(--secondary-container);
+  padding: 2px 10px;
+  color: var(--on-secondary-container);
+  font: var(--font-label-small);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.templateUnavailableNotice {
+  margin: 0;
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--warning, var(--tertiary)) 12%, transparent);
+  padding: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.groupLabel {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mcpList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcpItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.mcpName {
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.mcpTools {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.metadataFooter {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

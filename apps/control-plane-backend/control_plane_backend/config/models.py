@@ -95,7 +95,9 @@ class ManagedMcpServerRef(BaseModel):
     """Logical MCP reference kept in the managed-agent tuning payload."""
 
     id: str
+    display_name: str = ""
     require_tools: list[str] = Field(default_factory=list)
+    config_fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
 
 
 class ManagedAgentTuning(BaseModel):

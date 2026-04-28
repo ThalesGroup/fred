@@ -478,6 +478,7 @@ async def test_team_agent_templates_aggregates_runtime_catalog(
             "team_instantiable": True,
             "status": "available",
             "default_tuning_fields": [],
+            "mcp_servers": [],
         }
     ]
 

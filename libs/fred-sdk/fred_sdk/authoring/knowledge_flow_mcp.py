@@ -66,11 +66,21 @@ MCP_SERVER_KNOWLEDGE_FLOW_TABULAR: Final[str] = "mcp-knowledge-flow-mcp-tabular"
 MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS: Final[str] = "mcp-knowledge-flow-statistics"
 """Statistics analysis MCP server id used by Statistics-style agents."""
 
+MCP_SERVER_KNOWLEDGE_FLOW_TEXT: Final[str] = "mcp-knowledge-flow-mcp-text"
+"""Text search MCP server id — document full-text retrieval from the knowledge flow."""
+
+MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS: Final[str] = (
+    "mcp-knowledge-flow-prometheus-ops"
+)
+"""Prometheus monitoring MCP server id — metrics query and alerting operations."""
+
 __all__ = [
     "MCPServerRef",
     "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
     "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
+    "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
+    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT",
 ]
