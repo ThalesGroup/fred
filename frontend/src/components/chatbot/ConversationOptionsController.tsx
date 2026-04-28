@@ -226,12 +226,15 @@ export function useConversationOptionsController({
   const supportsSearchPolicySelection = currentAgent?.chat_options?.search_policy_selection === true;
   const supportsDeepSearchSelection = currentAgent?.chat_options?.deep_search_delegate === true;
   const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
-  const supportsLibrariesSelection = currentAgent?.chat_options?.libraries_selection === true;
+  const supportsLibrariesSelection =
+    currentAgent?.chat_options?.libraries_selection === true ||
+    currentAgent?.tuning?.mcp_servers?.some((s) => s.params?.provider === "kf_vector_search") === true;
   const supportsDocumentsSelection = currentAgent?.chat_options?.documents_selection === true;
 
   const creatorLibraryScope = useMemo<string[] | null>(() => {
     const ref = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search");
-    return ref?.params?.document_library_tags_ids ?? null;
+    const ids = ref?.params?.document_library_tags_ids ?? null;
+    return ids && ids.length > 0 ? ids : null;
   }, [currentAgent]);
 
   const [persistSessionPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
