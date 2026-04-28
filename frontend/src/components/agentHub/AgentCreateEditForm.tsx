@@ -460,7 +460,7 @@ export function AgentCreateEditForm({
           <TextArea
             placeholder={t("rework.teams.formAgent.fields.description.placeholder", { agentsNicknameSingular })}
             label={t("rework.teams.formAgent.fields.description.label")}
-            maxLength={80}
+            maxLength={120}
             value={topLevelTuning.description}
             onChange={(e) => onTopLevelChange("description", e.target.value)}
             required
