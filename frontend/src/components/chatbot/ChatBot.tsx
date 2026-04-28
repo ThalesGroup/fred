@@ -718,7 +718,7 @@ const ChatBot = ({
   const clientCreatedSessionRef = useRef<string | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
-  const { data: docLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
+  const { data: docLibs = [], isFetching: isLibsFetching } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
   const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
@@ -793,11 +793,13 @@ const ChatBot = ({
   useSessionChange(chatSessionId, {
     onSessionToDraft: () => {
       messagesRef.current = [];
+      serverNextRankRef.current = 0;
       setAllMessages([]);
       setDebugEvents([]);
     },
     onSessionSwitch: () => {
       messagesRef.current = [];
+      serverNextRankRef.current = 0;
       setAllMessages([]);
       setDebugEvents([]);
     },
@@ -859,6 +861,7 @@ const ChatBot = ({
       const merged = mergeAuthoritative(messagesRef.current, history);
       messagesRef.current = merged;
       setAllMessages(merged);
+      serverNextRankRef.current = Math.max(serverNextRankRef.current, merged.length);
     }
   }, [history, chatSessionId]);
 
@@ -902,6 +905,9 @@ const ChatBot = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
   const hiddenUserExchangeIdsRef = useRef<Set<string>>(new Set());
+  // Authoritative next rank from the server, used to prevent rank collisions when
+  // a client loads a partial history (e.g. stale cache, concurrent session access).
+  const serverNextRankRef = useRef<number>(0);
 
   // keep state + ref in sync
   const setAllMessages = (msgs: ChatMessage[]) => {
@@ -1277,6 +1283,9 @@ const ChatBot = ({
               // Merge authoritative finals (includes citations/metadata)
               messagesRef.current = mergeAuthoritative(messagesRef.current, finalEvent.messages);
               setMessages(messagesRef.current);
+              if (finalEvent.session?.next_rank != null) {
+                serverNextRankRef.current = Math.max(serverNextRankRef.current, finalEvent.session.next_rank);
+              }
               endWaiting({ sessionId: finalSessionId, exchangeId: finalExchangeId });
               break;
             }
@@ -1461,7 +1470,8 @@ const ChatBot = ({
     const includeCorpusScope = documentsScopeActive ? true : conversationPrefs.includeCorpusScope;
 
     if (!documentsScopeActive) {
-      runtimeContext.selected_document_libraries_ids = conversationPrefs.documentLibraryIds;
+      const ids = conversationPrefs.documentLibraryIds;
+      runtimeContext.selected_document_libraries_ids = ids.length > 0 ? ids : undefined;
     }
     if (documentsScopeActive) {
       runtimeContext.selected_document_libraries_ids = undefined;
@@ -1646,7 +1656,7 @@ const ChatBot = ({
     const optimisticMessage: ChatMessage = {
       session_id: sid,
       exchange_id: exchangeId,
-      rank: messagesRef.current.length,
+      rank: Math.max(messagesRef.current.length, serverNextRankRef.current),
       timestamp: new Date().toISOString(),
       role: "user",
       channel: "final",
@@ -1890,6 +1900,7 @@ const ChatBot = ({
         onAttachmentsUpdated={handleAttachmentsUpdated}
         isUploadingAttachments={isUploadingAttachments}
         libraryNameMap={libraryNameMap}
+        isLibsFetching={isLibsFetching}
         libraryById={libraryById}
         promptNameMap={promptNameMap}
         templateNameMap={templateNameMap}

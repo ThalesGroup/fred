@@ -15,9 +15,6 @@ class KfVectorSearchParams(BaseModel):
     """
     Agent-level scoping parameters for the kf_vector_search inprocess tool.
 
-    Set at agent creation time; act as the broadest allowed scope.
-    User runtime selection and LLM tool-call selection are clamped within this set.
-
     Chat options (attach_files, libraries_selection) let the agent creator opt in to
     the corresponding UI controls in the chat bar.  Setting a flag to True surfaces the
     control; leaving it False leaves the control hidden (the default).
@@ -27,8 +24,9 @@ class KfVectorSearchParams(BaseModel):
     document_library_tags_ids: List[str] = Field(
         default=[],
         description=(
-            "Restrict semantic search to these document library tag IDs. "
-            "User and LLM selections are intersected with this set at query time."
+            "Deprecated creator-level scope. Empty list (default) means no restriction — "
+            "the agent searches all accessible libraries. "
+            "Scoping is now done exclusively at conversation time via selected_document_libraries_ids."
         ),
     )
     attach_files: bool = Field(
