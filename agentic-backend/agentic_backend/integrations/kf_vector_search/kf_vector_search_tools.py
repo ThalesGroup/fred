@@ -55,6 +55,15 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
             document_uids=document_uids,
         )
 
+        logger.warning(
+            "[SEARCH][TOOL] question=%r top_k=%d llm_scoped_libs=%s llm_scoped_uids=%s -> hits_to_llm=%d titles=%s",
+            question[:80],
+            top_k,
+            list(document_library_tags_ids) if document_library_tags_ids else None,
+            list(document_uids) if document_uids else None,
+            len(hits),
+            [h.title for h in hits],
+        )
         # todo: return a string to agent and json metadata for the UI ?
         serialized = [h.model_dump() if hasattr(h, "model_dump") else h for h in hits]
         return json.dumps(serialized, ensure_ascii=False)

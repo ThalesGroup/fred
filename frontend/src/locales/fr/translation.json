@@ -400,6 +400,10 @@
         "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent.",
         "library_selection": "Base de connaissance",
         "library_selection_description": "Sélectionner les ressources exploitables par le {{agentsNicknameSingular}}"
+      },
+      "chat_options_search_policy_selection": {
+        "title": "Sélecteur de mode de recherche",
+        "description": "Permettre aux utilisateurs de choisir entre les stratégies hybride, sémantique et stricte par message."
       }
     }
   },

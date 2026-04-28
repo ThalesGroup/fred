@@ -625,6 +625,10 @@ export type KfVectorSearchParams = {
   attach_files?: boolean;
   /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. Defaults to True because conversation-level scoping is the only scoping mechanism. */
   libraries_selection?: boolean;
+  /** Default retrieval strategy: hybrid (BM25+vector), semantic (vector only), strict (high-precision threshold). */
+  search_policy?: "hybrid" | "semantic" | "strict";
+  /** When True, expose the search-policy selector in the chat bar so users can switch retrieval strategy per message. */
+  search_policy_selection?: boolean;
 };
 export type McpServerRef = {
   id: string;

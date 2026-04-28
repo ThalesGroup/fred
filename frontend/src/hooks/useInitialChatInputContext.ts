@@ -51,7 +51,7 @@ export function useInitialChatInputContext(
       documentUids: defaults.documentUids ?? EMPTY_STRING_ARRAY,
       promptResourceIds: defaults.promptResourceIds ?? EMPTY_STRING_ARRAY,
       templateResourceIds: defaults.templateResourceIds ?? EMPTY_STRING_ARRAY,
-      searchPolicy: defaults.searchPolicy ?? "semantic",
+      searchPolicy: defaults.searchPolicy ?? "hybrid",
       searchRagScope: defaults.searchRagScope,
       deepSearch: defaults.deepSearch,
       includeCorpusScope: defaults.includeCorpusScope ?? true,

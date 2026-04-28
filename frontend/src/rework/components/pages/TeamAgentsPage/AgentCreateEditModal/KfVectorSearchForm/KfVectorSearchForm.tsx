@@ -21,6 +21,12 @@ export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps<K
         checked={Boolean(params.attach_files)}
         onChange={(checked) => onParamsChange({ ...params, attach_files: checked })}
       />
+      <SwitchRow
+        label={t("agentTuning.fields.chat_options_search_policy_selection.title")}
+        description={t("agentTuning.fields.chat_options_search_policy_selection.description")}
+        checked={Boolean(params.search_policy_selection)}
+        onChange={(checked) => onParamsChange({ ...params, search_policy_selection: checked })}
+      />
     </div>
   );
 }
