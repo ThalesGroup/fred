@@ -15,7 +15,7 @@ Fred has four API surfaces (one is being migrated out of the runtime path — se
    - Secondary surface: `POST /v1/chat/completions` (OpenAI compat, for external tools only).
    - Runtime pods validate authorization but do not own tenancy, permissions, or routing.
    - Runtime observability is part of the execution surface: logs, KPI, metrics, and trace payloads must retain `user_id`, `team_id`, `agent_instance_id`, `session_id`, and trace correlation fields, including when exported to Langfuse.
-   - The runtime CLI (`fred-agent-chat`) is a first-class backend validation client and must remain able to exercise managed team-scoped execution without frontend dependencies.
+   - Each pod exposes `make cli` / `fred-agents-cli` as its first-class backend validation client. See [CLI-CONVENTION.md](CLI-CONVENTION.md).
 
 2. **Knowledge Flow Backend API** (`knowledge-flow-backend`)
    - Main role: ingestion, documents, tags/libraries, retrieval-facing operations.
@@ -67,7 +67,24 @@ When adding new behavior, decide with these rules:
 5. **Cross-backend shared primitive?** Put it in **fred-core** (only if truly shared, stable, and minimal).
 6. **New runtime contract type (execution identity, authorization, events)?** Put it in **fred-sdk** (`libs/fred-sdk/fred_sdk/contracts/`).
 
-## 4) Startup Model (Same Pattern Across Apps)
+## 4) CLI Convention (Same Pattern Across Apps)
+
+**Every Fred backend service exposes `make cli`.**
+
+This is a platform design decision: the CLI is not a convenience, it is the primary
+backend validation and operations tool for each service. Use it to validate execution
+contracts, auth flows, session continuity, KPIs, and managed execution — without a
+browser or a running frontend.
+
+| Component | Executable | Status |
+|---|---|---|
+| `fred-agents` (agent execution) | `fred-agents-cli` | ✅ live |
+| `knowledge-flow-backend` | `fred-kf-cli` | planned |
+| `control-plane-backend` | `fred-cp-cli` | planned |
+
+Full specification: [`CLI-CONVENTION.md`](CLI-CONVENTION.md).
+
+## 5) Startup Model (Same Pattern Across Apps)
 
 All Python backends follow the same startup convention:
 
@@ -83,7 +100,7 @@ See:
 
 - [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](./CONFIGURATION_AND_POLICY_CONVENTIONS.md)
 
-## 4.1 Runtime Catalog Sources
+## 5.1 Runtime Catalog Sources
 
 When the frontend uses managed agents, `control-plane-backend` needs a static
 list of reachable runtime pods in:
@@ -241,7 +258,7 @@ For one enrolled managed instance, the UI should be able to communicate:
 
 This distinction is required for a simple and robust operator experience.
 
-## 5) Related Docs
+## 6) Related Docs
 
 - Repository contract: [`docs/DEVELOPER_CONTRACT.md`](./DEVELOPER_CONTRACT.md)
 - Access model (team rights): [`docs/REBAC.md`](./REBAC.md)

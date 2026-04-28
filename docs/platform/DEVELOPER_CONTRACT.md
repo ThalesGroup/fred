@@ -14,7 +14,15 @@ Read these files in this order:
 4. [`docs/REBAC.md`](./REBAC.md) for access-control related work
 5. [`docs/CONTRIBUTING.md`](./CONTRIBUTING.md)
 
-## 2) Non-Negotiable Engineering Rules
+## 2) Platform CLI Convention
+
+**Every Fred backend exposes `make cli`** — the primary tool for validating and operating the service from a terminal.
+
+- Use `make cli` to validate a backend change before frontend integration.
+- Any phase gate that says "backend is ready" must be reachable from `make cli`.
+- Full specification: [`CLI-CONVENTION.md`](./CLI-CONVENTION.md)
+
+## 3) Non-Negotiable Engineering Rules
 
 - Keep changes minimal and direct.
   - Do not redesign unrelated parts.
@@ -57,7 +65,7 @@ Example:
 - If a test downloads models from internet or needs running services, it is an integration test.
 - If a test can run from a clean laptop with no services started, it belongs to default `make test`.
 
-## 4) Required PR Checks
+## 5) Required PR Checks
 
 Each PR must explicitly confirm:
 
@@ -67,7 +75,7 @@ Each PR must explicitly confirm:
 - New external dependency tests marked as integration.
 - Documentation updated when behavior/rules changed.
 
-## 5) AI Assistant Instructions
+## 6) AI Assistant Instructions
 
 When prompting an assistant, start with:
 

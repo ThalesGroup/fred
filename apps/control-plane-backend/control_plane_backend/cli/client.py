@@ -24,6 +24,7 @@ from control_plane_backend.scheduler.policies.policy_models import (
 )
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
 from control_plane_backend.teams.schemas import Team, TeamMember, TeamWithPermissions
+from control_plane_backend.users.schemas import UserSummary
 
 
 class ControlPlaneUserDetails(BaseModel):
@@ -43,6 +44,7 @@ class ControlPlaneUserDetails(BaseModel):
 
     cguValidated: str | None = None
     personalTeam: TeamWithPermissions
+    currentUser: UserSummary | None = None
 
 
 class ControlPlanePolicySummary(PolicyEvaluationResult):

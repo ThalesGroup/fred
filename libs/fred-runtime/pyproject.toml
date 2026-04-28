@@ -1,14 +1,14 @@
 [project]
 name = "fred-runtime"
-version = "0.1.18"
+version = "0.1.19"
 description = "Runtime adapters and infrastructure wiring for Fred v2 agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=1.5.0",
-  "fred-sdk>=0.1.9",
+  "fred-core>=1.5.3",
+  "fred-sdk>=0.1.11",
   "httpx>=0.28.1",
   "langchain-mcp-adapters>=0.2.1",
   "langfuse>=3.0.0",
@@ -24,7 +24,7 @@ classifiers = [
 urls = { Homepage = "https://fredk8.dev", Repository = "https://github.com/ThalesGroup/fred" }
 
 [project.scripts]
-fred-agent-chat = "fred_runtime.client:main"
+fred-agents-cli = "fred_runtime.client:main"
 
 [project.optional-dependencies]
 # Install fred-runtime[app] when building an agent pod with a FastAPI HTTP server.

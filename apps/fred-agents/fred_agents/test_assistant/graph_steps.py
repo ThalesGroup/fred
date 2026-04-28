@@ -39,8 +39,10 @@ from fred_sdk import (
     HumanChoiceOption,
     StepResult,
     choice_step,
-    finalize_step as _finalize_step,
     typed_node,
+)
+from fred_sdk import (
+    finalize_step as _finalize_step,
 )
 
 from .graph_state import TestState

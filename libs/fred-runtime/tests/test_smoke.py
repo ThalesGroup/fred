@@ -1,15 +1,18 @@
 from typing import cast
 
-from fred_sdk.contracts.context import RuntimeContext
-from fred_sdk.contracts.context import PortableContext, PortableEnvironment
+from fred_sdk.contracts.context import (
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
 
+from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
 from fred_runtime.runtime_support import (
     get_document_library_tags_ids,
     get_search_policy,
     get_vector_search_scopes,
     set_attachments_markdown,
 )
-from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
 
 
 def test_runtime_context_helpers_defaults():

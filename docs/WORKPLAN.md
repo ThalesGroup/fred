@@ -52,8 +52,8 @@ Three scenarios to validate, in order:
 
 1. **[x] Scenario automation wired** — `run_scenario_file()` supports `agent_instance_id`, HITL steps, env-var substitution, `history_has_messages` + `kpi_turn_recorded` checks
 2. **[ ] Live stack validation** — run `make test-integration-only` with pod up + `FRED_AGENT_INSTANCE_ID` set
-   - Tick `[ ] one managed execution works end-to-end from fred-agent-chat`
-   - Tick `[ ] one managed HITL resume flow works end-to-end from fred-agent-chat`
+   - Tick `[ ] one managed execution works end-to-end from fred-agents-cli`
+   - Tick `[ ] one managed HITL resume flow works end-to-end from fred-agents-cli`
    - Tick `[ ] one runtime capability reachable through raw agent_id also works correctly through team-scoped managed execution`
 
 **Done when**: all three ticked in BACKLOG.md §3b.7 after live stack run.
@@ -232,7 +232,7 @@ Current state: RFC exists, no implementation started.
 
 **Ref**: `docs/backlog/CONTROL-PLANE-CLI-BACKLOG.md`
 
-**Why**: `fred-agent-chat` gives us a first-class runtime validation console, but
+**Why**: `fred-agents-cli` gives us a first-class runtime validation console, but
 we still lack an equivalent terminal workflow for the control-plane product and
 admin surface. As `control-plane-backend` becomes the sole authority for
 managed-agent lifecycle, runtime binding, and execution preparation, this gap is

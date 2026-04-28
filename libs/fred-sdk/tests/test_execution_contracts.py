@@ -32,7 +32,6 @@ from fred_sdk.contracts.execution import (
 )
 from fred_sdk.contracts.runtime import RuntimeEventKind, TurnPersistedEvent
 
-
 # ---------------------------------------------------------------------------
 # ActorContext
 # ---------------------------------------------------------------------------

@@ -490,7 +490,7 @@ Exposed via **fred-runtime OpenAPI**, without reliance on `agentic-backend`.
 
 #### 1.5.9 H. Keep the Runtime CLI as a First-Class Contract Consumer
 
-- [x] Update `fred-agent-chat` to use the Phase 1 runtime contracts without relying on legacy assumptions
+- [x] Update `fred-agents-cli` to use the Phase 1 runtime contracts without relying on legacy assumptions
 - [x] Ensure the CLI can display:
   - current agent / execution target
   - current `session_id`
@@ -523,7 +523,7 @@ Exposed via **fred-runtime OpenAPI**, without reliance on `agentic-backend`.
 - [x] `make test` in `libs/fred-sdk`
 - [x] `make code-quality` in `libs/fred-runtime`
 - [x] `make test` in `libs/fred-runtime`
-- [x] `fred-agent-chat` works against the updated runtime contracts
+- [x] `fred-agents-cli` works against the updated runtime contracts
 - [x] CLI can display session, history, and checkpoint information clearly
 - [x] CLI can display a safe summary of execution context / authorization scope
 - [x] A developer can understand and validate a managed execution flow from terminal only
@@ -880,7 +880,7 @@ team-scoped, and fully observable end-to-end across:
 
 - `fred-runtime`
 - `control-plane-backend`
-- the runtime CLI (`fred-agent-chat`)
+- the runtime CLI (`fred-agents-cli`)
 
 This phase exists so the frontend does **not** become the first place where we
 discover backend gaps in:
@@ -897,7 +897,7 @@ Phase 3b is now underway.
 
 Concrete slices now landed:
 
-- `fred-agent-chat` supports `/team`, `--team-id`, and scenario overrides for
+- `fred-agents-cli` supports `/team`, `--team-id`, and scenario overrides for
   explicit team-scoped backend validation
 - runtime resume paths now require `ExecutionGrant.action=resume` for managed
   HITL resumes
@@ -908,12 +908,12 @@ Concrete slices now landed:
 - `fred-runtime` now boots a concrete `KPIWriter`, restores Prometheus export
   when `observability.metrics=prometheus`, and emits process/SQL pool KPIs
   without requiring Grafana/Prometheus deployment just to expose the metrics
-- `fred-agent-chat` now supports `/kpi [pattern]` and can inspect the runtime
+- `fred-agents-cli` now supports `/kpi [pattern]` and can inspect the runtime
   Prometheus surface directly for local KPI validation and laptop benchmarks
 
 Remaining focus before frontend work:
 
-- validate one complete managed execution flow from `fred-agent-chat` against
+- validate one complete managed execution flow from `fred-agents-cli` against
   the control-plane-approved path, not just pod-local execution
 - validate one managed HITL resume end-to-end with the same session/checkpoint
   identity set preserved
@@ -947,7 +947,7 @@ The managed path is the authoritative product path.
   - tracing payloads
   - Langfuse metadata
 - `template_agent_id` may still exist for diagnostics/runtime lookup, but it must not replace `agent_instance_id` as the primary managed identity
-- `fred-agent-chat` must remain able to validate managed team-scoped execution without the frontend
+- `fred-agents-cli` must remain able to validate managed team-scoped execution without the frontend
 
 ### 3b.5 Observability Enrichment Contract
 
@@ -978,7 +978,7 @@ This enrichment requirement applies equally to:
 - [ ] Ensure managed team-scoped execution works correctly even when the same pod also exposes raw `agent_id` access for dev/internal use
 - [x] Ensure runtime validates session/checkpoint authorization consistently for managed resume flows
 - [ ] Ensure control-plane runtime resolution + authorization context is sufficient for managed team-scoped execution
-- [x] Ensure `fred-agent-chat` can validate managed execution context, history, and checkpoint behavior without frontend dependencies
+- [x] Ensure `fred-agents-cli` can validate managed execution context, history, and checkpoint behavior without frontend dependencies
 - [x] Ensure Langfuse traces preserve managed execution identity and correlation metadata
 - [x] Restore the runtime Prometheus/KPI exporter wiring needed for local scrapes and laptop benchmarks
 - [x] Add a runtime CLI KPI inspection command on top of the restored scrapeable metrics surface
@@ -1027,7 +1027,7 @@ The fix is small and self-contained.
   and no team_id is provided, default to `"personal"`.
   (`libs/fred-runtime/fred_runtime/app/agent_app.py`)
 
-- [x] In `fred-agent-chat` CLI: when security is disabled (no `--keycloak`
+- [x] In `fred-agents-cli` CLI: when security is disabled (no `--keycloak`
   flag / no token), default the active team to `personal` automatically —
   no `--team-id` required. Startup banner now prints active team identity.
   (`libs/fred-runtime/fred_runtime/client.py`)
@@ -1075,13 +1075,13 @@ implementation until the TTL policy is agreed.
 
 ### 3b.7 Validation
 
-- [ ] one managed execution works end-to-end from `fred-agent-chat`
-- [ ] one managed HITL resume flow works end-to-end from `fred-agent-chat`
+- [ ] one managed execution works end-to-end from `fred-agents-cli`
+- [ ] one managed HITL resume flow works end-to-end from `fred-agents-cli`
 - [ ] one runtime capability reachable through raw `agent_id` also works correctly through team-scoped managed execution
 - [ ] managed execution metadata remains consistent across runtime history, checkpoints, logs, KPI, and traces
 - [ ] Langfuse-visible trace metadata includes the required managed execution identity fields
 - [x] one runtime pod can expose a scrapeable Prometheus metrics surface again when configured
-- [x] one developer can inspect pod KPIs locally from `fred-agent-chat` without Grafana/Prometheus dashboards
+- [x] one developer can inspect pod KPIs locally from `fred-agents-cli` without Grafana/Prometheus dashboards
 - [x] no frontend code is required to validate these backend guarantees — S1 scenarios run via `make test-integration-only`
 
 **S1 scenario automation (2026-04-26):**
@@ -1967,7 +1967,7 @@ isolated in the adapter layer (`react_message_codec.py`).
 - [x] Checkpoint endpoints renamed:
   - `GET /agents/checkpoints/{session_id}`
   - `DELETE /agents/checkpoints/{session_id}`
-- [x] CLI (`fred-agent-chat`) uses `session_id` in all labels and commands:
+- [x] CLI (`fred-agents-cli`) uses `session_id` in all labels and commands:
   - `/checkpoint <session_id>` (was `/checkpoint <thread_id>`)
   - `/checkpoints` listing shows `session_id` column
 - [x] `session_history` table extended with `team_id` and `agent_instance_id`
@@ -2035,6 +2035,8 @@ isolated in the adapter layer (`react_message_codec.py`).
   - The frontend calls it after a completed managed turn. The endpoint updates
     only `session_metadata.updated_at`; it does not read, proxy, cache, or serve
     runtime message history.
+  - **Done (2026-04-27)**: `ManagedChatPage` wires `onTurnPersisted` → `refreshSession`
+    on every `turn_persisted` SSE event via `usePatchTeamSession...Mutation`.
   - Inline title/status editing remains deferred to the later session PATCH
     scope.
 - [ ] `DELETE /control-plane/v1/sessions/{session_id}` — mark deleted, trigger
@@ -2050,7 +2052,7 @@ isolated in the adapter layer (`react_message_codec.py`).
 
 #### G. CLI Developer Ergonomics (Fixed 2026-04-26)
 
-A series of `fred-agent-chat` improvements to make the CLI fully self-contained for
+A series of `fred-agents-cli` improvements to make the CLI fully self-contained for
 developer testing and devops session management.
 
 **Session navigation:**
@@ -2490,7 +2492,7 @@ can filter them independently of debug or KPI output.
   - `grant_validated` — execution grant passed user correlation check (logged + ring buffer)
   - `grant_user_correlated` — user correlation confirmed at `_validate_grant_user_correlation()` (logged + ring buffer)
 - [x] `GET /agents/audit-events` pod endpoint returning the ring buffer
-- [x] `/audit [limit]` CLI command in `fred-agent-chat` — shows table of recent
+- [x] `/audit [limit]` CLI command in `fred-agents-cli` — shows table of recent
   security audit events with columns: Timestamp, event (red=failure, green=success),
   user_id, agent_instance_id, execution_action, reason
 
@@ -2549,9 +2551,9 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 
 ### 7.10 Validation
 
-- [x] `/kpi [limit]` in `fred-agent-chat` shows `agent.turn_completed` rows from
+- [x] `/kpi [limit]` in `fred-agents-cli` shows `agent.turn_completed` rows from
   the pod-side ring buffer with ms, model, tools, token counts, and session highlight
-- [x] `/audit [limit]` in `fred-agent-chat` shows security audit events from the
+- [x] `/audit [limit]` in `fred-agents-cli` shows security audit events from the
   pod-side ring buffer with event name colour-coded (red=failure, green=success)
 - [x] `make code-quality` and `make test` pass in `fred-core` (31 tests) and
   `fred-runtime` (62 tests), including:
@@ -2596,7 +2598,7 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
 
 - Prefer `agent_instance_id` for managed execution from the frontend.
 - Treat enriched observability as part of the backend contract, not as optional polish.
-- Validate managed execution with `fred-agent-chat` before treating the frontend as the primary consumer.
+- Validate managed execution with `fred-agents-cli` before treating the frontend as the primary consumer.
 - Keep `session_id` stable across normal turns and HITL resumes.
 - Add `checkpoint_id` support now if cheap; it will save a second protocol cleanup later.
 - Do not let OpenAI compatibility become the blocking work item for the Fred frontend migration.

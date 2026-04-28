@@ -594,7 +594,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "1.5.2"
+version = "1.5.3"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite" },
@@ -675,7 +675,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "0.1.18"
+version = "0.1.19"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "fred-core" },
@@ -723,7 +723,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "0.1.10"
+version = "0.1.11"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "deepagents" },

@@ -12,13 +12,15 @@ from keycloak.exceptions import KeycloakPutError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from control_plane_backend.agent_instances.store import AgentInstanceRecord
-from control_plane_backend.agent_instances.store import AgentInstanceStore
+from control_plane_backend.agent_instances.store import (
+    AgentInstanceRecord,
+    AgentInstanceStore,
+)
 from control_plane_backend.app.dependencies import get_application_container_from_app
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
-    ManagedMcpServerRef,
     ManagedAgentTuning,
+    ManagedMcpServerRef,
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
@@ -1650,6 +1652,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from fred_core.scheduler import SchedulerBackend
+
     from control_plane_backend.scheduler.policies.policy_models import (
         PolicyEvaluationResult,
         PurgeMode,

@@ -160,7 +160,7 @@ frontend.
 
 ### 5.2 Mandatory CLI behavior
 
-The CLI (`fred-agent-chat`) must show, for any `/checkpoints` or `/sessions` listing:
+The CLI (`fred-agents-cli`) must show, for any `/checkpoints` or `/sessions` listing:
 
 - `session_id` — the 36-character UUID identifying the conversation
 - `user_id` — who owns the conversation

@@ -1,4 +1,4 @@
-from .completion import _complete_scenario_path, completion_candidates
+from .completion import completion_candidates
 from .entrypoint import build_parser, main
 from .history_display import (
     build_hitl_resume_payload,
@@ -24,7 +24,6 @@ from .repl_helpers import (
     parse_mode_command,
     print_help,
 )
-from .scenario import ScenarioSkipped, run_scenario_file
 from .url_helpers import (
     default_agent_metrics_url,
     default_agent_pod_base_url,
@@ -36,8 +35,6 @@ __all__ = [
     "DEFAULT_AGENT_POD_BASE_URL",
     "HistogramSeriesSummary",
     "PrometheusSample",
-    "ScenarioSkipped",
-    "_complete_scenario_path",
     "build_hitl_resume_payload",
     "build_parser",
     "completion_candidates",
@@ -57,7 +54,6 @@ __all__ = [
     "print_runtime_event",
     "render_kpi_report",
     "run_interactive_chat",
-    "run_scenario_file",
     "run_single_turn",
     "summarize_prometheus_histograms",
 ]

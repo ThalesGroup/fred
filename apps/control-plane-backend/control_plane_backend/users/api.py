@@ -193,6 +193,7 @@ async def delete_user(
 class UserDetails(BaseModel):
     cguValidated: GcuVersionsType | None
     personalTeam: TeamWithPermissions
+    currentUser: UserSummary | None = None
 
 
 @router.get(
@@ -225,6 +226,7 @@ async def get_user_details(
     return UserDetails(
         cguValidated=user_details.gcuVersionAccepted if user_details else None,
         personalTeam=personal_team,
+        currentUser=UserSummary(id=user.uid, username=user.username, email=user.email),
     )
 
 

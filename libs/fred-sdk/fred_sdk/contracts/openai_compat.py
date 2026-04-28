@@ -42,7 +42,6 @@ from pydantic import BaseModel, Field
 from .context import UiPart
 from .runtime import HumanInputRequest
 
-
 # ---------------------------------------------------------------------------
 # Tool call models (OpenAI streaming shape)
 # ---------------------------------------------------------------------------

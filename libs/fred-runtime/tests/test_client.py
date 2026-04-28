@@ -10,10 +10,9 @@ from fred_runtime.client import (
     AgentPodClient,
     KeycloakLoginConfig,
     KeycloakUserSessionManager,
-    _complete_scenario_path,
     build_cli_token_provider,
-    build_parser,
     build_hitl_resume_payload,
+    build_parser,
     completion_candidates,
     default_agent_metrics_url,
     default_agent_pod_base_url,
@@ -21,11 +20,10 @@ from fred_runtime.client import (
     execution_mode_label,
     load_cli_environment,
     normalize_base_url,
-    parse_prometheus_text_exposition,
     parse_mode_command,
+    parse_prometheus_text_exposition,
     render_kpi_report,
     resolve_keycloak_login_config,
-    run_scenario_file,
     run_single_turn,
     summarize_prometheus_histograms,
 )
@@ -69,28 +67,6 @@ def test_default_agent_metrics_url_honors_env_override(monkeypatch) -> None:
     monkeypatch.setenv("FRED_AGENT_METRICS_URL", "http://localhost:9115/metrics/")
 
     assert default_agent_metrics_url() == "http://localhost:9115/metrics"
-
-
-def test_completion_candidates_suggest_scenario_command() -> None:
-    """
-    Verify /scenario appears in command completion candidates.
-
-    Why this test exists:
-    - /scenario is a new command that should be discoverable via tab
-    - the completion helper must route /scenario  prefix before the generic
-      /  prefix so it never accidentally falls through to command-name
-      completion once the user has typed the space
-
-    How to use it:
-    - run with the offline unit test suite
-    """
-    # Partial command name → suggest /scenario
-    assert "/scenario" in completion_candidates("/scen", agent_ids=())
-    # Once the space is typed, file-path completion takes over (not commands)
-    # We cannot glob real files in this offline test, but we can verify the
-    # branch is entered by confirming the result is a list (not an error).
-    result = completion_candidates("/scenario ", agent_ids=())
-    assert isinstance(result, list)
 
 
 def test_default_keycloak_token_file_honors_env_override(monkeypatch) -> None:
@@ -209,7 +185,7 @@ def test_cli_environment_loads_config_file_selection_from_env_file(
     Verify the CLI honors the same ENV_FILE -> CONFIG_FILE chain as the pod.
 
     Why this test exists:
-    - developers expect `fred-agent-chat` to target the same YAML profile as
+    - developers expect `fred-agents-cli` to target the same YAML profile as
       the agent pod without exporting extra shell variables manually
 
     How to use it:
@@ -248,72 +224,6 @@ security:
     assert config is not None
     assert config.realm_url == "http://localhost:8080/realms/app"
     assert config.client_id == "app"
-
-
-def test_complete_scenario_path_filters_by_prefix(tmp_path) -> None:
-    """
-    Verify scenario path completion returns only YAML files matching the prefix.
-
-    Why this test exists:
-    - the completer must narrow down to a single file when enough of the name
-      is typed, and return all candidates when nothing is typed yet
-    - using tmp_path keeps the test independent of the real scenarios/ layout
-
-    How to use it:
-    - run with the offline unit test suite
-    """
-    import os
-
-    (tmp_path / "sentinel_smoke.yaml").write_text("name: smoke")
-    (tmp_path / "sentinel_checkpointing.yaml").write_text("name: ckpt")
-    (tmp_path / "not_a_scenario.txt").write_text("ignored")
-
-    original_dir = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        # Empty prefix → both YAML files returned
-        all_files = _complete_scenario_path("")
-        assert sorted(all_files) == [
-            "sentinel_checkpointing.yaml",
-            "sentinel_smoke.yaml",
-        ]
-        # Partial prefix → only the matching file
-        assert _complete_scenario_path("sentinel_s") == ["sentinel_smoke.yaml"]
-        # Non-matching prefix → empty
-        assert _complete_scenario_path("unknown") == []
-    finally:
-        os.chdir(original_dir)
-
-
-def test_complete_scenario_path_descends_one_level(tmp_path) -> None:
-    """
-    Verify scenario path completion finds YAML files one directory below cwd.
-
-    Why this test exists:
-    - scenario files typically live in tests/scenarios/, not in the project root
-    - the completer must suggest them when the user has typed nothing yet or
-      has typed only the directory prefix
-
-    How to use it:
-    - run with the offline unit test suite
-    """
-    import os
-
-    sub = tmp_path / "tests" / "scenarios"
-    sub.mkdir(parents=True)
-    (sub / "sentinel_smoke.yaml").write_text("name: smoke")
-
-    original_dir = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        # Empty prefix → file found one level down
-        all_files = _complete_scenario_path("")
-        assert "tests/scenarios/sentinel_smoke.yaml" in all_files
-        # Directory prefix → file found
-        dir_files = _complete_scenario_path("tests/scenarios/")
-        assert "tests/scenarios/sentinel_smoke.yaml" in dir_files
-    finally:
-        os.chdir(original_dir)
 
 
 def test_completion_candidates_support_agent_switching() -> None:
@@ -754,63 +664,6 @@ def test_build_hitl_resume_payload_supports_choice_index_and_raw_id() -> None:
     }
 
 
-def test_run_scenario_file_applies_team_id_override(tmp_path) -> None:
-    """
-    Verify scenario execution can be forced into one explicit team scope.
-
-    Why this test exists:
-    - Phase 3b uses the CLI scenario runner as a backend validation tool for
-      team-scoped execution flows
-    - an explicit override keeps one scenario reusable across team contexts
-
-    How to use it:
-    - run with the offline `fred-runtime` test suite
-
-    Example:
-    - `pytest tests/test_client.py -q`
-    """
-
-    seen_payloads: list[dict[str, object]] = []
-    scenario = tmp_path / "team_scenario.yaml"
-    scenario.write_text(
-        """
-name: team scenario
-agent_id: sentinel.react.v2
-user_id: alice
-steps:
-  - id: first
-    type: turn
-    mode: final
-    session_id: scenario-${run_id}
-    message: hello
-    checks:
-      - kind: final
-""".strip(),
-        encoding="utf-8",
-    )
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.read().decode("utf-8"))
-        assert isinstance(body, dict)
-        seen_payloads.append(body)
-        return httpx.Response(200, json={"kind": "final", "content": "ok"})
-
-    http_client = httpx.Client(transport=httpx.MockTransport(handler))
-    client = AgentPodClient(
-        base_url="http://localhost:8010/fred/agents/v2",
-        http_client=http_client,
-    )
-
-    run_scenario_file(scenario, client=client, team_id_override="fredlab")
-
-    assert seen_payloads[0]["runtime_context"] == {
-        "user_id": "alice",
-        "team_id": "fredlab",
-    }
-
-    http_client.close()
-
-
 def test_agent_pod_client_injects_bearer_token() -> None:
     """
     Verify the pod client forwards the current bearer token on requests.
@@ -991,7 +844,7 @@ def test_build_cli_token_provider_falls_back_after_refresh_failure(
     Verify the CLI still starts when the cached Keycloak session cannot refresh.
 
     Why this test exists:
-    - developers expect `fred-agent-chat` to remain usable even when the local
+    - developers expect `fred-agents-cli` to remain usable even when the local
       refresh token was revoked or expired
     - public pod endpoints such as `/agents` should still work, and the user
       should be able to recover with `/login`

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import importlib
 import json
+from collections.abc import Callable
 from typing import Any, cast
 
 import httpx
-
 from fred_core.common import TeamId
 
 from control_plane_backend.cli import (

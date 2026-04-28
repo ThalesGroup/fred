@@ -436,7 +436,7 @@ python -c "from fred_runtime.cli.kpi_display import render_kpi_report; print('kp
 python -c "from fred_runtime.cli.scenario import ScenarioSkipped; print('scenario ok')"
 make code-quality
 uv run pytest tests/ -q
-fred-agent-chat --help   # entrypoint must still resolve
+fred-agents-cli --help   # entrypoint must still resolve
 ```
 
 ---
@@ -841,7 +841,7 @@ This backlog is closed when all of the following are true:
 - `[x]` New/modified files (P1–P5) report ≥ 70% coverage: `agent_app.py` 74%, `context.py` 95%, all new P4/P5 files 100% ✅ 2026-04-27
 - `[x]` No `import requests` in any source file under `fred_runtime/` (excluding `.venv`) ✅ Phase 1
 - `[x]` `from fred_runtime.client import AgentPodClient, run_scenario_file, main` still works (shim intact) ✅ 2026-04-27
-- `[x]` `fred-agent-chat --help` resolves correctly ✅ 2026-04-27
+- `[x]` `fred-agents-cli --help` resolves correctly ✅ 2026-04-27
 - `[x]` All ring-buffer state is instance-level, not module-global ✅ Phase 4
 - `[x]` `PodApplicationContext` is present and wired via `app.state` ✅ Phase 4
 - `[ ]` `grep -r "Any" fred_runtime/ | grep -v "# opaque\|# open bag\|\.venv"` returns zero results on function boundaries — **deferred to R1b** (see below)

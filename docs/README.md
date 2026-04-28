@@ -10,6 +10,7 @@ Start here, then follow the links to the relevant section.
 | I am… | Start here |
 |---|---|
 | **A developer** setting up the environment | [`platform/DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) |
+| **A developer** validating or debugging a running service | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) — `make cli` on any pod |
 | **A developer** touching an API boundary or execution path | [`design/`](#design--architecture-contracts) |
 | **A developer** working on the chat UI | [`backlog/CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) then [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) |
 | **A UX designer** reviewing component rendering | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
@@ -43,6 +44,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 |---|---|
 | Understand the system architecture | [`design/`](#design--architecture-contracts) |
 | Set up a dev environment | [`platform/DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) |
+| Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) |
 | Deploy Fred | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md) |
 | Write an agent with the SDK | [`authoring/`](#authoring--agent-sdk) |
 | See what the team is working on now | [`WORKPLAN.md`](WORKPLAN.md) |
@@ -87,6 +89,7 @@ guides. Read the developer contract first.
 | File | Purpose |
 |---|---|
 | [`DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) | **Start here** — build, test, PR conventions |
+| [`CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) | **CLI pattern** — every backend exposes `make cli` / `fred-{component}-cli` |
 | [`PYTHON_CODING_GUIDELINES.md`](platform/PYTHON_CODING_GUIDELINES.md) | Python style and quality rules |
 | [`CONFIGURATION_AND_POLICY_CONVENTIONS.md`](platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md) | Config file conventions and policy rules |
 | [`PLATFORM_RUNTIME_MAP.md`](platform/PLATFORM_RUNTIME_MAP.md) | Canonical map of services and their responsibilities |

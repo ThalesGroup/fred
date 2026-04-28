@@ -10,6 +10,18 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.product.schemas import (
+    AgentTemplateSummary,
+    CreateAgentInstanceRequest,
+    CreateSessionRequest,
+    ExecutionPreparation,
+    FrontendBootstrap,
+    ManagedAgentInstanceSummary,
+    ManagedAgentRuntimeBinding,
+    SessionListItem,
+    UpdateAgentInstanceRequest,
+    UpdateSessionRequest,
+)
 from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
@@ -25,18 +37,6 @@ from control_plane_backend.product.service import (
     unenroll_agent_instance,
     update_agent_instance,
     update_session_activity,
-)
-from control_plane_backend.product.schemas import (
-    AgentTemplateSummary,
-    CreateAgentInstanceRequest,
-    CreateSessionRequest,
-    ExecutionPreparation,
-    FrontendBootstrap,
-    ManagedAgentInstanceSummary,
-    ManagedAgentRuntimeBinding,
-    SessionListItem,
-    UpdateAgentInstanceRequest,
-    UpdateSessionRequest,
 )
 from control_plane_backend.teams.service import (
     get_team_by_id as get_team_by_id_from_service,

@@ -14,9 +14,10 @@
 
 from __future__ import annotations
 
-import pytest
-import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
 
 from fred_runtime.common.kf_workspace_client import (
     KfWorkspaceClient,
@@ -32,7 +33,6 @@ from fred_runtime.runtime_context import (
     RuntimeContext,
     set_runtime_context,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Annotated, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 from fred_core import (
     SecurityConfiguration,

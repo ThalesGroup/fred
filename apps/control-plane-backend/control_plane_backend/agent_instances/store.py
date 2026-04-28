@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session

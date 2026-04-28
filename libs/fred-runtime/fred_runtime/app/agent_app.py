@@ -94,13 +94,14 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
 )
 from fred_sdk.graph.graph_runtime import GraphRuntime
-from fred_sdk.runtime_support.checkpoints import load_checkpoint
 from fred_sdk.react.react_runtime import ReActRuntime
+from fred_sdk.runtime_support.checkpoints import load_checkpoint
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
 )
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
+
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
 
 from ..common.structures import AgentSettingsLike
@@ -108,9 +109,9 @@ from ..integrations.v2_runtime.adapters import (
     CompositeToolInvoker,
     FredArtifactPublisher,
     FredKnowledgeSearchToolInvoker,
-    KPIWriterMetricsAdapter,
     FredMcpToolProvider,
     FredResourceReader,
+    KPIWriterMetricsAdapter,
     build_default_tracer,
 )
 from ..runtime_context import (

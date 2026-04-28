@@ -289,7 +289,7 @@ That gate must cover:
    also exposes the same capability through raw `agent_id` or template listing.
 2. A team-scoped call resolved through `agent_instance_id` behaves correctly
    end-to-end for execution, history, checkpoints, and resume.
-3. The runtime CLI (`fred-agent-chat`) remains a first-class validation
+3. The runtime CLI (`fred-agents-cli`) remains a first-class validation
    consumer for managed team-scoped flows, not only raw template calls.
 4. Runtime observability is enriched consistently for logs, KPI, metrics, and
    tracing payloads, including exports to Langfuse.

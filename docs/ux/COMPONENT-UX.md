@@ -73,9 +73,9 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
   monospace on a light background. May be too visually heavy for secondary UI. Consider
   lowercase with a subtler pill, or icon-only at narrow widths.
 
-- **Collapse behaviour** — the accordion collapses only when `done=true` is passed, but
-  "done" is inferred from `finalMessages.length > 0`. During history load all turns
-  arrive simultaneously, so all `ThoughtTrace` blocks start collapsed even for past turns.
+- **Collapse behaviour** — the accordion collapses only when `done=true` is passed, which
+  is `!isStreaming` (set by `AssistantTurn`). During history load all turns arrive
+  simultaneously so all `ThoughtTrace` blocks start collapsed (past turns are not streaming).
   Discuss: should past turns always be collapsed, or should the most recent one start open?
 
 - **Timeline guideline alignment** — the vertical guideline (`.guideline`) is positioned
@@ -272,7 +272,8 @@ _(none yet)_
 
 #### Resolved
 
-_(none yet)_
+- **Props changed (2026-04-27)** — `finalMessages: ChatMessage[]` replaced by `text: string`.
+  Text is now pre-extracted by `toConversationMessages` in `ManagedChatPage` and passed directly.
 
 ---
 
@@ -333,9 +334,15 @@ _(none yet)_
 - **Focus management** — when `HitlPrompt` appears, focus should move to the first
   actionable element (first choice button or the free-text input). Not yet implemented.
 
+- **Frozen card visual distinction** — `readonly` mode (history replay) disables choice
+  buttons but does not visually differentiate the frozen state from a live prompt. A
+  muted/greyed style on the card or buttons would signal "past interaction" more clearly.
+
 #### Resolved
 
-_(none yet)_
+- **`readonly` prop added (2026-04-27)** — `HitlPrompt` now accepts `readonly?: boolean`.
+  When set, choice buttons are disabled and the free-text section is hidden. Used by
+  `ManagedChatPage` when rendering `hitl_request` history rows.
 
 ---
 

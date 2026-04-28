@@ -9,6 +9,20 @@ from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
 )
+from control_plane_backend.teams.schemas import (
+    AddTeamMemberRequest,
+    BannerUploadError,
+    KeycloakM2MDisabledError,
+    RemoveTeamMemberResponse,
+    Team,
+    TeamMember,
+    TeamMembershipSyncError,
+    TeamNotFoundError,
+    TeamOwnerConstraintError,
+    TeamWithPermissions,
+    UpdateTeamMemberRequest,
+    UpdateTeamRequest,
+)
 from control_plane_backend.teams.service import (
     add_team_member as add_team_member_from_service,
 )
@@ -28,20 +42,6 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import (
     upload_team_banner as upload_team_banner_from_service,
-)
-from control_plane_backend.teams.schemas import (
-    AddTeamMemberRequest,
-    BannerUploadError,
-    KeycloakM2MDisabledError,
-    RemoveTeamMemberResponse,
-    Team,
-    TeamMember,
-    TeamMembershipSyncError,
-    TeamNotFoundError,
-    TeamOwnerConstraintError,
-    TeamWithPermissions,
-    UpdateTeamMemberRequest,
-    UpdateTeamRequest,
 )
 
 router = APIRouter(tags=["Teams"])

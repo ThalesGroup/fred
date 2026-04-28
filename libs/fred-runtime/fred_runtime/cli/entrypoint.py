@@ -22,7 +22,6 @@ from fred_core.cli.ui import colors_enabled
 from .history_display import run_single_turn
 from .pod_client import AgentPodClient
 from .repl import run_interactive_chat
-from .scenario import run_scenario_file
 from .url_helpers import (
     default_agent_metrics_url,
     default_agent_pod_base_url,
@@ -123,15 +122,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable ANSI terminal colors in the chat client output.",
     )
     parser.add_argument(
-        "--scenario",
-        default=None,
-        metavar="FILE",
-        help=(
-            "Run a YAML scenario file against the pod and exit. "
-            "Mutually exclusive with interactive and one-shot modes."
-        ),
-    )
-    parser.add_argument(
         "message",
         nargs="*",
         help="Optional one-shot message. Omit it to start interactive mode.",
@@ -141,7 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the Fred agent pod chat client."""
-    env_file = load_cli_environment(log_prefix="[CHAT CONFIG]")
+    env_file = load_cli_environment(log_prefix="[CLI CONFIG]")
     parser = build_parser()
     args = parser.parse_args(argv)
     base_url = normalize_base_url(args.base_url)
@@ -153,10 +143,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     color_enabled = colors_enabled(no_color=args.no_color)
 
     config_file = default_configuration_file()
-    print(f"[chat] env file  : {env_file}")
-    print(f"[chat] config    : {config_file} (exists={config_file.exists()})")
-    print(f"[chat] pod url   : {base_url}")
-    print(f"[chat] metrics   : {metrics_url or 'not configured'}")
+    print(f"[cli] env file  : {env_file}")
+    print(f"[cli] config    : {config_file} (exists={config_file.exists()})")
+    print(f"[cli] pod url   : {base_url}")
+    print(f"[cli] metrics   : {metrics_url or 'not configured'}")
 
     http_client = httpx.Client(timeout=httpx.Timeout(30.0, connect=5.0, read=None))
     auth_session = None
@@ -167,20 +157,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if login_config is not None:
         print(
-            f"[chat] auth      : keycloak realm={login_config.realm_url}"
+            f"[cli] auth      : keycloak realm={login_config.realm_url}"
             f"  client={login_config.client_id}"
         )
         auth_session = KeycloakUserSessionManager(
             config=login_config,
             cache_file=default_keycloak_token_file(),
-            log_prefix="[chat]",
+            log_prefix="[cli]",
         )
     else:
-        print("[chat] auth      : none  (standalone mode — security disabled)")
+        print("[cli] auth      : none  (standalone mode — security disabled)")
 
     effective_team_id = args.team_id or ("personal" if login_config is None else None)
     if effective_team_id:
-        print(f"[chat] team      : {effective_team_id}")
+        print(f"[cli] team      : {effective_team_id}")
 
     static_token = os.getenv("FRED_AGENT_TOKEN")
 
@@ -191,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         token_provider=build_cli_token_provider(
             auth_session=auth_session,
             static_token=static_token,
-            log_prefix="[chat]",
+            log_prefix="[cli]",
         )
         if auth_session is not None or static_token
         else None,
@@ -229,18 +219,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             password = getpass.getpass("Password: ")
             auth_session.login(username=username, password=password)
             print(f"Logged in as {auth_session.current_username()}.")
-        if args.scenario:
-            try:
-                run_scenario_file(
-                    args.scenario,
-                    client=client,
-                    team_id_override=effective_team_id,
-                )
-                print("\nAll checks passed.")
-                return 0
-            except AssertionError as exc:
-                print(f"\nScenario FAILED: {exc}")
-                return 1
         if args.message:
             agents = client.list_agents()
             active_agent = args.agent or agents[0]

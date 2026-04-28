@@ -385,8 +385,8 @@ Source count is `message.metadata.sources.length`.
 - [x] Establish three-column layout in `ManagedChatPage` (left sidebar, chat area, right panel
   slot) — right slot renders `null` until Phase 6C; no structural refactor needed later
 - [x] Add `TogglePanelButton` atom to the chat header (wires to `rightPanelOpen: boolean` state)
-- [ ] Map SSE events to `ConversationMessage` state (replace current `Turn[]` grouping model)
-- [ ] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`;
+- [x] Map SSE events to `ConversationMessage` state (replace current `Turn[]` grouping model)
+- [x] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`;
   handle `hitl_request` (`HitlRequestPart`) and `hitl_response` (`HitlResponsePart`) channels as
   main-conversation rows (not trace entries); read sources from `assistant/final` row `metadata.sources`
 - [x] Run `make format` (Prettier) + `tsc --noEmit` on frontend — both pass (frontend has no `make code-quality` target)
@@ -402,7 +402,7 @@ Source count is `message.metadata.sources.length`.
 > **Test agent:** `fred.test.assistant` — a no-LLM, no-MCP graph agent in `apps/fred-agents`
 > that exercises all major SSE event types without any external service.
 > Keyword-prefix routing: `echo` | `hitl choice` | `hitl text` | `trace` | `error` | `long`.
-> Enroll it in a local pod and use `fred-agent-chat` or the managed chat UI to run each scenario.
+> Enroll it in a local pod and use `fred-agents-cli` or the managed chat UI to run each scenario.
 
 - [ ] User messages appear right-aligned with `--surface-container-high` background
 - [ ] Agent messages appear left-aligned with `--surface-container` background
@@ -418,9 +418,9 @@ Source count is `message.metadata.sources.length`.
 - [ ] `ChatInputBar` is disabled (send button + textarea) while streaming
 - [ ] Existing HITL flow (`HitlPrompt`) is unaffected
 - [ ] History loaded from runtime renders identically to streamed messages
-- [ ] `hitl_request` history rows render as read-only choice cards (question + labelled options, not clickable)
-- [ ] `hitl_response` history rows render as right-aligned user bubbles showing the selected label
-- [ ] Sources from history (`assistant/final` row `metadata.sources`) populate `SourcesPanel` correctly
+- [x] `hitl_request` history rows render as read-only choice cards (question + labelled options, not clickable)
+- [x] `hitl_response` history rows render as right-aligned user bubbles showing the selected label
+- [x] Sources from history (`assistant/final` row `metadata.sources`) populate `SourcesPanel` correctly
 - [ ] No regressions in `ChatList` sidebar session links
 
 ---
@@ -743,7 +743,7 @@ change.
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6A – Architecture & layout | 🟡 In progress | All atoms + molecules + organisms created; three-column layout + `TogglePanelButton` done; Prettier + `tsc` pass. `fred.test.assistant` graph agent added to `apps/fred-agents` for UI scenario testing (no LLM). Remaining: validation criteria sign-off |
+| 6A – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
 | 6B – Markdown & content | Planned | Depends on 6A |
 | 6C – Agent options & debug tools | Planned | AgentOptionsPanel + DebugDrawer; depends on 6A |
 | 6D – Advanced parts | Deferred | After 6C |

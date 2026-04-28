@@ -4,10 +4,11 @@ import argparse
 import getpass
 import os
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
-
 from fred_core.cli.auth import (
     KeycloakUserSessionManager,
     build_cli_token_provider,
@@ -404,6 +405,48 @@ def _print_model_json(
     print(json_text)
 
 
+@dataclass(frozen=True)
+class ColumnSpec:
+    """One column definition used by the generic _print_table renderer."""
+
+    header: str
+    width: int
+    getter: Callable[..., str]
+    color: str | None = None
+    align: str = "<"
+
+
+def _print_table(
+    title: str,
+    rows: list[Any],
+    columns: list[ColumnSpec],
+    *,
+    color_enabled: bool,
+) -> None:
+    """Render a titled, aligned table from a list of ColumnSpec definitions."""
+
+    _print_section(title, color_enabled=color_enabled)
+    header_parts = [
+        colorize(
+            f"{col.header:{col.align}{col.width}}",
+            color=ANSI_DIM,
+            enabled=color_enabled,
+            bold=True,
+        )
+        for col in columns
+    ]
+    print("  " + "  ".join(header_parts))
+    for row in rows:
+        row_parts = []
+        for col in columns:
+            value = _truncate(col.getter(row), col.width)
+            cell = f"{value:{col.align}{col.width}}"
+            if col.color:
+                cell = colorize(cell, color=col.color, enabled=color_enabled)
+            row_parts.append(cell)
+        print("  " + "  ".join(row_parts))
+
+
 def _print_bootstrap_summary(
     bootstrap: FrontendBootstrap,
     *,
@@ -443,25 +486,17 @@ def _print_bootstrap_summary(
 def _print_team_table(teams: list[Team], *, color_enabled: bool) -> None:
     """Render the team list in a compact table."""
 
-    _print_section("Teams", color_enabled=color_enabled)
-    print(
-        colorize("  id", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(" " * 18 + "name", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(
-            " " * 28 + "members", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
-        + colorize(
-            " " * 4 + "private", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
+    _print_table(
+        "Teams",
+        teams,
+        [
+            ColumnSpec("id", 20, lambda t: str(t.id), color=ANSI_CYAN),
+            ColumnSpec("name", 32, lambda t: t.name),
+            ColumnSpec("members", 7, lambda t: str(t.member_count or 0), align=">"),
+            ColumnSpec("private", 7, lambda t: str(t.is_private), align=">"),
+        ],
+        color_enabled=color_enabled,
     )
-    for team in teams:
-        print(
-            "  "
-            + colorize(_truncate(team.id, 20), color=ANSI_CYAN, enabled=color_enabled)
-            + f"  {_truncate(team.name, 30):<30}"
-            + f"  {str(team.member_count or 0):>7}"
-            + f"  {str(team.is_private):>7}"
-        )
     if teams:
         print("  Tip: use `/team <id or visible name>`.")
 
@@ -678,26 +713,18 @@ def _print_team_details(team: TeamWithPermissions, *, color_enabled: bool) -> No
 def _print_members_table(members: list[TeamMember], *, color_enabled: bool) -> None:
     """Render the team-member list in a compact table."""
 
-    _print_section("Members", color_enabled=color_enabled)
-    print(
-        colorize("  relation", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(
-            " " * 10 + "username", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
-        + colorize(" " * 20 + "email", color=ANSI_DIM, enabled=color_enabled, bold=True)
+    _print_table(
+        "Members",
+        members,
+        [
+            ColumnSpec("relation", 12, lambda m: m.relation.value),
+            ColumnSpec(
+                "username", 28, lambda m: m.user.username or "", color=ANSI_GREEN
+            ),
+            ColumnSpec("email", 32, lambda m: m.user.email or ""),
+        ],
+        color_enabled=color_enabled,
     )
-    for member in members:
-        email = member.user.email or ""
-        print(
-            f"  {_truncate(member.relation.value, 12):<12}"
-            + "  "
-            + colorize(
-                _truncate(member.user.username, 28),
-                color=ANSI_GREEN,
-                enabled=color_enabled,
-            )
-            + f"  {_truncate(email, 32)}"
-        )
 
 
 def _print_template_table(
@@ -707,27 +734,16 @@ def _print_template_table(
 ) -> None:
     """Render the template list in a compact table."""
 
-    _print_section("Templates", color_enabled=color_enabled)
-    print(
-        colorize("  template_id", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(
-            " " * 24 + "display_name", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
-        + colorize(
-            " " * 18 + "status", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
+    _print_table(
+        "Templates",
+        templates,
+        [
+            ColumnSpec("template_id", 36, lambda t: t.template_id, color=ANSI_CYAN),
+            ColumnSpec("display_name", 30, lambda t: t.display_name),
+            ColumnSpec("status", 10, lambda t: t.status),
+        ],
+        color_enabled=color_enabled,
     )
-    for template in templates:
-        print(
-            "  "
-            + colorize(
-                _truncate(template.template_id, 36),
-                color=ANSI_CYAN,
-                enabled=color_enabled,
-            )
-            + f"  {_truncate(template.display_name, 28):<28}"
-            + f"  {template.status:<10}"
-        )
 
 
 def _print_instance_table(
@@ -737,27 +753,18 @@ def _print_instance_table(
 ) -> None:
     """Render the managed-agent instance list in a compact table."""
 
-    _print_section("Instances", color_enabled=color_enabled)
-    print(
-        colorize("  instance_id", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(
-            " " * 20 + "display_name", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
-        + colorize(
-            " " * 18 + "status", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
+    _print_table(
+        "Instances",
+        instances,
+        [
+            ColumnSpec(
+                "instance_id", 32, lambda i: i.agent_instance_id, color=ANSI_CYAN
+            ),
+            ColumnSpec("display_name", 30, lambda i: i.display_name),
+            ColumnSpec("status", 10, lambda i: i.status),
+        ],
+        color_enabled=color_enabled,
     )
-    for instance in instances:
-        print(
-            "  "
-            + colorize(
-                _truncate(instance.agent_instance_id, 32),
-                color=ANSI_CYAN,
-                enabled=color_enabled,
-            )
-            + f"  {_truncate(instance.display_name, 28):<28}"
-            + f"  {instance.status:<10}"
-        )
 
 
 def _print_sessions_table(
@@ -767,30 +774,22 @@ def _print_sessions_table(
 ) -> None:
     """Render the session metadata list in a compact table."""
 
-    _print_section("Sessions", color_enabled=color_enabled)
-    print(
-        colorize("  session_id", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(" " * 22 + "title", color=ANSI_DIM, enabled=color_enabled, bold=True)
-        + colorize(
-            " " * 24 + "updated_at", color=ANSI_DIM, enabled=color_enabled, bold=True
-        )
+    _print_table(
+        "Sessions",
+        sessions,
+        [
+            ColumnSpec("session_id", 34, lambda s: s.session_id, color=ANSI_CYAN),
+            ColumnSpec("title", 30, lambda s: s.title or ""),
+            ColumnSpec(
+                "updated_at",
+                24,
+                lambda s: (
+                    s.updated_at.isoformat(timespec="seconds") if s.updated_at else "-"
+                ),
+            ),
+        ],
+        color_enabled=color_enabled,
     )
-    for session in sessions:
-        updated_at = (
-            session.updated_at.isoformat(timespec="seconds")
-            if session.updated_at
-            else "-"
-        )
-        print(
-            "  "
-            + colorize(
-                _truncate(session.session_id, 34),
-                color=ANSI_CYAN,
-                enabled=color_enabled,
-            )
-            + f"  {_truncate(session.title or '', 30):<30}"
-            + f"  {_truncate(updated_at, 24)}"
-        )
 
 
 def refresh_known_teams(
@@ -947,6 +946,12 @@ def completion_candidates(
     if stripped.startswith("/lifecycle run-once "):
         prefix = stripped.removeprefix("/lifecycle run-once ").strip()
         return [option for option in ("dry-run", "live") if option.startswith(prefix)]
+    if stripped.startswith("/lifecycle "):
+        prefix = stripped.removeprefix("/lifecycle ").strip()
+        return ["run-once"] if "run-once".startswith(prefix) else []
+    if stripped.startswith("/policy "):
+        prefix = stripped.removeprefix("/policy ").strip()
+        return [sc for sc in ("summary", "resolve") if sc.startswith(prefix)]
     if stripped.startswith("/"):
         return complete_slash_commands(stripped, commands=_COMMANDS)
     return []
@@ -1066,6 +1071,16 @@ def run_command(
         )
         _print_section("Who Am I", color_enabled=color_enabled)
         print(f"  Auth:          {auth_desc}")
+        if details.currentUser is not None:
+            print(
+                "  User id:       "
+                + colorize(
+                    details.currentUser.id,
+                    color=ANSI_CYAN,
+                    enabled=color_enabled,
+                    bold=True,
+                )
+            )
         print(
             "  Current team:  "
             + colorize(

@@ -34,13 +34,8 @@ from control_plane_backend.scheduler.policies.policy_models import (
     PolicyResolutionRequest,
 )
 from control_plane_backend.scheduler.temporal.structures import LifecycleManagerInput
-from control_plane_backend.teams.system import (
-    get_system_team,
-    list_system_teams,
-    to_team_summary,
-)
-from control_plane_backend.teams.metadata_store import TeamMetadataPatch
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.metadata_store import TeamMetadataPatch
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
     BannerUploadError,
@@ -56,6 +51,11 @@ from control_plane_backend.teams.schemas import (
     UpdateTeamMemberRequest,
     UpdateTeamRequest,
     UserTeamRelation,
+)
+from control_plane_backend.teams.system import (
+    get_system_team,
+    list_system_teams,
+    to_team_summary,
 )
 from control_plane_backend.users.schemas import UserSummary
 

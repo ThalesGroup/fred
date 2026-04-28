@@ -48,7 +48,7 @@ runtime discovery stays aligned with the target architecture:
 - runtime observability is part of the execution contract: logs, KPI, metrics,
   and trace metadata must remain attributable to
   `user_id + team_id + agent_instance_id`, including when exported to Langfuse
-- `fred-agent-chat` remains a first-class backend validation client for
+- `fred-agents-cli` remains a first-class backend validation client for
   managed team-scoped execution, resume, and local KPI inspection
 - `agentic-backend` is no longer the convergence layer for frontend chat/runtime
   behavior and must not regain that role

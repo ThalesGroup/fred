@@ -30,7 +30,7 @@ class AgentPodClient:
     - call `stream_events(...)` to collect streamed runtime events
 
     Example:
-    - `client = AgentPodClient(base_url="http://127.0.0.1:8010/fred/agents/v2", http_client=httpx.Client())`
+    - `client = AgentPodClient(base_url="http://127.0.0.1:8000/fred/agents/v2", http_client=httpx.Client())`
     """
 
     base_url: str

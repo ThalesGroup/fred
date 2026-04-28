@@ -1,6 +1,7 @@
 from typing import cast
 
 from fred_core.portable import InMemoryMetricsProvider, Span, Tracer
+
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,

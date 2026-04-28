@@ -36,11 +36,10 @@ The agent can run in any fred-agents pod that has fred_sdk installed.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from fred_core.store import VectorSearchHit
 from fred_sdk import GraphAgent, GraphWorkflow
 from fred_sdk.graph.runtime import GraphExecutionOutput
+from pydantic import BaseModel
 
 from .graph_state import TestInput, TestState
 from .graph_steps import (

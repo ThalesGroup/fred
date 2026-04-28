@@ -21,7 +21,7 @@ Why this module exists:
 
 How to use it:
 - import `GENERAL_ASSISTANT_AGENT` and add it to a pod registry
-- chat with it using `fred-agent-chat` without starting any other service
+- chat with it using `fred-agents-cli` without starting any other service
 
 Example:
 - `from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT`

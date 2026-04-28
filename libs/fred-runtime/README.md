@@ -104,13 +104,13 @@ services available at runtime (chat model factory, checkpointer wiring, MCP disc
 
 ---
 
-### `fred_runtime.client` — Developer CLI (`fred-agent-chat`)
+### `fred_runtime.client` — Developer CLI (`fred-agents-cli`)
 
 An interactive REPL and one-shot client for any Fred agent pod:
 
 ```bash
 # Interactive mode — connects to http://127.0.0.1:8000/api/v1 by default
-fred-agent-chat
+fred-agents-cli
 
 # Set the current team scope inside the REPL
 /team my-team
@@ -120,19 +120,16 @@ fred-agent-chat
 /kpi tool_name=search
 
 # One-shot
-fred-agent-chat --agent my-agent "What is the status of cluster A?"
-
-# Run a YAML scenario file (smoke tests, checkpointing tests)
-fred-agent-chat --scenario tests/scenarios/smoke.yaml
+fred-agents-cli --agent my-agent "What is the status of cluster A?"
 
 # Keycloak browser login
-fred-agent-chat --login
+fred-agents-cli --login
 
 # Start already scoped to one team
-fred-agent-chat --team-id my-team
+fred-agents-cli --team-id my-team
 
 # Override the metrics endpoint used by /kpi
-fred-agent-chat --metrics-url http://127.0.0.1:9115/metrics
+fred-agents-cli --metrics-url http://127.0.0.1:9115/metrics
 ```
 
 The target pod URL is resolved from `configuration.yaml` automatically,

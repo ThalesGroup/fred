@@ -22,8 +22,6 @@ from fred_runtime.cli import (
     AgentPodClient,
     HistogramSeriesSummary,
     PrometheusSample,
-    ScenarioSkipped,
-    _complete_scenario_path,
     build_hitl_resume_payload,
     build_parser,
     completion_candidates,
@@ -43,7 +41,6 @@ from fred_runtime.cli import (
     print_runtime_event,
     render_kpi_report,
     run_interactive_chat,
-    run_scenario_file,
     run_single_turn,
     summarize_prometheus_histograms,
 )
@@ -55,8 +52,6 @@ __all__ = [
     "KeycloakLoginConfig",
     "KeycloakUserSessionManager",
     "PrometheusSample",
-    "ScenarioSkipped",
-    "_complete_scenario_path",
     "build_cli_token_provider",
     "build_hitl_resume_payload",
     "build_parser",
@@ -80,7 +75,6 @@ __all__ = [
     "render_kpi_report",
     "resolve_keycloak_login_config",
     "run_interactive_chat",
-    "run_scenario_file",
     "run_single_turn",
     "summarize_prometheus_histograms",
 ]

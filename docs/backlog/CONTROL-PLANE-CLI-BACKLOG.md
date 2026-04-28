@@ -5,7 +5,7 @@
 ### 0.1 Goal
 
 Introduce a first-class developer/operator CLI for `control-plane-backend`
-that plays the same role for product/admin flows as `fred-agent-chat` already
+that plays the same role for product/admin flows as `fred-agents-cli` already
 plays for runtime execution flows.
 
 This CLI must let one developer inspect and manage the control-plane surface
@@ -25,7 +25,7 @@ Typical target use cases:
 
 ### 0.2 Why This Matters
 
-Today Fred has a strong runtime validation client (`fred-agent-chat`) but no
+Today Fred has a strong runtime validation client (`fred-agents-cli`) but no
 equivalent operator console for `control-plane-backend`.
 
 This creates a blind spot:
@@ -47,7 +47,7 @@ For the next migration steps, this gap becomes too expensive:
 
 ### 0.3 Core Decision
 
-Do **not** clone `fred-agent-chat` into `control-plane-backend`.
+Do **not** clone `fred-agents-cli` into `control-plane-backend`.
 
 Instead:
 
@@ -71,7 +71,7 @@ The core implementation for this backlog is now in place.
 Shipped pieces:
 
 - shared CLI/auth/bootstrap primitives extracted to `fred-core`
-- `fred-agent-chat` refit to consume those shared helpers
+- `fred-agents-cli` refit to consume those shared helpers
 - dedicated `fred-control-plane-cli` console script added in
   `control-plane-backend`
 - `make cli` added in `apps/control-plane-backend/Makefile`
@@ -123,7 +123,7 @@ They must not assume:
 
 `fred-runtime` keeps everything that is specific to runtime execution:
 
-- `fred-agent-chat`
+- `fred-agents-cli`
 - agent selection and one-shot chat execution
 - runtime SSE rendering
 - checkpoint/history inspection commands tied to runtime contracts
@@ -215,7 +215,7 @@ Yes, but only if the scope stays intentionally narrow.
 
 One reliable pass means:
 
-1. extract only the minimal shared CLI primitives from `fred-agent-chat`
+1. extract only the minimal shared CLI primitives from `fred-agents-cli`
 2. add one real `control-plane` CLI entrypoint
 3. deliver the MVP commands listed in this backlog
 4. validate the result with offline tests plus local no-security usage
@@ -225,7 +225,7 @@ One reliable pass does **not** mean:
 - redesigning all CLI ergonomics for all backends
 - introducing a generic plugin framework
 - implementing the `knowledge-flow` CLI now
-- rebuilding `fred-agent-chat`
+- rebuilding `fred-agents-cli`
 
 The implementation should be treated as one focused backend ergonomics slice,
 not as a platform-wide CLI rewrite.
@@ -317,7 +317,7 @@ Expected touched area:
 
 - `apps/control-plane-backend/tests/`
 - `libs/fred-core` tests if shared auth/CLI helpers move there
-- `libs/fred-runtime` tests if helper extraction changes `fred-agent-chat`
+- `libs/fred-runtime` tests if helper extraction changes `fred-agents-cli`
 
 ---
 
@@ -329,7 +329,7 @@ close to this shape:
 - `fred-core`
   - tiny shared CLI/auth/bootstrap helpers only
 - `fred-runtime`
-  - `fred-agent-chat` updated to consume those helpers
+  - `fred-agents-cli` updated to consume those helpers
 - `control-plane-backend`
   - `control_plane_backend/cli.py` for entrypoint
   - `control_plane_backend/cli_client.py` for typed HTTP calls
@@ -344,10 +344,10 @@ Avoid creating many layers beyond that unless duplication becomes real.
 
 ### 3.1 Phase A — Extract Minimal Shared CLI Primitives
 
-- [x] Identify the generic pieces currently embedded in `fred-agent-chat`
+- [x] Identify the generic pieces currently embedded in `fred-agents-cli`
 - [x] Move only the reusable pieces to `fred-core`
 - [x] Keep the extraction intentionally small
-- [x] Ensure `fred-agent-chat` still works after the extraction
+- [x] Ensure `fred-agents-cli` still works after the extraction
 
 Success rule:
 
@@ -384,7 +384,7 @@ Success rule:
 If this is implemented in one pass, the safest order is:
 
 1. extract the shared helpers to `fred-core`
-2. refit `fred-agent-chat` to prove the extraction is sound
+2. refit `fred-agents-cli` to prove the extraction is sound
 3. add the control-plane typed HTTP client
 4. add the control-plane CLI entrypoint and `make cli`
 5. add the read-only commands first
@@ -407,10 +407,10 @@ below are the remaining closeout items for this backlog.
 - [x] CLI resolves auth/config from the same files as backend startup
 - [x] offline/unit validation is green in `control-plane-backend`,
       `libs/fred-core`, and `libs/fred-runtime`
-- [ ] CLI works when security is disabled
-- [ ] CLI works with Keycloak login when security is enabled
-- [ ] one developer can enroll and unbind an agent instance without Swagger
-- [ ] one developer can prepare execution and inspect the resulting runtime URL
+- [x] CLI works when security is disabled
+- [x] CLI works with Keycloak login when security is enabled
+- [x] one developer can enroll and unbind an agent instance without Swagger
+- [x] one developer can prepare execution and inspect the resulting runtime URL
       and grant scope without the frontend
 
 ---
@@ -428,7 +428,7 @@ below are the remaining closeout items for this backlog.
 
 This backlog should be considered done only if all of the following are true:
 
-- `fred-agent-chat` still works after shared helper extraction
+- `fred-agents-cli` still works after shared helper extraction
 - the new control-plane CLI works from `make cli`
 - the CLI remains useful in both no-security and Keycloak-enabled setups
 - the implementation introduces no dependency from `control-plane-backend` to
@@ -443,7 +443,7 @@ This backlog should be considered done only if all of the following are true:
 
 After this backlog is implemented and validated:
 
-1. keep `fred-agent-chat` as the runtime validation console
+1. keep `fred-agents-cli` as the runtime validation console
 2. use the new control-plane CLI as the product/admin validation console
 3. only then reopen the `knowledge-flow` CLI topic
 

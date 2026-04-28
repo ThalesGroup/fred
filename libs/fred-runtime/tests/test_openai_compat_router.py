@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
@@ -22,8 +23,6 @@ from langchain_core.messages import AIMessage
 
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
-
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 
 
 @tool("demo.hello", description="Return a greeting.")

@@ -27,7 +27,6 @@ def print_help() -> None:
     )
     print("  /logout                  Clear the cached login session")
     print("  /mode [final|stream]     Show or change the execution mode")
-    print("  /scenario <file>         Run a YAML scenario file against the pod")
     print(
         "  /session [<N>|<id>]      Show current session, or switch by index / exact id"
     )
@@ -65,7 +64,7 @@ def print_help() -> None:
 
 _CLI_HELP_CONTEXT = (
     "You are an interactive help assistant embedded in the Fred CLI chat tool "
-    "(fred-agent-chat). Answer the user's question about how to use the CLI. "
+    "(fred-agents-cli). Answer the user's question about how to use the CLI. "
     "Respond in the same language as the user's question. Be concise and practical.\n\n"
     "Available commands:\n"
     "  /help [question]         Show command reference or ask a question in natural language\n"
@@ -76,7 +75,6 @@ _CLI_HELP_CONTEXT = (
     "  /whoami                  Show identity, auth, team, agent, session, pod URL\n"
     "  /logout                  Clear the cached login session\n"
     "  /mode [final|stream]     Show or change the execution mode (default: stream)\n"
-    "  /scenario <file>         Run a YAML scenario file against the pod\n"
     "  /session [<N>|<id>]      Show current session, or switch by index / exact id\n"
     "  /session-new             Start a fresh session with a generated id\n"
     "  /session-info [id]       Show session metadata (timestamps, agents, tokens, title)\n"

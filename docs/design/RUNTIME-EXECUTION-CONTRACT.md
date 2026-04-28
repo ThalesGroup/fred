@@ -75,7 +75,7 @@ When `KEYCLOAK_ENABLED=false` the pod runs without authentication. A mock user
 - This default is applied by `_stream()` before building `PortableContext`,
   `RuntimeContext`, and the KPI/history records. Every subsystem sees the same
   resolved value.
-- The CLI (`fred-agent-chat`) also defaults its active team to `"personal"` when
+- The CLI (`fred-agents-cli`) also defaults its active team to `"personal"` when
   no Keycloak configuration is present, and prints it in the startup banner:
   `[chat] team : personal`
 - Checkpoints, history rows, and KPI labels all carry `team_id="personal"` —
@@ -468,13 +468,14 @@ stream ends by connection close after `final`, with no sentinel frame, and that
 
 ---
 
-## 8. Developer CLI — `fred-agent-chat`
+## 8. Developer CLI — `fred-agents-cli`
 
-The CLI (`libs/fred-runtime/fred_runtime/client.py`) is a first-class contract
-consumer. It exercises the frozen execution contract from terminal without the
-frontend.
+> **Platform convention:** every Fred backend exposes `make cli`.
+> See [`platform/CLI-CONVENTION.md`](../platform/CLI-CONVENTION.md) for the full pattern.
 
-Entry point: `fred-agent-chat` (see `libs/fred-runtime/pyproject.toml`).
+The CLI is a first-class contract consumer. It exercises the frozen execution
+contract from a terminal without the frontend. Run it with `make cli` from
+`apps/fred-agents/`. Entry point: `fred-agents-cli` (`libs/fred-runtime/pyproject.toml`).
 
 ### Commands
 
@@ -492,7 +493,6 @@ Entry point: `fred-agent-chat` (see `libs/fred-runtime/pyproject.toml`).
 | `/context` | Show execution context summary (agent, session, mode, pod URL) |
 | `/stats` | Checkpoint storage statistics |
 | `/mode [final\|stream]` | Show or change execution mode |
-| `/scenario <file>` | Run a YAML scenario file |
 | `/login` / `/login-password` | Authenticate via PKCE or username/password |
 | `/team [team_id\|clear]` | Show, set, or clear the current team scope |
 | `/whoami` / `/logout` | Auth status and logout |
@@ -519,7 +519,7 @@ The CLI is not just a developer convenience:
   execution before the frontend is rewired
 - it must remain able to inspect execution context, history, checkpoints, and
   managed/runtime identity boundaries without browser dependencies
-- if a backend change cannot be validated through `fred-agent-chat` or targeted
+- if a backend change cannot be validated through `fred-agents-cli` or targeted
   runtime tests, the backend path is not yet "dry" enough for frontend cutover
 
 ## 9. Backend Completeness Gate Before Phase 4
@@ -537,7 +537,7 @@ following invariants:
    the execution identity and correlation fields below.
 5. Langfuse-exported traces keep the same identity metadata so downstream
    analysis does not lose team or managed-agent scope.
-6. `fred-agent-chat` remains a first-class validation client for these flows.
+6. `fred-agents-cli` remains a first-class validation client for these flows.
 
 Required observability identity set:
 
@@ -562,7 +562,7 @@ Implemented runtime-side today:
 - runtime span metadata, graph KPI dimensions, KF client KPI dimensions, MCP
   tool KPI dimensions, and Langfuse span metadata preserve the managed
   execution identity fields available at runtime
-- `fred-agent-chat` can set team scope explicitly via `/team` or `--team-id`
+- `fred-agents-cli` can set team scope explicitly via `/team` or `--team-id`
   and exercise the same managed/team-scoped backend path without the frontend
 - `fred-runtime` now restores a concrete KPI pipeline at pod startup:
   `KPIWriter`, Prometheus export when configured, and process/SQL pool KPI
@@ -570,13 +570,13 @@ Implemented runtime-side today:
 - Prometheus export filters unbounded runtime identity labels (`session_id`,
   `user_id`, `exchange_id`) at the KPI sink; the original KPI event still carries
   those dimensions for structured delegates such as log/OpenSearch stores
-- `fred-agent-chat` can now inspect that same runtime metrics surface directly
+- `fred-agents-cli` can now inspect that same runtime metrics surface directly
   via `/kpi [pattern]`, so backend KPI validation no longer depends on a local
   Grafana/Prometheus stack
 
 Still pending before Phase 4:
 
-- end-to-end validation from `fred-agent-chat` that one managed execution works
+- end-to-end validation from `fred-agents-cli` that one managed execution works
   through the real control-plane-approved path, not only pod-local shortcuts
 - end-to-end validation that one managed HITL resume preserves the same
   session/checkpoint identity set across runtime history, checkpoints, KPI,
@@ -590,7 +590,7 @@ Still pending before Phase 4:
 
 The current recommended continuation order is:
 
-1. validate the managed execution path from `fred-agent-chat`
+1. validate the managed execution path from `fred-agents-cli`
 2. validate managed HITL resume end-to-end
 3. finish the remaining observability/log-sink audit
 4. only then begin Phase 4 frontend SSE migration

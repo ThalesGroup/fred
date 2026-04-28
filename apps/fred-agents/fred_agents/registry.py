@@ -52,7 +52,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     """
 
     return {
-        # First entry is the default agent selected by fred-agent-chat on connect.
+        # First entry is the default agent selected by fred-agents-cli on connect.
         # general_assistant has no external dependencies — works with a model only.
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,

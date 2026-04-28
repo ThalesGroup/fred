@@ -32,7 +32,6 @@ from .repl_helpers import (
     parse_mode_command,
     print_help,
 )
-from .scenario import run_scenario_file
 
 
 def run_interactive_chat(
@@ -215,7 +214,7 @@ def run_interactive_chat(
                         "  ⚠  Standalone mode: history is stored under user_id = "
                         f'"{user_id}" (your Unix username).\n'
                         '     The local UI may send a different user_id (e.g. "admin").\n'
-                        "     Override with: fred-agent-chat --user-id admin",
+                        "     Override with: fred-agents-cli --user-id admin",
                         color=ANSI_YELLOW,
                         enabled=color_enabled,
                     )
@@ -266,18 +265,6 @@ def run_interactive_chat(
             print(
                 f"Switched to {colorize(current_agent, color=ANSI_CYAN, enabled=color_enabled, bold=True)}"
             )
-            continue
-        if message.startswith("/scenario "):
-            scenario_path = message.removeprefix("/scenario ").strip()
-            try:
-                run_scenario_file(
-                    scenario_path,
-                    client=client,
-                    team_id_override=current_team_id,
-                )
-                print("All checks passed.")
-            except (AssertionError, ValueError, FileNotFoundError) as exc:
-                print(f"Scenario failed: {exc}")
             continue
         if message == "/session-new":
             current_session_id = f"dev-session-{uuid.uuid4().hex[:8]}"
@@ -1176,7 +1163,6 @@ def run_interactive_chat(
                 "/session": "/session <id>",
                 "/team": "/team [team_id|clear]",
                 "/agent": "/agent <agent_id>  — use /agents to list available agents",
-                "/scenario": "/scenario <file>",
                 "/checkpoint": "/checkpoint <thread_id>  — use /checkpoints to list threads",
             }
             if bare in _USAGE_HINTS:

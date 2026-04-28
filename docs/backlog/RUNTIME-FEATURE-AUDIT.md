@@ -1,6 +1,6 @@
 # Runtime Feature Audit
 
-**Scope:** `fred-runtime`, `fred-sdk`, `fred-agent-chat` CLI, and their direct dependencies in `fred-core`.
+**Scope:** `fred-runtime`, `fred-sdk`, `fred-agents-cli` CLI, and their direct dependencies in `fred-core`.
 
 **Purpose:** A developer-facing, implementation-level inventory. For each feature and sub-feature:
 - implementation status and quality
@@ -301,7 +301,7 @@ It is not:
 
 ---
 
-## 9. CLI (fred-agent-chat)
+## 9. CLI (fred-agents-cli)
 
 ### 9.1 Interactive REPL
 **Status:** ✅
@@ -427,9 +427,9 @@ It is not:
 
 ## Validation Checklist (Standalone Mode)
 
-Run these manually with `make chat` in a fred-samples pod before any production stack work.
+Run these manually with `make cli` in a fred-samples pod before any production stack work.
 
-- [ ] `fred-agent-chat` starts: banner shows `auth: none (standalone mode)` and `team: personal`
+- [ ] `fred-agents-cli` starts: banner shows `auth: none (standalone mode)` and `team: personal`
 - [ ] Send a message: agent responds with streaming deltas and a `final` event
 - [ ] `/kpi`: `app_phase_latency_ms{phase=react_stream}` appears with `team_id=personal`
 - [ ] `/kpi`: `agent_turn_completed` histogram appears with `finish_reason=stop`

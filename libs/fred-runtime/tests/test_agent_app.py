@@ -5,6 +5,7 @@ import json
 import time
 from types import SimpleNamespace
 
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
 from fred_core.kpi.kpi_writer import KPIWriter
@@ -23,8 +24,6 @@ from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.runtime_context import get_runtime_context
-
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 
 
 @tool("demo.echo", description="Echo the provided text.")
@@ -662,8 +661,9 @@ def test_ring_buffer_endpoints_return_seeded_events(monkeypatch, tmp_path) -> No
         agent_app_module._emit_audit_event(
             container, "info", "grant_validated", user_id="bob"
         )
-        from fred_runtime.app.context import KpiTurnRecord
         from typing import cast as _cast
+
+        from fred_runtime.app.context import KpiTurnRecord
 
         with container._kpi_turns_lock:
             container.kpi_turns_buffer.append(

@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
@@ -41,8 +42,6 @@ from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.agent_app import _write_turn_history
 from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
-
-from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 
 
 @tool("noop.ping", description="Return pong.")
