@@ -371,116 +371,49 @@ const CustomCodeComponent: Components["code"] = ({ className, children, ...props
 };
 
 /* -------------------------------------------------------------------------- */
-/* NEW: CITATION HOOKS (Logic moved from your old renderer)                    */
+/* CITATION REHYPE PLUGIN                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** Walk all text nodes under root, excluding code/citations, to inject sup tags */
-function forEachTextNode(root: HTMLElement, excludeSelector: string, fn: (textNode: Text) => void) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node.parentElement;
-      if (!parent) return NodeFilter.FILTER_REJECT;
-      // Exclude nodes inside pre, code, etc.
-      // NOTE: Removed '.mermaid' from the exclusion selector
-      if (parent.closest(excludeSelector)) return NodeFilter.FILTER_REJECT;
-      // Only process text nodes that contain a potential citation pattern
-      if (!node.nodeValue || !node.nodeValue.match(/\[\d+\]/)) {
-        return NodeFilter.FILTER_SKIP;
+/**
+ * Rehype plugin: transform [n] text patterns into <sup class="fred-cite" data-n="n"> HAST
+ * elements before sanitization.  Running inside the rehype pipeline means citations are
+ * native React elements that React reconciles properly — no post-render DOM mutation, no
+ * streaming flicker.  Text nodes inside code/pre/kbd/samp are skipped.
+ */
+function rehypeCitations() {
+  const SKIP_TAGS = new Set(["code", "pre", "kbd", "samp"]);
+  const CITATION_RE = /\[(\d+)\]/g;
+
+  return (tree: any) => {
+    visit(tree, "text", (node: any, index: number | null, parent: any) => {
+      if (index == null || !parent) return;
+      if (parent.type === "element" && SKIP_TAGS.has(parent.tagName)) return;
+
+      CITATION_RE.lastIndex = 0;
+      if (!CITATION_RE.test(node.value)) return;
+      CITATION_RE.lastIndex = 0;
+
+      const parts: any[] = [];
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = CITATION_RE.exec(node.value)) !== null) {
+        if (m.index > last) parts.push({ type: "text", value: node.value.slice(last, m.index) });
+        parts.push({
+          type: "element",
+          tagName: "sup",
+          properties: { className: ["fred-cite"], "data-n": m[1] },
+          children: [{ type: "text", value: `[${m[1]}]` }],
+        });
+        last = m.index + m[0].length;
       }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-  let node: Node | null;
-  while ((node = walker.nextNode())) fn(node as Text);
-}
+      if (last < node.value.length) parts.push({ type: "text", value: node.value.slice(last) });
 
-/** Replace [n] in a text node with <sup class="fred-cite" data-n="n">[n]</sup> */
-function injectCitationSup(textNode: Text) {
-  const parent = textNode.parentNode as HTMLElement;
-  const txt = textNode.nodeValue || "";
-  // Split by citation pattern, keeping the delimiters
-  const parts = txt.split(/(\[\d+\])/g);
-  if (parts.length === 1) return;
-
-  const frag = document.createDocumentFragment();
-  for (const part of parts) {
-    const m = part.match(/^\[(\d+)\]$/);
-    if (!m) {
-      frag.appendChild(document.createTextNode(part));
-      continue;
-    }
-    const n = Number(m[1]);
-    const sup = document.createElement("sup");
-    sup.className = "fred-cite";
-    sup.setAttribute("data-n", String(n));
-    sup.textContent = `[${n}]`;
-    frag.appendChild(sup);
-  }
-  // Replace the original text node with the new fragment
-  parent.replaceChild(frag, textNode);
-}
-
-const useCitationEnrichment = (containerRef: React.RefObject<HTMLElement>, citations?: CitationHooks) => {
-  useEffect(() => {
-    if (!containerRef.current || !citations) return;
-
-    const container = containerRef.current;
-
-    // 1) Inject <sup.fred-cite> for every [n] in text nodes (exclude code-like)
-    // Removed '.mermaid' from the exclude selector
-    forEachTextNode(container, "pre, code, kbd, samp, .fred-cite", injectCitationSup);
-
-    // 2) Attach handlers and ARIA to the newly created <sup> elements
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>("sup.fred-cite"));
-
-    const onEnter = (e: Event) => {
-      const el = e.currentTarget as HTMLElement;
-      const n = Number(el.getAttribute("data-n") || "0");
-      const uid = citations.getUidForNumber(n);
-      el.classList.add("fred-cite--hover");
-      citations.onHover?.(uid);
-    };
-    const onLeave = (e: Event) => {
-      const el = e.currentTarget as HTMLElement;
-      el.classList.remove("fred-cite--hover");
-      citations.onHover?.(null);
-    };
-    const onClick = (e: Event) => {
-      const el = e.currentTarget as HTMLElement;
-      const n = Number(el.getAttribute("data-n") || "0");
-      const uid = citations.getUidForNumber(n);
-      citations.onClick?.(uid);
-    };
-    const onKeydown = (ke: KeyboardEvent) => {
-      if (ke.key === "Enter" || ke.key === " ") {
-        ke.preventDefault();
-        onClick(ke as unknown as Event);
+      if (parts.length > 1) {
+        parent.children.splice(index, 1, ...parts);
       }
-    };
-
-    nodes.forEach((el) => {
-      el.setAttribute("role", "button");
-      el.setAttribute("tabindex", "0");
-      el.setAttribute("aria-label", `Citation ${el.getAttribute("data-n")}`);
-      el.addEventListener("mouseenter", onEnter);
-      el.addEventListener("mouseleave", onLeave);
-      el.addEventListener("click", onClick);
-      el.addEventListener("keydown", onKeydown);
     });
-
-    // Cleanup
-    return () => {
-      nodes.forEach((el) => {
-        el.removeEventListener("mouseenter", onEnter);
-        el.removeEventListener("mouseleave", onLeave);
-        el.removeEventListener("click", onClick);
-        el.removeEventListener("keydown", onKeydown);
-        // Note: We don't remove the <sup> elements themselves here,
-        // as they will be re-rendered and replaced by the next ReactMarkdown run.
-      });
-    };
-  }, [containerRef, citations]);
-};
+  };
+}
 
 /* -------------------------------------------------------------------------- */
 /* MARKDOWN RENDERER CORE (Mermaid Initialization Removed)                     */
@@ -491,15 +424,11 @@ export default function MarkdownRenderer({
   size = "medium",
   enableEmojiSubstitution = false,
   remarkPlugins = [],
-  citations, // <-- DESTUCTURE CITATIONS PROP
+  citations,
   documentUidForMedia,
   ...props
 }: MarkdownRendererProps) {
   const theme = useTheme();
-  const containerRef = useRef<HTMLDivElement>(null); // Ref to hold the root DOM element
-
-  // Execute the custom citation logic hook after rendering
-  useCitationEnrichment(containerRef, citations); // <-- CALL THE NEW HOOK HERE
 
   const finalContent = enableEmojiSubstitution
     ? replaceStageDirectionsWithEmoji(content || "")
@@ -517,6 +446,33 @@ export default function MarkdownRenderer({
     img: ({ node, ...imageProps }) => (
       <AuthenticatedMarkdownImage {...imageProps} documentUidForMedia={documentUidForMedia} />
     ),
+    sup: ({ node, children, ...supProps }) => {
+      const n = (supProps as any)["data-n"] !== undefined ? Number((supProps as any)["data-n"]) : undefined;
+      if (n !== undefined && citations) {
+        const uid = citations.getUidForNumber(n);
+        return (
+          <sup
+            className="fred-cite"
+            data-n={String(n)}
+            onMouseEnter={() => citations.onHover?.(uid)}
+            onMouseLeave={() => citations.onHover?.(null)}
+            onClick={() => citations.onClick?.(uid)}
+            role="button"
+            tabIndex={0}
+            aria-label={`Citation ${n}`}
+            onKeyDown={(e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                citations.onClick?.(uid);
+              }
+            }}
+          >
+            {children}
+          </sup>
+        );
+      }
+      return <sup {...(supProps as any)}>{children}</sup>;
+    },
     ...(props.components || {}),
   };
 
@@ -525,7 +481,8 @@ export default function MarkdownRenderer({
     tagNames: [...(defaultSchema.tagNames || []), "details", "summary"],
     attributes: {
       ...(defaultSchema.attributes || {}),
-      details: ["open"], // allow the boolean 'open' attribute
+      details: ["open"],
+      sup: [...(defaultSchema.attributes?.sup ?? []), "data-n"],
     },
   };
 
@@ -551,7 +508,6 @@ export default function MarkdownRenderer({
 
   return (
     <Box
-      ref={containerRef}
       sx={{
         "& .fred-cite": {
           position: "relative",
@@ -579,11 +535,11 @@ export default function MarkdownRenderer({
         remarkPlugins={[
           remarkGfm,
           remarkMath,
-          remarkDirective, // 👈 must come before our details transformer
-          remarkDetailsContainers, // 👈 turns :::details into real <details>
+          remarkDirective,
+          remarkDetailsContainers,
           ...remarkPlugins,
         ]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
+        rehypePlugins={[rehypeRaw, rehypeCitations, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
       >
         {finalContent}
       </ReactMarkdown>

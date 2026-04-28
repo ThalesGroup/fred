@@ -37,10 +37,11 @@ class KfVectorSearchParams(BaseModel):
         ),
     )
     libraries_selection: bool = Field(
-        default=False,
+        default=True,
         description=(
             "When True, expose the document-library picker in the chat bar so users "
-            "can narrow retrieval to specific libraries at message time."
+            "can narrow retrieval to specific libraries at message time. "
+            "Defaults to True because conversation-level scoping is the only scoping mechanism."
         ),
     )
 
