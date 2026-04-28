@@ -40,6 +40,7 @@ export type ChatDocumentLibrariesWidgetProps = {
   onChangeSelectedLibraryIds: (ids: string[]) => void;
   teamId?: string;
   nameById: Record<string, string>;
+  isLoadingNames?: boolean;
   libraryById?: Record<string, TagWithItemsId | undefined>;
   includeInSearch: boolean;
   onIncludeInSearchChange: (next: boolean) => void;
@@ -59,6 +60,7 @@ const ChatDocumentLibrariesWidget = ({
   onChangeSelectedLibraryIds,
   teamId,
   nameById,
+  isLoadingNames = false,
   libraryById,
   includeInSearch,
   onIncludeInSearchChange,
@@ -141,10 +143,10 @@ const ChatDocumentLibrariesWidget = ({
     () =>
       selectedLibraryIds.map((id) => ({
         id,
-        label: nameById[id] ?? id,
+        label: nameById[id] ?? (isLoadingNames ? "…" : id),
         secondaryAction: buildActions(id),
       })),
-    [buildActions, nameById, selectedLibraryIds],
+    [buildActions, isLoadingNames, nameById, selectedLibraryIds],
   );
 
   const handleClickAway = () => {

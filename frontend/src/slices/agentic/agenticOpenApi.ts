@@ -619,7 +619,7 @@ export type FieldSpec = {
 };
 export type KfVectorSearchParams = {
   provider?: "kf_vector_search";
-  /** Restrict semantic search to these document library tag IDs. User and LLM selections are intersected with this set at query time. */
+  /** Deprecated creator-level scope. Empty list (default) means no restriction — the agent searches all accessible libraries. Scoping is now done exclusively at conversation time via selected_document_libraries_ids. */
   document_library_tags_ids?: string[];
   /** When True, expose the file-attachment control in the chat bar so users can attach local files (PDFs, images, text) to their messages. */
   attach_files?: boolean;

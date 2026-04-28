@@ -29,6 +29,14 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
     ) -> str:
         """Search the user's document library using semantic similarity (RAG).
 
+        Call this tool for ANY factual, technical, or domain-specific question BEFORE
+        answering from training knowledge. The library may contain more specific,
+        recent, or context-specific information than you already know — always search
+        first, even when you believe you can answer without it.
+
+        Skip this tool only for purely conversational exchanges (greetings, thanks,
+        clarifying what was just said) where no document lookup could add value.
+
         By default, keep a top_k of 5.
 
         Returns ranked hits with title, content, and rank. For each answer:
