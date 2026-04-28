@@ -78,7 +78,9 @@ workflow:
   extends: .docker-default
   rules:
     - if: $CI_COMMIT_TAG =~ /^code\/v/
-    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH
+    - if: $BUILD_CODE_DOCKER_IMAGE == "true" && $CODE_DOCKER_TAG != ""
+      when: always
+    - if: $CI_COMMIT_BRANCH == $DEV_BRANCH && $CODE_DOCKER_TAG == ""
       variables:
         IMAGE_TAG: dev-prism
     - if: $BUILD_CODE_DOCKER_IMAGE == "true"
