@@ -457,6 +457,7 @@ export type TeamWithPermissions = {
 export type UserDetails = {
   cguValidated: GcuVersionsType | null;
   personalTeam: TeamWithPermissions;
+  currentUser?: UserSummary | null;
 };
 export type Team = {
   id: string;

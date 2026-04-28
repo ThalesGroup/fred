@@ -21,9 +21,10 @@ import styles from "./HitlPrompt.module.css";
 interface HitlPromptProps {
   event: AwaitingHumanEvent;
   onAnswer: (answer: string | boolean, freeText?: string) => void;
+  readonly?: boolean;
 }
 
-export function HitlPrompt({ event, onAnswer }: HitlPromptProps) {
+export function HitlPrompt({ event, onAnswer, readonly = false }: HitlPromptProps) {
   const payload = event.payload as {
     title?: string | null;
     question?: string | null;
@@ -41,14 +42,21 @@ export function HitlPrompt({ event, onAnswer }: HitlPromptProps) {
       {payload.choices && payload.choices.length > 0 && (
         <div className={styles.choices}>
           {payload.choices.map((c) => (
-            <Button key={c.id} color="secondary" variant="outlined" size="small" onClick={() => onAnswer(c.id)}>
+            <Button
+              key={c.id}
+              color="secondary"
+              variant="outlined"
+              size="small"
+              disabled={readonly}
+              onClick={() => onAnswer(c.id)}
+            >
               {c.label}
             </Button>
           ))}
         </div>
       )}
 
-      {payload.free_text && (
+      {payload.free_text && !readonly && (
         <div className={styles.freeText}>
           <TextArea label="Your answer" value={freeText} onChange={(e) => setFreeText(e.target.value)} rows={2} />
           <Button

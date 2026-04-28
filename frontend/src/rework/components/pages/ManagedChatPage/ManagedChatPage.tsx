@@ -31,59 +31,111 @@ import {
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import { isTraceChannel } from "../../../../rework/utils/traceUtils";
+import { isTraceChannel, textOf } from "../../../../rework/utils/traceUtils";
 import { useSessionHistory } from "./useSessionHistory";
 
 import styles from "./ManagedChatPage.module.css";
 
-interface Turn {
-  exchangeId: string;
-  userMessages: ChatMessage[];
+interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant" | "hitl_request" | "hitl_response";
+  text: string;
+  isStreaming: boolean;
   traceMessages: ChatMessage[];
-  finalMessages: ChatMessage[];
   sources: VectorSearchHit[];
+  hitlChoices?: Array<{ id: string; label: string }>;
+  hitlTitle?: string | null;
 }
 
-function textOf(msg: ChatMessage): string {
-  return (msg.parts ?? [])
-    .filter((p) => p.type === "text")
-    .map((p) => (p as { type: "text"; text: string }).text)
-    .join("");
-}
-
-function extractSources(messages: ChatMessage[]): VectorSearchHit[] {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const srcs = messages[i].metadata?.sources;
-    if (srcs && srcs.length > 0) return srcs;
-  }
-  return [];
-}
-
-function groupIntoTurns(messages: ChatMessage[]): Turn[] {
+function toConversationMessages(messages: ChatMessage[], isStreaming: boolean): ConversationMessage[] {
   const order: string[] = [];
-  const map = new Map<string, Turn>();
+  const groups = new Map<string, ChatMessage[]>();
 
   for (const msg of messages) {
     const eid = msg.exchange_id;
-    if (!map.has(eid)) {
+    if (!groups.has(eid)) {
       order.push(eid);
-      map.set(eid, { exchangeId: eid, userMessages: [], traceMessages: [], finalMessages: [], sources: [] });
+      groups.set(eid, []);
     }
-    const turn = map.get(eid)!;
-    if (msg.role === "user") {
-      turn.userMessages.push(msg);
-    } else if (isTraceChannel(msg.channel)) {
-      turn.traceMessages.push(msg);
-    } else {
-      turn.finalMessages.push(msg);
+    groups.get(eid)!.push(msg);
+  }
+
+  const result: ConversationMessage[] = [];
+  const lastEid = order[order.length - 1] as string | undefined;
+
+  for (const eid of order) {
+    const msgs = groups.get(eid)!;
+    const isLast = eid === lastEid;
+
+    const userMsg = msgs.find((m) => m.role === "user" && (m.channel as string) !== "hitl_response");
+    if (userMsg) {
+      result.push({
+        id: `${eid}:user`,
+        role: "user",
+        text: textOf(userMsg),
+        isStreaming: false,
+        traceMessages: [],
+        sources: [],
+      });
+    }
+
+    const hitlReqMsg = msgs.find((m) => (m.channel as string) === "hitl_request");
+    if (hitlReqMsg) {
+      type ReqPart = { question?: string; choices?: Array<{ id: string; label: string }>; title?: string | null };
+      const part = hitlReqMsg.parts?.[0] as unknown as ReqPart | undefined;
+      result.push({
+        id: `${eid}:hitl_req`,
+        role: "hitl_request",
+        text: part?.question ?? "",
+        isStreaming: false,
+        traceMessages: [],
+        sources: [],
+        hitlChoices: part?.choices ?? [],
+        hitlTitle: part?.title,
+      });
+    }
+
+    const hitlRespMsg = msgs.find((m) => (m.channel as string) === "hitl_response");
+    if (hitlRespMsg) {
+      type RespPart = { label?: string | null; choice_id?: string };
+      const part = hitlRespMsg.parts?.[0] as unknown as RespPart | undefined;
+      result.push({
+        id: `${eid}:hitl_resp`,
+        role: "hitl_response",
+        text: part?.label ?? part?.choice_id ?? "",
+        isStreaming: false,
+        traceMessages: [],
+        sources: [],
+      });
+    }
+
+    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));
+    const finalMessages = msgs.filter((m) => {
+      const ch = m.channel as string;
+      return m.role !== "user" && ch !== "hitl_request" && ch !== "hitl_response" && !isTraceChannel(m.channel);
+    });
+
+    if (traceMessages.length > 0 || finalMessages.length > 0 || (isStreaming && isLast)) {
+      const sources: VectorSearchHit[] = [];
+      for (let i = finalMessages.length - 1; i >= 0; i--) {
+        const srcs = finalMessages[i].metadata?.sources;
+        if (srcs && srcs.length > 0) {
+          sources.push(...srcs);
+          break;
+        }
+      }
+      result.push({
+        id: `${eid}:assistant`,
+        role: "assistant",
+        text: finalMessages.map((m) => textOf(m)).join(""),
+        isStreaming: isStreaming && isLast,
+        traceMessages,
+        sources,
+      });
     }
   }
 
-  const turns = order.map((eid) => map.get(eid)!);
-  for (const turn of turns) {
-    turn.sources = extractSources(turn.finalMessages);
-  }
-  return turns;
+  return result;
 }
 
 export default function ManagedChatPage() {
@@ -142,7 +194,7 @@ export default function ManagedChatPage() {
     ...sseCallbacks,
   });
 
-  const turns = useMemo(() => groupIntoTurns(messages), [messages]);
+  const conversationMessages = useMemo(() => toConversationMessages(messages, waitResponse), [messages, waitResponse]);
 
   const { isLoading: isLoadingHistory } = useSessionHistory({
     sessionId,
@@ -207,26 +259,30 @@ export default function ManagedChatPage() {
       <div className={styles.body}>
         <div className={styles.chatColumn}>
           <ChatMessagesArea
-            isEmpty={turns.length === 0 && !waitResponse}
+            isEmpty={conversationMessages.length === 0 && !waitResponse}
             isLoading={isLoadingHistory}
             scrollVersion={messages.length}
           >
-            {turns.map((turn, i) => {
-              const isStreaming = waitResponse && i === turns.length - 1;
+            {conversationMessages.map((msg) => {
+              if (msg.role === "user" || msg.role === "hitl_response") {
+                return <UserMessage key={msg.id} text={msg.text} />;
+              }
+              if (msg.role === "hitl_request") {
+                const frozenEvent: AwaitingHumanEvent = {
+                  session_id: "",
+                  exchange_id: msg.id,
+                  payload: { question: msg.text, choices: msg.hitlChoices, title: msg.hitlTitle },
+                };
+                return <HitlPrompt key={msg.id} event={frozenEvent} onAnswer={() => {}} readonly />;
+              }
               return (
-                <div key={turn.exchangeId} className={styles.turn}>
-                  {turn.userMessages.map((msg, j) => (
-                    <UserMessage key={`${msg.exchange_id}|user|${j}`} text={textOf(msg)} />
-                  ))}
-                  {(turn.traceMessages.length > 0 || turn.finalMessages.length > 0 || isStreaming) && (
-                    <AssistantTurn
-                      traceMessages={turn.traceMessages}
-                      finalMessages={turn.finalMessages}
-                      sources={turn.sources}
-                      isStreaming={isStreaming}
-                    />
-                  )}
-                </div>
+                <AssistantTurn
+                  key={msg.id}
+                  text={msg.text}
+                  traceMessages={msg.traceMessages}
+                  sources={msg.sources}
+                  isStreaming={msg.isStreaming}
+                />
               );
             })}
             {pendingHitl && <HitlPrompt event={pendingHitl} onAnswer={handleHitlAnswer} />}

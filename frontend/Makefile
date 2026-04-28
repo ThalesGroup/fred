@@ -78,15 +78,6 @@ run: check-node node_modules ## Run frontend locally (Vite proxy handles backend
 format: ## Use prettier to format all codebase
 	npx prettier . --write
 
-.PHONY: update-agentic-api
-update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
-	@echo "🔧 Installing frontend dependencies..."
-	npm ci
-	@echo "🔧 Generating agentic backend OpenAPI specification..."
-	cd ../agentic-backend && make generate-openapi
-	@echo "🎯 Generating RTK Query hooks for agentic backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
-
 .PHONY: update-knowledge-flow-api
 update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@echo "🔧 Installing frontend dependencies..."

@@ -4,6 +4,17 @@ const injectedRtkApi = api.injectEndpoints({
     listAgentsPodV1AgentsGet: build.query<ListAgentsPodV1AgentsGetApiResponse, ListAgentsPodV1AgentsGetApiArg>({
       query: () => ({ url: `/pod/v1/agents` }),
     }),
+    getAuditEventsPodV1AgentsAuditEventsGet: build.query<
+      GetAuditEventsPodV1AgentsAuditEventsGetApiResponse,
+      GetAuditEventsPodV1AgentsAuditEventsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/audit-events`,
+        params: {
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     listCheckpointThreadsPodV1AgentsCheckpointsGet: build.query<
       ListCheckpointThreadsPodV1AgentsCheckpointsGetApiResponse,
       ListCheckpointThreadsPodV1AgentsCheckpointsGetApiArg
@@ -49,6 +60,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.runtimeExecuteRequest,
       }),
     }),
+    getKpiTurnsPodV1AgentsKpiTurnsGet: build.query<
+      GetKpiTurnsPodV1AgentsKpiTurnsGetApiResponse,
+      GetKpiTurnsPodV1AgentsKpiTurnsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/kpi-turns`,
+        params: {
+          limit: queryArg.limit,
+        },
+      }),
+    }),
     listSessionsPodV1AgentsSessionsGet: build.query<
       ListSessionsPodV1AgentsSessionsGetApiResponse,
       ListSessionsPodV1AgentsSessionsGetApiArg
@@ -59,6 +81,12 @@ const injectedRtkApi = api.injectEndpoints({
           user_id: queryArg.userId,
         },
       }),
+    }),
+    deleteSessionHistoryPodV1AgentsSessionsSessionIdDelete: build.mutation<
+      DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse,
+      DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}`, method: "DELETE" }),
     }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
@@ -87,6 +115,11 @@ const injectedRtkApi = api.injectEndpoints({
 export { injectedRtkApi as runtimeApi };
 export type ListAgentsPodV1AgentsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListAgentsPodV1AgentsGetApiArg = void;
+export type GetAuditEventsPodV1AgentsAuditEventsGetApiResponse =
+  /** status 200 Successful Response */ AuditEventRecord[];
+export type GetAuditEventsPodV1AgentsAuditEventsGetApiArg = {
+  limit?: number;
+};
 export type ListCheckpointThreadsPodV1AgentsCheckpointsGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadSummary[];
 export type ListCheckpointThreadsPodV1AgentsCheckpointsGetApiArg = {
@@ -104,8 +137,7 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
 };
-export type ExecutePodV1AgentsExecutePostApiResponse =
-  /** status 200 Successful Response */
+export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful Response */
   | (
       | ({
           kind: "assistant_delta";
@@ -143,9 +175,19 @@ export type ExecuteStreamPodV1AgentsExecuteStreamPostApiResponse = /** status 20
 export type ExecuteStreamPodV1AgentsExecuteStreamPostApiArg = {
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
+export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiResponse = /** status 200 Successful Response */ KpiTurnRecord[];
+export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiArg = {
+  limit?: number;
+};
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId: string;
+};
+export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse = /** status 200 Successful Response */ {
+  [key: string]: number;
+};
+export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg = {
+  sessionId: string;
 };
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
   /** status 200 Successful Response */ ChatMessage[];
@@ -161,6 +203,22 @@ export type ChatCompletionsV1ChatCompletionsPostApiArg = {
 };
 export type ListModelsV1ModelsGetApiResponse = /** status 200 Successful Response */ OpenAiModelList;
 export type ListModelsV1ModelsGetApiArg = void;
+export type AuditEventRecord = {
+  agent_id?: string | null;
+  agent_instance_id?: string | null;
+  audit_event: string;
+  team_id?: string | null;
+  ts: string;
+  user_id?: string;
+};
+export type ValidationError = {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+};
+export type HttpValidationError = {
+  detail?: ValidationError[];
+};
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
   blob_count: number;
@@ -170,14 +228,6 @@ export type CheckpointThreadSummary = {
   latest_created_at: string | null;
   pending_write_count: number;
   session_id: string;
-};
-export type ValidationError = {
-  loc: (string | number)[];
-  msg: string;
-  type: string;
-};
-export type HttpValidationError = {
-  detail?: ValidationError[];
 };
 export type CheckpointStorageStats = {
   blob_bytes_approx: number;
@@ -405,6 +455,22 @@ export type RuntimeExecuteRequest = {
   /** Session identifier for multi-turn continuity. Keep stable across turns. */
   session_id?: string | null;
 };
+export type KpiTurnRecord = {
+  exchange_id: string;
+  finish_reason?: string;
+  input_tokens?: number | null;
+  is_error: boolean;
+  model_name?: string | null;
+  output_tokens?: number | null;
+  runtime_id?: string | null;
+  session_id: string | null;
+  team_id?: string | null;
+  template_agent_id?: string | null;
+  tool_count?: number;
+  total_ms: number;
+  ts: string;
+  user_id: string;
+};
 export type Channel =
   | "final"
   | "plan"
@@ -413,7 +479,9 @@ export type Channel =
   | "tool_call"
   | "tool_result"
   | "error"
-  | "system_note";
+  | "system_note"
+  | "hitl_request"
+  | "hitl_response";
 export type ChatTokenUsage = {
   input_tokens?: number;
   output_tokens?: number;
@@ -432,6 +500,22 @@ export type CodePart = {
   code: string;
   language?: string | null;
   type?: "code";
+};
+export type HitlChoiceRecord = {
+  id: string;
+  label: string;
+};
+export type HitlRequestPart = {
+  choices: HitlChoiceRecord[];
+  question: string;
+  stage?: string | null;
+  title?: string | null;
+  type?: "hitl_request";
+};
+export type HitlResponsePart = {
+  choice_id: string;
+  label?: string | null;
+  type?: "hitl_response";
 };
 export type ImageUrlPart = {
   alt?: string | null;
@@ -466,6 +550,12 @@ export type ChatMessage = {
     | ({
         type: "code";
       } & CodePart)
+    | ({
+        type: "hitl_request";
+      } & HitlRequestPart)
+    | ({
+        type: "hitl_response";
+      } & HitlResponsePart)
     | ({
         type: "image_url";
       } & ImageUrlPart)
@@ -606,6 +696,8 @@ export type OpenAiModelList = {
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
+  useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
+  useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useGetCheckpointStorageStatsPodV1AgentsCheckpointsStatsGetQuery,
@@ -615,8 +707,11 @@ export const {
   useLazyGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
   useExecutePodV1AgentsExecutePostMutation,
   useExecuteStreamPodV1AgentsExecuteStreamPostMutation,
+  useGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
+  useLazyGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
+  useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,

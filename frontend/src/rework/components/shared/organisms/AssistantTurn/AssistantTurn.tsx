@@ -18,24 +18,15 @@ import { SourcesPanel } from "@shared/molecules/SourcesPanel/SourcesPanel";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
 import styles from "./AssistantTurn.module.css";
 
-function extractText(messages: ChatMessage[]): string {
-  return messages
-    .flatMap((m) => m.parts ?? [])
-    .filter((p) => p.type === "text")
-    .map((p) => (p as { type: "text"; text: string }).text)
-    .join("");
-}
-
 interface AssistantTurnProps {
+  text: string;
   traceMessages: ChatMessage[];
-  finalMessages: ChatMessage[];
   sources: VectorSearchHit[];
   isStreaming: boolean;
 }
 
-export function AssistantTurn({ traceMessages, finalMessages, sources, isStreaming }: AssistantTurnProps) {
-  const text = extractText(finalMessages);
-  const hasContent = traceMessages.length > 0 || finalMessages.length > 0 || isStreaming;
+export function AssistantTurn({ text, traceMessages, sources, isStreaming }: AssistantTurnProps) {
+  const hasContent = traceMessages.length > 0 || text.length > 0 || isStreaming;
 
   if (!hasContent) return null;
 
