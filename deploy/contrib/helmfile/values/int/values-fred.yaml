@@ -198,6 +198,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 125m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
 
     # ── Application Configuration ─────────────────────────────────────────────
     configuration:
@@ -467,6 +474,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
 
     ingress:
       annotations:
@@ -521,6 +535,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
 
     configuration:
       app:
@@ -578,6 +599,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 3Gi
     env:
       - name: LOG_LEVEL
         value: "WARNING"
@@ -618,6 +646,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 125m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
 
     configuration:
       app:
@@ -645,6 +680,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
 
     configuration:
       security:  *common-security
