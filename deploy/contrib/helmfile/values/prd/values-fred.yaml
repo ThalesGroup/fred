@@ -434,6 +434,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
 
     # ── Application Configuration ─────────────────────────────────────────────
     configuration:
@@ -654,6 +661,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
 
     ingress:
       annotations:
@@ -707,6 +721,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
 
     configuration:
       app:
@@ -767,6 +788,13 @@ applications:
         value: "WARNING"
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 3000m
+        memory: 6Gi
 
     configuration:
       processing:
@@ -800,6 +828,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
 
     configuration:
       app:
@@ -825,6 +860,13 @@ applications:
     extraEnvVars: *ssl-extra-env-vars
     extraVolumes: *ssl-extra-volumes
     extraVolumeMounts: *ssl-extra-volume-mounts
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 3Gi
 
     configuration:
       security:  *common-security
