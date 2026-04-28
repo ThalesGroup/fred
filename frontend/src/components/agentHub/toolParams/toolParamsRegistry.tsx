@@ -32,6 +32,6 @@ function makeEntry<T>(provider: string, component: React.FC<ToolParamsProps<T>>,
 export const TOOL_PARAMS_REGISTRY: Record<string, RegistryEntry> = {
   kf_vector_search: makeEntry<KfVectorSearchParams>("kf_vector_search", KfVectorSearchForm, {
     provider: "kf_vector_search",
-    libraries_selection: true,
+    libraries_selection: false,
   }),
 };
