@@ -57,6 +57,8 @@ run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost v
 		--name $(WORKER_CONTAINER_NAME) \
 		--network $(WORKER_DOCKER_NETWORK) \
 		-v $(realpath config):/app/config:ro \
+		--env-file $(realpath config)/.env \
+		-e CONFIG_FILE=./config/configuration_worker.yaml \
 		--entrypoint python \
 		$(IMAGE_FULL) \
 		knowledge_flow_backend/main_worker.py
