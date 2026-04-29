@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Literal
+from typing import TYPE_CHECKING, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,14 +10,17 @@ if TYPE_CHECKING:
 KfVectorSearchProviderType = Literal["kf_vector_search"]
 KF_VECTOR_SEARCH_PROVIDER: KfVectorSearchProviderType = "kf_vector_search"
 
+SearchPolicyLiteral = Literal["hybrid", "semantic", "strict"]
+
 
 class KfVectorSearchParams(BaseModel):
     """
     Agent-level scoping parameters for the kf_vector_search inprocess tool.
 
-    Chat options (attach_files, libraries_selection) let the agent creator opt in to
-    the corresponding UI controls in the chat bar.  Setting a flag to True surfaces the
-    control; leaving it False leaves the control hidden (the default).
+    Chat options (attach_files, libraries_selection, search_policy_selection) let the
+    agent creator opt in to the corresponding UI controls in the chat bar. Setting a
+    flag to True surfaces the control; leaving it False leaves the control hidden (the
+    default).
     """
 
     provider: KfVectorSearchProviderType = KF_VECTOR_SEARCH_PROVIDER
@@ -37,11 +40,26 @@ class KfVectorSearchParams(BaseModel):
         ),
     )
     libraries_selection: bool = Field(
-        default=True,
+        default=False,
         description=(
             "When True, expose the document-library picker in the chat bar so users "
-            "can narrow retrieval to specific libraries at message time. "
-            "Defaults to True because conversation-level scoping is the only scoping mechanism."
+            "can narrow retrieval to specific libraries at message time."
+        ),
+    )
+    search_policy: Optional[SearchPolicyLiteral] = Field(
+        default="semantic",
+        description=(
+            "Default retrieval strategy for this agent. hybrid combines BM25 and vector "
+            "search (RRF); semantic uses vector search only; strict applies a high-precision "
+            "similarity threshold. Overridden at runtime by the user's chat-bar selection "
+            "when search_policy_selection is True."
+        ),
+    )
+    search_policy_selection: bool = Field(
+        default=False,
+        description=(
+            "When True, expose the search-policy selector in the chat bar so users "
+            "can switch retrieval strategy per message."
         ),
     )
 
@@ -56,3 +74,5 @@ class KfVectorSearchParams(BaseModel):
             options.attach_files = True
         if self.libraries_selection:
             options.libraries_selection = True
+        if self.search_policy_selection:
+            options.search_policy_selection = True

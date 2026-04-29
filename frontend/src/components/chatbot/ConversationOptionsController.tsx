@@ -187,7 +187,10 @@ export function useConversationOptionsController({
       includeCorpusScope: currentAgent?.chat_options?.include_corpus_in_search ?? true,
     },
   );
-  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? "semantic";
+  const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers
+    ?.find((s) => s.params?.provider === "kf_vector_search")
+    ?.params?.search_policy as SearchPolicyName | undefined;
+  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? agentKfSearchPolicy ?? "semantic";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;
 
   const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({

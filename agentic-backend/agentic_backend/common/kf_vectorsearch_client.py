@@ -92,13 +92,28 @@ class VectorSearchClient(KfBaseClient):
             document_uids, runtime_context.selected_document_uids
         )
 
-        return await self.search(
+        effective_search_policy = (
+            runtime_context.search_policy or kf_params.search_policy
+        )
+        logger.info(
+            "[OBS][SEARCH][AGENTIC] agent=%s policy=runtime:%r|params:%r|effective:%r "
+            "libraries=%s doc_uids=%s question=%r top_k=%d",
+            agent_settings.id,
+            runtime_context.search_policy,
+            kf_params.search_policy,
+            effective_search_policy,
+            final_document_library_tags_ids,
+            final_document_uids,
+            question[:80],
+            top_k,
+        )
+        hits = await self.search(
             question=question,
             top_k=top_k,
             document_library_tags_ids=final_document_library_tags_ids,
             document_uids=final_document_uids,
             # Inferred from agent settings and runtime context:
-            search_policy=runtime_context.search_policy,
+            search_policy=effective_search_policy,
             owner_filter=OwnerFilter.TEAM
             if agent_settings.team_id
             else OwnerFilter.PERSONAL,
@@ -107,6 +122,12 @@ class VectorSearchClient(KfBaseClient):
             include_session_scope=runtime_context.include_session_scope or True,
             include_corpus_scope=runtime_context.include_corpus_scope or True,
         )
+        logger.info(
+            "[OBS][SEARCH][AGENTIC] returned count=%d hits=%s",
+            len(hits),
+            [(h.title, round(h.score, 4), h.tag_names) for h in hits],
+        )
+        return hits
 
     async def search(
         self,

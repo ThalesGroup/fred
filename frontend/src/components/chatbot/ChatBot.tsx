@@ -1478,7 +1478,9 @@ const ChatBot = ({
       runtimeContext.selected_document_uids = conversationPrefs.documentUids;
     }
 
-    runtimeContext.search_policy = conversationPrefs.searchPolicy || "semantic";
+    if (conversationPrefs.searchPolicy) {
+      runtimeContext.search_policy = conversationPrefs.searchPolicy;
+    }
     if (supportsRagScopeSelection && conversationPrefs.searchRagScope) {
       runtimeContext.search_rag_scope = conversationPrefs.searchRagScope;
     }

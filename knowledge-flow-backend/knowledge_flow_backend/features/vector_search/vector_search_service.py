@@ -564,6 +564,12 @@ class VectorSearchService:
 
             # Search function dispatch
             policy_key = policy_name or SearchPolicyName.hybrid
+            logger.warning(
+                "[SEARCH_POLICY] received=%r resolved=%r question_preview=%r",
+                policy_name,
+                policy_key,
+                question[:80],
+            )
             search_fn = {
                 SearchPolicyName.strict: self._strict,
                 SearchPolicyName.hybrid: self._hybrid,
@@ -598,21 +604,27 @@ class VectorSearchService:
                         library_tags_ids=None,
                         metadata_terms_extra=attachment_metadata,
                     )
+                logger.warning(
+                    "[SEARCH][KF][ATTACH] policy=%s count=%d hits=%s",
+                    policy_key,
+                    len(attachment_hits),
+                    [(h.title, round(h.score, 4), h.uid) for h in attachment_hits],
+                )
 
             # Corpus/library query (scoped by authorized tags, excludes session vectors)
             if include_corpus_scope and not authorized_tag_ids:
-                logger.info("[VECTOR][SEARCH][CORPUS] user has no authorized tags; skipping corpus search.")
+                logger.warning("[SEARCH][KF][CORPUS] user has no authorized tags; skipping corpus search.")
             if include_corpus_scope and authorized_tag_ids:
                 corpus_metadata: dict[str, Any] = {"scope": ["!session"]}
                 if authorized_document_uids:
                     corpus_metadata["document_uid"] = list(authorized_document_uids)
-                logger.info(
-                    "[VECTOR][SEARCH][CORPUS] policy=%s tags=%s owner_filter=%s team_id=%s question=%r top_k=%d",
+                logger.warning(
+                    "[SEARCH][KF][CORPUS] policy=%s tags=%s owner=%s team=%s question=%r top_k=%d",
                     policy_key,
-                    authorized_tag_ids,
+                    sorted(authorized_tag_ids),
                     owner_filter,
                     team_id,
-                    question,
+                    question[:80],
                     top_k,
                 )
                 with self._phase_timer(
@@ -626,6 +638,11 @@ class VectorSearchService:
                         library_tags_ids=list(authorized_tag_ids),
                         metadata_terms_extra=corpus_metadata,
                     )
+                logger.warning(
+                    "[SEARCH][KF][CORPUS] count=%d hits=%s",
+                    len(corpus_hits),
+                    [(h.title, round(h.score, 4), h.uid) for h in corpus_hits],
+                )
 
             with self._phase_timer(
                 phase="vector_search_merge_results",
@@ -637,12 +654,13 @@ class VectorSearchService:
                     top_k=top_k,
                     attachment_quota=3,
                 )
-            logger.info(
-                "[VECTOR][SEARCH] merged results attachment=%d corpus=%d forced_attachment=%d returned=%d",
+            logger.warning(
+                "[SEARCH][KF][MERGED] attach_raw=%d corpus_raw=%d forced_attach=%d returned=%d hits=%s",
                 len(attachment_hits),
                 len(corpus_hits),
                 min(3, top_k, len(attachment_hits)),
                 len(merged),
+                [(h.title, round(h.score, 4), h.tag_names) for h in merged],
             )
             _log_visual_search_hits("MERGED", merged)
             return merged

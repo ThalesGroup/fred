@@ -623,8 +623,12 @@ export type KfVectorSearchParams = {
   document_library_tags_ids?: string[];
   /** When True, expose the file-attachment control in the chat bar so users can attach local files (PDFs, images, text) to their messages. */
   attach_files?: boolean;
-  /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. Defaults to True because conversation-level scoping is the only scoping mechanism. */
+  /** When True, expose the document-library picker in the chat bar so users can narrow retrieval to specific libraries at message time. */
   libraries_selection?: boolean;
+  /** Default retrieval strategy for this agent. hybrid combines BM25 and vector search (RRF); semantic uses vector search only; strict applies a high-precision similarity threshold. Overridden at runtime by the user's chat-bar selection when search_policy_selection is True. */
+  search_policy?: ("hybrid" | "semantic" | "strict") | null;
+  /** When True, expose the search-policy selector in the chat bar so users can switch retrieval strategy per message. */
+  search_policy_selection?: boolean;
 };
 export type McpServerRef = {
   id: string;

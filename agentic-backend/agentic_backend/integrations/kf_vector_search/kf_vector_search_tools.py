@@ -9,6 +9,8 @@ from langchain_core.tools import BaseTool, tool
 # from langgraph.prebuilt import ToolRuntime
 from agentic_backend.common.kf_base_client import KnowledgeFlowAgentContext
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
+from agentic_backend.common.rags_utils import ensure_ranks, sort_hits
+from agentic_backend.core.agents.v2.contracts.context import ToolInvocationResult
 
 # from agentic_backend.core.agents.runtime_context import RuntimeContext
 
@@ -18,7 +20,9 @@ logger = logging.getLogger(__name__)
 def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseTool]:
     """Return in-process LangChain tools for Knowledge Flow vector search."""
 
-    @tool("search_documents_using_vectorization")
+    @tool(
+        "search_documents_using_vectorization", response_format="content_and_artifact"
+    )
     async def kf_vector_search(
         # todo: set back when gitlab agents do not call this tool directly with ainvoke (and use VectorSearchClient directly instead)
         # runtime: ToolRuntime[RuntimeContext],
@@ -26,7 +30,7 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         top_k: int = 5,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
-    ) -> str:
+    ) -> tuple[str, ToolInvocationResult]:
         """Search the user's document library using semantic similarity (RAG).
 
         Call this tool for ANY factual, technical, or domain-specific question BEFORE
@@ -55,8 +59,23 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
             document_uids=document_uids,
         )
 
-        # todo: return a string to agent and json metadata for the UI ?
+        hits = sort_hits(hits)
+        ensure_ranks(hits)
+
+        logger.info(
+            "[OBS][SEARCH][TOOL] question=%r top_k=%d llm_scoped_libs=%s llm_scoped_uids=%s -> hits_to_llm=%d titles=%s",
+            question[:80],
+            top_k,
+            list(document_library_tags_ids) if document_library_tags_ids else None,
+            list(document_uids) if document_uids else None,
+            len(hits),
+            [h.title for h in hits],
+        )
         serialized = [h.model_dump() if hasattr(h, "model_dump") else h for h in hits]
-        return json.dumps(serialized, ensure_ascii=False)
+        artifact = ToolInvocationResult(
+            tool_ref="kf_vector_search",
+            sources=tuple(hits),
+        )
+        return json.dumps(serialized, ensure_ascii=False), artifact
 
     return [kf_vector_search]
