@@ -92,7 +92,9 @@ class VectorSearchClient(KfBaseClient):
             document_uids, runtime_context.selected_document_uids
         )
 
-        effective_search_policy = runtime_context.search_policy or kf_params.search_policy
+        effective_search_policy = (
+            runtime_context.search_policy or kf_params.search_policy
+        )
         logger.warning(
             "[SEARCH][AGENTIC] agent=%s policy=runtime:%r|params:%r|effective:%r "
             "libraries=%s doc_uids=%s question=%r top_k=%d",
