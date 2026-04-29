@@ -399,6 +399,10 @@
         "description": "Let users select document libraries/knowledge sources for this agent.",
         "library_selection": "Knowledge base",
         "library_selection_description": "Select resources the {{agentsNicknameSingular}} can use"
+      },
+      "chat_options_search_policy_selection": {
+        "title": "Search mode selector",
+        "description": "Let users switch between hybrid, semantic, and strict retrieval strategies per message."
       }
     }
   },

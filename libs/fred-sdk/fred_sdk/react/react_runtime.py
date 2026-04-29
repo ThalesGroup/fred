@@ -220,6 +220,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     async def invoke(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> ReActOutput:
+        logger.info(
+            "[AGENT VERSION] *** V2 BasicReAct/ReActRuntime *** handling exchange agent_id=%s session_id=%s",
+            self._binding.portable_context.agent_id or "unknown",
+            self._binding.portable_context.session_id,
+        )
         span = None
         if self._services.tracer is not None:
             span = self._services.tracer.start_span(
@@ -252,6 +257,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     async def stream(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> AsyncIterator[RuntimeEvent]:
+        logger.info(
+            "[AGENT VERSION] *** V2 BasicReAct/stream *** exchange agent_id=%s session_id=%s",
+            self._binding.portable_context.agent_id or "unknown",
+            self._binding.portable_context.session_id,
+        )
         span = None
         if self._services.tracer is not None:
             span = self._services.tracer.start_span(
@@ -458,6 +468,14 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
+        logger.info(
+            "[AGENT VERSION] *** V2 BasicReAct/ReActRuntime *** activated"
+            " agent_id=%s profile=%s session_id=%s tools=%s",
+            self.definition.agent_id,
+            getattr(self.definition, "react_profile_id", "N/A"),
+            binding.portable_context.session_id,
+            [r.tool_ref for r in self.definition.declared_tool_refs],
+        )
 
     async def build_executor(
         self, binding: BoundRuntimeContext
