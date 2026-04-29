@@ -95,8 +95,8 @@ class VectorSearchClient(KfBaseClient):
         effective_search_policy = (
             runtime_context.search_policy or kf_params.search_policy
         )
-        logger.warning(
-            "[SEARCH][AGENTIC] agent=%s policy=runtime:%r|params:%r|effective:%r "
+        logger.info(
+            "[OBS][SEARCH][AGENTIC] agent=%s policy=runtime:%r|params:%r|effective:%r "
             "libraries=%s doc_uids=%s question=%r top_k=%d",
             agent_settings.id,
             runtime_context.search_policy,
@@ -122,8 +122,8 @@ class VectorSearchClient(KfBaseClient):
             include_session_scope=runtime_context.include_session_scope or True,
             include_corpus_scope=runtime_context.include_corpus_scope or True,
         )
-        logger.warning(
-            "[SEARCH][AGENTIC] returned count=%d hits=%s",
+        logger.info(
+            "[OBS][SEARCH][AGENTIC] returned count=%d hits=%s",
             len(hits),
             [(h.title, round(h.score, 4), h.tag_names) for h in hits],
         )

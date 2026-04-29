@@ -64,8 +64,8 @@ def get_document_library_tags_ids(context: RuntimeContext | None) -> list[str] |
 def get_search_policy(context: RuntimeContext | None) -> str:
     """Helper to extract search policy from context."""
     if not context:
-        return "hybrid"
-    return context.search_policy if context.search_policy else "hybrid"
+        return "semantic"
+    return context.search_policy if context.search_policy else "semantic"
 
 
 def get_document_uids(context: RuntimeContext | None) -> list[str] | None:

@@ -5,13 +5,27 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.constants import START
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 logger = logging.getLogger(__name__)
+
+
+def _trim_to_human_boundary(messages: list, max_messages: int) -> list:
+    """
+    Keep the last `max_messages` entries, then scan forward to the first
+    HumanMessage so the context never starts mid tool-call/result pair.
+    """
+    if len(messages) <= max_messages:
+        return messages
+    trimmed = messages[-max_messages:]
+    for i, msg in enumerate(trimmed):
+        if isinstance(msg, HumanMessage):
+            return trimmed[i:]
+    return trimmed
 
 
 def collect_tool_outputs(messages: List[Any]) -> Dict[str, Any]:
@@ -48,6 +62,7 @@ def build_tool_loop(
         Callable[[str, Dict[str, Any], MessagesState], Dict[str, Any]]
     ] = None,
     post_response: Optional[Callable[[AIMessage, MessagesState], AIMessage]] = None,
+    max_history_messages: Optional[int] = None,
 ) -> StateGraph:
     """
     Reusable graph for ReAct-style model and tool execution.
@@ -77,7 +92,18 @@ def build_tool_loop(
 
     async def reasoner(state: MessagesState):
         sys_text = system_builder(state)
-        msgs = [SystemMessage(content=sys_text)] + state["messages"]
+        all_messages = state["messages"]
+        if max_history_messages is not None:
+            trimmed = _trim_to_human_boundary(all_messages, max_history_messages)
+            logger.info(
+                "[TOOL LOOP] history trimmed: %d → %d messages (max_history_messages=%d)",
+                len(all_messages),
+                len(trimmed),
+                max_history_messages,
+            )
+        else:
+            trimmed = all_messages
+        msgs = [SystemMessage(content=sys_text)] + trimmed
         current_model = model_resolver(state) if model_resolver is not None else model
 
         async def _invoke_model() -> Any:

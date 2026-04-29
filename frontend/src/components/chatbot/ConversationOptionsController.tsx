@@ -190,7 +190,7 @@ export function useConversationOptionsController({
   const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers
     ?.find((s) => s.params?.provider === "kf_vector_search")
     ?.params?.search_policy as SearchPolicyName | undefined;
-  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? agentKfSearchPolicy ?? "hybrid";
+  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? agentKfSearchPolicy ?? "semantic";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;
 
   const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({
