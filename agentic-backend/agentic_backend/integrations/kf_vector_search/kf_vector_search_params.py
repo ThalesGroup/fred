@@ -55,6 +55,16 @@ class KfVectorSearchParams(BaseModel):
             "when search_policy_selection is True."
         ),
     )
+    top_k: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description=(
+            "Maximum number of document chunks returned per search call. When set, overrides "
+            "the model's dynamic choice. Leave unset to let the model decide (default: 10). "
+            "Increase for large heterogeneous corpora where relevant documents are sparse."
+        ),
+    )
     search_policy_selection: bool = Field(
         default=False,
         description=(

@@ -6,3 +6,44 @@
   background-color: var(--surface-container);
   padding: var(--spacing-m) var(--spacing-l);
 }
+
+.fieldRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.fieldLabel span:first-child {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.fieldDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.topKInput {
+  width: 64px;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-xs);
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.topKInput:focus {
+  outline: none;
+  border-color: var(--primary);
+}

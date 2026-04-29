@@ -95,9 +95,10 @@ class VectorSearchClient(KfBaseClient):
         effective_search_policy = (
             runtime_context.search_policy or kf_params.search_policy
         )
+        effective_top_k = kf_params.top_k if kf_params.top_k is not None else top_k
         logger.info(
             "[OBS][SEARCH][AGENTIC] agent=%s policy=runtime:%r|params:%r|effective:%r "
-            "libraries=%s doc_uids=%s question=%r top_k=%d",
+            "libraries=%s doc_uids=%s question=%r top_k=%d(agent=%s)",
             agent_settings.id,
             runtime_context.search_policy,
             kf_params.search_policy,
@@ -105,11 +106,12 @@ class VectorSearchClient(KfBaseClient):
             final_document_library_tags_ids,
             final_document_uids,
             question[:80],
-            top_k,
+            effective_top_k,
+            kf_params.top_k,
         )
         hits = await self.search(
             question=question,
-            top_k=top_k,
+            top_k=effective_top_k,
             document_library_tags_ids=final_document_library_tags_ids,
             document_uids=final_document_uids,
             # Inferred from agent settings and runtime context:

@@ -403,6 +403,10 @@
       "chat_options_search_policy_selection": {
         "title": "Search mode selector",
         "description": "Let users switch between hybrid, semantic, and strict retrieval strategies per message."
+      },
+      "top_k": {
+        "title": "Max results (top-k)",
+        "description": "Number of document chunks fetched per search. Overrides the model's choice. Leave empty to let the model decide (default: 10). Increase for large corpora."
       }
     }
   },

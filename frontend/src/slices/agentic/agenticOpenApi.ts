@@ -629,6 +629,8 @@ export type KfVectorSearchParams = {
   search_policy?: ("hybrid" | "semantic" | "strict") | null;
   /** When True, expose the search-policy selector in the chat bar so users can switch retrieval strategy per message. */
   search_policy_selection?: boolean;
+  /** Maximum number of document chunks returned per search call. Overrides the model's dynamic choice when set. Leave unset to let the model decide (default: 10). */
+  top_k?: number | null;
 };
 export type McpServerRef = {
   id: string;

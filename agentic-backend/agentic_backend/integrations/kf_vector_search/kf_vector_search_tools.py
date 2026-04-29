@@ -27,7 +27,7 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         # todo: set back when gitlab agents do not call this tool directly with ainvoke (and use VectorSearchClient directly instead)
         # runtime: ToolRuntime[RuntimeContext],
         question: str,
-        top_k: int = 5,
+        top_k: int = 10,
         document_library_tags_ids: Optional[Sequence[str]] = None,
         document_uids: Optional[Sequence[str]] = None,
     ) -> tuple[str, ToolInvocationResult]:
@@ -38,10 +38,14 @@ def build_kf_vector_search_tools(agent: KnowledgeFlowAgentContext) -> list[BaseT
         recent, or context-specific information than you already know — always search
         first, even when you believe you can answer without it.
 
+        IMPORTANT: call this tool on EVERY new user message that is not purely conversational,
+        even if you searched for the same topic in a previous turn. The document scope (selected
+        libraries) may have changed between messages and a fresh search is required.
+
         Skip this tool only for purely conversational exchanges (greetings, thanks,
         clarifying what was just said) where no document lookup could add value.
 
-        By default, keep a top_k of 5.
+        By default, use a top_k of 10. Increase to 15-20 when the question targets a specific topic across a large corpus.
 
         Returns ranked hits with title, content, and rank. For each answer:
         - Cite sources with bracketed numbers matching hit rank: [1], [2], etc.
