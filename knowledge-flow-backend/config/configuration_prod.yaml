@@ -32,6 +32,7 @@ processing:
       use_gpu: false
       generate_summary: false
       input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: false
       text_splitter:
         chunk_size: 1500
@@ -80,6 +81,7 @@ processing:
       use_gpu: false
       generate_summary: false
       input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: false
       text_splitter:
         chunk_size: 1500
@@ -94,7 +96,7 @@ processing:
         do_table_structure: true
         do_ocr: true
         ocr_backend: openvino
-        force_full_page_ocr: true
+        force_full_page_ocr: false  # true caused word-merging on born-digital PDFs (OCR re-reads already-clean text)
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -130,6 +132,7 @@ processing:
       use_gpu: false
       generate_summary: false
       input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: true
       text_splitter:
         chunk_size: 1500
@@ -144,7 +147,7 @@ processing:
         do_table_structure: true
         do_ocr: true
         ocr_backend: openvino
-        force_full_page_ocr: true
+        force_full_page_ocr: false  # true caused word-merging on born-digital PDFs (OCR re-reads already-clean text)
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -236,7 +239,7 @@ embedding_model:
     check_embedding_ctx_length: false
 vision_model:
   provider: openai
-  name: mistral-medium-latest # or gpt-4o if you want higher fidelity
+  name: pixtral-12b-2409  # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required
   settings:
     base_url: https://api.mistral.ai/v1
 crossencoder_model:

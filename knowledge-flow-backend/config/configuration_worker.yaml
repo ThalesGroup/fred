@@ -30,6 +30,8 @@ processing:
     fast:
       use_gpu: false
       generate_summary: false
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: false
       text_splitter:
         chunk_size: 1500

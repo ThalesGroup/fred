@@ -264,7 +264,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         *,
         context: object | None = None,
     ) -> AsyncIterator[RuntimeEvent]:
-        logger.info(
+        logger.debug(
             "[AGENT VERSION] *** V2 BasicReAct/stream *** exchange agent_id=%s session_id=%s",
             self._binding.portable_context.agent_id or "unknown",
             self._binding.portable_context.session_id,
@@ -512,6 +512,12 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             f"{system_prompt}"
             f"{_build_runtime_tool_prompt_suffix(bound_tools)}"
             f"{_build_guardrail_suffix(self.definition)}"
+        )
+        logger.debug(
+            "[LLM][SYSTEM PROMPT] agent=%s total=%dc preview=%r",
+            self.definition.agent_id,
+            len(system_prompt),
+            system_prompt[:200] + ("…" if len(system_prompt) > 200 else ""),
         )
         available_tool_names = {
             bound_tool.runtime_name

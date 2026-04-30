@@ -48,6 +48,7 @@ export function LogConsoleTile({
   height = 260,
   defaultService = "knowledge-flow",
   fillParent = true,
+  initialTextLike = "",
 }: {
   start: Date;
   end: Date; // ← no "until now" here; parent always passes a value
@@ -55,13 +56,14 @@ export function LogConsoleTile({
   defaultService?: string;
   devTail?: boolean;
   fillParent?: boolean;
+  initialTextLike?: string;
 }) {
   const { t } = useTranslation();
   // ---- UI filter state ----
   const [minLevel, setMinLevel] = useState<Level>("INFO");
   const [service, setService] = useState<ServiceId>(defaultService as ServiceId);
   const [loggerLike, setLoggerLike] = useState("");
-  const [textLike, setTextLike] = useState("");
+  const [textLike, setTextLike] = useState(initialTextLike);
   const dLoggerLike = useDebounced(loggerLike, 350);
   const dTextLike = useDebounced(textLike, 350);
 
@@ -160,15 +162,8 @@ export function LogConsoleTile({
       }}
     >
       {/* Controls row */}
-      <Stack
-        direction="row"
-        gap={1}
-        alignItems="center"
-        flexWrap="wrap"
-        sx={{ "& .MuiInputBase-root": { height: 34 } }}
-      >
+      <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap">
         <LogControls
-          // Fred: filters live here; parent owns time window
           minLevel={minLevel}
           setMinLevel={setMinLevel}
           service={service}
@@ -177,7 +172,7 @@ export function LogConsoleTile({
           setLoggerLike={setLoggerLike}
           textLike={textLike}
           setTextLike={setTextLike}
-          onRefresh={fetchQuery} // manual refresh remains available
+          onRefresh={fetchQuery}
         />
         <SimpleTooltip title="Copy all visible logs to clipboard">
           <Button
@@ -185,9 +180,8 @@ export function LogConsoleTile({
             size="small"
             onClick={copyAll}
             disabled={events.length === 0}
-            startIcon={<ContentCopyIcon />}
-            // Ensure button height matches CONTROL_HEIGHT (32px)
-            sx={{ height: 32 }}
+            startIcon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+            sx={{ height: 24, fontSize: "0.7rem", px: 1, py: 0 }}
           >
             {t("logs.copyAll", { count: events.length })}
           </Button>

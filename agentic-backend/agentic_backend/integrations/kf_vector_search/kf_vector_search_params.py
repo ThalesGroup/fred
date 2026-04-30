@@ -27,9 +27,10 @@ class KfVectorSearchParams(BaseModel):
     document_library_tags_ids: List[str] = Field(
         default=[],
         description=(
-            "Deprecated creator-level scope. Empty list (default) means no restriction — "
-            "the agent searches all accessible libraries. "
-            "Scoping is now done exclusively at conversation time via selected_document_libraries_ids."
+            "Hard library binding set at agent creation time. "
+            "When non-empty, the agent searches ONLY these libraries regardless of any "
+            "runtime user selection — the library picker is hidden in the chat bar. "
+            "Empty (default) means no restriction: the user can pick libraries at runtime."
         ),
     )
     attach_files: bool = Field(
@@ -82,7 +83,10 @@ class KfVectorSearchParams(BaseModel):
         """
         if self.attach_files:
             options.attach_files = True
-        if self.libraries_selection:
+        if self.document_library_tags_ids:
+            # Hard binding is active: library picker must be hidden in chat.
+            options.libraries_selection = False
+        elif self.libraries_selection:
             options.libraries_selection = True
         if self.search_policy_selection:
             options.search_policy_selection = True

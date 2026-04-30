@@ -15,6 +15,9 @@
 import BugReportIcon from "@mui/icons-material/BugReport";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import FullscreenIcon from "@mui/icons-material/Fullscreen";
+import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   Box,
   Button,
@@ -41,6 +44,7 @@ import {
   type ConversationPrefs,
 } from "./ConversationOptionsController.tsx";
 import type { LogGeniusMode } from "./ChatLogGeniusWidget.tsx";
+import { LogConsoleTile } from "../monitoring/logs/LogConsoleTile.tsx";
 import { MessagesArea } from "./MessagesArea.tsx";
 import UserInput, { type UserInputContent } from "./user_input/UserInput.tsx";
 
@@ -112,6 +116,13 @@ type ChatBotViewProps = {
     copyFeedback: string | null;
     hasDebugHistory: boolean;
   };
+  logsWidget?: {
+    isAdmin: boolean;
+    logsDrawerOpen: boolean;
+    setLogsDrawerOpen: (open: boolean) => void;
+    sessionId?: string;
+    sessionStart: Date;
+  };
 };
 
 const ChatBotView = ({
@@ -153,6 +164,7 @@ const ChatBotView = ({
   setSearchRagScope,
   setDeepSearchEnabled,
   debugWidget,
+  logsWidget,
 }: ChatBotViewProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -163,6 +175,9 @@ const ChatBotView = ({
     "";
   const greetingText = username ? t("chatbot.welcomeUser", { username }) : t("chatbot.welcomeFallback");
   const [typedGreeting, setTypedGreeting] = useState<string>(greetingText);
+  const [logsFullscreen, setLogsFullscreen] = useState(false);
+  const [logsBtnTooltipOpen, setLogsBtnTooltipOpen] = useState(false);
+  const [debugFullscreen, setDebugFullscreen] = useState(false);
   useEffect(() => {
     setTypedGreeting(greetingText);
   }, [greetingText]);
@@ -460,6 +475,76 @@ const ChatBotView = ({
           </>
         )}
       </Box>
+      {logsWidget?.isAdmin && (
+        <>
+          <Box
+            sx={{
+              position: "fixed",
+              bottom: 60,
+              display: logsWidget.logsDrawerOpen || debugWidget?.debugDrawerOpen ? "none" : undefined,
+              right: 16,
+              zIndex: 1500,
+            }}
+          >
+            <SimpleTooltip
+              title="Show session logs (agentic + knowledge-flow)"
+              open={logsBtnTooltipOpen}
+              onClose={() => setLogsBtnTooltipOpen(false)}
+            >
+              <IconButton
+                color="primary"
+                size="medium"
+                onMouseEnter={() => setLogsBtnTooltipOpen(true)}
+                onMouseLeave={() => setLogsBtnTooltipOpen(false)}
+                onClick={() => { setLogsBtnTooltipOpen(false); logsWidget.setLogsDrawerOpen(true); }}
+              >
+                <SearchIcon />
+              </IconButton>
+            </SimpleTooltip>
+          </Box>
+          <Drawer
+            anchor="bottom"
+            open={logsWidget.logsDrawerOpen}
+            onClose={() => logsWidget.setLogsDrawerOpen(false)}
+            PaperProps={{ sx: { height: logsFullscreen ? "100vh" : "50vh", width: "100%", bgcolor: "background.default", backgroundImage: "none", transition: "height 0.2s ease" } }}
+          >
+            <Box
+              role="presentation"
+              sx={{
+                width: "100%",
+                height: "100%",
+                p: 2,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="h6">Logs</Typography>
+                <Stack direction="row" alignItems="center">
+                  <SimpleTooltip title={logsFullscreen ? "Restore" : "Fullscreen"}>
+                    <IconButton size="small" onClick={() => setLogsFullscreen((v) => !v)}>
+                      {logsFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+                    </IconButton>
+                  </SimpleTooltip>
+                  <IconButton size="small" onClick={() => { logsWidget.setLogsDrawerOpen(false); setLogsFullscreen(false); }}>
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              </Stack>
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ flex: 1, minHeight: 0 }}>
+                <LogConsoleTile
+                  start={logsWidget.sessionStart}
+                  end={new Date()}
+                  defaultService="agentic"
+                  fillParent={true}
+                  initialTextLike={logsWidget.sessionId ? `session=${logsWidget.sessionId}` : ""}
+                />
+              </Box>
+            </Box>
+          </Drawer>
+        </>
+      )}
       {debugWidget?.isAdmin && (
         <>
           <Box
@@ -468,6 +553,7 @@ const ChatBotView = ({
               bottom: 16,
               right: 16,
               zIndex: 1500,
+              display: logsWidget?.logsDrawerOpen || debugWidget?.debugDrawerOpen ? "none" : undefined,
             }}
           >
             <SimpleTooltip title="Show sanitized WS debug history">
@@ -480,11 +566,12 @@ const ChatBotView = ({
             anchor="right"
             open={debugWidget.debugDrawerOpen}
             onClose={() => debugWidget.setDebugDrawerOpen(false)}
+            PaperProps={{ sx: { width: debugFullscreen ? "100vw" : { xs: "90vw", sm: 480 }, height: "100%", bgcolor: "background.default", backgroundImage: "none", transition: "width 0.2s ease" } }}
           >
             <Box
               role="presentation"
               sx={{
-                width: { xs: "90vw", sm: 480 },
+                width: "100%",
                 height: "100%",
                 p: 2,
                 display: "flex",
@@ -492,14 +579,18 @@ const ChatBotView = ({
               }}
             >
               <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="h6">WS Debug History</Typography>
-                <IconButton size="small" onClick={() => debugWidget.setDebugDrawerOpen(false)}>
-                  <CloseIcon fontSize="small" />
-                </IconButton>
+                <Typography variant="h6">Traces</Typography>
+                <Stack direction="row" alignItems="center">
+                  <SimpleTooltip title={debugFullscreen ? "Restore" : "Fullscreen"}>
+                    <IconButton size="small" onClick={() => setDebugFullscreen((v) => !v)}>
+                      {debugFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+                    </IconButton>
+                  </SimpleTooltip>
+                  <IconButton size="small" onClick={() => { debugWidget.setDebugDrawerOpen(false); setDebugFullscreen(false); }}>
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
               </Stack>
-              <Typography variant="body2" color="text.secondary" mt={1}>
-                Shows a sanitized, developer-oriented summary of each WebSocket event received in this session.
-              </Typography>
               <Divider sx={{ my: 1 }} />
               <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                 <Button
@@ -509,7 +600,7 @@ const ChatBotView = ({
                   size="small"
                   disabled={!debugWidget.hasDebugHistory}
                 >
-                  Copy debug
+                  Copy all
                 </Button>
                 {debugWidget.copyFeedback && (
                   <Typography variant="caption" color="text.secondary">

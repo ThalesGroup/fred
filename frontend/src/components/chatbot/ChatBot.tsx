@@ -927,6 +927,7 @@ const ChatBot = ({
   const isAdmin = roles.includes("admin");
   const [debugEvents, setDebugEvents] = useState<DebugEventEntry[]>([]);
   const [debugDrawerOpen, setDebugDrawerOpen] = useState(false);
+  const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1867,6 +1868,15 @@ const ChatBot = ({
     copyFeedback,
     hasDebugHistory: debugEvents.length > 0,
   };
+  const logsWidgetProps = {
+    isAdmin,
+    logsDrawerOpen,
+    setLogsDrawerOpen,
+    sessionId: chatSessionId,
+    sessionStart: messages[0]?.timestamp
+      ? new Date(messages[0].timestamp)
+      : new Date(Date.now() - 2 * 60 * 60 * 1000),
+  };
   const messageAgents = useMemo(
     () => [...agents, ...internalAgents, internalLogGeniusAgent],
     [agents, internalAgents, internalLogGeniusAgent],
@@ -1929,6 +1939,7 @@ const ChatBot = ({
         setSearchRagScope={setSearchRagScope}
         setDeepSearchEnabled={setDeepSearchEnabled}
         debugWidget={debugWidgetProps}
+        logsWidget={logsWidgetProps}
         hitlEvent={pendingHitl}
         onHitlSubmit={handleHitlSubmit}
         onHitlCancel={handleHitlCancel}

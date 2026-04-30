@@ -14,7 +14,7 @@
 
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
-import { Box, Button, Drawer, FormControl, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
+import { Box, Button, Drawer, FormControl, ListItemText, MenuItem, Paper, Select, Typography, useTheme } from "@mui/material";
 import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -321,17 +321,56 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       {canSelectProcessingProfile && (
         <FormControl fullWidth sx={{ mt: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
-            Processing Profile
+            {t("documentLibrary.processingProfile")}
           </Typography>
           <Select
             value={processingProfile}
             onChange={(e) => setProcessingProfile(e.target.value as IngestionProcessingProfile)}
             size="small"
+            renderValue={(selected) => {
+              const labels: Record<string, string> = {
+                fast: t("documentLibrary.processingProfileFast"),
+                medium: t("documentLibrary.processingProfileMedium"),
+                rich: t("documentLibrary.processingProfileRich"),
+              };
+              return labels[selected] ?? selected;
+            }}
             sx={{ borderRadius: "8px" }}
+            MenuProps={{
+              PaperProps: { sx: { mt: 0.75, maxWidth: 360 } },
+              MenuListProps: { dense: true },
+            }}
           >
-            <MenuItem value="fast">Fast</MenuItem>
-            <MenuItem value="medium">Medium</MenuItem>
-            <MenuItem value="rich">Rich</MenuItem>
+            <MenuItem value="fast" dense sx={{ alignItems: "flex-start", whiteSpace: "normal", py: 0.75 }}>
+              <ListItemText
+                primary={t("documentLibrary.processingProfileFast")}
+                secondary={t("documentLibrary.processingProfileFastDescription")}
+                slotProps={{
+                  primary: { sx: { fontSize: "0.78rem", fontWeight: 600 } },
+                  secondary: { sx: { fontSize: "0.72rem", color: "text.secondary" } },
+                }}
+              />
+            </MenuItem>
+            <MenuItem value="medium" dense sx={{ alignItems: "flex-start", whiteSpace: "normal", py: 0.75 }}>
+              <ListItemText
+                primary={t("documentLibrary.processingProfileMedium")}
+                secondary={t("documentLibrary.processingProfileMediumDescription")}
+                slotProps={{
+                  primary: { sx: { fontSize: "0.78rem", fontWeight: 600 } },
+                  secondary: { sx: { fontSize: "0.72rem", color: "text.secondary" } },
+                }}
+              />
+            </MenuItem>
+            <MenuItem value="rich" dense sx={{ alignItems: "flex-start", whiteSpace: "normal", py: 0.75 }}>
+              <ListItemText
+                primary={t("documentLibrary.processingProfileRich")}
+                secondary={t("documentLibrary.processingProfileRichDescription")}
+                slotProps={{
+                  primary: { sx: { fontSize: "0.78rem", fontWeight: 600 } },
+                  secondary: { sx: { fontSize: "0.72rem", color: "text.secondary" } },
+                }}
+              />
+            </MenuItem>
           </Select>
         </FormControl>
       )}
