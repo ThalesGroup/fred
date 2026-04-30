@@ -57,9 +57,20 @@ run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost v
 		--name $(WORKER_CONTAINER_NAME) \
 		--network $(WORKER_DOCKER_NETWORK) \
 		-v $(realpath config):/app/config:ro \
+		--env-file $(realpath config)/.env \
+		-e CONFIG_FILE=./config/configuration_worker.yaml \
 		--entrypoint python \
 		$(IMAGE_FULL) \
 		knowledge_flow_backend/main_worker.py
+
+.PHONY: bench
+BENCH_FILE ?= tests/assets/sample.pdf
+BENCH_OUT  ?= ./target/bench
+bench: dev ## Run processor benchmark locally (no server needed). FILE=path PROCESSORS=id1,id2 OUT=dir
+	@echo "Running processor benchmark on $(BENCH_FILE) ..."
+	PYTHONPATH=. $(PYTHON) tests/scripts/bench_processors.py "$(BENCH_FILE)" \
+		$(if $(PROCESSORS),--processors "$(PROCESSORS)",) \
+		--out "$(BENCH_OUT)"
 
 .PHONY: markdown-profile-test
 markdown-profile-test: ## Run recursive markdown profile test script (set INPUT_DIR=... optionally PROFILES=fast,medium,rich OUTPUT_DIR=...)

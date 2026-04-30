@@ -348,6 +348,10 @@ class ProcessingConfig(BaseModel):
             default="1h",
             description="Temporal start-to-close timeout for input processing activities (e.g., '1h', '45m').",
         )
+        activity_heartbeat_timeout: str = Field(
+            default="5m",
+            description="Temporal heartbeat timeout for input processing activities (e.g., '5m', '10m'). Must be larger than the worker's heartbeat interval (~20s).",
+        )
         pdf: "ProcessingConfig.PdfPipelineConfig" = Field(
             default_factory=lambda: ProcessingConfig.PdfPipelineConfig(),
             description="PDF processing options for this profile.",
@@ -385,6 +389,32 @@ class ProcessingConfig(BaseModel):
             return parse_duration_seconds(
                 self.input_activity_timeout,
                 field_name="processing.profiles.*.input_activity_timeout",
+            )
+
+        @field_validator("activity_heartbeat_timeout", mode="before")
+        @classmethod
+        def _normalize_activity_heartbeat_timeout(cls, value: object) -> str:
+            if value is None:
+                return "5m"
+            if isinstance(value, (int, float)):
+                seconds = parse_duration_seconds(
+                    value,
+                    field_name="processing.profiles.*.activity_heartbeat_timeout",
+                )
+                return f"{seconds}s"
+
+            normalized = str(value).strip().lower()
+            parse_duration_seconds(
+                normalized,
+                field_name="processing.profiles.*.activity_heartbeat_timeout",
+            )
+            return normalized
+
+        @property
+        def activity_heartbeat_timeout_seconds(self) -> int:
+            return parse_duration_seconds(
+                self.activity_heartbeat_timeout,
+                field_name="processing.profiles.*.activity_heartbeat_timeout",
             )
 
     class ProfilesConfig(BaseModel):

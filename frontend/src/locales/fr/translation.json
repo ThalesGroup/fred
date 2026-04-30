@@ -8,6 +8,7 @@
     "collapse": "Réduire",
     "remove": "Supprimer",
     "loading": "Chargement…",
+    "loadingError": "Échec du chargement. Voir la console pour les détails.",
     "beta": "Bêta",
     "retry": "Réessayer",
     "error": "Erreur",
@@ -395,6 +396,11 @@
         "title": "Autoriser les pièces jointes",
         "description": "Afficher les contrôles de téléversement/pièces jointes pour cet agent."
       },
+      "library_binding": {
+        "title": "Lier à des librairies spécifiques",
+        "description": "Restreint définitivement cet agent aux librairies sélectionnées. Les utilisateurs ne peuvent pas modifier la portée dans le chat.",
+        "noLibraries": "Aucune librairie disponible."
+      },
       "chat_options_libraries_selection": {
         "title": "Sélecteur de bibliothèques de documents",
         "description": "Permettre aux utilisateurs de sélectionner des bibliothèques de documents/sources de connaissances pour cet agent.",
@@ -404,6 +410,10 @@
       "chat_options_search_policy_selection": {
         "title": "Sélecteur de mode de recherche",
         "description": "Permettre aux utilisateurs de choisir entre les stratégies hybride, sémantique et stricte par message."
+      },
+      "top_k": {
+        "title": "Résultats max (top-k)",
+        "description": "Nombre de fragments de documents récupérés par recherche. Remplace le choix du modèle. Laisser vide pour laisser le modèle décider (défaut : 10). Augmenter pour les corpus volumineux."
       }
     }
   },
@@ -976,7 +986,14 @@
     "makeExcluded": "Exclure de la recherche",
     "makeSearchable": "Rendre recherchable",
     "searchOn": "Recherche activée",
-    "searchOff": "Recherche désactivée"
+    "searchOff": "Recherche désactivée",
+    "processingProfile": "Profil de traitement",
+    "processingProfileFast": "Rapide",
+    "processingProfileFastDescription": "Extraction de texte brut uniquement, sans OCR ni analyse de structure. Conçu principalement pour les pièces jointes dans une conversation (contexte rapide) ou pour des tests et des questions simples. Fonctionne de façon identique sur toutes les plateformes.",
+    "processingProfileMedium": "Standard",
+    "processingProfileMediumDescription": "Pipeline Docling complet : OCR sélectif, détection des tableaux et reconstruction de la structure documentaire. Le choix recommandé pour la majorité des documents. À noter : si aucun modèle de vision n'est configuré sur votre plateforme, Standard et Enrichi produisent un résultat identique.",
+    "processingProfileRich": "Enrichi",
+    "processingProfileRichDescription": "Identique à Standard, avec en plus la description des images et schémas via un modèle de vision (ex. Pixtral). Nécessite qu'un tel modèle soit disponible sur la plateforme — sinon le résultat est le même que Standard. Peut être significativement plus lent selon la taille du document et les ressources allouées."
   },
   "documentLibraryShareDialog": {
     "subtitle": "Ajoutez des utilisateurs ou des groupes et gérez les permissions d'accès pour cette bibliothèque.",

@@ -8,6 +8,7 @@
     "collapse": "Collapse",
     "remove": "Remove",
     "loading": "Loading…",
+    "loadingError": "Load failed. See console for details.",
     "beta": "Beta",
     "retry": "Retry",
     "error": "Error",
@@ -394,6 +395,11 @@
         "title": "Allow file attachments",
         "description": "Show file upload/attachment controls for this agent."
       },
+      "library_binding": {
+        "title": "Bind to specific libraries",
+        "description": "Permanently restrict this agent to selected libraries. Users cannot change the scope in chat.",
+        "noLibraries": "No libraries available."
+      },
       "chat_options_libraries_selection": {
         "title": "Document libraries picker",
         "description": "Let users select document libraries/knowledge sources for this agent.",
@@ -403,6 +409,10 @@
       "chat_options_search_policy_selection": {
         "title": "Search mode selector",
         "description": "Let users switch between hybrid, semantic, and strict retrieval strategies per message."
+      },
+      "top_k": {
+        "title": "Max results (top-k)",
+        "description": "Number of document chunks fetched per search. Overrides the model's choice. Leave empty to let the model decide (default: 10). Increase for large corpora."
       }
     }
   },
@@ -975,7 +985,14 @@
     "makeExcluded": "Make excluded",
     "makeSearchable": "Make searchable",
     "searchOn": "Search on",
-    "searchOff": "Search off"
+    "searchOff": "Search off",
+    "processingProfile": "Processing Profile",
+    "processingProfileFast": "Fast",
+    "processingProfileFastDescription": "Plain text extraction only, no OCR or structure analysis. Designed primarily for conversation attachments (quick context) or simple tests and questions. Behaves identically on all platforms.",
+    "processingProfileMedium": "Medium",
+    "processingProfileMediumDescription": "Full Docling pipeline: selective OCR, table detection and document structure reconstruction. The recommended choice for most documents. Note: if no vision model is configured on your platform, Medium and Rich produce identical results.",
+    "processingProfileRich": "Rich",
+    "processingProfileRichDescription": "Same as Medium, plus image and diagram description via a vision model (e.g. Pixtral). Requires a vision-capable model to be available on the platform — otherwise the result is identical to Medium. Can be significantly slower depending on document size and available resources."
   },
   "documentLibraryShareDialog": {
     "subtitle": "Add users or groups and manage access permissions for this library.",
