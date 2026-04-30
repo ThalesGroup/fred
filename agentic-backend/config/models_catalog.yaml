@@ -19,14 +19,14 @@ profiles:
     capability: chat
     model:
       provider: openai
-      name: mistral-medium-latest
+      name: mistral-medium-2508
       settings:
         base_url: https://api.mistral.ai/v1
   - profile_id: default.language.mistral
     capability: language
     model:
       provider: openai
-      name: mistral-medium-latest
+      name: mistral-medium-2508
       settings:
         base_url: https://api.mistral.ai/v1
   - profile_id: default.chat.openai.prod

@@ -602,7 +602,7 @@ class SessionOrchestrator:
                     is_cached = False
                     _v2_skip_history_restore = False
                     logger.info(
-                        "[OBS][SCOPE] session=%s CHANGED %s — checkpoint_deleted cache_evicted",
+                        "[OBS][SCOPE] session=%s CHANGED %s — checkpoint_deleted history_restore_forced",
                         session.id,
                         _scope_delta,
                     )
