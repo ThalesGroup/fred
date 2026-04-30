@@ -348,6 +348,7 @@ class SessionOrchestrator:
         - teardown cached agents
         """
         self.session_cache.delete(session_id)
+        self._scope_fingerprints.pop(session_id, None)
         try:
             await self.agent_factory.teardown_session_agents(session_id)
         except Exception:
@@ -1431,6 +1432,7 @@ class SessionOrchestrator:
                     session_id,
                 )
         self.session_cache.delete(session_id)
+        self._scope_fingerprints.pop(session_id, None)
         await self.agent_factory.teardown_session_agents(session_id)
         await self.session_store.delete(session_id)
         if self.attachments_store:
