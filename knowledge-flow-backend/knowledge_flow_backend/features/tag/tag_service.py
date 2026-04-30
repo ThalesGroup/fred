@@ -173,7 +173,7 @@ class TagService:
         # Normalize + uniqueness
         norm_path = self._normalize_path(tag_data.path)
         full_path = self._compose_full_path(norm_path, tag_data.name)
-        await self._ensure_unique_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=full_path)
+        await self._ensure_unique_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=full_path)
 
         now = datetime.now()
         tag = await self._tag_store.create_tag(
@@ -203,7 +203,7 @@ class TagService:
 
         # Link to parent tag in ReBAC when the new tag is nested.
         if norm_path:
-            parent_tag = await self._tag_store.get_by_owner_type_full_path(owner_id=user.uid, tag_type=tag_data.type, full_path=norm_path)
+            parent_tag = await self._tag_store.get_by_owner_type_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=norm_path)
             if parent_tag:
                 await self.rebac.add_relation(
                     Relation(

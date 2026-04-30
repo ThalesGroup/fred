@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _log_visual_search_hits(stage: str, hits: list) -> None:
     visual_hits = [h for h in hits if getattr(h, "has_visual_evidence", False) and getattr(h, "slide_image_uri", None)]
-    logger.info(
+    logger.debug(
         "[RICH][KFB][%s] total_hits=%d visual_hits=%d slide_ids=%s image_uris=%s",
         stage,
         len(hits),
@@ -337,7 +337,7 @@ class VectorSearchService:
         hits_count = len(ann_hits)
         self._record_search_stats(base_dims=base_dims, hits_count=hits_count, top_k=k, user=user)
         if not ann_hits:
-            logger.info(
+            logger.debug(
                 "[VECTOR][SEARCH][ANN] no hits returned; tags=%s metadata_terms=%s question_len=%d",
                 library_tags_ids,
                 metadata_terms,
@@ -355,7 +355,7 @@ class VectorSearchService:
                 }
                 for h in ann_hits[:3]
             ]
-            logger.info(
+            logger.debug(
                 "[VECTOR][SEARCH][ANN] got %d hits (sample: %s)",
                 len(ann_hits),
                 sample,
@@ -564,7 +564,7 @@ class VectorSearchService:
 
             # Search function dispatch
             policy_key = policy_name or SearchPolicyName.hybrid
-            logger.warning(
+            logger.debug(
                 "[SEARCH_POLICY] received=%r resolved=%r question_preview=%r",
                 policy_name,
                 policy_key,
@@ -576,6 +576,16 @@ class VectorSearchService:
                 SearchPolicyName.semantic: self._semantic,
             }.get(policy_key, self._hybrid)
 
+            logger.info(
+                "[OBS][SEARCH] session=%s q=%r policy=%s libs=%d session_scope=%s top_k=%d",
+                session_id,
+                question[:100],
+                policy_key.value,
+                len(authorized_tag_ids),
+                bool(include_session_scope and session_id),
+                top_k,
+            )
+
             # Attachment/session-scope query (uses user_id/session_id metadata, no tag filtering)
             if include_session_scope and session_id:
                 attachment_metadata: dict[str, Any] = {
@@ -585,7 +595,7 @@ class VectorSearchService:
                 }
                 if authorized_document_uids:
                     attachment_metadata["document_uid"] = list(authorized_document_uids)
-                logger.info(
+                logger.debug(
                     "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
                     session_id,
                     user.uid,
@@ -604,22 +614,21 @@ class VectorSearchService:
                         library_tags_ids=None,
                         metadata_terms_extra=attachment_metadata,
                     )
-                logger.warning(
-                    "[SEARCH][KF][ATTACH] policy=%s count=%d hits=%s",
-                    policy_key,
+                logger.debug(
+                    "[VECTOR][SEARCH][ATTACH] count=%d hits=%s",
                     len(attachment_hits),
                     [(h.title, round(h.score, 4), h.uid) for h in attachment_hits],
                 )
 
             # Corpus/library query (scoped by authorized tags, excludes session vectors)
             if include_corpus_scope and not authorized_tag_ids:
-                logger.warning("[SEARCH][KF][CORPUS] user has no authorized tags; skipping corpus search.")
+                logger.warning("[OBS][SEARCH] session=%s — no authorized libs, corpus search skipped", session_id)
             if include_corpus_scope and authorized_tag_ids:
                 corpus_metadata: dict[str, Any] = {"scope": ["!session"]}
                 if authorized_document_uids:
                     corpus_metadata["document_uid"] = list(authorized_document_uids)
-                logger.warning(
-                    "[SEARCH][KF][CORPUS] policy=%s tags=%s owner=%s team=%s question=%r top_k=%d",
+                logger.debug(
+                    "[VECTOR][SEARCH][CORPUS] policy=%s tags=%s owner=%s team=%s question=%r top_k=%d",
                     policy_key,
                     sorted(authorized_tag_ids),
                     owner_filter,
@@ -638,8 +647,8 @@ class VectorSearchService:
                         library_tags_ids=list(authorized_tag_ids),
                         metadata_terms_extra=corpus_metadata,
                     )
-                logger.warning(
-                    "[SEARCH][KF][CORPUS] count=%d hits=%s",
+                logger.debug(
+                    "[VECTOR][SEARCH][CORPUS] count=%d hits=%s",
                     len(corpus_hits),
                     [(h.title, round(h.score, 4), h.uid) for h in corpus_hits],
                 )
@@ -654,12 +663,12 @@ class VectorSearchService:
                     top_k=top_k,
                     attachment_quota=3,
                 )
-            logger.warning(
-                "[SEARCH][KF][MERGED] attach_raw=%d corpus_raw=%d forced_attach=%d returned=%d hits=%s",
+            logger.info(
+                "[OBS][SEARCH] session=%s count=%d attach=%d corpus=%d top=%s",
+                session_id,
+                len(merged),
                 len(attachment_hits),
                 len(corpus_hits),
-                min(3, top_k, len(attachment_hits)),
-                len(merged),
                 [(h.title, round(h.score, 4), h.tag_names) for h in merged],
             )
             _log_visual_search_hits("MERGED", merged)

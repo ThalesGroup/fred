@@ -92,6 +92,8 @@ export type SimpleTooltipProps = {
   placement?: TooltipProps["placement"];
   maxWidth?: number;
   children: React.ReactElement;
+  open?: boolean;
+  onClose?: () => void;
 };
 // A tooltip component that shows a detailed description with an optional disabled reason.
 export function DetailedTooltip({
@@ -156,11 +158,14 @@ export function DetailedTooltip({
 }
 
 // A simple tooltip component that shows a title.
-export function SimpleTooltip({ title, placement = "top", maxWidth = 320, children }: SimpleTooltipProps) {
+export function SimpleTooltip({ title, placement = "top", maxWidth = 320, children, open: controlledOpen, onClose: controlledOnClose }: SimpleTooltipProps) {
   const theme = useTheme();
   const { background, border, boxShadow } = getFloatingSurfaceTokens(theme);
-  const { open, handleOpen, handleClose } = useDelayedTooltip();
-  const trigger = attachTooltipHandlers(children, handleOpen, handleClose);
+  const { open: internalOpen, handleOpen, handleClose } = useDelayedTooltip();
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const handleClose2 = isControlled ? (controlledOnClose ?? handleClose) : handleClose;
+  const trigger = attachTooltipHandlers(children, isControlled ? () => {} : handleOpen, handleClose2);
 
   return (
     <Tooltip

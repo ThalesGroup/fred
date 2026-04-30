@@ -63,6 +63,7 @@ class FileToProcessWithoutUser(BaseModel):
 class FileToProcess(FileToProcessWithoutUser):
     processed_by: KeycloakUser
     input_activity_timeout_seconds: int = 3600
+    heartbeat_timeout_seconds: int = 300
 
     @classmethod
     def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: KeycloakUser) -> "FileToProcess":

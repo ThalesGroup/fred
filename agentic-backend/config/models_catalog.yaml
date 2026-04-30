@@ -12,9 +12,23 @@ common_model_settings:
     keepalive_expiry_seconds: 10
   temperature: 0.0
 default_profile_by_capability:
-  chat: default.chat.openai.prod
-  language: default.language.openai.prod
+  chat: default.chat.mistral
+  language: default.language.mistral
 profiles:
+  - profile_id: default.chat.mistral
+    capability: chat
+    model:
+      provider: openai
+      name: mistral-medium-2508
+      settings:
+        base_url: https://api.mistral.ai/v1
+  - profile_id: default.language.mistral
+    capability: language
+    model:
+      provider: openai
+      name: mistral-medium-2508
+      settings:
+        base_url: https://api.mistral.ai/v1
   - profile_id: default.chat.openai.prod
     capability: chat
     description: "Default balanced chat model for production conversations."

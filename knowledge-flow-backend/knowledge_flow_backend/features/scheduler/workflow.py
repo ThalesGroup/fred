@@ -169,6 +169,7 @@ class PullInputProcess:
         metadata: Any,
         profile: Any = None,
         input_activity_timeout_seconds: int = 3600,
+        heartbeat_timeout_seconds: int = 300,
     ) -> Any:
         workflow.logger.info("[SCHEDULER] PullInputProcess")
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
@@ -176,7 +177,7 @@ class PullInputProcess:
             "pull_input_process",
             args=[user, metadata, profile],
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
-            heartbeat_timeout=timedelta(minutes=1),
+            heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
 
@@ -191,6 +192,7 @@ class PushInputProcess:
         metadata: Any,
         profile: Any = None,
         input_activity_timeout_seconds: int = 3600,
+        heartbeat_timeout_seconds: int = 300,
     ) -> Any:
         workflow.logger.info("[SCHEDULER] PushInputProcess: %s", input_file or "<resolve-on-worker>")
         timeout_seconds = _wf_timeout_seconds(input_activity_timeout_seconds)
@@ -198,7 +200,7 @@ class PushInputProcess:
             "push_input_process",
             args=[user, metadata, input_file, profile],
             start_to_close_timeout=timedelta(seconds=timeout_seconds),
-            heartbeat_timeout=timedelta(minutes=1),
+            heartbeat_timeout=timedelta(seconds=heartbeat_timeout_seconds),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
 
@@ -259,6 +261,7 @@ class ProcessPullFile:
                 metadata,
                 _wf_profile_value(file),
                 _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
             ],
             id=_wf_child_id("PullInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),
@@ -308,6 +311,7 @@ class ProcessPushFile:
                 metadata,
                 _wf_profile_value(file),
                 _wf_timeout_seconds(_wf_get(file, "input_activity_timeout_seconds")),
+                _wf_timeout_seconds(_wf_get(file, "heartbeat_timeout_seconds"), default_seconds=300),
             ],
             id=_wf_child_id("PushInputProcess", file, file_index),
             retry_policy=RetryPolicy(maximum_attempts=1),

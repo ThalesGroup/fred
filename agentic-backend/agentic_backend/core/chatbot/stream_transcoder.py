@@ -551,7 +551,7 @@ class StreamTranscoder:
 
         # If Langfuse is configured, add the callback handler
         if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
-            logger.info("Langfuse credentials found.")
+            logger.debug("Langfuse credentials found.")
             langfuse_handler = CallbackHandler()
             config["callbacks"] = [langfuse_handler]
 
@@ -649,7 +649,7 @@ class StreamTranscoder:
                     if chunk_usage is not None:
                         pending_stream_token_usage = chunk_usage
                         if not token_usage_seen_from_messages:
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][TOKEN_USAGE][CAPTURE] session=%s exchange=%s agent=%s source=messages usage=%s",
                                 session_id,
                                 exchange_id,
@@ -768,7 +768,7 @@ class StreamTranscoder:
                         or clean_token_usage(additional_kwargs.get("usage"))
                     )
                     if token_usage is not None and not token_usage_seen_from_updates:
-                        logger.info(
+                        logger.debug(
                             "[TRANSCODER][TOKEN_USAGE][CAPTURE] session=%s exchange=%s agent=%s source=updates node=%s msg_type=%s usage=%s",
                             session_id,
                             exchange_id,
@@ -1093,7 +1093,7 @@ class StreamTranscoder:
                         )
                         pending_assistant_final = candidate_final
                         if pending_final_token_source != candidate_token_source:
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][TOKEN_USAGE][PENDING_FINAL] session=%s exchange=%s agent=%s source=%s usage=%s",
                                 session_id,
                                 exchange_id,
@@ -1185,7 +1185,25 @@ class StreamTranscoder:
                     }
                 )
                 final_token_source = TokenUsageSource.unavailable
+            _tu = _token_usage_log_payload(pending_assistant_final.metadata.token_usage)
+            _agent_name = getattr(
+                getattr(agent, "agent_settings", None), "name", None
+            ) or getattr(
+                getattr(getattr(agent, "binding", None), "portable_context", None),
+                "agent_name",
+                None,
+            )
+            _agent_label = f"{_agent_name}({agent_id[:8]})" if _agent_name else agent_id
             logger.info(
+                "[OBS][EXCHANGE] session=%s exchange=%s agent=%s in=%s out=%s total=%s",
+                session_id,
+                exchange_id,
+                _agent_label,
+                _tu.get("input_tokens") if _tu else None,
+                _tu.get("output_tokens") if _tu else None,
+                _tu.get("total_tokens") if _tu else None,
+            )
+            logger.debug(
                 "[TRANSCODER][TOKEN_USAGE][FINAL] session=%s exchange=%s agent=%s source=%s from_messages=%s from_updates=%s usage=%s",
                 session_id,
                 exchange_id,
@@ -1193,7 +1211,7 @@ class StreamTranscoder:
                 final_token_source.value,
                 token_usage_seen_from_messages,
                 token_usage_seen_from_updates,
-                _token_usage_log_payload(pending_assistant_final.metadata.token_usage),
+                _tu,
             )
             # Final answer is emitted once, at end-of-run.
             # Reuse the partial-stream rank when present so the UI replaces the

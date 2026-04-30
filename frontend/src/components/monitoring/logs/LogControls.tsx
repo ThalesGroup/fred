@@ -12,26 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//
-// Purpose (Fred):
-// - Lightweight "Kibana-lite" console for recent logs.
-// - Obeys the page's global date range (start/end) but offers an "Auto-refresh" for recent windows.
-// - Frameless by design; host it inside <FramelessTile> like other minis.
-//
-// How it fits Fred:
-// - Same data flow as KPI tiles: parent owns time range; tile is presentational + fetch logic.
-// - Uses RTK OpenAPI hooks you already generated: useQueryLogs... + useTailLogsFile...
-// - Minimal UI plumbing: level floor, service filter, logger contains, text contains.
-
 import ClearIcon from "@mui/icons-material/Clear";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Box,
   Chip,
-  Divider,
-  FormControl,
   IconButton,
-  InputLabel,
+  InputAdornment,
   MenuItem,
   Select,
   Stack,
@@ -39,12 +26,12 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from "@mui/material";
-import InputAdornment from "@mui/material/InputAdornment";
 import { t } from "i18next";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { Level, LEVELS, SERVICE_OPTIONS, ServiceId } from "./logType";
 
-const CONTROL_HEIGHT = 32; // one height to rule them all
+const H = 24;
+const FS = "0.7rem";
 
 const levelColor: Record<Level, "default" | "success" | "info" | "warning" | "error"> = {
   DEBUG: "default",
@@ -54,7 +41,6 @@ const levelColor: Record<Level, "default" | "success" | "info" | "warning" | "er
   CRITICAL: "error",
 };
 
-// Simplified and refined LvlChip for better vertical fit
 function LvlChip({ lvl }: { lvl: Level }) {
   return (
     <Chip
@@ -63,62 +49,30 @@ function LvlChip({ lvl }: { lvl: Level }) {
       color={levelColor[lvl]}
       label={lvl}
       sx={{
-        height: 20,
-        "& .MuiChip-label": {
-          px: 0.5,
-          py: 0,
-          fontSize: (t) => t.typography.caption.fontSize,
-          fontWeight: 600,
-          lineHeight: 1.1,
-        },
+        height: 16,
+        "& .MuiChip-label": { px: 0.5, py: 0, fontSize: FS, fontWeight: 600, lineHeight: 1 },
       }}
     />
   );
 }
 
+const fieldSx = {
+  "& .MuiOutlinedInput-root": { height: H, fontSize: FS },
+  "& .MuiInputBase-input": { py: "0 !important", px: "8px !important", fontSize: FS },
+  "& .MuiOutlinedInput-notchedOutline legend": { display: "none" },
+  "& .MuiOutlinedInput-notchedOutline": { top: 0 },
+};
+
 export type LogControlsProps = {
   minLevel: Level;
   setMinLevel: React.Dispatch<React.SetStateAction<Level>>;
-
   service: ServiceId;
   setService: React.Dispatch<React.SetStateAction<ServiceId>>;
-
   loggerLike: string;
   setLoggerLike: React.Dispatch<React.SetStateAction<string>>;
-
   textLike: string;
   setTextLike: React.Dispatch<React.SetStateAction<string>>;
-
   onRefresh: () => void;
-};
-
-// Helper for consistent height and alignment on fields
-const FIELD_WRAPPER_SX = {
-  // Target the root of the input (the outline box)
-  "& .MuiOutlinedInput-root": {
-    height: CONTROL_HEIGHT,
-    // Add display flex and align-items: center to ensure contents (text, adornment) are centered
-    display: "flex",
-    alignItems: "center",
-  },
-  // Target the actual text input area inside the box
-  "& .MuiInputBase-input": {
-    paddingTop: "0 !important", // Force remove any default vertical padding
-    paddingBottom: "0 !important",
-  },
-  // FIX: Vertical alignment for the placeholder label when the input is empty (not shrinked)
-  "& .MuiInputLabel-root:not(.MuiInputLabel-shrink)": {
-    // Calculates vertical center: CONTROL_HEIGHT / 2 - (Label_FontSize / 2) - small adjustment
-    // (36 / 2) - 12px = 6px down
-    transform: `translate(14px, ${CONTROL_HEIGHT / 2 - 12}px) scale(1)`,
-    // ensure label color matches text color when acting as placeholder
-    color: (t) => t.palette.text.secondary,
-  },
-  // FIX: Align the label when it is shrinked (on focus/with value)
-  "& .MuiInputLabel-shrink": {
-    top: 0,
-    transform: "translate(14px, -9px) scale(0.75)", // Adjusted position for small controls
-  },
 };
 
 export function LogControls({
@@ -133,156 +87,117 @@ export function LogControls({
   onRefresh,
 }: LogControlsProps) {
   return (
-    <>
-      <Stack
-        direction="row"
-        gap={1}
-        alignItems="center"
-        flexWrap="wrap"
-        sx={
-          {
-            // Removed the global InputLabel adjustment: "& .MuiInputLabel-root": { top: -6 },
-            // The label alignment is now handled specifically in FIELD_WRAPPER_SX
-          }
-        }
+    <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap">
+      {/* Min level */}
+      <Select
+        size="small"
+        value={minLevel}
+        onChange={(e) => setMinLevel(e.target.value as Level)}
+        displayEmpty
+        renderValue={(val) => (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <LvlChip lvl={val as Level} />
+            <Box component="span" sx={{ fontSize: FS }}>{val as string}</Box>
+          </Box>
+        )}
+        sx={{ height: H, minWidth: 120, fontSize: FS, ...fieldSx }}
+        MenuProps={{
+          PaperProps: {
+            sx: { "& .MuiMenuItem-root": { minHeight: H, py: 0, fontSize: FS } },
+          },
+        }}
       >
-        {/* Min level (Select) - Uses FIELD_WRAPPER_SX */}
-        <FormControl size="small" variant="outlined" sx={{ minWidth: 160, ...FIELD_WRAPPER_SX }}>
-          <InputLabel id="lvl-lbl">Min level</InputLabel>
-          <Select
-            labelId="lvl-lbl"
-            label="Min level"
-            value={minLevel}
-            onChange={(e) => setMinLevel(e.target.value as Level)}
-            renderValue={(val) => (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <LvlChip lvl={val as Level} />
-                <Box component="span" sx={{ fontSize: (t) => t.typography.caption.fontSize }}>
-                  {val as string}
-                </Box>
-              </Box>
-            )}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  "& .MuiMenuItem-root": { minHeight: CONTROL_HEIGHT, py: 0, display: "flex", alignItems: "center" },
-                },
-              },
-            }}
-          >
-            {LEVELS.map((l) => (
-              <MenuItem key={l} value={l} sx={{ gap: 0.75 }}>
-                <LvlChip lvl={l} />
-                <Box component="span" sx={{ fontSize: (t) => t.typography.caption.fontSize }}>
-                  {l}
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {LEVELS.map((l) => (
+          <MenuItem key={l} value={l} sx={{ gap: 0.75, fontSize: FS }}>
+            <LvlChip lvl={l} />
+            <Box component="span" sx={{ fontSize: FS }}>{l}</Box>
+          </MenuItem>
+        ))}
+      </Select>
 
-        {/* Service toggle — forced to the same height */}
-        <ToggleButtonGroup
+      {/* Service toggle */}
+      <ToggleButtonGroup
+        size="small"
+        color="primary"
+        exclusive
+        value={service}
+        onChange={(_, v) => v && setService(v as ServiceId)}
+        sx={{
+          "& .MuiToggleButton-root": {
+            height: H,
+            px: 1,
+            py: 0,
+            fontSize: FS,
+            textTransform: "none",
+            lineHeight: 1,
+          },
+        }}
+      >
+        {SERVICE_OPTIONS.map((opt) => (
+          <ToggleButton key={opt.id} value={opt.id}>
+            {opt.label}
+          </ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+
+      {/* Logger filter */}
+      <TextField
+        size="small"
+        variant="outlined"
+        placeholder={t("logs.file")}
+        value={loggerLike}
+        onChange={(e) => setLoggerLike(e.target.value)}
+        sx={{ minWidth: 150, ...fieldSx }}
+        slotProps={{
+          input: {
+            endAdornment: loggerLike ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setLoggerLike("")} sx={{ p: 0.25 }}>
+                  <ClearIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          },
+        }}
+      />
+
+      {/* Message filter */}
+      <TextField
+        size="small"
+        variant="outlined"
+        placeholder={t("logs.content")}
+        value={textLike}
+        onChange={(e) => setTextLike(e.target.value)}
+        sx={{ minWidth: 200, ...fieldSx }}
+        slotProps={{
+          input: {
+            endAdornment: textLike ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setTextLike("")} sx={{ p: 0.25 }}>
+                  <ClearIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          },
+        }}
+      />
+
+      {/* Refresh */}
+      <SimpleTooltip title="Refresh now">
+        <IconButton
           size="small"
-          color="primary"
-          exclusive
-          value={service}
-          onChange={(_, v) => v && setService(v as ServiceId)}
+          onClick={onRefresh}
           sx={{
-            "& .MuiToggleButton-root": {
-              height: CONTROL_HEIGHT,
-              display: "flex",
-              alignItems: "center",
-              px: 1.25,
-              py: 0,
-              fontSize: (t) => t.typography.caption.fontSize,
-            },
+            p: 0,
+            height: H,
+            width: H,
+            border: (t) => `1px solid ${t.palette.divider}`,
+            borderRadius: (t) => `${t.shape.borderRadius}px`,
           }}
         >
-          {SERVICE_OPTIONS.map((opt) => (
-            <ToggleButton key={opt.id} value={opt.id}>
-              {opt.label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-
-        {/* Logger contains (TextField) - FIX: Label alignment handled by FIELD_WRAPPER_SX */}
-        <TextField
-          size="small"
-          variant="outlined"
-          label={t("logs.file")}
-          value={loggerLike}
-          onChange={(e) => setLoggerLike(e.target.value)}
-          // Use FIELD_WRAPPER_SX for alignment consistency
-          sx={{ minWidth: 200, ...FIELD_WRAPPER_SX }}
-          slotProps={{
-            input: {
-              endAdornment: loggerLike ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    edge="end"
-                    aria-label="clear logger filter"
-                    onClick={() => setLoggerLike("")}
-                    sx={{ p: 0.5 }}
-                  >
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
-            },
-          }}
-        />
-
-        {/* Text contains (TextField) - FIX: Label alignment handled by FIELD_WRAPPER_SX */}
-        <TextField
-          size="small"
-          variant="outlined"
-          label={t("logs.content")}
-          value={textLike}
-          onChange={(e) => setTextLike(e.target.value)}
-          // Use FIELD_WRAPPER_SX for alignment consistency
-          sx={{ minWidth: 240, ...FIELD_WRAPPER_SX }}
-          slotProps={{
-            input: {
-              endAdornment: loggerLike ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    edge="end"
-                    aria-label="clear logger filter"
-                    onClick={() => setLoggerLike("")}
-                    sx={{ p: 0.5 }}
-                  >
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
-            },
-          }}
-        />
-
-        <SimpleTooltip title="Refresh now">
-          <IconButton
-            size="small"
-            onClick={onRefresh}
-            sx={{
-              p: 0,
-              height: CONTROL_HEIGHT,
-              width: CONTROL_HEIGHT, // square
-              border: (t) => `1px solid ${t.palette.divider}`,
-              borderRadius: (t) => t.shape.borderRadius,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </SimpleTooltip>
-      </Stack>
-
-      <Divider />
-    </>
+          <RefreshIcon sx={{ fontSize: 14 }} />
+        </IconButton>
+      </SimpleTooltip>
+    </Stack>
   );
 }
