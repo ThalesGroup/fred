@@ -618,8 +618,12 @@ def test_repo_models_catalog_bootstrap_has_no_team_rules_and_uses_defaults() -> 
 
     # Derive expected default from the catalog rather than hardcoding it,
     # so this test stays green when the catalog's default profile changes.
-    expected_default_chat_profile_id = policy.default_profile_by_capability[ModelCapability.CHAT]
-    expected_default_profile = next(p for p in policy.profiles if p.profile_id == expected_default_chat_profile_id)
+    expected_default_chat_profile_id = policy.default_profile_by_capability[
+        ModelCapability.CHAT
+    ]
+    expected_default_profile = next(
+        p for p in policy.profiles if p.profile_id == expected_default_chat_profile_id
+    )
 
     team_query = resolver.resolve(
         ModelSelectionRequest(
