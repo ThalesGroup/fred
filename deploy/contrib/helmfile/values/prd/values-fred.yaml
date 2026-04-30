@@ -172,6 +172,8 @@ x-ssl-extra-volume-mounts: &ssl-extra-volume-mounts
 x-carma-pull-secret: &carma-pull-secret
   - name: "carma-pull-secret"
 
+x-prism-image-tag: &prism-tag "dev-prism-20260430-154022"
+
 x-disable-service-account: &disable-service-account
   rbac:
     enabled: false
@@ -429,6 +431,7 @@ applications:
 
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
+      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
     extraEnvVars: *ssl-extra-env-vars
@@ -656,6 +659,7 @@ applications:
   frontend:
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/frontend
+      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
     extraEnvVars: *ssl-extra-env-vars
@@ -716,6 +720,7 @@ applications:
     replicaCount: 4
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
+      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
     extraEnvVars: *ssl-extra-env-vars
@@ -740,8 +745,12 @@ applications:
             use_gpu: false
           medium:
             use_gpu: false
+            pdf:
+              force_full_page_ocr: false
           rich:
             use_gpu: false
+            pdf:
+              force_full_page_ocr: false
 
       security:        *common-security
       scheduler:       *kf-scheduler
@@ -778,6 +787,7 @@ applications:
     configurationFileName: configuration.yaml
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/knowledge-flow-backend
+      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
     extraEnvVars: *ssl-extra-env-vars
@@ -803,8 +813,12 @@ applications:
             use_gpu: false
           medium:
             use_gpu: false
+            pdf:
+              force_full_page_ocr: false
           rich:
             use_gpu: false
+            pdf:
+              force_full_page_ocr: false
 
       security:        *common-security
       scheduler:       *kf-scheduler
@@ -823,6 +837,7 @@ applications:
     replicaCount: 2
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/control-plane-backend
+      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
     extraEnvVars: *ssl-extra-env-vars
@@ -855,6 +870,7 @@ applications:
     replicaCount: 1
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/control-plane-backend
+      tag: *prism-tag
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
     extraEnvVars: *ssl-extra-env-vars
