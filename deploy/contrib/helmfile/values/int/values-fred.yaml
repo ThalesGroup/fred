@@ -191,7 +191,7 @@ applications:
     replicaCount: 2
     image:
       repository: carma.corp.thales/proxy-docker-internal-c2/fred/agentic-backend
-      tag: &prism-tag "dev-prism"
+      tag: &prism-tag "dev-prism-20260430-154022"
       pullPolicy: &prism-pullPolicy Always
     imagePullSecrets: *carma-pull-secret
     serviceAccount: *disable-service-account
@@ -203,8 +203,8 @@ applications:
         cpu: 125m
         memory: 256Mi
       limits:
-        cpu: 500m
-        memory: 1Gi
+        cpu: 1000m
+        memory: 2Gi
 
     # ── Application Configuration ─────────────────────────────────────────────
     configuration:
@@ -540,8 +540,8 @@ applications:
         cpu: 250m
         memory: 512Mi
       limits:
-        cpu: 500m
-        memory: 1Gi
+        cpu: 1500m
+        memory: 3Gi
 
     configuration:
       app:
@@ -554,8 +554,12 @@ applications:
             use_gpu: false
           medium:
             use_gpu: false
+            pdf:
+              force_full_page_ocr: false
           rich:
             use_gpu: false
+            pdf:
+              force_full_page_ocr: false
 
       security:        *common-security
       scheduler:       *kf-scheduler
@@ -604,8 +608,8 @@ applications:
         cpu: 250m
         memory: 1Gi
       limits:
-        cpu: 1000m
-        memory: 3Gi
+        cpu: 3000m
+        memory: 5Gi
     env:
       - name: LOG_LEVEL
         value: "WARNING"
