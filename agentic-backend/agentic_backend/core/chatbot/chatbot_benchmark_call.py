@@ -218,7 +218,7 @@ async def handle_chatbot_baseline_websocket(
                     "agent_id": ask.agent_id or "baseline",
                     "phase": "llm_invoke",
                 },
-                actor=KPIActor(type="system", user_id=None, groups=None),
+                actor=KPIActor(type="system"),
                 unit="ms",
             ):
                 start_ts = datetime.utcnow()

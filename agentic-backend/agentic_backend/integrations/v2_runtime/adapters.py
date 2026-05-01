@@ -41,6 +41,7 @@ from fred_core import (
 from fred_core.common import OwnerFilter
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
+from langfuse.types import TraceContext as LangfuseTraceContext
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
 from agentic_backend.common.kf_logs_client import KfLogsClient
@@ -130,6 +131,10 @@ class LangfuseSpanAdapter(SpanPort):
         self._metadata: dict[str, object] = {}
         self._ended = False
 
+    @property
+    def span_id(self) -> str:
+        return self._span.id
+
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         if self._ended:
             return
@@ -160,11 +165,12 @@ class LangfuseTracerAdapter(TracerPort):
         name: str,
         context: PortableContext,
         attributes: Mapping[str, JsonScalar] | None = None,
+        parent: "SpanPort | None" = None,
     ) -> SpanPort:
         trace_seed = (
             context.trace_id
-            or context.correlation_id
             or context.request_id
+            or context.correlation_id
             or context.session_id
             or context.actor
         )
@@ -185,12 +191,15 @@ class LangfuseTracerAdapter(TracerPort):
         }
         if attributes:
             metadata.update(attributes)
+        trace_context: LangfuseTraceContext = {"trace_id": trace_id}
+        if parent is not None:
+            trace_context["parent_span_id"] = parent.span_id
         span = cast(
             "_LangfuseSpanLike",
             self._client.start_observation(
                 name=name,
                 as_type="span",
-                trace_context={"trace_id": trace_id},
+                trace_context=trace_context,
                 metadata=metadata,
             ),
         )
@@ -201,6 +210,8 @@ _LANGFUSE_TRACER: TracerPort | None | bool = False
 
 
 class _LangfuseSpanLike(Protocol):
+    id: str
+
     def update(
         self, *, metadata: Mapping[str, object] | None = None, **kwargs
     ) -> object: ...
@@ -1481,7 +1492,7 @@ def _extract_interesting_spans(observations: list[object]) -> list[dict[str, obj
             continue
         obs_type = str(raw.get("type") or "")
         if obs_type == "GENERATION":
-            latency_ms = _safe_int(raw.get("latency"))
+            latency_ms = _observation_latency_ms(raw.get("latency"))
             metadata = raw.get("metadata")
             md = metadata if isinstance(metadata, dict) else {}
             operation = _coerce_optional_string(raw.get("name"))
@@ -1515,7 +1526,7 @@ def _extract_interesting_spans(observations: list[object]) -> list[dict[str, obj
             continue
         metadata = raw.get("metadata")
         md = metadata if isinstance(metadata, dict) else {}
-        latency_ms = _safe_int(raw.get("latency"))
+        latency_ms = _observation_latency_ms(raw.get("latency"))
         node_id = _coerce_optional_string(md.get("node_id"))
         operation = _coerce_optional_string(md.get("operation"))
         tool_ref = _coerce_optional_string(md.get("tool_ref"))
@@ -1637,6 +1648,20 @@ def _safe_int(value: object) -> int:
     if isinstance(value, str):
         try:
             return max(0, int(float(value.strip())))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _observation_latency_ms(raw_latency: object) -> int:
+    # Langfuse public API expresses observation latency in seconds (same as trace latency).
+    if isinstance(raw_latency, bool):
+        return 0
+    if isinstance(raw_latency, int | float):
+        return max(0, int(float(raw_latency) * 1000))
+    if isinstance(raw_latency, str):
+        try:
+            return max(0, int(float(raw_latency.strip()) * 1000))
         except ValueError:
             return 0
     return 0

@@ -411,6 +411,10 @@
         "title": "Sélecteur de mode de recherche",
         "description": "Permettre aux utilisateurs de choisir entre les stratégies hybride, sémantique et stricte par message."
       },
+      "chat_options_default_search_policy": {
+        "title": "Mode de recherche par défaut",
+        "description": "Stratégie de recherche utilisée par défaut quand l'utilisateur ne l'a pas modifiée."
+      },
       "top_k": {
         "title": "Résultats max (top-k)",
         "description": "Nombre de fragments de documents récupérés par recherche. Remplace le choix du modèle. Laisser vide pour laisser le modèle décider (défaut : 10). Augmenter pour les corpus volumineux."

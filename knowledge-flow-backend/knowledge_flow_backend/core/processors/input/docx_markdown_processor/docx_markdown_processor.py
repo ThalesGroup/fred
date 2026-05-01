@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import logging
+import re
 import subprocess
 import zipfile
 from datetime import datetime
@@ -21,11 +23,49 @@ from shutil import which
 
 from docx import Document
 
+from knowledge_flow_backend.application_context import get_configuration
+from knowledge_flow_backend.common.processing_profile_context import get_current_processing_profile
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
+from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
 
 logger = logging.getLogger(__name__)
 
 _RASTER_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
+
+
+def _replace_image_reference(md_content: str, img_path: str, description: str) -> str:
+    """
+    Replace an image reference with its description text, handling all pandoc output styles:
+    - Raw HTML:        <img src="path" ... />  (markdown_strict with sized images)
+    - Inline:          ![alt](path)
+    - Reference-style: ![alt][label] + [label]: path  (produced by --reference-links)
+    """
+    replacement = f"\n\n{description}\n\n"
+    path_re = re.escape(img_path)
+
+    # Raw HTML img tag: <img src="path" ... /> — markdown_strict emits this for sized images
+    new = re.sub(r'<img\s[^>]*src="' + path_re + r'"[^>]*/>', replacement, md_content)
+    if new != md_content:
+        return new
+
+    # Inline link: ![alt](path) or ![alt](path "title")
+    new = re.sub(r"!\[[^\]]*\]\(" + path_re + r'(?:\s+"[^"]*")?\)', replacement, md_content)
+    if new != md_content:
+        return new
+
+    # Reference-style: locate the definition [label]: path, then replace usages
+    ref_def = re.search(r'^\[([^\]]+)\]:\s*' + path_re + r'[^\n]*$', md_content, re.MULTILINE)
+    if ref_def:
+        label = ref_def.group(1)
+        label_re = re.escape(label)
+        # Replace ![alt][label] and shorthand ![label]
+        new = re.sub(r'!\[[^\]]*\]\[' + label_re + r'\]', replacement, md_content)
+        new = re.sub(r'!\[' + label_re + r'\](?!\[)', replacement, new)
+        # Remove the reference definition line
+        new = re.sub(r'^\[' + label_re + r'\]:\s*' + path_re + r'[^\n]*\n?', '', new, flags=re.MULTILINE)
+        return new
+
+    return md_content
 
 
 def default_or_unknown(value: str, default="None") -> str:
@@ -34,6 +74,24 @@ def default_or_unknown(value: str, default="None") -> str:
 
 class DocxMarkdownProcessor(BaseMarkdownProcessor):
     description = "Converts DOCX files to Markdown while preserving headings, tables, and basic formatting."
+
+    def __init__(self):
+        super().__init__()
+        self.image_describer = None
+        self._warned_missing_vision_model = False
+
+    def _resolve_image_describer(self, process_images: bool):
+        if not process_images:
+            return None
+        if self.image_describer is not None:
+            return self.image_describer
+        if not get_configuration().vision_model:
+            if not self._warned_missing_vision_model:
+                logger.warning("[PROCESSOR][DOCX] Vision model configuration is missing while process_images is enabled.")
+                self._warned_missing_vision_model = True
+            return None
+        self.image_describer = build_image_describer(get_configuration().vision_model)
+        return self.image_describer
 
     def _annotate_markdown_tables(self, md_content: str) -> str:
         """Wrap Markdown tables with TABLE_START/END markers for downstream chunking."""
@@ -145,6 +203,12 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         output_dir.mkdir(parents=True, exist_ok=True)
         md_path = output_dir / "output.md"
 
+        processing = get_configuration().processing
+        current_profile = get_current_processing_profile()
+        active_profile = processing.normalize_profile(current_profile)
+        profile_cfg = processing.get_profile_config(active_profile)
+        image_describer = self._resolve_image_describer(profile_cfg.process_images)
+
         images_dir = output_dir
         extra_args = [f"--extract-media={images_dir}", "--preserve-tabs", "--wrap=none", "--reference-links"]
 
@@ -192,6 +256,25 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
             md_content = f.read()
 
         md_content = md_content.replace(".emf", ".svg")
+
+        # Describe raster images with the vision model when enabled
+        if image_describer is not None:
+            media_dir = output_dir / "media"
+            if media_dir.is_dir():
+                for img_path in sorted(media_dir.iterdir()):
+                    if img_path.suffix.lower() not in _RASTER_IMAGE_SUFFIXES:
+                        continue
+                    try:
+                        img_b64 = base64.b64encode(img_path.read_bytes()).decode("utf-8")
+                        description = image_describer.describe(img_b64)
+                        logger.info("[PROCESSOR][DOCX] Described image: %s", img_path.name)
+                    except Exception as e:
+                        logger.warning("[PROCESSOR][DOCX] Image description failed for %s: %s", img_path.name, e)
+                        description = "Image could not be described."
+                    before = md_content
+                    md_content = _replace_image_reference(md_content, str(img_path), description)
+                    if md_content == before:
+                        logger.warning("[PROCESSOR][DOCX] No match found for image reference: %s — regex did not replace", img_path)
 
         # Change media path to use api endpoint
         md_content = md_content.replace(str(output_dir), f"knowledge-flow/v1/markdown/{document_uid}")

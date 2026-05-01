@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser
-from fred_core.kpi import BaseKPIWriter
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
@@ -1203,6 +1203,25 @@ class StreamTranscoder:
                 _tu.get("output_tokens") if _tu else None,
                 _tu.get("total_tokens") if _tu else None,
             )
+            if kpi is not None and _tu:
+                _kpi_actor = KPIActor(type="system")
+                _kpi_dims = {
+                    "agent_id": _agent_name or agent_id,
+                    "model_name": pending_assistant_final.metadata.model,
+                }
+                _in = _tu.get("input_tokens")
+                _out = _tu.get("output_tokens")
+                _total = _tu.get("total_tokens")
+                if _in is not None:
+                    kpi.count("llm.tokens_input", _in, dims=_kpi_dims, actor=_kpi_actor)
+                if _out is not None:
+                    kpi.count(
+                        "llm.tokens_output", _out, dims=_kpi_dims, actor=_kpi_actor
+                    )
+                if _total is not None:
+                    kpi.count(
+                        "llm.tokens_total", _total, dims=_kpi_dims, actor=_kpi_actor
+                    )
             logger.debug(
                 "[TRANSCODER][TOKEN_USAGE][FINAL] session=%s exchange=%s agent=%s source=%s from_messages=%s from_updates=%s usage=%s",
                 session_id,

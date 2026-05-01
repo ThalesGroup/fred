@@ -36,6 +36,9 @@ import logging
 from collections.abc import AsyncIterator, Sequence
 from typing import cast
 
+from .react_tracing import active_agent_span
+
+from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -228,12 +231,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             self._binding.portable_context.session_id,
         )
         span = None
+        span_token = None
         if self._services.tracer is not None:
             span = self._services.tracer.start_span(
                 name="agent.invoke",
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            span_token = active_agent_span.set(span)
         try:
             result = await self._compiled_agent.ainvoke(
                 _graph_input(input_model, config),
@@ -254,6 +259,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             return ReActOutput(final_message=final_message, transcript=transcript)
         finally:
+            if span_token is not None:
+                active_agent_span.reset(span_token)
             if span is not None:
                 span.end()
 
@@ -270,12 +277,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             self._binding.portable_context.session_id,
         )
         span = None
+        span_token = None
         if self._services.tracer is not None:
             span = self._services.tracer.start_span(
                 name="agent.stream",
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            span_token = active_agent_span.set(span)
 
         sequence = 0
         last_assistant_message: ReActMessage | None = None
@@ -406,6 +415,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     finish_reason=last_finish_reason,
                 )
         finally:
+            if span_token is not None:
+                active_agent_span.reset(span_token)
             if span is not None:
                 span.end()
 
@@ -533,6 +544,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             approval_policy=policy.tool_approval,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             tracer=self.services.tracer,
+            kpi=self.services.kpi,
             chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,
@@ -579,6 +591,7 @@ def _create_compiled_react_agent(
     approval_policy: ToolApprovalPolicy,
     checkpointer: Checkpointer,
     tracer: TracerPort | None,
+    kpi: BaseKPIWriter | None,
     chat_model_factory: object | None,
     definition: ReActAgentDefinition,
     available_tool_names: set[str] | frozenset[str],
@@ -630,6 +643,7 @@ def _create_compiled_react_agent(
             available_tool_names=available_tool_names,
             model_call_wrapper=_build_tool_loop_model_call_wrapper(
                 tracer=tracer,
+                kpi=kpi,
                 binding=binding,
                 infer_operation_from_messages=_infer_react_model_operation_from_messages,
                 default_operation=REACT_MODEL_OPERATION_ROUTING,

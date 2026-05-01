@@ -103,7 +103,7 @@ from agentic_backend.core.session.stores.base_session_attachment_store import (
 )
 
 logger = logging.getLogger(__name__)
-PHASE_METRIC_ACTOR = KPIActor(type="system", user_id=None, groups=None)
+PHASE_METRIC_ACTOR = KPIActor(type="system")
 
 # Callback type used by WS controller to push events to clients
 CallbackType = Callable[[dict], None] | Callable[[dict], Awaitable[None]]
@@ -125,6 +125,21 @@ def _resolve_effective_agent_id(
     if internal_profile_id:
         return f"internal.react_profile.{internal_profile_id}"
     raise ValueError("Either agent_id or internal_profile_id must be provided.")
+
+
+def _agent_metric_label(agent: object, fallback: str) -> str:
+    """Return the human-readable agent name for KPI label use, falling back to the ID."""
+    name = getattr(getattr(agent, "agent_settings", None), "name", None)
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    name = getattr(
+        getattr(getattr(agent, "binding", None), "portable_context", None),
+        "agent_name",
+        None,
+    )
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return fallback
 
 
 _HITL_RESUME_UI_META_KEYS = {
@@ -440,7 +455,7 @@ class SessionOrchestrator:
 
         # KPI: count incoming question early (before any work)
         # Simply count the user message here; downstream errors or early returns will be captured in the phase metrics and error counts.
-        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+        actor = KPIActor(type="human", user_id=user.uid)
         exchange_id = client_exchange_id or str(uuid4())
         self.kpi.count(
             "chat.user_message_total",
@@ -520,19 +535,20 @@ class SessionOrchestrator:
                 },
             )
 
+        _agent_label = _agent_metric_label(agent, effective_agent_id)
         if is_cached:
             self.kpi.count(
                 "agent.cache_hit",
                 1,
-                dims={"agent_id": effective_agent_id},
-                actor=actor,
+                dims={"agent_id": _agent_label},
+                actor=PHASE_METRIC_ACTOR,
             )
         else:
             self.kpi.count(
                 "agent.cache_miss",
                 1,
-                dims={"agent_id": effective_agent_id},
-                actor=actor,
+                dims={"agent_id": _agent_label},
+                actor=PHASE_METRIC_ACTOR,
             )
 
         try:
@@ -842,13 +858,19 @@ class SessionOrchestrator:
             self.kpi.gauge(
                 "persist_pool_wait_ms",
                 pool_wait_ms,
-                dims={"phase": "persist", "agent": effective_agent_id},
+                dims={
+                    "phase": "persist",
+                    "agent_id": _agent_metric_label(agent, effective_agent_id),
+                },
                 actor=actor,
             )
             self.kpi.gauge(
                 "persist_sql_ms",
                 sql_ms,
-                dims={"phase": "persist", "agent": effective_agent_id},
+                dims={
+                    "phase": "persist",
+                    "agent_id": _agent_metric_label(agent, effective_agent_id),
+                },
                 actor=actor,
             )
             if logger.isEnabledFor(logging.DEBUG):
@@ -882,20 +904,28 @@ class SessionOrchestrator:
             self.agent_factory.release_agent(session.id, effective_agent_id)
             stats = self.agent_factory.get_cache_stats()
             if stats:
-                self.kpi.gauge("agent.cache_entries", stats.size, actor=actor)
                 self.kpi.gauge(
-                    "agent.cache_inflight_total", stats.in_use_total, actor=actor
+                    "agent.cache_entries", stats.size, actor=PHASE_METRIC_ACTOR
                 )
                 self.kpi.gauge(
-                    "agent.cache_inflight_entries", stats.in_use_entries, actor=actor
+                    "agent.cache_inflight_total",
+                    stats.in_use_total,
+                    actor=PHASE_METRIC_ACTOR,
                 )
                 self.kpi.gauge(
-                    "agent.cache_evictions_total", stats.evictions, actor=actor
+                    "agent.cache_inflight_entries",
+                    stats.in_use_entries,
+                    actor=PHASE_METRIC_ACTOR,
+                )
+                self.kpi.gauge(
+                    "agent.cache_evictions_total",
+                    stats.evictions,
+                    actor=PHASE_METRIC_ACTOR,
                 )
                 self.kpi.gauge(
                     "agent.cache_blocked_evictions_total",
                     stats.blocked_evictions,
-                    actor=actor,
+                    actor=PHASE_METRIC_ACTOR,
                 )
 
     @authorize(action=Action.CREATE, resource=Resource.SESSIONS)
@@ -954,7 +984,7 @@ class SessionOrchestrator:
         )
 
         # 5. KPI Actor
-        actor = KPIActor(type="human", user_id=user.uid, groups=user.groups)
+        actor = KPIActor(type="human", user_id=user.uid)
 
         # 6. Get Agent (Must be cached for in-memory checkpointer to work)
         agent, is_cached = await self.agent_factory.create_and_init(

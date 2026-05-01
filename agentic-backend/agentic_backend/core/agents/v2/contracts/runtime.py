@@ -179,6 +179,11 @@ RuntimeEvent: TypeAlias = Annotated[
 
 
 class SpanPort(ABC):
+    @property
+    @abstractmethod
+    def span_id(self) -> str:
+        """Stable identifier for this span, used to parent child spans."""
+
     @abstractmethod
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         """Attach a scalar attribute to the current span."""
@@ -196,6 +201,7 @@ class TracerPort(ABC):
         name: str,
         context: PortableContext,
         attributes: Mapping[str, JsonScalar] | None = None,
+        parent: "SpanPort | None" = None,
     ) -> SpanPort:
         """Start a span bound to the portable execution context."""
 
