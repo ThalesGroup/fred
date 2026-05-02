@@ -1,0 +1,30 @@
+.releaseNotesContainer {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-main);
+  padding: var(--spacing-m);
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--on-surface);
+}
+
+.releaseNotesHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-bottom: var(--spacing-m);
+}
+
+.releaseNotesTitle {
+  font: var(--font-title-large);
+}
+
+.releaseNotesContent {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-m);
+  background-color: var(--surface-container-lowest);
+}

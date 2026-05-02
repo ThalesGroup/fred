@@ -17,7 +17,7 @@ A quick, skimmable overview of what Fred offers — with links to deeper docs.
 | **Auth & Security** | Keycloak/OIDC-ready, scoped search (by libraries/tags), safe defaults | [Keycloak](./KEYCLOAK.md) · [Security](./SECURITY.md) · [Terms Of Use / CGU](./TERMS_OF_USE.md)                                                                                                                                                                       |
 | **Storage options** | Local FS + **SQLite + ChromaDB** by default; production: PostgreSQL/pgvector; optional OpenSearch + object store | [Design](./docs/DESIGN.md)                                                                                                                                                                                                                                              |
 | **Licensing** | Apache 2.0; optional integrations configured externally | [License](./docs/LICENSE.md)                                                                                                                                                                                                                                            |
-| **Roadmap** | What’s next & priorities | [ROADMAP](./docs/ROADMAP.md)                                                                                                                                                                                                                                            |
+| **Roadmap** | What’s next & priorities | See project website |
 
 ---
 
@@ -70,7 +70,7 @@ Start here: [Getting started (README)](./README.md#getting-started) · [Develope
 
 ## Roadmap & Contributing
 
-- What’s next: [ROADMAP](./docs/ROADMAP.md)  
+- What’s next: see project website
 - How to help: [CONTRIBUTING](./docs/CONTRIBUTING.md) · [CODE OF CONDUCT](./docs/CODE_OF_CONDUCT.md)
 
 ---

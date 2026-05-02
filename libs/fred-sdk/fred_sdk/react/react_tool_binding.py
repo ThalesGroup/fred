@@ -192,6 +192,8 @@ class ReActToolBinder:
             )
             span = None
             if self._tracer is not None:
+                from .react_tracing import active_agent_span
+
                 attributes = {
                     "tool_name": spec.runtime_name,
                     "tool_ref": spec.tool_ref,
@@ -201,6 +203,7 @@ class ReActToolBinder:
                     name=spec.trace_span_name,
                     context=self._binding.portable_context,
                     attributes=attributes,
+                    parent=active_agent_span.get(),
                 )
             try:
                 rendered_result, artifact = await spec.invoke(normalized_payload)

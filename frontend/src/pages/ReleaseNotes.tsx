@@ -40,10 +40,8 @@ export default function ReleaseNotes() {
             .replace(/[^a-z0-9_-]+/g, "-")
             .replace(/^-+|-+$/g, "");
         const releaseBrand = toSlug(getProperty("releaseBrand") as string | undefined) || "fred";
-        console.log("[ReleaseNotes] releaseBrand:", releaseBrand);
 
         const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-        console.log("[ReleaseNotes] base URL:", base || "(root)");
 
         const fetchDoc = async (path: string) => {
           try {
@@ -66,13 +64,9 @@ export default function ReleaseNotes() {
         const brandContent = await fetchDoc(brandPath);
         if (brandContent) {
           brandDoc = brandContent;
-          console.log("[ReleaseNotes] loaded brand release:", brandPath);
-        } else {
-          console.log("[ReleaseNotes] missing brand release:", brandPath);
         }
 
         const baseDoc = await fetchDoc("/release.md");
-        console.log("[ReleaseNotes] base release present:", Boolean(baseDoc));
 
         if (!brandDoc && !baseDoc) {
           throw new Error("not found");

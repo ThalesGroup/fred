@@ -21,16 +21,37 @@ import {
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import MarkdownRenderer from "../../../../components/markdown/MarkdownRenderer";
+import { getProperty } from "../../../../common/config.tsx";
 import styles from "./GcuPage.module.css";
 
 export default function GcuPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [trigger, { isLoading }] = useValidateGcuControlPlaneV1GcuPostMutation();
   const { data: userDetails, refetch } = useGetUserDetailsControlPlaneV1UserGetQuery();
   const { gcuVersion } = useFrontendProperties();
 
+  const [gcuMarkdown, setGcuMarkdown] = useState<string>("");
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
   const bottomRef = useRef(null);
+
+  useEffect(() => {
+    const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+    const lang = i18n.language?.split("-")[0] ?? "en";
+    const brand = (getProperty("releaseBrand") || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    const fetchMd = (path: string) =>
+      fetch(`${base}${path}`, { cache: "no-cache" })
+        .then((r) => (r.ok ? r.text() : null))
+        .then((text) => (text && !text.toLowerCase().includes("<!doctype") ? text : null))
+        .catch(() => null);
+
+    const candidates = brand
+      ? [`/contrib/${brand}/gcu.${lang}.md`, `/contrib/${brand}/gcu.md`, `/gcu.${lang}.md`, `/gcu.md`]
+      : [`/gcu.${lang}.md`, `/gcu.md`];
+
+    candidates.reduce((acc, path) => acc.then((text) => text ?? fetchMd(path)), Promise.resolve<string | null>(null))
+      .then((text) => { if (text) setGcuMarkdown(text); });
+  }, [i18n.language]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -53,7 +74,7 @@ export default function GcuPage() {
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [gcuMarkdown]);
 
   const handleAcceptGcu = async () => {
     await trigger().unwrap();
@@ -63,9 +84,12 @@ export default function GcuPage() {
   return (
     <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
-      <div className={styles.gcuContent}></div>
+      <div className={styles.gcuContent}>
+        <MarkdownRenderer content={gcuMarkdown} />
+        <div ref={bottomRef} />
+      </div>
       <div className={styles.gcuActions}>
-        {gcuVersion && userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion ? (
+        {!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion) ? (
           <Link to={"/"}>
             <Button color={"primary"} variant={"filled"} size={"medium"}>
               {t("rework.gcu.backToApp")}

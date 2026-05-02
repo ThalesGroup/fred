@@ -115,6 +115,11 @@ export default function UserSettingsPage() {
             {t("rework.userSettings.accessGcu")}
           </Button>
         </Link>
+        <Link to={"/release-notes"}>
+          <Button color={"primary"} variant={"text"} size={"medium"}>
+            {t("rework.userSettings.accessReleaseNotes")}
+          </Button>
+        </Link>
       </div>
     </div>
     </div>
