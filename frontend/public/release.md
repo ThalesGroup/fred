@@ -1,4 +1,4 @@
-**Unreleased** — XXXX-XX-XX
+**v1.5.1** — 2026-05-01
 
 - **Improvements**
 
@@ -7,29 +7,22 @@
   - Use consistent `agent_id` key on all Prometheus KPI metrics (was `agent` on some persist metrics)
   - Remove `groups` label from all KPI actors across the codebase — was high-cardinality label noise with no query value
   - Remove `user_id` from cache metrics — cache is a shared resource, per-user cardinality was incorrect
-  - Fix Langfuse observation latency unit bug: observation `latency` field is in seconds, not milliseconds — `tool_total_ms` and `model_total_ms` in LogGenius reports now show correct values
+  - Fix Langfuse observation latency unit bug: observation `latency` field is in seconds, not milliseconds — `tool_total_ms` and<w> `model_total_ms` in LogGenius reports now show correct values
   - Fix `ToolContentKind` checkpoint deserialization warning — `with_msgpack_allowlist` is a no-op on the default serde; passing the allowlist directly to the `JsonPlusSerializer` constructor silences the warning
-
-- **Bug Fixes**
-
-  - Fix SQL agent not listing tables when directly queried and responding in the wrong language
-
-**v1.5.1** — 2026-05-01
-
-- **Features**
-
-  - Add default search policy selector in agent creation form when search_policy_selection is enabled
-
-- **Improvements**
-
   - Change default search policy from semantic to hybrid
   - Improve error message for AI service unavailability (Bad Gateway / 502 / 503)
   - Add automatic retry on transient gateway errors for Mistral-hosted models
 
+
 - **Bug Fixes**
 
+  - Fix SQL agent not listing tables when directly queried and responding in the wrong language
   - Fix DOCX image processing: images embedded in DOCX files are now described by the vision model, matching PDF and PPTX behavior
   - Fix SQL agent responding in the wrong language and not listing tables when directly asked
+
+- **Features**
+
+  - Add default search policy selector in agent creation form when search_policy_selection is enabled
 
 **v1.5.0** — 2026-04-24
 

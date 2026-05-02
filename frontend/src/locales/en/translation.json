@@ -1392,7 +1392,8 @@
         "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}."
       },
       "accessGcu": "Access to GCU",
-      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?"
+      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?",
+      "accessReleaseNotes": "Release Notes"
     },
     "teamSettings": {
       "navigation": {
