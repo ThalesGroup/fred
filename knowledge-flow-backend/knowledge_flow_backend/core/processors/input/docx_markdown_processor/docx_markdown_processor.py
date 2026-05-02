@@ -41,15 +41,16 @@ def _replace_image_reference(md_content: str, img_path: str, description: str) -
     - Reference-style: ![alt][label] + [label]: path  (produced by --reference-links)
     """
     replacement = f"\n\n{description}\n\n"
+    safe_replacement = replacement.replace("\\", r"\\")
     path_re = re.escape(img_path)
 
     # Raw HTML img tag: <img src="path" ... /> — markdown_strict emits this for sized images
-    new = re.sub(r'<img\s[^>]*src="' + path_re + r'"[^>]*/>', replacement, md_content)
+    new = re.sub(r'<img\s[^>]*src="' + path_re + r'"[^>]*/>', safe_replacement, md_content)
     if new != md_content:
         return new
 
     # Inline link: ![alt](path) or ![alt](path "title")
-    new = re.sub(r"!\[[^\]]*\]\(" + path_re + r'(?:\s+"[^"]*")?\)', replacement, md_content)
+    new = re.sub(r"!\[[^\]]*\]\(" + path_re + r'(?:\s+"[^"]*")?\)', safe_replacement, md_content)
     if new != md_content:
         return new
 
@@ -59,8 +60,8 @@ def _replace_image_reference(md_content: str, img_path: str, description: str) -
         label = ref_def.group(1)
         label_re = re.escape(label)
         # Replace ![alt][label] and shorthand ![label]
-        new = re.sub(r"!\[[^\]]*\]\[" + label_re + r"\]", replacement, md_content)
-        new = re.sub(r"!\[" + label_re + r"\](?!\[)", replacement, new)
+        new = re.sub(r"!\[[^\]]*\]\[" + label_re + r"\]", safe_replacement, md_content)
+        new = re.sub(r"!\[" + label_re + r"\](?!\[)", safe_replacement, new)
         # Remove the reference definition line
         new = re.sub(r"^\[" + label_re + r"\]:\s*" + path_re + r"[^\n]*\n?", "", new, flags=re.MULTILINE)
         return new
