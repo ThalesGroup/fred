@@ -36,8 +36,6 @@ import logging
 from collections.abc import AsyncIterator, Sequence
 from typing import cast
 
-from .react_tracing import active_agent_span
-
 from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -147,6 +145,7 @@ from .react_tool_loop import build_tool_loop_compiled_react_agent
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
 from .react_tool_utils import sanitize_tool_name as _sanitize_tool_name
+from .react_tracing import active_agent_span
 
 logger = logging.getLogger(__name__)
 

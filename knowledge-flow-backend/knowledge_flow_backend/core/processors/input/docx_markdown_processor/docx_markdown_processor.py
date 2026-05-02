@@ -54,15 +54,15 @@ def _replace_image_reference(md_content: str, img_path: str, description: str) -
         return new
 
     # Reference-style: locate the definition [label]: path, then replace usages
-    ref_def = re.search(r'^\[([^\]]+)\]:\s*' + path_re + r'[^\n]*$', md_content, re.MULTILINE)
+    ref_def = re.search(r"^\[([^\]]+)\]:\s*" + path_re + r"[^\n]*$", md_content, re.MULTILINE)
     if ref_def:
         label = ref_def.group(1)
         label_re = re.escape(label)
         # Replace ![alt][label] and shorthand ![label]
-        new = re.sub(r'!\[[^\]]*\]\[' + label_re + r'\]', replacement, md_content)
-        new = re.sub(r'!\[' + label_re + r'\](?!\[)', replacement, new)
+        new = re.sub(r"!\[[^\]]*\]\[" + label_re + r"\]", replacement, md_content)
+        new = re.sub(r"!\[" + label_re + r"\](?!\[)", replacement, new)
         # Remove the reference definition line
-        new = re.sub(r'^\[' + label_re + r'\]:\s*' + path_re + r'[^\n]*\n?', '', new, flags=re.MULTILINE)
+        new = re.sub(r"^\[" + label_re + r"\]:\s*" + path_re + r"[^\n]*\n?", "", new, flags=re.MULTILINE)
         return new
 
     return md_content
