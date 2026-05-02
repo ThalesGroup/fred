@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
+import { UserInputSearchPolicy } from "src/components/chatbot/user_input/UserInputSearchPolicy";
 import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
-import { TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { SearchPolicyName, TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { SwitchRow } from "../SwitchRow/SwitchRow";
 import styles from "./KfVectorSearchForm.module.css";
 
-export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps<KfVectorSearchParams>) {
+export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParamsProps<KfVectorSearchParams>) {
   const { t } = useTranslation();
 
-  const { data: allLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
+  const { data: allLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    type: "document" as TagType,
+    ...(teamId ? { ownerFilter: "team", teamId } : {}),
+  });
 
   const [bindingEnabled, setBindingEnabled] = useState((params.document_library_tags_ids ?? []).length > 0);
 
@@ -97,6 +101,18 @@ export function KfVectorSearchForm({ params, onParamsChange }: ToolParamsProps<K
         checked={Boolean(params.search_policy_selection)}
         onChange={(checked) => onParamsChange({ ...params, search_policy_selection: checked })}
       />
+      {params.search_policy_selection && (
+        <div className={styles.fieldRow}>
+          <div className={styles.fieldLabel}>
+            <span>{t("agentTuning.fields.chat_options_default_search_policy.title")}</span>
+            <span className={styles.fieldDescription}>{t("agentTuning.fields.chat_options_default_search_policy.description")}</span>
+          </div>
+          <UserInputSearchPolicy
+            value={(params.search_policy as SearchPolicyName) ?? "hybrid"}
+            onChange={(next) => onParamsChange({ ...params, search_policy: next })}
+          />
+        </div>
+      )}
       <div className={styles.fieldRow}>
         <div className={styles.fieldLabel}>
           <span>{t("agentTuning.fields.top_k.title")}</span>

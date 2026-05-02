@@ -38,6 +38,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from sqlalchemy import (
     Column,
     DateTime,
@@ -93,6 +94,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     - using Fred's shared SQL engine keeps local and production semantics close
     """
 
+    _FRED_MSGPACK_ALLOWLIST: tuple[tuple[str, str], ...] = (
+        ("agentic_backend.core.agents.v2.contracts.context", "ToolContentKind"),
+    )
+
     def __init__(
         self,
         engine: AsyncEngine,
@@ -100,7 +105,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         prefix: str = "v2_",
         kpi: BaseKPIWriter | None = None,
     ) -> None:
-        super().__init__()
+        # Pass the allowlist directly to the constructor.
+        # with_msgpack_allowlist() is a no-op when the default serde starts with
+        # allowed_msgpack_modules=True, because it returns self unchanged.
+        serde = JsonPlusSerializer(
+            allowed_msgpack_modules=list(self._FRED_MSGPACK_ALLOWLIST)
+        )
+        super().__init__(serde=serde)
         self.store = AsyncBaseSqlStore(engine, prefix=prefix)
         metadata = MetaData()
         json_type = json_for_engine(engine)

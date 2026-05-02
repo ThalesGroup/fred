@@ -31,6 +31,7 @@ import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx"
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import GcuPage from "@components/pages/GcuPage/GcuPage.tsx";
 import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
+import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 
 const basename = getConfig().frontend_basename;
 
@@ -190,6 +191,10 @@ export const routes: RouteObject[] = [
   {
     path: "/gdpr",
     element: <GdprPage />,
+  },
+  {
+    path: "/release-notes",
+    element: <ReleaseNotesPage />,
   },
   {
     path: "unauthorized",
