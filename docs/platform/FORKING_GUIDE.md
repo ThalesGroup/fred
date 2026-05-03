@@ -67,25 +67,25 @@ Do not put anything else in your fork's `src/` tree. If you find yourself needin
 
 ---
 
-## Meridian (1.5.x) — current intermediate state
+## Kea (1.5.x) — current intermediate state
 
-In the current Meridian release line, some teams have placed organisation-specific agent code directly inside the fork's `agentic-backend/` source tree. This was unavoidable at the time: Fred did not yet ship a clean agent extension mechanism that could be activated purely through configuration.
+In the current Kea release line, some teams have placed organisation-specific agent code directly inside the fork's `agentic-backend/` source tree. This was unavoidable at the time: Fred did not yet ship a clean agent extension mechanism that could be activated purely through configuration.
 
-This is a known limitation of Meridian, not an intended pattern. It creates the same merge problem described above: every upstream merge requires manual resolution of conflicts in agent code files.
+This is a known limitation of Kea, not an intended pattern. It creates the same merge problem described above: every upstream merge requires manual resolution of conflicts in agent code files.
 
 If your fork is in this situation, the pragmatic mitigation is:
 
 1. Keep your agent code isolated in a clearly named subdirectory, e.g. `agentic-backend/agentic_backend/agents/contrib/<your-brand>/`.
 2. Register agents via Helm values (`agents_catalog.yaml`) rather than by patching any shared Python module.
-3. Plan to migrate to the Constellation model as soon as it is available (see below).
+3. Plan to migrate to the Swift model as soon as it is available (see below).
 
 ---
 
-## Constellation (2.x) — the target architecture
+## Swift (2.x) — the target architecture
 
-The upcoming Constellation release (tracked under the `agentic-pod` branch, milestone already tagged in the repository) resolves the agent problem at the architecture level.
+The upcoming Swift release (tracked under the `agentic-pod` branch, milestone already tagged in the repository) resolves the agent problem at the architecture level.
 
-In Constellation:
+In Swift:
 
 - **Agents** are delivered as independent, installable packages — separate repositories, separate release cycles, separate images.
 - **Document processors** follow the same model.
@@ -97,7 +97,7 @@ For fork operators this means:
 - The Fred core repository becomes a pure dependency — you consume it, you never patch it.
 - Merging upstream Fred updates requires zero conflict resolution, on any file, forever.
 
-**The `contrib/` pattern described in this guide is designed to be forward-compatible with Constellation.** Brand-specific static content (legal notices, release notes) will continue to live under `frontend/public/contrib/<your-brand>/` in Constellation. No migration of that content will be required.
+**The `contrib/` pattern described in this guide is designed to be forward-compatible with Swift.** Brand-specific static content (legal notices, release notes) will continue to live under `frontend/public/contrib/<your-brand>/` in Swift. No migration of that content will be required.
 
 ---
 
@@ -125,5 +125,5 @@ If you encounter a conflict on a source file, treat it as a bug — either in yo
 - [ ] Privacy notice is in `frontend/public/contrib/<your-brand>/gdpr.md`
 - [ ] Brand release notes (if any) are in `frontend/public/contrib/<your-brand>/release.md`
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
-- [ ] Agent code (Meridian only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
+- [ ] Agent code (Kea only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
 - [ ] `git merge develop` runs with zero conflicts

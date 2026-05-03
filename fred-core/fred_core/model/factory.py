@@ -247,19 +247,21 @@ def _normalize_openai_compat(settings: Dict[str, Any]) -> None:
 
 def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
     """
-    Enforce usage reporting for streamed chat responses across OpenAI-compatible wrappers.
+    Enforce token-level streaming and usage reporting for OpenAI-compatible wrappers.
 
     Rationale:
-    - In Fred we inject shared HTTP clients, which bypasses wrapper auto-defaults.
-    - The websocket telemetry contract expects token usage whenever upstream supports it.
+    - `streaming=True` makes ChatOpenAI use SSE and fire on_llm_new_token callbacks,
+      which LangGraph's stream_mode="messages" relies on to emit real-time token deltas.
+      Without it, ainvoke() makes a plain REST call and LangGraph gets no token events.
+    - `stream_usage=True` includes token counts in the streaming response.
+    - Fred injects shared HTTP clients, which bypasses wrapper auto-defaults.
 
     Opt-out:
-    - Set `stream_usage: false` explicitly in model settings when a gateway/provider
-      does not support usage-in-stream responses.
+    - Set `streaming: false` or `stream_usage: false` explicitly in model settings
+      when a gateway/provider does not support streaming responses.
     """
-    if "stream_usage" in settings:
-        return
-    settings["stream_usage"] = True
+    settings.setdefault("streaming", True)
+    settings.setdefault("stream_usage", True)
 
 
 # ---------------------------------------------------------------------------
