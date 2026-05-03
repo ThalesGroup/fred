@@ -39,16 +39,13 @@ tools-check:
 	fi
 
 .PHONY: run-worker
+run-worker: export CONFIG_FILE = ./config/configuration_worker.yaml
 run-worker: dev tools-check ## Run an ingestion worker (requires Temporal daemon)
 	@echo "🚀 Running the worker..."
 	PYTHONPATH=. \
 	LOG_LEVEL=$(LOG_LEVEL) \
 	ENV_FILE=$(ENV_FILE) \
 	$(PYTHON) $(PY_PACKAGE)/main_worker.py
-
-.PHONY: run-worker-prod
-run-worker-prod: export CONFIG_FILE = ./config/configuration_worker.yaml
-run-worker-prod: run-worker ## run the Temporal agent worker with production config
 
 .PHONY: run-worker-docker
 run-worker-docker: ## Run an ingestion worker in Docker (Temporal on localhost via host network)
@@ -122,9 +119,6 @@ reset-test-state: ## Reset local test state used by configuration_test.yaml
 	mkdir -p "$(abspath $(TEST_STATE_DIR))"
 	mkdir -p "$(abspath $(TEST_STATE_DIR))/.cache/huggingface/hub"
 	mkdir -p "$(abspath $(TEST_STATE_DIR))/numba-cache"
-
-.PHONY: docker-run
-docker-run: run-docker ## Backward-compatible alias for run-docker
 
 ##@ Docker
 

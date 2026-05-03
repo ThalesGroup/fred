@@ -59,7 +59,8 @@ export type MaterialIconType =
   | "mail"
   | "send"
   | "chevron_right"
-  | "chevron_left";
+  | "chevron_left"
+  | "close";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

@@ -1,10 +1,19 @@
+.userSettingsPageRoot {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100vw;
+  min-height: 100vh;
+  padding: var(--spacing-xl) var(--spacing-m);
+  box-sizing: border-box;
+}
+
 .userSettingsPage {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  padding-top: var(--spacing-m);
-  width: 680px;
-  height: 100%;
+  width: 100%;
+  max-width: 680px;
 }
 
 .userSettingsHeader {
