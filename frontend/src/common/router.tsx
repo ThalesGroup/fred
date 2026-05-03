@@ -21,7 +21,7 @@ import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import { Profile } from "../pages/Profile";
+import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { getConfig } from "./config";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
@@ -39,7 +39,6 @@ const basename = getConfig().frontend_basename;
 const Kpis = lazy(() => import("../pages/Kpis").then((module) => ({ default: module.Kpis })));
 const Runtime = lazy(() => import("../pages/Runtime"));
 const DataHub = lazy(() => import("../pages/DataHub"));
-const GraphHub = lazy(() => import("../pages/GraphHub"));
 const Logs = lazy(() => import("../pages/Logs"));
 const RebacBackfill = lazy(() => import("../pages/RebacBackfill"));
 const ProcessorBench = lazy(() => import("../pages/ProcessorBench"));
@@ -113,16 +112,6 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "monitoring/graph",
-        element: (
-          <ProtectedRoute resource="kpi" action="create">
-            <SuspenseWrapper>
-              <GraphHub />
-            </SuspenseWrapper>
-          </ProtectedRoute>
-        ),
-      },
-      {
         path: "monitoring/logs",
         element: (
           <ProtectedRoute
@@ -167,10 +156,6 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "settings",
-        element: <Profile />,
-      },
-      {
         path: "test-renderer",
         element: <RendererPlayground />,
       },
@@ -195,6 +180,10 @@ export const routes: RouteObject[] = [
   {
     path: "/release-notes",
     element: <ReleaseNotesPage />,
+  },
+  {
+    path: "/settings",
+    element: <UserSettingsPage />,
   },
   {
     path: "unauthorized",

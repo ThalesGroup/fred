@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Portal } from "@shared/utils/Portal.tsx";
 import styles from "./CodenameModal.module.css";
+
+const FOCUSABLE_SELECTORS =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface CodenameContent {
   description: string;
@@ -37,16 +42,59 @@ interface Props {
 }
 
 export default function CodenameModal({ open, onClose, data }: Props) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("fr") ? "fr" : "en";
   const content = data[lang];
   const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      dialogRef.current?.focus();
+    } else {
+      previousFocusRef.current?.focus();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)
+        );
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className={styles.overlay} onClick={onClose} role="dialog" aria-modal="true">
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
+    <Portal id="modal-portal">
+    <div className={styles.overlay} onClick={onClose}>
+      <div
+        ref={dialogRef}
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="codename-modal-title"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.imageWrapper}>
           <img
             src={`${base}${data.image}`}
@@ -60,12 +108,12 @@ export default function CodenameModal({ open, onClose, data }: Props) {
               size="xs"
               icon={{ category: "outlined", type: "close" }}
               onClick={onClose}
-              aria-label="close"
+              aria-label={t("common.close")}
             />
           </div>
         </div>
         <div className={styles.content}>
-          <span className={styles.badge}>{data.codename} · {data.version}</span>
+          <span id="codename-modal-title" className={styles.badge}>{data.codename} · {data.version}</span>
           <p className={styles.description}>{content.description}</p>
           <p className={styles.interpretation}>{content.interpretation}</p>
           <hr className={styles.divider} />
@@ -73,5 +121,6 @@ export default function CodenameModal({ open, onClose, data }: Props) {
         </div>
       </div>
     </div>
+    </Portal>
   );
 }

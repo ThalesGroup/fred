@@ -1,4 +1,3 @@
 {
-  "frontend_basename": "/",
-  "releaseCodename": "kea"
+  "frontend_basename": "/"
 }

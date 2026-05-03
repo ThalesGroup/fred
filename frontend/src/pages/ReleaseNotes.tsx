@@ -17,7 +17,9 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { Box, Button, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { getProperty } from "../common/config";
-import CodenameModal, { CodenameData } from "@shared/molecules/CodenameModal/CodenameModal";
+import CodenameModal from "@shared/molecules/CodenameModal/CodenameModal";
+// ── Release codename ── update this import on each major release ──────────────
+import CODENAME from "../releases/kea.json";
 import MarkdownRenderer from "../components/markdown/MarkdownRenderer";
 
 export default function ReleaseNotes() {
@@ -26,7 +28,6 @@ export default function ReleaseNotes() {
   const [brandLabel, setBrandLabel] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [codenameData, setCodenameData] = useState<CodenameData | null>(null);
   const [codenameOpen, setCodenameOpen] = useState(false);
 
   useEffect(() => {
@@ -77,21 +78,7 @@ export default function ReleaseNotes() {
         }
         if (baseDoc) setBaseMarkdown(baseDoc);
 
-        let releaseCodename: string | null = null;
-        try {
-          const cfgResp = await fetch(`${base}/config.json`, { cache: "no-cache" });
-          if (cfgResp.ok) {
-            const cfg = await cfgResp.json();
-            releaseCodename = typeof cfg.releaseCodename === "string" ? cfg.releaseCodename.trim().toLowerCase() : null;
-          }
-        } catch { /* silent */ }
 
-        if (releaseCodename) {
-          try {
-            const resp = await fetch(`${base}/releases/${releaseCodename}.json`, { cache: "no-cache" });
-            if (resp.ok) setCodenameData(await resp.json());
-          } catch { /* codename card is decorative — silent fallback */ }
-        }
       } catch (e: any) {
         setError("Release notes are unavailable.");
       } finally {
@@ -137,9 +124,8 @@ export default function ReleaseNotes() {
         <Typography variant="h6" fontWeight={600}>
           Release Notes
         </Typography>
-        {codenameData && (
-          <Chip
-            label={codenameData.codename}
+        <Chip
+            label={CODENAME.codename}
             size="small"
             onClick={() => setCodenameOpen(true)}
             sx={{
@@ -151,11 +137,8 @@ export default function ReleaseNotes() {
               fontSize: "0.7rem",
             }}
           />
-        )}
       </Stack>
-      {codenameData && (
-        <CodenameModal open={codenameOpen} onClose={() => setCodenameOpen(false)} data={codenameData} />
-      )}
+      <CodenameModal open={codenameOpen} onClose={() => setCodenameOpen(false)} data={CODENAME} />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         {cards.length > 1 && (
           <ToggleButtonGroup
