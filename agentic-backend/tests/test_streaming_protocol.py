@@ -31,13 +31,10 @@ migration to HTTP SSE and new libs does not silently regress it.
 
 from __future__ import annotations
 
+from fred_core.model.factory import _apply_openai_stream_usage_default
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages.tool import ToolMessage
 
-from agentic_backend.core.agents.v2.runtime_support.session_agent import (
-    _legacy_events_from_runtime_event,
-    _requested_stream_modes,
-)
 from agentic_backend.core.agents.v2.contracts.runtime import (
     AssistantDeltaRuntimeEvent,
     AwaitingHumanRuntimeEvent,
@@ -47,7 +44,10 @@ from agentic_backend.core.agents.v2.contracts.runtime import (
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
 )
-from fred_core.model.factory import _apply_openai_stream_usage_default
+from agentic_backend.core.agents.v2.runtime_support.session_agent import (
+    _legacy_events_from_runtime_event,
+    _requested_stream_modes,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
