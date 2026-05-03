@@ -31,7 +31,6 @@ migration to HTTP SSE and new libs does not silently regress it.
 
 from __future__ import annotations
 
-import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages.tool import ToolMessage
 
@@ -134,7 +133,9 @@ def test_assistant_delta_produces_messages_mode_event() -> None:
     AssistantDeltaRuntimeEvent must become a ("messages", (AIMessageChunk, metadata))
     tuple so the StreamTranscoder can process it as a streaming token chunk.
     """
-    legacy = _legacy_events_from_runtime_event(_delta_event("Hello "), requested_modes=_ALL_MODES)
+    legacy = _legacy_events_from_runtime_event(
+        _delta_event("Hello "), requested_modes=_ALL_MODES
+    )
 
     assert len(legacy) == 1
     event = legacy[0]
@@ -151,19 +152,25 @@ def test_assistant_delta_produces_messages_mode_event() -> None:
 
 def test_assistant_delta_filtered_when_messages_mode_not_requested() -> None:
     """Delta events must be suppressed when only 'updates' mode is requested."""
-    legacy = _legacy_events_from_runtime_event(_delta_event("Hello"), requested_modes=_UPDATES_ONLY)
+    legacy = _legacy_events_from_runtime_event(
+        _delta_event("Hello"), requested_modes=_UPDATES_ONLY
+    )
     assert legacy == []
 
 
 def test_assistant_delta_included_when_messages_mode_requested() -> None:
     """Delta events must pass through when 'messages' is in requested modes."""
-    legacy = _legacy_events_from_runtime_event(_delta_event("Hi"), requested_modes=_MESSAGES_ONLY)
+    legacy = _legacy_events_from_runtime_event(
+        _delta_event("Hi"), requested_modes=_MESSAGES_ONLY
+    )
     assert len(legacy) == 1
 
 
 def test_assistant_delta_node_is_agent() -> None:
     """The langgraph_node metadata for delta events must be 'agent' (not 'tools')."""
-    legacy = _legacy_events_from_runtime_event(_delta_event("x"), requested_modes=_ALL_MODES)
+    legacy = _legacy_events_from_runtime_event(
+        _delta_event("x"), requested_modes=_ALL_MODES
+    )
     _, (_, meta) = legacy[0]
     assert meta.get("langgraph_node") == "agent"
 

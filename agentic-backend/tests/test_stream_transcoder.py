@@ -61,9 +61,7 @@ Invariants checked throughout
 
 from __future__ import annotations
 
-import time
 from typing import Any, AsyncIterator, List
-from unittest.mock import patch
 
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
@@ -168,7 +166,9 @@ def _msg_chunk_tool_node(text: str) -> tuple:
     return ("messages", (AIMessageChunk(content=text), {"langgraph_node": "tools"}))
 
 
-def _tool_call_update(call_id: str = "c1", name: str = "search", args: dict | None = None) -> dict:
+def _tool_call_update(
+    call_id: str = "c1", name: str = "search", args: dict | None = None
+) -> dict:
     """'updates' mode event: AIMessage with tool_calls."""
     return {
         "agent": {
@@ -182,18 +182,20 @@ def _tool_call_update(call_id: str = "c1", name: str = "search", args: dict | No
     }
 
 
-def _tool_result_update(call_id: str = "c1", name: str = "search", content: str = "found it") -> dict:
+def _tool_result_update(
+    call_id: str = "c1", name: str = "search", content: str = "found it"
+) -> dict:
     """'updates' mode event: ToolMessage."""
     return {
         "tools": {
-            "messages": [
-                ToolMessage(content=content, tool_call_id=call_id, name=name)
-            ]
+            "messages": [ToolMessage(content=content, tool_call_id=call_id, name=name)]
         }
     }
 
 
-def _final_update(text: str, model: str = "gpt-test", usage: dict | None = None) -> dict:
+def _final_update(
+    text: str, model: str = "gpt-test", usage: dict | None = None
+) -> dict:
     """'updates' mode event: final AIMessage (no tool calls)."""
     response_metadata: dict = {"model_name": model, "finish_reason": "stop"}
     kwargs: dict = {"content": text, "response_metadata": response_metadata}
@@ -219,11 +221,17 @@ def _is_non_delta_final(msg: dict) -> bool:
 
 
 def _is_tool_call_msg(msg: dict) -> bool:
-    return msg.get("channel") == Channel.tool_call.value and msg.get("role") == Role.assistant.value
+    return (
+        msg.get("channel") == Channel.tool_call.value
+        and msg.get("role") == Role.assistant.value
+    )
 
 
 def _is_tool_result_msg(msg: dict) -> bool:
-    return msg.get("channel") == Channel.tool_result.value and msg.get("role") == Role.tool.value
+    return (
+        msg.get("channel") == Channel.tool_result.value
+        and msg.get("role") == Role.tool.value
+    )
 
 
 def _first_text(msg: dict) -> str:
@@ -350,7 +358,6 @@ async def test_tool_agent_pre_tool_text_streams_before_tool_call() -> None:
     ]
     msgs = await _collect(_make_transcoder(0), _FakeAgent(events))
 
-    deltas = [m for m in msgs if _is_streaming_delta(m)]
     pre_tool_deltas = []
     post_tool_deltas = []
     tool_call_seen = False
@@ -441,12 +448,11 @@ async def test_tool_agent_post_tool_streaming_works() -> None:
     ]
     msgs = await _collect(_make_transcoder(0), _FakeAgent(events))
 
-    deltas = [m for m in msgs if _is_streaming_delta(m)]
     # Collect deltas that appear after the tool_result message
-    tool_result_idx = next(
-        i for i, m in enumerate(msgs) if _is_tool_result_msg(m)
-    )
-    post_tool_deltas = [m for m in msgs[tool_result_idx + 1 :] if _is_streaming_delta(m)]
+    tool_result_idx = next(i for i, m in enumerate(msgs) if _is_tool_result_msg(m))
+    post_tool_deltas = [
+        m for m in msgs[tool_result_idx + 1 :] if _is_streaming_delta(m)
+    ]
     assert len(post_tool_deltas) >= 1
     combined_post = "".join(_first_text(d) for d in post_tool_deltas)
     assert "the answer is 42" in combined_post
@@ -595,7 +601,13 @@ async def test_token_usage_from_messages_mode_used_as_fallback() -> None:
     events = [
         _msg_chunk_with_usage("Answer.", usage),
         # Final update with no usage
-        {"agent": {"messages": [AIMessage(content="Answer.", response_metadata={"model_name": "m"})]}},
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(content="Answer.", response_metadata={"model_name": "m"})
+                ]
+            }
+        },
     ]
     msgs = await _collect(_make_transcoder(0), _FakeAgent(events))
 
@@ -687,9 +699,7 @@ async def test_message_ordering_user_tool_call_result_final() -> None:
     channels = [m.get("channel") for m in msgs]
     tc_idx = channels.index(Channel.tool_call.value)
     tr_idx = channels.index(Channel.tool_result.value)
-    final_idx = next(
-        i for i, m in enumerate(msgs) if _is_non_delta_final(m)
-    )
+    final_idx = next(i for i, m in enumerate(msgs) if _is_non_delta_final(m))
     assert tc_idx < tr_idx < final_idx, f"Wrong order: {channels}"
 
 
@@ -768,8 +778,12 @@ async def test_session_and_exchange_ids_propagated_to_all_messages() -> None:
     msgs = await _collect(_make_transcoder(0), _FakeAgent(events))
 
     for m in msgs:
-        assert m.get("session_id") == SESSION_ID, f"Wrong session_id in {m.get('channel')}"
-        assert m.get("exchange_id") == EXCHANGE_ID, f"Wrong exchange_id in {m.get('channel')}"
+        assert m.get("session_id") == SESSION_ID, (
+            f"Wrong session_id in {m.get('channel')}"
+        )
+        assert m.get("exchange_id") == EXCHANGE_ID, (
+            f"Wrong exchange_id in {m.get('channel')}"
+        )
 
 
 @pytest.mark.asyncio
