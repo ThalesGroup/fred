@@ -44,3 +44,29 @@ def test_configuration_keeps_explicit_scheduler_values_when_legacy_app_values_ex
     assert config.scheduler.temporal.ingestion_workflow_parallelism == 2
     assert config.scheduler.temporal.ingestion_max_concurrent_workflow_tasks == 3
     assert config.scheduler.temporal.ingestion_max_concurrent_activities == 4
+
+
+def test_configuration_normalizes_profile_retry_policy(app_context) -> None:
+    """
+    Ensure processing profile retry policy accepts compact operator-friendly values.
+
+    Why:
+        Production deployments should be able to tune ingestion retries from YAML
+        without duplicating Temporal-specific parsing rules in each backend.
+    How:
+        Override one processing profile retry block in the config payload and
+        validate the normalized values exposed by the profile model.
+    """
+    payload = app_context.configuration.model_dump(mode="python")
+    payload["processing"]["profiles"]["medium"]["retry_initial_interval"] = "20s"
+    payload["processing"]["profiles"]["medium"]["retry_maximum_interval"] = "5m"
+    payload["processing"]["profiles"]["medium"]["retry_maximum_attempts"] = 8
+
+    config = Configuration.model_validate(payload)
+
+    medium = config.processing.profiles.medium
+    assert medium.retry_initial_interval == "20s"
+    assert medium.retry_maximum_interval == "5m"
+    assert medium.retry_initial_interval_seconds == 20
+    assert medium.retry_maximum_interval_seconds == 300
+    assert medium.retry_maximum_attempts == 8

@@ -1,9 +1,13 @@
 **v1.5.3** — 2026-05-03
 
+- **Imrovements**
+
+  - Add capacity to specify custom RetryPolicy for Temporal activities (#1576)
+
 - **Bug Fixes**
 
   - Fixed semantics versus hybrid default values (#1580)
-  - Fiex runtime binding error in agentic when publishing KPIs (#1577)
+  - Fixed runtime binding error in agentic when publishing KPIs (#1577)
 
 **v1.5.2** — 2026-05-02
 
