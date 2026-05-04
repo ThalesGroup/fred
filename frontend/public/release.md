@@ -1,6 +1,6 @@
 **v1.5.3** — 2026-05-03
 
-- **Imrovements**
+- **Improvements**
 
   - Add capacity to specify custom RetryPolicy for Temporal activities (#1576)
 
