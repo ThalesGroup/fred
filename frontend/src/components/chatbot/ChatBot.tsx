@@ -1082,6 +1082,7 @@ const ChatBot = ({
   const {
     conversationPrefs,
     currentAgent,
+    supportsSearchPolicySelection,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
     supportsDocumentsSelection,
@@ -1479,7 +1480,7 @@ const ChatBot = ({
       runtimeContext.selected_document_uids = conversationPrefs.documentUids;
     }
 
-    if (conversationPrefs.searchPolicy) {
+    if (supportsSearchPolicySelection && conversationPrefs.searchPolicy) {
       runtimeContext.search_policy = conversationPrefs.searchPolicy;
     }
     if (supportsRagScopeSelection && conversationPrefs.searchRagScope) {
@@ -1507,6 +1508,7 @@ const ChatBot = ({
     conversationPrefs.deepSearch,
     conversationPrefs.includeSessionScope,
     conversationPrefs.includeCorpusScope,
+    supportsSearchPolicySelection,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
     supportsDocumentsSelection,
