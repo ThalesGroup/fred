@@ -12,7 +12,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
 
   const { data: allLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
     type: "document" as TagType,
-    ...(teamId ? { ownerFilter: "team", teamId } : {}),
+    ...(teamId ? { ownerFilter: "team", teamId } : { ownerFilter: "personal" }),
   });
 
   const [bindingEnabled, setBindingEnabled] = useState((params.document_library_tags_ids ?? []).length > 0);
