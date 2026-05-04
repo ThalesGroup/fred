@@ -129,7 +129,7 @@ clean-dev-registry:
           jq -r '.tags[] | select(startswith("dev-prism-"))' | sort -r)
         echo "$TAGS" | awk '{print "  - " $0}'
 
-        TAGS_TO_DELETE=$(echo "$TAGS" | tail -n +20)
+        TAGS_TO_DELETE=$(echo "$TAGS" | tail -n +100)
         if [ -z "$TAGS_TO_DELETE" ]; then
           echo "  ✅ Nothing to delete (5 or fewer tags)"
           continue
