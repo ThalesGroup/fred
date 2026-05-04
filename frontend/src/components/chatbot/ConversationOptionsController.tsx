@@ -199,7 +199,7 @@ export function useConversationOptionsController({
     documentUids: initialCtx.documentUids,
     promptResourceIds: initialCtx.promptResourceIds,
     templateResourceIds: initialCtx.templateResourceIds,
-    searchPolicy: initialCtx.searchPolicy,
+    searchPolicy: defaultSearchPolicy,
     searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
     deepSearch: initialCtx.deepSearch ?? false,
     includeCorpusScope: initialCtx.includeCorpusScope ?? true,
@@ -216,14 +216,14 @@ export function useConversationOptionsController({
       documentUids: initialCtx.documentUids,
       promptResourceIds: initialCtx.promptResourceIds,
       templateResourceIds: initialCtx.templateResourceIds,
-      searchPolicy: initialCtx.searchPolicy,
+      searchPolicy: defaultSearchPolicy,
       searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
       deepSearch: initialCtx.deepSearch ?? false,
       includeCorpusScope: initialCtx.includeCorpusScope ?? true,
       includeDocumentScope: initialCtx.includeDocumentScope ?? true,
       includeSessionScope: initialCtx.includeSessionScope ?? true,
     }));
-  }, [chatSessionId, initialCtx, defaultRagScope]);
+  }, [chatSessionId, initialCtx, defaultRagScope, agentKfSearchPolicy]);
 
   const supportsRagScopeSelection = currentAgent?.chat_options?.search_rag_scoping === true;
   const supportsSearchPolicySelection = currentAgent?.chat_options?.search_policy_selection === true;
