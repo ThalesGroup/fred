@@ -15,8 +15,7 @@
 import { Accordion, AccordionDetails, AccordionSummary, Box, Typography } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import React, { useMemo } from "react";
-import { ChunkItem, VectorItem } from "./DocumentDataCommon.tsx";
-import { VectorHeatmap } from "./VectorHeatmap.tsx";
+import { ChunkItem } from "./DocumentDataCommon.tsx";
 
 function fallbackChunkText(c: ChunkItem | undefined): string {
   if (!c) return "(empty)";
@@ -28,36 +27,18 @@ function fallbackChunkText(c: ChunkItem | undefined): string {
 }
 
 type Props = {
-  vectors?: VectorItem[];
   chunks: ChunkItem[];
 };
 
-export const ChunksAccordion: React.FC<Props> = ({ vectors, chunks }) => {
+export const ChunksAccordion: React.FC<Props> = ({ chunks }) => {
   const pairs = useMemo(() => {
-    const v = vectors ?? [];
-    const len = Math.max(v.length, chunks.length);
-    return new Array(len).fill(0).map((_, i) => ({
-      index: i,
-      vector: v[i],
-      chunk: chunks[i],
-    }));
-  }, [vectors, chunks]);
+    return chunks.map((chunk, i) => ({ index: i, chunk }));
+  }, [chunks]);
 
   return (
     <>
-      {pairs.map(({ index, vector, chunk }) => (
+      {pairs.map(({ index, chunk }) => (
         <Box key={index} sx={{ mb: 1.5 }}>
-          {vector && (
-            <Accordion disableGutters>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle2">Vector #{index + 1}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <VectorHeatmap vector={vector} />
-              </AccordionDetails>
-            </Accordion>
-          )}
-
           <Accordion disableGutters>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Box sx={{ display: "flex", alignItems: "center", width: "100%", gap: 1, minWidth: 0 }}>

@@ -51,6 +51,9 @@ from agentic_backend.core.agents.v2.graph.authoring import (
     model_text_step,
     typed_node,
 )
+from agentic_backend.core.agents.v2.react.react_prompting import (
+    normalize_response_language,
+)
 
 from .sql_agent_state import SqlAgentState
 from .tabular_capabilities import (
@@ -122,9 +125,8 @@ class IntentDecision(BaseModel):
     direct_response: str | None = Field(
         description=(
             "Required when intent is 'show_metadata'. "
-            "Describe the agent's capabilities (what it can do, what queries it can run) "
-            "and the available datasets it can query. "
-            "Do not list raw table names mechanically — explain what the agent helps users accomplish."
+            "List all available tables with their column names and types using bullet points. "
+            "Then briefly describe what kinds of queries the agent can run on these datasets."
         )
     )
 
@@ -138,6 +140,7 @@ async def analyze_intent_step(
     Decide if the user wants to query data or just see metadata.
     """
     summary = _format_database_summary(state.database_context)
+    language = normalize_response_language(context.binding.runtime_context.language)
     decision = cast(
         IntentDecision,
         await context.invoke_structured_model(
@@ -153,7 +156,8 @@ async def analyze_intent_step(
                         "- Help users understand what data is available and what questions they can ask\n\n"
                         f"Available datasets:\n{summary}\n\n"
                         "Route 'show_metadata' for any question about capabilities, tools, available data, "
-                        "or what the agent can do. Route 'query_data' only when data retrieval is needed."
+                        "or what the agent can do. Route 'query_data' only when data retrieval is needed.\n\n"
+                        f"Always respond in {language}."
                     )
                 ),
                 HumanMessage(content=state.latest_user_text),
@@ -371,11 +375,12 @@ async def synthesize_answer_step(
         results_json = json.dumps(state.query_results, indent=2, ensure_ascii=False)
         content += f"Query Results:\n{results_json}"
 
+    language = normalize_response_language(context.binding.runtime_context.language)
     answer = await model_text_step(
         context,
         operation="synthesize_answer",
         system_prompt=content,
-        user_prompt="Summarize the answer for the user.",
+        user_prompt=f"Summarize the answer for the user. Respond in {language}.",
     )
 
     return StepResult(

@@ -40,4 +40,6 @@
   --outline: var(--cold-grey-50);
   --outline-retreat: var(--cold-grey-80);
   --outline-muted: var(--cold-grey-80);
+  --scrim: rgba(25, 27, 33, 0.44);
+  --surface-picture: var(--cold-grey-100);
 }

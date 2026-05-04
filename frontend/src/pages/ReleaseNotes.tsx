@@ -14,9 +14,12 @@
 
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { Box, Button, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { getProperty } from "../common/config";
+import CodenameModal from "@shared/molecules/CodenameModal/CodenameModal";
+// ── Release codename ── update this import on each major release ──────────────
+import CODENAME from "../releases/kea.json";
 import MarkdownRenderer from "../components/markdown/MarkdownRenderer";
 
 export default function ReleaseNotes() {
@@ -25,6 +28,7 @@ export default function ReleaseNotes() {
   const [brandLabel, setBrandLabel] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [codenameOpen, setCodenameOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -36,10 +40,8 @@ export default function ReleaseNotes() {
             .replace(/[^a-z0-9_-]+/g, "-")
             .replace(/^-+|-+$/g, "");
         const releaseBrand = toSlug(getProperty("releaseBrand") as string | undefined) || "fred";
-        console.log("[ReleaseNotes] releaseBrand:", releaseBrand);
 
         const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-        console.log("[ReleaseNotes] base URL:", base || "(root)");
 
         const fetchDoc = async (path: string) => {
           try {
@@ -62,13 +64,9 @@ export default function ReleaseNotes() {
         const brandContent = await fetchDoc(brandPath);
         if (brandContent) {
           brandDoc = brandContent;
-          console.log("[ReleaseNotes] loaded brand release:", brandPath);
-        } else {
-          console.log("[ReleaseNotes] missing brand release:", brandPath);
         }
 
         const baseDoc = await fetchDoc("/release.md");
-        console.log("[ReleaseNotes] base release present:", Boolean(baseDoc));
 
         if (!brandDoc && !baseDoc) {
           throw new Error("not found");
@@ -79,6 +77,8 @@ export default function ReleaseNotes() {
           setBrandLabel(releaseBrand || "Custom");
         }
         if (baseDoc) setBaseMarkdown(baseDoc);
+
+
       } catch (e: any) {
         setError("Release notes are unavailable.");
       } finally {
@@ -124,7 +124,21 @@ export default function ReleaseNotes() {
         <Typography variant="h6" fontWeight={600}>
           Release Notes
         </Typography>
+        <Chip
+            label={CODENAME.codename}
+            size="small"
+            onClick={() => setCodenameOpen(true)}
+            sx={{
+              textTransform: "capitalize",
+              fontWeight: 500,
+              letterSpacing: "0.04em",
+              cursor: "pointer",
+              height: 20,
+              fontSize: "0.7rem",
+            }}
+          />
       </Stack>
+      <CodenameModal open={codenameOpen} onClose={() => setCodenameOpen(false)} data={CODENAME} />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         {cards.length > 1 && (
           <ToggleButtonGroup

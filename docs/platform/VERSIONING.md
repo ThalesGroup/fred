@@ -49,6 +49,8 @@ The expected pattern remains the same:
 - release tags for code and charts,
 - production rollout from images/charts generated from that production branch.
 
+For rules on how to structure a fork so that merging from `develop` remains permanently conflict-free, see [FORKING_GUIDE.md](./FORKING_GUIDE.md).
+
 ## Tagging Sequence (Recommended)
 
 1. Validate on integration (`develop`).

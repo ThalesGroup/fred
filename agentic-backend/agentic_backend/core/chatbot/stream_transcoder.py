@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser
-from fred_core.kpi import BaseKPIWriter
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
@@ -596,7 +596,7 @@ class StreamTranscoder:
                     t_first_event = time.monotonic()
 
                 if mode == "messages":
-                    # Token/chunk stream (best-effort): enabled until we detect tool activity.
+                    # Token/chunk stream (best-effort): always enabled for all agents.
                     chunk_obj = (
                         event[0] if isinstance(event, tuple) and event else event
                     )
@@ -669,14 +669,6 @@ class StreamTranscoder:
                         continue
                     if partial_stream_rank is None:
                         partial_stream_rank = base_rank + seq
-                    # Only stream deltas once tool activity has been seen.
-                    # Before the first tool call, the model may stream reasoning text
-                    # ("I'm going to call X...") that would be visually replaced by
-                    # the tool call UI. Buffer it silently; it gets discarded when the
-                    # tool call resets partial_stream_text (line ~784), or flushed at
-                    # end-of-stream by the flush block below for no-tool agents.
-                    if not tool_activity_seen:
-                        continue
                     now = time.monotonic()
                     if now - last_partial_emit < self._stream_flush_interval_s:
                         continue
@@ -1203,6 +1195,25 @@ class StreamTranscoder:
                 _tu.get("output_tokens") if _tu else None,
                 _tu.get("total_tokens") if _tu else None,
             )
+            if kpi is not None and _tu:
+                _kpi_actor = KPIActor(type="system")
+                _kpi_dims = {
+                    "agent_id": _agent_name or agent_id,
+                    "model_name": pending_assistant_final.metadata.model,
+                }
+                _in = _tu.get("input_tokens")
+                _out = _tu.get("output_tokens")
+                _total = _tu.get("total_tokens")
+                if _in is not None:
+                    kpi.count("llm.tokens_input", _in, dims=_kpi_dims, actor=_kpi_actor)
+                if _out is not None:
+                    kpi.count(
+                        "llm.tokens_output", _out, dims=_kpi_dims, actor=_kpi_actor
+                    )
+                if _total is not None:
+                    kpi.count(
+                        "llm.tokens_total", _total, dims=_kpi_dims, actor=_kpi_actor
+                    )
             logger.debug(
                 "[TRANSCODER][TOKEN_USAGE][FINAL] session=%s exchange=%s agent=%s source=%s from_messages=%s from_updates=%s usage=%s",
                 session_id,
