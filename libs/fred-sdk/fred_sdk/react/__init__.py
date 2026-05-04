@@ -1,14 +1,6 @@
 """
-ReAct runtime implementation package for v2 agents.
+ReAct authoring contracts package.
 
-Why this package exists:
-- group the reviewed ReAct runtime files under one obvious scope
-- keep the ReAct execution surface separate from contracts, graph, and deep files
-
-How to use:
-- import concrete helpers from the submodules in this package when working on the
-  ReAct runtime internals
-
-Example:
-- `from fred_sdk.react.react_runtime import ReActRuntime`
+The ReAct execution engine has moved to fred-runtime.
+Agent authors only need fred_sdk.authoring and fred_sdk.contracts.
 """

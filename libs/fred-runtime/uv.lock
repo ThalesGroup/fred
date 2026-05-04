@@ -618,11 +618,15 @@ name = "fred-runtime"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "deepagents" },
     { name = "fred-core" },
     { name = "fred-sdk" },
     { name = "httpx" },
+    { name = "langchain" },
+    { name = "langchain-core" },
     { name = "langchain-mcp-adapters" },
     { name = "langfuse" },
+    { name = "langgraph" },
     { name = "pyyaml" },
     { name = "requests" },
 ]
@@ -654,13 +658,17 @@ dev = [
 requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "deepagents", specifier = ">=0.4.11" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", marker = "extra == 'app'", specifier = ">=0.116" },
     { name = "fred-core", editable = "../fred-core" },
     { name = "fred-sdk", editable = "../fred-sdk" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "langchain", specifier = ">=0.3.0" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
     { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
     { name = "langfuse", specifier = ">=3.0.0" },
+    { name = "langgraph", specifier = ">=1.1.3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -684,7 +692,6 @@ name = "fred-sdk"
 version = "2.0.0"
 source = { editable = "../fred-sdk" }
 dependencies = [
-    { name = "deepagents" },
     { name = "fred-core" },
     { name = "httpx" },
     { name = "langchain" },
@@ -697,7 +704,6 @@ dependencies = [
 requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
-    { name = "deepagents", specifier = ">=0.4.11" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fred-core", editable = "../fred-core" },
     { name = "httpx", specifier = ">=0.28.1" },

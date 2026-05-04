@@ -69,11 +69,11 @@ from fred_sdk.graph.runtime import (
     GraphNodeContext,
     GraphNodeResult,
 )
-from fred_sdk.runtime_support.checkpoints import (
+from fred_runtime.runtime_support.checkpoints import (
     AsyncCheckpointReader,
     AsyncCheckpointWriter,
 )
-from fred_sdk.runtime_support.model_metadata import runtime_metadata_from_message
+from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 
 logger = logging.getLogger(__name__)

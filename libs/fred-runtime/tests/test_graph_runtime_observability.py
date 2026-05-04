@@ -9,7 +9,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
-from fred_sdk.graph.graph_runtime import _graph_phase_timer, _start_runtime_span
+from fred_runtime.graph.graph_runtime import _graph_phase_timer, _start_runtime_span
 
 
 class _RecordingSpan(Span):

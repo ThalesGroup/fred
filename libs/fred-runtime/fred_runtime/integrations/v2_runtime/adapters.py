@@ -77,6 +77,7 @@ from fred_sdk.support.builtins import (
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
+from langfuse.types import TraceContext as LangfuseTraceContext
 
 from fred_runtime.common.kf_logs_client import KfLogsClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient

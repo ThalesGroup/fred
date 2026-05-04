@@ -4,6 +4,7 @@
   "reportMissingTypeStubs": false,
   "venvPath": ".",
   "venv": ".venv",
+  "extraPaths": ["../fred-core", "../fred-sdk"],
   "executionEnvironments": [
     {
       "root": ".",

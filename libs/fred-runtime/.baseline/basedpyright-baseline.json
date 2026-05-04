@@ -1,3 +1,126 @@
 {
-    "files": {}
+    "files": {
+        "./fred_runtime/app/agent_app.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 66,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 43,
+                    "endColumn": 57,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./fred_runtime/deep/deep_runtime.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 14,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./fred_runtime/integrations/v2_runtime/adapters.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 18,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 53,
+                    "endColumn": 60,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "/home/dimi/Work/fred/libs/fred-runtime/fred_runtime/app/agent_app.py": [
+            {
+                "code": "reportArgumentType",
+                "message": "Argument of type \"KPIWriterMetricsAdapter\" cannot be assigned to parameter \"metrics\" of type \"MetricsProvider | None\" in function \"__init__\"\n  Type \"KPIWriterMetricsAdapter\" is not assignable to type \"MetricsProvider | None\"\n    \"KPIWriterMetricsAdapter\" is not assignable to \"MetricsProvider\"\n    \"KPIWriterMetricsAdapter\" is not assignable to \"None\"",
+                "range": {
+                    "start": {
+                        "line": 680,
+                        "character": 16
+                    },
+                    "end": {
+                        "line": 680,
+                        "character": 66
+                    }
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "message": "Argument of type \"BaseModel | ReActInput\" cannot be assigned to parameter \"input_model\" of type \"ReActInput\" in function \"stream\"\n  Type \"BaseModel | ReActInput\" is not assignable to type \"ReActInput\"\n    \"BaseModel\" is not assignable to \"ReActInput\"",
+                "range": {
+                    "start": {
+                        "line": 1714,
+                        "character": 43
+                    },
+                    "end": {
+                        "line": 1714,
+                        "character": 57
+                    }
+                }
+            }
+        ],
+        "/home/dimi/Work/fred/libs/fred-runtime/fred_runtime/deep/deep_runtime.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "message": "\"definition\" incorrectly overrides property of same name in class \"AgentRuntime\"",
+                "range": {
+                    "start": {
+                        "line": 83,
+                        "character": 4
+                    },
+                    "end": {
+                        "line": 83,
+                        "character": 14
+                    }
+                }
+            }
+        ],
+        "/home/dimi/Work/fred/libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "message": "Method \"start_span\" overrides class \"Tracer\" in an incompatible manner\n  Parameter \"**attributes\" has no corresponding parameter",
+                "range": {
+                    "start": {
+                        "line": 185,
+                        "character": 8
+                    },
+                    "end": {
+                        "line": 185,
+                        "character": 18
+                    }
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "message": "Cannot access attribute \"span_id\" for class \"SpanPort\"\n  Attribute \"span_id\" is unknown",
+                "range": {
+                    "start": {
+                        "line": 233,
+                        "character": 53
+                    },
+                    "end": {
+                        "line": 233,
+                        "character": 60
+                    }
+                }
+            }
+        ]
+    }
 }

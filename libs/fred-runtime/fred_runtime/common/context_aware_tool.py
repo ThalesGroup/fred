@@ -279,9 +279,7 @@ class ContextAwareTool(BaseTool):
             logger.debug("[KPI] Could not resolve runtime_id: %s", exc)
         return dims
 
-    def _kpi_timer(
-        self, *, context
-    ) -> tuple[Any, Any, dict[str, Optional[str]], list[str] | None]:
+    def _kpi_timer(self, *, context) -> tuple[Any, Any, dict[str, Optional[str]]]:
         """
         Return KPI writer + timer context for tool execution.
 

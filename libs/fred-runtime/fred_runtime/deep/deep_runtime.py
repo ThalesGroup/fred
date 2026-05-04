@@ -38,13 +38,13 @@ from langgraph.types import Checkpointer
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import DeepAgentDefinition
 from fred_sdk.contracts.runtime import Executor
-from fred_sdk.react.react_prompting import (
+from fred_runtime.react.react_prompting import (
     build_guardrail_suffix as _build_guardrail_suffix,
 )
-from fred_sdk.react.react_prompting import (
+from fred_runtime.react.react_prompting import (
     render_prompt_template as _render_prompt_template,
 )
-from fred_sdk.react.react_runtime import (
+from fred_runtime.react.react_runtime import (
     ReActInput,
     ReActOutput,
     ReActRuntime,
@@ -52,8 +52,8 @@ from fred_sdk.react.react_runtime import (
     _CompiledReActAgent,
     _TransportBackedReActExecutor,
 )
-from fred_sdk.react.react_tool_binding import ReActToolBinder
-from fred_sdk.react.react_tool_resolution import ReActRuntimeToolResolver
+from fred_runtime.react.react_tool_binding import ReActToolBinder
+from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 
 _FILESYSTEM_TOOL_NAMES: tuple[str, ...] = (
     "ls",

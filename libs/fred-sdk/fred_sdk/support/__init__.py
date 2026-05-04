@@ -1,14 +1,9 @@
 """
-Shared support files for v2 agent runtimes.
+Authoring support utilities.
 
-Why this package exists:
-- keep cross-cutting v2 support concerns out of the main runtime folders
-- group the files that define built-in tools, Python-authored toolsets, approval
-  policies, and filesystem browsing context
-
-How to use:
-- import from these submodules when working on shared v2 support behavior rather
-  than one specific runtime family
+Contains built-in tool references, authored toolset registry, and MCP helpers.
+Execution-only support (tool_loop, tool_approval, filesystem_context) lives in
+fred_runtime.support.
 
 Example:
 - `from fred_sdk.support.builtins import TOOL_REF_KNOWLEDGE_SEARCH`

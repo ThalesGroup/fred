@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Runtime support utilities: checkpointing and session-agent helpers.
+Runtime support utilities: checkpointing and remote agent invocation.
 """
 
 from .remote_agent_invoker import RemoteSseAgentInvoker, RemoteSseAgentInvokerConfig

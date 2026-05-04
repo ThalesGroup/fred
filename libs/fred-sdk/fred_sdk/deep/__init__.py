@@ -1,17 +1,6 @@
 """
-Deep-agent runtime family for Fred v2.
+Deep-agent authoring contracts.
 
-Why this package exists:
-- keep the v2 root readable by grouping the deep-agent-specific runtime under
-  one explicit folder
-
-How to use it:
-- import `DeepAgentRuntime` when wiring or inspecting the deep-agent runtime
-
-Example:
-- `from fred_sdk.deep import DeepAgentRuntime`
+DeepAgentRuntime has moved to fred-runtime.
+DeepAgentDefinition (the authoring type) remains in fred_sdk.contracts.models.
 """
-
-from .runtime import DeepAgentRuntime
-
-__all__ = ["DeepAgentRuntime"]

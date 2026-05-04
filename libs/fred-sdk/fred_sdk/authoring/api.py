@@ -32,7 +32,6 @@ from typing import Any, ClassVar, TypeVar, overload
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
-from pydantic_core import PydanticUndefined
 
 from ..contracts.context import (
     ArtifactPublishRequest,
@@ -837,8 +836,7 @@ def _derive_fields(cls: type) -> tuple[FieldSpec, ...]:
         ui_type = extra.get("_ui_type")
         if not ui_type:
             continue
-        raw_default = field_info.default
-        default = None if raw_default is PydanticUndefined else raw_default
+        default = None if field_info.is_required() else field_info.default
         ui_hints_data = extra.get("_ui_hints", {})
         specs.append(
             FieldSpec(

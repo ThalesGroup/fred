@@ -53,10 +53,10 @@ def get_search_policy(context: RuntimeContext | None) -> str:
     """Return the search policy with a stable default.
 
     Why: normalize the default search policy when the context omits it.
-    How: pass a RuntimeContext (or None); "semantic" is used when missing.
+    How: pass a RuntimeContext (or None); "hybrid" is used when missing.
     Example:
         >>> get_search_policy(RuntimeContext())
-        'semantic'
+        'hybrid'
     """
     if not context:
         return "hybrid"

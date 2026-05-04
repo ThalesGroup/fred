@@ -93,9 +93,9 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
 )
-from fred_sdk.graph.graph_runtime import GraphRuntime
-from fred_sdk.react.react_runtime import ReActRuntime
-from fred_sdk.runtime_support.checkpoints import load_checkpoint
+from fred_runtime.graph.graph_runtime import GraphRuntime
+from fred_runtime.react.react_runtime import ReActRuntime
+from fred_runtime.runtime_support.checkpoints import load_checkpoint
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,

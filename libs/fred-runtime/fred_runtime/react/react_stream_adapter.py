@@ -48,7 +48,7 @@ from pydantic import ValidationError
 
 from fred_sdk.contracts.context import ToolInvocationResult, UiPart
 from fred_sdk.contracts.runtime import HumanInputRequest
-from fred_sdk.runtime_support.model_metadata import (  # noqa: F401
+from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
     normalize_token_usage,
     runtime_metadata_from_message,
     runtime_metadata_from_stream_event,

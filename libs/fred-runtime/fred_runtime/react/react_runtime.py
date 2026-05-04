@@ -557,7 +557,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             approval_policy=policy.tool_approval,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             tracer=self.services.tracer,
-            kpi=self.services.kpi,
+            kpi=None,
             chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,

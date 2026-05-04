@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import contextvars
 
-from agentic_backend.core.agents.v2.contracts.runtime import SpanPort
+from fred_sdk.contracts.runtime import SpanPort
 
 active_agent_span: contextvars.ContextVar[SpanPort | None] = contextvars.ContextVar(
     "active_agent_span", default=None

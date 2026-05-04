@@ -19,7 +19,7 @@ def test_runtime_context_helpers_defaults():
     context = RuntimeContext()
 
     assert get_document_library_tags_ids(None) is None
-    assert get_search_policy(None) == "semantic"
+    assert get_search_policy(None) == "hybrid"
     assert get_vector_search_scopes(None) == (True, True)
 
     set_attachments_markdown(context, "# Notes")

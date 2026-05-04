@@ -39,12 +39,12 @@ from fred_sdk.contracts.runtime import (
     HumanChoiceOption,
     HumanInputRequest,
 )
-from fred_sdk.support.filesystem_context import (
+from fred_runtime.support.filesystem_context import (
     render_filesystem_browsing_context,
     rewrite_filesystem_tool_arguments,
 )
-from fred_sdk.support.tool_approval import requires_tool_approval
-from fred_sdk.support.tool_loop import build_tool_loop
+from fred_runtime.support.tool_approval import requires_tool_approval
+from fred_runtime.support.tool_loop import build_tool_loop
 
 # Bounded history window for V2 ReAct — matches V1 Rico's rag.history_max_messages=6
 # and prevents unbounded LangGraph checkpointer growth from contaminating queries.

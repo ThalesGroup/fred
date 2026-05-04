@@ -256,35 +256,6 @@ RuntimeEvent: TypeAlias = Annotated[
 ]
 
 
-class SpanPort(ABC):
-    @property
-    @abstractmethod
-    def span_id(self) -> str:
-        """Stable identifier for this span, used to parent child spans."""
-
-    @abstractmethod
-    def set_attribute(self, key: str, value: JsonScalar) -> None:
-        """Attach a scalar attribute to the current span."""
-
-    @abstractmethod
-    def end(self) -> None:
-        """Finish the span."""
-
-
-class TracerPort(ABC):
-    @abstractmethod
-    def start_span(
-        self,
-        *,
-        name: str,
-        context: PortableContext,
-        attributes: Mapping[str, JsonScalar] | None = None,
-        parent: "SpanPort | None" = None,
-    ) -> SpanPort:
-        """Start a span bound to the portable execution context."""
-
-
-
 class TokenProviderPort(ABC):
     @abstractmethod
     def get_bearer_token(self, binding: BoundRuntimeContext) -> str:

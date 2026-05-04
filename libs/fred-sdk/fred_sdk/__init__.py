@@ -38,9 +38,9 @@ MCP server references
 ---------------------
     from fred_sdk import MCPServerRef, MCP_SERVER_KNOWLEDGE_FLOW_CORPUS
 
-What is NOT exported here (platform internals):
-    - ReActRuntime, GraphRuntime, DeepAgentRuntime  → agentic-backend wiring
-    - ChatModelFactoryPort, RuntimeServices          → platform port interfaces
+What is NOT exported here (execution engine, lives in fred-runtime):
+    - ReActRuntime, GraphRuntime, DeepAgentRuntime  → fred_runtime.react / .graph / .deep
+    - ChatModelFactoryPort, RuntimeServices          → fred_sdk.contracts.runtime (ports only)
     - BoundRuntimeContext, PortableContext           → platform execution context
     - ReActInput, ReActOutput, ReActMessage          → runtime transport types
 """
