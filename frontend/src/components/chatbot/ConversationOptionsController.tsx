@@ -190,7 +190,7 @@ export function useConversationOptionsController({
   const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers
     ?.find((s) => s.params?.provider === "kf_vector_search")
     ?.params?.search_policy as SearchPolicyName | undefined;
-  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? agentKfSearchPolicy ?? "hybrid";
+  const defaultSearchPolicy: SearchPolicyName = agentKfSearchPolicy ?? initialCtx.searchPolicy ?? "hybrid";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;
 
   const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({
@@ -516,7 +516,7 @@ export function useConversationOptionsController({
         documentUids: initialCtx.documentUids,
         promptResourceIds: initialCtx.promptResourceIds,
         templateResourceIds: initialCtx.templateResourceIds,
-        searchPolicy: initialCtx.searchPolicy,
+        searchPolicy: defaultSearchPolicy,
         searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
         deepSearch: initialCtx.deepSearch ?? false,
         includeCorpusScope: initialCtx.includeCorpusScope ?? true,
@@ -557,7 +557,7 @@ export function useConversationOptionsController({
         documentUids: [],
         promptResourceIds: [],
         templateResourceIds: [],
-        searchPolicy: initialCtx.searchPolicy,
+        searchPolicy: defaultSearchPolicy,
         searchRagScope: initialCtx.searchRagScope ?? defaultRagScope,
         deepSearch: initialCtx.deepSearch ?? false,
         includeCorpusScope: initialCtx.includeCorpusScope ?? true,
@@ -574,7 +574,7 @@ export function useConversationOptionsController({
       const nextDocUids = asStringArray(p.documentUids, []);
       const nextPrompts = asStringArray(p.promptResourceIds, []);
       const nextTemplates = asStringArray(p.templateResourceIds, []);
-      const nextSearchPolicy = p.searchPolicy ?? initialCtx.searchPolicy;
+      const nextSearchPolicy = p.searchPolicy ?? agentKfSearchPolicy ?? "hybrid";
       const nextRagScope = p.searchRagScope ?? p.ragKnowledgeScope ?? initialCtx.searchRagScope ?? defaultRagScope;
       const nextDeepSearch = p.deepSearch ?? initialCtx.deepSearch ?? false;
       const nextIncludeCorpusScope = asBoolean(p.includeCorpusScope, initialCtx.includeCorpusScope ?? true);
