@@ -132,11 +132,11 @@ def _agent_metric_label(agent: object, fallback: str) -> str:
     name = getattr(getattr(agent, "agent_settings", None), "name", None)
     if isinstance(name, str) and name.strip():
         return name.strip()
-    name = getattr(
-        getattr(getattr(agent, "binding", None), "portable_context", None),
-        "agent_name",
-        None,
-    )
+    try:
+        binding = getattr(agent, "binding", None)
+    except Exception:
+        binding = None
+    name = getattr(getattr(binding, "portable_context", None), "agent_name", None)
     if isinstance(name, str) and name.strip():
         return name.strip()
     return fallback
