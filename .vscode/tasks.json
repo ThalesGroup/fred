@@ -23,7 +23,7 @@
         "agentic-backend-prod",
         "knowledge-flow-backend-prod",
         "frontend",
-        "kf-worker-prod",
+        "kf-worker",
         "control-plane-prod"
       ],
       "dependsOrder": "parallel",
@@ -164,24 +164,6 @@
       "type": "shell",
       "command": "bash",
       "args": ["-lc", "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker"],
-      "options": {
-        "cwd": "${workspaceFolder}/knowledge-flow-backend"
-      },
-      "problemMatcher": [],
-      "presentation": {
-        "panel": "new",
-        "reveal": "always"
-      },
-      "icon": {
-        "id": "filter",
-        "color": "terminal.ansiBlue"
-      }
-    },
-    {
-      "label": "kf-worker-prod",
-      "type": "shell",
-      "command": "bash",
-      "args": ["-lc", "set -m; _cleanup(){ kill -- -$$ 2>/dev/null; }; trap _cleanup EXIT INT TERM EXIT INT TERM; make run-worker-prod"],
       "options": {
         "cwd": "${workspaceFolder}/knowledge-flow-backend"
       },
