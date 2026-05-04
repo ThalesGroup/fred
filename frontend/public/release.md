@@ -1,4 +1,35 @@
-**Unreleased** — XXXX-XX-XX
+**v1.5.2** — 2026-05-02
+
+- **Features**
+
+  - Streaming responses now enabled for all agent types — previously limited to v2 ReAct agents
+  - Token usage metrics (`llm.tokens_input`, `llm.tokens_output`, `llm.tokens_total`) now emitted per streaming session for all agents
+
+- **Bug Fixes**
+
+  - Fix team identity not resolved in `_stream()`, causing KPI and conversation history to miss the personal team default
+
+---
+
+**v1.5.1** — 2026-05-01
+
+- **Features**
+
+  - Default search policy selector in agent creation form
+
+- **Improvements**
+
+  - Default search policy changed from semantic to hybrid
+  - Human-readable agent names on all Prometheus metrics; consistent `agent_id` dimension across all KPI actors
+  - New `llm.call_latency_ms` metric for per-model Grafana panels
+  - Automatic retry on transient gateway errors for Mistral-hosted models
+  - Clearer error messages on AI service unavailability (502 / 503)
+  - Fix Langfuse observation latency unit (field is in seconds, not milliseconds)
+
+- **Bug Fixes**
+
+  - Fix SQL agent not listing tables when directly queried and responding in the wrong language
+  - Fix DOCX embedded image processing to match PDF and PPTX behavior
 
 **v1.5.0** — 2026-04-24
 

@@ -1,18 +1,14 @@
 import styles from "./UserSettingsPage.module.scss";
-import { ModalInteractionProps } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
-interface UserSettingsPageProps {
-  modalInteraction: ModalInteractionProps;
-}
-
-export default function UserSettingsPage({ modalInteraction }: UserSettingsPageProps) {
+export default function UserSettingsPage() {
+  const navigate = useNavigate();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { t } = useTranslation();
   // TODO Enable when Light mode is complete
@@ -25,6 +21,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
   const userRoles = KeyCloakService.GetUserRoles();
 
   return (
+    <div className={styles.userSettingsPageRoot}>
     <div className={styles.userSettingsPage}>
       <div className={styles.userSettingsHeader}>
         <Button
@@ -32,7 +29,7 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
           variant={"text"}
           size={"medium"}
           icon={{ category: "outlined", type: "arrow_back", filled: true }}
-          onClick={modalInteraction.close}
+          onClick={() => navigate(-1)}
         >
           {t("rework.back")}
         </Button>
@@ -118,7 +115,13 @@ export default function UserSettingsPage({ modalInteraction }: UserSettingsPageP
             {t("rework.userSettings.accessGcu")}
           </Button>
         </Link>
+        <Link to={"/release-notes"}>
+          <Button color={"primary"} variant={"text"} size={"medium"}>
+            {t("rework.userSettings.accessReleaseNotes")}
+          </Button>
+        </Link>
       </div>
+    </div>
     </div>
   );
 }

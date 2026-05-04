@@ -52,6 +52,20 @@ def human_error_message(runtime_context: RuntimeContext | None, err: Exception) 
             f"Detail: {err_text}"
         )
 
+    if (
+        "bad gateway" in lower
+        or "502" in lower
+        or "503" in lower
+        or "service unavailable" in lower
+    ):
+        return (
+            "Le service IA est temporairement indisponible. Merci de réessayer dans quelques instants. "
+            f"Détail : {err_text}"
+            if french
+            else "The AI service is temporarily unavailable. Please try again in a moment. "
+            f"Detail: {err_text}"
+        )
+
     if "timeout" in lower or "timed out" in lower:
         return (
             "L'opération a dépassé le délai. Réduisez la portée ou le nombre de documents. "

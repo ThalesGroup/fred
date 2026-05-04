@@ -33,6 +33,7 @@ Example:
 from __future__ import annotations
 
 import os
+import uuid
 
 from fred_core import KeycloakUser
 
@@ -70,10 +71,11 @@ def build_bound_runtime_context(
     """
 
     tenant = runtime_context.user_id or user.uid or "fred"
+    exchange_id = uuid.uuid4().hex
     return BoundRuntimeContext(
         runtime_context=runtime_context.model_copy(deep=True),
         portable_context=PortableContext(
-            request_id=f"req:{runtime_context.session_id or agent_id}",
+            request_id=exchange_id,
             correlation_id=f"corr:{runtime_context.session_id or agent_id}",
             actor=f"user:{user.uid}",
             tenant=tenant,

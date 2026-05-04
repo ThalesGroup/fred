@@ -22,6 +22,7 @@ profiles:
       name: mistral-medium-2508
       settings:
         base_url: https://api.mistral.ai/v1
+        max_retries: 2
   - profile_id: default.language.mistral
     capability: language
     model:
@@ -29,6 +30,7 @@ profiles:
       name: mistral-medium-2508
       settings:
         base_url: https://api.mistral.ai/v1
+        max_retries: 2
   - profile_id: default.chat.openai.prod
     capability: chat
     description: "Default balanced chat model for production conversations."

@@ -48,7 +48,7 @@ class KfVectorSearchParams(BaseModel):
         ),
     )
     search_policy: Optional[SearchPolicyLiteral] = Field(
-        default="semantic",
+        default="hybrid",
         description=(
             "Default retrieval strategy for this agent. hybrid combines BM25 and vector "
             "search (RRF); semantic uses vector search only; strict applies a high-precision "

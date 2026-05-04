@@ -270,6 +270,10 @@ class RecordingSpan(SpanPort):
         }
         self._sink = sink
 
+    @property
+    def span_id(self) -> str:
+        return f"fake-{self._record['name']}"
+
     def set_attribute(self, key: str, value: object) -> None:
         self._record["attributes"][key] = value
 
@@ -281,8 +285,8 @@ class RecordingTracer(TracerPort):
     def __init__(self) -> None:
         self.finished_spans: list[dict[str, object]] = []
 
-    def start_span(self, *, name, context, attributes=None):  # type: ignore[override]
-        del context
+    def start_span(self, *, name, context, attributes=None, parent=None):  # type: ignore[override]
+        del context, parent
         return RecordingSpan(
             name=name,
             attributes=dict(attributes or {}),
