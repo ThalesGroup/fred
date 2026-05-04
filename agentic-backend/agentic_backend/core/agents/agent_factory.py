@@ -238,7 +238,7 @@ class AgentFactory(BaseAgentFactory):
                         team_id=cached_portable.team_id,
                     )
                 )
-            logger.info(
+            logger.debug(
                 "[AGENTS] Reusing cached agent '%s' for session '%s'",
                 agent_id,
                 session_id,

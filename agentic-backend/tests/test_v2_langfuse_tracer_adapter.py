@@ -22,7 +22,8 @@ from agentic_backend.integrations.v2_runtime.adapters import LangfuseTracerAdapt
 
 
 class _FakeSpan:
-    def __init__(self) -> None:
+    def __init__(self, span_id: str = "obs-1") -> None:
+        self.id = span_id
         self.updated_metadata: dict[str, object] | None = None
         self.ended = False
 
@@ -80,8 +81,31 @@ def test_langfuse_tracer_uses_start_observation_v4() -> None:
     assert client.last_start_observation_args["name"] == "v2.react.model"
     assert client.last_start_observation_args["as_type"] == "span"
     assert client.last_start_observation_args["trace_context"] == {
-        "trace_id": "trace-corr-1"
+        "trace_id": "trace-req-1"
     }
     assert client.last_start_observation_args["metadata"]["operation"] == "model_call"
+    assert "parent_observation_id" not in client.last_start_observation_args
     assert client.span.updated_metadata == {"status": "ok"}
     assert client.span.ended is True
+
+
+def test_langfuse_tracer_child_span_sets_parent_observation_id() -> None:
+    client = _FakeLangfuseV4Client()
+    tracer = LangfuseTracerAdapter(client)  # type: ignore[arg-type]
+
+    parent_span = tracer.start_span(name="agent.stream", context=_portable_context())
+    assert parent_span.span_id == "obs-1"
+
+    child_span = tracer.start_span(
+        name="tool.invoke",
+        context=_portable_context(),
+        attributes={"tool_name": "search"},
+        parent=parent_span,
+    )
+    child_span.end()
+
+    assert client.last_start_observation_args is not None
+    assert client.last_start_observation_args["name"] == "tool.invoke"
+    assert (
+        client.last_start_observation_args["trace_context"]["parent_span_id"] == "obs-1"
+    )

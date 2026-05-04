@@ -23,7 +23,7 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
   const handleJoinTeam = (e: React.MouseEvent<HTMLButtonElement>, team: Team): void => {
     e.preventDefault();
     if (team.owners.length === 0) return;
-    const recipients = team.owners.map((o) => o.email).join(",");
+    const recipients = team.owners.map((o) => o.email).join(";");
     const subject = `[${siteTitle} ${siteSubtitle}] Demande pour rejoindre l'équipe ${team.name}`;
     const teamUrl = `${window.location.origin}/teams/${team.id}/agents`;
     const body = `Bonjour,\n\nJe souhaite rejoindre l’équipe ${team.name} sur ${siteTitle} ${siteSubtitle}.\n\nInformations utilisateur : ${userFullName} (${username})\n\nAller à la page de l'équipe ${team.name} : ${teamUrl}`;

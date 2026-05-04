@@ -26,6 +26,10 @@ spec:
 {{- end }}
     spec:
       restartPolicy: {{ .Values.job.restartPolicy }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+{{ toYaml . | indent 8 }}
+      {{- end }}
       {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
       serviceAccountName: {{ default (include "agentic-bench.fullname" .) .Values.serviceAccount.name }}
       {{- end }}
@@ -33,6 +37,10 @@ spec:
         - name: bench
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+{{ toYaml . | indent 12 }}
+          {{- end }}
           args:
             - "-url={{ $common.url }}"
             {{- if $common.agentUUID }}

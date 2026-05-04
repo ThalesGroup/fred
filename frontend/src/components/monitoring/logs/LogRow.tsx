@@ -52,7 +52,7 @@ function LvlChip({ lvl }: { lvl: Level }) {
       label={lvl}
       sx={{
         height: 18,
-        "& .MuiChip-label": { px: 0.5, py: 0, fontSize: (t) => t.typography.caption.fontSize, fontWeight: 600 },
+        "& .MuiChip-label": { px: 0.5, py: 0, fontSize: "0.68rem", fontWeight: 600 },
       }}
     />
   );
@@ -71,7 +71,7 @@ export function LogRow({ e }: { e: LogEventDto }) {
     theme.typography?.fontFamilyMono ||
     "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
 
-  const caption = theme.typography.caption;
+  const fontSize = "0.68rem";
 
   return (
     <Stack
@@ -79,7 +79,7 @@ export function LogRow({ e }: { e: LogEventDto }) {
       gap={0.75}
       alignItems="flex-start"
       sx={{
-        py: 0.25,
+        py: 0.1,
         px: 0.75,
         "&:hover": { backgroundColor: theme.palette.action.hover },
       }}
@@ -90,7 +90,7 @@ export function LogRow({ e }: { e: LogEventDto }) {
           minWidth: 150,
           color: "text.secondary",
           fontFamily: monoFamily,
-          fontSize: caption.fontSize,
+          fontSize: fontSize,
           lineHeight: 1.4,
         }}
       >
@@ -107,7 +107,7 @@ export function LogRow({ e }: { e: LogEventDto }) {
         sx={{
           minWidth: 150,
           color: "text.secondary",
-          fontSize: caption.fontSize,
+          fontSize: fontSize,
           lineHeight: 1.4,
           whiteSpace: "nowrap",
           textOverflow: "ellipsis",
@@ -122,10 +122,11 @@ export function LogRow({ e }: { e: LogEventDto }) {
       <Box
         sx={{
           flex: 1,
-          fontSize: caption.fontSize,
+          fontSize: fontSize,
           lineHeight: 1.35,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
+          color: "text.secondary",
         }}
       >
         {e.msg}
@@ -146,7 +147,7 @@ export function LogRow({ e }: { e: LogEventDto }) {
                   bgcolor: "background.default",
                   borderRadius: 1,
                   border: (t) => `1px solid ${t.palette.divider}`,
-                  fontSize: caption.fontSize,
+                  fontSize: fontSize,
                   lineHeight: 1.35,
                   overflowX: "auto",
                 }}
@@ -160,8 +161,8 @@ export function LogRow({ e }: { e: LogEventDto }) {
 
       {/* copy */}
       <SimpleTooltip title="Copy message">
-        <IconButton size="small" onClick={copy} sx={{ p: 0.25, color: "text.secondary" }}>
-          <ContentCopyIcon fontSize="inherit" />
+        <IconButton size="small" onClick={copy} sx={{ p: 0, color: "text.secondary", opacity: 0.5 }}>
+          <ContentCopyIcon sx={{ fontSize: 11 }} />
         </IconButton>
       </SimpleTooltip>
     </Stack>

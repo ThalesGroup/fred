@@ -36,6 +36,7 @@ import logging
 from collections.abc import AsyncIterator, Sequence
 from typing import cast
 
+from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -144,6 +145,7 @@ from .react_tool_loop import build_tool_loop_compiled_react_agent
 from .react_tool_rendering import stringify_tool_output as _stringify_content
 from .react_tool_resolution import ReActRuntimeToolResolver
 from .react_tool_utils import sanitize_tool_name as _sanitize_tool_name
+from .react_tracing import active_agent_span
 
 logger = logging.getLogger(__name__)
 
@@ -222,13 +224,20 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         *,
         context: object | None = None,
     ) -> ReActOutput:
+        logger.info(
+            "[AGENT VERSION] *** V2 BasicReAct/ReActRuntime *** handling exchange agent_id=%s session_id=%s",
+            self._binding.portable_context.agent_id or "unknown",
+            self._binding.portable_context.session_id,
+        )
         span = None
+        span_token = None
         if self._services.tracer is not None:
             span = self._services.tracer.start_span(
                 name="agent.invoke",
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            span_token = active_agent_span.set(span)
         try:
             result = await self._compiled_agent.ainvoke(
                 _graph_input(input_model, config),
@@ -249,6 +258,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             return ReActOutput(final_message=final_message, transcript=transcript)
         finally:
+            if span_token is not None:
+                active_agent_span.reset(span_token)
             if span is not None:
                 span.end()
 
@@ -259,13 +270,20 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         *,
         context: object | None = None,
     ) -> AsyncIterator[RuntimeEvent]:
+        logger.debug(
+            "[AGENT VERSION] *** V2 BasicReAct/stream *** exchange agent_id=%s session_id=%s",
+            self._binding.portable_context.agent_id or "unknown",
+            self._binding.portable_context.session_id,
+        )
         span = None
+        span_token = None
         if self._services.tracer is not None:
             span = self._services.tracer.start_span(
                 name="agent.stream",
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
+            span_token = active_agent_span.set(span)
 
         sequence = 0
         last_assistant_message: ReActMessage | None = None
@@ -396,6 +414,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     finish_reason=last_finish_reason,
                 )
         finally:
+            if span_token is not None:
+                active_agent_span.reset(span_token)
             if span is not None:
                 span.end()
 
@@ -444,6 +464,14 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         )
         if self.services.tool_provider is not None:
             await self.services.tool_provider.activate()
+        logger.info(
+            "[AGENT VERSION] *** V2 BasicReAct/ReActRuntime *** activated"
+            " agent_id=%s profile=%s session_id=%s tools=%s",
+            self.definition.agent_id,
+            getattr(self.definition, "react_profile_id", "N/A"),
+            binding.portable_context.session_id,
+            [r.tool_ref for r in self.definition.declared_tool_refs],
+        )
 
     async def build_executor(
         self, binding: BoundRuntimeContext
@@ -495,6 +523,12 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             f"{_build_runtime_tool_prompt_suffix(bound_tools)}"
             f"{_build_guardrail_suffix(self.definition)}"
         )
+        logger.debug(
+            "[LLM][SYSTEM PROMPT] agent=%s total=%dc preview=%r",
+            self.definition.agent_id,
+            len(system_prompt),
+            system_prompt[:200] + ("…" if len(system_prompt) > 200 else ""),
+        )
         available_tool_names = {
             bound_tool.runtime_name
             for bound_tool in bound_tools
@@ -509,6 +543,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             approval_policy=policy.tool_approval,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             tracer=self.services.tracer,
+            kpi=self.services.kpi,
             chat_model_factory=self.services.chat_model_factory,
             definition=self.definition,
             available_tool_names=available_tool_names,
@@ -555,6 +590,7 @@ def _create_compiled_react_agent(
     approval_policy: ToolApprovalPolicy,
     checkpointer: Checkpointer,
     tracer: TracerPort | None,
+    kpi: BaseKPIWriter | None,
     chat_model_factory: object | None,
     definition: ReActAgentDefinition,
     available_tool_names: set[str] | frozenset[str],
@@ -606,6 +642,7 @@ def _create_compiled_react_agent(
             available_tool_names=available_tool_names,
             model_call_wrapper=_build_tool_loop_model_call_wrapper(
                 tracer=tracer,
+                kpi=kpi,
                 binding=binding,
                 infer_operation_from_messages=_infer_react_model_operation_from_messages,
                 default_operation=REACT_MODEL_OPERATION_ROUTING,

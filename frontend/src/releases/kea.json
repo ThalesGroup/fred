@@ -1,0 +1,15 @@
+{
+  "codename": "kea",
+  "version": "1.5.x",
+  "image": "/images/kea_vintage_optimized.webp",
+  "en": {
+    "description": "The kea (Nestor notabilis) is a large alpine parrot native to New Zealand. Known for its exceptional intelligence and curiosity, it is one of the few parrots adapted to mountainous environments. Keas are highly exploratory birds, capable of manipulating objects, solving complex problems, and interacting extensively with their surroundings.",
+    "interpretation": "Its behavior reflects an active form of intelligence—one that learns through interaction, experimentation, and continuous engagement with its environment.",
+    "hint": "Understanding begins with curiosity."
+  },
+  "fr": {
+    "description": "Le kea (Nestor notabilis) est un grand perroquet alpin originaire de Nouvelle-Zélande. Reconnu pour son intelligence exceptionnelle et sa curiosité, il est l'un des rares perroquets adaptés aux environnements montagneux. Le kea explore activement son environnement, manipule des objets, résout des problèmes complexes et interagit de manière soutenue avec ce qui l'entoure.",
+    "interpretation": "Son comportement illustre une forme d'intelligence active, fondée sur l'exploration, l'expérimentation et l'interaction continue avec son environnement.",
+    "hint": "« Comprendre commence par la curiosité. »"
+  }
+}

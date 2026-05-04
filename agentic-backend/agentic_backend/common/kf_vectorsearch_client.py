@@ -73,32 +73,53 @@ class VectorSearchClient(KfBaseClient):
         """Simplified search method for use within agent tools, which infers auth
         and other parameters from the agent settings and runtime context.
 
-        Library scope is resolved as a three-level intersection (broadest → narrowest):
-          1. creator scope  — set at agent creation time via MCPServerRef.params
-          2. user scope     — runtime_context.selected_document_libraries_ids chosen by the user
-          3. LLM scope      — document_library_tags_ids chosen by the agent for this call
+        Library scope rules (in priority order):
+          1. Hard binding  — if document_library_tags_ids is set on the agent at creation
+                             time, it wins unconditionally; user and LLM selections are ignored.
+          2. Runtime scope — otherwise, intersect user selection with the LLM's own scope.
         """
         kf_params = _get_kf_vector_search_params(agent_settings)
 
-        # Apply the three-level intersection: creator ∩ user ∩ LLM.
-        final_document_library_tags_ids = _intersect_or_fallback(
-            _intersect_or_fallback(
-                kf_params.document_library_tags_ids,
+        if kf_params.document_library_tags_ids:
+            # Hard binding: ignore runtime user selection and LLM scope entirely.
+            final_document_library_tags_ids = list(kf_params.document_library_tags_ids)
+        else:
+            final_document_library_tags_ids = _intersect_or_fallback(
                 runtime_context.selected_document_libraries_ids,
-            ),
-            document_library_tags_ids,
-        )
+                document_library_tags_ids,
+            )
         final_document_uids = _intersect_or_fallback(
             document_uids, runtime_context.selected_document_uids
         )
 
-        return await self.search(
+        effective_search_policy = (
+            runtime_context.search_policy or kf_params.search_policy
+        )
+        effective_top_k = kf_params.top_k if kf_params.top_k is not None else top_k
+        logger.info(
+            "[OBS][SEARCH] session=%s q=%r policy=%s libs=%s top_k=%d",
+            runtime_context.session_id,
+            question[:100],
+            effective_search_policy,
+            final_document_library_tags_ids,
+            effective_top_k,
+        )
+        logger.info(
+            "[OBS][SEARCH][DETAIL] agent=%s policy=runtime:%r|params:%r|effective:%r doc_uids=%s top_k_agent=%s",
+            agent_settings.id,
+            runtime_context.search_policy,
+            kf_params.search_policy,
+            effective_search_policy,
+            final_document_uids,
+            kf_params.top_k,
+        )
+        hits = await self.search(
             question=question,
-            top_k=top_k,
+            top_k=effective_top_k,
             document_library_tags_ids=final_document_library_tags_ids,
             document_uids=final_document_uids,
             # Inferred from agent settings and runtime context:
-            search_policy=runtime_context.search_policy,
+            search_policy=effective_search_policy,
             owner_filter=OwnerFilter.TEAM
             if agent_settings.team_id
             else OwnerFilter.PERSONAL,
@@ -107,6 +128,13 @@ class VectorSearchClient(KfBaseClient):
             include_session_scope=runtime_context.include_session_scope or True,
             include_corpus_scope=runtime_context.include_corpus_scope or True,
         )
+        logger.info(
+            "[OBS][SEARCH] session=%s count=%d top=%s",
+            runtime_context.session_id,
+            len(hits),
+            [(h.title, round(h.score, 4), h.tag_names) for h in hits],
+        )
+        return hits
 
     async def search(
         self,
@@ -156,7 +184,7 @@ class VectorSearchClient(KfBaseClient):
             payload["session_id"] = session_id
             payload["include_session_scope"] = include_session_scope
         payload["include_corpus_scope"] = include_corpus_scope
-        logger.info(
+        logger.debug(
             "[VECTOR][CLIENT] team_id=%s session_id=%s include_session_scope=%s include_corpus_scope=%s top_k=%d search_policy=%s document_library_tags_ids=%s document_uids=%s",
             team_id,
             session_id,
@@ -253,22 +281,25 @@ class VectorSearchClient(KfBaseClient):
 def _intersect_or_fallback(
     a: Optional[Collection[str]], b: Optional[Collection[str]]
 ) -> Optional[Collection[str]]:
-    """Return the intersection when both sides are set, otherwise whichever is non-None.
+    """Return the intersection when both sides carry an explicit non-empty list,
+    otherwise whichever side is non-empty (or None if neither restricts).
 
     Semantics:
-    - None means "no restriction at this level" — passes through whatever the other level sets.
-    - [] (empty collection) means "explicitly no libraries" — an explicit empty on either side
-      propagates through and results in no results when both sides are set.
-    - When both are non-None: return the intersection (may be an empty set).
-    - When one side is None: return the other side unchanged (preserving [] vs populated list).
+    - None and [] both mean "no restriction at this level" and are treated identically.
+    - A non-empty list means "restrict to exactly these libraries".
+    - When both sides are non-empty: return their intersection (may be empty → deny all).
+    - When only one side is non-empty: return that side unchanged.
+    - When neither side is non-empty: return None (no restriction).
     """
-    if a is None and b is None:
+    effective_a = a if a else None
+    effective_b = b if b else None
+    if effective_a is None and effective_b is None:
         return None
-    if a is None:
-        return b
-    if b is None:
-        return a
-    return set(a) & set(b)
+    if effective_a is None:
+        return effective_b
+    if effective_b is None:
+        return effective_a
+    return set(effective_a) & set(effective_b)
 
 
 def _get_kf_vector_search_params(agent_settings: AgentSettings) -> KfVectorSearchParams:

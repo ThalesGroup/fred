@@ -244,25 +244,22 @@ class ContextAwareTool(BaseTool):
             dims["user_id"] = str(user_id)
         return dims
 
-    def _kpi_timer(
-        self, *, context
-    ) -> tuple[Any, Any, dict[str, Optional[str]], list[str] | None]:
+    def _kpi_timer(self, *, context) -> tuple[Any, Any, dict[str, Optional[str]]]:
         kpi = get_app_context().get_kpi_writer()
         dims = self._kpi_base_dims(context=context)
-        groups = getattr(context, "user_groups", None) if context else None
         timer = kpi.timer(
             "agent.tool_latency_ms",
             dims=dims,
-            actor=KPIActor(type="system", groups=groups),
+            actor=KPIActor(type="system"),
         )
-        return kpi, timer, dims, groups
+        return kpi, timer, dims
 
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing."""
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
-        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
+        kpi, timer, base_dims = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
                 result = self.base_tool._run(**kwargs)
@@ -291,7 +288,7 @@ class ContextAwareTool(BaseTool):
                         "exception_type": type(e).__name__,
                         "http_status": str(status_code) if status_code else None,
                     },
-                    actor=KPIActor(type="system", groups=groups),
+                    actor=KPIActor(type="system"),
                 )
 
                 # 2. Logging
@@ -314,7 +311,7 @@ class ContextAwareTool(BaseTool):
         context = self.context_provider()
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
-        kpi, timer, base_dims, groups = self._kpi_timer(context=context)
+        kpi, timer, base_dims = self._kpi_timer(context=context)
         with timer as kpi_dims:
             try:
                 result = await self.base_tool._arun(config=config, **kwargs)
@@ -343,7 +340,7 @@ class ContextAwareTool(BaseTool):
                         "exception_type": type(e).__name__,
                         "http_status": str(status_code) if status_code else None,
                     },
-                    actor=KPIActor(type="system", groups=groups),
+                    actor=KPIActor(type="system"),
                 )
 
                 # 2. Logging

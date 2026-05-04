@@ -342,7 +342,8 @@ class KPIWriter(BaseKPIWriter):
     def _format_summary(
         self, snapshot: Dict[str, _MetricRollup]
     ) -> list[tuple[str, _MetricRollup]]:
-        # Keep summary output focused on app phase latencies and key persist gauges.
+        # Keep summary output focused on app phase latencies, key persist gauges,
+        # and llm token counters (per-window sum shows cost pressure at a glance).
         chat_items = []
         for name, rollup in snapshot.items():
             if name.startswith("app.phase_latency_ms"):
@@ -351,6 +352,10 @@ class KPIWriter(BaseKPIWriter):
                 "persist_pool_wait_ms",
                 "persist_sql_ms",
                 "event_loop_lag_ms",
+                "llm.call_latency_ms",
+                "llm.tokens_input",
+                "llm.tokens_output",
+                "llm.tokens_total",
             ):
                 chat_items.append((name, rollup))
         if not chat_items:

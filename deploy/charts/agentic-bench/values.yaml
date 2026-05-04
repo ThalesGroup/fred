@@ -69,6 +69,10 @@ serviceAccount:
   create: false
   name: ""
 
+podSecurityContext: {}
+
+securityContext: {}
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

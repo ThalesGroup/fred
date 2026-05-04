@@ -105,6 +105,7 @@ class IngestionTaskService:
             with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(
                 update={
                     "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
+                    "heartbeat_timeout_seconds": profile_config.activity_heartbeat_timeout_seconds,
                 }
             )
             enriched_files.append(with_timeout)

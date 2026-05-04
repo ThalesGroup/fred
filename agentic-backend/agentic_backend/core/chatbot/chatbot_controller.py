@@ -696,7 +696,7 @@ async def websocket_chatbot_question(
                     last_session_id = parsed.session_id or last_session_id
                 elif isinstance(parsed, HumanResumeInput):
                     last_session_id = parsed.session_id or last_session_id
-                logger.info(
+                logger.debug(
                     "[CHATBOT WS] parsed type=%s session_id=%s exchange_id=%s agent=%s has_runtime_ctx=%s",
                     type(parsed).__name__,
                     getattr(parsed, "session_id", None)

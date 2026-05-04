@@ -60,6 +60,12 @@ x-kf-scheduler: &kf-scheduler
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
+    # Maximum number of document-ingestion workflows running concurrently.
+    ingestion_workflow_parallelism: 3
+    # Maximum concurrent workflow task pollers (scales CPU-bound steps).
+    ingestion_max_concurrent_workflow_tasks: 3
+    # Maximum concurrent activity pollers (I/O-bound steps: chunking, embedding, indexing).
+    ingestion_max_concurrent_activities: 3
 
 x-kf-content-storage: &kf-content-storage
   type: minio
@@ -104,6 +110,7 @@ x-kf-vision-model: &kf-vision-model
     base_url: https://api.mistral.ai/v1
 
 x-kf-crossencoder-model: &kf-crossencoder-model
+  name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
     online: true
     local_path: ~/.cache/huggingface/hub
@@ -229,6 +236,8 @@ applications:
         backend: temporal
         temporal:
           host: "temporal:7233"
+          namespace: "default"
+          task_queue: "agents"
 
       security:
         m2m:
@@ -243,6 +252,23 @@ applications:
           api_url: "http://openfga:9080"
 
       ai:
+        # Trust DB-persisted agents; set true to ignore DB and use only static catalog files.
+        use_static_config_only: false
+        # Modern catalog-based agent loading (required for team agents).
+        enable_catalog_mode: true
+        # Durable SQL checkpointer for v2 ReAct runtimes.
+        enable_v2_sql_checkpointer: true
+        # History exchanges restored into agent context after a restart.
+        restore_max_exchanges: 20
+        # Milliseconds between partial-stream WebSocket frames. Raise to ~200 on high-concurrency deployments.
+        stream_flush_interval_ms: 100
+        # LRU cache size for in-memory agent instances.
+        max_concurrent_agents: 1024
+        # Max parallel chat sessions per user (set high locally; tighten in prod).
+        max_concurrent_sessions_per_user: 10
+        # Per-user attachment limits.
+        max_attached_files_per_user: 20
+        max_attached_file_size_mb: 50
         knowledge_flow_url: "http://knowledge-flow-backend:8000/knowledge-flow/v1"
         timeout:
           connect: 20
@@ -256,6 +282,11 @@ applications:
           port: 5432
           database: fred
           username: fred
+          pool_size: 2
+          max_overflow: 0
+          pool_timeout: 30
+          pool_recycle: 1800
+          pool_pre_ping: true
         opensearch:
           host: https://opensearch:9200
         feedback_store:
@@ -449,6 +480,13 @@ applications:
   # ===========================================================================
   # KNOWLEDGE FLOW BACKEND
   # ===========================================================================
+  # Note on processing profiles (fast / medium / rich):
+  #   Each profile supports two Temporal activity timeout overrides:
+  #     processing.profiles.<name>.input_activity_timeout: 1h   (max wall-clock per document)
+  #     processing.profiles.<name>.activity_heartbeat_timeout: 5m
+  #   These are set in configuration_prod.yaml. To override locally you must supply
+  #   the complete profile block (including all input_processors) because Helm
+  #   replaces lists entirely — partial list merges are not supported.
   knowledge-flow-backend:
     image:
       tag: "0.1"

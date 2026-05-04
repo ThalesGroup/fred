@@ -187,7 +187,10 @@ export function useConversationOptionsController({
       includeCorpusScope: currentAgent?.chat_options?.include_corpus_in_search ?? true,
     },
   );
-  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? "semantic";
+  const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers
+    ?.find((s) => s.params?.provider === "kf_vector_search")
+    ?.params?.search_policy as SearchPolicyName | undefined;
+  const defaultSearchPolicy: SearchPolicyName = initialCtx.searchPolicy ?? agentKfSearchPolicy ?? "hybrid";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;
 
   const [conversationPrefs, setConversationPrefs] = useState<ConversationPrefs>(() => ({
@@ -226,12 +229,20 @@ export function useConversationOptionsController({
   const supportsSearchPolicySelection = currentAgent?.chat_options?.search_policy_selection === true;
   const supportsDeepSearchSelection = currentAgent?.chat_options?.deep_search_delegate === true;
   const supportsAttachments = currentAgent?.chat_options?.attach_files === true;
-  const supportsLibrariesSelection = currentAgent?.chat_options?.libraries_selection === true;
+  const hasHardLibraryBinding =
+    currentAgent?.tuning?.mcp_servers?.some(
+      (s) => s.params?.provider === "kf_vector_search" && (s.params?.document_library_tags_ids?.length ?? 0) > 0,
+    ) === true;
+  const supportsLibrariesSelection =
+    !hasHardLibraryBinding &&
+    (currentAgent?.chat_options?.libraries_selection === true ||
+      currentAgent?.tuning?.mcp_servers?.some((s) => s.params?.provider === "kf_vector_search") === true);
   const supportsDocumentsSelection = currentAgent?.chat_options?.documents_selection === true;
 
   const creatorLibraryScope = useMemo<string[] | null>(() => {
     const ref = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search");
-    return ref?.params?.document_library_tags_ids ?? null;
+    const ids = ref?.params?.document_library_tags_ids ?? null;
+    return ids && ids.length > 0 ? ids : null;
   }, [currentAgent]);
 
   const [persistSessionPrefs] = useUpdateSessionPreferencesAgenticV1ChatbotSessionSessionIdPreferencesPutMutation();
@@ -501,7 +512,7 @@ export function useConversationOptionsController({
       setConversationPrefs((prev) => ({
         ...prev,
         chatContextIds: [],
-        documentLibraryIds: creatorLibraryScope ?? initialCtx.documentLibraryIds,
+        documentLibraryIds: initialCtx.documentLibraryIds,
         documentUids: initialCtx.documentUids,
         promptResourceIds: initialCtx.promptResourceIds,
         templateResourceIds: initialCtx.templateResourceIds,
@@ -542,7 +553,7 @@ export function useConversationOptionsController({
       setSearchOptionsWidgetOpen(false);
       setConversationPrefs({
         chatContextIds: [],
-        documentLibraryIds: creatorLibraryScope ?? [],
+        documentLibraryIds: [],
         documentUids: [],
         promptResourceIds: [],
         templateResourceIds: [],
@@ -559,7 +570,7 @@ export function useConversationOptionsController({
     if (prefsLoadState === "loading" && sessionPrefs) {
       const p = (sessionPrefs as PersistedCtx) || {};
       const nextChatContextIds = asStringArray(p.chatContextIds, []);
-      const nextLibs = asStringArray(p.documentLibraryIds, creatorLibraryScope ?? []);
+      const nextLibs = asStringArray(p.documentLibraryIds, []);
       const nextDocUids = asStringArray(p.documentUids, []);
       const nextPrompts = asStringArray(p.promptResourceIds, []);
       const nextTemplates = asStringArray(p.templateResourceIds, []);
@@ -794,6 +805,7 @@ type ConversationOptionsPanelProps = {
   isUploadingAttachments: boolean;
   onRequestLogGenius?: (mode: LogGeniusMode) => void;
   libraryNameMap: Record<string, string>;
+  isLibsFetching?: boolean;
   libraryById: Record<string, TagWithItemsId | undefined>;
   promptNameMap: Record<string, string>;
   templateNameMap: Record<string, string>;
@@ -810,6 +822,7 @@ export function ConversationOptionsPanel({
   isUploadingAttachments,
   onRequestLogGenius,
   libraryNameMap,
+  isLibsFetching,
   libraryById,
   promptNameMap,
   templateNameMap,
@@ -952,6 +965,7 @@ export function ConversationOptionsPanel({
               onChangeSelectedLibraryIds={setDocumentLibraryIds}
               teamId={currentAgent?.team_id || undefined}
               nameById={libraryNameMap}
+              isLoadingNames={isLibsFetching}
               libraryById={libraryById}
               includeInSearch={conversationPrefs.includeCorpusScope}
               onIncludeInSearchChange={setIncludeCorpusScope}

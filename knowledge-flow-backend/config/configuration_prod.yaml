@@ -18,7 +18,7 @@ app:
   log_level: "info"
   reload: false
   reload_dir: "."
-  metrics_enabled: true
+  metrics_enabled: false
   metrics_address: "0.0.0.0"
   metrics_port: 9111
   # Production defaults: scrape via Prometheus/Grafana and avoid KPI log noise.
@@ -32,6 +32,7 @@ processing:
       use_gpu: false
       generate_summary: false
       input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: false
       text_splitter:
         chunk_size: 1500
@@ -80,6 +81,7 @@ processing:
       use_gpu: false
       generate_summary: false
       input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: false
       text_splitter:
         chunk_size: 1500
@@ -94,7 +96,7 @@ processing:
         do_table_structure: true
         do_ocr: true
         ocr_backend: openvino
-        force_full_page_ocr: true
+        force_full_page_ocr: false  # true caused word-merging on born-digital PDFs (OCR re-reads already-clean text)
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -130,6 +132,7 @@ processing:
       use_gpu: false
       generate_summary: false
       input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
       process_images: true
       text_splitter:
         chunk_size: 1500
@@ -144,7 +147,7 @@ processing:
         do_table_structure: true
         do_ocr: true
         ocr_backend: openvino
-        force_full_page_ocr: true
+        force_full_page_ocr: false  # true caused word-merging on born-digital PDFs (OCR re-reads already-clean text)
       input_processors:
         - suffix: ".pdf"
           class_path: knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.PdfMarkdownProcessor
@@ -225,42 +228,20 @@ document_sources:
     description: "Documents manually uploaded by users"
 chat_model:
   provider: openai
-  name: gpt-4o-mini # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
   settings:
-    temperature: 0
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    base_url: https://api.mistral.ai/v1
 embedding_model:
   provider: openai
-  name: text-embedding-3-large # or text-embedding-3-small
+  name: mistral-embed # or text-embedding-3-small
   settings:
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
+    base_url: https://api.mistral.ai/v1
+    check_embedding_ctx_length: false
 vision_model:
   provider: openai
-  name: gpt-4o-mini # or gpt-4o if you want higher fidelity
+  name: pixtral-12b-2409  # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required
   settings:
-    max_retries: 0
-    timeout:
-      connect: 10.0
-      read: 120.0
-    http_client_limits:
-      max_connections: 500
-      max_keepalive_connections: 0
-      keepalive_expiry_seconds: 10
-    temperature: 0 # optional
+    base_url: https://api.mistral.ai/v1
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
@@ -409,7 +390,7 @@ storage:
       max_rows: 1000
   vector_store:
     type: opensearch
-    index: vector-index
+    index: vector-index-mistral
     # type: clickhouse
     # table: fred_vectors
     # Default bulk size for vector insertions is 500. Increase if you have

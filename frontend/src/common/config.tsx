@@ -49,6 +49,7 @@ const normalizeProps = (p?: Properties): Record<string, string> => {
   if (p?.logoNameDark !== undefined) out.logoNameDark = String((p as any).logoNameDark);
   if (p?.siteDisplayName !== undefined) out.siteDisplayName = String((p as any).siteDisplayName);
   if ((p as any)?.releaseBrand !== undefined) out.releaseBrand = String((p as any).releaseBrand);
+  if ((p as any)?.releaseCodename !== undefined) out.releaseCodename = String((p as any).releaseCodename);
   if ((p as any)?.logoHeight !== undefined) out.logoHeight = String((p as any).logoHeight);
   if ((p as any)?.logoWidth !== undefined) out.logoWidth = String((p as any).logoWidth);
   if ((p as any)?.faviconName !== undefined) out.faviconName = String((p as any).faviconName);
