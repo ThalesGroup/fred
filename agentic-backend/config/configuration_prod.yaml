@@ -69,6 +69,7 @@ frontend_settings:
     siteDisplayName: "Prism AI Hub"
     siteTitle: "Prism"
     siteSubtitle: "AI Hub"
+    releaseBrand: "prism"
     agentsNicknameSingular: "Lumi"
     agentsNicknamePlural: "Lumis"
     contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"

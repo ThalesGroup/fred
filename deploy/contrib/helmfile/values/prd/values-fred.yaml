@@ -51,7 +51,7 @@ x-kf-scheduler: &kf-scheduler
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
     ##################################################################################################
-    # INTERNAL CONCURRENCY SETUP: These are set to 10 in the integration values file, so depending on 
+    # INTERNAL CONCURRENCY SETUP: These are set to 10 in the integration values file, so depending on
     # how it goes we maybe can set them to 10 as well (or more if we feel like it is low risk)
     ##################################################################################################
     ingestion_workflow_parallelism: 5 # TODO: see how much we can bump it, default is 3
@@ -148,7 +148,7 @@ x-cp-storage: &cp-storage
   postgres:  *common-postgres
   session_store:
     type: postgres
-  content_storage: 
+  content_storage:
     <<: *kf-content-storage
     bucket_name: "control-plane-content"
 
@@ -293,7 +293,7 @@ global:
       julie.trojani@thalesgroup.com
       aurelia.peltier@thalesgroup.com
       dinh.do@thalesgroup.com
-      lea.crouzillac@thalesgroup.com 
+      lea.crouzillac@thalesgroup.com
       aurelia.choquer@thalesgroup.com
       kalina.genet@thalesgroup.com
       quentin.loizelet@thalesgroup.com
@@ -464,6 +464,8 @@ applications:
           siteDisplayName: "PRISM.AI"
           siteTitle: "Prism"
           siteSubtitle: "AI Hub"
+          # todo: uncomment for next release
+          # releaseBrand: "prism"
           agentsNicknameSingular: "Lumi"
           agentsNicknamePlural: "Lumis"
           contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
@@ -563,7 +565,7 @@ applications:
           search_rag_scoping: true
           attach_files: false
           deep_search_delegate: false
-    
+
       - id: "Tempo"
         name: "Tempo"
         type: "agent"
@@ -586,14 +588,14 @@ applications:
       #   enabled: true
       #   chat_options:
       #     libraries_selection: true
-      #     attach_files: true      
+      #     attach_files: true
 
       # SQL Agent
       - id: "SQL Agent"
         name: "SQL Agent"
         type: "agent"
         definition_ref: "v2.production.sql_analyst"
-        
+
       react_profiles:
       - profile_id: "rag_expert"
         enabled: true
@@ -888,4 +890,3 @@ applications:
       security:  *common-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
- 

@@ -142,7 +142,7 @@ x-cp-storage: &cp-storage
   postgres:  *common-postgres
   session_store:
     type: postgres
-  content_storage: 
+  content_storage:
     <<: *kf-content-storage
     bucket_name: "control-plane-content"
 
@@ -225,6 +225,7 @@ applications:
           siteDisplayName: "PRISM.AI"
           siteTitle: "Prism"
           siteSubtitle: "AI Hub"
+          releaseBrand: "prism"
           agentsNicknameSingular: "Lumi"
           agentsNicknamePlural: "Lumis"
           contactSupportLink: "https://join.citadel.team/web-client/#/room/!rPdYXaGrZwwbgsEPaK:thales.citadel.team?deeplink=true"
@@ -312,7 +313,7 @@ applications:
         type: "agent"
         class_path: "agentic_backend.agents.v1.production.tabular.tabular_expert.Tessa"
         enabled: true
-  
+
       # -------- Bid and capture agents
       - id: "Archie"
         name: "Archie"
@@ -326,7 +327,7 @@ applications:
           search_rag_scoping: true
           attach_files: false
           deep_search_delegate: false
-    
+
       - id: "Tempo"
         name: "Tempo"
         type: "agent"
@@ -349,7 +350,7 @@ applications:
         enabled: true
         chat_options:
           libraries_selection: true
-          attach_files: true      
+          attach_files: true
 
       - id: "Bench"
         name: "Bench"
@@ -367,7 +368,7 @@ applications:
         name: "SQL Agent"
         type: "agent"
         definition_ref: "v2.production.sql_analyst"
-        
+
       react_profiles:
       - profile_id: "rag_expert"
         enabled: true
@@ -696,4 +697,3 @@ applications:
       security:  *common-security
       scheduler: *cp-scheduler
       storage:   *cp-storage
- 
