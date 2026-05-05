@@ -109,6 +109,12 @@ async def main() -> None:
             configuration.app.metrics_port,
             addr=configuration.app.metrics_address,
         )
+        logger.info(
+            "[METRICS] Prometheus metrics exposed on %s:%s",
+            configuration.app.metrics_address,
+            configuration.app.metrics_port,
+        )
+
     kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
 
     try:
