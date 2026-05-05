@@ -77,8 +77,6 @@ export default function ReleaseNotes() {
           setBrandLabel(releaseBrand || "Custom");
         }
         if (baseDoc) setBaseMarkdown(baseDoc);
-
-
       } catch (e: any) {
         setError("Release notes are unavailable.");
       } finally {
@@ -125,18 +123,18 @@ export default function ReleaseNotes() {
           Release Notes
         </Typography>
         <Chip
-            label={CODENAME.codename}
-            size="small"
-            onClick={() => setCodenameOpen(true)}
-            sx={{
-              textTransform: "capitalize",
-              fontWeight: 500,
-              letterSpacing: "0.04em",
-              cursor: "pointer",
-              height: 20,
-              fontSize: "0.7rem",
-            }}
-          />
+          label={CODENAME.codename}
+          size="small"
+          onClick={() => setCodenameOpen(true)}
+          sx={{
+            textTransform: "capitalize",
+            fontWeight: 500,
+            letterSpacing: "0.04em",
+            cursor: "pointer",
+            height: 20,
+            fontSize: "0.7rem",
+          }}
+        />
       </Stack>
       <CodenameModal open={codenameOpen} onClose={() => setCodenameOpen(false)} data={CODENAME} />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 2 }}>

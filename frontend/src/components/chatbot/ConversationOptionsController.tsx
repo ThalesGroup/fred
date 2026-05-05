@@ -187,8 +187,7 @@ export function useConversationOptionsController({
       includeCorpusScope: currentAgent?.chat_options?.include_corpus_in_search ?? true,
     },
   );
-  const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers
-    ?.find((s) => s.params?.provider === "kf_vector_search")
+  const agentKfSearchPolicy = currentAgent?.tuning?.mcp_servers?.find((s) => s.params?.provider === "kf_vector_search")
     ?.params?.search_policy as SearchPolicyName | undefined;
   const defaultSearchPolicy: SearchPolicyName = agentKfSearchPolicy ?? initialCtx.searchPolicy ?? "hybrid";
   const defaultSearchRagScope: SearchRagScope = initialCtx.searchRagScope ?? defaultRagScope;

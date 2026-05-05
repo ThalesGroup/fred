@@ -718,7 +718,9 @@ const ChatBot = ({
   const clientCreatedSessionRef = useRef<string | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
-  const { data: docLibs = [], isFetching: isLibsFetching } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
+  const { data: docLibs = [], isFetching: isLibsFetching } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    type: "document" as TagType,
+  });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
   const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
@@ -1875,9 +1877,7 @@ const ChatBot = ({
     logsDrawerOpen,
     setLogsDrawerOpen,
     sessionId: chatSessionId,
-    sessionStart: messages[0]?.timestamp
-      ? new Date(messages[0].timestamp)
-      : new Date(Date.now() - 2 * 60 * 60 * 1000),
+    sessionStart: messages[0]?.timestamp ? new Date(messages[0].timestamp) : new Date(Date.now() - 2 * 60 * 60 * 1000),
   };
   const messageAgents = useMemo(
     () => [...agents, ...internalAgents, internalLogGeniusAgent],
