@@ -30,8 +30,8 @@ from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 
-from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.common.langfuse_config import get_langfuse_credentials
+from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_factory import RuntimeAgentInstance
 from agentic_backend.core.agents.runtime_context import RuntimeContext
 from agentic_backend.core.agents.v2.runtime_support import (

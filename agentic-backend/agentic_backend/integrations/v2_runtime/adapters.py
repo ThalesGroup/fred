@@ -43,16 +43,16 @@ from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
-from agentic_backend.common.langfuse_config import (
-    build_langfuse_client,
-    get_langfuse_credentials,
-)
 from agentic_backend.common.kf_logs_client import KfLogsClient
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
     WorkspaceUploadError,
+)
+from agentic_backend.common.langfuse_config import (
+    build_langfuse_client,
+    get_langfuse_credentials,
 )
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
