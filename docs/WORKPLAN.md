@@ -141,7 +141,7 @@ Wires the control-plane form with actual tunable fields for all three production
 - [x] `RagExpertReActDefinition`: `prompts.system` + `chat_options.attach_files` + `chat_options.libraries_selection` fields
 - [x] `make code-quality && make test` in `fred-agents` and `fred-sdk`
 
-**Next step**: apply `prompts.system` field value at runtime in `_apply_runtime_tuning` (currently only structural metadata is overlaid; field *values* from control-plane are not yet applied to `system_prompt_template`).
+**Done (2026-05-04)**: `prompts.system` value now applied in `_apply_runtime_tuning`. Fix required two changes: (1) `AgentTuning` in fred-sdk gained `values: dict[str, Any]` so Pydantic no longer silently drops the field during control-plane response deserialization; (2) `_apply_runtime_tuning` reads `tuning.values.get("prompts.system")` and, when non-blank and the definition is a `ReActAgentDefinition`, overlays `system_prompt_template` in the `model_copy` update. Two offline unit tests added to `test_agent_app.py`. All 127 fred-runtime + 75 fred-sdk tests pass.
 
 ---
 
@@ -184,15 +184,28 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 
 ---
 
-## Phase 6B — Markdown Rendering (Félix) · After 6A
+## Phase 6B — Markdown Rendering (Dimitri) · Done 2026-05-04
 
 **Ref**: `docs/backlog/CHAT-UI-BACKLOG.md` §2
 
-- [ ] Audit `package.json` for `react-markdown`
-- [ ] Document library choice in CHAT-UI-BACKLOG.md §2.2 before writing code
-- [ ] Implement `MarkdownRenderer` molecule
-- [ ] Implement `CodeBlock` molecule (monospace + copy)
-- [ ] Wire into `AssistantMessage` only
+- [x] Audit `package.json` for `react-markdown` — present at `^9.1.0`
+- [x] Document library choice in CHAT-UI-BACKLOG.md §2.2
+- [x] Implement `MarkdownRenderer` molecule (react-markdown + remark-gfm + rehype-sanitize + inline `rehypeCitations` plugin)
+- [x] Implement `SourceBadge` atom (Phase 6B prerequisite, deferred from 6A)
+- [x] Implement `CodeBlock` molecule (monospace + copy)
+- [x] Wire into `AssistantMessage`; thread `onSourceClick` through `AssistantTurn` → `SourcesPanel` activeIndex highlight
+- [x] Prettier + `tsc --noEmit` pass (zero new errors)
+
+## Code Quality Audit (Dimitri) · Done 2026-05-04
+
+Full audit of all rework frontend code for design-system compliance.
+
+- [x] Remove MUI `KeyboardArrowRightIcon` from `Breadcrumb` — replaced with `Icon` atom (`chevron_right`)
+- [x] Remove `CssBaseline` from `MainLayout` — global reset already handled by `reset.scss`
+- [x] Move `Menu` from `organisms/Menu/` → `molecules/Menu/` — it only composes `MenuItem` atoms; update 3 import sites (`Select`, `Autocomplete`, `IconButtonMenu`)
+- [x] Remove hex fallbacks from `HitlPrompt.module.css` (4 `var(token, #hex)` lines → `var(token)`)
+- [x] Add Apache 2.0 license headers to all 51 rework `.tsx` files that were missing them
+- [x] Keep `KfVectorSearchForm` — still consumed by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`; add license header and note in backlog
 
 ---
 
@@ -332,6 +345,27 @@ AFTER 6A                                                                    │
 AFTER 6B + F2                                                               │
 └── Félix:   6C Agent options + session title ──────────────────────────── ┘
 ```
+
+---
+
+## M1 — Multi-Agent Conversational Memory (Dimitri) · RFC phase
+
+**Ref**: `docs/rfc/MULTI-AGENT-MEMORY-RFC.md` · `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
+
+**Why**: `TeamAgent` in `route` mode fails on the second user question. The coordinator has no knowledge of prior turns, the sub-agent receives no conversation context, and the graph state discards history at every turn boundary. The root cause is a missing general primitive in the SDK — not a `TeamAgent`-specific bug.
+
+**Design constraint**: The fix must be a general SDK contract (`ConversationTurn`, `ConversationalState`, explicit turn carry-forward, `build_completed_state`, typed `prior_turns`/`invocation_turns`). `TeamAgent` is a consumer of these primitives, not a special case. See RFC §3 Design Principles.
+
+**Implementation rule**: do not use this feature to deepen transitional runtime plumbing. If a touched path already has a public typed contract plus a private bridge (for example `RuntimeExecuteRequest` → `_AgentExecuteRequest` → `to_legacy_context()`), prefer spending effort where the same change reduces that duplication.
+
+**Current state (2026-05-05)**: RFC refreshed and implementation decisions resolved in the doc. The first runtime convergence slice is now complete in `fred-runtime`: local in-pod agent invocation reuses the typed execute-request bridge, and `agent_app.py` has one extracted runtime-preparation path ready for continuity fields. The remaining work is adding the shared memory primitives and wiring them through that narrowed seam.
+
+- [x] Preliminary runtime seam convergence: `LocalRegistryAgentInvoker` now projects through `RuntimeExecuteRequest`, `_iterate_runtime_event_payloads(...)` uses one extracted preparation path, and `make code-quality` / `make test` passed in `libs/fred-runtime` (2026-05-05)
+- [ ] Phase A — SDK primitives: `ConversationTurn`, `ConversationalState`, `build_turn_state`, `build_completed_state`, `AgentInvocationRequest`, `ExecutionConfig`
+- [ ] Phase B — `TeamAgent` consumes the primitives: state, history append, coordinator prompts, `invoke_agent`
+- [ ] Phase C — Runtime: ReAct context injection, local/remote invoker forwarding, `GraphRuntime` checkpoint wiring
+- [ ] Phase D — Integration validation: two-turn scenario, `make test` in `fred-sdk` + `fred-runtime`
+- [ ] Phase E — Documentation: `AGENTS.md`, `V2_AGENT_CREATION.md`, RFC status update
 
 ---
 

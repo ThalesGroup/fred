@@ -91,6 +91,7 @@ guides. Read the developer contract first.
 | [`DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) | **Start here** — build, test, PR conventions |
 | [`CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) | **CLI pattern** — every backend exposes `make cli` / `fred-{component}-cli` |
 | [`PYTHON_CODING_GUIDELINES.md`](platform/PYTHON_CODING_GUIDELINES.md) | Python style and quality rules |
+| [`FRONTEND_CODING_GUIDELINES.md`](platform/FRONTEND_CODING_GUIDELINES.md) | Frontend CSS/design-system rules — mandatory before touching `src/rework/` |
 | [`CONFIGURATION_AND_POLICY_CONVENTIONS.md`](platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md) | Config file conventions and policy rules |
 | [`PLATFORM_RUNTIME_MAP.md`](platform/PLATFORM_RUNTIME_MAP.md) | Canonical map of services and their responsibilities |
 | [`REBAC.md`](platform/REBAC.md) | ReBAC access control model (OpenFGA) |
@@ -138,6 +139,7 @@ Current migration state, feature backlogs, and audit reports.
 | [`BACKLOG.md`](backlog/BACKLOG.md) | **Master backlog** — migration Phases 0→7, status and sequencing |
 | [`FRONTEND-BACKLOG.md`](backlog/FRONTEND-BACKLOG.md) | Frontend Phase 5 adaptation plan |
 | [`CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) | Chat UI quality build-out (Phases 6A→6D) |
+| [`MULTI-AGENT-MEMORY-BACKLOG.md`](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | Cross-turn conversational memory for graph agents (RFC: `rfc/MULTI-AGENT-MEMORY-RFC.md`) |
 | [`RUNTIME-FEATURE-AUDIT.md`](backlog/RUNTIME-FEATURE-AUDIT.md) | Current runtime feature inventory against target architecture |
 
 ---

@@ -1,7 +1,20 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { useTranslation } from "react-i18next";
 import styles from "./TeamSelectionItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import React, { useId } from "react";
 import { Link, To } from "react-router-dom";
 
 interface TeamSelectionItemProps {
@@ -20,16 +33,9 @@ export default function TeamSelectionItem({
   icon = { category: "outlined", type: "groups", filled: true },
 }: TeamSelectionItemProps) {
   const { t } = useTranslation();
-  const id = useId();
-  const safeId = `--anchor-${id.replace(/:/g, "")}`;
 
   return (
-    <div
-      className={styles.teamAvatarContainer}
-      data-selected={selected}
-      popoverTarget={safeId}
-      style={{ anchorName: `--${safeId}` }}
-    >
+    <div className={styles.teamAvatarContainer} data-selected={selected}>
       <Link to={redirection} className={styles.link}>
         <div className={styles.stateLayer}>
           <span className={styles.icon}>
@@ -44,14 +50,7 @@ export default function TeamSelectionItem({
           )}
         </div>
       </Link>
-      <span
-        id={safeId}
-        popover={"auto"}
-        className={styles.teamTooltip}
-        style={{ positionAnchor: `--${safeId}` } as React.CSSProperties}
-      >
-        {teamName}
-      </span>
+      <span className={styles.teamTooltip}>{teamName}</span>
     </div>
   );
 }

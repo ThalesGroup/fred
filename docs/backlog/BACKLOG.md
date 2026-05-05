@@ -1908,7 +1908,7 @@ The first required operating mode for Phase 5 is:
 | 2 – OpenAPI / codegen | ✓ Complete | `runtimeOpenApi.ts` generated |
 | 3a – Control-plane product surface | ✓ Complete | bootstrap, templates (+ `mcp_servers`), instances endpoints |
 | 3b – Backend completeness gate | Code ✓; validation items open | Run in parallel — not blocking Phase 4 |
-| 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking) |
+| 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking). `AgentTuning.values` forwarding + `prompts.system` application in `_apply_runtime_tuning` done (2026-05-04). |
 | 4 – Frontend SSE | ✓ Complete | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes |
 | 5 – Frontend adaptation | In progress | 5A bootstrap ✓; 5B no-security baseline ✓; 5C managed agent surface ✓; 5D session/chat convergence ✓ — see `FRONTEND-BACKLOG.md` |
 

@@ -558,12 +558,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 is_error=True,
             )
 
-        execute_request = _AgentExecuteRequest.model_construct(
-            agent_id=request.agent_id,
-            agent_instance_id=None,
-            message=request.message,
-            context=request.context.model_dump(mode="json"),
-            resume_payload=None,
+        execute_request = _to_internal_request(
+            _build_runtime_execute_request_from_invocation(request)
         )
 
         content_parts: list[str] = []
@@ -770,6 +766,13 @@ class _AgentExecuteRequest(BaseModel):
         return self
 
 
+@dataclass(slots=True)
+class _PreparedRuntimeExecution:
+    runtime: ReActRuntime | GraphRuntime
+    execution_config: ExecutionConfig
+    executor_input: Any
+
+
 def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
     """
     Bridge a public RuntimeExecuteRequest to the internal execution model.
@@ -791,6 +794,36 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         context=r.to_legacy_context() or None,
         checkpoint_id=r.checkpoint_id,
         resume_payload=r.resume_payload,
+    )
+
+
+def _build_runtime_execute_request_from_invocation(
+    request: AgentInvocationRequest,
+) -> RuntimeExecuteRequest:
+    """
+    Project one in-process agent invocation onto the public execute contract.
+
+    Why this exists:
+    - pod-local agent-to-agent calls should follow the same request projection
+      path as HTTP execution, rather than hand-constructing a second private
+      request shape
+    - future continuity fields should therefore land once on the typed runtime
+      contract, then flow through both local and remote invocation paths
+
+    How to use it:
+    - call from `LocalRegistryAgentInvoker.invoke(...)`
+    - pass the result through `_to_internal_request(...)` until the remaining
+      internal helpers consume `RuntimeExecuteRequest` directly
+
+    Example:
+    - `runtime_request = _build_runtime_execute_request_from_invocation(request)`
+    """
+
+    return RuntimeExecuteRequest(
+        agent_id=request.agent_id,
+        input=request.message,
+        session_id=request.context.session_id,
+        runtime_context=request.context.model_dump(mode="json"),
     )
 
 
@@ -838,17 +871,23 @@ def _apply_runtime_tuning(
     - `definition = _apply_runtime_tuning(template_definition, resolution.tuning)`
     """
 
-    return definition.model_copy(
-        update={
-            "role": tuning.role,
-            "description": tuning.description,
-            "tags": tuple(tuning.tags),
-            "fields": tuple(field.model_copy(deep=True) for field in tuning.fields),
-            "default_mcp_servers": tuple(
-                server.model_copy(deep=True) for server in tuning.mcp_servers
-            ),
-        }
-    )
+    update: dict[str, Any] = {
+        "role": tuning.role,
+        "description": tuning.description,
+        "tags": tuple(tuning.tags),
+        "fields": tuple(field.model_copy(deep=True) for field in tuning.fields),
+        "default_mcp_servers": tuple(
+            server.model_copy(deep=True) for server in tuning.mcp_servers
+        ),
+    }
+    system_prompt = tuning.values.get("prompts.system")
+    if (
+        isinstance(definition, ReActAgentDefinition)
+        and isinstance(system_prompt, str)
+        and system_prompt.strip()
+    ):
+        update["system_prompt_template"] = system_prompt
+    return definition.model_copy(update=update)
 
 
 def _available_mcp_servers_for_definition(
@@ -1565,7 +1604,42 @@ async def _stream(
             )
 
 
-async def _iterate_runtime_event_payloads(
+def _build_executor_input(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    request: _AgentExecuteRequest,
+) -> Any:
+    """
+    Normalize one turn into the executor input expected by the selected runtime.
+
+    Why this exists:
+    - `ReActRuntime` and `GraphRuntime` accept different input shapes
+    - resume turns also bypass normal message validation, so the mapping should
+      live in one helper instead of being repeated inline in the execution loop
+
+    How to use it:
+    - call while assembling one prepared runtime execution
+    - pass the returned object unchanged to `executor.stream(...)`
+
+    Example:
+    - `executor_input = _build_executor_input(definition, request)`
+    """
+
+    if isinstance(definition, GraphAgentDefinition):
+        input_cls = definition.input_model()
+        if request.resume_payload is not None:
+            return input_cls.model_construct(message="")
+        return input_cls.model_validate({"message": request.message or ""})
+
+    return ReActInput(
+        messages=(
+            ()
+            if request.resume_payload is not None
+            else (ReActMessage(role=ReActMessageRole.USER, content=request.message),)
+        ),
+    )
+
+
+def _prepare_runtime_execution(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
     access_token: str | None = None,
@@ -1573,26 +1647,24 @@ async def _iterate_runtime_event_payloads(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
-) -> AsyncIterator[dict[str, Any]]:
+) -> _PreparedRuntimeExecution:
     """
-    Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
+    Build the bound runtime, executor input, and execution config for one turn.
 
-    Why this helper exists:
-    - both `/agents/execute` and `/agents/execute/stream` share the same runtime
-      wiring and event production path
-    - keeping the generator payload-oriented lets the HTTP layer choose whether
-      it renders SSE or returns a terminal JSON response
+    Why this exists:
+    - `execute`, `execute/stream`, and in-process agent invocation all converge
+      on `_iterate_runtime_event_payloads`, so this is the narrowest place to
+      centralize request projection before memory fields are added
+    - it removes one long block of binding/runtime setup from the event loop and
+      gives future continuity fields a single place to enter the runtime stack
 
-    team_id:
-    - callers are responsible for resolving the effective team before calling this
-      function; see _stream() for the standalone "personal" default logic
-    - None is accepted for agent-to-agent (AgentInvoker) invocations where no
-      team scope is required
+    How to use it:
+    - call from `_iterate_runtime_event_payloads(...)`
+    - activate the returned runtime, obtain its executor, then stream with the
+      returned `executor_input` and `execution_config`
 
-    access_token:
-    - the user's JWT forwarded via the Authorization header
-    - stored in RuntimeContext so KF tool adapters can use it for outbound calls
-    - None in local dev when security is disabled
+    Example:
+    - `prepared = _prepare_runtime_execution(definition, request, team_id="fredlab")`
     """
 
     request_id = str(uuid4())
@@ -1651,7 +1723,6 @@ async def _iterate_runtime_event_payloads(
         runtime_context=runtime_context,
         portable_context=portable_context,
     )
-
     services = _build_runtime_services(
         definition,
         binding,
@@ -1659,8 +1730,9 @@ async def _iterate_runtime_event_payloads(
         registry=registry,
         access_token=access_token,
     )
+    runtime: ReActRuntime | GraphRuntime
     if isinstance(definition, GraphAgentDefinition):
-        runtime: ReActRuntime | GraphRuntime = GraphRuntime(
+        runtime = GraphRuntime(
             definition=definition,
             services=services,
         )
@@ -1679,40 +1751,58 @@ async def _iterate_runtime_event_payloads(
         checkpoint_id=request.checkpoint_id,
         resume_payload=request.resume_payload,
     )
+    return _PreparedRuntimeExecution(
+        runtime=runtime,
+        execution_config=execution_config,
+        executor_input=_build_executor_input(definition, request),
+    )
+
+
+async def _iterate_runtime_event_payloads(
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    request: _AgentExecuteRequest,
+    access_token: str | None = None,
+    *,
+    team_id: str | None = None,
+    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
+    exchange_id: str | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """
+    Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
+
+    Why this helper exists:
+    - both `/agents/execute` and `/agents/execute/stream` share the same runtime
+      wiring and event production path
+    - keeping the generator payload-oriented lets the HTTP layer choose whether
+      it renders SSE or returns a terminal JSON response
+
+    team_id:
+    - callers are responsible for resolving the effective team before calling this
+      function; see _stream() for the standalone "personal" default logic
+    - None is accepted for agent-to-agent (AgentInvoker) invocations where no
+      team scope is required
+
+    access_token:
+    - the user's JWT forwarded via the Authorization header
+    - stored in RuntimeContext so KF tool adapters can use it for outbound calls
+    - None in local dev when security is disabled
+    """
+    prepared = _prepare_runtime_execution(
+        definition,
+        request,
+        access_token=access_token,
+        team_id=team_id,
+        registry=registry,
+        exchange_id=exchange_id,
+    )
 
     try:
-        await runtime.activate()
-        executor = await runtime.get_executor()
-        if isinstance(definition, GraphAgentDefinition):
-            # Graph agents receive their typed input schema; the agent's
-            # build_turn_state() maps it to graph state before the first node runs.
-            # The standard contract is a single "message" field in the input schema.
-            # On a HITL resume the runtime ignores input entirely (state is loaded
-            # from the checkpoint), so bypass validation with model_construct.
-            input_cls = definition.input_model()
-            if request.resume_payload is not None:
-                graph_input = input_cls.model_construct(message="")
-            else:
-                graph_input = input_cls.model_validate(
-                    {"message": request.message or ""}
-                )
-            executor_input: ReActInput | object = graph_input
-        else:
-            # On HITL resume, messages are ignored by the codec — the graph
-            # resumes from its checkpointed interrupt via Command(resume=...).
-            # On a normal turn, the user message is the only input.
-            executor_input = ReActInput(
-                messages=(
-                    ()
-                    if request.resume_payload is not None
-                    else (
-                        ReActMessage(
-                            role=ReActMessageRole.USER, content=request.message
-                        ),
-                    )
-                ),
-            )
-        async for event in executor.stream(executor_input, execution_config):
+        await prepared.runtime.activate()
+        executor = await prepared.runtime.get_executor()
+        async for event in executor.stream(
+            prepared.executor_input,
+            prepared.execution_config,
+        ):
             payload = event.model_dump(mode="json")
             if not isinstance(payload, dict):
                 raise RuntimeError(
@@ -1725,7 +1815,7 @@ async def _iterate_runtime_event_payloads(
         )
         yield RuntimeErrorEvent(message=str(exc)).model_dump(mode="json")
     finally:
-        await runtime.dispose()
+        await prepared.runtime.dispose()
 
 
 def _terminal_execute_payload(

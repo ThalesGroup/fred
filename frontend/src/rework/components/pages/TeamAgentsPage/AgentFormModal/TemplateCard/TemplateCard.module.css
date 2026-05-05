@@ -14,7 +14,7 @@
 
 .card:hover:not([data-unavailable="true"]):not([data-selected="true"]) {
   border-color: var(--outline);
-  background: var(--surface-container-hight);
+  background: var(--surface-container-high);
 }
 
 .card[data-selected="true"] {

@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 1rem auto;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
+  box-shadow: var(--shadow-l);
   border-radius: var(--radius-l);
   background: var(--surface-container-lowest);
   padding: var(--spacing-l);

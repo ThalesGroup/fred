@@ -1,0 +1,26 @@
+.badge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  vertical-align: super;
+  transition:
+    background 120ms,
+    color 120ms;
+  cursor: pointer;
+  margin: 0 1px;
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container);
+  padding: 1px 3px;
+  color: var(--on-surface-retreat);
+  font-size: 0.7em;
+  line-height: 1.4;
+  font-family: monospace;
+  user-select: none;
+}
+
+.badge:hover {
+  border-color: var(--outline-retreat);
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+}

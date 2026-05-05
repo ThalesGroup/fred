@@ -18,15 +18,16 @@ import styles from "./SourceCard.module.css";
 interface SourceCardProps {
   source: VectorSearchHit;
   index: number;
+  active?: boolean;
   onSelect: (source: VectorSearchHit) => void;
 }
 
-export function SourceCard({ source, index, onSelect }: SourceCardProps) {
+export function SourceCard({ source, index, active = false, onSelect }: SourceCardProps) {
   const score = typeof source.score === "number" ? Math.round(source.score * 100) : null;
 
   return (
     <div
-      className={styles.card}
+      className={`${styles.card} ${active ? styles.active : ""}`}
       role="button"
       tabIndex={0}
       aria-label={`Source ${index}: ${source.title}`}

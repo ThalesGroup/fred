@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from types import SimpleNamespace
+from typing import cast
 
 from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
 from fastapi.testclient import TestClient
@@ -14,6 +15,11 @@ from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.users.store import postgres_user_store
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
+from fred_sdk.contracts.context import (
+    AgentInvocationRequest,
+    PortableContext,
+    PortableEnvironment,
+)
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 from fred_sdk.contracts.models import ReActAgentDefinition
 from langchain_core.messages import AIMessage
@@ -884,6 +890,88 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
     }
 
 
+def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -> None:
+    """
+    Ensure local agent invocation flows through the typed runtime request bridge.
+
+    Why this exists:
+    - the multi-agent memory work needs one request-projection path for HTTP and
+      in-process agent calls, or new continuity fields will be duplicated again
+    - this regression proves `LocalRegistryAgentInvoker` no longer hand-builds a
+      separate private request payload
+
+    How to use it:
+    - run in the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py -q`
+    """
+
+    seen: dict[str, object] = {}
+
+    async def _fake_iterate_runtime_event_payloads(
+        definition,
+        request,
+        access_token=None,
+        *,
+        team_id=None,
+        registry=None,
+        exchange_id=None,
+    ):
+        _ = (definition, access_token, team_id, registry, exchange_id)
+        seen["checkpoint_id"] = request.checkpoint_id
+        seen["context"] = dict(request.context or {})
+        yield {"kind": "final", "sequence": 0, "content": "ok"}
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_iterate_runtime_event_payloads",
+        _fake_iterate_runtime_event_payloads,
+    )
+
+    definition = _EchoAgent()
+    invoker = agent_app_module.LocalRegistryAgentInvoker(
+        registry={definition.agent_id: definition},
+        access_token="token-1",
+    )
+
+    result = asyncio.run(
+        invoker.invoke(
+            AgentInvocationRequest(
+                agent_id=definition.agent_id,
+                message="hello",
+                context=PortableContext(
+                    request_id="req-1",
+                    correlation_id="corr-1",
+                    actor="alice",
+                    tenant="tenant-a",
+                    environment=PortableEnvironment.DEV,
+                    trace_id="trace-1",
+                    session_id="session-1",
+                    user_id="alice",
+                    team_id="fredlab",
+                ),
+            )
+        )
+    )
+
+    assert result.content == "ok"
+    assert result.is_error is False
+    assert seen["checkpoint_id"] is None
+    context = seen["context"]
+    assert isinstance(context, dict)
+    assert context["request_id"] == "req-1"
+    assert context["correlation_id"] == "corr-1"
+    assert context["actor"] == "alice"
+    assert context["tenant"] == "tenant-a"
+    assert context["environment"] == "dev"
+    assert context["trace_id"] == "trace-1"
+    assert context["session_id"] == "session-1"
+    assert context["user_id"] == "alice"
+    assert context["team_id"] == "fredlab"
+    assert context["execution_action"] == "execute"
+
+
 def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
     """
     Ensure resume requests fail fast when the checkpoint is not waiting for input.
@@ -1071,3 +1159,65 @@ def test_no_security_resolves_personal_team_in_portable_context(
     assert any("team:personal" in e.get("content", "") for e in tool_results), (
         f"Expected team:personal in tool_result events, got: {tool_results}"
     )
+
+
+def test_apply_runtime_tuning_applies_system_prompt_from_values() -> None:
+    """
+    Ensure _apply_runtime_tuning writes prompts.system into system_prompt_template.
+
+    Why this exists:
+    - control-plane stores user-set field values in AgentTuning.values; the
+      runtime must apply them at execution time, not silently drop them
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_applies_system_prompt_from_values -q`
+    """
+    from fred_sdk.contracts.models import AgentTuning
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
+
+    definition = _EchoAgent()
+    assert (
+        definition.system_prompt_template
+        == "Use the demo_echo tool, then answer briefly."
+    )
+
+    tuning = AgentTuning(
+        role=definition.role,
+        description=definition.description,
+        values={"prompts.system": "Custom override prompt."},
+    )
+    result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning))
+    assert result.system_prompt_template == "Custom override prompt."
+    assert result.policy().system_prompt_template == "Custom override prompt."
+
+
+def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
+    """
+    Ensure _apply_runtime_tuning does not override when prompts.system is blank.
+
+    Why this exists:
+    - an empty or whitespace-only value means "use the agent default"; the
+      control-plane UI stores an empty string when the field is cleared
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+    """
+    from fred_sdk.contracts.models import AgentTuning
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
+
+    definition = _EchoAgent()
+    original = definition.system_prompt_template
+
+    for blank in ("", "   "):
+        tuning = AgentTuning(
+            role=definition.role,
+            description=definition.description,
+            values={"prompts.system": blank},
+        )
+        result = cast(_EchoAgent, _apply_runtime_tuning(definition, tuning))
+        assert result.system_prompt_template == original, (
+            f"blank {blank!r} should not override"
+        )

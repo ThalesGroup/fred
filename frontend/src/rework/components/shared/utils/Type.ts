@@ -60,7 +60,8 @@ export type MaterialIconType =
   | "send"
   | "chevron_right"
   | "chevron_left"
-  | "close";
+  | "close"
+  | "cloud_off";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

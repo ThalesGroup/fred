@@ -57,7 +57,7 @@
   justify-content: flex-end;
   align-items: center;
   border-radius: 0 0 var(--radius-m) var(--radius-m);
-  background-color: var(--surface-container-hight);
+  background-color: var(--surface-container-high);
   padding: var(--spacing-m);
   width: 660px;
 }

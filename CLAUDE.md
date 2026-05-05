@@ -13,9 +13,10 @@ Repository-wide instructions for Claude Code.
 7. [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) when touching control-plane product/session/admin APIs or frontend migration away from `agentic-backend`
 8. [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) for migration phase status and next-step sequencing
 9. [`docs/WORKPLAN.md`](./docs/WORKPLAN.md) for current sprint assignments and parallel work — always read before starting any task to avoid duplicating in-progress work
-10. [`docs/backlog/FRONTEND-BACKLOG.md`](./docs/backlog/FRONTEND-BACKLOG.md) when touching frontend bootstrap, session, or team identity
-11. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/backlog/CHAT-UI-BACKLOG.md) when touching `ManagedChatPage`, chat UI components, or SSE event rendering
-12. [`docs/ux/COMPONENT-UX.md`](./docs/ux/COMPONENT-UX.md) when implementing or refining any chat UI component — check open UX issues before writing CSS
+10. [`docs/platform/FRONTEND_CODING_GUIDELINES.md`](./docs/platform/FRONTEND_CODING_GUIDELINES.md) when touching **any** file under `frontend/src/rework/` — mandatory before writing or reviewing CSS/TSX
+11. [`docs/backlog/FRONTEND-BACKLOG.md`](./docs/backlog/FRONTEND-BACKLOG.md) when touching frontend bootstrap, session, or team identity
+12. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/backlog/CHAT-UI-BACKLOG.md) when touching `ManagedChatPage`, chat UI components, or SSE event rendering
+13. [`docs/ux/COMPONENT-UX.md`](./docs/ux/COMPONENT-UX.md) when implementing or refining any chat UI component — check open UX issues before writing CSS
 
 ## Non-Negotiable Defaults
 

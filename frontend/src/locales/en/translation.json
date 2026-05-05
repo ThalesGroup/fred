@@ -1445,7 +1445,8 @@
         "create": "Create {{agentsNicknameSingular}}",
         "firstTitle": "Create your first {{agentsNicknameSingular}} !",
         "noAgent": "No team {{agentsNicknameSingular}} configured yet. Create your first team {{agentsNicknameSingular}} to get started.",
-        "firstCreate": "Create"
+        "firstCreate": "Create",
+        "loading": "Loading {{agentsNicknamePlural}}…"
       },
       "formAgent": {
         "titleCreate": "Create a new {{agentsNicknameSingular}}",
@@ -1484,6 +1485,23 @@
     "gdpr": {
       "title": "Privacy policy",
       "backToApp": "Back to app"
+    },
+    "serviceNotice": {
+      "agentTemplates": {
+        "title": "No agent runtime available",
+        "description": "Start a runtime pod to enroll managed agents."
+      },
+      "knowledgeService": {
+        "title": "Knowledge service not running",
+        "description": "Start the knowledge-flow service to browse resources."
+      }
+    },
+    "releaseNotes": {
+      "baseRelease": "Base Fred release",
+      "brandRelease": "{{brand}} release",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "empty": "No release notes available."
     }
   }
 }

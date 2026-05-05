@@ -211,7 +211,72 @@ _(none yet)_
   `AssistantMessage` shows a bare blinking cursor. Confirm whether a label ("Thinking…") or a
   three-dot animation would be a clearer affordance.
 
-- **Markdown** — Phase 6B will replace the `<p>` with `MarkdownRenderer`. No UX issue yet.
+- **StreamingCursor position** — cursor now renders in a `<span>` below the last markdown paragraph
+  rather than inline at the end of the last word. Confirm whether this is acceptable or whether an
+  inline-in-last-paragraph approach is preferable.
+
+#### Resolved
+
+- **Markdown** — Phase 6B: `AssistantMessage` now renders via `MarkdownRenderer` (2026-05-04).
+
+---
+
+### `MarkdownRenderer`
+
+**Location:** `src/rework/components/shared/molecules/MarkdownRenderer/MarkdownRenderer.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Heading sizes** — `h1`/`h2`/`h3` use `--font-headline-small` (1.5rem). LLM responses rarely
+  use top-level headings, but when they do the size may feel large inside an assistant bubble.
+  Consider capping at `--font-title-large` (1.375rem) for headings inside chat.
+
+- **Table overflow** — wide tables overflow the bubble width without horizontal scroll at
+  narrow viewports. Consider `overflow-x: auto` on a wrapper.
+
+- **Blockquote style** — left-border only, no background. Confirm whether a subtle background tint
+  (`--surface-container`) would better distinguish blockquotes from regular text.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `CodeBlock`
+
+**Location:** `src/rework/components/shared/molecules/CodeBlock/CodeBlock.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **No syntax highlighting** — plain monospace only. Consider adding `react-syntax-highlighter`
+  (already in `package.json`) for a richer developer experience, especially for code-heavy agents.
+
+- **Fenced code without language** — renders as inline code (no language class, so the block
+  path is not triggered). Low-frequency edge case, but may surprise users who write unlabelled
+  fenced blocks. Discuss whether to detect by trailing `\n` heuristic.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `SourceBadge`
+
+**Location:** `src/rework/components/shared/atoms/SourceBadge/SourceBadge.tsx`
+**Status:** `Functional`
+
+#### Open UX issues
+
+- **Discoverability** — the badge is small (0.7em superscript). Confirm whether a hover tooltip
+  ("View source N") would improve clarity.
+
+- **Active state** — clicking a badge highlights the card in `SourcesPanel` but the badge itself
+  has no active/visited visual state. Consider a filled background when the corresponding card is
+  `activeIndex`.
 
 #### Resolved
 

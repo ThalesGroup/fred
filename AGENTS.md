@@ -21,6 +21,9 @@ Mandatory defaults:
 - Mark external-service tests as `integration`.
 - For all default validation, assume zero third-party services are running (no MinIO, OpenSearch, Postgres, Keycloak, OpenFGA, Temporal, etc.).
 - Prefer strengthening existing typed contracts over adding ad hoc `dict[str, Any]` payloads.
+- When extending `fred-sdk` or `fred-runtime`, first look for transitional bridges or duplicate request/state shapes and prefer collapsing them over threading new fields through every layer.
+- Do not add feature-specific side channels for `TeamAgent` or other one-off use cases when the real seam belongs in a shared runtime/SDK contract.
+- Do not introduce a second transport or execution request shape for a special case if the existing typed runtime contract can be extended instead.
 - Never hand-edit generated files such as `frontend/src/slices/runtime/runtimeOpenApi.ts`; edit the source contract and regenerate.
 - If a needed type is missing, first strengthen the source contract or FastAPI schema and regenerate; do not add shadow DTOs in the frontend.
 - If the docs do not answer a migration decision, stop at the smallest safe change and update the docs/backlog instead of inventing a path.

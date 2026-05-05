@@ -89,6 +89,7 @@ html {
 body {
   margin: 0;
   padding: 0;
+  color: var(--on-surface);
   font-family: var(--font-family);
 }
 

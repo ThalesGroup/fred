@@ -30,7 +30,7 @@ import { KnowledgePage } from "../pages/KnowledgePage.tsx";
 import { McpHub } from "../pages/McpHub";
 import { PageError } from "../pages/PageError";
 import Unauthorized from "../pages/PageUnauthorized";
-import ReleaseNotes from "../pages/ReleaseNotes";
+import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import { getConfig } from "./config";
 
@@ -184,7 +184,7 @@ export const routes: RouteObject[] = [
   },
   {
     path: "/release-notes",
-    element: <ReleaseNotes />,
+    element: <ReleaseNotesPage />,
   },
   {
     path: "/settings",

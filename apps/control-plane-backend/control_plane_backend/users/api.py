@@ -1,4 +1,5 @@
 import logging
+import uuid as _uuid_mod
 from typing import Annotated
 from uuid import UUID
 
@@ -62,19 +63,18 @@ TeamDependencies = Annotated[
 ]
 
 
-def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
+def _parse_user_uuid(user: KeycloakUser) -> UUID:
     """
-    Return the persisted user UUID when the authenticated subject uses one.
+    Return the persisted user UUID for the authenticated subject.
 
     Why this function exists:
-    - control-plane now persists GCU acceptance in the shared `fred_core.users`
-      store, but no-security mode still injects a mock admin with `uid="admin"`
-    - helper endpoints must tolerate that mock subject without redefining the
-      personal-team contract
+    - control-plane persists GCU acceptance in the shared `fred_core.users`
+      store, but no-security mode injects a mock admin with uid="admin"
+    - non-UUID subjects (standalone mode) get a deterministic UUID derived
+      from their uid so the same SQLite upsert path works for everyone
 
     How to use it:
-    - call before reading or writing GCU state; handle `None` as "no persisted
-      user row available for this subject"
+    - call before reading or writing GCU state
 
     Example:
     - `user_uuid = _parse_user_uuid(user)`
@@ -82,7 +82,9 @@ def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
     try:
         return UUID(user.uid)
     except ValueError:
-        return None
+        # Standalone / no-security mode: derive a stable UUID from the string
+        # subject so GCU acceptance can be stored and read back normally.
+        return _uuid_mod.uuid5(_uuid_mod.NAMESPACE_DNS, f"dev-user-{user.uid}")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -216,11 +218,7 @@ async def get_user_details(
       `/frontend/bootstrap`
     """
     user_uuid = _parse_user_uuid(user)
-    user_details = (
-        await find_user_details_by_id(user_uuid, user_store)
-        if user_uuid is not None
-        else None
-    )
+    user_details = await find_user_details_by_id(user_uuid, user_store)
     personal_team = await get_team_by_id_from_service(user, PERSONAL_TEAM_ID, team_deps)
 
     return UserDetails(
@@ -237,26 +235,16 @@ async def validate_gcu(
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
     """
-    Persist the current user's accepted GCU version when a persisted UUID exists.
+    Persist the current user's accepted GCU version.
 
     Why this function exists:
     - GCU acceptance must be writable before the stricter `get_current_user()`
       dependency starts enforcing it
-    - no-security mode still uses a mock admin subject without a UUID-backed
-      user row
-
-    How to use it:
-    - call after the user accepts the active GCU version; in no-security mode
-      the endpoint becomes a no-op because there is no persisted user identity
+    - standalone/no-security subjects (non-UUID uid) get a deterministic UUID
+      so the same SQLite upsert path works for them too
 
     Example:
     - `POST /control-plane/v1/gcu`
     """
     user_uuid = _parse_user_uuid(user)
-    if user_uuid is None:
-        logger.info(
-            "Skipping GCU persistence for subject %r because it is not UUID-backed.",
-            user.uid,
-        )
-        return
     await update_gcu_validation(user_uuid, user_store, deps)

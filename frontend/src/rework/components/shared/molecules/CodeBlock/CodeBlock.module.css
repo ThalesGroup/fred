@@ -1,0 +1,73 @@
+/* Inline code: tight pill */
+.inline {
+  border-radius: var(--radius-xs);
+  background: var(--surface-container);
+  padding: 1px 4px;
+  color: var(--on-surface);
+  font-size: 0.875em;
+  font-family: "Geist Mono", "Fira Code", ui-monospace, monospace;
+}
+
+/* Fenced block wrapper */
+.block {
+  margin: var(--spacing-s, 12px) 0;
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+/* Header: language label + copy button */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.5px solid var(--outline-muted);
+  background: var(--surface-container);
+  padding: var(--spacing-2xs, 4px) var(--spacing-s, 12px);
+  min-height: 32px;
+}
+
+.lang {
+  color: var(--on-surface-muted);
+  font-size: 0.6875rem;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.copy {
+  display: flex;
+  align-items: center;
+  transition:
+    background 120ms,
+    color 120ms;
+  cursor: pointer;
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: 2px var(--spacing-xs, 8px);
+  color: var(--on-surface-retreat);
+  font-size: 0.6875rem;
+}
+
+.copy:hover {
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+}
+
+/* Code area */
+.pre {
+  margin: 0;
+  background: var(--surface-container-lowest);
+  padding: var(--spacing-m, 16px);
+  overflow-x: auto;
+}
+
+.code {
+  display: block;
+  color: var(--on-surface);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  font-family: "Geist Mono", "Fira Code", ui-monospace, monospace;
+  white-space: pre;
+}

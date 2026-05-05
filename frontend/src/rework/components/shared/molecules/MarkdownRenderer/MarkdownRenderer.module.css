@@ -1,0 +1,108 @@
+/* Root: inherits message bubble font/color */
+.root {
+  color: var(--on-surface);
+  font: var(--font-body-large, 400 1rem/1.6 sans-serif);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Block elements ---- */
+
+.root :global(p) {
+  margin: 0 0 var(--spacing-s, 12px);
+}
+
+.root :global(p:last-child) {
+  margin-bottom: 0;
+}
+
+.root :global(h1),
+.root :global(h2),
+.root :global(h3) {
+  margin: var(--spacing-m, 16px) 0 var(--spacing-xs, 8px);
+  color: var(--on-surface);
+  font: var(--font-headline-small, 400 1.5rem/1.33 sans-serif);
+}
+
+.root :global(h4),
+.root :global(h5),
+.root :global(h6) {
+  margin: var(--spacing-s, 12px) 0 var(--spacing-2xs, 4px);
+  color: var(--on-surface);
+  font: var(--font-title-medium, 500 1rem/1.5 sans-serif);
+}
+
+.root :global(ul),
+.root :global(ol) {
+  margin: 0 0 var(--spacing-s, 12px);
+  padding-left: var(--spacing-l, 24px);
+}
+
+.root :global(li) {
+  margin-bottom: var(--spacing-2xs, 4px);
+}
+
+.root :global(li:last-child) {
+  margin-bottom: 0;
+}
+
+.root :global(blockquote) {
+  margin: var(--spacing-s, 12px) 0;
+  border-left: 3px solid var(--outline-muted);
+  padding: var(--spacing-2xs, 4px) var(--spacing-m, 16px);
+  color: var(--on-surface-retreat);
+}
+
+.root :global(blockquote p) {
+  margin-bottom: 0;
+}
+
+.root :global(hr) {
+  margin: var(--spacing-m, 16px) 0;
+  border: none;
+  border-top: 0.5px solid var(--outline-muted);
+}
+
+/* ---- Tables (remark-gfm) ---- */
+
+.root :global(table) {
+  margin: var(--spacing-s, 12px) 0;
+  border-collapse: collapse;
+  width: 100%;
+  font: var(--font-body-medium, 400 0.875rem/1.42 sans-serif);
+}
+
+.root :global(th),
+.root :global(td) {
+  border: 0.5px solid var(--outline-muted);
+  padding: var(--spacing-xs, 8px) var(--spacing-s, 12px);
+  text-align: left;
+}
+
+.root :global(th) {
+  background: var(--surface-container);
+  font-weight: 600;
+}
+
+.root :global(tr:nth-child(even)) {
+  background: var(--surface-container-lowest);
+}
+
+/* ---- Inline ---- */
+
+.root :global(a) {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.root :global(strong) {
+  font-weight: 600;
+}
+
+.root :global(em) {
+  font-style: italic;
+}
+
+/* Inline code is styled by CodeBlock.module.css */
+/* Citation badges are styled by SourceBadge.module.css */

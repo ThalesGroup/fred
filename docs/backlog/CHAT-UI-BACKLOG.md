@@ -347,7 +347,7 @@ Source count is `message.metadata.sources.length`.
 - [x] Create `MessageBubble` atom with `role` variant prop — `atoms/MessageBubble/MessageBubble.tsx`
 - [x] Create `StreamingCursor` atom (CSS blink animation) — `atoms/StreamingCursor/StreamingCursor.tsx`
 - [x] Create `ToolBadge` atom (running / success / error variants) — `atoms/ToolBadge/ToolBadge.tsx`
-- [ ] Create `SourceBadge` atom (superscript index, onClick scroll) — Phase 6B prerequisite
+- [x] Create `SourceBadge` atom (superscript index, onClick scroll) — `atoms/SourceBadge/SourceBadge.tsx` (done Phase 6B)
 
 **Molecules**
 
@@ -447,15 +447,25 @@ text.
 
 ---
 
+### 2.2 Library Decision
+
+**`react-markdown` ^9.1.0** — already in `package.json` as a direct dependency.
+Plugins used: `remark-gfm` (GFM tables, strikethrough, task lists), `rehype-sanitize`
+(default schema, extended to allow `sup[data-n]` for citation badges).
+`rehype-raw` is intentionally **not** used — no arbitrary HTML passthrough.
+Citation injection is handled via a custom `rehypeCitations` rehype plugin (inline, no new
+dep) that converts `[N]` text patterns to `<sup class="fred-cite" data-n="N">` hast
+elements before sanitization.
+
 ### 2.3 Tasks
 
-- [ ] Audit whether `react-markdown` is already in `package.json`
-- [ ] Decide and document markdown library choice
-- [ ] Implement `MarkdownRenderer` molecule with safe subset
-- [ ] Implement `SourceBadge` injection inside rendered markdown
-- [ ] Implement `CodeBlock` molecule (monospace + copy button)
-- [ ] Replace plain text in `AssistantMessage` with `MarkdownRenderer`
-- [ ] Run `make code-quality` on frontend
+- [x] Audit whether `react-markdown` is already in `package.json` — yes, `^9.1.0`
+- [x] Decide and document markdown library choice — `react-markdown` + `remark-gfm` + `rehype-sanitize` (see §2.2)
+- [x] Implement `MarkdownRenderer` molecule with safe subset — `molecules/MarkdownRenderer/MarkdownRenderer.tsx`
+- [x] Implement `SourceBadge` injection inside rendered markdown — `rehypeCitations` plugin in `MarkdownRenderer`, renders `SourceBadge` atom via `components.sup`
+- [x] Implement `CodeBlock` molecule (monospace + copy button) — `molecules/CodeBlock/CodeBlock.tsx`
+- [x] Replace plain text in `AssistantMessage` with `MarkdownRenderer`
+- [x] Run `make format` (Prettier) + `tsc --noEmit` on frontend — both pass (4 pre-existing errors in `config.tsx`, zero in new/modified files)
 
 ---
 
@@ -736,7 +746,7 @@ change.
 | Agent settings / edit | ~~Button visible but disabled on agent card~~ **Fixed.** | `EnrollManagedAgentModal` renamed to `AgentFormModal`, pre-fills from instance, dispatches PATCH via `usePatchTeamAgentInstance…` mutation. Frozen-snapshot policy in place (no re-merge with current template). | ~~Backend + frontend~~ Done |
 | Agent tuning fields at creation | ~~Modal only captures `display_name` + `description`~~ **Fixed.** | `AgentFormModal` fully refactored per RFC. `TemplateBrowser` card grid replaces raw `<select>`. All field types implemented: string, number/integer, boolean (`SwitchRow`), enum, secret, url, prompt/multiline. Field grouping via `ui.group`. Inline validation. Edit mode context bar + metadata footer. MCP tools read-only section. | ~~Backend + frontend~~ Done |
 | `mcp_servers` pass-through | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response. | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section. | ~~Backend + frontend~~ Done |
-| Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`. | `KfVectorSearchForm` still dead code; safe to delete in a separate cleanup pass. | None — defer cleanup |
+| Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`. | `KfVectorSearchForm` is still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY` — cannot delete until that old component is migrated. | None — defer until `AgentToolsSelection` migrates |
 
 ---
 
@@ -746,7 +756,8 @@ change.
 |---|---|---|
 | AgentFormModal refactor | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`. |
 | 6A – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
-| 6B – Markdown & content | Planned | Depends on 6A |
+| 6B – Markdown & content | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass. |
+| Code quality audit | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`). |
 | 6C – Agent options & debug tools | Planned | AgentOptionsPanel + DebugDrawer; depends on 6A |
 | 6D – Advanced parts | Deferred | After 6C |
 

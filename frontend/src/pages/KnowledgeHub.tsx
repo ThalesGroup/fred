@@ -25,6 +25,7 @@ import ResourceLibraryList from "../components/resources/ResourceLibraryList";
 import { useFrontendBootstrap } from "../hooks/useFrontendBootstrap";
 import { usePermissions } from "../security/usePermissions";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import ServiceNotice from "../rework/components/shared/molecules/ServiceNotice/ServiceNotice";
 
 const knowledgeHubViews = ["operations", "documents", "chatContexts", "userAssets"] as const;
 type KnowledgeHubView = (typeof knowledgeHubViews)[number];
@@ -140,7 +141,6 @@ const UserAssetsTab = () => {
     data: tags,
     isLoading,
     isError,
-    refetch,
   } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
     { type: "document", limit: 10000, offset: 0 },
     { refetchOnMountOrArgChange: true },
@@ -153,10 +153,11 @@ const UserAssetsTab = () => {
       <UserAssetsList tagId={userAssetsTagId} />
       {isError && (
         <Box mt={2}>
-          <Typography color="error">{t("documentLibrary.failedToLoad")}</Typography>
-          <Button onClick={() => refetch()} size="small" variant="outlined">
-            {t("dialogs.retry")}
-          </Button>
+          <ServiceNotice
+            icon="cloud_off"
+            title={t("rework.serviceNotice.knowledgeService.title")}
+            description={t("rework.serviceNotice.knowledgeService.description")}
+          />
         </Box>
       )}
       {isLoading && (

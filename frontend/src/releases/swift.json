@@ -1,0 +1,15 @@
+{
+  "codename": "swift",
+  "version": "2.0.x",
+  "image": "/images/swift_vintage_optimized.webp",
+  "en": {
+    "description": "The common swift (Apus apus) is a migratory bird renowned for its extraordinary aerial mastery. Among the fastest in horizontal flight, it can exceed 170 km/h and spends most of its life airborne—eating, drinking, and even sleeping on the wing. Often seen in groups, swifts move through the sky in fluid formations, their trajectories constantly adjusting in response to one another.",
+    "interpretation": "Their flight reveals a form of distributed intelligence—where individual motion and collective flow become indistinguishable, and coordination emerges without constraint.",
+    "hint": "Nothing leads them, yet they converge."
+  },
+  "fr": {
+    "description": "Le martinet commun (Apus apus) est un oiseau migrateur réputé pour sa maîtrise aérienne exceptionnelle. Parmi les plus rapides en vol horizontal, il peut dépasser 170 km/h et passe l’essentiel de sa vie en vol — mangeant, buvant et dormant dans les airs. Souvent observés en groupe, les martinets évoluent en formations fluides, leurs trajectoires s’ajustant en permanence les unes aux autres.",
+    "interpretation": "Leur vol exprime une forme d’intelligence distribuée, où mouvement individuel et dynamique collective deviennent indissociables, et où la coordination émerge sans contrainte.",
+    "hint": "« Rien ne les dirige, et pourtant ils convergent. »"
+  }
+}

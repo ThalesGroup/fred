@@ -43,6 +43,7 @@ import { ResourceLibraryTree } from "./ResourceLibraryTree";
 import { ResourcePreviewModal } from "./ResourcePreviewModal";
 import { TemplateEditorModal } from "./TemplateEditorModal";
 import { useResourceCommands } from "./useResourceCommands";
+import ServiceNotice from "../../rework/components/shared/molecules/ServiceNotice/ServiceNotice";
 
 /** Small i18n helper */
 export const useKindLabels = (kind: "prompt" | "template" | "chat-context") => {
@@ -363,12 +364,11 @@ export default function ResourceLibraryList({ kind }: Props) {
         </Card>
       )}
       {isError && (
-        <Card sx={{ p: 3, borderRadius: 3 }}>
-          <Typography color="error">{t("resourceLibrary.failedToLoad")}</Typography>
-          <Button onClick={() => refetchTags()} sx={{ mt: 1 }} size="small" variant="outlined">
-            {t("dialogs.retry")}
-          </Button>
-        </Card>
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.serviceNotice.knowledgeService.title")}
+          description={t("rework.serviceNotice.knowledgeService.description")}
+        />
       )}
 
       {/* Tree */}

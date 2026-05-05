@@ -23,8 +23,10 @@
 .releaseNotesContent {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-m);
   background-color: var(--surface-container-lowest);
+  display: flex;
+  flex-direction: column;
 }

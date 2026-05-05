@@ -40,6 +40,7 @@ import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
+import ServiceNotice from "../../../rework/components/shared/molecules/ServiceNotice/ServiceNotice";
 
 export interface DocumentLibraryListProps {
   teamId?: string;
@@ -527,12 +528,11 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
         </Card>
       )}
       {isError && (
-        <Card sx={{ p: 3, borderRadius: 3 }}>
-          <Typography color="error">{t("documentLibrary.failedToLoad")}</Typography>
-          <Button onClick={() => refetch()} sx={{ mt: 1 }} size="small" variant="outlined">
-            {t("dialogs.retry")}
-          </Button>
-        </Card>
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.serviceNotice.knowledgeService.title")}
+          description={t("rework.serviceNotice.knowledgeService.description")}
+        />
       )}
 
       {/* Tree */}

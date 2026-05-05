@@ -22,7 +22,17 @@ Read these files in this order:
 - Any phase gate that says "backend is ready" must be reachable from `make cli`.
 - Full specification: [`CLI-CONVENTION.md`](./CLI-CONVENTION.md)
 
-## 3) Non-Negotiable Engineering Rules
+## 3) Frontend Work
+
+Read [`FRONTEND_CODING_GUIDELINES.md`](./FRONTEND_CODING_GUIDELINES.md) before touching any `.tsx`, `.css`, or `.scss` file under `src/rework/`. Key rules that have caused production bugs:
+
+- Never use hardcoded color values (`rgba`, `#hex`) in CSS modules — use tokens only.
+- Never use `var(token, #fallback)` — fallbacks mask missing tokens silently.
+- Every component with its own background must set `color` explicitly using the M3 pairing rule.
+- Verify a token exists in the token files before using it. If missing, add it.
+- No experimental browser APIs (`CSS Anchor Positioning`, `popover` on `<div>`) as the primary implementation path.
+
+## 4) Non-Negotiable Engineering Rules
 
 - Keep changes minimal and direct.
   - Do not redesign unrelated parts.
@@ -30,6 +40,11 @@ Read these files in this order:
 - Every new feature should reduce complexity, not increase it.
   - Prefer deleting/replacing duplicated code over adding parallel logic.
   - If code is added, remove obsolete code in the same change whenever possible.
+  - When touching shared runtime/SDK seams, prefer collapsing transitional
+    bridges or duplicate request/state models instead of threading one more
+    field through every copy.
+  - Do not solve a cross-cutting problem with a use-case-specific side channel
+    if one existing typed contract can be strengthened instead.
 - Respect existing Fred conventions.
   - Same environment variable names and startup behavior across backends.
   - Same Make targets and expected developer workflow.

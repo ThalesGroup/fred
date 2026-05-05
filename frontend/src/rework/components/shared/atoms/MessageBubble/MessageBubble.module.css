@@ -10,7 +10,7 @@
 .user {
   align-self: flex-end;
   border-radius: var(--radius-m, 12px);
-  background: var(--surface-container-hight);
+  background: var(--surface-container-high);
   padding: var(--spacing-s, 0.625rem) var(--spacing-m, 1rem);
   max-width: 65%;
   color: var(--on-surface);

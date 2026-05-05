@@ -15,7 +15,7 @@
   white-space: nowrap;
 
   &:focus-visible + .switch {
-    outline: 2px solid var(--primary, #007bff);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
   }
 
@@ -51,7 +51,7 @@
   cursor: pointer;
   border: 1px solid var(--switch-border-color, var(--outline-retreat));
   border-radius: var(--radius-2xl);
-  background-color: var(--switch-background-color, var(--surface-container-hight));
+  background-color: var(--switch-background-color, var(--surface-container-high));
   width: 52px;
   height: 2rem;
   --switch-padding: var(--spacing-2xs);

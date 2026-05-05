@@ -248,6 +248,16 @@ Compatibility helpers (transitional, will be removed):
 - `effective_team_id()` — same
 - `to_legacy_context()` — bridges to internal plumbing; not part of the frozen contract
 
+Convergence rule for future work:
+- New execution features should prefer first-class typed fields on the public
+  contract and typed runtime plumbing behind it.
+- Do not deepen transitional compatibility bridges (`runtime_context`,
+  `to_legacy_context()`, private mirror request models) when the same change can
+  instead retire or shrink them.
+- In particular, do not add a second special-purpose execution API for
+  agent-to-agent calls if the existing runtime execute transport can carry the
+  needed typed fields.
+
 ### 2.4 Grant validation helper — `validate_execution_grant`
 
 ```python

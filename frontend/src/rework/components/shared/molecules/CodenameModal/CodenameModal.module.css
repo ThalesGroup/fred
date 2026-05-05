@@ -12,7 +12,7 @@
   width: min(480px, 90vw);
   max-height: 90vh;
   border-radius: var(--radius-m);
-  background-color: var(--surface-container-hight);
+  background-color: var(--surface-container-high);
   box-shadow: var(--shadow-s);
   overflow: hidden;
   display: flex;

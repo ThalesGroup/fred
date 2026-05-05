@@ -161,6 +161,10 @@ It exists so control-plane can resolve:
 
 Use it for runtime resolution and backend validation only.
 
+**Field value forwarding:** `ManagedAgentTuning.values` (the user-set field values dict) is forwarded verbatim as `AgentTuning.values` in the runtime binding response. The runtime applies known field keys in `_apply_runtime_tuning`:
+
+- `prompts.system` → `ReActAgentDefinition.system_prompt_template` (blank value = keep agent default)
+
 ### 3.4 Managed agent instance writes
 
 Freeze typed write payloads before implementing CRUD:

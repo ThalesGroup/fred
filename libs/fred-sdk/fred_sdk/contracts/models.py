@@ -181,6 +181,10 @@ class AgentTuning(BaseModel):
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
     mcp_servers: list[MCPServerRef] = Field(default_factory=list)
+    values: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="User-set field values keyed by FieldSpec.key, forwarded from control-plane.",
+    )
 
     def dump(self) -> str:
         """Return a concise JSON summary for logging."""

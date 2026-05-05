@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
 import { SourceCard } from "./SourceCard/SourceCard";
 import { SourceDetailModal } from "./SourceDetailModal/SourceDetailModal";
@@ -20,11 +20,18 @@ import styles from "./SourcesPanel.module.css";
 
 interface SourcesPanelProps {
   sources: VectorSearchHit[];
+  /** 1-based index of the source highlighted via a citation badge click */
+  activeIndex?: number | null;
 }
 
-export function SourcesPanel({ sources }: SourcesPanelProps) {
+export function SourcesPanel({ sources, activeIndex }: SourcesPanelProps) {
   const [expanded, setExpanded] = useState(true);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
+
+  // Auto-expand when a citation badge is clicked
+  useEffect(() => {
+    if (activeIndex != null) setExpanded(true);
+  }, [activeIndex]);
 
   if (sources.length === 0) return null;
 
@@ -43,6 +50,7 @@ export function SourcesPanel({ sources }: SourcesPanelProps) {
               key={src.uid ?? i}
               source={src}
               index={i + 1}
+              active={activeIndex === i + 1}
               onSelect={(s) => setSelected({ source: s, index: i + 1 })}
             />
           ))}

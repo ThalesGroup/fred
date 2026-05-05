@@ -1,9 +1,8 @@
-.text {
-  margin: 0;
-  font: var(--font-body-large, 1rem/1.6 sans-serif);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
+/* Inline streaming cursor after markdown content */
+.cursor {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
 }
 
 /* Shown only when streaming starts but no text has arrived yet */

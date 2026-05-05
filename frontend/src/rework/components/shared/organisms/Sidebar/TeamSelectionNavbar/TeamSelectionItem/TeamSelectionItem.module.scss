@@ -82,13 +82,14 @@
 }
 
 .teamTooltip {
-  inset: auto;
-  top: anchor(top);
-  left: anchor(right);
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: calc(100% + var(--spacing-xs));
+  transform: translateY(-50%);
   align-items: center;
   z-index: 1;
-  margin: var(--spacing-2xs) 0;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 1);
+  box-shadow: var(--shadow-s);
   border: 1px solid var(--outline);
   border-radius: var(--spacing-xs);
   background-color: var(--surface-container-highest);
@@ -96,7 +97,6 @@
   height: 2.5rem;
   pointer-events: none;
   color: var(--on-surface);
-
   font: var(--font-title-medium);
   text-wrap: nowrap;
 }

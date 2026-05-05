@@ -125,7 +125,7 @@
 .btn:disabled {
   --btn-background-surface: transparent;
   --btn-background: var(--state-on-surface-disabled);
-  --btn-text-color: var(--state-on-surface-text-disabled);
+  --btn-text-color: var(--state-text-disabled);
   --btn-cursor: default;
 
   &.btn-outlined {

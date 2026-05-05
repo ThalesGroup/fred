@@ -4,6 +4,7 @@ app:
   address: 127.0.0.1
   port: 8222
   log_level: info
+  gcu_version: "v1"
 
 scheduler:
   enabled: false

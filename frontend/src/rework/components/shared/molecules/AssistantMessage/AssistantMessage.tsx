@@ -14,23 +14,29 @@
 
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { StreamingCursor } from "@shared/atoms/StreamingCursor/StreamingCursor";
+import { MarkdownRenderer } from "../MarkdownRenderer/MarkdownRenderer";
 import styles from "./AssistantMessage.module.css";
 
 interface AssistantMessageProps {
   text: string;
   isStreaming: boolean;
+  onSourceClick?: (index: number) => void;
 }
 
-export function AssistantMessage({ text, isStreaming }: AssistantMessageProps) {
+export function AssistantMessage({ text, isStreaming, onSourceClick }: AssistantMessageProps) {
   if (!text && !isStreaming) return null;
 
   return (
     <MessageBubble role="assistant">
       {text ? (
-        <p className={styles.text}>
-          {text}
-          {isStreaming && <StreamingCursor />}
-        </p>
+        <>
+          <MarkdownRenderer text={text} onSourceClick={onSourceClick} />
+          {isStreaming && (
+            <span className={styles.cursor}>
+              <StreamingCursor />
+            </span>
+          )}
+        </>
       ) : (
         // No text yet: show cursor only while waiting for first delta
         <p className={styles.thinking}>

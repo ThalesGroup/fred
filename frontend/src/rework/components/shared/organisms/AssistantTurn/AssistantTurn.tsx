@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useState } from "react";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { SourcesPanel } from "@shared/molecules/SourcesPanel/SourcesPanel";
@@ -26,15 +27,20 @@ interface AssistantTurnProps {
 }
 
 export function AssistantTurn({ text, traceMessages, sources, isStreaming }: AssistantTurnProps) {
-  const hasContent = traceMessages.length > 0 || text.length > 0 || isStreaming;
+  const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
 
+  const hasContent = traceMessages.length > 0 || text.length > 0 || isStreaming;
   if (!hasContent) return null;
 
   return (
     <div className={styles.turn}>
       {traceMessages.length > 0 && <ThoughtTrace messages={traceMessages} done={!isStreaming} />}
-      <AssistantMessage text={text} isStreaming={isStreaming} />
-      {!isStreaming && sources.length > 0 && <SourcesPanel sources={sources} />}
+      <AssistantMessage
+        text={text}
+        isStreaming={isStreaming}
+        onSourceClick={sources.length > 0 ? setActiveSourceIndex : undefined}
+      />
+      {!isStreaming && sources.length > 0 && <SourcesPanel sources={sources} activeIndex={activeSourceIndex} />}
     </div>
   );
 }

@@ -25,9 +25,8 @@
   justify-content: space-between;
   align-items: end;
   width: 100%;
-
+  color: var(--on-secondary-container);
   font: var(--font-title-medium);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 1);
 }
 
 .navigationContainer {

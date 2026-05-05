@@ -1,3 +1,17 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import Button from "@shared/atoms/Button/Button.tsx";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
 import { useTranslation } from "react-i18next";
@@ -12,6 +26,7 @@ import {
   default as AgentFormModal,
 } from "./AgentFormModal/AgentFormModal.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import {
   type ManagedAgentInstanceSummary,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
@@ -178,15 +193,16 @@ export default function TeamAgentsPage() {
       </div>
 
       {templatesUnavailable && (
-        <div className={styles.bannerNotice}>
-          No agent templates are currently available for this team. Start a runtime pod to enroll
-          managed agents.
-        </div>
+        <ServiceNotice
+          icon="cloud_off"
+          title={t("rework.serviceNotice.agentTemplates.title")}
+          description={t("rework.serviceNotice.agentTemplates.description")}
+        />
       )}
 
       {isLoadingInstances ? (
         <div className={styles.loadingState}>
-          Loading {agentsNicknamePlural.toLowerCase()}…
+          {t("rework.teams.agents.loading", { agentsNicknamePlural: agentsNicknamePlural.toLowerCase() })}
         </div>
       ) : showEmptyState ? (
         <TeamAgentEmptyState

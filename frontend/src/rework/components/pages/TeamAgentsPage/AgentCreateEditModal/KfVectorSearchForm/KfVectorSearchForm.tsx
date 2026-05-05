@@ -1,10 +1,24 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
 import { UserInputSearchPolicy } from "src/components/chatbot/user_input/UserInputSearchPolicy";
 import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
 import { SearchPolicyName, TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { SwitchRow } from "../SwitchRow/SwitchRow";
+import { SwitchRow } from "../SwitchRow/SwitchRow.tsx";
 import styles from "./KfVectorSearchForm.module.css";
 
 export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParamsProps<KfVectorSearchParams>) {
@@ -44,7 +58,6 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
 
   return (
     <div className={styles.mainFormCard}>
-      {/* Hard library binding */}
       <SwitchRow
         label={t("agentTuning.fields.library_binding.title")}
         description={t("agentTuning.fields.library_binding.description")}
@@ -79,7 +92,6 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
         </div>
       )}
 
-      {/* Runtime options — library picker hidden when hard binding is active */}
       {!bindingEnabled && (
         <SwitchRow
           label={t("agentTuning.fields.chat_options_libraries_selection.title")}

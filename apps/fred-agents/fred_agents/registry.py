@@ -31,6 +31,7 @@ from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
+from fred_agents.simple_assistant import SIMPLE_ASSISTANT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
 
 
@@ -53,7 +54,8 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
 
     return {
         # First entry is the default agent selected by fred-agents-cli on connect.
-        # general_assistant has no external dependencies — works with a model only.
+        # simple_assistant is pure LLM — works with a model alone, no MCP servers.
+        SIMPLE_ASSISTANT_AGENT.agent_id: SIMPLE_ASSISTANT_AGENT,
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,

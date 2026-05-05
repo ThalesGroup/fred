@@ -2,7 +2,7 @@
   position: fixed;
   z-index: 200;
   inset: 0;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--scrim);
 }
 
 .drawer {
@@ -13,7 +13,7 @@
   bottom: 0;
   flex-direction: column;
   z-index: 201;
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-m);
   border-left: 1px solid var(--outline-muted);
   background: var(--surface-container-lowest);
   width: min(480px, 90vw);

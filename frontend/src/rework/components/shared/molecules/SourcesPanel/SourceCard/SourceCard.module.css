@@ -10,8 +10,14 @@
   text-decoration: none;
 }
 
-a.card:hover {
+a.card:hover,
+.card:hover {
   background: var(--surface-container);
+}
+
+/* Active state: citation badge clicked — teal-400 per CHAT-COMPONENT-SPECS §0.5 */
+.active {
+  border: 0.5px solid #5dcaa5;
 }
 
 .header {

@@ -23,10 +23,10 @@
 }
 
 .chatListPlaceholder {
-  border: 1px dashed var(--outline-variant, #d6d6de);
-  border-radius: var(--radius-s, 0.75rem);
+  border: 1px dashed var(--outline-variant);
+  border-radius: var(--radius-s);
   padding: var(--spacing-s) var(--spacing-m);
-  color: var(--on-surface-retreat, #666);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   text-align: center;
 }
@@ -37,7 +37,7 @@
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
-  border-radius: var(--radius-s, 0.75rem);
+  border-radius: var(--radius-s);
   padding: var(--spacing-xs) var(--spacing-m);
   min-height: 2.25rem;
   color: var(--on-surface);
@@ -45,11 +45,11 @@
   text-decoration: none;
 
   &:hover {
-    background-color: var(--surface-container-high, rgba(0, 0, 0, 0.06));
+    background-color: var(--surface-container-high);
   }
 
   &:active {
-    background-color: var(--surface-container-highest, rgba(0, 0, 0, 0.1));
+    background-color: var(--surface-container-highest);
   }
 }
 
@@ -62,6 +62,6 @@
 
 .chatListItemDate {
   flex-shrink: 0;
-  color: var(--on-surface-retreat, #666);
+  color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }

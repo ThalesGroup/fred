@@ -8,14 +8,6 @@
                     "endColumn": 66,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 43,
-                    "endColumn": 57,
-                    "lineCount": 1
-                }
             }
         ],
         "./fred_runtime/deep/deep_runtime.py": [
