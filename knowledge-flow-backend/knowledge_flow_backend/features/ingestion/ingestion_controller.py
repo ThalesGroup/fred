@@ -48,10 +48,10 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_docx_processor import (
     FastLiteDocxProcessor,
 )
-from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_markdown_processor import (
     FastLiteMarkdownProcessor,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
     FastLitePptxProcessor,
 )
