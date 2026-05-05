@@ -49,6 +49,9 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_
     FastLiteDocxProcessor,
 )
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pdf_processor import FastLitePdfProcessor
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_markdown_processor import (
+    FastLiteMarkdownProcessor,
+)
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor import (
     FastLitePptxProcessor,
 )
@@ -169,6 +172,7 @@ class IngestionController:
             registry[".docx"] = FastLiteDocxProcessor
             registry[".pptx"] = FastLitePptxProcessor
             registry[".csv"] = FastLiteCsvProcessor
+            registry[".md"] = FastLiteMarkdownProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
