@@ -65,33 +65,16 @@ def test_get_langfuse_credentials_requires_explicit_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("LANGFUSE_HOST", raising=False)
-    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
 
     assert get_langfuse_credentials() is None
 
 
-def test_get_langfuse_credentials_accepts_legacy_base_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
-    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://langfuse.example/")
-    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
-    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-
-    assert get_langfuse_credentials() == (
-        "https://langfuse.example",
-        "pk-test",
-        "sk-test",
-    )
-
-
 def test_build_langfuse_tracer_stays_disabled_without_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("LANGFUSE_HOST", raising=False)
-    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
     monkeypatch.setattr(v2_adapters, "_LANGFUSE_TRACER", False)

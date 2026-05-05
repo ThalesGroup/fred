@@ -47,7 +47,6 @@ def get_langfuse_credentials() -> tuple[str, str, str] | None:
       host are present.
     - Requiring the host avoids accidental fallback to the default cloud
       endpoint in environments without outbound DNS/network access.
-    - `LANGFUSE_BASE_URL` is still accepted as a temporary compatibility alias.
 
     How to use it:
     - Call this before creating a Langfuse client or callback handler.
@@ -63,8 +62,6 @@ def get_langfuse_credentials() -> tuple[str, str, str] | None:
     """
 
     host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
-    if host is None:
-        host = _coerce_optional_string(os.getenv("LANGFUSE_BASE_URL"))
     public_key = _coerce_optional_string(os.getenv("LANGFUSE_PUBLIC_KEY"))
     secret_key = _coerce_optional_string(os.getenv("LANGFUSE_SECRET_KEY"))
     if not host or not public_key or not secret_key:
@@ -78,8 +75,6 @@ def build_langfuse_client() -> Langfuse | None:
 
     Why this function exists:
     - Runtime entrypoints need a single safe way to create the SDK client.
-    - Passing the resolved host keeps legacy `LANGFUSE_BASE_URL` deployments
-      working while Fred standardizes on `LANGFUSE_HOST`.
 
     How to use it:
     - Use this from runtime bootstrap code instead of calling `Langfuse()`
