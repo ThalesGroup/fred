@@ -2,7 +2,7 @@
 
 **RFC**: [`docs/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
 
-**Status**: Phases A, B, C implemented (2026-05-05) — integration validation and docs pending
+**Status**: Core implementation landed (2026-05-05) — post-implementation hardening pending before final closeout
 
 **Why this track exists**: Graph agents (including `TeamAgent`) are stateless across turns. A user's second question fails to route correctly and reaches the sub-agent without any knowledge of the prior exchange. The RFC defines the fix as a general SDK contract, not a TeamAgent-specific patch. This backlog tracks implementation in phases.
 
@@ -156,6 +156,62 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ---
 
+## Phase F — Post-Implementation Hardening
+
+These follow-up slices should be implemented as separate small branches from
+`swift`. They are not new scope; they are the minimum cleanup needed to make
+the memory implementation match the RFC's "reduce, do not grow" rule.
+
+### F.1 Agent-scoped checkpoint isolation
+
+- [ ] Isolate persisted graph/ReAct state per agent within a shared `session_id`
+- [ ] Do not let multiple agents in the same conversation load or overwrite each other's completed or pending checkpoints
+- [ ] Use one consistent strategy across GraphRuntime and ReActRuntime
+- [ ] Preserve HITL resume semantics while introducing the agent-scoped key/namespace
+- [ ] Regression tests:
+  - two different graph agents sharing one `session_id` do not share completed state
+  - a TeamAgent and a callee agent sharing one `session_id` do not bleed memory into each other
+  - resume still works when checkpoint isolation is enabled
+- [ ] Suggested branch: `fix/memory-agent-checkpoint-isolation`
+
+### F.2 Remote execute-contract convergence
+
+- [ ] Make `RemoteSseAgentInvoker` send the public `RuntimeExecuteRequest` shape (`input`, `runtime_context`, `invocation_turns`) instead of legacy `message` / `context`
+- [ ] Keep the remote agent-to-agent path on the same typed transport shape as pod-local and HTTP execution
+- [ ] Do not introduce a second remote payload contract just for memory
+- [ ] Regression tests:
+  - remote invoker payload matches `RuntimeExecuteRequest`
+  - invocation turns still propagate to remote callees
+- [ ] Suggested branch: `fix/remote-agent-runtime-execute-contract`
+
+### F.3 Local execution-seam convergence
+
+- [ ] Remove the duplicate hand-built `_AgentExecuteRequest` construction in `LocalRegistryAgentInvoker`
+- [ ] Reuse `_to_internal_request(RuntimeExecuteRequest)` or its direct successor so local and HTTP execution share one projection path
+- [ ] Keep `_AgentExecuteRequest` as a single temporary boundary until it can be removed entirely
+- [ ] Regression tests:
+  - local invoker continues to preserve `prior_turns`
+  - no drift between local and HTTP request projection for execution metadata
+- [ ] Suggested branch: `refactor/local-agent-execute-projection`
+
+### F.4 Team history cap enforcement
+
+- [ ] Enforce `conversation_history_max_turns` when `TeamAgent.build_completed_state` appends the new turn
+- [ ] Keep persisted state aligned with the same oldest-first truncation rule used by `build_turn_state`
+- [ ] Regression tests:
+  - appending at `max_turns` keeps exactly `max_turns`
+  - oldest turn is discarded first
+- [ ] Suggested branch: `fix/team-memory-history-cap`
+
+### Recommended branch order
+
+1. `fix/memory-agent-checkpoint-isolation`
+2. `fix/remote-agent-runtime-execute-contract`
+3. `refactor/local-agent-execute-projection`
+4. `fix/team-memory-history-cap`
+
+---
+
 ## Resolved Decisions
 
 | Decision | Chosen answer |
@@ -173,9 +229,10 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 | Phase | Status | Notes |
 |---|---|---|
-| RFC | Implemented (2026-05-05) | Consolidated design: decisions resolved, fully implemented |
+| RFC | Implemented (2026-05-05) | Design accepted; hardening follow-ups tracked below |
 | A – SDK primitives | Complete (2026-05-05) | `ConversationTurn`, `ConversationalState` in `context.py`; `build_turn_state` carry-forward + `build_completed_state` in `models.py`; all contract extensions done; 103 tests pass |
 | B – TeamAgent | Complete (2026-05-05) | `TeamState` inherits `ConversationalState`; auto-generated `build_completed_state`; all three prompt helpers enriched; `prior_turns` forwarded in `_make_agent_invoke_step` |
-| C – Runtime | Complete (2026-05-05) | `GraphRuntime` passes `invocation_turns` and calls `build_completed_state`; `ReActRuntime` injects context as leading `SystemMessage`; both invokers forward `prior_turns`; 150 tests pass |
+| C – Runtime | Implemented with hardening pending | Core continuity path works; follow-up runtime convergence and checkpoint-isolation slices remain |
 | D – Integration | Complete (2026-05-05) | 28 new offline tests across `fred-sdk` + `fred-runtime`; manual 3-turn validation with `fred.samples.team_of_3.router` confirmed correct routing and arithmetic through 3 turns |
 | E – Docs | Complete (2026-05-05) | RFC status updated; `AGENTS.md` multi-turn section added; `V2_AGENT_CREATION.md` pointer added; `WORKPLAN.md` updated |
+| F – Hardening | Planned | Split into four branchable follow-up slices from `swift` |
