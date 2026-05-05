@@ -23,6 +23,7 @@ The two backends do not configure models the same way today.
     - `chat_model`
     - `embedding_model`
     - `vision_model`
+    - `ocr_model`
 
 Detailed examples are centralized in:
 
@@ -120,6 +121,13 @@ vision_model:
   settings:
     project: your-gcp-project-id
     location: europe-west1
+
+ocr_model:
+  provider: vertex-ai
+  name: gemini-2.5-flash
+  settings:
+    project: your-gcp-project-id
+    location: europe-west1
 ```
 
 ## Minimal Examples
@@ -195,7 +203,7 @@ Vertex AI Model Garden chat profile:
 
 ### Knowledge Flow Models (`configuration*.yaml`)
 
-OpenAI chat + embeddings + vision:
+OpenAI chat + embeddings + vision + OCR:
 
 ```yaml
 chat_model:
@@ -210,6 +218,12 @@ embedding_model:
   settings: {}
 
 vision_model:
+  provider: openai
+  name: gpt-4o-mini
+  settings:
+    temperature: 0
+
+ocr_model:
   provider: openai
   name: gpt-4o-mini
   settings:
@@ -316,14 +330,14 @@ embedding_model:
 
 Provider support implemented in `fred-core/fred_core/model/factory.py`:
 
-| Provider | Chat/Language | Embeddings | Vision |
-| --- | --- | --- | --- |
-| `openai` | yes | yes | yes |
-| `azure-openai` | yes | yes | yes |
-| `azure-apim` | yes | yes | yes |
-| `ollama` | yes | yes | yes (if multimodal model) |
-| `vertex-ai` | yes | yes | yes |
-| `vertex-ai-model-garden` | yes | yes | no |
+| Provider | Chat/Language | Embeddings | Vision | Remote OCR |
+| --- | --- | --- | --- | --- |
+| `openai` | yes | yes | yes | yes |
+| `azure-openai` | yes | yes | yes | yes |
+| `azure-apim` | yes | yes | yes | yes |
+| `ollama` | yes | yes | yes (if multimodal model) | yes (if multimodal model) |
+| `vertex-ai` | yes | yes | yes | yes |
+| `vertex-ai-model-garden` | yes | yes | no | no |
 
 ## Required Settings By Provider
 
@@ -378,5 +392,5 @@ Provider support implemented in `fred-core/fred_core/model/factory.py`:
 
 - Keep secrets in `.env`, not in YAML.
 - For `agentic-backend`, prefer `models_catalog.yaml` over editing `ai.default_*` directly.
-- For `knowledge-flow-backend`, keep using `chat_model` / `embedding_model` / `vision_model` in the runtime config files.
+- For `knowledge-flow-backend`, keep using `chat_model` / `embedding_model` / `vision_model` / `ocr_model` in the runtime config files.
 - Use environment-specific files only for active runtime values and deployment-specific overrides.

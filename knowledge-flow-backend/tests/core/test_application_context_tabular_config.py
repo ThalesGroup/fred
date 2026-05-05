@@ -121,6 +121,34 @@ def test_configuration_defaults_to_dataset_tabular_store(tmp_path):
     assert config.storage.tabular_store.query.engine == "duckdb"
 
 
+def test_configuration_accepts_optional_ocr_model(tmp_path):
+    """
+    Ensure OCR model wiring is available in the runtime configuration.
+
+    Why this exists:
+    - Remote OCR is configured at the top level, like embedding and vision
+      models, so validation must accept that shape.
+
+    How to use:
+    - Build a minimal valid configuration and add `ocr_model`.
+    - Assert the field is preserved after validation.
+    """
+
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    config = config.model_copy(
+        update={
+            "ocr_model": ModelConfiguration(
+                provider="openai",
+                name="gpt-4o-mini",
+                settings={"temperature": 0},
+            )
+        }
+    )
+
+    assert config.ocr_model is not None
+    assert config.ocr_model.name == "gpt-4o-mini"
+
+
 def test_configuration_rejects_removed_storage_tabular_stores_field(tmp_path):
     """
     Ensure the removed `storage.tabular_stores` field is rejected.

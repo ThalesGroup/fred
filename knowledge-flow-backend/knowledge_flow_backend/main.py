@@ -111,6 +111,10 @@ def create_app() -> FastAPI:
     logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
+    if configuration.vision_model:
+        logger.info("%s Vision model: [%s] %s", LOG_PREFIX, configuration.vision_model.provider, configuration.vision_model.name)
+    if configuration.ocr_model:
+        logger.info("%s OCR model: [%s] %s", LOG_PREFIX, configuration.ocr_model.provider, configuration.ocr_model.name)
 
     base_url = configuration.app.base_url
 

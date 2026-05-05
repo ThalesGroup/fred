@@ -267,6 +267,15 @@ vision_model:
       keepalive_expiry_seconds: 10
     temperature: 0 # optional
 
+# Optional remote OCR model used by PdfMarkdownProcessor when
+# `processing.profiles.<profile>.pdf.do_ocr: true`.
+# When omitted, Knowledge Flow keeps using the local Docling OCR backend.
+# ocr_model:
+#   provider: openai
+#   name: gpt-4o-mini
+#   settings:
+#     temperature: 0
+
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:

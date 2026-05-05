@@ -250,6 +250,14 @@ embedding_model:
     base_url: http://localhost:11434
     max_retries: 0
 
+# Optional remote OCR model used when profile PDF OCR is enabled.
+# If omitted, tests keep the existing local Docling/RapidOCR path.
+# ocr_model:
+#   provider: ollama
+#   name: qwen2.5:3b-instruct
+#   settings:
+#     base_url: http://localhost:11434
+
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:

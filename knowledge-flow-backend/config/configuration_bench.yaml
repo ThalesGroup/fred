@@ -264,6 +264,13 @@ vision_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
     temperature: 0 # optional
+# Optional remote OCR model used when profile PDF OCR is enabled.
+# If omitted, benchmark runs keep the existing local Docling/RapidOCR path.
+# ocr_model:
+#   provider: openai
+#   name: gpt-4o-mini
+#   settings:
+#     temperature: 0
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:

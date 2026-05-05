@@ -601,6 +601,17 @@ class ApplicationContext:
             raise ValueError("Vision model configuration is missing.")
         return get_model(self.configuration.vision_model)
 
+    def get_ocr_model(self):
+        """
+        Fred rationale:
+        - Keep OCR model construction aligned with chat/vision model wiring.
+        - Let PDF ingestion call one typed accessor instead of instantiating
+          provider-specific clients itself.
+        """
+        if not self.configuration.ocr_model:
+            raise ValueError("OCR model configuration is missing.")
+        return get_model(self.configuration.ocr_model)
+
     def get_crossencoder_model(self) -> CrossEncoder:
         """
         Retrieve the cross-encoder model based on the application configuration.

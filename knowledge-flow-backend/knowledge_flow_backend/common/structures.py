@@ -875,6 +875,7 @@ class Configuration(BaseModel):
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
+    ocr_model: Optional[ModelConfiguration] = None
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(

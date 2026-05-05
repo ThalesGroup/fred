@@ -36,9 +36,62 @@ def _build_context(model_name: str, settings: dict) -> ApplicationContext:
             provider=None,
             name=model_name,
             settings=settings,
-        )
+        ),
+        ocr_model=None,
     )
     return ctx
+
+
+def test_get_ocr_model_returns_built_model(monkeypatch):
+    """
+    Ensure OCR model access uses the same shared model factory as other models.
+
+    Why this exists:
+    - Remote OCR should be wired through the top-level configuration instead of
+      creating provider-specific clients inside processors.
+
+    How to use:
+    - Patch `get_model`, set `ocr_model` on a lightweight context, and assert
+      the constructed model instance is returned.
+    """
+
+    expected = SimpleNamespace(name="ocr-model")
+    captured = {}
+
+    def fake_get_model(cfg):
+        captured["cfg"] = cfg
+        return expected
+
+    monkeypatch.setattr(application_context_module, "get_model", fake_get_model)
+    context = ApplicationContext.__new__(ApplicationContext)
+    context.configuration = SimpleNamespace(
+        ocr_model=ModelConfiguration(provider="openai", name="gpt-4o-mini", settings={"temperature": 0}),
+    )
+
+    model = ApplicationContext.get_ocr_model(context)
+
+    assert model is expected
+    assert captured["cfg"].name == "gpt-4o-mini"
+
+
+def test_get_ocr_model_raises_when_missing():
+    """
+    Ensure missing OCR configuration fails with a direct error.
+
+    Why this exists:
+    - PDF processors should get a clear failure when remote OCR is explicitly
+      requested but not configured.
+
+    How to use:
+    - Build a lightweight context with `ocr_model=None` and assert the accessor
+      raises `ValueError`.
+    """
+
+    context = ApplicationContext.__new__(ApplicationContext)
+    context.configuration = SimpleNamespace(ocr_model=None)
+
+    with pytest.raises(ValueError, match="OCR model configuration is missing"):
+        ApplicationContext.get_ocr_model(context)
 
 
 def test_get_crossencoder_model_offline_uses_resolved_local_path(monkeypatch, tmp_path):

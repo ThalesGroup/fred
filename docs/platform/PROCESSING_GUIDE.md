@@ -105,6 +105,7 @@ Current status:
 Additional runtime/model dependencies:
 - Cross-encoder reranker may download from Hugging Face unless configured offline.
 - Vision model is used when `process_images: true` (rich profile PDF image descriptions).
+- OCR model is used when `do_ocr: true` and `ocr_model` is configured; this remote path prioritizes readable transcription over full Docling structural reconstruction on scanned pages.
 - Chat/embedding/vision providers pointing to external APIs (e.g. OpenAI) require network access.
 
 ---

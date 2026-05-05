@@ -236,6 +236,13 @@ vision_model:
   name: mistral-medium-latest # or gpt-4o if you want higher fidelity
   settings:
     base_url: https://api.mistral.ai/v1
+# Optional remote OCR model used when profile PDF OCR is enabled.
+# If omitted, the worker keeps the existing local Docling/RapidOCR path.
+# ocr_model:
+#   provider: openai
+#   name: pixtral-12b-2409
+#   settings:
+#     base_url: https://api.mistral.ai/v1
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
