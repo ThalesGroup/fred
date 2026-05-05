@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 from fred_core import (
     KeycloakUser,
     get_config,
@@ -225,4 +227,17 @@ def create_app() -> FastAPI:
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)
     app.include_router(router)
+
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app)
+        start_http_server(
+            configuration.app.metrics_port,
+            addr=configuration.app.metrics_address,
+        )
+        logger.info(
+            "[METRICS] Prometheus metrics exposed on %s:%s",
+            configuration.app.metrics_address,
+            configuration.app.metrics_port,
+        )
+
     return app
