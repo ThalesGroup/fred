@@ -348,7 +348,7 @@ AFTER 6B + F2                                                               │
 
 ---
 
-## M1 — Multi-Agent Conversational Memory (Dimitri) · Implementation complete — integration + docs pending
+## M1 — Multi-Agent Conversational Memory (Dimitri) · Complete (2026-05-05)
 
 **Ref**: `docs/rfc/MULTI-AGENT-MEMORY-RFC.md` · `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
 
@@ -364,8 +364,8 @@ AFTER 6B + F2                                                               │
 - [x] Phase A — SDK primitives: `ConversationTurn`, `ConversationalState`, `build_turn_state`, `build_completed_state`, `AgentInvocationRequest`, `ExecutionConfig` (2026-05-05)
 - [x] Phase B — `TeamAgent` consumes the primitives: state, history append, coordinator prompts, `invoke_agent` (2026-05-05)
 - [x] Phase C — Runtime: ReAct context injection, local/remote invoker forwarding, `GraphRuntime` checkpoint wiring (2026-05-05)
-- [ ] Phase D — Integration validation: two-turn scenario, `make test` in `fred-sdk` + `fred-runtime`
-- [ ] Phase E — Documentation: `AGENTS.md`, `V2_AGENT_CREATION.md`, RFC status update
+- [x] Phase D — Integration validation: 28 new offline tests; manual 3-turn validation with `fred.samples.team_of_3.router` confirmed (2026-05-05)
+- [x] Phase E — Documentation: `AGENTS.md` multi-turn section, `V2_AGENT_CREATION.md` pointer, RFC status → Implemented (2026-05-05)
 
 ---
 

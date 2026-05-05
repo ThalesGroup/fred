@@ -254,6 +254,75 @@ every stage. Read it before writing your first graph agent.
 
 ---
 
+## Multi-turn conversational memory
+
+Graph agents (including `TeamAgent`) maintain state across turns via the LangGraph
+checkpointer. The memory contract is opt-in: only agents whose state inherits from
+`ConversationalState` get automatic carry-forward.
+
+### How it works
+
+1. **`ConversationalState` mixin** — adds `conversation_history: tuple[ConversationTurn, ...]`
+   to any graph state class. `TeamState` already inherits it.
+2. **`build_turn_state` carry-forward** — on each new turn the runtime calls
+   `build_turn_state(input, binding, previous_state=<last checkpoint>)`. If the state
+   includes `ConversationalState`, the previous history is carried forward automatically.
+3. **`build_completed_state` hook** — called after the terminal node, before the
+   checkpoint is persisted. `TeamAgent` auto-generates an override that appends a
+   `ConversationTurn(user_message, agent_response, agent_name)` so the next turn sees it.
+4. **Sub-agent seeding** — when a graph node calls `context.invoke_agent(...)` it can
+   pass `prior_turns=state.conversation_history`. `TeamAgent` does this automatically.
+   ReAct sub-agents receive the history as a leading `SystemMessage`; graph sub-agents
+   receive it through `build_turn_state(invocation_turns=...)`.
+
+### Enabling memory on a custom graph agent
+
+```python
+from pydantic import BaseModel
+from fred_sdk.contracts.context import ConversationTurn, ConversationalState
+
+class MyState(ConversationalState, BaseModel):
+    user_message: str
+    result: str = ""
+```
+
+That is all. `build_turn_state` will carry `conversation_history` forward on every
+subsequent turn. Override `build_completed_state` to append the completed exchange:
+
+```python
+class MyAgent(GraphAgent):
+    ...
+
+    def build_completed_state(self, state: MyState) -> MyState:
+        turn = ConversationTurn(
+            user_message=state.user_message,
+            agent_response=state.result,
+        )
+        return state.model_copy(
+            update={"conversation_history": state.conversation_history + (turn,)}
+        )
+```
+
+### Depth limit
+
+`GraphAgentDefinition.conversation_history_max_turns` (default `20`) caps the number
+of turns carried forward. Oldest turns are dropped first. Override as a `ClassVar` on
+your agent class to change the limit.
+
+### TeamAgent — fully automatic
+
+`TeamAgent` subclasses get memory for free:
+
+- `TeamState` already inherits `ConversationalState`
+- `build_completed_state` is auto-generated in `__pydantic_init_subclass__`
+- All coordinator and member prompts receive the history block when non-empty
+- `_make_agent_invoke_step` passes `state.conversation_history` as `prior_turns`
+  to every routed sub-agent
+
+No author action is required.
+
+---
+
 ## Where does my file go?
 
 | Stage | Folder |

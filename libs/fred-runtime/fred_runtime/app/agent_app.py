@@ -800,6 +800,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         context=r.to_legacy_context() or None,
         checkpoint_id=r.checkpoint_id,
         resume_payload=r.resume_payload,
+        invocation_turns=r.invocation_turns,
     )
 
 

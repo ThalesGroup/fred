@@ -976,8 +976,8 @@ class GraphAgentDefinition(AgentDefinition, ABC):
         max_turns = self.__class__.conversation_history_max_turns
 
         if previous_state is not None:
-            base_fields = set(base.model_fields)
-            prev_fields = set(previous_state.model_fields)
+            base_fields = set(type(base).model_fields)
+            prev_fields = set(type(previous_state).model_fields)
             shared = carry_fields & base_fields & prev_fields
             updates: dict[str, object] = {}
             for field_name in shared:
