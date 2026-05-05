@@ -97,7 +97,9 @@ export function LogControls({
         renderValue={(val) => (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <LvlChip lvl={val as Level} />
-            <Box component="span" sx={{ fontSize: FS }}>{val as string}</Box>
+            <Box component="span" sx={{ fontSize: FS }}>
+              {val as string}
+            </Box>
           </Box>
         )}
         sx={{ height: H, minWidth: 120, fontSize: FS, ...fieldSx }}
@@ -110,7 +112,9 @@ export function LogControls({
         {LEVELS.map((l) => (
           <MenuItem key={l} value={l} sx={{ gap: 0.75, fontSize: FS }}>
             <LvlChip lvl={l} />
-            <Box component="span" sx={{ fontSize: FS }}>{l}</Box>
+            <Box component="span" sx={{ fontSize: FS }}>
+              {l}
+            </Box>
           </MenuItem>
         ))}
       </Select>
