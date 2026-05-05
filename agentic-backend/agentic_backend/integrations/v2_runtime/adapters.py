@@ -22,7 +22,6 @@ import asyncio
 import inspect
 import json
 import logging
-import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -44,6 +43,10 @@ from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
+from agentic_backend.common.langfuse_config import (
+    build_langfuse_client,
+    get_langfuse_credentials,
+)
 from agentic_backend.common.kf_logs_client import KfLogsClient
 from agentic_backend.common.kf_vectorsearch_client import VectorSearchClient
 from agentic_backend.common.kf_workspace_client import (
@@ -228,14 +231,16 @@ def build_langfuse_tracer() -> TracerPort | None:
     if _LANGFUSE_TRACER is not False:
         return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
 
-    has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
-    has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not (has_public and has_secret):
+    if get_langfuse_credentials() is None:
         _LANGFUSE_TRACER = None
         return None
 
     try:
-        _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
+        client = build_langfuse_client()
+        if client is None:
+            _LANGFUSE_TRACER = None
+            return None
+        _LANGFUSE_TRACER = LangfuseTracerAdapter(client)
     except Exception:
         logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
         _LANGFUSE_TRACER = None
@@ -1683,12 +1688,7 @@ def _trace_total_latency_ms(*, selected_trace: dict[str, object]) -> int:
 
 
 def _langfuse_credentials() -> tuple[str, str, str] | None:
-    host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
-    public_key = _coerce_optional_string(os.getenv("LANGFUSE_PUBLIC_KEY"))
-    secret_key = _coerce_optional_string(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not host or not public_key or not secret_key:
-        return None
-    return host.rstrip("/"), public_key, secret_key
+    return get_langfuse_credentials()
 
 
 def _langfuse_get_json(
