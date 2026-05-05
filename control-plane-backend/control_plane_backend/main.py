@@ -7,8 +7,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import start_http_server
-from prometheus_fastapi_instrumentator import Instrumentator
 from fred_core import (
     KeycloakUser,
     get_config,
@@ -20,6 +18,8 @@ from fred_core import (
 from fred_core.common import read_env_bool
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from control_plane_backend.application_context import (
