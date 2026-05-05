@@ -50,6 +50,7 @@ from langgraph.types import Checkpointer
 
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    ConversationTurn,
     UiPart,
 )
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
@@ -162,6 +163,17 @@ __all__ = [
 ]
 
 
+def _format_invocation_turns(turns: tuple[ConversationTurn, ...]) -> str:
+    """Render caller-provided prior turns into a compact context block."""
+    parts = []
+    for turn in turns:
+        speaker = f" ({turn.agent_name})" if turn.agent_name else ""
+        parts.append(
+            f"User: {turn.user_message}\nAssistant{speaker}: {turn.agent_response}"
+        )
+    return "\n\n".join(parts)
+
+
 def _graph_input(
     input_model: ReActInput,
     config: ExecutionConfig,
@@ -169,25 +181,33 @@ def _graph_input(
     """
     Convert Fred ReAct input to the compiled-agent graph input shape.
 
-    Why this exists:
-    - `react_runtime.py` should call one local helper instead of repeating the
-      adapter call plus `sanitize_tool_name=_sanitize_tool_name`
-    - that keeps the executor code readable while the LangChain-specific shape
-      stays in the adapter module
-
-    How to use:
-    - pass the validated `ReActInput` plus `ExecutionConfig` before invoking the
-      compiled agent
-
-    Example:
-    - `_graph_input(input_model, ExecutionConfig())`
+    When ``config.invocation_turns`` is non-empty (the agent is being called
+    from a team leader), a system message carrying the prior conversation
+    context is injected as the first message in the thread so the model
+    understands the follow-up without requiring the user to repeat themselves.
+    The baked-in system prompt (applied by LangGraph's state_modifier) is
+    separate and unaffected.
     """
 
-    return _graph_input_adapter(
+    base = _graph_input_adapter(
         input_model,
         config,
         sanitize_tool_name=_sanitize_tool_name,
     )
+
+    if not config.invocation_turns or config.resume_payload is not None:
+        return base
+
+    from langchain_core.messages import SystemMessage
+
+    context_block = (
+        "[Conversation context from calling agent]\n"
+        + _format_invocation_turns(config.invocation_turns)
+    )
+    if isinstance(base, dict) and isinstance(base.get("messages"), list):
+        existing: list[object] = base["messages"]  # type: ignore[assignment]
+        return {"messages": [SystemMessage(content=context_block), *existing]}
+    return base
 
 
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):

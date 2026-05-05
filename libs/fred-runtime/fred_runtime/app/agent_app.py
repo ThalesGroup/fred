@@ -67,6 +67,7 @@ from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
+    ConversationTurn,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -567,6 +568,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             message=request.message,
             context=context_dict,
             resume_payload=None,
+            invocation_turns=request.prior_turns,
         )
 
         content_parts: list[str] = []
@@ -747,6 +749,10 @@ class _AgentExecuteRequest(BaseModel):
             "When set, the graph is resumed from its checkpointed interrupt state using "
             "LangGraph Command(resume=...) — the message field is ignored."
         ),
+    )
+    invocation_turns: tuple[ConversationTurn, ...] = Field(
+        default=(),
+        description="Prior conversation turns forwarded by the calling agent.",
     )
 
     @model_validator(mode="after")
@@ -1783,6 +1789,7 @@ async def _iterate_runtime_event_payloads(
         session_id=ctx.get("session_id") or request_id,
         checkpoint_id=request.checkpoint_id,
         resume_payload=request.resume_payload,
+        invocation_turns=getattr(request, "invocation_turns", ()),
     )
 
     try:

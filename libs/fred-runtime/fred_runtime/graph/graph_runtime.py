@@ -37,6 +37,7 @@ from fred_sdk.contracts.context import (
     ArtifactPublishRequest,
     ArtifactScope,
     BoundRuntimeContext,
+    ConversationTurn,
     FetchedResource,
     PublishedArtifact,
     ResourceFetchRequest,
@@ -549,6 +550,8 @@ class _GraphNodeExecutionContext:
         self,
         agent_id: str,
         message: str,
+        *,
+        prior_turns: tuple[ConversationTurn, ...] = (),
     ) -> AgentInvocationResult:
         agent_invoker = self.services.agent_invoker
         if agent_invoker is None:
@@ -587,6 +590,7 @@ class _GraphNodeExecutionContext:
                         agent_id=agent_id,
                         message=message,
                         context=self.binding.portable_context,
+                        prior_turns=prior_turns,
                     )
                 )
                 if result.is_error:
@@ -1119,13 +1123,14 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
             resume_payload = None
 
         self._pending_checkpoints.pop(checkpoint_key, None)
+        completed_state = self._definition.build_completed_state(state)
         await self._store_completed_state(
             checkpoint_key=checkpoint_key,
             config=config,
-            state=state,
+            state=completed_state,
         )
         output_model = self._definition.output_model().model_validate(
-            self._definition.build_output(state)
+            self._definition.build_output(completed_state)
         )
         if emit_event is not None:
             emit_event(
@@ -1278,10 +1283,13 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
         # The runtime persists the last completed state for the conversation.
         # The agent decides whether that prior state should influence the new
         # turn, for example by remembering a parcel, case, or selected asset.
+        # When invoked by another agent, invocation_turns seeds cross-turn
+        # context on the first call (previous_state takes priority when it exists).
         initial_state = self._definition.build_turn_state(
             input_model,
             self._binding,
             previous_state=previous_state,
+            invocation_turns=config.invocation_turns,
         )
         state = self._definition.state_model().model_validate(initial_state)
         return state, self._graph.entry_node, None

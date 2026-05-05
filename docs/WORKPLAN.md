@@ -348,7 +348,7 @@ AFTER 6B + F2                                                               │
 
 ---
 
-## M1 — Multi-Agent Conversational Memory (Dimitri) · RFC phase
+## M1 — Multi-Agent Conversational Memory (Dimitri) · Implementation complete — integration + docs pending
 
 **Ref**: `docs/rfc/MULTI-AGENT-MEMORY-RFC.md` · `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
 
@@ -358,12 +358,12 @@ AFTER 6B + F2                                                               │
 
 **Implementation rule**: do not use this feature to deepen transitional runtime plumbing. If a touched path already has a public typed contract plus a private bridge (for example `RuntimeExecuteRequest` → `_AgentExecuteRequest` → `to_legacy_context()`), prefer spending effort where the same change reduces that duplication.
 
-**Current state (2026-05-05)**: RFC refreshed and implementation decisions resolved in the doc. The first runtime convergence slice is now complete in `fred-runtime`: local in-pod agent invocation reuses the typed execute-request bridge, and `agent_app.py` has one extracted runtime-preparation path ready for continuity fields. The remaining work is adding the shared memory primitives and wiring them through that narrowed seam.
+**Current state (2026-05-05)**: Phases A, B, C implemented and validated. `make code-quality && make test` pass in both `fred-sdk` (75 tests) and `fred-runtime` (142 tests).
 
 - [x] Preliminary runtime seam convergence: `LocalRegistryAgentInvoker` now projects through `RuntimeExecuteRequest`, `_iterate_runtime_event_payloads(...)` uses one extracted preparation path, and `make code-quality` / `make test` passed in `libs/fred-runtime` (2026-05-05)
-- [ ] Phase A — SDK primitives: `ConversationTurn`, `ConversationalState`, `build_turn_state`, `build_completed_state`, `AgentInvocationRequest`, `ExecutionConfig`
-- [ ] Phase B — `TeamAgent` consumes the primitives: state, history append, coordinator prompts, `invoke_agent`
-- [ ] Phase C — Runtime: ReAct context injection, local/remote invoker forwarding, `GraphRuntime` checkpoint wiring
+- [x] Phase A — SDK primitives: `ConversationTurn`, `ConversationalState`, `build_turn_state`, `build_completed_state`, `AgentInvocationRequest`, `ExecutionConfig` (2026-05-05)
+- [x] Phase B — `TeamAgent` consumes the primitives: state, history append, coordinator prompts, `invoke_agent` (2026-05-05)
+- [x] Phase C — Runtime: ReAct context injection, local/remote invoker forwarding, `GraphRuntime` checkpoint wiring (2026-05-05)
 - [ ] Phase D — Integration validation: two-turn scenario, `make test` in `fred-sdk` + `fred-runtime`
 - [ ] Phase E — Documentation: `AGENTS.md`, `V2_AGENT_CREATION.md`, RFC status update
 

@@ -2,7 +2,7 @@
 
 **RFC**: [`docs/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
 
-**Status**: Implementation started — runtime convergence slice complete (2026-05-05)
+**Status**: Phases A, B, C implemented (2026-05-05) — integration validation and docs pending
 
 **Why this track exists**: Graph agents (including `TeamAgent`) are stateless across turns. A user's second question fails to route correctly and reaches the sub-agent without any knowledge of the prior exchange. The RFC defines the fix as a general SDK contract, not a TeamAgent-specific patch. This backlog tracks implementation in phases.
 
@@ -24,19 +24,19 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ### A.1 Shared types
 
-- [ ] Add `ConversationTurn(user_message, agent_response, agent_name?)` to `fred_sdk.contracts.models`
-- [ ] Add `ConversationalState(conversation_history: tuple[ConversationTurn, ...] = ())` mixin to `fred_sdk.contracts.models`
-- [ ] Export both from `fred_sdk.contracts.__init__` (or equivalent public surface)
-- [ ] Unit tests: model construction, serialisation round-trip, immutability (frozen)
+- [x] Add `ConversationTurn(user_message, agent_response, agent_name?)` to `fred_sdk.contracts.context` (placed in `context.py` to avoid circular imports with `models.py`)
+- [x] Add `ConversationalState(conversation_history: tuple[ConversationTurn, ...] = ())` mixin to `fred_sdk.contracts.context`
+- [x] Export both from `fred_sdk.contracts.__init__` (or equivalent public surface)
+- [x] Unit tests: model construction, serialisation round-trip, immutability (frozen)
 
 ### A.2 `GraphAgentDefinition` contract extension
 
-- [ ] Add `_turn_carry_fields() -> frozenset[str]` hook to `GraphAgentDefinition`
-- [ ] Add `conversation_history_max_turns: ClassVar[int] = 20` to `GraphAgentDefinition`
-- [ ] Change `build_turn_state` default to carry forward only explicit carry fields
-- [ ] Extend `build_turn_state(..., invocation_turns=())` so invoked graph agents can seed history on first use
-- [ ] Enforce depth limit during carry-forward and invocation seeding
-- [ ] Unit tests:
+- [x] Add `_turn_carry_fields() -> frozenset[str]` hook to `GraphAgentDefinition`
+- [x] Add `conversation_history_max_turns: ClassVar[int] = 20` to `GraphAgentDefinition`
+- [x] Change `build_turn_state` default to carry forward only explicit carry fields
+- [x] Extend `build_turn_state(..., invocation_turns=())` so invoked graph agents can seed history on first use
+- [x] Enforce depth limit during carry-forward and invocation seeding
+- [x] Unit tests:
   - carry-forward when `previous_state` is `None` → same as `build_initial_state`
   - carry-forward when state includes `ConversationalState` → history carried
   - carry-forward when state does NOT include `ConversationalState` → no change in behaviour
@@ -45,17 +45,17 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ### A.3 History append — `build_completed_state` hook
 
-- [ ] Add `build_completed_state(state) -> state` hook to `GraphAgentDefinition` with identity default
-- [ ] Ensure runtime persists the completed state before building output
-- [ ] Unit tests: output round-trip, state after completion includes new turn
+- [x] Add `build_completed_state(state) -> state` hook to `GraphAgentDefinition` with identity default
+- [x] Ensure runtime persists the completed state before building output
+- [x] Unit tests: output round-trip, state after completion includes new turn
 
 ### A.4 `AgentInvocationRequest` extension
 
-- [ ] Add `prior_turns: tuple[ConversationTurn, ...] = ()` to `AgentInvocationRequest` in `fred_sdk.contracts.context`
-- [ ] Add `prior_turns: tuple[ConversationTurn, ...] = ()` keyword argument to `GraphNodeContext.invoke_agent` in `fred_sdk.graph.runtime`
-- [ ] Add `invocation_turns: tuple[ConversationTurn, ...] = ()` to `ExecutionConfig`
-- [ ] Ensure the default remains empty so all existing callers are unaffected
-- [ ] Unit tests: request and execution-config serialisation with and without `prior_turns`
+- [x] Add `prior_turns: tuple[ConversationTurn, ...] = ()` to `AgentInvocationRequest` in `fred_sdk.contracts.context`
+- [x] Add `prior_turns: tuple[ConversationTurn, ...] = ()` keyword argument to `GraphNodeContext.invoke_agent` in `fred_sdk.graph.runtime`
+- [x] Add `invocation_turns: tuple[ConversationTurn, ...] = ()` to `ExecutionConfig`
+- [x] Ensure the default remains empty so all existing callers are unaffected
+- [x] Unit tests: request and execution-config serialisation with and without `prior_turns`
 
 ---
 
@@ -65,22 +65,22 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ### B.1 `TeamState` includes `ConversationalState`
 
-- [ ] Update the shared `TeamState` class to inherit from `ConversationalState`
-- [ ] Keep `TeamAgent.__pydantic_init_subclass__` assigning `state_schema = TeamState`
-- [ ] Verify that `conversation_history` carries forward on turn 2 without any author override
+- [x] Update the shared `TeamState` class to inherit from `ConversationalState`
+- [x] Keep `TeamAgent.__pydantic_init_subclass__` assigning `state_schema = TeamState`
+- [x] Verify that `conversation_history` carries forward on turn 2 without any author override
 
 ### B.2 History append for `TeamAgent`
 
-- [ ] Auto-generate `build_completed_state` in `TeamAgent.__pydantic_init_subclass__` to append `ConversationTurn(user_message=state.user_message, agent_response=state.final_text, agent_name=<last member name>)` after each turn
-- [ ] Determine "last member name" from `state.results[-1].agent_name` when results are non-empty; use `None` otherwise
+- [x] Auto-generate `build_completed_state` in `TeamAgent.__pydantic_init_subclass__` to append `ConversationTurn(user_message=state.user_message, agent_response=state.final_text, agent_name=<last member name>)` after each turn
+- [x] Determine "last member name" from `state.results[-1].agent_name` when results are non-empty; use `None` otherwise
 
 ### B.3 Coordinator prompt enrichment
 
-- [ ] Add `_format_conversation_history(history: tuple[ConversationTurn, ...]) -> str` helper in `team_api.py`
-- [ ] Update `_make_member_step` to include history block in inline member prompts when `state.conversation_history` is non-empty
-- [ ] Update `_make_route_coordinator_step` to include history block in the prompt when `state.conversation_history` is non-empty
-- [ ] Update `_make_coordinator_step` (dynamic mode) to include history block in the prompt when `state.conversation_history` is non-empty
-- [ ] Unit tests:
+- [x] Add `_format_conversation_history(history: tuple[ConversationTurn, ...]) -> str` helper in `team_api.py`
+- [x] Update `_make_member_step` to include history block in inline member prompts when `state.conversation_history` is non-empty
+- [x] Update `_make_route_coordinator_step` to include history block in the prompt when `state.conversation_history` is non-empty
+- [x] Update `_make_coordinator_step` (dynamic mode) to include history block in the prompt when `state.conversation_history` is non-empty
+- [x] Unit tests:
   - member step with history → history block present
   - route coordinator with empty history → prompt unchanged (no regression)
   - route coordinator with non-empty history → history block present in prompt
@@ -88,9 +88,9 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ### B.4 `_make_agent_invoke_step` passes `prior_turns`
 
-- [ ] In `_make_agent_invoke_step`, pass `state.conversation_history` as `prior_turns` to `context.invoke_agent`
-- [ ] Pass the empty tuple on first turn — no change in behaviour for first-turn invocations
-- [ ] Unit tests: `invoke_agent` called with correct `prior_turns` on turn 2
+- [x] In `_make_agent_invoke_step`, pass `state.conversation_history` as `prior_turns` to `context.invoke_agent`
+- [x] Pass the empty tuple on first turn — no change in behaviour for first-turn invocations
+- [x] Unit tests: `invoke_agent` called with correct `prior_turns` on turn 2
 
 ---
 
@@ -105,33 +105,33 @@ These are the foundational types and contracts. Nothing else can start until A i
 
 ### C.1 ReAct agent context injection
 
-- [ ] In `ReActRuntime`, detect when `ExecutionConfig.invocation_turns` is non-empty
-- [ ] Render `invocation_turns` with the shared formatter
-- [ ] Inject the rendered context block in the system prompt: `"\n\n[Conversation context]\n{formatted_turns}"` appended after the agent's own system prompt
-- [ ] Injection is transparent to the agent author — no `system_prompt_template` change is needed
-- [ ] Unit tests:
+- [x] In `ReActRuntime`, detect when `ExecutionConfig.invocation_turns` is non-empty
+- [x] Render `invocation_turns` with the shared formatter
+- [x] Inject the rendered context block as a leading `SystemMessage` prepended to the input messages (rather than appended to system prompt, since the system prompt is baked at compile time in the cached executor)
+- [x] Injection is transparent to the agent author — no `system_prompt_template` change is needed
+- [x] Unit tests:
   - ReAct agent invoked without `invocation_turns` → system prompt unchanged
   - ReAct agent invoked with `invocation_turns` → context block appended
   - Context block does not duplicate the current `message`
 
 ### C.2 In-process invoker forwards `prior_turns`
 
-- [ ] Update `LocalRegistryAgentInvoker.invoke` to forward `prior_turns` into the callee execution path
-- [ ] Ensure the internal execution bridge preserves `prior_turns` when calling `_iterate_runtime_event_payloads`
-- [ ] Unit tests: in-process agent invocation with and without `prior_turns`
+- [x] Update `LocalRegistryAgentInvoker.invoke` to forward `prior_turns` into the callee execution path
+- [x] Ensure the internal execution bridge preserves `prior_turns` when calling `_iterate_runtime_event_payloads`
+- [x] Unit tests: in-process agent invocation with and without `prior_turns`
 
 ### C.3 Remote invoker forwards `prior_turns`
 
-- [ ] Update `RemoteSseAgentInvoker.invoke` to include `prior_turns` in the HTTP payload
-- [ ] Extend the runtime execute bridge so `prior_turns` reaches the callee without introducing a second public execution API
-- [ ] Prefer converging the remote path on `RuntimeExecuteRequest` / typed execution plumbing rather than deepening `to_legacy_context()` usage
-- [ ] Unit tests: payload construction with and without `prior_turns`
+- [x] Update `RemoteSseAgentInvoker.invoke` to include `prior_turns` in the HTTP payload
+- [x] Extend the runtime execute bridge so `prior_turns` reaches the callee without introducing a second public execution API
+- [x] Prefer converging the remote path on `RuntimeExecuteRequest` / typed execution plumbing rather than deepening `to_legacy_context()` usage
+- [x] Unit tests: payload construction with and without `prior_turns`
 
 ### C.4 Graph agent runtime — verify `build_completed_state` and `invocation_turns` are used
 
-- [ ] In `GraphRuntime`, pass `ExecutionConfig.invocation_turns` into `build_turn_state`
-- [ ] In `GraphRuntime._execute_loop`, call `build_completed_state` after the terminal node completes and before persisting the final checkpoint
-- [ ] Unit tests:
+- [x] In `GraphRuntime`, pass `ExecutionConfig.invocation_turns` into `build_turn_state`
+- [x] In `GraphRuntime._execute_loop`, call `build_completed_state` after the terminal node completes and before persisting the final checkpoint
+- [x] Unit tests:
   - after a two-turn graph agent execution, the checkpointer holds state with `conversation_history` length 2
   - invoked graph callee with no prior state receives seeded history from `invocation_turns`
 
@@ -174,8 +174,8 @@ These are the foundational types and contracts. Nothing else can start until A i
 | Phase | Status | Notes |
 |---|---|---|
 | RFC | Draft (2026-05-05) | Consolidated design: decisions resolved, implementation plan refreshed |
-| A – SDK primitives | Not started | Ready to implement |
-| B – TeamAgent | Not started | Depends on A |
-| C – Runtime | In progress | 2026-05-05: converged local invoker + runtime preparation path in `agent_app.py`; memory fields still pending |
+| A – SDK primitives | Complete (2026-05-05) | `ConversationTurn`, `ConversationalState` in `context.py`; `build_turn_state` carry-forward + `build_completed_state` in `models.py`; all contract extensions done; 75 tests pass |
+| B – TeamAgent | Complete (2026-05-05) | `TeamState` inherits `ConversationalState`; auto-generated `build_completed_state`; all three prompt helpers enriched; `prior_turns` forwarded in `_make_agent_invoke_step` |
+| C – Runtime | Complete (2026-05-05) | `GraphRuntime` passes `invocation_turns` and calls `build_completed_state`; `ReActRuntime` injects context as leading `SystemMessage`; both invokers forward `prior_turns`; 142 tests pass |
 | D – Integration | Not started | Depends on C |
 | E – Docs | Not started | Depends on D |

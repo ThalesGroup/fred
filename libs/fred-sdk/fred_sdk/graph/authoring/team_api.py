@@ -129,6 +129,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
+from ...contracts.context import ConversationTurn, ConversationalState
 from ..runtime import GraphNodeContext, GraphNodeResult
 from .api import (
     GraphAgent,
@@ -255,9 +256,13 @@ class TeamInput(BaseModel):
     """The task or question sent to the team."""
 
 
-class TeamState(BaseModel):
+class TeamState(ConversationalState, BaseModel):
     """
     Shared workflow state for all TeamAgent subclasses.
+
+    Inherits ``conversation_history`` from ``ConversationalState`` so that
+    multi-turn memory is automatically carried forward by ``build_turn_state``
+    without any author override.
 
     Why this model exists:
     - all members read and write the same state so that later members can see
@@ -300,6 +305,19 @@ def _format_prior_results(results: list[TeamMemberResult]) -> str:
     return "\n\n".join(parts)
 
 
+def _format_conversation_history(history: tuple[ConversationTurn, ...]) -> str:
+    """Render prior conversation turns into a prompt-ready context block."""
+    if not history:
+        return ""
+    parts = []
+    for turn in history:
+        speaker = f" ({turn.agent_name})" if turn.agent_name else ""
+        parts.append(
+            f"User: {turn.user_message}\nAssistant{speaker}: {turn.agent_response}"
+        )
+    return "\n\n".join(parts)
+
+
 def _make_member_step(spec: AgentSpec) -> GraphStepHandler:
     """
     Build a typed graph node that runs one AgentSpec as an LLM call.
@@ -328,10 +346,15 @@ def _make_member_step(spec: AgentSpec) -> GraphStepHandler:
                 f"Work already completed by your teammates:\n\n{prior_context}"
             )
 
+        history_block = _format_conversation_history(state.conversation_history)
+        system_prompt = f"Your role: {spec.role}\n\n{spec.instructions}"
+        if history_block:
+            system_prompt = f"{system_prompt}\n\n[Prior conversation]\n{history_block}"
+
         output = await model_text_step(
             context,
             operation=operation,
-            system_prompt=f"Your role: {spec.role}\n\n{spec.instructions}",
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             fallback_text=f"[{spec.name} produced no output]",
         )
@@ -399,6 +422,7 @@ def _make_agent_invoke_step(spec: AgentSpec) -> GraphStepHandler:
         result = await context.invoke_agent(
             agent_id=agent_ref,
             message=state.user_message,
+            prior_turns=state.conversation_history,
         )
         output = (
             result.content
@@ -448,12 +472,20 @@ def _make_route_coordinator_step(
             next_member=member_names[0],
             reasoning="fallback: first member",
         )
+        history_block = _format_conversation_history(state.conversation_history)
+        user_prompt = f"Request: {state.user_message}"
+        if history_block:
+            user_prompt = (
+                f"[Prior conversation]\n{history_block}\n\n"
+                f"Current request: {state.user_message}"
+            )
+        user_prompt += "\n\nWhich specialist should handle this?"
         decision = await structured_model_step(
             context,
             operation="team_route_coordinator",
             output_model=_CoordinatorDecision,
             system_prompt=system_prompt,
-            user_prompt=f"Request: {state.user_message}\n\nWhich specialist should handle this?",
+            user_prompt=user_prompt,
             fallback_output=fallback,
         )
         route = decision.next_member
@@ -604,8 +636,12 @@ def _make_coordinator_step(
     @typed_node(TeamState)
     async def _coordinator(state: TeamState, context: GraphNodeContext) -> StepResult:
         prior_context = _format_prior_results(state.results)
+        history_block = _format_conversation_history(state.conversation_history)
+        history_prefix = (
+            f"[Prior conversation]\n{history_block}\n\n" if history_block else ""
+        )
         user_prompt = (
-            f"Task: {state.user_message}\n\n"
+            f"{history_prefix}Task: {state.user_message}\n\n"
             + (
                 f"Work completed so far:\n{prior_context}"
                 if prior_context
@@ -825,3 +861,23 @@ class TeamAgent(GraphAgent):
             raise ValueError(
                 f"TeamAgent.mode must be 'sequential', 'dynamic', or 'route', got {cls.mode!r}."
             )
+
+        # Auto-generate build_completed_state to append one ConversationTurn
+        # after each completed team execution.  This closes the memory loop:
+        # turn N appends the exchange so turn N+1 sees it via build_turn_state.
+        def _build_completed_state(self: "TeamAgent", state: TeamState) -> TeamState:  # type: ignore[override]
+            last_agent_name: str | None = None
+            if state.results:
+                last_agent_name = state.results[-1].agent_name
+            new_turn = ConversationTurn(
+                user_message=state.user_message,
+                agent_response=state.final_text,
+                agent_name=last_agent_name,
+            )
+            return state.model_copy(
+                update={
+                    "conversation_history": state.conversation_history + (new_turn,)
+                }
+            )
+
+        setattr(cls, "build_completed_state", _build_completed_state)
