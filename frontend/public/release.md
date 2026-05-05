@@ -56,7 +56,6 @@
 
   - Improve temporal worker concurrency and add appropriate metrics (#1521)
 
-
 **v1.4.1** — 2026-04-13
 
 - **Bug Fixes**

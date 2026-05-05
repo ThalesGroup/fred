@@ -18,8 +18,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Portal } from "@shared/utils/Portal.tsx";
 import styles from "./CodenameModal.module.css";
 
-const FOCUSABLE_SELECTORS =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE_SELECTORS = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface CodenameContent {
   description: string;
@@ -62,18 +61,21 @@ export default function CodenameModal({ open, onClose, data }: Props) {
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); return; }
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
       if (e.key === "Tab" && dialogRef.current) {
-        const focusable = Array.from(
-          dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)
-        );
+        const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS));
         if (!focusable.length) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault(); last.focus();
+          e.preventDefault();
+          last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault(); first.focus();
+          e.preventDefault();
+          first.focus();
         }
       }
     };
@@ -85,42 +87,40 @@ export default function CodenameModal({ open, onClose, data }: Props) {
 
   return (
     <Portal id="modal-portal">
-    <div className={styles.overlay} onClick={onClose}>
-      <div
-        ref={dialogRef}
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="codename-modal-title"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={styles.imageWrapper}>
-          <img
-            src={`${base}${data.image}`}
-            alt={data.codename}
-            className={styles.image}
-          />
-          <div className={styles.closeButton}>
-            <IconButton
-              color="on-surface"
-              variant="filled"
-              size="xs"
-              icon={{ category: "outlined", type: "close" }}
-              onClick={onClose}
-              aria-label={t("common.close")}
-            />
+      <div className={styles.overlay} onClick={onClose}>
+        <div
+          ref={dialogRef}
+          className={styles.dialog}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="codename-modal-title"
+          tabIndex={-1}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className={styles.imageWrapper}>
+            <img src={`${base}${data.image}`} alt={data.codename} className={styles.image} />
+            <div className={styles.closeButton}>
+              <IconButton
+                color="on-surface"
+                variant="filled"
+                size="xs"
+                icon={{ category: "outlined", type: "close" }}
+                onClick={onClose}
+                aria-label={t("common.close")}
+              />
+            </div>
+          </div>
+          <div className={styles.content}>
+            <span id="codename-modal-title" className={styles.badge}>
+              {data.codename} · {data.version}
+            </span>
+            <p className={styles.description}>{content.description}</p>
+            <p className={styles.interpretation}>{content.interpretation}</p>
+            <hr className={styles.divider} />
+            <p className={styles.hint}>{content.hint}</p>
           </div>
         </div>
-        <div className={styles.content}>
-          <span id="codename-modal-title" className={styles.badge}>{data.codename} · {data.version}</span>
-          <p className={styles.description}>{content.description}</p>
-          <p className={styles.interpretation}>{content.interpretation}</p>
-          <hr className={styles.divider} />
-          <p className={styles.hint}>{content.hint}</p>
-        </div>
       </div>
-    </div>
     </Portal>
   );
 }

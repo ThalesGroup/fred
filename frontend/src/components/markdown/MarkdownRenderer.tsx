@@ -532,13 +532,7 @@ export default function MarkdownRenderer({
       <ReactMarkdown
         skipHtml={false}
         components={finalComponents}
-        remarkPlugins={[
-          remarkGfm,
-          remarkMath,
-          remarkDirective,
-          remarkDetailsContainers,
-          ...remarkPlugins,
-        ]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkDirective, remarkDetailsContainers, ...remarkPlugins]}
         rehypePlugins={[rehypeRaw, rehypeCitations, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
       >
         {finalContent}

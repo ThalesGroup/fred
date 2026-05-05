@@ -24,7 +24,11 @@ export default function GcuPage() {
   useEffect(() => {
     const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
     const lang = i18n.language?.split("-")[0] ?? "en";
-    const brand = (getProperty("releaseBrand") || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    const brand = (getProperty("releaseBrand") || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
     const fetchMd = (path: string) =>
       fetch(`${base}${path}`, { cache: "no-cache" })
         .then((r) => (r.ok ? r.text() : null))
@@ -35,8 +39,11 @@ export default function GcuPage() {
       ? [`/contrib/${brand}/gcu.${lang}.md`, `/contrib/${brand}/gcu.md`, `/gcu.${lang}.md`, `/gcu.md`]
       : [`/gcu.${lang}.md`, `/gcu.md`];
 
-    candidates.reduce((acc, path) => acc.then((text) => text ?? fetchMd(path)), Promise.resolve<string | null>(null))
-      .then((text) => { if (text) setGcuMarkdown(text); });
+    candidates
+      .reduce((acc, path) => acc.then((text) => text ?? fetchMd(path)), Promise.resolve<string | null>(null))
+      .then((text) => {
+        if (text) setGcuMarkdown(text);
+      });
   }, [i18n.language]);
 
   useEffect(() => {
