@@ -41,7 +41,7 @@ jobs:
             fred-core:
               - 'libs/fred-core/**'
             control-plane:
-              - 'control-plane-backend/**'
+              - 'apps/control-plane-backend/**'
             fred-sdk:
               - 'libs/fred-sdk/**'
             fred-runtime:
@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        directory: [knowledge-flow-backend, libs/fred-core, control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents]
+        directory: [knowledge-flow-backend, libs/fred-core, apps/control-plane-backend, libs/fred-sdk, libs/fred-runtime, apps/fred-agents]
         check:
           - lint
           - format
@@ -73,7 +73,7 @@ jobs:
           - directory: libs/fred-core
             condition: needs.detect-changes.outputs.fred-core == 'true'
           # Control plane backend runs when control-plane or fred-core changes
-          - directory: control-plane-backend
+          - directory: apps/control-plane-backend
             condition: needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true'
           # Fred SDK runs when fred-sdk changes
           - directory: libs/fred-sdk
@@ -127,7 +127,7 @@ jobs:
             needs-pandoc: true
             should-run: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' }}
           - name: control-plane-backend
-            directory: control-plane-backend
+            directory: apps/control-plane-backend
             unit-target: test
             integration-target: ""
             needs-pandoc: false
@@ -292,16 +292,16 @@ jobs:
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env
         with:
-          working-directory: control-plane-backend
+          working-directory: apps/control-plane-backend
 
       - name: Check route security
         run: |
-          cd control-plane-backend/
+          cd apps/control-plane-backend/
           make check-route-security
 
       - name: Test backend startup
         run: |
-          cd control-plane-backend/
+          cd apps/control-plane-backend/
           timeout 30s make run || true
 
   # Job to check OpenAPI spec drift when backends or frontend change
@@ -324,7 +324,7 @@ jobs:
             slice-path: frontend/src/slices/knowledgeFlow/knowledgeFlowOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.knowledge-flow == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
           - name: control-plane
-            backend-directory: control-plane-backend
+            backend-directory: apps/control-plane-backend
             make-target: update-control-plane-api
             slice-path: frontend/src/slices/controlPlane/controlPlaneOpenApi.ts
             condition: ${{ needs.detect-changes.outputs.control-plane == 'true' || needs.detect-changes.outputs.fred-core == 'true' || needs.detect-changes.outputs.frontend == 'true' }}
