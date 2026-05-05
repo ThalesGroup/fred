@@ -129,7 +129,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
-from ...contracts.context import ConversationTurn, ConversationalState
+from ...contracts.context import ConversationalState, ConversationTurn
 from ..runtime import GraphNodeContext, GraphNodeResult
 from .api import (
     GraphAgent,

@@ -29,8 +29,8 @@ Example:
 """
 
 from fred_sdk import (
-    FieldSpec,
     TOOL_REF_KNOWLEDGE_SEARCH,
+    FieldSpec,
     GuardrailDefinition,
     ToolRefRequirement,
     UIHints,

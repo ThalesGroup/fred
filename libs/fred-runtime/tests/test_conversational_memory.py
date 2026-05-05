@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import MagicMock, patch
 
-
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     ConversationTurn,

@@ -39,15 +39,6 @@ from typing import cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-)
-from langchain_core.messages.tool import ToolMessage
-from langchain_core.tools import BaseTool
-from langgraph.types import Checkpointer
-
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ConversationTurn,
@@ -75,6 +66,14 @@ from fred_sdk.contracts.runtime import (
     ToolResultRuntimeEvent,
     TracerPort,
 )
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+)
+from langchain_core.messages.tool import ToolMessage
+from langchain_core.tools import BaseTool
+from langgraph.types import Checkpointer
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
 # Read it as one boundary:

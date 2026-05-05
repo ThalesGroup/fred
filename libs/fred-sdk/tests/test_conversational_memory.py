@@ -24,8 +24,8 @@ from pydantic import BaseModel
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     BoundRuntimeContext,
-    ConversationTurn,
     ConversationalState,
+    ConversationTurn,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,

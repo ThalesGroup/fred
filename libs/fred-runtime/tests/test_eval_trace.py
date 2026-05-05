@@ -11,11 +11,10 @@ import time
 from fred_sdk.contracts.eval import EvalTrace
 
 from fred_runtime.app.agent_app import (
-    _TurnOutcome,
     _build_eval_trace,
     _parse_turn_outcome,
+    _TurnOutcome,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

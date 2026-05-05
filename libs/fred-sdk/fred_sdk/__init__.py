@@ -84,6 +84,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
     ToolContentKind,
 )
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.models import (
     DeepAgentDefinition,
     ExecutionCategory,
@@ -94,7 +95,6 @@ from fred_sdk.contracts.models import (
     ToolApprovalPolicy,
     ToolRefRequirement,
 )
-from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.runtime import HumanChoiceOption, HumanInputRequest
 
 # ---------------------------------------------------------------------------

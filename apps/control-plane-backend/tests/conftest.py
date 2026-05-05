@@ -15,14 +15,14 @@ def _setup_test_schema() -> None:
     call create_all so the tables exist without needing a running alembic
     process.  Existing tables are left untouched (checkfirst=True default).
     """
-    from control_plane_backend.models.base import Base as CPBase
+    from fred_core.models.base import Base as FredCoreBase
+    from fred_core.users.user_models import UserRow  # noqa: F401
 
     import control_plane_backend.models.agent_instance_models  # noqa: F401
     import control_plane_backend.models.purge_queue_models  # noqa: F401
     import control_plane_backend.models.session_metadata_models  # noqa: F401
     import control_plane_backend.models.team_metadata_models  # noqa: F401
-    from fred_core.models.base import Base as FredCoreBase
-    from fred_core.users.user_models import UserRow  # noqa: F401
+    from control_plane_backend.models.base import Base as CPBase
 
     db_path = pathlib.Path("~/.fred/control-plane/control_plane.sqlite3").expanduser()
     db_path.parent.mkdir(parents=True, exist_ok=True)
