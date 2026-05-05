@@ -96,6 +96,41 @@ class AgentPodClient:
             raise RuntimeError("Execute response must be a JSON object.")
         return result
 
+    def evaluate(
+        self,
+        *,
+        agent_id: str,
+        message: str,
+        session_id: str,
+        user_id: str,
+        team_id: str | None = None,
+        agent_instance_id: str | None = None,
+        checkpoint_id: str | None = None,
+    ) -> dict[str, Any]:
+        runtime_context: dict[str, Any] = {"user_id": user_id}
+        if team_id:
+            runtime_context["team_id"] = team_id
+        payload: dict[str, Any] = {
+            "agent_id": agent_id,
+            "input": message,
+            "session_id": session_id,
+            "runtime_context": runtime_context,
+        }
+        if agent_instance_id is not None:
+            payload["agent_instance_id"] = agent_instance_id
+        if checkpoint_id is not None:
+            payload["checkpoint_id"] = checkpoint_id
+        response = self.http_client.post(
+            f"{self.base_url}/agents/evaluate",
+            json=payload,
+            headers=self._auth_headers(),
+        )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict):
+            raise RuntimeError("Evaluate response must be a JSON object.")
+        return result
+
     def stream_events(
         self,
         *,

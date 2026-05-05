@@ -49,7 +49,7 @@ def completion_candidates(
         return [sid for sid in session_ids if sid.startswith(prefix)]
     if stripped.startswith("/mode "):
         prefix = stripped.removeprefix("/mode ").strip()
-        return [mode for mode in ("final", "stream") if mode.startswith(prefix)]
+        return [mode for mode in ("eval", "final", "stream") if mode.startswith(prefix)]
     if stripped.startswith("/"):
         return complete_slash_commands(stripped, commands=_COMMANDS)
     return []

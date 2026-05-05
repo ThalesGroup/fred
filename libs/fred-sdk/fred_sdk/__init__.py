@@ -94,6 +94,7 @@ from fred_sdk.contracts.models import (
     ToolApprovalPolicy,
     ToolRefRequirement,
 )
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.runtime import HumanChoiceOption, HumanInputRequest
 
 # ---------------------------------------------------------------------------
@@ -211,6 +212,9 @@ __all__ = [
     "FieldSpec",
     "GuardrailDefinition",
     "ToolRefRequirement",
+    # Evaluation contracts (POST /agents/evaluate)
+    "EvalStep",
+    "EvalTrace",
     # Request context (language, user, session info visible inside nodes)
     "RuntimeContext",
     "ToolContentKind",

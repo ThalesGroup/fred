@@ -21,12 +21,15 @@ from .completion import completion_candidates
 from .history_display import (
     build_hitl_resume_payload,
     print_history,
+    run_eval_turn,
     run_single_turn,
 )
 from .kpi_display import parse_prometheus_text_exposition, render_kpi_report
 from .pod_client import AgentPodClient
 from .repl_helpers import (
+    ExecutionMode,
     _ask_cli_help,
+    execution_mode_color,
     execution_mode_label,
     fmt_bytes,
     parse_mode_command,
@@ -43,6 +46,7 @@ def run_interactive_chat(
     team_id: str | None,
     verbose: bool,
     stream: bool,
+    mode: ExecutionMode = "stream",
     color_enabled: bool,
     auth_session: KeycloakUserSessionManager | None,
     callback_host: str,
@@ -85,7 +89,7 @@ def run_interactive_chat(
     )
     print(
         "Mode: "
-        f"{colorize(execution_mode_label(stream=stream), color=ANSI_GREEN if stream else ANSI_YELLOW, enabled=color_enabled, bold=True)}"
+        f"{colorize(execution_mode_label(mode), color=execution_mode_color(mode), enabled=color_enabled, bold=True)}"
     )
     if auth_session is not None:
         print(
@@ -103,7 +107,7 @@ def run_interactive_chat(
     )
 
     current_session_id = session_id
-    current_stream = stream
+    current_mode: ExecutionMode = mode
     current_team_id = team_id
     while True:
         try:
@@ -202,8 +206,8 @@ def run_interactive_chat(
             print(
                 _wfield(
                     "Mode:",
-                    execution_mode_label(stream=current_stream),
-                    ANSI_GREEN if current_stream else ANSI_YELLOW,
+                    execution_mode_label(current_mode),
+                    execution_mode_color(current_mode),
                 )
             )
             print(_wfield("Pod:", client.base_url, ANSI_DIM))
@@ -247,13 +251,13 @@ def run_interactive_chat(
             if requested_mode is None:
                 print(
                     "Mode: "
-                    f"{colorize(execution_mode_label(stream=current_stream), color=ANSI_GREEN if current_stream else ANSI_YELLOW, enabled=color_enabled, bold=True)}"
+                    f"{colorize(execution_mode_label(current_mode), color=execution_mode_color(current_mode), enabled=color_enabled, bold=True)}"
                 )
                 continue
-            current_stream = requested_mode
+            current_mode = requested_mode
             print(
                 "Switched to "
-                f"{colorize(execution_mode_label(stream=current_stream), color=ANSI_GREEN if current_stream else ANSI_YELLOW, enabled=color_enabled, bold=True)} mode"
+                f"{colorize(execution_mode_label(current_mode), color=execution_mode_color(current_mode), enabled=color_enabled, bold=True)} mode"
             )
             continue
         if message.startswith("/agent "):
@@ -1105,8 +1109,8 @@ def run_interactive_chat(
                 else colorize("none", color=ANSI_YELLOW, enabled=color_enabled)
             )
             mode_label = colorize(
-                execution_mode_label(stream=current_stream),
-                color=ANSI_GREEN if current_stream else ANSI_YELLOW,
+                execution_mode_label(current_mode),
+                color=execution_mode_color(current_mode),
                 enabled=color_enabled,
                 bold=True,
             )
@@ -1174,58 +1178,69 @@ def run_interactive_chat(
                 )
             continue
 
-        exit_code, hitl = run_single_turn(
-            client=client,
-            agent_id=current_agent,
-            message=message,
-            session_id=current_session_id,
-            user_id=user_id,
-            team_id=current_team_id,
-            verbose=verbose,
-            stream=current_stream,
-            color_enabled=color_enabled,
-        )
-        while hitl is not None:
-            req = hitl.get("request") or {}
-            choices = req.get("choices") or []
-            free_text = req.get("free_text", False)
-            if free_text:
-                try:
-                    answer = input("Your answer: ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    print("\nCancelled.")
-                    hitl = None
-                    continue
-                resume_value: Any = answer
-            elif choices:
-                try:
-                    raw = input("Your choice (number or id): ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    print("\nCancelled.")
-                    hitl = None
-                    continue
-                resume_value = build_hitl_resume_payload(
-                    raw_response=raw,
-                    choices=choices,
-                )
-            else:
-                try:
-                    resume_value = input("Your response: ").strip()
-                except (EOFError, KeyboardInterrupt):
-                    print("\nCancelled.")
-                    hitl = None
-                    continue
+        if current_mode == "eval":
+            exit_code = run_eval_turn(
+                client=client,
+                agent_id=current_agent,
+                message=message,
+                session_id=current_session_id,
+                user_id=user_id,
+                team_id=current_team_id,
+                color_enabled=color_enabled,
+            )
+        else:
             exit_code, hitl = run_single_turn(
                 client=client,
                 agent_id=current_agent,
-                message="",
+                message=message,
                 session_id=current_session_id,
                 user_id=user_id,
                 team_id=current_team_id,
                 verbose=verbose,
-                stream=current_stream,
+                stream=(current_mode == "stream"),
                 color_enabled=color_enabled,
-                resume_payload=resume_value,
             )
+            while hitl is not None:
+                req = hitl.get("request") or {}
+                choices = req.get("choices") or []
+                free_text = req.get("free_text", False)
+                if free_text:
+                    try:
+                        answer = input("Your answer: ").strip()
+                    except (EOFError, KeyboardInterrupt):
+                        print("\nCancelled.")
+                        hitl = None
+                        continue
+                    resume_value: Any = answer
+                elif choices:
+                    try:
+                        raw = input("Your choice (number or id): ").strip()
+                    except (EOFError, KeyboardInterrupt):
+                        print("\nCancelled.")
+                        hitl = None
+                        continue
+                    resume_value = build_hitl_resume_payload(
+                        raw_response=raw,
+                        choices=choices,
+                    )
+                else:
+                    try:
+                        resume_value = input("Your response: ").strip()
+                    except (EOFError, KeyboardInterrupt):
+                        print("\nCancelled.")
+                        hitl = None
+                        continue
+                exit_code, hitl = run_single_turn(
+                    client=client,
+                    agent_id=current_agent,
+                    message="",
+                    session_id=current_session_id,
+                    user_id=user_id,
+                    team_id=current_team_id,
+                    verbose=verbose,
+                    stream=(current_mode == "stream"),
+                    color_enabled=color_enabled,
+                    resume_payload=resume_value,
+                )
         if exit_code != 0:
             print("The request failed. Use /help for commands or try another agent.")

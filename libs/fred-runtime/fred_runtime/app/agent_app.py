@@ -62,6 +62,7 @@ from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.structure import KeycloakUser
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -558,8 +559,14 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
                 is_error=True,
             )
 
-        execute_request = _to_internal_request(
-            _build_runtime_execute_request_from_invocation(request)
+        context_dict = request.context.model_dump(mode="json")
+        context_dict.setdefault("execution_action", ExecutionGrantAction.EXECUTE.value)
+        execute_request = _AgentExecuteRequest.model_construct(
+            agent_id=request.agent_id,
+            agent_instance_id=None,
+            message=request.message,
+            context=context_dict,
+            resume_payload=None,
         )
 
         content_parts: list[str] = []
@@ -766,13 +773,6 @@ class _AgentExecuteRequest(BaseModel):
         return self
 
 
-@dataclass(slots=True)
-class _PreparedRuntimeExecution:
-    runtime: ReActRuntime | GraphRuntime
-    execution_config: ExecutionConfig
-    executor_input: Any
-
-
 def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
     """
     Bridge a public RuntimeExecuteRequest to the internal execution model.
@@ -794,36 +794,6 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         context=r.to_legacy_context() or None,
         checkpoint_id=r.checkpoint_id,
         resume_payload=r.resume_payload,
-    )
-
-
-def _build_runtime_execute_request_from_invocation(
-    request: AgentInvocationRequest,
-) -> RuntimeExecuteRequest:
-    """
-    Project one in-process agent invocation onto the public execute contract.
-
-    Why this exists:
-    - pod-local agent-to-agent calls should follow the same request projection
-      path as HTTP execution, rather than hand-constructing a second private
-      request shape
-    - future continuity fields should therefore land once on the typed runtime
-      contract, then flow through both local and remote invocation paths
-
-    How to use it:
-    - call from `LocalRegistryAgentInvoker.invoke(...)`
-    - pass the result through `_to_internal_request(...)` until the remaining
-      internal helpers consume `RuntimeExecuteRequest` directly
-
-    Example:
-    - `runtime_request = _build_runtime_execute_request_from_invocation(request)`
-    """
-
-    return RuntimeExecuteRequest(
-        agent_id=request.agent_id,
-        input=request.message,
-        session_id=request.context.session_id,
-        runtime_context=request.context.model_dump(mode="json"),
     )
 
 
@@ -871,7 +841,7 @@ def _apply_runtime_tuning(
     - `definition = _apply_runtime_tuning(template_definition, resolution.tuning)`
     """
 
-    update: dict[str, Any] = {
+    update: dict[str, object] = {
         "role": tuning.role,
         "description": tuning.description,
         "tags": tuple(tuning.tags),
@@ -881,11 +851,7 @@ def _apply_runtime_tuning(
         ),
     }
     system_prompt = tuning.values.get("prompts.system")
-    if (
-        isinstance(definition, ReActAgentDefinition)
-        and isinstance(system_prompt, str)
-        and system_prompt.strip()
-    ):
+    if isinstance(system_prompt, str) and system_prompt.strip():
         update["system_prompt_template"] = system_prompt
     return definition.model_copy(update=update)
 
@@ -1416,6 +1382,120 @@ def _sse(payload: str) -> str:
     return f"data: {payload}\n\n"
 
 
+@dataclass(frozen=True)
+class _TurnOutcome:
+    model_name: str | None
+    finish_reason: str
+    token_usage: dict[str, Any] | None
+    input_tokens: int | None
+    output_tokens: int | None
+    tool_count: int
+    is_error: bool
+    total_ms: int
+    final_content: str | None
+
+
+def _parse_turn_outcome(
+    payloads: list[dict[str, Any]],
+    turn_start: float,
+) -> _TurnOutcome:
+    total_ms = int((time.monotonic() - turn_start) * 1000)
+    tool_count = sum(1 for p in payloads if p.get("kind") == "tool_call")
+    final = next((p for p in reversed(payloads) if p.get("kind") == "final"), None)
+    is_error = any(p.get("kind") == "execution_error" for p in payloads)
+    token_usage: dict[str, Any] | None = final.get("token_usage") if final else None
+    return _TurnOutcome(
+        model_name=final.get("model_name") if final else None,
+        finish_reason="error"
+        if is_error
+        else ((final.get("finish_reason") or "") if final else ""),
+        token_usage=token_usage,
+        input_tokens=token_usage.get("input_tokens") if token_usage else None,
+        output_tokens=token_usage.get("output_tokens") if token_usage else None,
+        tool_count=tool_count,
+        is_error=is_error,
+        total_ms=total_ms,
+        final_content=(final.get("content") or None) if final else None,
+    )
+
+
+def _build_eval_trace(
+    payloads: list[dict[str, Any]],
+    input_text: str,
+    agent_id: str,
+    session_id: str,
+    turn_start: float,
+) -> EvalTrace:
+    outcome = _parse_turn_outcome(payloads, turn_start)
+    steps: list[EvalStep] = []
+    retrieval_context: list[str] = []
+    tools_called: list[str] = []
+    error: str | None = None
+
+    for p in payloads:
+        kind = p.get("kind")
+        if kind == "tool_call":
+            steps.append(
+                EvalStep(
+                    kind="tool_call",
+                    tool_name=p.get("tool_name"),
+                    call_id=p.get("call_id"),
+                    arguments=p.get("arguments") or {},
+                )
+            )
+            if p.get("tool_name"):
+                tools_called.append(p["tool_name"])
+        elif kind == "tool_result":
+            content = p.get("content", "")
+            is_err = p.get("is_error", False)
+            steps.append(
+                EvalStep(
+                    kind="tool_result",
+                    tool_name=p.get("tool_name"),
+                    call_id=p.get("call_id"),
+                    content=content,
+                    is_error=is_err,
+                )
+            )
+            if not is_err:
+                sources = p.get("sources") or []
+                if sources:
+                    retrieval_context.extend(
+                        s["content"] for s in sources if s.get("content")
+                    )
+                elif content:
+                    retrieval_context.append(content)
+        elif kind == "final":
+            steps.append(EvalStep(kind="final", content=p.get("content")))
+        elif kind == "node_error":
+            steps.append(
+                EvalStep(
+                    kind="node_error",
+                    node_id=p.get("node_id"),
+                    error_message=p.get("error_message"),
+                )
+            )
+        elif kind == "awaiting_human":
+            steps.append(EvalStep(kind="awaiting_human"))
+        elif kind == "execution_error":
+            error = p.get("message")
+
+    return EvalTrace(
+        session_id=session_id,
+        agent_id=agent_id,
+        input=input_text,
+        output=outcome.final_content,
+        error=error,
+        latency_ms=outcome.total_ms,
+        model_name=outcome.model_name,
+        token_usage=outcome.token_usage,
+        finish_reason=outcome.finish_reason or None,
+        steps=tuple(steps),
+        retrieval_context=tuple(retrieval_context),
+        tools_called=tuple(tools_called),
+    )
+
+
 def _emit_turn_completed(
     container: PodApplicationContext,
     *,
@@ -1447,21 +1527,7 @@ def _emit_turn_completed(
     """
     try:
         kpi = get_runtime_context().get_kpi_writer()
-        total_ms = int((time.monotonic() - turn_start) * 1000)
-        tool_count = sum(1 for p in payloads if p.get("kind") == "tool_call")
-        final = next((p for p in reversed(payloads) if p.get("kind") == "final"), None)
-        is_error = any(p.get("kind") == "execution_error" for p in payloads)
-        model_name: str | None = final.get("model_name") if final else None
-        finish_reason: str = (
-            "error" if is_error else (final.get("finish_reason") or "") if final else ""
-        )
-        token_usage: dict[str, Any] | None = final.get("token_usage") if final else None
-        input_tokens: int | None = (
-            token_usage.get("input_tokens") if token_usage else None
-        )
-        output_tokens: int | None = (
-            token_usage.get("output_tokens") if token_usage else None
-        )
+        outcome = _parse_turn_outcome(payloads, turn_start)
         runtime_id = get_runtime_context().config.service_name
 
         # Prometheus-safe dims: low-cardinality only.
@@ -1472,25 +1538,25 @@ def _emit_turn_completed(
             "team_id": team_id,
             "template_agent_id": template_agent_id,
             "runtime_id": runtime_id,
-            "model_name": model_name,
-            "finish_reason": finish_reason,
+            "model_name": outcome.model_name,
+            "finish_reason": outcome.finish_reason,
         }
 
         kpi.emit(
             name="agent.turn_completed",
             type="timer",
-            value=total_ms,
+            value=outcome.total_ms,
             unit="ms",
             dims=prom_dims,
             quantities={
-                "tool_count": tool_count,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
+                "tool_count": outcome.tool_count,
+                "input_tokens": outcome.input_tokens,
+                "output_tokens": outcome.output_tokens,
             },
             actor=KPIActor(type="system"),
         )
 
-        if is_error:
+        if outcome.is_error:
             kpi.emit(
                 name="agent.turn_error_total",
                 type="counter",
@@ -1507,12 +1573,12 @@ def _emit_turn_completed(
                 "session_id": session_id,
                 "exchange_id": exchange_id,
                 "user_id": user_id,
-                "total_ms": total_ms,
-                "is_error": is_error,
+                "total_ms": outcome.total_ms,
+                "is_error": outcome.is_error,
                 **prom_dims,
-                "tool_count": tool_count,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
+                "tool_count": outcome.tool_count,
+                "input_tokens": outcome.input_tokens,
+                "output_tokens": outcome.output_tokens,
             },
         )
         with container._kpi_turns_lock:
@@ -1604,42 +1670,7 @@ async def _stream(
             )
 
 
-def _build_executor_input(
-    definition: ReActAgentDefinition | GraphAgentDefinition,
-    request: _AgentExecuteRequest,
-) -> Any:
-    """
-    Normalize one turn into the executor input expected by the selected runtime.
-
-    Why this exists:
-    - `ReActRuntime` and `GraphRuntime` accept different input shapes
-    - resume turns also bypass normal message validation, so the mapping should
-      live in one helper instead of being repeated inline in the execution loop
-
-    How to use it:
-    - call while assembling one prepared runtime execution
-    - pass the returned object unchanged to `executor.stream(...)`
-
-    Example:
-    - `executor_input = _build_executor_input(definition, request)`
-    """
-
-    if isinstance(definition, GraphAgentDefinition):
-        input_cls = definition.input_model()
-        if request.resume_payload is not None:
-            return input_cls.model_construct(message="")
-        return input_cls.model_validate({"message": request.message or ""})
-
-    return ReActInput(
-        messages=(
-            ()
-            if request.resume_payload is not None
-            else (ReActMessage(role=ReActMessageRole.USER, content=request.message),)
-        ),
-    )
-
-
-def _prepare_runtime_execution(
+async def _iterate_runtime_event_payloads(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
     access_token: str | None = None,
@@ -1647,24 +1678,26 @@ def _prepare_runtime_execution(
     team_id: str | None = None,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
     exchange_id: str | None = None,
-) -> _PreparedRuntimeExecution:
+) -> AsyncIterator[dict[str, Any]]:
     """
-    Build the bound runtime, executor input, and execution config for one turn.
+    Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
 
-    Why this exists:
-    - `execute`, `execute/stream`, and in-process agent invocation all converge
-      on `_iterate_runtime_event_payloads`, so this is the narrowest place to
-      centralize request projection before memory fields are added
-    - it removes one long block of binding/runtime setup from the event loop and
-      gives future continuity fields a single place to enter the runtime stack
+    Why this helper exists:
+    - both `/agents/execute` and `/agents/execute/stream` share the same runtime
+      wiring and event production path
+    - keeping the generator payload-oriented lets the HTTP layer choose whether
+      it renders SSE or returns a terminal JSON response
 
-    How to use it:
-    - call from `_iterate_runtime_event_payloads(...)`
-    - activate the returned runtime, obtain its executor, then stream with the
-      returned `executor_input` and `execution_config`
+    team_id:
+    - callers are responsible for resolving the effective team before calling this
+      function; see _stream() for the standalone "personal" default logic
+    - None is accepted for agent-to-agent (AgentInvoker) invocations where no
+      team scope is required
 
-    Example:
-    - `prepared = _prepare_runtime_execution(definition, request, team_id="fredlab")`
+    access_token:
+    - the user's JWT forwarded via the Authorization header
+    - stored in RuntimeContext so KF tool adapters can use it for outbound calls
+    - None in local dev when security is disabled
     """
 
     request_id = str(uuid4())
@@ -1723,6 +1756,7 @@ def _prepare_runtime_execution(
         runtime_context=runtime_context,
         portable_context=portable_context,
     )
+
     services = _build_runtime_services(
         definition,
         binding,
@@ -1730,9 +1764,8 @@ def _prepare_runtime_execution(
         registry=registry,
         access_token=access_token,
     )
-    runtime: ReActRuntime | GraphRuntime
     if isinstance(definition, GraphAgentDefinition):
-        runtime = GraphRuntime(
+        runtime: ReActRuntime | GraphRuntime = GraphRuntime(
             definition=definition,
             services=services,
         )
@@ -1751,58 +1784,40 @@ def _prepare_runtime_execution(
         checkpoint_id=request.checkpoint_id,
         resume_payload=request.resume_payload,
     )
-    return _PreparedRuntimeExecution(
-        runtime=runtime,
-        execution_config=execution_config,
-        executor_input=_build_executor_input(definition, request),
-    )
-
-
-async def _iterate_runtime_event_payloads(
-    definition: ReActAgentDefinition | GraphAgentDefinition,
-    request: _AgentExecuteRequest,
-    access_token: str | None = None,
-    *,
-    team_id: str | None = None,
-    registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition] | None = None,
-    exchange_id: str | None = None,
-) -> AsyncIterator[dict[str, Any]]:
-    """
-    Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
-
-    Why this helper exists:
-    - both `/agents/execute` and `/agents/execute/stream` share the same runtime
-      wiring and event production path
-    - keeping the generator payload-oriented lets the HTTP layer choose whether
-      it renders SSE or returns a terminal JSON response
-
-    team_id:
-    - callers are responsible for resolving the effective team before calling this
-      function; see _stream() for the standalone "personal" default logic
-    - None is accepted for agent-to-agent (AgentInvoker) invocations where no
-      team scope is required
-
-    access_token:
-    - the user's JWT forwarded via the Authorization header
-    - stored in RuntimeContext so KF tool adapters can use it for outbound calls
-    - None in local dev when security is disabled
-    """
-    prepared = _prepare_runtime_execution(
-        definition,
-        request,
-        access_token=access_token,
-        team_id=team_id,
-        registry=registry,
-        exchange_id=exchange_id,
-    )
 
     try:
-        await prepared.runtime.activate()
-        executor = await prepared.runtime.get_executor()
-        async for event in executor.stream(
-            prepared.executor_input,
-            prepared.execution_config,
-        ):
+        await runtime.activate()
+        executor = await runtime.get_executor()
+        if isinstance(definition, GraphAgentDefinition):
+            # Graph agents receive their typed input schema; the agent's
+            # build_turn_state() maps it to graph state before the first node runs.
+            # The standard contract is a single "message" field in the input schema.
+            # On a HITL resume the runtime ignores input entirely (state is loaded
+            # from the checkpoint), so bypass validation with model_construct.
+            input_cls = definition.input_model()
+            if request.resume_payload is not None:
+                graph_input = input_cls.model_construct(message="")
+            else:
+                graph_input = input_cls.model_validate(
+                    {"message": request.message or ""}
+                )
+            executor_input: ReActInput | object = graph_input
+        else:
+            # On HITL resume, messages are ignored by the codec — the graph
+            # resumes from its checkpointed interrupt via Command(resume=...).
+            # On a normal turn, the user message is the only input.
+            executor_input = ReActInput(
+                messages=(
+                    ()
+                    if request.resume_payload is not None
+                    else (
+                        ReActMessage(
+                            role=ReActMessageRole.USER, content=request.message
+                        ),
+                    )
+                ),
+            )
+        async for event in executor.stream(executor_input, execution_config):
             payload = event.model_dump(mode="json")
             if not isinstance(payload, dict):
                 raise RuntimeError(
@@ -1815,7 +1830,7 @@ async def _iterate_runtime_event_payloads(
         )
         yield RuntimeErrorEvent(message=str(exc)).model_dump(mode="json")
     finally:
-        await prepared.runtime.dispose()
+        await runtime.dispose()
 
 
 def _terminal_execute_payload(
@@ -2417,6 +2432,113 @@ def _build_agent_router(
                     resume_payload=request.resume_payload,
                 )
         return _terminal_execute_payload(payloads)
+
+    @router.post(
+        "/evaluate",
+        response_model=EvalTrace,
+    )
+    async def evaluate(
+        request: RuntimeExecuteRequest,
+        http_request: Request,
+        authenticated_user: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
+    ) -> EvalTrace:
+        """
+        Execute one agent turn and return a complete EvalTrace as JSON.
+
+        POST <configured base_url>/agents/evaluate
+        Authorization: Bearer <user JWT>
+        Body: RuntimeExecuteRequest
+        Response: EvalTrace — synchronous, no SSE, no Langfuse dependency
+
+        Intended for evaluation harnesses (DeepEval, Promptfoo) that need
+        input, output, retrieval_context, tools_called, and steps in one response.
+        """
+        auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+
+        expected_action = _expected_execution_action(request)
+
+        try:
+            validate_execution_grant(request, expected_action=expected_action)
+        except ExecutionGrantViolation as exc:
+            _emit_audit_event(
+                container,
+                "warning",
+                "grant_validation_failed",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+                action=expected_action.value,
+                reason=str(exc),
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        if request.execution_grant is not None:
+            _emit_audit_event(
+                container,
+                "info",
+                "grant_validated",
+                agent_instance_id=request.agent_instance_id,
+                user_id=request.effective_user_id(),
+                action=expected_action.value,
+            )
+        _validate_grant_user_correlation(request, authenticated_user, container)
+        await _validate_session_checkpoint_access(request)
+
+        exchange_id = str(uuid4())
+        turn_start = time.monotonic()
+        internal_req = _to_internal_request(request)
+        target = await _resolve_agent_instance(
+            request=internal_req,
+            registry=registry,
+            access_token=access_token,
+            control_plane_url=get_runtime_context().config.control_plane_url,
+        )
+        payloads = [
+            payload
+            async for payload in _iterate_runtime_event_payloads(
+                target.definition,
+                internal_req,
+                access_token=access_token,
+                team_id=target.team_id,
+                registry=registry,
+                exchange_id=exchange_id,
+            )
+        ]
+        session_id: str | None = request.effective_session_id()
+        eval_session_id = session_id or str(uuid4())
+        user_id_str = request.effective_user_id() or "unknown"
+        _emit_turn_completed(
+            container,
+            session_id=session_id,
+            exchange_id=exchange_id,
+            user_id=user_id_str,
+            team_id=target.team_id,
+            agent_instance_id=request.agent_instance_id,
+            template_agent_id=target.definition.agent_id,
+            payloads=payloads,
+            turn_start=turn_start,
+        )
+        if session_id:
+            history_store = get_runtime_context().config.history_store
+            if history_store is not None:
+                await _write_turn_history(
+                    session_id=session_id,
+                    user_id=user_id_str,
+                    request_message=request.input,
+                    payloads=payloads,
+                    history_store=history_store,
+                    team_id=target.team_id,
+                    agent_instance_id=request.agent_instance_id,
+                    exchange_id=exchange_id,
+                    resume_payload=request.resume_payload,
+                )
+        return _build_eval_trace(
+            payloads=payloads,
+            input_text=request.input or "",
+            agent_id=target.definition.agent_id,
+            session_id=eval_session_id,
+            turn_start=turn_start,
+        )
 
     @router.post(
         "/execute/stream",

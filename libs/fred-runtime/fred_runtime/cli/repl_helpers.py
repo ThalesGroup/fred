@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
-from fred_core.cli.ui import ANSI_DIM, colorize
+from fred_core.cli.ui import ANSI_CYAN, ANSI_DIM, ANSI_GREEN, ANSI_YELLOW, colorize
 
 from .pod_client import AgentPodClient
+
+ExecutionMode = Literal["stream", "final", "eval"]
 
 
 def print_help() -> None:
@@ -26,7 +28,7 @@ def print_help() -> None:
         "  /whoami                  Show identity, auth, team, agent, session, pod URL"
     )
     print("  /logout                  Clear the cached login session")
-    print("  /mode [final|stream]     Show or change the execution mode")
+    print("  /mode [stream|final|eval] Show or change the execution mode")
     print(
         "  /session [<N>|<id>]      Show current session, or switch by index / exact id"
     )
@@ -74,7 +76,7 @@ _CLI_HELP_CONTEXT = (
     "  /login-password [user]   Use direct username/password login as a local fallback\n"
     "  /whoami                  Show identity, auth, team, agent, session, pod URL\n"
     "  /logout                  Clear the cached login session\n"
-    "  /mode [final|stream]     Show or change the execution mode (default: stream)\n"
+    "  /mode [stream|final|eval] Show or change the execution mode (default: stream)\n"
     "  /session [<N>|<id>]      Show current session, or switch by index / exact id\n"
     "  /session-new             Start a fresh session with a generated id\n"
     "  /session-info [id]       Show session metadata (timestamps, agents, tokens, title)\n"
@@ -152,23 +154,35 @@ def fmt_bytes(n: int) -> str:
     return f"{n / (1024 * 1024):.1f} MB"
 
 
-def execution_mode_label(*, stream: bool) -> str:
+_MODE_COLORS: dict[str, str] = {
+    "stream": ANSI_GREEN,
+    "final": ANSI_YELLOW,
+    "eval": ANSI_CYAN,
+}
+
+
+def execution_mode_label(mode: ExecutionMode) -> str:
     """Return the human-readable label for the current execution mode."""
-    return "stream" if stream else "final"
+    return mode
 
 
-def parse_mode_command(message: str) -> bool | None:
+def execution_mode_color(mode: ExecutionMode) -> str:
+    """Return the ANSI color for the given execution mode."""
+    return _MODE_COLORS.get(mode, ANSI_DIM)
+
+
+def parse_mode_command(message: str) -> ExecutionMode | None:
     """
     Parse one `/mode ...` command into the requested execution mode.
 
-    Returns `True` for stream mode, `False` for final mode, or `None` to display current.
+    Returns the mode string, or None to display the current mode.
+    Raises ValueError on unknown input.
     """
-    command = message.strip()
-    if command == "/mode":
+    requested = message.strip().removeprefix("/mode").strip().lower()
+    if not requested:
         return None
-    requested_mode = command.removeprefix("/mode").strip().lower()
-    if requested_mode == "stream":
-        return True
-    if requested_mode == "final":
-        return False
-    raise ValueError("Unknown mode. Use `/mode`, `/mode final`, or `/mode stream`.")
+    if requested in ("stream", "final", "eval"):
+        return requested  # type: ignore[return-value]
+    raise ValueError(
+        f"Unknown mode {requested!r}. Use `/mode stream`, `/mode final`, or `/mode eval`."
+    )

@@ -300,10 +300,12 @@ def test_parse_mode_command_handles_show_and_switch_requests() -> None:
     """
 
     assert parse_mode_command("/mode") is None
-    assert parse_mode_command("/mode final") is False
-    assert parse_mode_command("/mode stream") is True
-    assert execution_mode_label(stream=False) == "final"
-    assert execution_mode_label(stream=True) == "stream"
+    assert parse_mode_command("/mode final") == "final"
+    assert parse_mode_command("/mode stream") == "stream"
+    assert parse_mode_command("/mode eval") == "eval"
+    assert execution_mode_label("final") == "final"
+    assert execution_mode_label("stream") == "stream"
+    assert execution_mode_label("eval") == "eval"
 
 
 def test_build_parser_accepts_team_id_flag() -> None:

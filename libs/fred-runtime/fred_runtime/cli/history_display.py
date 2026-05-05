@@ -408,3 +408,152 @@ def build_hitl_resume_payload(
         if 0 <= idx < len(choices):
             selected_choice_id = str(choices[idx].get("id", raw_response))
     return {"choice_id": selected_choice_id}
+
+
+def print_eval_trace(trace: dict[str, Any], *, color_enabled: bool) -> None:
+    """Render one EvalTrace dict (from POST /agents/evaluate) to the terminal."""
+    sep = colorize("  " + "─" * 62, color=ANSI_DIM, enabled=color_enabled)
+    print(colorize("  EvalTrace", color=ANSI_CYAN, enabled=color_enabled, bold=True))
+    print(sep)
+
+    def _field(label: str, value: str, color: str = ANSI_DIM) -> None:
+        print(
+            colorize(f"  {label:<18}", color=ANSI_DIM, enabled=color_enabled)
+            + colorize(value, color=color, enabled=color_enabled)
+        )
+
+    _field("agent", trace.get("agent_id") or "-", ANSI_CYAN)
+    _field("session", trace.get("session_id") or "-")
+    _field("latency", f"{trace.get('latency_ms', 0)} ms")
+    _field("model", trace.get("model_name") or "-")
+    _field("finish", trace.get("finish_reason") or "-")
+
+    tu = trace.get("token_usage") or {}
+    if tu:
+        _field(
+            "tokens",
+            f"{tu.get('input_tokens', 0)}↑ in  {tu.get('output_tokens', 0)}↓ out",
+        )
+
+    tools_called: list[str] = list(trace.get("tools_called") or [])
+    if tools_called:
+        _field("tools_called", "  ".join(tools_called), ANSI_YELLOW)
+
+    retrieval_ctx: list[str] = list(trace.get("retrieval_context") or [])
+    _field("retrieval_ctx", str(len(retrieval_ctx)) + " chunk(s)")
+
+    steps: list[dict[str, Any]] = list(trace.get("steps") or [])
+    _field("steps", str(len(steps)))
+
+    err = trace.get("error")
+    _field("error", err or "none", ANSI_RED if err else ANSI_DIM)
+
+    if steps:
+        print()
+        print(colorize("  Steps:", color=ANSI_DIM, enabled=color_enabled, bold=True))
+        for i, step in enumerate(steps, 1):
+            kind = step.get("kind", "?")
+            name = step.get("tool_name") or ""
+            if kind == "tool_call":
+                raw_args = step.get("arguments")
+                args_str = (
+                    json.dumps(raw_args, ensure_ascii=False)
+                    if raw_args is not None
+                    else ""
+                )
+                args_str = (args_str[:80] + "…") if len(args_str) > 80 else args_str
+                print(
+                    colorize(f"  {i:>3}  ", color=ANSI_DIM, enabled=color_enabled)
+                    + colorize(
+                        "[tool_call]   ", color=ANSI_YELLOW, enabled=color_enabled
+                    )
+                    + colorize(
+                        name, color=ANSI_YELLOW, enabled=color_enabled, bold=True
+                    )
+                )
+                if args_str:
+                    print(
+                        colorize(
+                            f"       {args_str}", color=ANSI_DIM, enabled=color_enabled
+                        )
+                    )
+            elif kind == "tool_result":
+                is_err = step.get("is_error", False)
+                rc = ANSI_RED if is_err else ANSI_GREEN
+                content = str(step.get("content") or "")
+                content = (content[:80] + "…") if len(content) > 80 else content
+                print(
+                    colorize(f"  {i:>3}  ", color=ANSI_DIM, enabled=color_enabled)
+                    + colorize("[tool_result] ", color=rc, enabled=color_enabled)
+                    + colorize(name, color=rc, enabled=color_enabled, bold=True)
+                    + colorize(
+                        "  (error)" if is_err else "  (ok)",
+                        color=rc,
+                        enabled=color_enabled,
+                    )
+                )
+                if content:
+                    print(
+                        colorize(
+                            f"       {content}", color=ANSI_DIM, enabled=color_enabled
+                        )
+                    )
+            elif kind == "node_error":
+                msg = str(step.get("error_message") or "")
+                print(
+                    colorize(f"  {i:>3}  ", color=ANSI_DIM, enabled=color_enabled)
+                    + colorize("[node_error]  ", color=ANSI_RED, enabled=color_enabled)
+                    + colorize(
+                        step.get("node_id") or "",
+                        color=ANSI_RED,
+                        enabled=color_enabled,
+                        bold=True,
+                    )
+                )
+                if msg:
+                    print(
+                        colorize(f"       {msg}", color=ANSI_DIM, enabled=color_enabled)
+                    )
+            elif kind == "final":
+                print(
+                    colorize(f"  {i:>3}  ", color=ANSI_DIM, enabled=color_enabled)
+                    + colorize(
+                        "[final]", color=ANSI_GREEN, enabled=color_enabled, bold=True
+                    )
+                )
+            else:
+                print(
+                    colorize(f"  {i:>3}  ", color=ANSI_DIM, enabled=color_enabled)
+                    + colorize(f"[{kind}]", color=ANSI_DIM, enabled=color_enabled)
+                )
+
+    output = trace.get("output") or ""
+    if output:
+        print()
+        print(colorize("  Output:", color=ANSI_DIM, enabled=color_enabled, bold=True))
+        print(sep)
+        print(output)
+
+    print(sep)
+
+
+def run_eval_turn(
+    *,
+    client: AgentPodClient,
+    agent_id: str,
+    message: str,
+    session_id: str,
+    user_id: str,
+    team_id: str | None,
+    color_enabled: bool,
+) -> int:
+    """Call /agents/evaluate and pretty-print the EvalTrace."""
+    result = client.evaluate(
+        agent_id=agent_id,
+        message=message,
+        session_id=session_id,
+        user_id=user_id,
+        team_id=team_id,
+    )
+    print_eval_trace(result, color_enabled=color_enabled)
+    return 0 if result.get("error") is None else 1
