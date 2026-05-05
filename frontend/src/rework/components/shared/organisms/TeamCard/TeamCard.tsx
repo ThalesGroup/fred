@@ -1,12 +1,12 @@
-import styles from "./TeamCard.module.scss";
-import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { useTranslation } from "react-i18next";
-import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
-import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import React from "react";
+import { useTranslation } from "react-i18next";
+import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
+import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import styles from "./TeamCard.module.scss";
 
 export interface TeamCardProps {
   team: Team;
@@ -25,7 +25,7 @@ export default function TeamCard({ team, withDescription, canJoin }: TeamCardPro
     if (team.owners.length === 0) return;
     const recipients = team.owners.map((o) => o.email).join(";");
     const subject = `[${siteTitle} ${siteSubtitle}] Demande pour rejoindre l'équipe ${team.name}`;
-    const teamUrl = `${window.location.origin}/teams/${team.id}/agents`;
+    const teamUrl = `${window.location.origin}/team/${team.id}/agents`;
     const body = `Bonjour,\n\nJe souhaite rejoindre l’équipe ${team.name} sur ${siteTitle} ${siteSubtitle}.\n\nInformations utilisateur : ${userFullName} (${username})\n\nAller à la page de l'équipe ${team.name} : ${teamUrl}`;
     const params = new URLSearchParams({
       subject: subject,
