@@ -138,7 +138,7 @@ dev = [
 # Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
 # https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
 config-settings = { editable_mode = "compat" }
-environments = ["sys_platform == 'linux'"]
+environments = ["sys_platform == 'linux' or sys_platform == 'darwin'"]
 
 
 [tool.alembic]
@@ -224,4 +224,3 @@ prepend_sys_path = [
 # type = "exec"
 # executable = "ruff"
 # options = "check --fix REVISION_SCRIPT_FILENAME"
-

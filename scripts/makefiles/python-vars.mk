@@ -7,7 +7,7 @@ TARGET?=$(CURDIR)/target
 VENV?=$(CURDIR)/.venv
 PYTHON?=$(VENV)/bin/python
 PIP?=$(VENV)/bin/pip
-UV?=$(VENV)/bin/uv
+UV?=$(or $(wildcard $(VENV)/bin/uv),$(shell command -v uv 2>/dev/null),uv)
 
 # Needed env variable to start app
 ROOT_DIR := $(realpath $(CURDIR))

@@ -22,12 +22,12 @@ import asyncio
 import inspect
 import json
 import logging
-import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 
 import httpx
@@ -50,6 +50,10 @@ from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
     WorkspaceUploadError,
+)
+from agentic_backend.common.langfuse_config import (
+    build_langfuse_client,
+    get_langfuse_credentials,
 )
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
@@ -206,9 +210,6 @@ class LangfuseTracerAdapter(TracerPort):
         return LangfuseSpanAdapter(span)
 
 
-_LANGFUSE_TRACER: TracerPort | None | bool = False
-
-
 class _LangfuseSpanLike(Protocol):
     id: str
 
@@ -219,27 +220,60 @@ class _LangfuseSpanLike(Protocol):
     def end(self, *, end_time: int | None = None) -> object: ...
 
 
-def build_langfuse_tracer() -> TracerPort | None:
+@lru_cache(maxsize=1)
+def _cached_langfuse_tracer() -> TracerPort | None:
     """
-    Return a shared Langfuse tracer when credentials are configured.
+    Build and memoize the process-wide Langfuse tracer once.
+
+    Why this function exists:
+    - v2 runtime bootstrap may ask for a tracer multiple times in one process.
+    - Langfuse client creation should stay idempotent and avoid repeated setup.
+    - A function cache is clearer than a mutable module-global sentinel.
+
+    How to use it:
+    - Call indirectly through `build_langfuse_tracer()`.
+    - Tests may clear the cache with `_cached_langfuse_tracer.cache_clear()`.
+
+    Example:
+    ```python
+    tracer = build_langfuse_tracer()
+    if tracer is not None:
+        ...
+    ```
     """
 
-    global _LANGFUSE_TRACER
-    if _LANGFUSE_TRACER is not False:
-        return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
-
-    has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
-    has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not (has_public and has_secret):
-        _LANGFUSE_TRACER = None
+    if get_langfuse_credentials() is None:
         return None
 
     try:
-        _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
+        client = build_langfuse_client()
+        if client is None:
+            return None
+        return LangfuseTracerAdapter(client)
     except Exception:
         logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
-        _LANGFUSE_TRACER = None
-    return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
+        return None
+
+
+def build_langfuse_tracer() -> TracerPort | None:
+    """
+    Return a shared Langfuse tracer when credentials are configured.
+
+    Why this function exists:
+    - runtime wiring needs one small entrypoint for optional Langfuse tracing
+    - callers should not need to know whether the tracer is disabled or cached
+
+    How to use it:
+    - call during runtime/bootstrap wiring
+    - handle `None` as "Langfuse tracing disabled for this process"
+
+    Example:
+    ```python
+    tracer = build_langfuse_tracer()
+    runtime = build_runtime(tracer=tracer)
+    ```
+    """
+    return _cached_langfuse_tracer()
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
@@ -567,7 +601,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     ToolContentBlock(
                         kind=ToolContentKind.TEXT,
                         text=(
-                            "Langfuse summary failed. Check LANGFUSE_HOST/"
+                            "Langfuse summary failed. Check LANGFUSE_BASE_URL/"
                             "LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY and trace filters."
                         ),
                     ),
@@ -1311,7 +1345,7 @@ def _summarize_langfuse_conversation(
     credentials = _langfuse_credentials()
     if credentials is None:
         raise RuntimeError(
-            "Langfuse credentials are not configured. Expected LANGFUSE_HOST, "
+            "Langfuse credentials are not configured. Expected LANGFUSE_BASE_URL, "
             "LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY."
         )
     host, public_key, secret_key = credentials
@@ -1683,12 +1717,7 @@ def _trace_total_latency_ms(*, selected_trace: dict[str, object]) -> int:
 
 
 def _langfuse_credentials() -> tuple[str, str, str] | None:
-    host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
-    public_key = _coerce_optional_string(os.getenv("LANGFUSE_PUBLIC_KEY"))
-    secret_key = _coerce_optional_string(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not host or not public_key or not secret_key:
-        return None
-    return host.rstrip("/"), public_key, secret_key
+    return get_langfuse_credentials()
 
 
 def _langfuse_get_json(
