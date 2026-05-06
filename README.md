@@ -21,34 +21,24 @@ The repository also includes an [academy](./academy/README.md) with sample MCP s
 
 ---
 
-> ### Architecture transition in progress
+> ### This branch introduces a new architecture — read this first
 >
-> This branch introduces a new layout alongside the existing components above.
+> **`agentic-backend` still runs.** Nothing is removed until the replacement is validated.
+> But the target model is fundamentally different and this branch has a lot of moving parts.
 >
-> **`libs/`** — pip-installable Python libraries, already published on PyPI:
+> **→ [`docs/SWIFT_ARCHITECTURE.md`](./docs/SWIFT_ARCHITECTURE.md)** — start here for the big picture: independent agentic pods, control-plane integration, how to register a third-party pod, and what is and is not done yet.
 >
-> | Package | Role |
-> |---------|------|
-> | `libs/fred-core` | Shared SQL, KPI, security, and configuration infrastructure |
-> | `libs/fred-sdk` | Agent authoring SDK — define agents, tools, graphs, HITL |
-> | `libs/fred-runtime` | Execution runtime — FastAPI pod factory, checkpointing, history store, CLI |
+> **In brief:**
 >
-> **`apps/`** — standalone agent applications built on top of those libraries:
+> | Layer | Package | Role |
+> |-------|---------|------|
+> | Libraries | `libs/fred-sdk` | Agent authoring SDK — graphs, tools, HITL |
+> | Libraries | `libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
+> | Libraries | `libs/fred-core` | Shared infrastructure — SQL, KPI, security, config |
+> | Apps | `apps/fred-agents` | First-party agent pod — replaces `agentic-backend` execution |
+> | Apps | `apps/control-plane-backend` | Control plane — teams, sessions, agent enrollment, product APIs |
 >
-> | App | Role |
-> |-----|------|
-> | `apps/fred-agents` | First-party agent pod (RAG expert, general assistant, sentinel) — replaces `agentic-backend` agent execution |
-> | `apps/control-plane-backend` | Control-plane service for team, session, enrollment, and product/admin APIs |
->
-> **What this means in practice:**
->
-> - `libs/fred-sdk` + `libs/fred-runtime` are the new way to build an independent agent pod without pulling in the full Fred platform. See [`libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md`](./libs/docs/ops/AGENT_POD_RUNTIME_PROTOCOL.md) and the [bootstrap guide](./docs/authoring/BOOTSTRAP.md).
-> - `apps/fred-agents` is production-ready and can already replace `agentic-backend` for agent execution. Both coexist in this branch.
-> - `apps/fred-agents` and `apps/control-plane-backend` now live under `apps/` as promoted application packages.
-> - `knowledge-flow-backend` will progressively move into `apps/` in a follow-up commit.
-> - The existing `agentic-backend` and `knowledge-flow-backend` directories remain **fully operational** throughout the migration. Nothing is removed until the replacement is validated.
->
-> If you want to experiment with the new model today, start with `apps/fred-agents` or the [fred-samples](https://github.com/ThalesGroup/fred-samples) reference pod.
+> To experiment today: `apps/fred-agents` or the [fred-samples](https://github.com/ThalesGroup/fred-samples) reference pod.
 
 ---
 
