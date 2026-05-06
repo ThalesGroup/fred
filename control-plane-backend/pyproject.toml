@@ -17,6 +17,7 @@ dependencies = [
   "temporalio>=1.11.1,<2.0.0",
   "fred-core",
   "alembic>=1.18.4",
+  "prometheus-fastapi-instrumentator>=7.1.0",
 ]
 
 [project.optional-dependencies]

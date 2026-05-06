@@ -1573,7 +1573,7 @@ applications:
           port: 8222
           targetPort: 8222
     metricsService:
-      enabled: false
+      enabled: true
       annotations: {}
       extraLabels: {}
       type: ClusterIP
