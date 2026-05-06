@@ -12,7 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fred_core.security.authorization import Action, Resource
+import pytest
+
+from fred_core.security.authorization import (
+    Action,
+    Resource,
+    authorize_or_raise,
+    is_authorized,
+    require_admin,
+)
+from fred_core.security.models import AuthorizationError
 from fred_core.security.rbac import RBACProvider
 from fred_core.security.structure import KeycloakUser
 
@@ -131,3 +140,37 @@ class TestRBACProvider:
         assert self.rbac.is_authorized(multi_role_user, Action.CREATE, Resource.TAGS)
         assert self.rbac.is_authorized(multi_role_user, Action.DELETE, Resource.TAGS)
         assert self.rbac.is_authorized(multi_role_user, Action.READ, Resource.TAGS)
+
+
+def _admin() -> KeycloakUser:
+    return KeycloakUser(uid="a1", username="admin", email="a@t.com", roles=["admin"])
+
+
+def _viewer() -> KeycloakUser:
+    return KeycloakUser(uid="v1", username="viewer", email="v@t.com", roles=["viewer"])
+
+
+class TestIsAuthorized:
+    def test_admin_is_authorized(self) -> None:
+        assert is_authorized(_admin(), Action.READ, Resource.TAGS) is True
+
+    def test_viewer_denied_create(self) -> None:
+        assert is_authorized(_viewer(), Action.CREATE, Resource.TAGS) is False
+
+
+class TestAuthorizeOrRaise:
+    def test_authorized_does_not_raise(self) -> None:
+        authorize_or_raise(_admin(), Action.READ, Resource.TAGS)
+
+    def test_unauthorized_raises_authorization_error(self) -> None:
+        with pytest.raises(AuthorizationError):
+            authorize_or_raise(_viewer(), Action.CREATE, Resource.TAGS)
+
+
+class TestRequireAdmin:
+    def test_admin_passes(self) -> None:
+        require_admin(_admin())
+
+    def test_non_admin_raises(self) -> None:
+        with pytest.raises(AuthorizationError):
+            require_admin(_viewer())

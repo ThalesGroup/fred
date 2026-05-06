@@ -2,22 +2,19 @@
 
 This document is the central summary for model configuration across:
 
-- `agentic-backend`
+- `apps/fred-agents` (and any third-party agent pod built with `fred-runtime`)
 - `knowledge-flow-backend`
 
 ## Source Of Truth
 
-The two backends do not configure models the same way today.
+The two surfaces configure models differently.
 
-- `agentic-backend`
-  - Modern/default mode: model routing comes from `agentic-backend/config/models_catalog.yaml`
-  - This mode is enabled with `ai.enable_catalog_mode: true`
-  - The catalog can be overridden with:
-    - `FRED_MODELS_CATALOG_FILE`
-    - `FRED_V2_MODELS_CATALOG_FILE`
-  - The catalog seeds the runtime defaults for `chat` and `language`
+- **Agent pods** (`apps/fred-agents`, or your own pod)
+  - Model routing comes from `apps/fred-agents/config/models_catalog.yaml`
+  - The catalog can be overridden with the `FRED_MODELS_CATALOG_FILE` environment variable
+  - The catalog seeds the runtime defaults for `chat` and `language` capabilities
 
-- `knowledge-flow-backend`
+- **Knowledge Flow backend**
   - Models are configured directly in `knowledge-flow-backend/config/configuration*.yaml`
   - Main keys:
     - `chat_model`
@@ -26,15 +23,15 @@ The two backends do not configure models the same way today.
 
 Detailed examples are centralized in:
 
-- `agentic-backend/config/models_catalog.yaml`
-- `agentic-backend/config/configuration_prod.yaml`
+- `apps/fred-agents/config/models_catalog.yaml`
+- `apps/fred-agents/config/configuration_prod.yaml`
 - `knowledge-flow-backend/config/configuration_prod.yaml`
 
-## Agentic Backend
+## Agent Pod Model Catalog
 
 ### Catalog Shape
 
-`agentic-backend` uses a catalog-first model routing file with this structure:
+Agent pods use a catalog-first model routing file (`models_catalog.yaml`) with this structure:
 
 - `version`
 - `common_model_settings`
@@ -45,7 +42,7 @@ Detailed examples are centralized in:
 
 The strict loader lives in:
 
-- `agentic-backend/agentic_backend/core/agents/v2/model_routing/catalog.py`
+- `libs/fred-runtime/fred_runtime/model_routing/catalog.py`
 
 Important behavior:
 
@@ -87,11 +84,9 @@ profiles:
 rules: []
 ```
 
-### Legacy Bootstrap Fields
+### Bootstrap Fields
 
-`ai.default_chat_model` and `ai.default_language_model` still exist as bootstrap/fallback inputs, but they are no longer the primary place to set models in modern `agentic-backend` deployments.
-
-Use `models_catalog.yaml` as the source of truth when `ai.enable_catalog_mode: true`.
+`ai.default_chat_model` and `ai.default_language_model` exist as legacy fallback inputs. Use `models_catalog.yaml` as the source of truth for all agent pod deployments.
 
 ## Knowledge Flow Backend
 
@@ -124,7 +119,7 @@ vision_model:
 
 ## Minimal Examples
 
-### Agentic Backend Profiles (`models_catalog.yaml`)
+### Agent Pod Profiles (`models_catalog.yaml`)
 
 OpenAI chat profile:
 
@@ -377,6 +372,6 @@ Provider support implemented in `fred-core/fred_core/model/factory.py`:
 ## Notes
 
 - Keep secrets in `.env`, not in YAML.
-- For `agentic-backend`, prefer `models_catalog.yaml` over editing `ai.default_*` directly.
+- For agent pods (`apps/fred-agents` or your own pod), use `models_catalog.yaml` as the source of truth. Avoid editing `ai.default_*` directly.
 - For `knowledge-flow-backend`, keep using `chat_model` / `embedding_model` / `vision_model` in the runtime config files.
 - Use environment-specific files only for active runtime values and deployment-specific overrides.

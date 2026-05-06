@@ -65,7 +65,7 @@ class SimpleAssistantDefinition(ReActAgentDefinition):
     - `definition = SimpleAssistantDefinition()`
     """
 
-    agent_id: str = "fred.simple_assistant"
+    agent_id: str = "fred.github.simple_assistant"
     role: str = "Generalist assistant"
     description: str = (
         "A helpful, concise assistant that answers directly from the model. "

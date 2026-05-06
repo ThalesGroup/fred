@@ -18,8 +18,8 @@ Why this module exists:
 - all other agents in this pod are scoped to a specific task (monitoring, RAG)
 - this agent is the generic configurable template: team admins equip it with the
   Knowledge Flow MCP tools their use case needs and guide it via a system prompt
-- it is also the minimal smoke-test for a running pod (no external service required
-  if mcp servers are not reachable — the agent falls back gracefully)
+- it is the fully-equipped configurable template: team admins pick which KF
+  tools to activate and specialise the role via the system prompt field
 
 How to use it:
 - import `GENERAL_ASSISTANT_AGENT` and add it to a pod registry
@@ -57,8 +57,9 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     Why this class exists:
     - it is the generic Fred agent: team admins configure it with any combination
       of Knowledge Flow MCP tools and a custom system prompt for their use case
-    - it works with zero external services (the model alone is enough) and scales
-      up to the full Knowledge Flow toolkit without code changes
+    - it works with zero external services and scales up to the full Knowledge
+      Flow toolkit without code changes; for a pure LLM baseline use
+      `simple_assistant` instead
 
     Key design choices:
     - all Knowledge Flow MCP servers are declared in `default_mcp_servers` so the

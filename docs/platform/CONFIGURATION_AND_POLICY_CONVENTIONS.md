@@ -17,9 +17,9 @@ No extra conventions should be introduced outside this contract.
 
 ## Backends Covered
 
-- `agentic-backend`
+- `apps/fred-agents` (agent execution pod)
 - `knowledge-flow-backend`
-- `control-plane-backend`
+- `apps/control-plane-backend`
 
 All three follow the same startup configuration contract.
 

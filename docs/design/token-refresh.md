@@ -1,5 +1,7 @@
 # Token Refresh & MCP Retries (v1)
 
+> **Note:** Module paths in this document reference `agentic_backend.*`. The token-expiry detection now lives in `fred_runtime.common.token_expiry` and `fred_runtime.common.kf_base_client`. Concepts are unchanged.
+
 ## Overview
 Lorsqu'un agent appelle un MCP ou un service Knowledge Flow, il propage le **jeton utilisateur** issu de Keycloak. Si ce jeton expire en plein échange, l'expérience doit rester fluide : l'agent rafraîchit le jeton et reprend l'appel sans perdre le fil.
 

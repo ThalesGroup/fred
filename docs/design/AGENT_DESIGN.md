@@ -1,5 +1,7 @@
 # Design Note - Tool Capabilities, Governance, and HITL in Fred
 
+> **Note:** Code paths in this document reference `agentic_backend.*` modules from the legacy execution surface. The concepts (tool governance, HITL approval, tool loop) are still valid; the implementation now lives in `fred_sdk.*` and `fred_runtime.*`. See `libs/fred-sdk/` and `libs/fred-runtime/` for current paths.
+
 ## Purpose
 
 This note consolidates the current Fred design for:

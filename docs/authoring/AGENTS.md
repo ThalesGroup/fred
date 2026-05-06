@@ -2,6 +2,12 @@
 
 Pick the shape that matches your goal, then follow the link.
 
+> **⚠️ This document needs updating.**
+> The code examples below reference `agentic_backend.*` import paths, which belong to the legacy `agentic-backend` service.
+> The current agent authoring model uses `fred_sdk.*` imports (see `libs/fred-sdk/`).
+> The runtime concepts (ReAct profiles, graph agents, tools, HITL) are the same — only the import paths and registration mechanism have changed.
+> See `apps/fred-agents/` for working examples.
+
 ---
 
 ## Shape 1 — Profile-based assistant (no code)

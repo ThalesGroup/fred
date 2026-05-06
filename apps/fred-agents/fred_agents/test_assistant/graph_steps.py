@@ -68,26 +68,38 @@ def _delay_seconds(context: GraphNodeContext) -> float:
 
 def _active_tuning_lines(context: GraphNodeContext) -> list[str]:
     """
-    Return one compact markdown summary of the test assistant tuning surface.
+    Return one compact markdown summary of every tuning field the test assistant exposes.
 
     Why this helper exists:
-    - the fallback and model-probe scenarios both need to show the currently
-      active prompt, settings, and chat-option values without duplicating the
-      same formatting logic
+    - the fallback and model-probe scenarios show the full active tuning surface
+      so developers can confirm end-to-end that every field type is stored and
+      forwarded correctly by the control-plane and runtime
 
     How to use it:
-    - call from a step when you want to append a user-visible debug summary of
-      the active managed-agent tuning values
+    - call from any step that wants to append a user-visible debug dump
 
     Example:
     - `lines = _active_tuning_lines(context)`
     """
 
+    # Prompts
     system_prompt = _as_text(context.tuning_values.get("prompts.system"))
     planning = _as_text(context.tuning_values.get("prompts.planning"))
     routing = _as_text(context.tuning_values.get("prompts.routing"))
+    # Settings — existing scalars
     verbose = _as_bool(context.tuning_values.get("settings.verbose"))
     delay_ms = _as_int(context.tuning_values.get("settings.delay_ms"), 0)
+    # Settings — new types
+    greeting = _as_text(context.tuning_values.get("settings.greeting"))
+    language = _as_text(context.tuning_values.get("settings.language")) or "en"
+    timeout_s = context.tuning_values.get("settings.timeout_s")
+    notes_raw = _as_text(context.tuning_values.get("settings.notes"))
+    notes = (notes_raw[:40] + "…") if len(notes_raw) > 40 else notes_raw
+    tags = context.tuning_values.get("settings.tags")
+    # Credentials — mask secret, show url
+    api_key_set = bool(context.tuning_values.get("credentials.api_key"))
+    webhook_url = _as_text(context.tuning_values.get("credentials.webhook_url"))
+    # Chat options
     allow_files = _as_bool(context.tuning_values.get("chat_options.attach_files"))
     allow_libraries = _as_bool(
         context.tuning_values.get("chat_options.libraries_selection")
@@ -95,13 +107,27 @@ def _active_tuning_lines(context: GraphNodeContext) -> list[str]:
     return [
         "**Active tuning values:**",
         "",
-        f"- **prompts.system**: {system_prompt or '_not set_'}",
-        f"- **prompts.planning**: {planning or '_not set_'}",
-        f"- **prompts.routing**: {routing or '_not set_'}",
-        f"- **settings.verbose**: {verbose}",
-        f"- **settings.delay_ms**: {delay_ms}",
-        f"- **chat_options.attach_files**: {allow_files}",
-        f"- **chat_options.libraries_selection**: {allow_libraries}",
+        "**Prompts**",
+        f"- `prompts.system` (prompt): {system_prompt or '_not set_'}",
+        f"- `prompts.planning` (prompt): {planning or '_not set_'}",
+        f"- `prompts.routing` (prompt): {routing or '_not set_'}",
+        "",
+        "**Settings**",
+        f"- `settings.verbose` (boolean): {verbose}",
+        f"- `settings.delay_ms` (integer): {delay_ms}",
+        f"- `settings.greeting` (string): {greeting or '_not set_'}",
+        f"- `settings.language` (select): {language}",
+        f"- `settings.timeout_s` (number): {timeout_s if timeout_s is not None else '_not set_'}",
+        f"- `settings.notes` (text-multiline): {notes or '_not set_'}",
+        f"- `settings.tags` (array): {tags or '_not set_'}",
+        "",
+        "**Credentials**",
+        f"- `credentials.api_key` (secret): {'••••••' if api_key_set else '_not set_'}",
+        f"- `credentials.webhook_url` (url): {webhook_url or '_not set_'}",
+        "",
+        "**Chat options**",
+        f"- `chat_options.attach_files` (boolean): {allow_files}",
+        f"- `chat_options.libraries_selection` (boolean): {allow_libraries}",
     ]
 
 
@@ -195,6 +221,7 @@ async def echo_step(
     delay = _delay_seconds(context)
     verbose = _as_bool(context.tuning_values.get("settings.verbose"))
     system_prompt = _as_text(context.tuning_values.get("prompts.system"))
+    greeting = _as_text(context.tuning_values.get("settings.greeting"))
 
     context.emit_status("echo", "Receiving your message.")
     await asyncio.sleep(0.1 + delay)
@@ -203,6 +230,8 @@ async def echo_step(
     context.emit_status("echo", "Sending reply.")
 
     reply = f"Echo: {state.latest_user_text}"
+    if greeting:
+        reply = f"{greeting}\n\n{reply}"
     if system_prompt:
         reply += f"\n\n---\n**Active system prompt:** {system_prompt}"
     if verbose:
