@@ -8,7 +8,10 @@ from agentic_backend.core.agents.v2 import (
     PortableContext,
     PortableEnvironment,
 )
-from agentic_backend.core.agents.v2.react.react_prompting import render_prompt_template
+from agentic_backend.core.agents.v2.react.react_prompting import (
+    find_invalid_prompt_placeholders,
+    render_prompt_template,
+)
 
 
 def _binding() -> BoundRuntimeContext:
@@ -32,12 +35,13 @@ def _render(template: str) -> str:
 
 def test_known_tokens_are_substituted():
     result = _render(
-        "Session {session_id} for {user_id} in {response_language} on {today}."
+        "Session {session_id} for {user_id} in {response_language} on {today} agent {agent_id}."
     )
     assert "{" not in result
     assert "s1" in result
     assert "u1" in result
     assert "English" in result
+    assert "test-agent" in result
 
 
 def test_unknown_simple_key_preserved():
@@ -61,3 +65,30 @@ def test_unknown_simple_key_preserved():
 def test_code_like_braces_do_not_crash(template: str):
     result = _render(template)
     assert result == template
+
+
+# --- find_invalid_prompt_placeholders ---
+
+
+@pytest.mark.parametrize(
+    "template,expected",
+    [
+        # clean templates — all five known tokens plus an unknown simple key
+        ("Today is {today}.", []),
+        ("Respond in {response_language}.", []),
+        ("Session {session_id} user {user_id} agent {agent_id}.", []),
+        ("Answer the {question} carefully.", []),
+        ("No braces here.", []),
+        # invalid — attribute access
+        ("{toto.toto}", ["{toto.toto}"]),
+        # invalid — empty braces
+        ("{}", ["{}"]),
+        ("main() { ... }", ["{ ... }"]),
+        # invalid — item access
+        ("{key[0]}", ["{key[0]}"]),
+        # mixed: one valid, one invalid
+        ("Hello {today} and {toto.toto}", ["{toto.toto}"]),
+    ],
+)
+def test_find_invalid_prompt_placeholders(template: str, expected: list[str]):
+    assert find_invalid_prompt_placeholders(template) == expected
