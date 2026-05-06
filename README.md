@@ -1,46 +1,32 @@
 # Fred
 
-Before you even know what fred is about, there are two key references to know: 
+Two key references before diving in:
 - [Who does what](https://github.com/orgs/ThalesGroup/projects/8/views/4)
 - [Fred deployment factory](https://github.com/fred-agent/fred-deployment-factory)
 
+Fred is a production-ready platform for building and operating multi-agent AI applications. It has two complementary faces:
 
-Fred is a production-ready platform for building and operating multi-agent AI applications. It is designed around two complementary goals:
+- **A hosted platform** — control plane, knowledge flow, chat frontend, auth, team access control, observability, and Kubernetes-ready deployment, all integrated and ready to use.
+- **An open agent model** — a typed SDK and lightweight runtime that let teams ship independent agent pods, registered with the platform and operated alongside it without forking the core.
 
-- **A complete runtime platform** — auth, session management, document ingestion, team access control, observability, and Kubernetes-ready deployment, all integrated and ready to use.
-- **A structured agent authoring SDK** — a constrained, typed authoring model (v2 SDK) that lets domain engineers write reliable agents without having to design a distributed runtime from scratch.
+## How Fred is structured
 
-Fred is composed of four components:
+Fred is built around three platform applications and a publishable SDK stack:
 
-- a **Python agentic backend** (`agentic-backend`) — multi-agent runtime, session orchestration, streaming, MCP tool integration
-- a **Python knowledge flow backend** (`knowledge-flow-backend`) — document ingestion, vectorization, and retrieval
-- a **Python control plane backend** (`apps/control-plane-backend`) — team and user management, access policy, agent registry
-- a **React frontend** (`frontend`) — chat interface and agent management UI
+| Layer | Package | Role |
+|-------|---------|------|
+| Platform | `apps/control-plane-backend` | Teams, sessions, agent enrollment, product APIs, `ExecutionGrant` issuance |
+| Platform | `apps/knowledge-flow-backend` | Document ingestion, vectorization, retrieval |
+| Platform | `frontend` | React chat interface and agent management UI |
+| Agent pods | `apps/fred-agents` | First-party agent pod — the reference implementation and production execution surface |
+| Agent pods | [fred-samples](https://github.com/ThalesGroup/fred-samples) | Example third-party pods — ship your own agents independently |
+| Libraries | `libs/fred-sdk` | Agent authoring SDK — ReAct and graph agents, tools, HITL, execution contracts |
+| Libraries | `libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI (`fred-agents-cli`) |
+| Libraries | `libs/fred-core` | Shared infrastructure — SQL, KPI, security, config |
 
-The repository also includes an [academy](./academy/README.md) with sample MCP servers and agents to get started quickly.
+**The key design principle**: the control plane, knowledge flow backend, and frontend are the stable platform. Agent pods — `fred-agents` or any team's own pod built with `fred-sdk` + `fred-runtime` — are independently deployable and register themselves with the control plane. You can ship new agents without touching the platform.
 
----
-
-> ### This branch introduces a new architecture — read this first
->
-> **`agentic-backend` still runs.** Nothing is removed until the replacement is validated.
-> But the target model is fundamentally different and this branch has a lot of moving parts.
->
-> **→ [`docs/SWIFT_ARCHITECTURE.md`](./docs/SWIFT_ARCHITECTURE.md)** — start here for the big picture: independent agentic pods, control-plane integration, how to register a third-party pod, and what is and is not done yet.
->
-> **In brief:**
->
-> | Layer | Package | Role |
-> |-------|---------|------|
-> | Libraries | `libs/fred-sdk` | Agent authoring SDK — graphs, tools, HITL |
-> | Libraries | `libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
-> | Libraries | `libs/fred-core` | Shared infrastructure — SQL, KPI, security, config |
-> | Apps | `apps/fred-agents` | First-party agent pod — replaces `agentic-backend` execution |
-> | Apps | `apps/control-plane-backend` | Control plane — teams, sessions, agent enrollment, product APIs |
->
-> To experiment today: `apps/fred-agents` or the [fred-samples](https://github.com/ThalesGroup/fred-samples) reference pod.
-
----
+> `agentic-backend` is still present during migration but no new features go there. Execution moves to `fred-agents` / `fred-runtime`; product/session/admin moves to `control-plane-backend`. See [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) for migration status.
 
 See the project site: <https://fredk8.dev>
 
@@ -94,7 +80,7 @@ Choose how you want to prepare Fred's development environment:
 
 Prefer an isolated environment with everything pre-installed?
 
-The Dev Container setup takes care of all dependencies related to agentic backend, knowledge-flow backend, and frontend components.
+The Dev Container setup takes care of all dependencies related to knowledge-flow backend, control-plane backend, fred-agents pod, and frontend components.
 
 ##### Prerequisites
 
@@ -109,7 +95,7 @@ The Dev Container setup takes care of all dependencies related to agentic backen
 1. Clone (or open) the repository in VS Code.
 2. Press <kbd>F1</kbd> → **Dev Containers: Reopen in Container**.
 
-When the terminal prompt appears, the workspace is ready but you still need to run the different services with `make run` as specified in the [next section](#start-fred-components). Ports `8000` (Agentic backend), `8111` (Knowledge Flow backend), and `5173` (Frontend (vite)) are automatically forwarded to the host.
+When the terminal prompt appears, the workspace is ready but you still need to run the different services with `make run` as specified in the [next section](#start-fred-components). Ports `8000` (fred-agents pod), `8111` (Knowledge Flow backend), `8222` (Control Plane backend), and `5173` (Frontend) are automatically forwarded to the host.
 
 ##### Rebuilds & troubleshooting
 
@@ -152,7 +138,8 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 graph TD
     subgraph FredComponents["Fred Components"]
       style FredComponents fill:#b0e57c,stroke:#333,stroke-width:2px  %% Green Color
-        Agentic["agentic-backend"]
+        FredAgents["apps/fred-agents"]
+        ControlPlane["apps/control-plane-backend"]
         Knowledge["knowledge-flow-backend"]
         Frontend["frontend"]
     end
@@ -175,9 +162,10 @@ graph TD
         Yq["yq (YAML processor)"]
     end
 
-    Agentic -->|depends on| Python
-    Agentic -->|depends on| Knowledge
-    Agentic -->|depends on| Venv
+    FredAgents -->|depends on| Python
+    FredAgents -->|depends on| Venv
+    ControlPlane -->|depends on| Python
+    ControlPlane -->|depends on| Venv
 
     Knowledge -->|depends on| Python
     Knowledge -->|depends on| Venv
@@ -223,21 +211,22 @@ To get full VS Code Python support (linting, IntelliSense, debugging, etc.) acr
 
 After cloning the repo, you can open Fred's VS Code workspace with `code .vscode/fred.code-workspace`
 
-When you open Fred's VS Code workspace, VS Code will load four folders:
+When you open Fred's VS Code workspace, VS Code will load these folders:
 
-- `fred` – for any repo‑wide files, scripts, etc
-- `agentic-backend` – first Python backend
-- `knowledge-flow-backend` – second Python backend
-- `fred-core` - a common python library for both python backends
-- `frontend` – UI
+- `fred` – repo-wide files and scripts
+- `apps/fred-agents` – first-party agent pod
+- `apps/control-plane-backend` – control plane backend
+- `knowledge-flow-backend` – knowledge flow backend
+- `libs/fred-core`, `libs/fred-sdk`, `libs/fred-runtime` – shared libraries
+- `frontend` – React UI
 </details>
 
 <details>
   <summary>2. Per‑folder `.vscode/settings.json` files in each Python backend to pin the interpreter.</summary>
 
-Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance `agentic_backend/.vscode/settings.json`) to automatically pick it:
+Each backend ships its own virtual environment under .venv. We’ve added a per‑folder VS Code setting (see for instance `apps/fred-agents/.vscode/settings.json`) to automatically pick it:
 
-This ensures that as soon as you open a Python file under agentic_backend/ (or knowledge_flow_backend/), VS Code will:
+This ensures that as soon as you open a Python file inside any backend or library folder, VS Code will:
 
 - Activate that folder’s virtual environment
 - Provide linting, IntelliSense, formatting, and debugging using the correct Python
@@ -245,9 +234,9 @@ This ensures that as soon as you open a Python file under agentic_backend/ (or k
 
 ### Model configuration
 
-#### Model configuration (Agentic Backend)
+#### Model configuration (Agent pods)
 
-Model configuration for the agentic backend lives in **`agentic-backend/config/models_catalog.yaml`**. This file is separate from `configuration.yaml` and owns the full model setup: named profiles, provider settings, shared HTTP client limits, and routing rules.
+Model configuration for agent pods lives in **`apps/fred-agents/config/models_catalog.yaml`** (and equivalently in any third-party pod). This file is separate from `configuration.yaml` and owns the full model setup: named profiles, provider settings, shared HTTP client limits, and routing rules.
 
 **Profiles** are named model configurations. Each profile declares a provider, a model name, and optional settings (temperature, timeouts, retries). Profiles are referenced by `profile_id`.
 
@@ -282,16 +271,18 @@ For details on all supported match criteria (`team_id`, `agent_id`, `user_id`, `
 
 #### Set it up according to your development environment
 
-No matter which development environment you choose, both backends rely on `.env` files for secrets and `configuration.yaml` / `models_catalog.yaml` for settings:
+All backends rely on `.env` files for secrets and `configuration.yaml` / `models_catalog.yaml` for settings:
 
-- Agentic backend: `agentic-backend/config/.env`, `configuration.yaml`, and `models_catalog.yaml`
+- fred-agents pod: `apps/fred-agents/config/.env`, `configuration.yaml`, and `models_catalog.yaml`
 - Knowledge Flow backend: `knowledge-flow-backend/config/.env` and `configuration.yaml`
+- Control Plane backend: `apps/control-plane-backend/config/.env` and `configuration.yaml`
 
 1. **Copy the templates (skip if they already exist).**
 
    ```bash
-   cp agentic-backend/config/.env.template agentic-backend/config/.env
+   cp apps/fred-agents/config/.env.template apps/fred-agents/config/.env
    cp knowledge-flow-backend/config/.env.template knowledge-flow-backend/config/.env
+   cp apps/control-plane-backend/config/.env.template apps/control-plane-backend/config/.env
    ```
 
 2. **Edit the `.env` files** to set the API keys, base URLs, and deployment names that match your model provider.
@@ -303,20 +294,14 @@ No matter which development environment you choose, both backends rely on `.env`
 
 > **Note:** Out of the box, Fred is configured to use OpenAI public APIs with the following models:
 >
-> - agentic backend: chat model `gpt-4o`
+> - fred-agents pod: chat model `gpt-4o` (or whatever profile is set as default in `models_catalog.yaml`)
 > - knowledge flow backend: chat model `gpt-4o-mini` and embedding model `text-embedding-3-large`
 >
 > If you plan to use Fred with these OpenAI models, you don't have to perform the `yq` commands below—just make sure the `.env` files contain your key.
 
-- agentic backend configuration
+- fred-agents pod configuration
 
-  - Chat model
-
-    ```bash
-    yq eval '.ai.default_chat_model.provider = "openai"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.name = "<your-openai-model-name>"' -i agentic-backend/config/configuration.yaml
-    yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
-    ```
+  Edit `apps/fred-agents/config/models_catalog.yaml`. Find the profile you want to use (or add one) and set `provider: openai` and `name: <your-openai-model-name>`. Then set it as the `default_profile_by_capability.chat` default.
 
 - knowledge flow backend configuration
 
@@ -345,17 +330,9 @@ No matter which development environment you choose, both backends rely on `.env`
 <details>
   <summary>Azure OpenAI</summary>
 
-- agentic backend configuration
+- fred-agents pod configuration
 
-  - Chat model
-
-    ```bash
-    yq eval '.ai.default_chat_model.provider = "azure-openai"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.name = "<your-azure-openai-deployment-name>"' -i agentic-backend/config/configuration.yaml
-    yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_endpoint = "<your-azure-openai-endpoint>"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
-    ```
+  Edit `apps/fred-agents/config/models_catalog.yaml`. Find or add a profile with `provider: azure-openai`, `name: <deployment-name>`, and `settings.azure_endpoint` / `settings.azure_openai_api_version`. Set it as the `default_profile_by_capability.chat` default.
 
 - knowledge flow backend configuration
 
@@ -396,16 +373,9 @@ No matter which development environment you choose, both backends rely on `.env`
 <details>
   <summary>Ollama</summary>
 
-- agentic backend configuration
+- fred-agents pod configuration
 
-  - Chat model
-
-    ```bash
-    yq eval '.ai.default_chat_model.provider = "ollama"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.name = "<your-ollama-model-name>"' -i agentic-backend/config/configuration.yaml
-    yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.base_url = "<your-ollama-endpoint>"' -i agentic-backend/config/configuration.yaml
-    ```
+  Edit `apps/fred-agents/config/models_catalog.yaml`. Add or update a profile with `provider: openai`, `name: <your-ollama-model-name>`, and `settings.base_url: <your-ollama-endpoint>`. Set it as the `default_profile_by_capability.chat` default.
 
 - knowledge flow backend configuration
 
@@ -432,21 +402,9 @@ No matter which development environment you choose, both backends rely on `.env`
 <details>
   <summary>Azure OpenAI via Azure APIM</summary>
 
-- agentic backend configuration
+- fred-agents pod configuration
 
-  - Chat model
-
-    ```bash
-    yq eval '.ai.default_chat_model.provider = "azure-apim"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.name = "<your-azure-openai-deployment-name>"' -i agentic-backend/config/configuration.yaml
-    yq eval 'del(.ai.default_chat_model.settings)' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_ad_client_id = "<your-azure-apim-client-id>"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_ad_client_scope = "<your-azure-apim-client-scope>"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_apim_base_url = "<your-azure-apim-endpoint>"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_apim_resource_path = "<your-azure-apim-resource-path>"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_openai_api_version = "<your-azure-openai-api-version>"' -i agentic-backend/config/configuration.yaml
-    yq eval '.ai.default_chat_model.settings.azure_tenant_id = "<your-azure-tenant-id>"' -i agentic-backend/config/configuration.yaml
-    ```
+  Edit `apps/fred-agents/config/models_catalog.yaml`. Add or update a profile with `provider: azure-apim` and the required `settings` fields (`azure_ad_client_id`, `azure_ad_client_scope`, `azure_apim_base_url`, `azure_apim_resource_path`, `azure_openai_api_version`, `azure_tenant_id`). Set it as the default profile.
 
 - knowledge flow backend configuration
 
@@ -513,7 +471,7 @@ Run a single backend API from repository root:
 
 ```bash
 make run-control-plane
-make run-agentic
+make run-fred-agents
 make run-knowledge-flow
 ```
 
@@ -525,8 +483,8 @@ cd knowledge-flow-backend && make run
 ```
 
 ```bash
-# agentic backend
-cd agentic-backend && make run
+# fred-agents pod
+cd apps/fred-agents && make run
 ```
 
 ```bash
@@ -583,13 +541,13 @@ make k3d-deploy
 
 | Target | Description |
 |--------|-------------|
-| `make k3d-build` | Build Docker images for all services (agentic-backend, knowledge-flow-backend, frontend) |
+| `make k3d-build` | Build Docker images for all services (fred-agents, knowledge-flow-backend, control-plane-backend, frontend) |
 | `make k3d-import` | Import built images into the k3d cluster |
 | `make k3d-deploy` | All-in-one: build + import + deploy |
 | `make k3d-deploy-only` | Deploy/upgrade the Helm chart only (images must already be imported) |
 | `make k3d-undeploy` | Uninstall the Helm release |
 | `make k3d-status` | Show pod and service status in the `fred` namespace |
-| `make k3d-logs-agentic` | Tail logs for the agentic-backend |
+| `make k3d-logs-fred-agents` | Tail logs for the fred-agents pod |
 | `make k3d-logs-kf` | Tail logs for the knowledge-flow-backend |
 | `make k3d-logs-frontend` | Tail logs for the frontend |
 
@@ -600,8 +558,9 @@ Once deployed, open <http://localhost:8088> in your browser. The Traefik Ingress
 | Path | Service |
 |------|---------|
 | `/` | Frontend |
-| `/agentic/*` | Agentic backend |
+| `/fred/agents/v2/*` | fred-agents pod |
 | `/knowledge-flow/*` | Knowledge Flow backend |
+| `/control-plane/*` | Control Plane backend |
 | `/realms/*` | Keycloak (authentication) |
 
 Other infrastructure services remain accessible on their usual ports:
@@ -643,51 +602,59 @@ Start with the [agent authoring guide (v2)](./docs/authoring/AGENTS.md). For the
 
 ## Agent coding academy
 
-The [academy](./academy/README.md) contains sample MCP servers and standalone applications to experiment with agent development outside the main platform. The [academy agents](./agentic-backend/agentic_backend/academy/ACADEMY.md) provide ready-to-run agent examples inside the agentic backend.
+The [academy](./academy/README.md) contains sample MCP servers and standalone applications to experiment with agent development outside the main platform. The [fred-samples](https://github.com/ThalesGroup/fred-samples) repository provides ready-to-run example pods built with `fred-sdk` + `fred-runtime`.
 
 ## Advanced configuration
 
 ### System Architecture
 
-**Existing platform components (fully operational):**
+**Platform applications:**
 
-| Component              | Location                    | Role                                                                 |
-| ---------------------- | --------------------------- | -------------------------------------------------------------------- |
-| Frontend UI            | `./frontend`                | React chat interface and agent management UI                         |
-| Agentic backend        | `./agentic-backend`         | Multi-agent runtime, session orchestration, streaming, MCP tools     |
-| Knowledge Flow backend | `./knowledge-flow-backend`  | Document ingestion, vectorization, and retrieval                     |
-| Control Plane backend  | `./apps/control-plane-backend`   | Team and user management, access policy, agent registry              |
+| Component              | Location                         | Role                                                                 |
+| ---------------------- | -------------------------------- | -------------------------------------------------------------------- |
+| Frontend UI            | `./frontend`                     | React chat interface and agent management UI                         |
+| Knowledge Flow backend | `./knowledge-flow-backend`       | Document ingestion, vectorization, and retrieval                     |
+| Control Plane backend  | `./apps/control-plane-backend`   | Teams, users, agent enrollment, session metadata, `ExecutionGrant` issuance |
 
-**New libraries and apps (migration in progress — see notice above):**
+**Agent pods:**
 
-| Component         | Location              | Role                                                            |
-| ----------------- | --------------------- | --------------------------------------------------------------- |
-| fred-core         | `./libs/fred-core`    | Shared infrastructure library (PyPI)                           |
-| fred-sdk          | `./libs/fred-sdk`     | Agent authoring SDK (PyPI)                                      |
-| fred-runtime      | `./libs/fred-runtime` | Pod execution runtime + `fred-agent-chat` CLI (PyPI)           |
-| fred-agents app   | `./apps/fred-agents`  | First-party agent pod — progressive replacement for agentic-backend |
+| Component       | Location              | Role                                                                        |
+| --------------- | --------------------- | --------------------------------------------------------------------------- |
+| fred-agents     | `./apps/fred-agents`  | First-party agent pod — reference implementation and production execution surface |
+| _(your pod)_    | your repo             | Any pod built with `fred-sdk` + `fred-runtime` and registered with the control plane |
+
+**Shared libraries (published to PyPI):**
+
+| Component    | Location              | Role                                                     |
+| ------------ | --------------------- | -------------------------------------------------------- |
+| fred-core    | `./libs/fred-core`    | Shared infrastructure — SQL, KPI, security, config       |
+| fred-sdk     | `./libs/fred-sdk`     | Agent authoring SDK — contracts, graph, tools, HITL      |
+| fred-runtime | `./libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI |
+
+> `agentic-backend` (`./agentic-backend`) remains during migration. Do not add new features there.
 
 ### Configuration Files
 
-| File                                                | Purpose                                                 | Tip                                                                 |
-| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
-| `agentic-backend/config/.env`                       | Secrets (API keys, passwords). Not committed to Git.    | Copy `.env.template` to `.env` and fill in any missing values.      |
-| `knowledge-flow-backend/config/.env`                | Same as above                                           | Same as above                                                       |
-| `apps/control-plane-backend/config/.env`            | Same as above                                           | Same as above                                                       |
-| `agentic-backend/config/configuration.yaml`         | Functional settings (providers, agents, feature flags). | -                                                                   |
-| `knowledge-flow-backend/config/configuration.yaml`  | Same as above                                           | -                                                                   |
-| `apps/control-plane-backend/config/configuration.yaml`   | Team/user policy settings.                              | -                                                                   |
+| File                                                       | Purpose                                                        | Tip                                                            |
+| ---------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
+| `apps/fred-agents/config/.env`                             | Secrets (API keys, passwords). Not committed to Git.           | Copy `.env.template` to `.env` and fill in any missing values. |
+| `knowledge-flow-backend/config/.env`                       | Same as above                                                  | Same as above                                                  |
+| `apps/control-plane-backend/config/.env`                   | Same as above                                                  | Same as above                                                  |
+| `apps/fred-agents/config/models_catalog.yaml`              | Model profiles, routing rules, provider settings for the pod.  | Edit profiles and set `default_profile_by_capability`.         |
+| `apps/fred-agents/config/configuration.yaml`               | Pod runtime settings (base URL, feature flags, MCP catalog).   | -                                                              |
+| `knowledge-flow-backend/config/configuration.yaml`         | Chat/embedding/vision model settings, ingestion options.       | -                                                              |
+| `apps/control-plane-backend/config/configuration.yaml`     | Team/user policy settings, runtime catalog sources.            | -                                                              |
 
 ### Supported Model Providers
 
-| Provider                    | How to enable                                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| OpenAI (default)            | Add `OPENAI_API_KEY` to `config/.env`; Adjust `configuration.yaml`                                           |
-| Azure OpenAI                | Add `AZURE_OPENAI_API_KEY` to `config/.env`; Adjust `configuration.yaml`                                     |
-| Azure OpenAI via Azure APIM | Add `AZURE_APIM_SUBSCRIPTION_KEY` and `AZURE_AD_CLIENT_SECRET` to `config/.env`; Adjust `configuration.yaml` |
-| Ollama (local models)       | Adjust `configuration.yaml`                                                                                  |
+| Provider                    | How to enable                                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| OpenAI (default)            | Add `OPENAI_API_KEY` to `apps/fred-agents/config/.env`; add a profile in `models_catalog.yaml`                 |
+| Azure OpenAI                | Add `AZURE_OPENAI_API_KEY` to `.env`; add a profile with `provider: azure-openai` in `models_catalog.yaml`     |
+| Azure OpenAI via Azure APIM | Add `AZURE_APIM_SUBSCRIPTION_KEY` and `AZURE_AD_CLIENT_SECRET` to `.env`; add profile with `provider: azure-apim` |
+| Ollama (local models)       | Add a profile with `provider: openai` and `settings.base_url: <ollama-endpoint>` in `models_catalog.yaml`      |
 
-See `agentic-backend/config/configuration.yaml` (section `ai:`) and `knowledge-flow-backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`) for concrete examples.
+See `apps/fred-agents/config/models_catalog.yaml` and `knowledge-flow-backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`) for concrete examples. Full routing documentation: [`docs/platform/LLM_ROUTING_FRED.md`](./docs/platform/LLM_ROUTING_FRED.md).
 
 ### Advanced Integrations
 
@@ -698,7 +665,7 @@ See `agentic-backend/config/configuration.yaml` (section `ai:`) and `knowledge-f
 
 ## Core Architecture and Licensing Clarity
 
-The four components described above form the _entirety of the Fred platform_. By default they run self-contained on a laptop using **SQLite + ChromaDB** (no external services).
+The platform applications and the fred-agents pod form the default Fred deployment. By default they run self-contained on a laptop using **SQLite + ChromaDB** (no external services).
 
 Fred is modular: you can optionally add Keycloak/OpenFGA, MinIO/S3, OpenSearch, and PostgreSQL/pgvector for production-grade persistence.
 
@@ -714,12 +681,12 @@ Persistence options:
   - [Main docs](https://fredk8.dev/docs)
   - [Features overview](./docs/platform/FEATURES.md)
 
-- Agentic backend
+- fred-agents pod and runtime libraries
 
-  - [Agentic backend README](./agentic-backend/README.md)
-  - [Agentic Architecture](./agentic-backend/docs/RUNTIME_ARCHITECTURE.md)
-  - [Agentic backend agentic design](./agentic-backend/docs/AGENTS.md)
-  - [MCP capabilities for agent](./agentic-backend/docs/MCP.md)
+  - [fred-agents README](./apps/fred-agents/README.md)
+  - [fred-runtime (pod factory)](./libs/fred-runtime/)
+  - [fred-sdk (authoring SDK)](./libs/fred-sdk/)
+  - [fred-core (shared infrastructure)](./libs/fred-core/)
 
 - Agent authoring (v2 SDK)
 
@@ -734,7 +701,7 @@ Persistence options:
 
 - Knowledge Flow backend
 
-  - [Knowledge Flow backend README](./knowledge_flow_backend/README.md)
+  - [Knowledge Flow backend README](./knowledge-flow-backend/README.md)
 
 - Frontend
 

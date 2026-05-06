@@ -32,20 +32,26 @@ It does **not** prescribe a specific orchestrator (Kubernetes, VMs, Docker Compo
 
 # 2. Fred Components to Deploy
 
-Fred is composed of three main runtime components:
+Fred is composed of four main runtime components:
 
 1. **Frontend UI** (`./frontend`)  
    - React single-page application (Vite dev server in dev, static assets in prod).
-   - Talks to the agentic backend via HTTP(S) and WebSocket.
+   - Talks to the control plane and agent pods via HTTP(S) and SSE.
 
-2. **Agentic backend** (`./agentic-backend`)  
+2. **Control Plane backend** (`./apps/control-plane-backend`)  
    - FastAPI application.  
-   - Hosts the multi-agent runtime (LangGraph + LangChain).  
-   - Integrates with:
-     - LLM providers (OpenAI, Azure OpenAI, Ollama, etc.).
-     - Storage: **SQLite (dev/laptop default)** or **PostgreSQL (prod)**; OpenSearch is optional.
+   - Manages teams, users, agent enrollment, session metadata, and `ExecutionGrant` issuance.
+   - Storage: **SQLite (dev/laptop default)** or **PostgreSQL (prod)**.
 
-3. **Knowledge Flow backend** (`./knowledge-flow-backend`)  
+3. **fred-agents pod** (`./apps/fred-agents`)  
+   - FastAPI application built on `fred-runtime`.
+   - Hosts the agent execution runtime: ReAct and graph agents, SSE streaming, checkpointing, HITL.
+   - Registers with the control plane at startup; multiple pods can run side by side.
+   - Integrates with:
+     - LLM providers (OpenAI, Azure OpenAI, Ollama, etc.) via `models_catalog.yaml`.
+     - Storage: **SQLite (dev/laptop default)** or **PostgreSQL (prod)**.
+
+4. **Knowledge Flow backend** (`./knowledge-flow-backend`)  
    - FastAPI application focused on:
      - Document ingestion (PDF, DOCX, PPTX, CSV, etc.).
      - Chunking and vectorization.
@@ -59,7 +65,7 @@ In local dev, these run with **no external data services** (SQLite + ChromaDB em
 In production, you typically deploy:
 
 - Frontend as static assets served by a reverse proxy (NGINX, ingress, etc.).
-- `agentic-backend` and `knowledge-flow-backend` as separate services (Kubernetes deployments, ECS services, etc.).
+- `control-plane-backend`, `fred-agents`, and `knowledge-flow-backend` as separate services (Kubernetes deployments, ECS services, etc.).
 - A shared persistence stack: PostgreSQL/pgvector or OpenSearch, plus an object store if you need externalized files.
 
 ---
@@ -83,8 +89,11 @@ Each backend has two configuration layers:
 
 Files of interest:
 
-- `agentic-backend/config/.env`
-- `agentic-backend/config/configuration.yaml`
+- `apps/fred-agents/config/.env`
+- `apps/fred-agents/config/configuration.yaml`
+- `apps/fred-agents/config/models_catalog.yaml`
+- `apps/control-plane-backend/config/.env`
+- `apps/control-plane-backend/config/configuration.yaml`
 - `knowledge-flow-backend/config/.env`
 - `knowledge-flow-backend/config/configuration.yaml`
 - Password mapping to remember:
