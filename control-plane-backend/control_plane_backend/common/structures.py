@@ -24,7 +24,7 @@ class AppConfig(BaseModel):
     gcu_version: str | None = None
     metrics_enabled: bool = True
     metrics_port: int = 9222
-    metrics_address: str = "0.0.0.0"
+    metrics_address: str = "127.0.0.1"
 
 
 class SchedulerConfig(BaseModel):
