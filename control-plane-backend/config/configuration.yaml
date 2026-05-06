@@ -4,6 +4,9 @@ app:
   address: 127.0.0.1
   port: 8222
   log_level: info
+  metrics_enabled: false
+  metrics_address: "0.0.0.0"
+  metrics_port: 9222
 
 scheduler:
   enabled: false
