@@ -250,7 +250,12 @@ export function AgentCreateEditForm({
         fields,
       };
 
-      await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
+      try {
+        await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
+      } catch {
+        // useAgentUpdater already showed the error toast — return without calling onSaved.
+        return;
+      }
       onSaved?.();
     } catch (e: any) {
       showError({

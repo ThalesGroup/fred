@@ -60,6 +60,9 @@ from agentic_backend.core.agents.v2.legacy_bridge.react_profile_bridge import (
     get_react_profile,
     is_react_profile_allowed,
 )
+from agentic_backend.core.agents.v2.react.react_prompting import (
+    find_invalid_prompt_placeholders,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +77,10 @@ class InvalidClassPathError(Exception):
     """Raised when a class_path is not a valid, importable module.Class."""
 
     pass
+
+
+class InvalidPromptTemplateError(Exception):
+    """Raised when a system prompt template contains unsupported placeholders."""
 
 
 class ImmutableTeamIdError(Exception):
@@ -554,6 +561,22 @@ class AgentService:
                     ORGANIZATION_ID,
                 )
                 _validate_class_path(agent_settings.class_path)
+
+        if agent_settings.tuning:
+            for field in agent_settings.tuning.fields or []:
+                if field.key == "system_prompt_template" and isinstance(
+                    field.default, str
+                ):
+                    bad = find_invalid_prompt_placeholders(field.default)
+                    if bad:
+                        raise InvalidPromptTemplateError(
+                            f"System prompt contains unsupported placeholders: "
+                            f"{', '.join(bad)}. "
+                            f"Supported placeholders are: {{today}}, "
+                            f"{{response_language}}, {{session_id}}, {{user_id}}, "
+                            f"{{agent_id}}. Other {{…}} patterns (e.g. from code "
+                            f"snippets) are not substituted and should be removed."
+                        )
 
         await self.agent_manager.update_agent(new_settings=agent_settings)
 

@@ -121,6 +121,35 @@ def render_prompt_template(
     )
 
 
+_SAFE_PLACEHOLDER_RE = re.compile(r"^\w+$")
+
+
+def find_invalid_prompt_placeholders(template: str) -> list[str]:
+    """
+    Return any {…} placeholders that cannot be substituted safely.
+
+    Why this exists:
+    - `render_prompt_template` only substitutes simple `{word}` placeholders
+    - other patterns (`{}`, `{key.attr}`, `{key[0]}`) are left verbatim but look
+      like template variables to users, who may have introduced them accidentally
+      from pasted code snippets
+    - surfacing them at write time lets callers return a clear 422 rather than
+      silently leaving the prompt with unexpected literal braces
+
+    How to use:
+    - call before persisting a system prompt template and raise if the result is
+      non-empty
+
+    Example:
+    - `find_invalid_prompt_placeholders("main() { ... }")` → `["{ ... }"]`
+    """
+    bad = []
+    for content in re.findall(r"\{([^}]*)\}", template):
+        if not _SAFE_PLACEHOLDER_RE.match(content):
+            bad.append("{" + content + "}")
+    return bad
+
+
 def normalize_response_language(language: str | None) -> str:
     """
     Convert one runtime language hint to the human-facing prompt wording.
