@@ -29,15 +29,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import cast
 
+from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.models import DeepAgentDefinition
+from fred_sdk.contracts.runtime import Executor
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer
 
-from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.models import DeepAgentDefinition
-from fred_sdk.contracts.runtime import Executor
 from fred_runtime.react.react_prompting import (
     build_guardrail_suffix as _build_guardrail_suffix,
 )

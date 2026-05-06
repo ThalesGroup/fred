@@ -2,6 +2,11 @@
 
 When creating a v2 agent — whether via the API or as a static catalog entry — there are exactly **two choices**.
 
+> **Multi-turn memory**: graph agents and `TeamAgent` subclasses support cross-turn
+> conversational memory via `ConversationTurn` and `ConversationalState` from
+> `fred_sdk.contracts.context`. See [`docs/authoring/AGENTS.md`](../authoring/AGENTS.md)
+> for the full authoring guide.
+
 ---
 
 ## Choice 1 — React profile (configurable, user-editable)

@@ -25,10 +25,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_core.messages.tool import ToolMessage
-from langgraph.types import Command
-
 from fred_sdk.contracts.react_contract import (
     ReActInput,
     ReActMessage,
@@ -36,6 +32,9 @@ from fred_sdk.contracts.react_contract import (
     ReActToolCall,
 )
 from fred_sdk.contracts.runtime import ExecutionConfig
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages.tool import ToolMessage
+from langgraph.types import Command
 
 
 def stringify_langchain_content(value: object) -> str:

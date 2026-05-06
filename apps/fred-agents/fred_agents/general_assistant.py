@@ -30,7 +30,6 @@ Example:
 """
 
 from fred_sdk import (
-    FieldSpec,
     MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
     MCP_SERVER_KNOWLEDGE_FLOW_FS,
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
@@ -38,6 +37,7 @@ from fred_sdk import (
     MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS,
     MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
     MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
+    FieldSpec,
     MCPServerRef,
     UIHints,
 )

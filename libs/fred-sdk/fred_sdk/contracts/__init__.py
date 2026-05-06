@@ -23,7 +23,14 @@ How to use:
 - keep SDK-specific runtime code outside this package
 """
 
-from .context import GeoPart, LinkKind, LinkPart, RuntimeContext
+from .context import (
+    ConversationalState,
+    ConversationTurn,
+    GeoPart,
+    LinkKind,
+    LinkPart,
+    RuntimeContext,
+)
 from .execution import (
     ActorContext,
     ExecutionGrant,
@@ -45,6 +52,9 @@ from .openai_compat import (
 from .runtime import RuntimeErrorEvent, TurnPersistedEvent
 
 __all__ = [
+    # Conversational memory
+    "ConversationTurn",
+    "ConversationalState",
     # Context / UI parts
     "GeoPart",
     "LinkKind",

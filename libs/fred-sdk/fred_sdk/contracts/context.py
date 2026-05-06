@@ -140,6 +140,37 @@ class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
 
 
+class ConversationTurn(FrozenModel):
+    """
+    One completed user–agent exchange for cross-turn memory.
+
+    Kept deliberately narrow: the minimum a coordinator or sub-agent needs to
+    understand what happened without embedding full message traces.
+    ``agent_name`` is set when a named sub-agent produced the response.
+    """
+
+    user_message: str
+    agent_response: str
+    agent_name: str | None = None
+
+
+class ConversationalState(BaseModel):
+    """
+    Opt-in mixin that grants a graph state class cross-turn memory.
+
+    Compose this into any graph state class to get automatic carry-forward of
+    ``conversation_history`` across turns via ``build_turn_state``.
+
+    Example::
+
+        class MyState(ConversationalState, BaseModel):
+            user_message: str
+            result: str = ""
+    """
+
+    conversation_history: tuple[ConversationTurn, ...] = ()
+
+
 class PortableEnvironment(str, Enum):
     DEV = "dev"
     STAGING = "staging"
@@ -227,6 +258,9 @@ class AgentInvocationRequest(FrozenModel):
 
     context: PortableContext
     """Propagated execution context (identity, tracing, tenant, session)."""
+
+    prior_turns: tuple[ConversationTurn, ...] = ()
+    """Prior conversation turns forwarded from the calling agent for context seeding."""
 
 
 class AgentInvocationResult(FrozenModel):

@@ -62,15 +62,16 @@ from fred_core.logs.log_setup import log_setup
 from fred_core.logs.memory_log_store import RamLogStore
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_core.security.structure import KeycloakUser
-from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
+    ConversationTurn,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
     ExecutionGrantAction,
     ExecutionGrantViolation,
@@ -94,9 +95,6 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeServices,
 )
-from fred_runtime.graph.graph_runtime import GraphRuntime
-from fred_runtime.react.react_runtime import ReActRuntime
-from fred_runtime.runtime_support.checkpoints import load_checkpoint
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
     build_authored_tool_handlers,
@@ -104,6 +102,9 @@ from fred_sdk.support.authored_toolsets import (
 from pydantic import BaseModel, Field, TypeAdapter, model_validator
 
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
+from fred_runtime.graph.graph_runtime import GraphRuntime
+from fred_runtime.react.react_runtime import ReActRuntime
+from fred_runtime.runtime_support.checkpoints import load_checkpoint
 
 from ..common.structures import AgentSettingsLike
 from ..integrations.v2_runtime.adapters import (
@@ -567,6 +568,7 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             message=request.message,
             context=context_dict,
             resume_payload=None,
+            invocation_turns=request.prior_turns,
         )
 
         content_parts: list[str] = []
@@ -748,6 +750,10 @@ class _AgentExecuteRequest(BaseModel):
             "LangGraph Command(resume=...) — the message field is ignored."
         ),
     )
+    invocation_turns: tuple[ConversationTurn, ...] = Field(
+        default=(),
+        description="Prior conversation turns forwarded by the calling agent.",
+    )
 
     @model_validator(mode="after")
     def _require_message_or_resume(self) -> "_AgentExecuteRequest":
@@ -794,6 +800,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         context=r.to_legacy_context() or None,
         checkpoint_id=r.checkpoint_id,
         resume_payload=r.resume_payload,
+        invocation_turns=r.invocation_turns,
     )
 
 
@@ -1783,6 +1790,7 @@ async def _iterate_runtime_event_payloads(
         session_id=ctx.get("session_id") or request_id,
         checkpoint_id=request.checkpoint_id,
         resume_payload=request.resume_payload,
+        invocation_turns=getattr(request, "invocation_turns", ()),
     )
 
     try:

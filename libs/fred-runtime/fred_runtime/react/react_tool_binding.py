@@ -38,10 +38,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from langchain_core.tools import BaseTool, StructuredTool
-
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import TracerPort
+from langchain_core.tools import BaseTool, StructuredTool
 
 from .react_tool_resolution import FredRuntimeToolSpec
 from .react_tool_utils import normalize_payload

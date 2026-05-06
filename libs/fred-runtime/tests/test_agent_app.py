@@ -1176,6 +1176,7 @@ def test_apply_runtime_tuning_applies_system_prompt_from_values() -> None:
     - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_applies_system_prompt_from_values -q`
     """
     from fred_sdk.contracts.models import AgentTuning
+
     from fred_runtime.app.agent_app import _apply_runtime_tuning
 
     definition = _EchoAgent()
@@ -1206,6 +1207,7 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
     - run in the default offline fred-runtime test suite
     """
     from fred_sdk.contracts.models import AgentTuning
+
     from fred_runtime.app.agent_app import _apply_runtime_tuning
 
     definition = _EchoAgent()

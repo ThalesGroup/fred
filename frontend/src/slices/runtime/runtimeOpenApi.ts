@@ -311,6 +311,11 @@ export type ExecutionGrant = {
   trace_id?: string | null;
   user_id: string;
 };
+export type ConversationTurn = {
+  agent_name?: string | null;
+  agent_response: string;
+  user_message: string;
+};
 export type RuntimeExecuteRequest = {
   /** Direct template agent_id. For internal/dev use only. */
   agent_id?: string | null;
@@ -322,6 +327,8 @@ export type RuntimeExecuteRequest = {
   execution_grant?: ExecutionGrant | null;
   /** User turn input. Ignored when resume_payload is set (HITL resume). */
   input?: string;
+  /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
+  invocation_turns?: ConversationTurn[];
   /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
   resume_payload?: any | null;
   /** Optional per-request context passthrough (language, user_groups, etc.). Kept for transitional compatibility; prefer execution_grant for identity fields. In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' unless runtime_context.user_id is explicitly provided. */

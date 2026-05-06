@@ -42,6 +42,7 @@ from .context import (
     AgentInvocationResult,
     ArtifactPublishRequest,
     BoundRuntimeContext,
+    ConversationTurn,
     FetchedResource,
     JsonScalar,
     PublishedArtifact,
@@ -103,6 +104,8 @@ class ExecutionConfig(FrozenModel):
     max_steps: int = Field(default=100, ge=1)
     stream_intermediate_events: bool = True
     resume_payload: object | None = None
+    invocation_turns: tuple[ConversationTurn, ...] = ()
+    """Prior conversation turns forwarded by the calling agent for context seeding."""
 
 
 class RuntimeEventBase(FrozenModel):

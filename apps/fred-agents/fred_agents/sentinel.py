@@ -29,8 +29,8 @@ Example:
 """
 
 from fred_sdk import (
-    FieldSpec,
     MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
+    FieldSpec,
     MCPServerRef,
     UIHints,
 )

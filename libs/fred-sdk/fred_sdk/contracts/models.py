@@ -43,11 +43,11 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Protocol, TypeAlias
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Protocol, TypeAlias
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
-from .context import BoundRuntimeContext
+from .context import BoundRuntimeContext, ConversationTurn
 
 # ---------------------------------------------------------------------------
 # Agent tuning and MCP types — canonical SDK home.
@@ -920,6 +920,9 @@ class GraphAgentDefinition(AgentDefinition, ABC):
     def output_model(self) -> type[BaseModel]:
         """Return the typed final output model produced by the graph runtime."""
 
+    conversation_history_max_turns: ClassVar[int] = 20
+    """Maximum number of prior turns carried forward. Oldest-first truncation."""
+
     @abstractmethod
     def build_initial_state(
         self,
@@ -933,20 +936,74 @@ class GraphAgentDefinition(AgentDefinition, ABC):
         runtime context, but MUST NOT perform I/O.
         """
 
+    def _turn_carry_fields(self) -> frozenset[str]:
+        """
+        Return the set of state field names that carry forward across turns.
+
+        The default includes ``conversation_history`` when the state model
+        declares it (i.e. inherits from ``ConversationalState``).  Override to
+        add agent-specific continuity fields.
+        """
+        state_fields = self.state_model().model_fields
+        if "conversation_history" in state_fields:
+            return frozenset({"conversation_history"})
+        return frozenset()
+
     def build_turn_state(
         self,
         input_model: BaseModel,
         binding: BoundRuntimeContext,
         previous_state: BaseModel | None = None,
+        invocation_turns: tuple[ConversationTurn, ...] = (),
     ) -> BaseModel:
         """
-        Build the initial state for a new turn, optionally reusing prior session state.
+        Build the initial state for a new turn, carrying forward continuity fields.
 
-        The default behavior is stateless. Override this when the business
-        experience should feel continuous across turns, for example remembering
-        which parcel, ticket, order, or case the user already selected.
+        Carry-forward policy (P1–P3 from the memory RFC):
+        - Only fields declared by ``_turn_carry_fields()`` are carried from
+          ``previous_state``; all other fields come from ``build_initial_state``.
+        - When there is no ``previous_state`` but ``invocation_turns`` is
+          non-empty, those turns seed ``conversation_history`` on the first
+          callee turn so the sub-agent understands the caller's context.
+        - Agents whose state does not include ``ConversationalState`` are
+          completely unaffected by this default implementation.
         """
-        return self.build_initial_state(input_model, binding)
+        base = self.build_initial_state(input_model, binding)
+        carry_fields = self._turn_carry_fields()
+        if not carry_fields:
+            return base
+
+        max_turns = self.__class__.conversation_history_max_turns
+
+        if previous_state is not None:
+            base_fields = set(type(base).model_fields)
+            prev_fields = set(type(previous_state).model_fields)
+            shared = carry_fields & base_fields & prev_fields
+            updates: dict[str, object] = {}
+            for field_name in shared:
+                value = getattr(previous_state, field_name)
+                if field_name == "conversation_history":
+                    value = tuple(value[-max_turns:])
+                updates[field_name] = value
+            return base.model_copy(update=updates) if updates else base
+
+        if invocation_turns and "conversation_history" in carry_fields:
+            return base.model_copy(
+                update={"conversation_history": tuple(invocation_turns[-max_turns:])}
+            )
+
+        return base
+
+    def build_completed_state(self, state: BaseModel) -> BaseModel:
+        """
+        Normalize the terminal graph state before it is persisted.
+
+        Called by the runtime after the last node completes and before
+        checkpointing. The default implementation is the identity function.
+        Override (or let ``TeamAgent`` auto-generate) to append a
+        ``ConversationTurn`` so that turn N+1 sees the completed exchange.
+        """
+        return state
 
     @abstractmethod
     def node_handlers(self) -> Mapping[str, object]:
