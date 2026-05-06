@@ -301,7 +301,10 @@ def print_inspect(
             fmax = f.get("max")
             fdesc = f.get("description", "")
 
+            fenum: list[str] | None = f.get("enum") or None
             meta_parts = [ftype]
+            if fenum:
+                meta_parts.append("|".join(fenum))
             if required:
                 meta_parts.append("required")
             if default is not None:
@@ -341,9 +344,13 @@ def print_inspect(
             sid = srv.get("id", "?")
             sname = srv.get("name", "")
             sdesc = srv.get("description", "")
+            config_fields: list[dict[str, Any]] = srv.get("config_fields") or []
             print(_dim("    ") + _key(f"{sid:<28}") + _dim(sname))
             if sdesc:
                 print(_dim(f"      {sdesc}"))
+            if config_fields:
+                print(_dim("      config_fields  (tunable via /tune key=value):"))
+                _render_fields(config_fields)
 
     print()
 
