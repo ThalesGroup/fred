@@ -15,6 +15,7 @@
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import {
+  Alert,
   Box,
   Button,
   Drawer,
@@ -30,6 +31,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { usePermissions } from "../../../security/usePermissions";
+import { useFrontendProperties } from "../../../hooks/useFrontendProperties";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
 import {
@@ -60,12 +62,19 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   onUploadComplete,
   metadata,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showError, showInfo } = useToast();
   const theme = useTheme();
   const { can } = usePermissions();
   // TODO(security): replace this temporary gate with a dedicated permission for profile selection.
   const canSelectProcessingProfile = can("document", "update");
+
+  const { uploadWarning } = useFrontendProperties();
+  const uploadWarningMessage = uploadWarning?.messages
+    ? (uploadWarning.messages[i18n.language?.split("-")[0] ?? "en"] ??
+        uploadWarning.messages["en"] ??
+        null)
+    : null;
 
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [processingProfile, setProcessingProfile] = useState<IngestionProcessingProfile>("fast");
@@ -313,6 +322,12 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
       <Typography variant="h5" fontWeight="bold" gutterBottom>
         {t("documentLibrary.uploadDrawerTitle")}
       </Typography>
+
+      {uploadWarning && uploadWarningMessage && (
+        <Alert severity={uploadWarning.severity ?? "info"} sx={{ mt: 1.5 }}>
+          {uploadWarningMessage}
+        </Alert>
+      )}
 
       <FormControl fullWidth sx={{ mt: 2 }}>
         <Typography variant="subtitle2" gutterBottom>
