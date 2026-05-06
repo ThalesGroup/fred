@@ -31,6 +31,7 @@ Example:
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from ..contracts.context import BoundRuntimeContext
@@ -108,8 +109,15 @@ def render_prompt_template(
     - `render_prompt_template(template, binding=binding, agent_id="custodian")`
     """
 
-    return template.format_map(
-        _LiteralFriendlyDict(safe_prompt_token_map(binding, agent_id=agent_id))
+    # Use regex substitution instead of str.format_map so that code-like braces
+    # in the template (e.g. `{}`, `{key.attr}`) are left verbatim rather than
+    # raising IndexError / AttributeError.  Only simple `{word}` placeholders
+    # that appear in the known token map are substituted.
+    token_map = safe_prompt_token_map(binding, agent_id=agent_id)
+    return re.sub(
+        r"\{(\w+)\}",
+        lambda m: token_map.get(m.group(1), m.group(0)),
+        template,
     )
 
 
