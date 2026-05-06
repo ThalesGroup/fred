@@ -77,7 +77,7 @@ def test_build_langfuse_tracer_stays_disabled_without_base_url(
     monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-    monkeypatch.setattr(v2_adapters, "_LANGFUSE_TRACER", False)
+    v2_adapters._cached_langfuse_tracer.cache_clear()
 
     assert v2_adapters.build_langfuse_tracer() is None
 

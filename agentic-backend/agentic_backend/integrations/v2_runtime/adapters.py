@@ -27,6 +27,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 
 import httpx
@@ -209,9 +210,6 @@ class LangfuseTracerAdapter(TracerPort):
         return LangfuseSpanAdapter(span)
 
 
-_LANGFUSE_TRACER: TracerPort | None | bool = False
-
-
 class _LangfuseSpanLike(Protocol):
     id: str
 
@@ -222,29 +220,60 @@ class _LangfuseSpanLike(Protocol):
     def end(self, *, end_time: int | None = None) -> object: ...
 
 
-def build_langfuse_tracer() -> TracerPort | None:
+@lru_cache(maxsize=1)
+def _cached_langfuse_tracer() -> TracerPort | None:
     """
-    Return a shared Langfuse tracer when credentials are configured.
-    """
+    Build and memoize the process-wide Langfuse tracer once.
 
-    global _LANGFUSE_TRACER
-    if _LANGFUSE_TRACER is not False:
-        return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
+    Why this function exists:
+    - v2 runtime bootstrap may ask for a tracer multiple times in one process.
+    - Langfuse client creation should stay idempotent and avoid repeated setup.
+    - A function cache is clearer than a mutable module-global sentinel.
+
+    How to use it:
+    - Call indirectly through `build_langfuse_tracer()`.
+    - Tests may clear the cache with `_cached_langfuse_tracer.cache_clear()`.
+
+    Example:
+    ```python
+    tracer = build_langfuse_tracer()
+    if tracer is not None:
+        ...
+    ```
+    """
 
     if get_langfuse_credentials() is None:
-        _LANGFUSE_TRACER = None
         return None
 
     try:
         client = build_langfuse_client()
         if client is None:
-            _LANGFUSE_TRACER = None
             return None
-        _LANGFUSE_TRACER = LangfuseTracerAdapter(client)
+        return LangfuseTracerAdapter(client)
     except Exception:
         logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
-        _LANGFUSE_TRACER = None
-    return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
+        return None
+
+
+def build_langfuse_tracer() -> TracerPort | None:
+    """
+    Return a shared Langfuse tracer when credentials are configured.
+
+    Why this function exists:
+    - runtime wiring needs one small entrypoint for optional Langfuse tracing
+    - callers should not need to know whether the tracer is disabled or cached
+
+    How to use it:
+    - call during runtime/bootstrap wiring
+    - handle `None` as "Langfuse tracing disabled for this process"
+
+    Example:
+    ```python
+    tracer = build_langfuse_tracer()
+    runtime = build_runtime(tracer=tracer)
+    ```
+    """
+    return _cached_langfuse_tracer()
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
