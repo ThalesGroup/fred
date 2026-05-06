@@ -392,7 +392,7 @@ How it fits v2:
 - same runtime tool path as other platform capabilities
 - intentionally implemented as a Fred built-in runtime tool, not as an MCP tool
 - current backend path is Langfuse Public API over HTTP (`/api/public/traces`,
-  `/api/public/traces/{trace_id}`) using `LANGFUSE_HOST`,
+  `/api/public/traces/{trace_id}`) using `LANGFUSE_BASE_URL`,
   `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY`
 
 Best thing to test:

@@ -67,7 +67,7 @@ def test_extract_interesting_spans_includes_langfuse_generations_as_model_rows()
                 "type": "GENERATION",
                 "name": "analysis",
                 "model": "gpt-4o-mini",
-                "latency": 321,
+                "latency": 0.321,
                 "startTime": "2026-03-03T04:37:14.100Z",
                 "endTime": "2026-03-03T04:37:14.421Z",
             }
@@ -114,7 +114,7 @@ def test_extract_interesting_spans_classifies_react_model_span_as_model() -> Non
             {
                 "type": "SPAN",
                 "name": "v2.react.model",
-                "latency": 245,
+                "latency": 0.245,
                 "startTime": "2026-03-03T04:37:14.100Z",
                 "endTime": "2026-03-03T04:37:14.345Z",
                 "metadata": {"operation": "model_call", "model_name": "gpt-5-mini"},
@@ -135,7 +135,7 @@ def test_extract_interesting_spans_classifies_react_model_span_as_model() -> Non
 async def test_traces_summarize_conversation_returns_disabled_status_when_langfuse_is_not_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
 

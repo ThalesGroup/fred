@@ -1,7 +1,8 @@
 [project]
 name = "control-plane-backend"
 readme = "README.md"
-version = "1.5.0+post"
+version = "1.5.2"
+license = "Apache-2.0"
 description = "Minimal control-plane backend for team lifecycle and policy resolution"
 authors = [{ name = "Fred", email = "noreply@example.com" }]
 requires-python = ">=3.12,<3.13"
@@ -16,6 +17,7 @@ dependencies = [
   "temporalio>=1.11.1,<2.0.0",
   "fred-core",
   "alembic>=1.18.4",
+  "prometheus-fastapi-instrumentator>=7.1.0",
 ]
 
 [project.optional-dependencies]

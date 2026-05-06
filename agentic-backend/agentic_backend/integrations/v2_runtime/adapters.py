@@ -22,12 +22,12 @@ import asyncio
 import inspect
 import json
 import logging
-import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 
 import httpx
@@ -41,6 +41,7 @@ from fred_core import (
 from fred_core.common import OwnerFilter
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
+from langfuse.types import TraceContext as LangfuseTraceContext
 
 from agentic_backend.application_context import get_app_context, get_default_chat_model
 from agentic_backend.common.kf_logs_client import KfLogsClient
@@ -49,6 +50,10 @@ from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     WorkspaceRetrievalError,
     WorkspaceUploadError,
+)
+from agentic_backend.common.langfuse_config import (
+    build_langfuse_client,
+    get_langfuse_credentials,
 )
 from agentic_backend.common.mcp_runtime import MCPRuntime
 from agentic_backend.common.structures import AgentSettings
@@ -130,6 +135,10 @@ class LangfuseSpanAdapter(SpanPort):
         self._metadata: dict[str, object] = {}
         self._ended = False
 
+    @property
+    def span_id(self) -> str:
+        return self._span.id
+
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         if self._ended:
             return
@@ -160,11 +169,12 @@ class LangfuseTracerAdapter(TracerPort):
         name: str,
         context: PortableContext,
         attributes: Mapping[str, JsonScalar] | None = None,
+        parent: "SpanPort | None" = None,
     ) -> SpanPort:
         trace_seed = (
             context.trace_id
-            or context.correlation_id
             or context.request_id
+            or context.correlation_id
             or context.session_id
             or context.actor
         )
@@ -185,22 +195,24 @@ class LangfuseTracerAdapter(TracerPort):
         }
         if attributes:
             metadata.update(attributes)
+        trace_context: LangfuseTraceContext = {"trace_id": trace_id}
+        if parent is not None:
+            trace_context["parent_span_id"] = parent.span_id
         span = cast(
             "_LangfuseSpanLike",
             self._client.start_observation(
                 name=name,
                 as_type="span",
-                trace_context={"trace_id": trace_id},
+                trace_context=trace_context,
                 metadata=metadata,
             ),
         )
         return LangfuseSpanAdapter(span)
 
 
-_LANGFUSE_TRACER: TracerPort | None | bool = False
-
-
 class _LangfuseSpanLike(Protocol):
+    id: str
+
     def update(
         self, *, metadata: Mapping[str, object] | None = None, **kwargs
     ) -> object: ...
@@ -208,27 +220,60 @@ class _LangfuseSpanLike(Protocol):
     def end(self, *, end_time: int | None = None) -> object: ...
 
 
-def build_langfuse_tracer() -> TracerPort | None:
+@lru_cache(maxsize=1)
+def _cached_langfuse_tracer() -> TracerPort | None:
     """
-    Return a shared Langfuse tracer when credentials are configured.
+    Build and memoize the process-wide Langfuse tracer once.
+
+    Why this function exists:
+    - v2 runtime bootstrap may ask for a tracer multiple times in one process.
+    - Langfuse client creation should stay idempotent and avoid repeated setup.
+    - A function cache is clearer than a mutable module-global sentinel.
+
+    How to use it:
+    - Call indirectly through `build_langfuse_tracer()`.
+    - Tests may clear the cache with `_cached_langfuse_tracer.cache_clear()`.
+
+    Example:
+    ```python
+    tracer = build_langfuse_tracer()
+    if tracer is not None:
+        ...
+    ```
     """
 
-    global _LANGFUSE_TRACER
-    if _LANGFUSE_TRACER is not False:
-        return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
-
-    has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
-    has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not (has_public and has_secret):
-        _LANGFUSE_TRACER = None
+    if get_langfuse_credentials() is None:
         return None
 
     try:
-        _LANGFUSE_TRACER = LangfuseTracerAdapter(Langfuse())
+        client = build_langfuse_client()
+        if client is None:
+            return None
+        return LangfuseTracerAdapter(client)
     except Exception:
         logger.exception("[V2][TRACING] Failed to initialize Langfuse tracer.")
-        _LANGFUSE_TRACER = None
-    return _LANGFUSE_TRACER if isinstance(_LANGFUSE_TRACER, TracerPort) else None
+        return None
+
+
+def build_langfuse_tracer() -> TracerPort | None:
+    """
+    Return a shared Langfuse tracer when credentials are configured.
+
+    Why this function exists:
+    - runtime wiring needs one small entrypoint for optional Langfuse tracing
+    - callers should not need to know whether the tracer is disabled or cached
+
+    How to use it:
+    - call during runtime/bootstrap wiring
+    - handle `None` as "Langfuse tracing disabled for this process"
+
+    Example:
+    ```python
+    tracer = build_langfuse_tracer()
+    runtime = build_runtime(tracer=tracer)
+    ```
+    """
+    return _cached_langfuse_tracer()
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
@@ -556,7 +601,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     ToolContentBlock(
                         kind=ToolContentKind.TEXT,
                         text=(
-                            "Langfuse summary failed. Check LANGFUSE_HOST/"
+                            "Langfuse summary failed. Check LANGFUSE_BASE_URL/"
                             "LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY and trace filters."
                         ),
                     ),
@@ -1300,7 +1345,7 @@ def _summarize_langfuse_conversation(
     credentials = _langfuse_credentials()
     if credentials is None:
         raise RuntimeError(
-            "Langfuse credentials are not configured. Expected LANGFUSE_HOST, "
+            "Langfuse credentials are not configured. Expected LANGFUSE_BASE_URL, "
             "LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY."
         )
     host, public_key, secret_key = credentials
@@ -1481,7 +1526,7 @@ def _extract_interesting_spans(observations: list[object]) -> list[dict[str, obj
             continue
         obs_type = str(raw.get("type") or "")
         if obs_type == "GENERATION":
-            latency_ms = _safe_int(raw.get("latency"))
+            latency_ms = _observation_latency_ms(raw.get("latency"))
             metadata = raw.get("metadata")
             md = metadata if isinstance(metadata, dict) else {}
             operation = _coerce_optional_string(raw.get("name"))
@@ -1515,7 +1560,7 @@ def _extract_interesting_spans(observations: list[object]) -> list[dict[str, obj
             continue
         metadata = raw.get("metadata")
         md = metadata if isinstance(metadata, dict) else {}
-        latency_ms = _safe_int(raw.get("latency"))
+        latency_ms = _observation_latency_ms(raw.get("latency"))
         node_id = _coerce_optional_string(md.get("node_id"))
         operation = _coerce_optional_string(md.get("operation"))
         tool_ref = _coerce_optional_string(md.get("tool_ref"))
@@ -1642,6 +1687,20 @@ def _safe_int(value: object) -> int:
     return 0
 
 
+def _observation_latency_ms(raw_latency: object) -> int:
+    # Langfuse public API expresses observation latency in seconds (same as trace latency).
+    if isinstance(raw_latency, bool):
+        return 0
+    if isinstance(raw_latency, int | float):
+        return max(0, int(float(raw_latency) * 1000))
+    if isinstance(raw_latency, str):
+        try:
+            return max(0, int(float(raw_latency.strip()) * 1000))
+        except ValueError:
+            return 0
+    return 0
+
+
 def _trace_total_latency_ms(*, selected_trace: dict[str, object]) -> int:
     raw_latency = selected_trace.get("latency")
     if isinstance(raw_latency, bool):
@@ -1658,12 +1717,7 @@ def _trace_total_latency_ms(*, selected_trace: dict[str, object]) -> int:
 
 
 def _langfuse_credentials() -> tuple[str, str, str] | None:
-    host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
-    public_key = _coerce_optional_string(os.getenv("LANGFUSE_PUBLIC_KEY"))
-    secret_key = _coerce_optional_string(os.getenv("LANGFUSE_SECRET_KEY"))
-    if not host or not public_key or not secret_key:
-        return None
-    return host.rstrip("/"), public_key, secret_key
+    return get_langfuse_credentials()
 
 
 def _langfuse_get_json(

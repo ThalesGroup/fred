@@ -616,6 +616,15 @@ def test_repo_models_catalog_bootstrap_has_no_team_rules_and_uses_defaults() -> 
     policy = load_model_routing_policy_from_catalog(catalog_file)
     resolver = ModelRoutingResolver(policy)
 
+    # Derive expected default from the catalog rather than hardcoding it,
+    # so this test stays green when the catalog's default profile changes.
+    expected_default_chat_profile_id = policy.default_profile_by_capability[
+        ModelCapability.CHAT
+    ]
+    expected_default_profile = next(
+        p for p in policy.profiles if p.profile_id == expected_default_chat_profile_id
+    )
+
     team_query = resolver.resolve(
         ModelSelectionRequest(
             capability=ModelCapability.CHAT,
@@ -628,9 +637,9 @@ def test_repo_models_catalog_bootstrap_has_no_team_rules_and_uses_defaults() -> 
     )
     assert team_query.source == ModelSelectionSource.DEFAULT
     assert team_query.rule_id is None
-    assert team_query.profile_id == "default.chat.openai.prod"
-    assert team_query.model.provider == "openai"
-    assert team_query.model.name == "gpt-5.1"
+    assert team_query.profile_id == expected_default_chat_profile_id
+    assert team_query.model.provider == expected_default_profile.model.provider
+    assert team_query.model.name == expected_default_profile.model.name
 
     another_team_query = resolver.resolve(
         ModelSelectionRequest(
@@ -644,4 +653,4 @@ def test_repo_models_catalog_bootstrap_has_no_team_rules_and_uses_defaults() -> 
     )
     assert another_team_query.source == ModelSelectionSource.DEFAULT
     assert another_team_query.rule_id is None
-    assert another_team_query.profile_id == "default.chat.openai.prod"
+    assert another_team_query.profile_id == expected_default_chat_profile_id

@@ -32,6 +32,13 @@ processing:
       use_gpu: true
       generate_summary: false
       process_images: false
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 5s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 20s
+      retry_maximum_attempts: 3
+      retry_non_retryable_error_types: []
       text_splitter:
         chunk_size: 1500
         chunk_overlap: 150
@@ -79,6 +86,13 @@ processing:
       use_gpu: true
       generate_summary: false
       process_images: false
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 20s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 2m
+      retry_maximum_attempts: 5
+      retry_non_retryable_error_types: []
       text_splitter:
         chunk_size: 1500
         chunk_overlap: 150
@@ -128,6 +142,13 @@ processing:
       use_gpu: true
       generate_summary: false
       process_images: true
+      input_activity_timeout: 1h
+      activity_heartbeat_timeout: 5m
+      retry_initial_interval: 30s
+      retry_backoff_coefficient: 2.0
+      retry_maximum_interval: 5m
+      retry_maximum_attempts: 7
+      retry_non_retryable_error_types: []
       text_splitter:
         chunk_size: 1500
         chunk_overlap: 150

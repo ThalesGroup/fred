@@ -199,7 +199,7 @@ const DocumentDataDrawerContent: React.FC<{ doc: ProcessingGraphNode }> = ({ doc
             No data available for this document.
           </Typography>
         )}
-        {!loading && !error && <ChunksAccordion vectors={vectors} chunks={chunks} />}
+        {!loading && !error && <ChunksAccordion chunks={chunks} />}
       </Box>
     </Box>
   );

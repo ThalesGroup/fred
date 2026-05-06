@@ -718,7 +718,9 @@ const ChatBot = ({
   const clientCreatedSessionRef = useRef<string | null>(null);
 
   // Name of des libs / prompts / templates / chat-context
-  const { data: docLibs = [], isFetching: isLibsFetching } = useListAllTagsKnowledgeFlowV1TagsGetQuery({ type: "document" as TagType });
+  const { data: docLibs = [], isFetching: isLibsFetching } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
+    type: "document" as TagType,
+  });
   const { data: promptResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "prompt" });
   const { data: templateResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({ kind: "template" });
   const { data: chatContextResources = [] } = useListResourcesByKindKnowledgeFlowV1ResourcesGetQuery({
@@ -927,6 +929,7 @@ const ChatBot = ({
   const isAdmin = roles.includes("admin");
   const [debugEvents, setDebugEvents] = useState<DebugEventEntry[]>([]);
   const [debugDrawerOpen, setDebugDrawerOpen] = useState(false);
+  const [logsDrawerOpen, setLogsDrawerOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1081,6 +1084,7 @@ const ChatBot = ({
   const {
     conversationPrefs,
     currentAgent,
+    supportsSearchPolicySelection,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
     supportsDocumentsSelection,
@@ -1478,7 +1482,9 @@ const ChatBot = ({
       runtimeContext.selected_document_uids = conversationPrefs.documentUids;
     }
 
-    runtimeContext.search_policy = conversationPrefs.searchPolicy || "semantic";
+    if (supportsSearchPolicySelection && conversationPrefs.searchPolicy) {
+      runtimeContext.search_policy = conversationPrefs.searchPolicy;
+    }
     if (supportsRagScopeSelection && conversationPrefs.searchRagScope) {
       runtimeContext.search_rag_scope = conversationPrefs.searchRagScope;
     }
@@ -1504,6 +1510,7 @@ const ChatBot = ({
     conversationPrefs.deepSearch,
     conversationPrefs.includeSessionScope,
     conversationPrefs.includeCorpusScope,
+    supportsSearchPolicySelection,
     supportsRagScopeSelection,
     supportsDeepSearchSelection,
     supportsDocumentsSelection,
@@ -1865,6 +1872,13 @@ const ChatBot = ({
     copyFeedback,
     hasDebugHistory: debugEvents.length > 0,
   };
+  const logsWidgetProps = {
+    isAdmin,
+    logsDrawerOpen,
+    setLogsDrawerOpen,
+    sessionId: chatSessionId,
+    sessionStart: messages[0]?.timestamp ? new Date(messages[0].timestamp) : new Date(Date.now() - 2 * 60 * 60 * 1000),
+  };
   const messageAgents = useMemo(
     () => [...agents, ...internalAgents, internalLogGeniusAgent],
     [agents, internalAgents, internalLogGeniusAgent],
@@ -1927,6 +1941,7 @@ const ChatBot = ({
         setSearchRagScope={setSearchRagScope}
         setDeepSearchEnabled={setDeepSearchEnabled}
         debugWidget={debugWidgetProps}
+        logsWidget={logsWidgetProps}
         hitlEvent={pendingHitl}
         onHitlSubmit={handleHitlSubmit}
         onHitlCancel={handleHitlCancel}

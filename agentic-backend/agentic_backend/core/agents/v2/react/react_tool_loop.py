@@ -44,6 +44,10 @@ from ..support.filesystem_context import (
 )
 from ..support.tool_approval import requires_tool_approval
 
+# Bounded history window for V2 ReAct — matches V1 Rico's rag.history_max_messages=6
+# and prevents unbounded LangGraph checkpointer growth from contaminating queries.
+_V2_MAX_HISTORY_MESSAGES = 10
+
 
 def _truncate_for_human_review(value: object, *, max_chars: int = 1200) -> str:
     """
@@ -318,5 +322,6 @@ def build_tool_loop_compiled_react_agent(
         requires_hitl=_requires_human_approval,
         hitl_callback=_hitl_callback,
         rewrite_tool_call=_rewrite_tool_call,
+        max_history_messages=_V2_MAX_HISTORY_MESSAGES,
     )
     return graph.compile(checkpointer=checkpointer)

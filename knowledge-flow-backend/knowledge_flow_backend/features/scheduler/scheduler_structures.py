@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fred_core import KeycloakUser
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from knowledge_flow_backend.common.document_structures import (
     AccessInfo,
@@ -63,6 +63,12 @@ class FileToProcessWithoutUser(BaseModel):
 class FileToProcess(FileToProcessWithoutUser):
     processed_by: KeycloakUser
     input_activity_timeout_seconds: int = 3600
+    heartbeat_timeout_seconds: int = 300
+    retry_initial_interval_seconds: int = 30
+    retry_backoff_coefficient: float = 2.0
+    retry_maximum_interval_seconds: int = 600
+    retry_maximum_attempts: int = 6
+    retry_non_retryable_error_types: List[str] = Field(default_factory=list)
 
     @classmethod
     def from_file_to_process_without_user(cls, file: FileToProcessWithoutUser, user: KeycloakUser) -> "FileToProcess":

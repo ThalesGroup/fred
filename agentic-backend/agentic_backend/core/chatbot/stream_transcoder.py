@@ -17,13 +17,12 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fred_core import KeycloakUser
-from fred_core.kpi import BaseKPIWriter
+from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
@@ -31,6 +30,7 @@ from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 
+from agentic_backend.common.langfuse_config import get_langfuse_credentials
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_factory import RuntimeAgentInstance
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -550,8 +550,8 @@ class StreamTranscoder:
             resume_payload.pop("checkpoint", None)
 
         # If Langfuse is configured, add the callback handler
-        if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
-            logger.info("Langfuse credentials found.")
+        if get_langfuse_credentials() is not None:
+            logger.debug("Langfuse credentials found.")
             langfuse_handler = CallbackHandler()
             config["callbacks"] = [langfuse_handler]
 
@@ -596,7 +596,7 @@ class StreamTranscoder:
                     t_first_event = time.monotonic()
 
                 if mode == "messages":
-                    # Token/chunk stream (best-effort): enabled until we detect tool activity.
+                    # Token/chunk stream (best-effort): always enabled for all agents.
                     chunk_obj = (
                         event[0] if isinstance(event, tuple) and event else event
                     )
@@ -649,7 +649,7 @@ class StreamTranscoder:
                     if chunk_usage is not None:
                         pending_stream_token_usage = chunk_usage
                         if not token_usage_seen_from_messages:
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][TOKEN_USAGE][CAPTURE] session=%s exchange=%s agent=%s source=messages usage=%s",
                                 session_id,
                                 exchange_id,
@@ -669,14 +669,6 @@ class StreamTranscoder:
                         continue
                     if partial_stream_rank is None:
                         partial_stream_rank = base_rank + seq
-                    # Only stream deltas once tool activity has been seen.
-                    # Before the first tool call, the model may stream reasoning text
-                    # ("I'm going to call X...") that would be visually replaced by
-                    # the tool call UI. Buffer it silently; it gets discarded when the
-                    # tool call resets partial_stream_text (line ~784), or flushed at
-                    # end-of-stream by the flush block below for no-tool agents.
-                    if not tool_activity_seen:
-                        continue
                     now = time.monotonic()
                     if now - last_partial_emit < self._stream_flush_interval_s:
                         continue
@@ -768,7 +760,7 @@ class StreamTranscoder:
                         or clean_token_usage(additional_kwargs.get("usage"))
                     )
                     if token_usage is not None and not token_usage_seen_from_updates:
-                        logger.info(
+                        logger.debug(
                             "[TRANSCODER][TOKEN_USAGE][CAPTURE] session=%s exchange=%s agent=%s source=updates node=%s msg_type=%s usage=%s",
                             session_id,
                             exchange_id,
@@ -1093,7 +1085,7 @@ class StreamTranscoder:
                         )
                         pending_assistant_final = candidate_final
                         if pending_final_token_source != candidate_token_source:
-                            logger.info(
+                            logger.debug(
                                 "[TRANSCODER][TOKEN_USAGE][PENDING_FINAL] session=%s exchange=%s agent=%s source=%s usage=%s",
                                 session_id,
                                 exchange_id,
@@ -1185,7 +1177,44 @@ class StreamTranscoder:
                     }
                 )
                 final_token_source = TokenUsageSource.unavailable
+            _tu = _token_usage_log_payload(pending_assistant_final.metadata.token_usage)
+            _agent_name = getattr(
+                getattr(agent, "agent_settings", None), "name", None
+            ) or getattr(
+                getattr(getattr(agent, "binding", None), "portable_context", None),
+                "agent_name",
+                None,
+            )
+            _agent_label = f"{_agent_name}({agent_id[:8]})" if _agent_name else agent_id
             logger.info(
+                "[OBS][EXCHANGE] session=%s exchange=%s agent=%s in=%s out=%s total=%s",
+                session_id,
+                exchange_id,
+                _agent_label,
+                _tu.get("input_tokens") if _tu else None,
+                _tu.get("output_tokens") if _tu else None,
+                _tu.get("total_tokens") if _tu else None,
+            )
+            if kpi is not None and _tu:
+                _kpi_actor = KPIActor(type="system")
+                _kpi_dims = {
+                    "agent_id": _agent_name or agent_id,
+                    "model_name": pending_assistant_final.metadata.model,
+                }
+                _in = _tu.get("input_tokens")
+                _out = _tu.get("output_tokens")
+                _total = _tu.get("total_tokens")
+                if _in is not None:
+                    kpi.count("llm.tokens_input", _in, dims=_kpi_dims, actor=_kpi_actor)
+                if _out is not None:
+                    kpi.count(
+                        "llm.tokens_output", _out, dims=_kpi_dims, actor=_kpi_actor
+                    )
+                if _total is not None:
+                    kpi.count(
+                        "llm.tokens_total", _total, dims=_kpi_dims, actor=_kpi_actor
+                    )
+            logger.debug(
                 "[TRANSCODER][TOKEN_USAGE][FINAL] session=%s exchange=%s agent=%s source=%s from_messages=%s from_updates=%s usage=%s",
                 session_id,
                 exchange_id,
@@ -1193,7 +1222,7 @@ class StreamTranscoder:
                 final_token_source.value,
                 token_usage_seen_from_messages,
                 token_usage_seen_from_updates,
-                _token_usage_log_payload(pending_assistant_final.metadata.token_usage),
+                _tu,
             )
             # Final answer is emitted once, at end-of-run.
             # Reuse the partial-stream rank when present so the UI replaces the

@@ -8,6 +8,9 @@ app:
   kpi_process_metrics_interval_sec: 0
   kpi_log_summary_interval_sec: 0.0
   kpi_log_summary_top_n: 0
+  metrics_enabled: true
+  metrics_address: "0.0.0.0"
+  metrics_port: 9222 
 
 scheduler:
   enabled: true
