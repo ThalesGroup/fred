@@ -135,7 +135,7 @@ def test_extract_interesting_spans_classifies_react_model_span_as_model() -> Non
 async def test_traces_summarize_conversation_returns_disabled_status_when_langfuse_is_not_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
 

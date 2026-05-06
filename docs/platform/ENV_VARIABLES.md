@@ -59,8 +59,7 @@ Note:
 | --- | --- | --- |
 | `LANGFUSE_PUBLIC_KEY` | agentic | Langfuse public key. |
 | `LANGFUSE_SECRET_KEY` | agentic | Langfuse secret key. |
-| `LANGFUSE_HOST` | agentic | Langfuse host URL used by current runtime code. |
-| `LANGFUSE_BASE_URL` | agentic | Legacy naming in template; current runtime reads `LANGFUSE_HOST`. |
+| `LANGFUSE_BASE_URL` | agentic | Langfuse base URL used by current runtime code. |
 
 ## 2) Startup Configuration and Feature-Switch Variables
 
@@ -133,7 +132,6 @@ These exist in templates/docs/deploy values but no active runtime read was found
 
 | Variable | Where it appears | Current status |
 | --- | --- | --- |
-| `LANGFUSE_BASE_URL` | `agentic-backend/config/.env.template`, deploy values | Runtime currently reads `LANGFUSE_HOST`. |
 | `VITE_USE_AUTH` | deploy values | No active frontend code read found. |
 | `FRED_AUTH_VERBOSE` | docs only | No runtime read found. |
 | `FRED_TEMPORAL_CODEC_KEY` | docs only | No runtime read found. |
