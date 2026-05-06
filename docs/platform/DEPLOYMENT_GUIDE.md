@@ -160,7 +160,7 @@ The goal is to ensure:
 Fred applies the following principles for HTTP communication with LLM providers:
 
 1. **Single shared connection pool per backend process**
-   - Each backend (`agentic-backend`, `knowledge-flow-backend`) creates **one shared HTTP client stack**.
+   - Each backend (`fred-agents`, `knowledge-flow-backend`) creates **one shared HTTP client stack**.
    - All chat, embedding, and vision models reuse this pool.
    - This makes concurrency, resource usage, and failures observable and controllable.
 

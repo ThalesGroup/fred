@@ -372,6 +372,6 @@ Provider support implemented in `fred-core/fred_core/model/factory.py`:
 ## Notes
 
 - Keep secrets in `.env`, not in YAML.
-- For `agentic-backend`, prefer `models_catalog.yaml` over editing `ai.default_*` directly.
+- For agent pods (`apps/fred-agents` or your own pod), use `models_catalog.yaml` as the source of truth. Avoid editing `ai.default_*` directly.
 - For `knowledge-flow-backend`, keep using `chat_model` / `embedding_model` / `vision_model` in the runtime config files.
 - Use environment-specific files only for active runtime values and deployment-specific overrides.

@@ -28,7 +28,8 @@ We use two tag families:
 
 Tagging `main` with `code/vX.Y.Z` triggers image builds:
 
-- `agentic-backend:<X.Y.Z>`
+- `fred-agents:<X.Y.Z>`
+- `control-plane-backend:<X.Y.Z>`
 - `knowledge-flow-backend:<X.Y.Z>`
 - `frontend:<X.Y.Z>`
 

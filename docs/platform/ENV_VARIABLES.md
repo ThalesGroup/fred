@@ -3,7 +3,7 @@
 This is the central inventory for environment variables in the active Fred codebase.
 
 Scope:
-- `agentic-backend`, `knowledge-flow-backend`, `control-plane-backend`, `fred-core`, `frontend`
+- `apps/fred-agents`, `knowledge-flow-backend`, `apps/control-plane-backend`, `libs/fred-core`, `libs/fred-runtime`, `frontend`
 - excludes `ignored/`, virtual environments, and generated vendor folders
 
 Rule of thumb:
@@ -133,7 +133,7 @@ These exist in templates/docs/deploy values but no active runtime read was found
 
 | Variable | Where it appears | Current status |
 | --- | --- | --- |
-| `LANGFUSE_BASE_URL` | `agentic-backend/config/.env.template`, deploy values | Runtime currently reads `LANGFUSE_HOST`. |
+| `LANGFUSE_BASE_URL` | `apps/fred-agents/config/.env.template`, deploy values | Runtime currently reads `LANGFUSE_HOST`. |
 | `VITE_USE_AUTH` | deploy values | No active frontend code read found. |
 | `FRED_AUTH_VERBOSE` | docs only | No runtime read found. |
 | `FRED_TEMPORAL_CODEC_KEY` | docs only | No runtime read found. |
