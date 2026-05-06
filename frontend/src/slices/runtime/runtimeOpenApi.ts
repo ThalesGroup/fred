@@ -44,6 +44,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/checkpoints/${queryArg.sessionId}` }),
     }),
+    evaluatePodV1AgentsEvaluatePost: build.mutation<
+      EvaluatePodV1AgentsEvaluatePostApiResponse,
+      EvaluatePodV1AgentsEvaluatePostApiArg
+    >({
+      query: (queryArg) => ({ url: `/pod/v1/agents/evaluate`, method: "POST", body: queryArg.runtimeExecuteRequest }),
+    }),
     executePodV1AgentsExecutePost: build.mutation<
       ExecutePodV1AgentsExecutePostApiResponse,
       ExecutePodV1AgentsExecutePostApiArg
@@ -136,6 +142,10 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
   /** status 200 Successful Response */ CheckpointThreadDetail;
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
+};
+export type EvaluatePodV1AgentsEvaluatePostApiResponse = /** status 200 Successful Response */ EvalTrace;
+export type EvaluatePodV1AgentsEvaluatePostApiArg = {
+  runtimeExecuteRequest: RuntimeExecuteRequest;
 };
 export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful Response */
   | (
@@ -253,6 +263,80 @@ export type CheckpointEntry = {
 export type CheckpointThreadDetail = {
   checkpoints: CheckpointEntry[];
   session_id: string;
+};
+export type EvalStep = {
+  arguments?: {
+    [key: string]: any;
+  } | null;
+  call_id?: string | null;
+  content?: string | null;
+  error_message?: string | null;
+  is_error?: boolean | null;
+  kind: string;
+  node_id?: string | null;
+  tool_name?: string | null;
+};
+export type EvalTrace = {
+  agent_id: string;
+  error?: string | null;
+  finish_reason?: string | null;
+  input: string;
+  latency_ms: number;
+  model_name?: string | null;
+  output?: string | null;
+  retrieval_context?: string[];
+  session_id: string;
+  steps?: EvalStep[];
+  token_usage?: {
+    [key: string]: number;
+  } | null;
+  tools_called?: string[];
+};
+export type ExecutionGrantAction = "execute" | "resume";
+export type ExecutionGrant = {
+  action: ExecutionGrantAction;
+  agent_instance_id: string;
+  /** Intended runtime service/endpoint URL or identifier. */
+  audience: string;
+  correlation_id?: string | null;
+  /** Grant expiry time as a Unix timestamp. */
+  expires_at: number;
+  /** Grant issuance time as a Unix timestamp. */
+  issued_at: number;
+  /** Optional permission scopes granted for this execution. */
+  scopes?: string[];
+  /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
+  storage_scope?: string | null;
+  team_id: string;
+  trace_id?: string | null;
+  user_id: string;
+};
+export type ConversationTurn = {
+  agent_name?: string | null;
+  agent_response: string;
+  user_message: string;
+};
+export type RuntimeExecuteRequest = {
+  /** Direct template agent_id. For internal/dev use only. */
+  agent_id?: string | null;
+  /** Managed agent instance ID (preferred). Requires execution_grant. */
+  agent_instance_id?: string | null;
+  /** Checkpoint identifier for precise graph-state resume. */
+  checkpoint_id?: string | null;
+  /** Authorization envelope issued by control-plane. Required when agent_instance_id is set. Runtime MUST reject requests with a missing or invalid grant. */
+  execution_grant?: ExecutionGrant | null;
+  /** User turn input. Ignored when resume_payload is set (HITL resume). */
+  input?: string;
+  /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
+  invocation_turns?: ConversationTurn[];
+  /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
+  resume_payload?: any | null;
+  /** Optional per-request context passthrough (language, user_groups, etc.). Kept for transitional compatibility; prefer execution_grant for identity fields. In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' unless runtime_context.user_id is explicitly provided. */
+  runtime_context?: {
+    [key: string]: any;
+  } | null;
+  /** Session identifier for multi-turn continuity. Keep stable across turns. */
+  session_id?: string | null;
 };
 export type AssistantDeltaRuntimeEvent = {
   delta: string;
@@ -415,45 +499,6 @@ export type TurnPersistedEvent = {
 };
 export type RuntimeErrorPayload = {
   error: string;
-};
-export type ExecutionGrantAction = "execute" | "resume";
-export type ExecutionGrant = {
-  action: ExecutionGrantAction;
-  agent_instance_id: string;
-  /** Intended runtime service/endpoint URL or identifier. */
-  audience: string;
-  correlation_id?: string | null;
-  /** Grant expiry time as a Unix timestamp. */
-  expires_at: number;
-  /** Grant issuance time as a Unix timestamp. */
-  issued_at: number;
-  /** Optional permission scopes granted for this execution. */
-  scopes?: string[];
-  /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
-  storage_scope?: string | null;
-  team_id: string;
-  trace_id?: string | null;
-  user_id: string;
-};
-export type RuntimeExecuteRequest = {
-  /** Direct template agent_id. For internal/dev use only. */
-  agent_id?: string | null;
-  /** Managed agent instance ID (preferred). Requires execution_grant. */
-  agent_instance_id?: string | null;
-  /** Checkpoint identifier for precise graph-state resume. */
-  checkpoint_id?: string | null;
-  /** Authorization envelope issued by control-plane. Required when agent_instance_id is set. Runtime MUST reject requests with a missing or invalid grant. */
-  execution_grant?: ExecutionGrant | null;
-  /** User turn input. Ignored when resume_payload is set (HITL resume). */
-  input?: string;
-  /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
-  resume_payload?: any | null;
-  /** Optional per-request context passthrough (language, user_groups, etc.). Kept for transitional compatibility; prefer execution_grant for identity fields. In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' unless runtime_context.user_id is explicitly provided. */
-  runtime_context?: {
-    [key: string]: any;
-  } | null;
-  /** Session identifier for multi-turn continuity. Keep stable across turns. */
-  session_id?: string | null;
 };
 export type KpiTurnRecord = {
   exchange_id: string;
@@ -664,6 +709,10 @@ export type AgentTuning = {
   /** The agent's mandatory role for discovery. */
   role: string;
   tags?: string[];
+  /** User-set field values keyed by FieldSpec.key, forwarded from control-plane. */
+  values?: {
+    [key: string]: any;
+  };
 };
 export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
 export type AgentTemplateSummary = {
@@ -705,6 +754,7 @@ export const {
   useDeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteMutation,
   useGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
   useLazyGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
+  useEvaluatePodV1AgentsEvaluatePostMutation,
   useExecutePodV1AgentsExecutePostMutation,
   useExecuteStreamPodV1AgentsExecuteStreamPostMutation,
   useGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,

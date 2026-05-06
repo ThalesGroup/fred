@@ -1,7 +1,6 @@
 from typing import cast
 
 from fred_core.portable import InMemoryMetricsProvider, Span, Tracer
-
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -9,6 +8,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
+
 from fred_runtime.graph.graph_runtime import _graph_phase_timer, _start_runtime_span
 
 

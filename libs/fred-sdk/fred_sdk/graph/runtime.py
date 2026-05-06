@@ -34,6 +34,7 @@ from ..contracts.context import (
     AgentInvocationResult,
     ArtifactScope,
     BoundRuntimeContext,
+    ConversationTurn,
     FetchedResource,
     PublishedArtifact,
     ResourceScope,
@@ -144,6 +145,8 @@ class GraphNodeContext(Protocol):
         self,
         agent_id: str,
         message: str,
+        *,
+        prior_turns: tuple[ConversationTurn, ...] = (),
     ) -> AgentInvocationResult:
         raise NotImplementedError()
 

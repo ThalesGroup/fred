@@ -43,11 +43,11 @@ from __future__ import annotations
 import json
 
 from fred_core.store import VectorSearchHit
+from fred_sdk.contracts.context import ToolInvocationResult, UiPart
+from fred_sdk.contracts.runtime import HumanInputRequest
 from langchain_core.messages import AIMessageChunk, BaseMessage
 from pydantic import ValidationError
 
-from fred_sdk.contracts.context import ToolInvocationResult, UiPart
-from fred_sdk.contracts.runtime import HumanInputRequest
 from fred_runtime.runtime_support.model_metadata import (  # noqa: F401
     normalize_token_usage,
     runtime_metadata_from_message,

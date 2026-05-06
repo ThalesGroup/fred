@@ -64,6 +64,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .context import ConversationTurn
+
 
 class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
@@ -410,6 +412,17 @@ class RuntimeExecuteRequest(BaseModel):
             "Kept for transitional compatibility; prefer execution_grant for identity fields. "
             "In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' "
             "unless runtime_context.user_id is explicitly provided."
+        ),
+    )
+
+    # Multi-turn memory — agent-to-agent context seeding
+    invocation_turns: tuple[ConversationTurn, ...] = Field(
+        default=(),
+        description=(
+            "Prior conversation turns forwarded by the calling agent. "
+            "Used to seed memory in sub-agents invoked via context.invoke_agent(). "
+            "Graph sub-agents receive history through build_turn_state; "
+            "ReAct sub-agents receive it as a leading SystemMessage."
         ),
     )
 

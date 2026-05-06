@@ -29,11 +29,10 @@ from contextlib import contextmanager
 from typing import Any, Generator, Protocol, cast
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.runtime import TracerPort
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 TRACE_MODEL_SPAN_NAME = "v2.react.model"
 

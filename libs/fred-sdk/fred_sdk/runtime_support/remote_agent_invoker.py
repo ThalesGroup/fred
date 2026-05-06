@@ -243,11 +243,13 @@ class RemoteSseAgentInvoker(AgentInvokerPort):
         - the invoker aggregates RuntimeEvent streams until FinalRuntimeEvent
         """
 
-        payload = {
+        payload: dict[str, object] = {
             "agent_id": request.agent_id,
             "message": request.message,
             "context": request.context.model_dump(),
         }
+        if request.prior_turns:
+            payload["invocation_turns"] = [t.model_dump() for t in request.prior_turns]
         headers = self._build_headers(request)
         timeout = self._config.build_timeout()
 
