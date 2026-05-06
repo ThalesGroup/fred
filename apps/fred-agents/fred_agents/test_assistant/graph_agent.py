@@ -19,8 +19,7 @@ Purpose:
 - Provide a no-LLM, no-MCP graph agent that exercises every major SSE event
   type so developers can validate the chat UI without any external services.
 - Expose every FieldSpec type, UIHints option, declared_tool_refs pattern, and
-  default_mcp_servers pattern so the control-plane agent form can be validated
-  end-to-end from one agent definition.
+  so the control-plane agent form can be validated end-to-end from one agent definition.
 
 Field type coverage:
   prompt          prompts.system / prompts.planning / prompts.routing
@@ -34,10 +33,9 @@ Field type coverage:
   secret          credentials.api_key         (UIHints.placeholder)
   url             credentials.webhook_url     (UIHints.placeholder)
 
-Tool/MCP coverage:
+Tool coverage:
   declared_tool_refs   knowledge.search (required=True, locked)
                        artifacts.publish_text (required=False, toggleable)
-  default_mcp_servers  knowledge-flow/text (default-on, toggleable)
 
 Workflow overview (keyword-routed by dispatch_step):
 
@@ -59,13 +57,11 @@ from __future__ import annotations
 
 from fred_core.store import VectorSearchHit
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     TOOL_REF_ARTIFACTS_PUBLISH_TEXT,
     TOOL_REF_KNOWLEDGE_SEARCH,
     FieldSpec,
     GraphAgent,
     GraphWorkflow,
-    MCPServerRef,
     ToolRefRequirement,
     UIHints,
 )
@@ -100,7 +96,6 @@ class TestAssistantGraphAgent(GraphAgent):
     - test error / node_error SSE event rendering
     - test long streaming reply layout (word-by-word via emit_assistant_delta)
     - validate declared_tool_refs rendering (locked vs toggleable rows)
-    - validate default_mcp_servers rendering (toggleable MCP section)
     - optionally validate graph operation-aware model routing
 
     Send a message starting with one of the scenario keywords to trigger
@@ -114,8 +109,8 @@ class TestAssistantGraphAgent(GraphAgent):
         "Exercises every SSE event type (status, HITL choice, HITL free-text, "
         "streaming text, mock sources, node errors, long streaming) and every "
         "FieldSpec type (prompt, boolean, integer, string, select, number, "
-        "text-multiline, array, secret, url). Also declares tool refs and an "
-        "MCP server to validate form rendering of those sections. "
+        "text-multiline, array, secret, url). Also declares tool refs to validate "
+        "form rendering of those sections. "
         "Keyword-prefix routing: echo | model routing | model planning | "
         "hitl choice | hitl text | trace | error | long."
     )
@@ -142,13 +137,6 @@ class TestAssistantGraphAgent(GraphAgent):
                 "This row appears as a toggleable option in the agent form."
             ),
         ),
-    )
-
-    # ── MCP server coverage ───────────────────────────────────────────────────
-    # One MCP server to validate that the MCP section renders in the agent form
-    # with a default-on, toggleable checkbox per instance.
-    default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
     )
 
     # ── Field spec coverage ───────────────────────────────────────────────────
