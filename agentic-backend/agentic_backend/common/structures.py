@@ -325,6 +325,17 @@ class AIConfig(BaseModel):
         return cleaned
 
 
+class UploadWarning(BaseModel):
+    severity: Literal["info", "warning", "error", "success"] = Field(
+        default="info",
+        description="MUI Alert severity level.",
+    )
+    messages: Dict[str, str] = Field(
+        default_factory=dict,
+        description='Locale → message map (e.g. {"en": "...", "fr": "..."}).',
+    )
+
+
 class FrontendFlags(BaseModel):
     enableK8Features: bool = False
     enableElecWarfare: bool = False
@@ -357,6 +368,10 @@ class Properties(BaseModel):
     defaultTeamAvatarFile: str = "default-team-avatar.png"
     defaultPersonalAvatarFile: str = "default-team-avatar.png"
     gcuVersion: str | None = None
+    uploadWarning: Optional[UploadWarning] = Field(
+        default=None,
+        description="Optional alert shown in the document upload drawer. Omit to show nothing.",
+    )
 
 
 class FrontendSettings(BaseModel):

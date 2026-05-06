@@ -1149,6 +1149,14 @@ export type FrontendFlags = {
   enableK8Features?: boolean;
   enableElecWarfare?: boolean;
 };
+export type UploadWarning = {
+  /** MUI Alert severity level. */
+  severity?: "info" | "warning" | "error" | "success";
+  /** Locale → message map (e.g. {"en": "...", "fr": "..."}). */
+  messages?: {
+    [key: string]: string;
+  };
+};
 export type Properties = {
   logoName?: string;
   logoNameDark?: string;
@@ -1174,6 +1182,8 @@ export type Properties = {
   defaultTeamAvatarFile?: string;
   defaultPersonalAvatarFile?: string;
   gcuVersion?: string | null;
+  /** Optional alert shown in the document upload drawer. Omit to show nothing. */
+  uploadWarning?: UploadWarning | null;
 };
 export type FrontendSettings = {
   feature_flags: FrontendFlags;
