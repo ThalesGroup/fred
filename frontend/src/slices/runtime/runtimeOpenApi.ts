@@ -77,6 +77,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getMcpCatalogPodV1AgentsMcpCatalogGet: build.query<
+      GetMcpCatalogPodV1AgentsMcpCatalogGetApiResponse,
+      GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg
+    >({
+      query: () => ({ url: `/pod/v1/agents/mcp-catalog` }),
+    }),
     listSessionsPodV1AgentsSessionsGet: build.query<
       ListSessionsPodV1AgentsSessionsGetApiResponse,
       ListSessionsPodV1AgentsSessionsGetApiArg
@@ -189,6 +195,8 @@ export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiResponse = /** status 200 Succes
 export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiArg = {
   limit?: number;
 };
+export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiResponse = /** status 200 Successful Response */ McpCatalogResponse;
+export type GetMcpCatalogPodV1AgentsMcpCatalogGetApiArg = void;
 export type ListSessionsPodV1AgentsSessionsGetApiResponse = /** status 200 Successful Response */ string[];
 export type ListSessionsPodV1AgentsSessionsGetApiArg = {
   userId: string;
@@ -325,6 +333,18 @@ export type RuntimeExecuteRequest = {
   checkpoint_id?: string | null;
   /** Authorization envelope issued by control-plane. Required when agent_instance_id is set. Runtime MUST reject requests with a missing or invalid grant. */
   execution_grant?: ExecutionGrant | null;
+  /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
+  inline_tuning?: {
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
+  } | null;
   /** User turn input. Ignored when resume_payload is set (HITL resume). */
   input?: string;
   /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
@@ -516,6 +536,16 @@ export type KpiTurnRecord = {
   ts: string;
   user_id: string;
 };
+export type McpCatalogEntry = {
+  description?: string | null;
+  enabled: boolean;
+  id: string;
+  name: string;
+  transport?: string | null;
+};
+export type McpCatalogResponse = {
+  servers: McpCatalogEntry[];
+};
 export type Channel =
   | "final"
   | "plan"
@@ -620,33 +650,6 @@ export type ChatMessage = {
   timestamp: string;
 };
 export type ClientAuthMode = "user_token" | "no_token";
-export type McpServerConfiguration = {
-  /** Args to give the command as a list. */
-  args?: string[] | null;
-  /** Client authentication mode. */
-  auth_mode?: ClientAuthMode;
-  /** Command to run for stdio transport. */
-  command?: string | null;
-  /** react-i18next key for the description of the MCP server. */
-  description?: string | null;
-  /** If false, this MCP server is ignored. */
-  enabled?: boolean;
-  /** Environment variables to give the MCP server */
-  env?: {
-    [key: string]: string;
-  } | null;
-  id: string;
-  /** react-i18next key for the name of the MCP server. */
-  name: string;
-  /** Local provider key when transport=inprocess. */
-  provider?: string | null;
-  /** How long (in seconds) the client will wait for a new event before disconnecting */
-  sse_read_timeout?: number | null;
-  /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
-  transport?: string | null;
-  /** URL and endpoint of the MCP server */
-  url?: string | null;
-};
 export type UiHints = {
   group?: string | null;
   hide?: boolean;
@@ -657,7 +660,16 @@ export type UiHints = {
   textarea?: boolean;
 };
 export type FieldSpec = {
-  default?: any | null;
+  default?:
+    | string
+    | number
+    | number
+    | boolean
+    | (string | number | number | boolean)[]
+    | {
+        [key: string]: string | number | number | boolean;
+      }
+    | null;
   description?: string | null;
   enum?: string[] | null;
   item_type?:
@@ -697,6 +709,35 @@ export type FieldSpec = {
     | "url";
   ui?: UiHints;
 };
+export type McpServerConfiguration = {
+  /** Args to give the command as a list. */
+  args?: string[] | null;
+  /** Client authentication mode. */
+  auth_mode?: ClientAuthMode;
+  /** Command to run for stdio transport. */
+  command?: string | null;
+  /** User-facing configuration options declared by this server. Rendered in the agent form beneath the server's activation checkbox. Values flow into RuntimeContext as tuning field values at execution time. */
+  config_fields?: FieldSpec[];
+  /** react-i18next key for the description of the MCP server. */
+  description?: string | null;
+  /** If false, this MCP server is ignored. */
+  enabled?: boolean;
+  /** Environment variables to give the MCP server */
+  env?: {
+    [key: string]: string;
+  } | null;
+  id: string;
+  /** react-i18next key for the name of the MCP server. */
+  name: string;
+  /** Local provider key when transport=inprocess. */
+  provider?: string | null;
+  /** How long (in seconds) the client will wait for a new event before disconnecting */
+  sse_read_timeout?: number | null;
+  /** MCP server transport. Can be sse, stdio, websocket, streamable_http, or inprocess (local toolkit provider exposed in the MCP catalog). */
+  transport?: string | null;
+  /** URL and endpoint of the MCP server */
+  url?: string | null;
+};
 export type McpServerRef = {
   id: string;
   require_tools?: string[];
@@ -708,10 +749,20 @@ export type AgentTuning = {
   mcp_servers?: McpServerRef[];
   /** The agent's mandatory role for discovery. */
   role: string;
+  /** Admin-chosen subset of mcp_servers IDs to activate for this instance. Empty list means all declared servers are active. */
+  selected_mcp_server_ids?: string[];
   tags?: string[];
   /** User-set field values keyed by FieldSpec.key, forwarded from control-plane. */
   values?: {
-    [key: string]: any;
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
   };
 };
 export type ExecutionCategory = "graph" | "react" | "deep" | "proxy";
@@ -759,6 +810,8 @@ export const {
   useExecuteStreamPodV1AgentsExecuteStreamPostMutation,
   useGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
   useLazyGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
+  useGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
+  useLazyGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
