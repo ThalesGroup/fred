@@ -167,7 +167,7 @@ class TestModelRouteRuleNormalization:
             rule_id="r1",
             capability=ModelCapability.CHAT,
             target_profile_id="p1",
-            match={"operation": "planning", "purpose": "chat"},
+            match={"operation": "planning", "purpose": "chat"},  # type: ignore[arg-type]
         )
         assert rule.match.operation == "planning"
         assert rule.match.purpose == "chat"
@@ -196,7 +196,7 @@ class TestModelRouteRuleNormalization:
                 capability=ModelCapability.CHAT,
                 target_profile_id="p1",
                 operation="routing",
-                match={"operation": "planning"},
+                match={"operation": "planning"},  # type: ignore[arg-type]
             )
 
     def test_consistent_flat_and_match_block_accepted(self) -> None:
@@ -205,7 +205,7 @@ class TestModelRouteRuleNormalization:
             capability=ModelCapability.CHAT,
             target_profile_id="p1",
             operation="routing",
-            match={"operation": "routing", "team_id": "team-a"},
+            match={"operation": "routing", "team_id": "team-a"},  # type: ignore[arg-type]
         )
         assert rule.match.operation == "routing"
         assert rule.match.team_id == "team-a"
@@ -471,7 +471,9 @@ class TestModelCatalogToPolicy:
     def test_common_settings_applied(self) -> None:
         catalog = self._make_catalog(common={"temperature": 0.3})
         policy = catalog.to_policy()
-        assert policy.profiles[0].model.settings["temperature"] == 0.3
+        settings = policy.profiles[0].model.settings
+        assert settings is not None
+        assert settings["temperature"] == 0.3
 
     def test_capability_settings_override_common(self) -> None:
         catalog = self._make_catalog(
@@ -479,7 +481,9 @@ class TestModelCatalogToPolicy:
             by_capability={ModelCapability.CHAT: {"temperature": 0.7}},
         )
         policy = catalog.to_policy()
-        assert policy.profiles[0].model.settings["temperature"] == 0.7
+        settings = policy.profiles[0].model.settings
+        assert settings is not None
+        assert settings["temperature"] == 0.7
 
     def test_profile_settings_override_capability(self) -> None:
         catalog = self._make_catalog(
@@ -488,7 +492,9 @@ class TestModelCatalogToPolicy:
             profile_settings={"temperature": 1.0},
         )
         policy = catalog.to_policy()
-        assert policy.profiles[0].model.settings["temperature"] == 1.0
+        settings = policy.profiles[0].model.settings
+        assert settings is not None
+        assert settings["temperature"] == 1.0
 
     def test_nested_settings_deep_merged(self) -> None:
         catalog = self._make_catalog(
@@ -497,6 +503,7 @@ class TestModelCatalogToPolicy:
         )
         policy = catalog.to_policy()
         settings = policy.profiles[0].model.settings
+        assert settings is not None
         assert settings["azure"]["api_version"] == "2024-01"
         assert settings["azure"]["endpoint"] == "https://override"
 

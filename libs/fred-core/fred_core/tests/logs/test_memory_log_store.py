@@ -10,10 +10,11 @@ Covers:
 from __future__ import annotations
 
 import time
+from typing import Literal
 
 import pytest
 
-from fred_core.logs.log_structures import LogEventDTO, LogFilter, LogQuery
+from fred_core.logs.log_structures import LogEventDTO, LogFilter, LogLevel, LogQuery
 from fred_core.logs.memory_log_store import RamLogStore, _parse_since
 
 # ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ def _event(
     msg: str,
     *,
     ts: float | None = None,
-    level: str = "INFO",
+    level: LogLevel = "INFO",
     logger: str = "app",
     service: str | None = None,
 ) -> LogEventDTO:
@@ -44,12 +45,12 @@ def _query(
     *,
     since: str = "now-1h",
     until: str | None = None,
-    level_at_least: str | None = None,
+    level_at_least: LogLevel | None = None,
     logger_like: str | None = None,
     service: str | None = None,
     text_like: str | None = None,
     limit: int = 500,
-    order: str = "asc",
+    order: "Literal['asc', 'desc']" = "asc",
 ) -> LogQuery:
     return LogQuery(
         since=since,

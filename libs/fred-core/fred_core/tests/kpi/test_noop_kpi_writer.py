@@ -11,7 +11,7 @@ Focus: verify the contract is honoured, not that operations do nothing.
 
 from __future__ import annotations
 
-from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.kpi.kpi_writer_structures import Dims, KPIActor
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 
 ACTOR = KPIActor(type="system")
@@ -61,7 +61,7 @@ class TestNoOpKPIWriterTimerContract:
         # mutation must not raise
 
     def test_timer_with_initial_dims_yields_copy(self) -> None:
-        initial = {"phase": "routing"}
+        initial: Dims = {"phase": "routing"}
         with self.writer.timer("test.timer", dims=initial, actor=ACTOR) as d:
             assert d["phase"] == "routing"
             d["extra"] = "added"
