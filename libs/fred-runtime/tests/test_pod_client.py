@@ -67,7 +67,9 @@ def _json_response(data: Any, *, status_code: int = 200) -> httpx.Response:
 
 def _sse_response(*events: dict[str, Any]) -> httpx.Response:
     lines = "".join(f"data: {json.dumps(e)}\n\n" for e in events)
-    return httpx.Response(200, text=lines, headers={"content-type": "text/event-stream"})
+    return httpx.Response(
+        200, text=lines, headers={"content-type": "text/event-stream"}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +81,9 @@ class TestAuthHeaders:
     def test_no_token_provider_returns_empty(self) -> None:
         c = AgentPodClient(
             base_url=BASE_URL,
-            http_client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[]))),
+            http_client=httpx.Client(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[]))
+            ),
         )
         assert c._auth_headers() == {}
 
@@ -88,7 +92,9 @@ class TestAuthHeaders:
         assert c._auth_headers() == {}
 
     def test_provider_returning_token_returns_bearer(self) -> None:
-        c = _client(lambda r: httpx.Response(200, json=[]), token_provider=lambda: "my-token")
+        c = _client(
+            lambda r: httpx.Response(200, json=[]), token_provider=lambda: "my-token"
+        )
         assert c._auth_headers() == {"Authorization": "Bearer my-token"}
 
 
@@ -148,9 +154,7 @@ class TestListTemplates:
 
 
 class TestExecute:
-    def _capture_execute(
-        self, **kwargs: Any
-    ) -> tuple[dict[str, Any], _Capture]:
+    def _capture_execute(self, **kwargs: Any) -> tuple[dict[str, Any], _Capture]:
         capture = _Capture(_json_response({"output": "done"}))
         c = _client(capture)
         c.execute(
@@ -196,9 +200,7 @@ class TestExecute:
     def test_non_dict_response_raises(self) -> None:
         c = _client(lambda r: _json_response(["not", "a", "dict"]))
         with pytest.raises(RuntimeError, match="JSON object"):
-            c.execute(
-                agent_id="a", message="m", session_id="s", user_id="u"
-            )
+            c.execute(agent_id="a", message="m", session_id="s", user_id="u")
 
     def test_http_error_propagates(self) -> None:
         c = _client(lambda r: httpx.Response(503))
@@ -207,9 +209,7 @@ class TestExecute:
 
     def test_url_targets_execute_endpoint(self) -> None:
         capture = _Capture(_json_response({"output": "ok"}))
-        _client(capture).execute(
-            agent_id="a", message="m", session_id="s", user_id="u"
-        )
+        _client(capture).execute(agent_id="a", message="m", session_id="s", user_id="u")
         assert str(capture.last.url).endswith("/agents/execute")
 
 
@@ -260,9 +260,7 @@ class TestEvaluate:
 class TestIterStreamEvents:
     def _stream(self, *events: dict[str, Any]) -> list[dict[str, Any]]:
         c = _client(lambda r: _sse_response(*events))
-        return c.stream_events(
-            agent_id="a", message="m", session_id="s", user_id="u"
-        )
+        return c.stream_events(agent_id="a", message="m", session_id="s", user_id="u")
 
     def test_single_event_parsed(self) -> None:
         result = self._stream({"kind": "final", "content": "hi"})
@@ -277,28 +275,22 @@ class TestIterStreamEvents:
         assert [e["kind"] for e in result] == ["tool_call", "tool_result", "final"]
 
     def test_non_data_lines_skipped(self) -> None:
-        body = "comment line\n\ndata: {\"kind\": \"final\"}\n\n: ping\n\n"
+        body = 'comment line\n\ndata: {"kind": "final"}\n\n: ping\n\n'
         c = _client(lambda r: httpx.Response(200, text=body))
-        result = c.stream_events(
-            agent_id="a", message="m", session_id="s", user_id="u"
-        )
+        result = c.stream_events(agent_id="a", message="m", session_id="s", user_id="u")
         assert result == [{"kind": "final"}]
 
     def test_empty_data_line_skipped(self) -> None:
-        body = "data: \n\ndata: {\"kind\": \"final\"}\n\n"
+        body = 'data: \n\ndata: {"kind": "final"}\n\n'
         c = _client(lambda r: httpx.Response(200, text=body))
-        result = c.stream_events(
-            agent_id="a", message="m", session_id="s", user_id="u"
-        )
+        result = c.stream_events(agent_id="a", message="m", session_id="s", user_id="u")
         assert result == [{"kind": "final"}]
 
     def test_non_dict_sse_event_raises(self) -> None:
         body = 'data: ["not", "a", "dict"]\n\n'
         c = _client(lambda r: httpx.Response(200, text=body))
         with pytest.raises(RuntimeError, match="JSON object"):
-            c.stream_events(
-                agent_id="a", message="m", session_id="s", user_id="u"
-            )
+            c.stream_events(agent_id="a", message="m", session_id="s", user_id="u")
 
     def test_inline_tuning_forwarded(self) -> None:
         capture = _Capture(_sse_response({"kind": "final"}))
@@ -316,9 +308,7 @@ class TestIterStreamEvents:
     def test_http_error_propagates(self) -> None:
         c = _client(lambda r: httpx.Response(401))
         with pytest.raises(httpx.HTTPStatusError):
-            c.stream_events(
-                agent_id="a", message="m", session_id="s", user_id="u"
-            )
+            c.stream_events(agent_id="a", message="m", session_id="s", user_id="u")
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,6 @@ import pytest
 from fred_core.logs.log_structures import LogEventDTO, LogFilter, LogQuery
 from fred_core.logs.memory_log_store import RamLogStore, _parse_since
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -113,7 +112,9 @@ class TestRamLogStoreLifecycle:
 
     def test_capacity_evicts_oldest(self) -> None:
         store = RamLogStore(capacity=3)
-        base = time.time() - 300  # anchor in the past so all events are within the query window
+        base = (
+            time.time() - 300
+        )  # anchor in the past so all events are within the query window
         for i in range(5):
             store.index_event(_event(f"msg-{i}", ts=base + i))
         result = store.query(_query(since="now-1h", limit=10))
@@ -190,12 +191,34 @@ class TestRamLogStoreQueryFilters:
     def _populated_store(self) -> RamLogStore:
         store = RamLogStore()
         now = time.time() - 10
-        store.bulk_index([
-            _event("debug msg", ts=now, level="DEBUG", logger="app.debug", service="svc-a"),
-            _event("info msg",  ts=now, level="INFO",  logger="app.info",  service="svc-a"),
-            _event("warn msg",  ts=now, level="WARNING", logger="app.warn", service="svc-b"),
-            _event("error msg", ts=now, level="ERROR", logger="app.error", service="svc-b"),
-        ])
+        store.bulk_index(
+            [
+                _event(
+                    "debug msg",
+                    ts=now,
+                    level="DEBUG",
+                    logger="app.debug",
+                    service="svc-a",
+                ),
+                _event(
+                    "info msg", ts=now, level="INFO", logger="app.info", service="svc-a"
+                ),
+                _event(
+                    "warn msg",
+                    ts=now,
+                    level="WARNING",
+                    logger="app.warn",
+                    service="svc-b",
+                ),
+                _event(
+                    "error msg",
+                    ts=now,
+                    level="ERROR",
+                    logger="app.error",
+                    service="svc-b",
+                ),
+            ]
+        )
         return store
 
     def test_level_at_least_warning_excludes_debug_info(self) -> None:

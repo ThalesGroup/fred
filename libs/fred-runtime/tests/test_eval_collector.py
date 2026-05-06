@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from fred_runtime.eval.collector import collect_eval_trace
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -124,7 +123,12 @@ def test_tool_result_recorded_in_steps() -> None:
         ]
     )
     assert trace["steps"] == [
-        {"kind": "tool_result", "name": "search", "output": "result text", "is_error": False}
+        {
+            "kind": "tool_result",
+            "name": "search",
+            "output": "result text",
+            "is_error": False,
+        }
     ]
 
 

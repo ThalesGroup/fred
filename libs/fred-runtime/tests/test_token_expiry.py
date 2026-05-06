@@ -8,7 +8,6 @@ httpx objects are constructed directly; no mocking framework needed.
 from __future__ import annotations
 
 import httpx
-import pytest
 
 from fred_runtime.common.token_expiry import (
     _is_expired_body,
@@ -45,9 +44,7 @@ def _make_status_error(
     body: str = "",
     www_authenticate: str | None = None,
 ) -> httpx.HTTPStatusError:
-    response = _make_response(
-        status_code, body=body, www_authenticate=www_authenticate
-    )
+    response = _make_response(status_code, body=body, www_authenticate=www_authenticate)
     return httpx.HTTPStatusError(
         message=f"HTTP {status_code}",
         request=httpx.Request("GET", "http://example.com"),
@@ -74,7 +71,10 @@ class TestIsExpiredWwwAuthenticate:
         assert _is_expired_www_authenticate("Bearer TOKEN EXPIRED") is True
 
     def test_expired_and_token_keywords(self) -> None:
-        assert _is_expired_www_authenticate("error=invalid_token, token has expired") is True
+        assert (
+            _is_expired_www_authenticate("error=invalid_token, token has expired")
+            is True
+        )
 
     def test_expired_without_token_returns_false(self) -> None:
         assert _is_expired_www_authenticate("session expired") is False

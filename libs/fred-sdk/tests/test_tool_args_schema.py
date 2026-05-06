@@ -19,7 +19,6 @@ from pydantic import BaseModel
 
 from fred_sdk.authoring.tool_args_schema import build_args_schema
 
-
 # ---------------------------------------------------------------------------
 # Dummy ToolContext placeholder (not imported; just a positional stand-in)
 # ---------------------------------------------------------------------------

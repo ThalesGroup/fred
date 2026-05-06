@@ -20,7 +20,6 @@ from fred_sdk.contracts.models import (
     GraphRouteDefinition,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -165,9 +164,7 @@ class TestGraphTopologyConditionals:
             entry_node="router",
             nodes=(_node("router"), _node("path_a"), _node("path_b")),
             conditionals=(
-                _conditional(
-                    "router", _route("a", "path_a"), _route("b", "path_b")
-                ),
+                _conditional("router", _route("a", "path_a"), _route("b", "path_b")),
             ),
         )
         assert len(g.conditionals) == 1

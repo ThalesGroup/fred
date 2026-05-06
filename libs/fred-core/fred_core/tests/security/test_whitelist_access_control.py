@@ -11,8 +11,6 @@ Strategy:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 import fred_core.security.whitelist_access_control.access_control as _wl_module
@@ -23,7 +21,6 @@ from fred_core.security.whitelist_access_control.access_control import (
     is_email_whitelisted,
     is_user_whitelisted,
 )
-
 
 # ---------------------------------------------------------------------------
 # _normalize_email
@@ -89,9 +86,7 @@ def _reset_whitelist_cache(monkeypatch, tmp_path):
     """
     whitelist_file = tmp_path / "users.txt"
     monkeypatch.setattr(_wl_module, "_WHITELIST_PATH", whitelist_file)
-    monkeypatch.setattr(
-        _wl_module, "_WHITELIST_CACHE_KEY", str(whitelist_file)
-    )
+    monkeypatch.setattr(_wl_module, "_WHITELIST_CACHE_KEY", str(whitelist_file))
     _wl_module._WHITELIST_CACHE.clear()
     yield
     _wl_module._WHITELIST_CACHE.clear()
@@ -131,7 +126,5 @@ class TestIsUserWhitelisted:
 
     def test_non_whitelisted_user(self, tmp_path) -> None:
         _wl_module._WHITELIST_PATH.write_text("alice@example.com\n", encoding="utf-8")
-        user = KeycloakUser(
-            uid="u2", username="bob", email="bob@example.com", roles=[]
-        )
+        user = KeycloakUser(uid="u2", username="bob", email="bob@example.com", roles=[])
         assert is_user_whitelisted(user) is False
