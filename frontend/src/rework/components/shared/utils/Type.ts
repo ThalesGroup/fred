@@ -61,7 +61,11 @@ export type MaterialIconType =
   | "chevron_right"
   | "chevron_left"
   | "close"
-  | "cloud_off";
+  | "cloud_off"
+  | "edit_note"
+  | "tune"
+  | "forum"
+  | "build";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

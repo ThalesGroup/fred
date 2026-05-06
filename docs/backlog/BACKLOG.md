@@ -836,6 +836,12 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
 - [x] Add agent template aggregation endpoint (→ Phase 3a)
 - [x] Extend `AgentTemplateSummary` with `mcp_servers: list[ManagedMcpServerRef]` — enriched with `display_name` from runtime MCP catalog (→ 2026-04-28)
 - [x] Extend `ManagedMcpServerRef` with `display_name` + `config_fields` for Phase 2 MCP configuration (→ 2026-04-28)
+- [x] Populate `ManagedMcpServerRef.config_fields` from `mcp_catalog.yaml` — tool-declared capability options (RFC: `docs/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md`, done 2026-05-06):
+  - [x] Add `config_fields: list[FieldSpec] = []` to `MCPServerConfiguration` in `fred-sdk`
+  - [x] Extend `mcp_catalog.yaml` format: add `config_fields` entries to `mcp-knowledge-flow-mcp-text` and `mcp-knowledge-flow-corpus`
+  - [x] Extend control-plane product service enrichment loop to copy `config_fields` from catalog entries into `ManagedMcpServerRef`
+  - [x] Remove `chat_options.*` `FieldSpec` declarations from `fred-agents` agent templates (`general_assistant.py`, `rag_expert.py`)
+  - [ ] Frontend: render `ManagedMcpServerRef.config_fields` beneath active server checkboxes in `AgentFormBody` Tools tab
 - [x] Add agent instance CRUD endpoints (→ Phase 3c — POST enroll + DELETE unenroll done)
 - [x] Add read-only team-scoped agent instance listing endpoint (→ Phase 3a)
 - [x] Add session create + list endpoints (→ Phase 5D — `POST/GET /teams/{team_id}/sessions`); delete deferred
@@ -1806,6 +1812,264 @@ This is the correct bridge between:
 - **Kubernetes/Ingress/Gateway handle routing; Fred code handles authorization and business semantics**
 - **secured deployment posture is mandatory before Phase 4 starts**
 
+## Phase 3d — Pod Catalog Exposure, Agent Configuration, and Drift Detection
+
+### 3d.1 Goal
+
+Allow team admins to configure each managed agent instance with a specific
+subset of tools and a model profile drawn from the pod's own deployment
+catalogs (`mcp_catalog.yaml`, `models_catalog.yaml`). Ensure that any
+mismatch between a stored instance configuration and the current live pod
+catalog is surfaced to the user as a clear, actionable error — not a silent
+runtime failure.
+
+**Do not implement** until Phase 3c is fully closed. This phase is the
+prerequisite for the agent form's tool-selection and model-picker UI.
+
+---
+
+### 3d.2 Design Principles
+
+- **Pod catalogs are the single source of truth** for what is available at
+  runtime. The UI never hardcodes server IDs or model names.
+- **Enrollment freezes the selection**, not the catalog. An instance stores
+  which server IDs and which model profile the admin chose. The catalog can
+  change after enrollment; the stored selection is what gets executed.
+- **Catalog drift = clear user error, not silent skip.** If the pod is
+  reachable at listing time and a stored server ID or model profile ID no
+  longer appears in the live catalog, the instance surfaces a
+  `catalog_warnings` list. The UI must show this prominently so the admin
+  knows they must delete and recreate the agent.
+- **Pod unreachability ≠ drift.** If the pod is down, the instance shows
+  `runtime_unavailable`; drift warnings are only emitted when the pod IS
+  reachable but the stored IDs are missing from its catalog.
+- **No auto-heal.** The platform never silently drops unavailable servers
+  or substitutes a fallback model. Broken = visible, always.
+- **Keep tuning families separate.** Agent-authored field values stay limited to
+  `prompts.*`, `settings.*`, and `chat_options.*`. Model profile selection and
+  MCP server selection are platform-owned selectors and must use dedicated typed
+  contract fields rather than ad hoc generic tuning keys.
+
+---
+
+### 3d.3 New Runtime Endpoints (fred-runtime)
+
+Two new read-only endpoints on the agent pod. Both require no auth in
+no-security mode; in secured mode they use the same m2m token as other
+control-plane → pod calls.
+
+#### `GET /agents/mcp-catalog`
+
+Returns the full list of MCP servers declared in `mcp_catalog.yaml`,
+including disabled ones, so the control-plane can distinguish
+"never configured" from "configured but disabled".
+
+```json
+{
+  "servers": [
+    {
+      "id": "mcp-knowledge-flow-mcp-text",
+      "name": "mcp.servers.search_documents.name",
+      "description": "mcp.servers.search_documents.description",
+      "enabled": true,
+      "transport": "streamable_http"
+    },
+    ...
+  ]
+}
+```
+
+Response model: `McpCatalogResponse` (new, in `fred-runtime`).  
+Fields per entry: `id`, `name`, `description`, `enabled`, `transport`.  
+Do **not** expose `url`, `auth_mode`, or credentials — those are runtime-internal.
+
+#### `GET /agents/model-profiles`
+
+Returns the model profiles declared in `models_catalog.yaml`, grouped by
+capability. The frontend uses this to offer a model picker on the agent form.
+
+```json
+{
+  "profiles": [
+    {
+      "profile_id": "default.chat.mistral",
+      "capability": "chat",
+      "description": "Default balanced chat model."
+    },
+    ...
+  ],
+  "default_by_capability": {
+    "chat": "default.chat.mistral",
+    "language": "default.language.mistral"
+  }
+}
+```
+
+Response model: `ModelProfilesResponse` (new, in `fred-runtime`).  
+Fields per profile: `profile_id`, `capability`, `description`.  
+Do **not** expose `provider`, `base_url`, `api_key`, or raw model settings.
+
+---
+
+### 3d.4 Control-Plane Aggregation Changes
+
+#### Extended `AgentTemplateSummary`
+
+Add two new fields populated at template-listing time by calling the two
+new pod endpoints alongside the existing `/agents/templates` call:
+
+```python
+available_mcp_servers: list[ManagedMcpServerRef]   # already exists — no change
+available_model_profiles: list[ManagedModelProfileRef]  # NEW
+```
+
+`ManagedModelProfileRef` (new, in `control_plane_backend/config/models.py`):
+
+```python
+class ManagedModelProfileRef(BaseModel):
+    profile_id: str
+    capability: str          # "chat" | "language"
+    description: str = ""
+    is_default: bool = False
+```
+
+The control-plane fetches `/agents/mcp-catalog` and `/agents/model-profiles`
+in the same request fan-out as `/agents/templates` for each enabled
+`runtime_catalog_source`. Failures on the new endpoints are logged and
+result in empty lists — template discovery itself must not fail.
+
+#### Extended create/update request bodies
+
+`CreateAgentInstanceRequest` gains two optional fields:
+
+```python
+mcp_server_ids: list[str] | None = None
+# If None → inherit all enabled servers the template declares.
+# If present → use exactly this subset (validated against available_mcp_servers).
+# Unknown IDs are rejected with HTTP 422, not silently dropped.
+
+model_profile_id: str | None = None
+# If None → runtime uses its default_by_capability["chat"] profile.
+# If present → validated against available_model_profiles; 422 on unknown.
+```
+
+`UpdateAgentInstanceRequest` gains the same two fields with identical semantics.
+
+Validation rule: if an ID is supplied that does not appear in the live
+template's available catalog, the control-plane returns HTTP 422 with a
+message naming the unknown ID. Do **not** create or update the instance.
+
+#### Enrollment service
+
+When creating or patching an instance, the service:
+1. Fetches the live template catalog to validate supplied IDs.
+2. Stores the resolved `mcp_server_ids` and `model_profile_id` in
+   `ManagedAgentTuning` (new fields: `selected_mcp_server_ids`,
+   `model_profile_id`).
+3. The runtime receives these in `ExecutionPreparation` tuning and applies
+   them in `_apply_runtime_tuning`.
+
+---
+
+### 3d.5 Drift Detection
+
+When `GET /teams/{team_id}/agent-instances` is called, the control-plane:
+
+1. Calls `GET /agents/mcp-catalog` and `GET /agents/model-profiles` on the
+   bound pod (same fan-out, cached per request).
+2. For each instance, compares `stored.selected_mcp_server_ids` against the
+   live catalog's `enabled` servers:
+   - any stored ID absent from the live catalog → add to `catalog_warnings`
+   - any stored `model_profile_id` absent from the live catalog →
+     add to `catalog_warnings`
+3. If the pod is unreachable (HTTP error / timeout), sets
+   `runtime_status = "unavailable"` and emits **no** drift warnings.
+
+Extended `ManagedAgentInstanceSummary`:
+
+```python
+runtime_status: Literal["ok", "unavailable"] = "ok"
+catalog_warnings: list[str] = []
+# e.g. ["MCP server 'mcp-knowledge-flow-corpus' is no longer in the pod catalog",
+#        "Model profile 'default.chat.mistral' is no longer in the pod catalog"]
+```
+
+The UI contract for warnings:
+- `runtime_status = "unavailable"` → show a "pod unreachable" badge, no action needed
+- `catalog_warnings` non-empty → show a prominent warning banner on the AgentCard
+  with message: "This agent's configuration is out of sync with the pod catalog.
+  Delete and recreate to restore it." — no edit button, no chat link.
+- Both conditions can coexist.
+
+---
+
+### 3d.6 Runtime Execution Side
+
+`_apply_runtime_tuning` (fred-runtime) extended to:
+- filter `default_mcp_servers` to only the IDs in `tuning.selected_mcp_server_ids`
+  (when non-empty; empty = keep all declared servers)
+- select the model profile by `tuning.model_profile_id` via the model router
+  (when set; unset = keep current default routing)
+
+---
+
+### 3d.7 Tasks
+
+**fred-runtime:**
+- [x] Add `McpCatalogResponse` model and `GET /agents/mcp-catalog` endpoint
+- [ ] Add `ModelProfilesResponse` model and `GET /agents/model-profiles` endpoint — deferred
+- [x] Extend `_apply_runtime_tuning` to filter MCP servers by `selected_mcp_server_ids` (model profile deferred)
+- [x] `make code-quality && make test` in `fred-runtime`
+
+**control-plane-backend:**
+- [ ] Add `ManagedModelProfileRef` to `config/models.py` — deferred
+- [ ] Extend `AgentTemplateSummary` with `available_model_profiles` — deferred
+- [x] Extend `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest` with
+  `mcp_server_ids` (`model_profile_id` deferred)
+- [x] Extend `ManagedAgentTuning` with `selected_mcp_server_ids` (`model_profile_id` deferred)
+- [x] Extend `ManagedAgentInstanceSummary` with `runtime_status` and
+  `catalog_warnings`
+- [x] Enrollment service: validate supplied IDs against live catalog, store
+  selection, reject unknown IDs with 422
+- [x] Drift detection in `list_managed_agent_instances`: compare stored IDs
+  against live catalog per instance
+- [x] Regenerate `controlPlaneOpenApi.ts`
+- [x] `make code-quality && make test` in `control-plane-backend`
+
+**frontend:**
+- [x] Replace read-only MCP list in `AgentFormBody` with a checkbox multi-select
+  populated from `AgentTemplateSummary.mcp_servers`
+- [ ] Add model profile picker to `AgentFormBody` — deferred
+- [x] Wire `mcp_server_ids` into `AgentFormPayload` and the create/update mutation calls
+  (`model_profile_id` deferred)
+- [x] `AgentCard`: show "pod unreachable" badge when `runtime_status = "unavailable"`
+- [x] `AgentCard`: show MCP drift warning banner when `catalog_warnings` is non-empty
+- [ ] `make code-quality` in `frontend` — no lint script; `tsc --noEmit` + build pass
+
+---
+
+### 3d.8 Validation
+
+- [ ] `GET /agents/mcp-catalog` returns all servers from `mcp_catalog.yaml`
+  (enabled and disabled), without URLs or credentials
+- [ ] `GET /agents/model-profiles` returns all profiles from `models_catalog.yaml`
+  with `is_default` correctly set from `default_by_capability`
+- [ ] Creating an instance with a valid subset of `mcp_server_ids` stores the
+  subset and the runtime executes with only those servers active
+- [ ] Creating an instance with an unknown `mcp_server_id` returns HTTP 422
+  naming the unknown ID
+- [ ] After disabling a server in `mcp_catalog.yaml` and restarting the pod,
+  a previously enrolled instance that used that server shows a `catalog_warnings`
+  entry in `GET /teams/{team_id}/agent-instances`
+- [ ] The drift warning renders on `AgentCard` with the correct message; edit
+  and chat links are disabled for that agent
+- [ ] When the pod is down, `runtime_status = "unavailable"` and
+  `catalog_warnings` is empty (no false drift alarms)
+- [ ] `make code-quality && make test` pass in `fred-runtime` and
+  `control-plane-backend`
+
+---
+
 ## Phase 4 - Frontend SSE Connector
 
 ### Goal
@@ -2052,7 +2316,28 @@ isolated in the adapter layer (`react_message_codec.py`).
   request queue that feeds the runtime bulk purge endpoint above; do not mix
   the two concerns until a concrete policy is defined
 
-#### G. CLI Developer Ergonomics (Fixed 2026-04-26)
+#### F. Session Endpoint User-Ownership Enforcement (Security Hardening)
+
+`POST`, `PATCH`, and `DELETE /teams/{team_id}/sessions/{session_id}` all check
+`CAN_READ` team membership (Keycloak + ReBAC) and scope queries to `team_id`.
+However, none of them verify that `session.user_id == current_user.username`.
+Any team member with `CAN_READ` can currently patch or delete another member's
+session.
+
+Fix: pass `user_id` into `SessionMetadataStore.update_metadata` and
+`SessionMetadataStore.delete` and add a `WHERE user_id = :user_id` clause.
+The `POST` (create) already writes `user_id`; the read path (list) is read-only
+and scoped to the team so it is not affected.
+
+- [ ] `store.update_metadata`: add `user_id` filter; return `None` (→ 404) when
+  the session belongs to another user
+- [ ] `store.delete`: add `user_id` filter; return `False` (→ 204 with no-op) or
+  raise 403 when the session belongs to another user
+- [ ] `product/service.py`: thread `user.username` through both call sites
+- [ ] Add offline test: patching/deleting a session owned by a different user
+  returns the appropriate error code
+
+#### G. CLI Developer Ergonomics (Fixed 2026-04-26; extended 2026-05-06)
 
 A series of `fred-agents-cli` improvements to make the CLI fully self-contained for
 developer testing and devops session management.
@@ -2090,6 +2375,29 @@ developer testing and devops session management.
 - [x] `/purge-session [id]` — deletes BOTH history rows and checkpoint state
 - [x] After a successful delete, the session is removed from the in-memory tab-completion index
 - [x] `delete_session_messages()` and `delete_checkpoint()` added to `AgentPodClient`
+
+**Template inspection + direct tuning (2026-05-06):**
+- [x] `GET /agents/templates` → `list_templates()` in `AgentPodClient`; returns full template
+  list including `kind`, `description`, `default_tuning.fields`, `available_mcp_servers`
+- [x] `/inspect` — renders the current agent's FieldSpec table grouped by `ui.group`, with
+  key, type, required, default, range, description, and available MCP servers
+- [x] `/run <scenario>` — sends scenario keyword directly as message text; tab-completes the 8
+  `fred.test.assistant` scenario keywords; falls through to the normal send path
+- [x] `/tune key=value` — sets a session-local tuning override (parsed to bool/int/float/str);
+  `/tune key=` clears a specific override; stored in `current_inline_tuning` dict
+- [x] `/tuning` — renders active in-session overrides as a key→value table in green
+- [x] Prompt badge `~N` (ANSI yellow) shown when N overrides are active
+- [x] `inline_tuning` field added to `RuntimeExecuteRequest` (fred-sdk) and `_AgentExecuteRequest`
+  (fred-runtime); direct-template path in `_resolve_agent_instance` applies inline overrides
+  via `_apply_runtime_tuning` — intended for CLI dev tooling, not production frontend
+- [x] `TuningScalar` + `TuningValue` typed aliases replace all `Dict[str, Any]` in the tuning
+  surface (`FieldSpec.default`, `AgentTuning.values`, `GraphNodeContext.tuning_values`,
+  `_GraphNodeExecutionContext.tuning_values`)
+- [x] `tuning_values` moved from `GraphAgentDefinition` to base `AgentDefinition`; all agent
+  families carry it and `_apply_runtime_tuning` sets it unconditionally
+- [x] ReAct silent-drop gap closed: non-`prompts.system` tuning values reach
+  `render_prompt_template` as `extra_tokens` (keys dot→underscore transformed) so prompt
+  templates may reference e.g. `{prompts_planning}`
 
 #### F. History Schema — HITL and Sources (Fixed 2026-04-26)
 

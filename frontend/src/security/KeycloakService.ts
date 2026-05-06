@@ -23,9 +23,12 @@ let refreshInFlight: Promise<boolean> | null = null;
 // ---------- Insecure-mode dev token support ----------
 // Fred rationale: even when security is off, the frontend + backend contracts
 // still expect an Authorization: Bearer <token>. We mint a local, JWT-shaped
-// token with "admin" roles so the UI flows (headers, auth guards, role checks)
-// behave exactly like production — just without real verification.
+// token with the current user's identity so the UI flows (headers, auth guards,
+// role checks) behave exactly like production — just without real verification.
+// VITE_DEV_USERNAME is injected at dev-server start time via `make run`
+// (VITE_DEV_USERNAME=$(whoami) npm run dev), giving the real Unix username.
 const DEV_TOKEN_STORAGE_KEY = "dev_admin_token";
+const DEV_USERNAME = import.meta.env.VITE_DEV_USERNAME || "dev";
 
 // Minimal base64url (no padding) to build a JWT-shaped string without crypto.
 function b64url(obj: unknown): string {
@@ -57,12 +60,12 @@ function buildDevAdminToken(): string {
     azp: "app",
     scope: "openid profile email",
     email_verified: true,
-    name: "Administrator",
-    preferred_username: "admin",
-    given_name: "Admin",
-    family_name: "User",
-    email: "admin@mail.com",
-    sub: "admin", // stable ID used by UI and logs in dev
+    name: DEV_USERNAME,
+    preferred_username: DEV_USERNAME,
+    given_name: DEV_USERNAME,
+    family_name: "",
+    email: `${DEV_USERNAME}@localhost`,
+    sub: DEV_USERNAME, // stable ID used by UI and logs in dev
     realm_access: { roles: ["admin"] },
     resource_access: {
       app: { roles: ["admin"] },
@@ -93,9 +96,14 @@ function parseJwtPayload(token: string | null | undefined): any | null {
 }
 
 function getOrCreateDevToken(): string {
-  let tok = localStorage.getItem(DEV_TOKEN_STORAGE_KEY);
-  if (tok) return tok;
-  tok = buildDevAdminToken();
+  const cached = localStorage.getItem(DEV_TOKEN_STORAGE_KEY);
+  if (cached) {
+    // Invalidate if the Unix username has changed since the token was cached.
+    const parsed = parseJwtPayload(cached);
+    if (parsed?.preferred_username === DEV_USERNAME) return cached;
+    localStorage.removeItem(DEV_TOKEN_STORAGE_KEY);
+  }
+  const tok = buildDevAdminToken();
   localStorage.setItem(DEV_TOKEN_STORAGE_KEY, tok);
   return tok;
 }
@@ -238,27 +246,27 @@ const GetUserRoles = (): string[] => {
 };
 
 const GetUserName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin";
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
   return (keycloakInstance.tokenParsed as any).preferred_username || null;
 };
 
 const GetUserFullName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "Administrator";
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
   return (keycloakInstance.tokenParsed as any).name || null;
 };
 
 const GetUserGivenName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "Admin";
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
   return (keycloakInstance.tokenParsed as any).given_name || null;
 };
 
 const GetUserMail = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin@mail.com";
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return `${DEV_USERNAME}@localhost`;
   return (keycloakInstance.tokenParsed as any).email || null;
 };
 
 const GetUserId = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return "admin";
+  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
   return (keycloakInstance.tokenParsed as any).sub || null;
 };
 

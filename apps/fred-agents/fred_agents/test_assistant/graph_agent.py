@@ -23,6 +23,7 @@ Workflow overview (keyword-routed by dispatch_step):
 
     dispatch
      ├─ echo        ──► echo_step        ──► finalize
+     ├─ model_probe ──► model_probe_step ──► finalize
      ├─ hitl_choice ──► hitl_choice_step ──► finalize
      ├─ hitl_text   ──► hitl_text_step   ──► finalize
      ├─ trace       ──► trace_step       ──► finalize
@@ -37,7 +38,7 @@ The agent can run in any fred-agents pod that has fred_sdk installed.
 from __future__ import annotations
 
 from fred_core.store import VectorSearchHit
-from fred_sdk import GraphAgent, GraphWorkflow
+from fred_sdk import FieldSpec, GraphAgent, GraphWorkflow, UIHints
 from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
@@ -51,13 +52,14 @@ from .graph_steps import (
     hitl_choice_step,
     hitl_text_step,
     long_step,
+    model_probe_step,
     trace_step,
 )
 
 
 class TestAssistantGraphAgent(GraphAgent):
     """
-    No-LLM test agent that exercises all major SSE event types.
+    No-LLM-by-default test agent that exercises all major SSE event types.
 
     Use this agent when you need to:
     - validate chat UI rendering without a model provider
@@ -65,6 +67,7 @@ class TestAssistantGraphAgent(GraphAgent):
     - test source panel rendering with mock VectorSearchHit data
     - test error / node_error SSE event rendering
     - test long streaming reply layout (word-by-word via emit_assistant_delta)
+    - optionally validate graph operation-aware model routing when a model is configured
 
     Send a message starting with one of the scenario keywords to trigger
     the corresponding workflow branch. Send anything else to see the help menu.
@@ -73,13 +76,96 @@ class TestAssistantGraphAgent(GraphAgent):
     agent_id: str = "fred.test.assistant"
     role: str = "Test Assistant (no LLM)"
     description: str = (
-        "A no-LLM, no-MCP graph agent for UI testing. "
+        "A no-LLM-by-default, no-MCP graph agent for UI testing. "
         "Exercises status events, HITL choice, HITL free-text, "
         "streaming text via assistant_delta, mock sources, node errors, "
-        "and long streaming replies. "
-        "Keyword-prefix routing: echo | hitl choice | hitl text | trace | error | long."
+        "long streaming replies, and an optional model-routing probe. "
+        "Keyword-prefix routing: echo | model routing | model planning | "
+        "hitl choice | hitl text | trace | error | long."
     )
     tags: tuple[str, ...] = ("test", "graph", "hitl", "streaming", "no-llm", "dev")
+
+    fields: tuple[FieldSpec, ...] = (
+        FieldSpec(
+            key="prompts.system",
+            type="prompt",
+            title="System prompt",
+            description=(
+                "Role instructions shown back in every scenario reply to confirm "
+                "the value was applied end-to-end."
+            ),
+            required=True,
+            ui=UIHints(group="Prompts", multiline=True, markdown=True),
+        ),
+        FieldSpec(
+            key="prompts.planning",
+            type="prompt",
+            title="Planning step instructions",
+            description=(
+                "Optional instructions injected into the dispatch-step status "
+                "message, proving per-step prompt injection works."
+            ),
+            required=False,
+            ui=UIHints(group="Prompts", multiline=True),
+        ),
+        FieldSpec(
+            key="prompts.routing",
+            type="prompt",
+            title="Routing/model probe instructions",
+            description=(
+                "Optional instructions injected into the optional model-probe "
+                "scenario when validating operation-aware model routing."
+            ),
+            required=False,
+            ui=UIHints(group="Prompts", multiline=True),
+        ),
+        FieldSpec(
+            key="settings.verbose",
+            type="boolean",
+            title="Verbose mode",
+            description=(
+                "When enabled, every scenario reply appends a debug footer "
+                "showing the active scenario name."
+            ),
+            default=False,
+            ui=UIHints(group="Settings"),
+        ),
+        FieldSpec(
+            key="settings.delay_ms",
+            type="integer",
+            title="Step delay (ms)",
+            description=(
+                "Extra milliseconds added to each asyncio.sleep() call. "
+                "Use this to simulate slow-network or slow-model UX."
+            ),
+            default=0,
+            min=0,
+            max=2000,
+            ui=UIHints(group="Settings"),
+        ),
+        FieldSpec(
+            key="chat_options.attach_files",
+            type="boolean",
+            title="Allow file attachments",
+            description=(
+                "Frontend hint used to verify that managed agent instances can "
+                "toggle file-attachment affordances in chat."
+            ),
+            default=False,
+            ui=UIHints(group="Chat options"),
+        ),
+        FieldSpec(
+            key="chat_options.libraries_selection",
+            type="boolean",
+            title="Document library picker",
+            description=(
+                "Frontend hint used to verify that managed agent instances can "
+                "toggle library-selection affordances in chat."
+            ),
+            default=False,
+            ui=UIHints(group="Chat options"),
+        ),
+    )
 
     input_schema = TestInput
     state_schema = TestState
@@ -91,6 +177,7 @@ class TestAssistantGraphAgent(GraphAgent):
         nodes={
             "dispatch": dispatch_step,
             "echo": echo_step,
+            "model_probe": model_probe_step,
             "hitl_choice": hitl_choice_step,
             "hitl_text": hitl_text_step,
             "trace": trace_step,
@@ -101,6 +188,7 @@ class TestAssistantGraphAgent(GraphAgent):
         },
         edges={
             "echo": "finalize",
+            "model_probe": "finalize",
             "hitl_choice": "finalize",
             "hitl_text": "finalize",
             "trace": "finalize",
@@ -114,6 +202,7 @@ class TestAssistantGraphAgent(GraphAgent):
         routes={
             "dispatch": {
                 "echo": "echo",
+                "model_probe": "model_probe",
                 "hitl_choice": "hitl_choice",
                 "hitl_text": "hitl_text",
                 "trace": "trace",

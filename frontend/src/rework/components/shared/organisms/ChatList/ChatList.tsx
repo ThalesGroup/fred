@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
-import { useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useNavigate } from "react-router-dom";
+import {
+  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
+  useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
 import styles from "./ChatList.module.scss";
 
 interface ChatListProps {
@@ -33,28 +38,29 @@ function formatRelativeDate(dateStr: string | undefined): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/**
- * Render the sidebar conversation list from control-plane session metadata.
- *
- * Why this component exists:
- * - replaces the intentional placeholder once control-plane session metadata
- *   endpoints exist (Phase 5D)
- *
- * How to use it:
- * - mount it in team sidebars under `/team/:teamId/...`
- *
- * Example:
- * - `<ChatList teamId="personal" />`
- */
 export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
-  const { data: sessions, isLoading } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
+  const { data: sessions, isLoading, refetch } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
     { teamId: teamId! },
     { skip: !teamId, pollingInterval: 30_000 },
   );
 
+  const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
+
   const isEmpty = !isLoading && (!sessions || sessions.length === 0);
+
+  const handleDelete = (sessionId: string, href: string) => async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await deleteSession({ teamId: teamId!, sessionId }).unwrap().catch(() => {});
+    refetch();
+    const sessionPath = href.split("?")[0];
+    if (window.location.pathname === sessionPath) {
+      navigate(`/team/${teamId}/agents`);
+    }
+  };
 
   return (
     <div className={styles.chatListContainer} data-team-id={teamId}>
@@ -63,20 +69,17 @@ export default function ChatList({ teamId }: ChatListProps) {
         {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
         {isEmpty && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.emptyManaged")}</div>}
         {sessions?.map((session) => {
-          const href = session.agent_instance_id
-            ? `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`
-            : undefined;
-
-          const label = session.title || session.session_id.slice(0, 8) + "…";
-          const dateLabel = formatRelativeDate(session.updated_at);
-
-          if (!href) return null;
-
+          if (!session.agent_instance_id) return null;
+          const href = `/team/${teamId}/managed-chat/${session.agent_instance_id}?session=${session.session_id}`;
           return (
-            <Link key={session.session_id} to={href} className={styles.chatListItem}>
-              <span className={styles.chatListItemLabel}>{label}</span>
-              {dateLabel && <span className={styles.chatListItemDate}>{dateLabel}</span>}
-            </Link>
+            <ChatListItem
+              key={session.session_id}
+              sessionId={session.session_id}
+              href={href}
+              label={session.title || session.session_id.slice(0, 8) + "…"}
+              dateLabel={formatRelativeDate(session.updated_at)}
+              onDelete={handleDelete(session.session_id, href)}
+            />
           );
         })}
       </div>

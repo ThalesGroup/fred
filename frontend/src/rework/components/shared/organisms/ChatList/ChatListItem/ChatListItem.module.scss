@@ -3,12 +3,14 @@
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
-  border-radius: var(--spacing-xs);
-  padding: var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-xs);
-  height: 3rem;
+  border-radius: var(--radius-s);
+  padding: var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs) var(--spacing-m);
+  min-height: 2.5rem;
+  color: var(--on-surface);
+  text-decoration: none;
 
   &:hover {
-    --display-action: block;
+    --display-action: flex;
     background-color: var(--state-on-surface-hover);
   }
 
@@ -20,58 +22,27 @@
 .chatDescription {
   display: flex;
   flex-direction: column;
-  margin-right: auto;
-  padding: 2px 0;
+  flex: 1;
+  gap: var(--spacing-3xs);
   min-width: 0;
 }
 
-.title,
-.agentName {
-  min-width: 0;
+.title {
   overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.title {
-  color: var(--on-surface);
-  font: var(--font-body-medium);
-}
-
-.metadata {
-  display: flex;
-  gap: var(--spacing-2xs);
-  font: var(--font-label-small);
-}
-
-.agent {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  min-width: 0;
-}
-
-.agentName {
-  color: var(--secondary);
-}
-
-.separator {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--spacing-xs);
-  height: 100%;
-  color: var(--on-surface-retreat);
-
-  font: var(--font-body-small-emphasized);
-}
-
 .date {
-  color: var(--on-surface-muted);
+  color: var(--on-surface-retreat);
   font: var(--font-label-small);
 }
 
 .chatActions {
   display: var(--display-action, none);
+  flex-shrink: 0;
+  align-items: center;
   color: var(--error);
 }

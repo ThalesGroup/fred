@@ -3,6 +3,7 @@
   position: fixed;
   flex-direction: column;
   align-items: center;
+  overflow-y: auto;
   //TODO REMOVE WHEN DELETE MUI
   z-index: 1200;
   inset: 0;

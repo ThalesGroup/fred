@@ -90,7 +90,11 @@ class _LiteralFriendlyDict(dict[str, str]):
 
 
 def render_prompt_template(
-    template: str, *, binding: BoundRuntimeContext, agent_id: str
+    template: str,
+    *,
+    binding: BoundRuntimeContext,
+    agent_id: str,
+    extra_tokens: dict[str, str] | None = None,
 ) -> str:
     """
     Render one ReAct-style system prompt template with runtime-safe variables.
@@ -103,14 +107,18 @@ def render_prompt_template(
 
     How to use:
     - pass the template plus the active bound runtime context and agent id
+    - pass extra_tokens to inject admin-set tuning values (e.g. prompts.planning
+      becomes the token `prompts_planning` inside the template)
 
     Example:
     - `render_prompt_template(template, binding=binding, agent_id="custodian")`
+    - `render_prompt_template(template, binding=binding, agent_id="x", extra_tokens={"prompts_planning": "..."})`
     """
 
-    return template.format_map(
-        _LiteralFriendlyDict(safe_prompt_token_map(binding, agent_id=agent_id))
-    )
+    tokens = safe_prompt_token_map(binding, agent_id=agent_id)
+    if extra_tokens:
+        tokens = {**tokens, **extra_tokens}
+    return template.format_map(_LiteralFriendlyDict(tokens))
 
 
 def normalize_response_language(language: str | None) -> str:

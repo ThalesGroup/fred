@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import base64
+import getpass
 import json
 import logging
 import os
@@ -246,12 +247,15 @@ def _parse_user_uuid(user: KeycloakUser) -> UUID | None:
 def decode_jwt(token: str) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
-        logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
+        username = getpass.getuser()
+        logger.debug(
+            "[SECURITY] Authentication is DISABLED. Returning mock user: %s", username
+        )
         return KeycloakUser(
-            uid="admin",
-            username="admin",
+            uid=username,
+            username=username,
             roles=["admin"],
-            email="dev@localhost",
+            email=f"{username}@localhost",
             groups=["admins"],
         )
 

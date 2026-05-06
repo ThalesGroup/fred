@@ -3,7 +3,7 @@
 **Status:** Implemented (2026-04-28)  
 **Author:** Architecture  
 **Scope:** `AgentFormModal` + sub-components in `frontend/src/rework/components/pages/TeamAgentsPage/AgentFormModal/`  
-**Related:** `docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`, `docs/backlog/CHAT-UI-BACKLOG.md`
+**Related:** `docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`, `docs/platform/V2_AGENT_CREATION.md`, `docs/backlog/CHAT-UI-BACKLOG.md`
 
 ---
 
@@ -37,8 +37,8 @@ A deployed agentic pod advertises three catalogs at runtime:
 | Catalog | Endpoint | Current state |
 |---|---|---|
 | Agent catalog | `GET /agents/templates` | Implemented. Returns agents with `default_tuning` (role, description, tuning fields, mcp_servers). |
-| Model catalog | Embedded in agent tuning fields | Implemented implicitly: an agent declares `{"key": "model", "type": "string", "enum": [...models]}` as a tunable field. No separate endpoint needed. |
-| MCP tool catalog | Not yet exposed per-tool | **Gap.** Tools are listed by id in `mcp_servers[].require_tools` but their configurable parameters (URL, credentials) are not advertised. |
+| Model profile catalog | Dedicated runtime/catalog surface | Follow-up phase. Model selection should not be expressed as a generic agent tuning field. |
+| MCP tool catalog | Runtime MCP catalog + template MCP refs | Follow-up phase. Template membership is advertised today; per-instance selection/configuration is a separate contract. |
 
 ### 2.2 Control plane role
 
@@ -49,8 +49,12 @@ The control plane:
 - Enforces access control and team scoping
 
 The control plane adds **zero business logic** to agent definitions. It does not know
-what a "role" or a "model" means — it stores field values opaquely and returns them to
-the runtime at execution time.
+what a prompt or business setting means — it stores agent-authored field values
+opaquely and returns them to the runtime at execution time.
+
+The exception is platform-owned selectors such as MCP server selection and model
+profile selection. Those belong in dedicated typed product/runtime contracts, not
+in generic tuning-field keys.
 
 ### 2.3 What the frontend configures (and what it cannot)
 
@@ -60,20 +64,43 @@ the runtime at execution time.
 | Display name | Control plane instance | Yes (`display_name`). |
 | Description | Control plane instance | Yes (`description`). |
 | Tuning field values | Control plane instance | Yes (keys constrained to `default_tuning_fields`). |
-| Model selection | Runtime field (enum tuning field) | Yes — if the pod declares it as a tuning field. |
-| MCP tool selection | Runtime template | No. Tool membership is template-defined. |
-| MCP tool parameters (URL, auth) | **Phase 2** | **Phase 2** (pending runtime contract extension). |
+| Model selection | Platform/runtime routing contract | Follow-up phase via dedicated `model_profile_id`, not a generic tuning field. |
+| MCP tool selection | Platform/runtime catalog contract | Follow-up phase via dedicated `mcp_server_ids`, not a generic tuning field. |
+| MCP tool parameters (URL, auth) | Platform/runtime catalog contract | Follow-up phase. |
 | Status (enabled/disabled) | Control plane DB field | Not yet exposed via API. Omit from UI for now. |
 | Tags | Template-level only | No. Templates have tags; instances do not. |
 
+### 2.4 Tuning taxonomy shown by the form
+
+The dynamic field surface should be treated as three distinct families:
+
+- `prompts.*`
+  - author instructions
+  - includes the special `prompts.system` override plus optional phase prompts
+- `settings.*`
+  - typed execution or business behavior knobs
+- `chat_options.*`
+  - frontend chat affordances
+
+The form may render all three families with the same generic field renderer, but
+they should remain visibly grouped and conceptually distinct.
+
 ---
 
-## 3. Runtime contract extension (Phase 2 — not in scope for this implementation)
+## 3. Runtime contract extension (Phase 2 / C1 follow-up)
 
 ### 3.1 Current contract gap
 
-`AgentTemplateSummary.default_tuning_fields` lets agents declare tunable configuration
-fields. The same pattern does not yet exist for MCP tools. A tool reference today is:
+`AgentTemplateSummary.default_tuning_fields` lets agents declare agent-authored
+configuration fields (`prompts.*`, `settings.*`, `chat_options.*`). Platform-owned
+selectors should not be squeezed into that same mechanism.
+
+The remaining contract gaps are:
+
+- MCP selection and configuration
+- model profile selection
+
+A tool reference today is:
 
 ```python
 class ManagedMcpServerRef(BaseModel):
@@ -109,17 +136,25 @@ ManagedMcpServerRef(
 
 The control plane passes `mcp_servers` through `AgentTemplateSummary` unchanged
 (pure proxy — no interpretation). The frontend renders a "Tool configuration" section
-per MCP tool that has `config_fields`, storing values in a new `mcp_config_values`
-dict on the instance (or within `tuning_field_values` namespaced by tool id).
+per MCP tool that has `config_fields`, storing values in a dedicated MCP configuration
+payload rather than flattening infrastructure concerns into generic tuning keys.
 
-**Required changes for Phase 2:**
+Model profile selection follows the same rule:
+
+- use a dedicated model-profile picker sourced from the runtime catalog
+- store the selected profile in a typed `model_profile_id` field on the managed instance
+- do not encode provider/model choice as ad hoc fields like `settings.model`
+
+**Required changes for the follow-up phase:**
 - Runtime pod: add `config_fields` to `ManagedMcpServerRef` in pod config/contracts
 - Control plane backend: pass `mcp_servers` through `AgentTemplateSummary` (one field addition)
 - Control plane backend: accept `mcp_config_values` in `CreateAgentInstanceRequest` /
   `UpdateAgentInstanceRequest` (or namespace under `tuning_field_values`)
+- Control plane backend: expose typed MCP/model selectors for managed instances
 - Frontend: render a "Tools" section in the form using the same `renderTuningField` logic
 
-**No new concepts. No new endpoints. Same field-spec pattern everywhere.**
+**Important boundary:** the field-spec pattern is for agent-authored tunings. MCP
+and model selectors are platform-owned and deserve dedicated typed fields.
 
 ---
 
@@ -229,6 +264,15 @@ header (uppercase, muted, `font-label-small`, separator line above). Groups are 
 by first-occurrence order. Fields without a group appear first under an implicit
 ungrouped section.
 
+Preferred grouping for managed-agent tunings:
+
+- `Prompts`
+- `Settings`
+- `Chat options`
+
+This keeps the three tuning families recognizable even though they share one
+generic renderer.
+
 ### 4.5 Validation
 
 Save button is disabled when any of:
@@ -238,6 +282,11 @@ Save button is disabled when any of:
 
 On submit attempt with invalid state: highlight the first invalid field with an error
 border and scroll to it. Do not show a toast for validation — inline error is enough.
+
+Backend rule:
+
+- control-plane validates known tuning values against the frozen field spec
+  (type, enum, min/max, pattern) and returns HTTP 422 when a submitted value is invalid
 
 ### 4.6 `SwitchRow` pattern for boolean fields
 

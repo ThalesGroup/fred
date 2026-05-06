@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import datetime, timezone
+from typing import Any, Literal, Sequence
 from uuid import uuid4
 
 import httpx
@@ -12,7 +14,10 @@ from fred_core.common import PERSONAL_TEAM_ID, TeamId
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
-from control_plane_backend.config.models import ManagedAgentTuning
+from control_plane_backend.config.models import (
+    ManagedAgentFieldSpec,
+    ManagedAgentTuning,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
@@ -72,18 +77,31 @@ class _RuntimeTemplatePayload:
                 "description": data["description"],
             }
         )
-        # Enrich mcp_server refs with display_name from the resolved MCP catalog
-        catalog_names: dict[str, str] = {
-            s["id"]: s.get("name", s["id"])
+        # Enrich mcp_server refs with display_name and config_fields from the MCP catalog
+        catalog_entries: dict[str, dict] = {
+            s["id"]: s
             for s in data.get("available_mcp_servers", [])
             if isinstance(s, dict) and "id" in s
         }
-        if catalog_names:
+        if catalog_entries:
             tuning = tuning.model_copy(
                 update={
                     "mcp_servers": [
                         ref.model_copy(
-                            update={"display_name": catalog_names.get(ref.id, ref.id)}
+                            update={
+                                "display_name": catalog_entries[ref.id].get(
+                                    "name", ref.id
+                                )
+                                if ref.id in catalog_entries
+                                else ref.id,
+                                "config_fields": [
+                                    ManagedAgentFieldSpec.model_validate(f)
+                                    for f in catalog_entries.get(ref.id, {}).get(
+                                        "config_fields", []
+                                    )
+                                    if isinstance(f, dict)
+                                ],
+                            }
                         )
                         for ref in tuning.mcp_servers
                     ]
@@ -165,6 +183,179 @@ async def _fetch_runtime_templates(base_url: str) -> list[_RuntimeTemplatePayloa
     return [_RuntimeTemplatePayload.model_validate(item) for item in payload]
 
 
+async def _fetch_mcp_catalog(base_url: str) -> dict[str, bool] | None:
+    """
+    Fetch the live MCP catalog from one runtime pod.
+
+    Returns a mapping of {server_id: enabled} for all declared servers.
+    Returns None when the pod is unreachable — callers must distinguish this
+    from an empty catalog (pod reachable but no servers configured).
+    """
+    url = f"{base_url.rstrip('/')}/agents/mcp-catalog"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+        response.raise_for_status()
+        payload = response.json()
+        return {
+            entry["id"]: bool(entry.get("enabled", True))
+            for entry in payload.get("servers", [])
+            if isinstance(entry, dict) and "id" in entry
+        }
+    except Exception as exc:
+        logger.warning("Failed to fetch MCP catalog from %s: %s", base_url, exc)
+        return None
+
+
+def _validate_tuning_field_values(
+    *,
+    field_specs: Sequence[ManagedAgentFieldSpec],
+    submitted_values: dict[str, Any],
+    context_label: str,
+) -> dict[str, Any]:
+    """
+    Filter and validate submitted tuning values against one frozen field-spec list.
+
+    Why this function exists:
+    - managed-agent writes already constrain values to declared field keys, but
+      they also need one shared validator so prompt/settings/chat-option values
+      respect the authored field contract before control-plane persists them
+
+    How to use it:
+    - pass the frozen `ManagedAgentFieldSpec` list from the template or stored
+      instance together with the submitted values dict
+    - unknown keys are ignored to preserve current write compatibility
+    - invalid values raise `EnrollmentError(http_status=422)`
+
+    Example:
+    - `values = _validate_tuning_field_values(field_specs=tuning.fields, submitted_values={"settings.verbose": True}, context_label="agent enrollment")`
+    """
+    specs_by_key: dict[str, ManagedAgentFieldSpec] = {
+        field.key: field for field in field_specs
+    }
+    validated: dict[str, Any] = {}
+    scalar_string_types = {
+        "string",
+        "text",
+        "text-multiline",
+        "prompt",
+        "secret",
+        "url",
+    }
+
+    def _fail(field_key: str, reason: str) -> None:
+        raise EnrollmentError(
+            f"Invalid value for tuning field {field_key!r} during {context_label}: {reason}.",
+            http_status=422,
+        )
+
+    def _is_numeric(value: object) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    def _validate_array_item(
+        *, field_key: str, item_type: str | None, value: object
+    ) -> None:
+        if item_type is None:
+            if isinstance(value, (str, int, float, bool)):
+                return
+            _fail(field_key, "array items must be scalar values")
+        if item_type in scalar_string_types or item_type == "select":
+            if not isinstance(value, str):
+                _fail(field_key, f"array items for type {item_type!r} must be strings")
+            return
+        if item_type == "boolean":
+            if not isinstance(value, bool):
+                _fail(field_key, "array items for type 'boolean' must be booleans")
+            return
+        if item_type == "integer":
+            if not (isinstance(value, int) and not isinstance(value, bool)):
+                _fail(field_key, "array items for type 'integer' must be integers")
+            return
+        if item_type == "number":
+            if not _is_numeric(value):
+                _fail(field_key, "array items for type 'number' must be numeric")
+            return
+        _fail(field_key, f"unsupported array item_type {item_type!r}")
+
+    for key, value in submitted_values.items():
+        field = specs_by_key.get(key)
+        if field is None:
+            continue
+        if value is None:
+            continue
+        numeric_value: float | None = None
+
+        if field.type in scalar_string_types:
+            if not isinstance(value, str):
+                _fail(key, f"expected a string for type {field.type!r}")
+            if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
+                _fail(key, f"value does not match pattern {field.pattern!r}")
+        elif field.type == "select":
+            if not isinstance(value, str):
+                _fail(key, "expected a string for type 'select'")
+        elif field.type == "boolean":
+            if not isinstance(value, bool):
+                _fail(key, "expected a boolean")
+        elif field.type == "integer":
+            if not (isinstance(value, int) and not isinstance(value, bool)):
+                _fail(key, "expected an integer")
+            numeric_value = float(value)
+        elif field.type == "number":
+            if not _is_numeric(value):
+                _fail(key, "expected a number")
+            numeric_value = float(value)
+        elif field.type == "array":
+            if not isinstance(value, list):
+                _fail(key, "expected an array")
+            for item in value:
+                _validate_array_item(
+                    field_key=key, item_type=field.item_type, value=item
+                )
+        elif field.type == "object":
+            if not isinstance(value, dict):
+                _fail(key, "expected an object")
+            if not all(
+                isinstance(obj_key, str)
+                and isinstance(obj_value, (str, int, float, bool))
+                for obj_key, obj_value in value.items()
+            ):
+                _fail(key, "object keys must be strings and values must be scalars")
+        else:
+            _fail(key, f"unsupported field type {field.type!r}")
+
+        if field.enum is not None and value not in field.enum:
+            _fail(key, f"value must be one of {field.enum!r}")
+        if numeric_value is not None:
+            if field.min is not None and numeric_value < field.min:
+                _fail(key, f"value must be >= {field.min}")
+            if field.max is not None and numeric_value > field.max:
+                _fail(key, f"value must be <= {field.max}")
+
+        validated[key] = value
+    return validated
+
+
+def _validate_mcp_server_ids(
+    *,
+    submitted_ids: list[str],
+    available_ids: frozenset[str],
+    context_label: str,
+) -> list[str]:
+    """
+    Validate submitted MCP server IDs against the template's declared servers.
+
+    Unknown IDs raise EnrollmentError(422); known IDs are returned as-is.
+    """
+    unknown = [sid for sid in submitted_ids if sid not in available_ids]
+    if unknown:
+        raise EnrollmentError(
+            f"Unknown MCP server ID(s) in {context_label}: {unknown!r}. "
+            "Only server IDs declared by the template are allowed.",
+            http_status=422,
+        )
+    return submitted_ids
+
+
 async def list_agent_templates(
     team_id: TeamId,
     deps: ProductServiceDependencies,
@@ -220,11 +411,13 @@ async def list_managed_agent_instances(
     deps: ProductServiceDependencies,
 ) -> list[ManagedAgentInstanceSummary]:
     """
-    Return the enrolled managed agent instances for one team from the DB.
+    Return the enrolled managed agent instances for one team, with drift detection.
 
     Why this function exists:
     - the product surface must expose managed agent instances by stable
       `agent_instance_id`, separate from live runtime catalog discovery
+    - drift detection surfaces MCP server selection mismatches to the admin
+      before they cause silent execution failures
 
     How to use it:
     - call from the team agent-instances route
@@ -235,10 +428,38 @@ async def list_managed_agent_instances(
     """
     store = deps.get_agent_instance_store()
     records = await store.list_by_team(team_id)
-    return [_record_to_summary(record) for record in records]
+
+    # Build a catalog-per-source map for drift detection; failures → "unavailable".
+    catalog_by_source: dict[str, dict[str, bool] | None] = {}
+    for source in deps.configuration.platform.runtime_catalog_sources:
+        if not source.enabled:
+            continue
+        catalog_by_source[source.runtime_id] = await _fetch_mcp_catalog(source.base_url)
+
+    summaries: list[ManagedAgentInstanceSummary] = []
+    for record in records:
+        catalog = catalog_by_source.get(record.source_runtime_id)
+        if catalog is None:
+            summaries.append(_record_to_summary(record, runtime_status="unavailable"))
+            continue
+
+        warnings: list[str] = []
+        for sid in record.tuning.selected_mcp_server_ids:
+            if sid not in catalog:
+                warnings.append(f"MCP server '{sid}' is no longer in the pod catalog.")
+            elif not catalog[sid]:
+                warnings.append(f"MCP server '{sid}' is disabled in the pod catalog.")
+        summaries.append(_record_to_summary(record, catalog_warnings=warnings))
+
+    return summaries
 
 
-def _record_to_summary(record: AgentInstanceRecord) -> ManagedAgentInstanceSummary:
+def _record_to_summary(
+    record: AgentInstanceRecord,
+    *,
+    runtime_status: Literal["ok", "unavailable"] = "ok",
+    catalog_warnings: list[str] | None = None,
+) -> ManagedAgentInstanceSummary:
     """Build a frontend-facing summary from a DB-backed agent instance record."""
     return ManagedAgentInstanceSummary(
         agent_instance_id=record.agent_instance_id,
@@ -251,6 +472,9 @@ def _record_to_summary(record: AgentInstanceRecord) -> ManagedAgentInstanceSumma
         updated_at=record.updated_at,
         created_by=record.created_by,
         tuning_field_values=record.tuning.values,
+        selected_mcp_server_ids=list(record.tuning.selected_mcp_server_ids),
+        runtime_status=runtime_status,
+        catalog_warnings=catalog_warnings or [],
     )
 
 
@@ -349,16 +573,23 @@ async def enroll_agent_instance(
         }
     )
     if request.tuning_field_values:
-        valid_keys = {f.key for f in tuning.fields}
         tuning = tuning.model_copy(
             update={
-                "values": {
-                    k: v
-                    for k, v in request.tuning_field_values.items()
-                    if k in valid_keys
-                }
+                "values": _validate_tuning_field_values(
+                    field_specs=tuning.fields,
+                    submitted_values=request.tuning_field_values,
+                    context_label="agent enrollment",
+                )
             }
         )
+    if request.mcp_server_ids is not None:
+        available = frozenset(srv.id for srv in tuning.mcp_servers)
+        validated_ids = _validate_mcp_server_ids(
+            submitted_ids=request.mcp_server_ids,
+            available_ids=available,
+            context_label="agent enrollment",
+        )
+        tuning = tuning.model_copy(update={"selected_mcp_server_ids": validated_ids})
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -410,23 +641,34 @@ async def update_agent_instance(
         return None
 
     new_tuning: ManagedAgentTuning | None = None
-    if request.tuning_field_values is not None:
-        valid_keys = {f.key for f in record.tuning.fields}
-        new_tuning = record.tuning.model_copy(
-            update={
-                "values": {
-                    k: v
-                    for k, v in request.tuning_field_values.items()
-                    if k in valid_keys
+    if request.tuning_field_values is not None or request.mcp_server_ids is not None:
+        base = record.tuning
+        if request.tuning_field_values is not None:
+            base = base.model_copy(
+                update={
+                    "values": _validate_tuning_field_values(
+                        field_specs=base.fields,
+                        submitted_values=request.tuning_field_values,
+                        context_label="agent update",
+                    )
                 }
-            }
-        )
+            )
+        if request.mcp_server_ids is not None:
+            available = frozenset(srv.id for srv in base.mcp_servers)
+            validated_ids = _validate_mcp_server_ids(
+                submitted_ids=request.mcp_server_ids,
+                available_ids=available,
+                context_label="agent update",
+            )
+            base = base.model_copy(update={"selected_mcp_server_ids": validated_ids})
+        new_tuning = base
 
     updated = await store.update(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
         display_name=request.display_name,
         description=request.description,
+        enabled=request.status == "enabled" if request.status is not None else None,
         tuning=new_tuning,
     )
     return _record_to_summary(updated) if updated is not None else None
@@ -653,14 +895,31 @@ async def update_session_activity(
     Example:
     - `await update_session_activity(team_id, session_id, request, deps)`
     """
-    record = await deps.get_session_metadata_store().update_last_activity(
+    record = await deps.get_session_metadata_store().update_metadata(
         session_id=session_id,
         team_id=team_id,
+        title=request.title,
         updated_at=request.updated_at,
     )
     if record is None:
         return None
     return _record_to_item(record)
+
+
+async def delete_session(
+    team_id: TeamId,
+    session_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """
+    Remove one control-plane session metadata record.
+
+    Returns True when a row was deleted, False when the session did not exist.
+    """
+    return await deps.get_session_metadata_store().delete(
+        session_id=session_id,
+        team_id=team_id,
+    )
 
 
 def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:

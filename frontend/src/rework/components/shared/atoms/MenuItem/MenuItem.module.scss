@@ -34,6 +34,12 @@
   width: 100%;
   min-height: 2.5rem;
   color: var(--item-color);
+
+  &:has(.description) {
+    align-items: flex-start;
+    padding-top: var(--spacing-s);
+    padding-bottom: var(--spacing-s);
+  }
 }
 
 .icon-wrapper {
@@ -48,4 +54,18 @@
   font: var(--font-body-large);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.description {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  white-space: normal;
+  line-height: 1.4;
 }

@@ -9,6 +9,24 @@ servers:
     sse_read_timeout: 2000
     enabled: true
     auth_mode: "user_token"
+    config_fields:
+      - key: "chat_options.libraries_selection"
+        type: "boolean"
+        title: "Document library picker"
+        description: "Show a document library selector in the chat interface."
+        default: false
+      - key: "chat_options.search_policy"
+        type: "string"
+        title: "Default search policy"
+        description: "Search strategy applied when querying document libraries."
+        enum: ["strict", "hybrid", "semantic"]
+        default: "hybrid"
+      - key: "chat_options.search_rag_scope"
+        type: "string"
+        title: "Default RAG scope"
+        description: "Whether to search corpus only, general knowledge only, or both."
+        enum: ["corpus_only", "hybrid", "general_only"]
+        default: "hybrid"
 
   - id: "mcp-knowledge-flow-mcp-tabular"
     name: "mcp.servers.tabular.name"
@@ -72,6 +90,24 @@ servers:
     url: "http://localhost:8111/knowledge-flow/v1/mcp-corpus"
     sse_read_timeout: 2000
     auth_mode: "user_token"
+    config_fields:
+      - key: "chat_options.libraries_selection"
+        type: "boolean"
+        title: "Document library picker"
+        description: "Show a document library selector in the chat interface."
+        default: false
+      - key: "chat_options.search_policy"
+        type: "string"
+        title: "Default search policy"
+        description: "Search strategy applied when querying document libraries."
+        enum: ["strict", "hybrid", "semantic"]
+        default: "hybrid"
+      - key: "chat_options.search_rag_scope"
+        type: "string"
+        title: "Default RAG scope"
+        description: "Whether to search corpus only, general knowledge only, or both."
+        enum: ["corpus_only", "hybrid", "general_only"]
+        default: "hybrid"
 
   - id: "mcp-neo4j-graph-db"
     name: "mcp.servers.neo4j.name"

@@ -38,14 +38,94 @@ from fred_sdk import (
     GraphNodeResult,
     HumanChoiceOption,
     StepResult,
+    TuningValue,
     choice_step,
     typed_node,
 )
 from fred_sdk import (
     finalize_step as _finalize_step,
 )
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from .graph_state import TestState
+
+
+def _as_int(val: TuningValue | None, default: int) -> int:
+    return int(val) if isinstance(val, (int, float)) else default
+
+
+def _as_bool(val: TuningValue | None, default: bool = False) -> bool:
+    return val if isinstance(val, bool) else default
+
+
+def _as_text(val: TuningValue | None) -> str:
+    return val.strip() if isinstance(val, str) else ""
+
+
+def _delay_seconds(context: GraphNodeContext) -> float:
+    return _as_int(context.tuning_values.get("settings.delay_ms"), 0) / 1000.0
+
+
+def _active_tuning_lines(context: GraphNodeContext) -> list[str]:
+    """
+    Return one compact markdown summary of the test assistant tuning surface.
+
+    Why this helper exists:
+    - the fallback and model-probe scenarios both need to show the currently
+      active prompt, settings, and chat-option values without duplicating the
+      same formatting logic
+
+    How to use it:
+    - call from a step when you want to append a user-visible debug summary of
+      the active managed-agent tuning values
+
+    Example:
+    - `lines = _active_tuning_lines(context)`
+    """
+
+    system_prompt = _as_text(context.tuning_values.get("prompts.system"))
+    planning = _as_text(context.tuning_values.get("prompts.planning"))
+    routing = _as_text(context.tuning_values.get("prompts.routing"))
+    verbose = _as_bool(context.tuning_values.get("settings.verbose"))
+    delay_ms = _as_int(context.tuning_values.get("settings.delay_ms"), 0)
+    allow_files = _as_bool(context.tuning_values.get("chat_options.attach_files"))
+    allow_libraries = _as_bool(
+        context.tuning_values.get("chat_options.libraries_selection")
+    )
+    return [
+        "**Active tuning values:**",
+        "",
+        f"- **prompts.system**: {system_prompt or '_not set_'}",
+        f"- **prompts.planning**: {planning or '_not set_'}",
+        f"- **prompts.routing**: {routing or '_not set_'}",
+        f"- **settings.verbose**: {verbose}",
+        f"- **settings.delay_ms**: {delay_ms}",
+        f"- **chat_options.attach_files**: {allow_files}",
+        f"- **chat_options.libraries_selection**: {allow_libraries}",
+    ]
+
+
+def _model_probe_operation(user_text: str) -> str:
+    """
+    Derive the model-routing operation label from the scenario keyword prefix.
+
+    Why this helper exists:
+    - the test assistant needs one deterministic way to exercise different
+      routing-policy operation labels without turning model selection into a
+      generic tuning field
+
+    How to use it:
+    - pass the lower-cased user text routed to the `model_probe` scenario
+    - returns one stable operation label such as `routing` or `planning`
+
+    Example:
+    - `operation = _model_probe_operation("model routing explain this")`
+    """
+
+    if user_text.startswith("model planning"):
+        return "planning"
+    return "routing"
+
 
 # ── Step: dispatch ─────────────────────────────────────────────────────────────
 
@@ -60,6 +140,7 @@ async def dispatch_step(
 
     Routes (set via route_key):
       "echo"        → echo_step
+      "model_probe" → model_probe_step
       "hitl_choice" → hitl_choice_step
       "hitl_text"   → hitl_text_step
       "trace"       → trace_step
@@ -67,12 +148,20 @@ async def dispatch_step(
       "long"        → long_step
       "fallback"    → fallback_step
     """
-    context.emit_status("dispatch", "Selecting test scenario.")
+    planning = context.tuning_values.get("prompts.planning", "")
+    detail = (
+        f"Selecting test scenario. {planning}".strip()
+        if planning
+        else "Selecting test scenario."
+    )
+    context.emit_status("dispatch", detail)
 
     text = state.latest_user_text.lower().strip()
 
     if text.startswith("echo"):
         scenario = "echo"
+    elif text.startswith("model"):
+        scenario = "model_probe"
     elif text.startswith("hitl choice"):
         scenario = "hitl_choice"
     elif text.startswith("hitl text"):
@@ -101,17 +190,119 @@ async def echo_step(
     Emit status events then echo the user message back.
 
     SSE events exercised: status (x3), assistant_delta, final.
+    Appends system-prompt and verbose footer when those tuning values are set.
     """
+    delay = _delay_seconds(context)
+    verbose = _as_bool(context.tuning_values.get("settings.verbose"))
+    system_prompt = _as_text(context.tuning_values.get("prompts.system"))
+
     context.emit_status("echo", "Receiving your message.")
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.1 + delay)
     context.emit_status("echo", "Processing.")
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.1 + delay)
     context.emit_status("echo", "Sending reply.")
+
+    reply = f"Echo: {state.latest_user_text}"
+    if system_prompt:
+        reply += f"\n\n---\n**Active system prompt:** {system_prompt}"
+    if verbose:
+        reply += "\n\n_[verbose] scenario: echo_"
 
     return StepResult(
         state_update={
-            "final_text": f"Echo: {state.latest_user_text}",
+            "final_text": reply,
             "done_reason": "echo_complete",
+        }
+    )
+
+
+# ── Step: model_probe ─────────────────────────────────────────────────────────
+
+
+@typed_node(TestState)
+async def model_probe_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Optionally invoke a model with an explicit operation label for routing tests.
+
+    SSE events exercised:
+    - status
+    - assistant_delta when a model is configured
+    - final
+
+    This branch is intentionally optional: when no model provider is configured,
+    it returns a deterministic explanatory message instead of failing the whole
+    test assistant.
+    """
+    operation = _model_probe_operation(state.latest_user_text.lower().strip())
+    context.emit_status(
+        "model_probe",
+        f"Preparing optional model probe for operation '{operation}'.",
+    )
+    if context.model is None:
+        lines = [
+            (
+                "Model probe skipped: no chat model is configured for this pod. "
+                "All other test-assistant scenarios remain fully offline."
+            ),
+            "",
+            "---",
+            *_active_tuning_lines(context),
+        ]
+        return StepResult(
+            state_update={
+                "final_text": "\n".join(lines),
+                "done_reason": "model_probe_no_model",
+            }
+        )
+
+    delay = _delay_seconds(context)
+    system_prompt = _as_text(context.tuning_values.get("prompts.system"))
+    phase_prompt_key = (
+        "prompts.planning" if operation == "planning" else "prompts.routing"
+    )
+    phase_prompt = _as_text(context.tuning_values.get(phase_prompt_key))
+    verbose = _as_bool(context.tuning_values.get("settings.verbose"))
+
+    instruction_lines = [
+        "You are Fred's graph-agent model-routing probe.",
+        "Reply in one concise sentence.",
+        f"Confirm that the requested operation label is '{operation}'.",
+    ]
+    if system_prompt:
+        instruction_lines.append(f"Global system prompt override: {system_prompt}")
+    if phase_prompt:
+        instruction_lines.append(f"Phase-specific prompt: {phase_prompt}")
+
+    response = await context.invoke_model(
+        messages=[
+            SystemMessage(content="\n".join(instruction_lines)),
+            HumanMessage(
+                content=(
+                    "This is a runtime routing validation turn. "
+                    f"Original user message: {state.latest_user_text}"
+                )
+            ),
+        ],
+        operation=operation,
+    )
+    response_text = (
+        response.content if isinstance(response.content, str) else str(response.content)
+    )
+    lines = [
+        f"Model probe complete for operation **`{operation}`**.",
+        "",
+        response_text,
+    ]
+    if verbose:
+        lines += ["", "---", *_active_tuning_lines(context)]
+    await asyncio.sleep(delay)
+    return StepResult(
+        state_update={
+            "final_text": "\n".join(lines),
+            "done_reason": f"model_probe_{operation}",
         }
     )
 
@@ -279,18 +470,19 @@ async def trace_step(
     SSE events exercised: status (x4), assistant_delta (word stream), final (with sources).
     Sources are stored in state; build_output override converts them to VectorSearchHit.
     """
+    delay = _delay_seconds(context)
     context.emit_status("trace", "Starting trace scenario.")
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05 + delay)
     context.emit_status("trace", "Emitting streaming analysis text.")
 
     words = _TRACE_STREAM.split()
     for i, word in enumerate(words):
         chunk = word if i == 0 else f" {word}"
         context.emit_assistant_delta(chunk)
-        await asyncio.sleep(0.04)
+        await asyncio.sleep(0.04 + delay)
 
     context.emit_status("trace", "Attaching mock sources.")
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05 + delay)
     context.emit_status("trace", "Done.")
 
     return StepResult(
@@ -315,8 +507,9 @@ async def error_step(
 
     SSE events exercised: status, node_error, final (via on_error route to finalize).
     """
+    delay = _delay_seconds(context)
     context.emit_status("error", "About to raise a deliberate error for testing.")
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.1 + delay)
 
     raise RuntimeError(
         "This is a deliberate test error from fred.test.assistant. "
@@ -371,6 +564,7 @@ async def long_step(
 
     SSE events exercised: status, assistant_delta (continuous stream), final.
     """
+    delay = _delay_seconds(context)
     context.emit_status("long", "Starting long-streaming test (30 sentences).")
 
     full_text = ""
@@ -379,7 +573,7 @@ async def long_step(
             chunk = word if (full_text == "" and i == 0) else f" {word}"
             context.emit_assistant_delta(chunk)
             full_text += chunk
-            await asyncio.sleep(0.08)
+            await asyncio.sleep(0.08 + delay)
 
     return StepResult(
         state_update={
@@ -391,20 +585,17 @@ async def long_step(
 
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
-_FALLBACK_TEXT = """\
-**fred.test.assistant** — available test scenarios:
-
+_SCENARIO_TABLE = """\
 | Keyword prefix | What it exercises |
 |---|---|
 | `echo` | Status events (x3) → simple reply |
+| `model routing` | Optional model call using operation label `routing` |
+| `model planning` | Optional model call using operation label `planning` |
 | `hitl choice` | HITL binary choice gate (3 options) |
 | `hitl text` | HITL free-text input gate |
 | `trace` | Status events + streamed text + mock sources (SourcesPanel) |
 | `error` | Deliberate node error → on_error route |
-| `long` | 30-sentence word-by-word streaming reply |
-
-Type the keyword at the start of your message to run that scenario.
-"""
+| `long` | 30-sentence word-by-word streaming reply |"""
 
 
 @typed_node(TestState)
@@ -412,11 +603,26 @@ async def fallback_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """Return the scenario menu when no keyword matches."""
+    """Return the scenario menu plus active tuning config when no keyword matches."""
     context.emit_status("fallback", "No matching scenario — showing help.")
+
+    lines = [
+        "**fred.test.assistant** — available test scenarios:",
+        "",
+        _SCENARIO_TABLE,
+        "",
+    ]
+    lines.append("Type the keyword at the start of your message to run that scenario.")
+
+    lines += [
+        "",
+        "---",
+        *_active_tuning_lines(context),
+    ]
+
     return StepResult(
         state_update={
-            "final_text": _FALLBACK_TEXT,
+            "final_text": "\n".join(lines),
             "done_reason": "fallback_help",
         }
     )

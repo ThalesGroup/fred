@@ -58,6 +58,16 @@ class AgentPodClient:
             raise RuntimeError("Agent list response must be a JSON array of strings.")
         return payload
 
+    def list_templates(self) -> list[dict[str, Any]]:
+        response = self.http_client.get(
+            f"{self.base_url}/agents/templates", headers=self._auth_headers()
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise RuntimeError("Templates response must be a JSON array.")
+        return payload
+
     def execute(
         self,
         *,
@@ -69,6 +79,7 @@ class AgentPodClient:
         agent_instance_id: str | None = None,
         checkpoint_id: str | None = None,
         resume_payload: Any = None,
+        inline_tuning: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         runtime_context: dict[str, Any] = {"user_id": user_id}
         if team_id:
@@ -85,6 +96,8 @@ class AgentPodClient:
             payload["checkpoint_id"] = checkpoint_id
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
+        if inline_tuning:
+            payload["inline_tuning"] = inline_tuning
         response = self.http_client.post(
             f"{self.base_url}/agents/execute",
             json=payload,
@@ -142,6 +155,7 @@ class AgentPodClient:
         agent_instance_id: str | None = None,
         checkpoint_id: str | None = None,
         resume_payload: Any = None,
+        inline_tuning: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
         for event in self.iter_stream_events(
@@ -153,6 +167,7 @@ class AgentPodClient:
             agent_instance_id=agent_instance_id,
             checkpoint_id=checkpoint_id,
             resume_payload=resume_payload,
+            inline_tuning=inline_tuning,
         ):
             events.append(event)
         return events
@@ -168,6 +183,7 @@ class AgentPodClient:
         agent_instance_id: str | None = None,
         checkpoint_id: str | None = None,
         resume_payload: Any = None,
+        inline_tuning: dict[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
         runtime_context: dict[str, Any] = {"user_id": user_id}
         if team_id:
@@ -184,6 +200,8 @@ class AgentPodClient:
             payload["checkpoint_id"] = checkpoint_id
         if resume_payload is not None:
             payload["resume_payload"] = resume_payload
+        if inline_tuning:
+            payload["inline_tuning"] = inline_tuning
         with self.http_client.stream(
             "POST",
             f"{self.base_url}/agents/execute/stream",

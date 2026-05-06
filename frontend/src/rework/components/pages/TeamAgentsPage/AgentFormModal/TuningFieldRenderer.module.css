@@ -21,8 +21,8 @@
 }
 
 .select:focus {
-  border-color: var(--primary);
   outline: none;
+  border-color: var(--primary);
 }
 
 .selectError {

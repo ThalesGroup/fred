@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi.responses import Response
 from fred_core import KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
 
@@ -28,6 +29,7 @@ from control_plane_backend.product.service import (
     SessionAlreadyExistsError,
     build_frontend_bootstrap,
     create_session,
+    delete_session,
     enroll_agent_instance,
     get_runtime_binding,
     list_agent_templates,
@@ -195,18 +197,23 @@ async def patch_team_agent_instance(
     Policy — frozen snapshot:
     - field specs (ManagedAgentFieldSpec) are frozen at enrollment time and are
       never re-merged with the current template when the instance is edited
-    - only field keys present in the instance's tuning.fields are accepted;
-      unknown keys are silently dropped
+    - only field keys present in the instance's tuning.fields are considered;
+      unknown keys are ignored for compatibility
+    - known values are validated against the frozen field contract; invalid
+      type/enum/range/pattern values return HTTP 422
 
     Returns 404 if the instance is not found for the given team.
     """
     await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
-    result = await update_agent_instance(
-        team_id=team_id,
-        agent_instance_id=agent_instance_id,
-        request=body,
-        deps=deps,
-    )
+    try:
+        result = await update_agent_instance(
+            team_id=team_id,
+            agent_instance_id=agent_instance_id,
+            request=body,
+            deps=deps,
+        )
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -383,6 +390,29 @@ async def patch_team_session(
             detail=f"Session {session_id!r} not found for team {team_id!r}.",
         )
     return updated
+
+
+@router.delete(
+    "/teams/{team_id}/sessions/{session_id}",
+    status_code=204,
+    response_class=Response,
+    summary="Delete session metadata for one team-scoped session.",
+)
+async def delete_team_session(
+    team_id: Annotated[TeamId, Path()],
+    session_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> Response:
+    """
+    Remove control-plane metadata for one team-scoped session.
+
+    Returns 204 on success or when the session does not exist.
+    Does not touch runtime-owned message history.
+    """
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    await delete_session(team_id=team_id, session_id=session_id, deps=deps)
+    return Response(status_code=204)
 
 
 @router.post(

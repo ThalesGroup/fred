@@ -108,6 +108,13 @@ class ManagedAgentTuning(BaseModel):
     tags: list[str] = Field(default_factory=list)
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
     mcp_servers: list[ManagedMcpServerRef] = Field(default_factory=list)
+    selected_mcp_server_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Admin-chosen subset of mcp_servers IDs to activate for this instance. "
+            "Empty list means all declared servers are active."
+        ),
+    )
     values: dict[str, Any] = Field(
         default_factory=dict,
         description=(

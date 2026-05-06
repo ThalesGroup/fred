@@ -43,7 +43,7 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Protocol, TypeAlias
+from typing import ClassVar, Dict, List, Literal, Optional, Protocol, TypeAlias, Union
 
 from pydantic import AliasChoices, AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
@@ -70,6 +70,13 @@ FieldType = Literal[
     "url",
 ]
 
+# Scalar value that an admin can store for a FieldSpec field.
+# Arrays and objects are composed from these scalars.
+TuningScalar: TypeAlias = Union[str, int, float, bool]
+TuningValue: TypeAlias = Union[
+    TuningScalar, list[TuningScalar], dict[str, TuningScalar]
+]
+
 
 class UIHints(BaseModel):
     """UI hints for rendering the field in a user interface."""
@@ -91,7 +98,7 @@ class FieldSpec(BaseModel):
     title: str
     description: Optional[str] = None
     required: bool = False
-    default: Optional[Any] = None
+    default: TuningValue | None = None
     enum: Optional[List[str]] = None
     min: Optional[float] = None
     max: Optional[float] = None
@@ -146,6 +153,14 @@ class MCPServerConfiguration(BaseModel):
     auth_mode: ClientAuthMode = Field(
         ClientAuthMode.USER_TOKEN, description="Client authentication mode."
     )
+    config_fields: List[FieldSpec] = Field(
+        default_factory=list,
+        description=(
+            "User-facing configuration options declared by this server. "
+            "Rendered in the agent form beneath the server's activation checkbox. "
+            "Values flow into RuntimeContext as tuning field values at execution time."
+        ),
+    )
 
 
 class MCPServerRef(BaseModel):
@@ -181,7 +196,14 @@ class AgentTuning(BaseModel):
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
     mcp_servers: list[MCPServerRef] = Field(default_factory=list)
-    values: Dict[str, Any] = Field(
+    selected_mcp_server_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Admin-chosen subset of mcp_servers IDs to activate for this instance. "
+            "Empty list means all declared servers are active."
+        ),
+    )
+    values: dict[str, TuningValue] = Field(
         default_factory=dict,
         description="User-set field values keyed by FieldSpec.key, forwarded from control-plane.",
     )
@@ -806,6 +828,15 @@ class AgentDefinition(FrozenModel, ABC):
     description: str = Field(..., min_length=1)
     tags: tuple[str, ...] = ()
     fields: tuple[FieldSpec, ...] = ()
+    tuning_values: dict[str, TuningValue] = Field(
+        default_factory=dict,
+        description=(
+            "Runtime tuning values forwarded from control-plane enrollment. "
+            "Keyed by FieldSpec.key. Read via context.tuning_values in graph steps "
+            "or via definition.tuning_values in react prompting. "
+            "Populated by _apply_runtime_tuning; do not set manually in agent definitions."
+        ),
+    )
     execution_category: ExecutionCategory
     public: bool = True
     """

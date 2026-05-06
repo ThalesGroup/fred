@@ -26,13 +26,7 @@ type TuningFieldRendererProps = {
   error?: string;
 };
 
-export function TuningFieldRenderer({
-  field,
-  value,
-  onChange,
-  disabled,
-  error,
-}: TuningFieldRendererProps) {
+export function TuningFieldRenderer({ field, value, onChange, disabled, error }: TuningFieldRendererProps) {
   if (field.ui?.hide) return null;
 
   const fieldValue = value ?? field.default ?? "";
@@ -78,10 +72,7 @@ export function TuningFieldRenderer({
   }
 
   const isMultiline =
-    field.ui?.multiline ||
-    field.ui?.textarea ||
-    field.type === "prompt" ||
-    field.type === "text-multiline";
+    field.ui?.multiline || field.ui?.textarea || field.type === "prompt" || field.type === "text-multiline";
 
   if (isMultiline) {
     return (
@@ -112,12 +103,7 @@ export function TuningFieldRenderer({
       type={inputType}
       min={field.min ?? undefined}
       max={field.max ?? undefined}
-      onChange={(e) =>
-        onChange(
-          field.key,
-          inputType === "number" ? Number(e.target.value) : e.target.value,
-        )
-      }
+      onChange={(e) => onChange(field.key, inputType === "number" ? Number(e.target.value) : e.target.value)}
       disabled={disabled}
       required={field.required}
       error={error}

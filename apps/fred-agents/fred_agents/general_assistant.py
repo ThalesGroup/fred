@@ -109,22 +109,6 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
             required=False,
             ui=UIHints(group="Prompts", multiline=True, markdown=True, max_lines=12),
         ),
-        FieldSpec(
-            key="chat_options.attach_files",
-            type="boolean",
-            title="Allow file attachments",
-            description="Users can attach files to messages in the chat interface.",
-            default=False,
-            ui=UIHints(group="Chat options"),
-        ),
-        FieldSpec(
-            key="chat_options.libraries_selection",
-            type="boolean",
-            title="Document library picker",
-            description="Show a document library selector in the chat interface.",
-            default=False,
-            ui=UIHints(group="Chat options"),
-        ),
     )
 
     def policy(self) -> ReActPolicy:

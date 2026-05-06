@@ -440,7 +440,7 @@ Platform concerns belong to:
 
 ---
 
-## 8. SSE Contract Gaps — Fixed (April 2026)
+## 8. SSE Contract Gaps — Fixed (April–May 2026)
 
 These gaps were surfaced while implementing an external SSE bench client.
 All four have been resolved in commit `eedbc610` (branch `agentic-pod`).
@@ -475,6 +475,23 @@ stream ends by connection close after `final`, with no sentinel frame, and that
 **Fix**: `RuntimeExecuteRequest.runtime_context` description updated: in
 `agent_id` direct mode, `user_id` defaults to `"unknown"` unless
 `runtime_context.user_id` is explicitly provided.
+
+### 8.5 ✅ Chat options dropped in `_iterate_runtime_event_payloads` — fixed (May 2026)
+
+**Was**: `agent_app.py` mapped the incoming `runtime_context` dict to the internal
+`RuntimeContext` dataclass but only forwarded identity and observability fields.
+User-selected chat options — `selected_document_libraries_ids`, `search_policy`,
+`search_rag_scope`, `include_session_scope`, `include_corpus_scope`, `deep_search`,
+`selected_document_uids`, `selected_chat_context_ids`, `refresh_token`,
+`access_token_expires_at` — were silently discarded, causing `ContextAwareTool`,
+all KF search helpers, and the v2 adapter to always fall back to their defaults
+regardless of what the user selected in the UI.
+
+**Fix**: All chat option fields are now copied from `ctx` into the `RuntimeContext`
+construction in `_iterate_runtime_event_payloads` (`agent_app.py`). The full chain
+is now correct: UI picker → `RuntimeExecuteRequest.runtime_context` →
+`to_legacy_context()` → `ctx` dict → `RuntimeContext` → `ContextAwareTool` injection
+→ KF `VectorSearchClient.search()` params.
 
 ---
 

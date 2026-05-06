@@ -165,6 +165,23 @@ class _FakeSessionMetadataStore:
                 return record
         return None
 
+    async def update_metadata(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        *,
+        title: str | None = None,
+        updated_at: datetime | None = None,
+    ) -> SessionMetadataRecord | None:
+        for record in self._records:
+            if record.session_id == session_id and record.team_id == team_id:
+                if title is not None:
+                    record.title = title
+                if updated_at is not None:
+                    record.updated_at = updated_at
+                return record
+        return None
+
 
 class _DuplicateSessionMetadataStore:
     """Offline stand-in that always reproduces one duplicate session conflict."""
@@ -507,6 +524,9 @@ async def test_team_agent_instances_returns_managed_identity(
             "status": "enabled",
             "created_by": "internal-admin",
             "tuning_field_values": {},
+            "selected_mcp_server_ids": [],
+            "runtime_status": "unavailable",
+            "catalog_warnings": [],
         }
     ]
 
@@ -926,6 +946,83 @@ async def test_patch_team_session_returns_404_for_other_team_session(
         )
 
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_team_session_updates_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title=None,
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            json={"title": "Analysis of Q1 report"},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["title"] == "Analysis of Q1 report"
+    assert store._records[0].title == "Analysis of Q1 report"
+
+
+@pytest.mark.asyncio
+async def test_patch_team_session_updates_title_and_activity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    initial = datetime.fromisoformat("2026-04-23T08:00:00+00:00")
+    refreshed = datetime.fromisoformat("2026-04-23T08:10:00+00:00")
+    store = _FakeSessionMetadataStore(
+        [
+            SessionMetadataRecord(
+                session_id="session-1",
+                team_id=TeamId("personal"),
+                agent_instance_id="instance-1",
+                user_id="admin",
+                title=None,
+                updated_at=initial,
+            )
+        ]
+    )
+    _patch_session_store(monkeypatch, store)
+
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/session-1",
+            json={"title": "My analysis", "updated_at": refreshed.isoformat()},
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["title"] == "My analysis"
+    assert payload["updated_at"] == "2026-04-23T08:10:00Z"
+    assert store._records[0].title == "My analysis"
+    assert store._records[0].updated_at == refreshed
 
 
 @pytest.mark.asyncio
@@ -1924,6 +2021,46 @@ def _make_template_with_fields() -> "_RuntimeTemplatePayload":
     )
 
 
+def _make_template_with_validated_fields() -> "_RuntimeTemplatePayload":
+    """Return a fake template payload with typed field constraints for validation tests."""
+    return _RuntimeTemplatePayload(
+        template_agent_id="rags.sample.validated",
+        title="Validated Agent",
+        description="Echo with validated fields",
+        kind="assistant",
+        default_tuning=ManagedAgentTuning(
+            role="Validated Agent",
+            description="Echo with validated fields",
+            fields=[
+                ManagedAgentFieldSpec(
+                    key="prompts.system",
+                    type="prompt",
+                    title="System prompt",
+                    pattern=r"^.{3,}$",
+                ),
+                ManagedAgentFieldSpec(
+                    key="settings.delay_ms",
+                    type="integer",
+                    title="Delay",
+                    min=0,
+                    max=1000,
+                ),
+                ManagedAgentFieldSpec(
+                    key="settings.verbose",
+                    type="boolean",
+                    title="Verbose",
+                ),
+                ManagedAgentFieldSpec(
+                    key="chat_options.mode",
+                    type="select",
+                    title="Mode",
+                    enum=["compact", "full"],
+                ),
+            ],
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_team_agent_templates_exposes_non_empty_tuning_fields(
     monkeypatch: pytest.MonkeyPatch,
@@ -2056,6 +2193,91 @@ async def test_enroll_agent_instance_silently_drops_unknown_field_keys(
 
 
 @pytest.mark.asyncio
+async def test_enroll_agent_instance_rejects_invalid_tuning_value_type_and_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch_runtime_templates(_base_url: str):
+        return [_make_template_with_validated_fields()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch_runtime_templates,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.validated",
+                "display_name": "Validated Echo",
+                "tuning_field_values": {
+                    "settings.delay_ms": "slow",
+                    "settings.verbose": True,
+                },
+            },
+        )
+
+    assert resp.status_code == 422
+    assert "settings.delay_ms" in resp.json()["detail"]
+    assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_patch_agent_instance_rejects_invalid_tuning_enum_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = AgentInstanceRecord(
+        agent_instance_id="instance-validated",
+        team_id=TeamId("personal"),
+        template_id="runtime-a:rags.sample.validated",
+        source_runtime_id="runtime-a",
+        source_agent_id="rags.sample.validated",
+        display_name="Validated",
+        description=None,
+        enabled=True,
+        created_by="admin",
+        tuning=_make_template_with_validated_fields().default_tuning,
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-validated",
+            json={"tuning_field_values": {"chat_options.mode": "unsupported"}},
+        )
+
+    assert resp.status_code == 422
+    assert "chat_options.mode" in resp.json()["detail"]
+    assert store._records[0].tuning.values == {}
+
+
+@pytest.mark.asyncio
 async def test_patch_agent_instance_updates_display_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2147,3 +2369,160 @@ async def test_patch_agent_instance_returns_404_for_unknown_instance(
         )
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# MCP server selection — enrollment, validation, and drift detection
+# ---------------------------------------------------------------------------
+
+
+def _make_template_with_mcp_servers() -> "_RuntimeTemplatePayload":
+    """Return a fake template payload with two declared MCP server refs."""
+    return _RuntimeTemplatePayload(
+        template_agent_id="rags.sample.mcp",
+        title="MCP Agent",
+        description="Agent with MCP servers",
+        kind="assistant",
+        default_tuning=ManagedAgentTuning(
+            role="MCP Agent",
+            description="Agent with MCP servers",
+            mcp_servers=[
+                ManagedMcpServerRef(id="mcp-search", display_name="Search"),
+                ManagedMcpServerRef(id="mcp-storage", display_name="Storage"),
+            ],
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_stores_mcp_server_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch(_base_url: str):
+        return [_make_template_with_mcp_servers()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.mcp",
+                "display_name": "MCP Instance",
+                "mcp_server_ids": ["mcp-search"],
+            },
+        )
+
+    assert resp.status_code == 201
+    assert store._records[0].tuning.selected_mcp_server_ids == ["mcp-search"]
+
+
+@pytest.mark.asyncio
+async def test_enroll_agent_instance_rejects_unknown_mcp_server_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+
+    async def _fake_fetch(_base_url: str):
+        return [_make_template_with_mcp_servers()]
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.service._fetch_runtime_templates",
+        _fake_fetch,
+    )
+    store = _FakeAgentInstanceStore([])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/agent-instances",
+            json={
+                "template_id": "runtime-a:rags.sample.mcp",
+                "display_name": "MCP Instance",
+                "mcp_server_ids": ["mcp-unknown"],
+            },
+        )
+
+    assert resp.status_code == 422
+    assert "mcp-unknown" in resp.json()["detail"]
+    assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_list_agent_instances_sets_unavailable_when_pod_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = _make_record()
+    record = AgentInstanceRecord(
+        agent_instance_id=base.agent_instance_id,
+        team_id=base.team_id,
+        template_id=base.template_id,
+        source_runtime_id=base.source_runtime_id,
+        source_agent_id=base.source_agent_id,
+        display_name=base.display_name,
+        description=base.description,
+        enabled=base.enabled,
+        created_by=base.created_by,
+        tuning=ManagedAgentTuning(
+            role=base.tuning.role,
+            description=base.tuning.description,
+            selected_mcp_server_ids=["mcp-search"],
+        ),
+    )
+    store = _FakeAgentInstanceStore([record])
+    app = create_app()
+    _patch_store(monkeypatch, store)
+    container = get_application_container_from_app(app)
+    container.configuration.platform.runtime_catalog_sources = [
+        RuntimeCatalogSourceConfig(
+            runtime_id="runtime-a",
+            base_url="http://runtime-a/pod/v1",
+            enabled=True,
+        )
+    ]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/agent-instances")
+
+    assert resp.status_code == 200
+    item = resp.json()[0]
+    assert item["runtime_status"] == "unavailable"
+    assert item["catalog_warnings"] == []
+    assert item["selected_mcp_server_ids"] == ["mcp-search"]

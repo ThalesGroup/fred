@@ -6,4 +6,5 @@ export interface OptionModel<T = string> {
   key: string;
   icon?: IconProps;
   disabled?: boolean;
+  description?: string;
 }

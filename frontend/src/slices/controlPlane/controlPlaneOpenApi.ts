@@ -214,6 +214,15 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateSessionRequest,
       }),
     }),
+    deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: build.mutation<
+      DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiResponse,
+      DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
+        method: "DELETE",
+      }),
+    }),
     postPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPost: build.mutation<
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse,
       PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg
@@ -350,6 +359,11 @@ export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiAr
   teamId: string;
   sessionId: string;
   updateSessionRequest: UpdateSessionRequest;
+};
+export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiResponse = unknown;
+export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg = {
+  teamId: string;
+  sessionId: string;
 };
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiResponse =
   /** status 200 Successful Response */ ExecutionPreparation;
@@ -587,24 +601,36 @@ export type ManagedAgentInstanceSummary = {
   tuning_field_values?: {
     [key: string]: any;
   };
+  /** Admin-chosen MCP server IDs active for this instance. Empty list means all servers declared by the template are active. */
+  selected_mcp_server_ids?: string[];
+  /** ok when the pod is reachable at listing time; unavailable when the pod cannot be contacted. */
+  runtime_status?: "ok" | "unavailable";
+  /** Non-empty when stored MCP server IDs are absent from the live pod catalog. Admin must delete and recreate the instance to resolve. */
+  catalog_warnings?: string[];
 };
 export type CreateAgentInstanceRequest = {
   /** Composite template identity: '{source_runtime_id}:{source_agent_id}'. Obtained from GET /teams/{team_id}/agent-templates. */
   template_id: string;
   display_name: string;
   description?: string | null;
-  /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are silently dropped. */
+  /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are ignored. Known values are validated against the declared field type and constraints. */
   tuning_field_values?: {
     [key: string]: any;
   } | null;
+  /** Optional subset of MCP server IDs to activate for this instance. None means all servers declared by the template are active. Unknown IDs are rejected with HTTP 422. */
+  mcp_server_ids?: string[] | null;
 };
 export type UpdateAgentInstanceRequest = {
   display_name?: string | null;
   description?: string | null;
-  /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are silently dropped. Pass null to leave existing values unchanged. */
+  /** Set to 'enabled' or 'disabled' to toggle the instance. None leaves the current status unchanged. */
+  status?: ("enabled" | "disabled") | null;
+  /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are ignored. Known values are validated against the declared field type and constraints. Pass null to leave existing values unchanged. */
   tuning_field_values?: {
     [key: string]: any;
   } | null;
+  /** Replaces the active MCP server selection for this instance. None means leave the existing selection unchanged. Unknown IDs (not in the instance's declared mcp_servers) are rejected with 422. */
+  mcp_server_ids?: string[] | null;
 };
 export type ManagedAgentTuning = {
   role: string;
@@ -612,6 +638,8 @@ export type ManagedAgentTuning = {
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
   mcp_servers?: ManagedMcpServerRef[];
+  /** Admin-chosen subset of mcp_servers IDs to activate for this instance. Empty list means all declared servers are active. */
+  selected_mcp_server_ids?: string[];
   /** User-set field values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
   values?: {
     [key: string]: any;
@@ -642,7 +670,9 @@ export type CreateSessionRequest = {
 };
 export type UpdateSessionRequest = {
   /** Frontend-observed last activity timestamp. Used only for control-plane session metadata freshness, not runtime message history. */
-  updated_at: string;
+  updated_at?: string | null;
+  /** Human-readable session title shown in the sidebar. */
+  title?: string | null;
 };
 export type ExecutionGrantAction = "execute" | "resume";
 export type ExecutionGrant = {
@@ -725,5 +755,6 @@ export const {
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
+  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,
 } = injectedRtkApi;

@@ -89,11 +89,14 @@ from fred_sdk.contracts.models import (
     DeepAgentDefinition,
     ExecutionCategory,
     FieldSpec,
+    FieldType,
     GuardrailDefinition,
     ReActAgentDefinition,
     ReActPolicy,
     ToolApprovalPolicy,
     ToolRefRequirement,
+    TuningScalar,
+    TuningValue,
 )
 from fred_sdk.contracts.runtime import HumanChoiceOption, HumanInputRequest
 
@@ -210,8 +213,11 @@ __all__ = [
     "ReActPolicy",
     "ToolApprovalPolicy",
     "FieldSpec",
+    "FieldType",
     "GuardrailDefinition",
     "ToolRefRequirement",
+    "TuningScalar",
+    "TuningValue",
     # Evaluation contracts (POST /agents/evaluate)
     "EvalStep",
     "EvalTrace",

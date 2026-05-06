@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
+import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { IconType } from "@shared/utils/Type.ts";
@@ -25,12 +26,14 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { AgentFormBody } from "./AgentFormBody.tsx";
 import styles from "./AgentFormModal.module.css";
+import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 
 export type AgentFormPayload = {
   templateId: string;
   displayName: string;
   description: string;
   tuningFieldValues: Record<string, unknown>;
+  selectedMcpServerIds: string[] | null;
 };
 
 type AgentFormModalProps = {
@@ -42,6 +45,7 @@ type AgentFormModalProps = {
   editInstance?: ManagedAgentInstanceSummary;
   onClose: () => void;
   onSubmit: (payload: AgentFormPayload) => Promise<void>;
+  onDelete?: () => void;
 };
 
 type FormState = {
@@ -49,6 +53,7 @@ type FormState = {
   displayName: string;
   description: string;
   tuningValues: Record<string, unknown>;
+  selectedMcpServerIds: string[] | null;
 };
 
 export default function AgentFormModal({
@@ -60,14 +65,20 @@ export default function AgentFormModal({
   editInstance,
   onClose,
   onSubmit,
+  onDelete,
 }: AgentFormModalProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
+
+  // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
+  const [step, setStep] = useState<1 | 2>(1);
+
   const [form, setForm] = useState<FormState>({
     templateId: "",
     displayName: "",
     description: "",
     tuningValues: {},
+    selectedMcpServerIds: null,
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
@@ -77,22 +88,26 @@ export default function AgentFormModal({
       return;
     }
     if (mode === "edit" && editInstance) {
+      const stored = editInstance.selected_mcp_server_ids ?? [];
       setForm({
         templateId: editInstance.template_id,
         displayName: editInstance.display_name,
         description: editInstance.description ?? "",
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
+        selectedMcpServerIds: stored.length > 0 ? stored : null,
       });
+      setStep(2);
     } else {
-      const first = templates[0];
       setForm({
-        templateId: first?.template_id ?? "",
-        displayName: first?.display_name ?? "",
-        description: first?.description ?? "",
+        templateId: "",
+        displayName: "",
+        description: "",
         tuningValues: {},
+        selectedMcpServerIds: null,
       });
+      setStep(1);
     }
-  }, [isOpen, mode, editInstance, templates]);
+  }, [isOpen, mode, editInstance]);
 
   const handleTemplateSelect = (id: string) => {
     const tpl = templates.find((t) => t.template_id === id);
@@ -101,7 +116,9 @@ export default function AgentFormModal({
       displayName: tpl?.display_name ?? "",
       description: tpl?.description ?? "",
       tuningValues: {},
+      selectedMcpServerIds: null,
     });
+    setStep(2);
   };
 
   const handleTuningChange = (key: string, value: unknown) => {
@@ -123,6 +140,7 @@ export default function AgentFormModal({
       displayName: form.displayName.trim(),
       description: form.description.trim(),
       tuningFieldValues: form.tuningValues,
+      selectedMcpServerIds: form.selectedMcpServerIds,
     });
   };
 
@@ -141,44 +159,65 @@ export default function AgentFormModal({
             </span>
             <div className={styles.modalTitleBlock}>
               <div className={styles.modalTitle}>{title}</div>
-              <div className={styles.modalSubtitle}>
-                {teamName || t("rework.sidebar.team.userTeam")}
-              </div>
+              <div className={styles.modalSubtitle}>{teamName || t("rework.sidebar.team.userTeam")}</div>
             </div>
           </div>
+
           <div className={styles.modalActions}>
+            {mode === "create" && step === 2 && (
+              <div className={styles.modalActionsBack}>
+                <Button
+                  color="on-surface"
+                  variant="text"
+                  size="medium"
+                  icon={{ category: "outlined", type: "arrow_back" }}
+                  onClick={() => setStep(1)}
+                >
+                  {t("rework.back", "Back")}
+                </Button>
+              </div>
+            )}
             <Button color="primary" variant="text" size="medium" onClick={onClose}>
               {t("rework.cancel")}
             </Button>
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              onClick={handleSubmit}
-              disabled={!form.templateId || !form.displayName.trim() || isSubmitting}
-            >
-              {mode === "edit" ? t("rework.save") : t("rework.create")}
-            </Button>
+            {step === 2 && (
+              <Button color="primary" variant="filled" size="medium" onClick={handleSubmit} disabled={!canSave}>
+                {mode === "edit" ? t("rework.save") : t("rework.create")}
+              </Button>
+            )}
           </div>
         </div>
 
         <div className={styles.modalContent}>
-          <AgentFormBody
-            mode={mode}
-            templates={templates}
-            templateId={form.templateId}
-            displayName={form.displayName}
-            description={form.description}
-            tuningFieldValues={form.tuningValues}
-            isSubmitting={isSubmitting}
-            submitAttempted={submitAttempted}
-            editInstance={editInstance}
-            onTemplateSelect={handleTemplateSelect}
-            onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
-            onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
-            onTuningChange={handleTuningChange}
-          />
+          {step === 1 ? (
+            <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
+          ) : (
+            <AgentFormBody
+              mode={mode}
+              templates={templates}
+              templateId={form.templateId}
+              displayName={form.displayName}
+              description={form.description}
+              tuningFieldValues={form.tuningValues}
+              selectedMcpServerIds={form.selectedMcpServerIds}
+              isSubmitting={isSubmitting}
+              submitAttempted={submitAttempted}
+              editInstance={editInstance}
+              onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
+              onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+              onTuningChange={handleTuningChange}
+              onMcpSelectionChange={(ids) =>
+                setForm((prev) => ({ ...prev, selectedMcpServerIds: ids.length > 0 ? ids : null }))
+              }
+            />
+          )}
         </div>
+
+        {mode === "edit" && onDelete && (
+          <div className={styles.modalFooter}>
+            <DeleteIconButton onClick={onDelete} aria-label={t("rework.delete", "Delete")} />
+          </div>
+        )}
       </div>
     </FullPageModal>
   );

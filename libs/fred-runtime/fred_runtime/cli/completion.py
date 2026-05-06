@@ -14,6 +14,7 @@ _COMMANDS: tuple[str, ...] = (
     "/context",
     "/delete-session",
     "/delete-checkpoint",
+    "/inspect",
     "/purge-session",
     "/execution-context",
     "/history",
@@ -21,15 +22,30 @@ _COMMANDS: tuple[str, ...] = (
     "/login",
     "/login-password",
     "/mode",
+    "/run",
     "/session",
     "/session-info",
     "/session-new",
     "/sessions",
     "/stats",
     "/team",
+    "/tune",
+    "/tuning",
     "/logout",
     "/quit",
     "/whoami",
+)
+
+# Scenario keywords for fred.test.assistant — used for /run tab-completion.
+_TEST_ASSISTANT_SCENARIOS: tuple[str, ...] = (
+    "echo",
+    "error",
+    "hitl choice",
+    "hitl text",
+    "long",
+    "model planning",
+    "model routing",
+    "trace",
 )
 
 
@@ -50,6 +66,9 @@ def completion_candidates(
     if stripped.startswith("/mode "):
         prefix = stripped.removeprefix("/mode ").strip()
         return [mode for mode in ("eval", "final", "stream") if mode.startswith(prefix)]
+    if stripped.startswith("/run "):
+        prefix = stripped.removeprefix("/run ").strip()
+        return [s for s in _TEST_ASSISTANT_SCENARIOS if s.startswith(prefix)]
     if stripped.startswith("/"):
         return complete_slash_commands(stripped, commands=_COMMANDS)
     return []

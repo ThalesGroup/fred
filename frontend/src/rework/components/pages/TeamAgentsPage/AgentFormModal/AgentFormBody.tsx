@@ -14,31 +14,43 @@
 
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { IconType } from "@shared/utils/Type.ts";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   AgentTemplateSummary,
   ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
+import { McpServerCard } from "./McpServerCard/McpServerCard.tsx";
 import styles from "./AgentFormBody.module.css";
 
-type AgentFormBodyProps = {
-  mode: "create" | "edit";
-  templates: AgentTemplateSummary[];
-  templateId: string;
-  displayName: string;
-  description: string;
-  tuningFieldValues: Record<string, unknown>;
-  isSubmitting: boolean;
-  submitAttempted: boolean;
-  editInstance?: ManagedAgentInstanceSummary;
-  onTemplateSelect: (id: string) => void;
-  onDisplayNameChange: (v: string) => void;
-  onDescriptionChange: (v: string) => void;
-  onTuningChange: (key: string, value: unknown) => void;
+type SectionKey = "prompts" | "settings" | "chat" | "tools";
+
+const SECTION_ORDER: SectionKey[] = ["prompts", "settings", "chat", "tools"];
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  prompts: "Prompts",
+  settings: "Settings",
+  chat: "Chat",
+  tools: "Tools",
 };
+
+const SECTION_ICONS: Record<SectionKey, { category: "outlined"; type: IconType }> = {
+  prompts: { category: "outlined", type: "edit_note" },
+  settings: { category: "outlined", type: "tune" },
+  chat: { category: "outlined", type: "forum" },
+  tools: { category: "outlined", type: "build" },
+};
+
+function routeField(field: ManagedAgentFieldSpec): "prompts" | "settings" | "chat" {
+  const g = (field.ui?.group ?? "").toLowerCase().trim();
+  if (g === "prompts") return "prompts";
+  if (g === "chat") return "chat";
+  return "settings";
+}
 
 function formatRelativeDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
@@ -55,21 +67,22 @@ function formatRelativeDate(dateStr: string | null | undefined): string {
   return `${Math.floor(diffMonths / 12)} year(s) ago`;
 }
 
-function groupFields(fields: ManagedAgentFieldSpec[]): { group: string | null; fields: ManagedAgentFieldSpec[] }[] {
-  const groups: Map<string | null, ManagedAgentFieldSpec[]> = new Map();
-  for (const field of fields) {
-    if (field.ui?.hide) continue;
-    const key = field.ui?.group ?? null;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(field);
-  }
-  const result: { group: string | null; fields: ManagedAgentFieldSpec[] }[] = [];
-  if (groups.has(null)) result.push({ group: null, fields: groups.get(null)! });
-  for (const [key, fields] of groups) {
-    if (key !== null) result.push({ group: key, fields });
-  }
-  return result;
-}
+type AgentFormBodyProps = {
+  mode: "create" | "edit";
+  templates: AgentTemplateSummary[];
+  templateId: string;
+  displayName: string;
+  description: string;
+  tuningFieldValues: Record<string, unknown>;
+  selectedMcpServerIds: string[] | null;
+  isSubmitting: boolean;
+  submitAttempted: boolean;
+  editInstance?: ManagedAgentInstanceSummary;
+  onDisplayNameChange: (v: string) => void;
+  onDescriptionChange: (v: string) => void;
+  onTuningChange: (key: string, value: unknown) => void;
+  onMcpSelectionChange: (ids: string[]) => void;
+};
 
 export function AgentFormBody({
   mode,
@@ -78,51 +91,68 @@ export function AgentFormBody({
   displayName,
   description,
   tuningFieldValues,
+  selectedMcpServerIds,
   isSubmitting,
   submitAttempted,
   editInstance,
-  onTemplateSelect,
   onDisplayNameChange,
   onDescriptionChange,
   onTuningChange,
+  onMcpSelectionChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
+  const [activeSection, setActiveSection] = useState<SectionKey>("settings");
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
-  const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
-  const fieldGroups = groupFields(visibleFields);
-  const mcpServers = selectedTemplate?.mcp_servers ?? [];
   const templateMissing = mode === "edit" && !selectedTemplate;
+  const mcpServers = selectedTemplate?.mcp_servers ?? [];
+
+  const visibleFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => !f.ui?.hide);
+  const promptFields = visibleFields.filter((f) => routeField(f) === "prompts");
+  const settingsFields = visibleFields.filter((f) => routeField(f) === "settings");
+  const chatFields = visibleFields.filter((f) => routeField(f) === "chat");
+
+  const fieldsBySection: Record<"prompts" | "settings" | "chat", ManagedAgentFieldSpec[]> = {
+    prompts: promptFields,
+    settings: settingsFields,
+    chat: chatFields,
+  };
+
+  const visibleSections = SECTION_ORDER.filter((s) => {
+    if (s === "tools") return mcpServers.length > 0;
+    return fieldsBySection[s].length > 0;
+  });
+
+  const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "settings");
+
+  const defaultSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
 
   const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
 
+  const renderFieldList = (fields: ManagedAgentFieldSpec[]) =>
+    fields.map((field) => (
+      <TuningFieldRenderer
+        key={field.key}
+        field={field}
+        value={tuningFieldValues[field.key]}
+        onChange={onTuningChange}
+        disabled={isSubmitting}
+        error={
+          submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
+        }
+      />
+    ));
+
   return (
     <div className={styles.body}>
-      {mode === "create" ? (
-        <section className={styles.section}>
-          <h3 className={styles.sectionHeader}>{t("rework.teams.formAgent.templateSection")}</h3>
-          <TemplateBrowser
-            templates={templates}
-            selectedId={templateId}
-            onSelect={onTemplateSelect}
-          />
-        </section>
-      ) : (
+      {selectedTemplate ? (
         <div className={styles.contextBar}>
-          <span className={styles.contextName}>
-            {selectedTemplate?.display_name ?? templateId}
-          </span>
-          {selectedTemplate?.category && (
-            <span className={styles.contextCategory}>{selectedTemplate.category}</span>
-          )}
+          <span className={styles.contextName}>{selectedTemplate.display_name}</span>
+          {selectedTemplate.category && <span className={styles.contextCategory}>{selectedTemplate.category}</span>}
         </div>
-      )}
-
-      {templateMissing && (
-        <p className={styles.templateUnavailableNotice}>
-          {t("rework.teams.formAgent.templateUnavailable")}
-        </p>
-      )}
+      ) : templateMissing ? (
+        <p className={styles.templateUnavailableNotice}>{t("rework.teams.formAgent.templateUnavailable")}</p>
+      ) : null}
 
       {!templateMissing && (
         <>
@@ -144,47 +174,53 @@ export function AgentFormBody({
             disabled={isSubmitting}
           />
 
-          {fieldGroups.length > 0 && (
-            <section className={styles.section}>
-              <h3 className={styles.sectionHeader}>{t("rework.teams.formAgent.tunableFields")}</h3>
-              {fieldGroups.map(({ group, fields }) => (
-                <div key={group ?? "__ungrouped"} className={styles.fieldGroup}>
-                  {group && <p className={styles.groupLabel}>{group}</p>}
-                  {fields.map((field) => (
-                    <TuningFieldRenderer
-                      key={field.key}
-                      field={field}
-                      value={tuningFieldValues[field.key]}
-                      onChange={onTuningChange}
-                      disabled={isSubmitting}
-                      error={
-                        submitAttempted && field.required && !tuningFieldValues[field.key]
-                          ? `${field.title} is required`
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              ))}
-            </section>
-          )}
+          {visibleSections.length > 0 && (
+            <>
+              <div className={styles.tabStrip}>
+                <ButtonGroup
+                  key={visibleSections.join(",")}
+                  size="small"
+                  color="secondary"
+                  defaultSelectedIndex={defaultSectionIndex}
+                  items={visibleSections.map((s) => ({
+                    label: SECTION_LABELS[s],
+                    icon: SECTION_ICONS[s],
+                    onClick: () => setActiveSection(s),
+                  }))}
+                />
+              </div>
 
-          {mcpServers.length > 0 && (
-            <section className={styles.section}>
-              <h3 className={styles.sectionHeader}>{t("rework.teams.formAgent.mcpTools")}</h3>
-              <ul className={styles.mcpList}>
-                {mcpServers.map((server) => (
-                  <li key={server.id} className={styles.mcpItem}>
-                    <span className={styles.mcpName}>
-                      {t(server.display_name || server.id, { defaultValue: server.id })}
-                    </span>
-                    {server.require_tools && server.require_tools.length > 0 && (
-                      <span className={styles.mcpTools}>{server.require_tools.join(", ")}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
+              <div className={styles.sectionContent}>
+                {effectiveSection === "prompts" && renderFieldList(promptFields)}
+                {effectiveSection === "settings" && renderFieldList(settingsFields)}
+                {effectiveSection === "chat" && renderFieldList(chatFields)}
+                {effectiveSection === "tools" && (
+                  <ul className={styles.mcpList}>
+                    {mcpServers.map((server) => {
+                      const checked = selectedMcpServerIds === null || selectedMcpServerIds.includes(server.id);
+                      const toggle = () => {
+                        const current = selectedMcpServerIds ?? mcpServers.map((s) => s.id);
+                        const next = checked
+                          ? current.filter((id) => id !== server.id)
+                          : [...current.filter((id) => id !== server.id), server.id];
+                        onMcpSelectionChange(next);
+                      };
+                      return (
+                        <McpServerCard
+                          key={server.id}
+                          server={server}
+                          checked={checked}
+                          disabled={isSubmitting}
+                          tuningFieldValues={tuningFieldValues}
+                          onToggle={toggle}
+                          onTuningChange={onTuningChange}
+                        />
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
           )}
         </>
       )}

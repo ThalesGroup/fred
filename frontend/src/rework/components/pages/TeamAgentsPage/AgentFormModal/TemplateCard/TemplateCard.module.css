@@ -2,14 +2,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+  cursor: pointer;
   border: 2px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-m);
   width: 100%;
   text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background-color 0.15s;
 }
 
 .card:hover:not([data-unavailable="true"]):not([data-selected="true"]) {
@@ -46,9 +48,9 @@
 
 .description {
   display: -webkit-box;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }

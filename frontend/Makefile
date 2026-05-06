@@ -70,7 +70,7 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 
 .PHONY: run
 run: check-node node_modules ## Run frontend locally (Vite proxy handles backend routing)
-	npm run dev
+	VITE_DEV_USERNAME=$(shell whoami) npm run dev
 
 ##@ Dev
 

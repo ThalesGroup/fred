@@ -143,6 +143,28 @@ Wires the control-plane form with actual tunable fields for all three production
 
 **Done (2026-05-04)**: `prompts.system` value now applied in `_apply_runtime_tuning`. Fix required two changes: (1) `AgentTuning` in fred-sdk gained `values: dict[str, Any]` so Pydantic no longer silently drops the field during control-plane response deserialization; (2) `_apply_runtime_tuning` reads `tuning.values.get("prompts.system")` and, when non-blank and the definition is a `ReActAgentDefinition`, overlays `system_prompt_template` in the `model_copy` update. Two offline unit tests added to `test_agent_app.py`. All 127 fred-runtime + 75 fred-sdk tests pass.
 
+**Done (2026-05-06)**: documentation and RFCs now freeze the managed-agent tuning taxonomy explicitly:
+
+- `prompts.*` = author instructions
+- `settings.*` = typed runtime/business behavior
+- `chat_options.*` = frontend chat affordances
+- MCP/model selection stays out of generic tuning fields and belongs in dedicated typed contract fields
+
+Updated docs:
+
+- `docs/platform/V2_AGENT_CREATION.md`
+- `docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`
+- `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`
+- `docs/backlog/BACKLOG.md` §3d design principles
+
+**Done (2026-05-06)**: `control-plane-backend` now validates known managed-agent tuning values against the frozen field contract before persistence:
+
+- shared validator in `product/service.py`
+- reused by both enroll and update flows
+- known values now enforce declared type / enum / min/max / pattern constraints
+- unknown keys remain ignored for compatibility
+- offline coverage added for create and patch failure cases
+
 ---
 
 ## Phase 6A — Chat UI Architecture (Félix) · Starts after S1 + F1
@@ -209,18 +231,14 @@ Full audit of all rework frontend code for design-system compliance.
 
 ---
 
-## F2 — PATCH Session Endpoint (Florian) · Before Phase 6C
+## F2 — PATCH Session Endpoint · Done 2026-05-06
 
 **Ref**: `docs/backlog/BACKLOG.md` §6.4.D, `docs/backlog/CHAT-UI-BACKLOG.md` §3
 
-Needed for inline session title editing in Phase 6C.
-
-- [ ] `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` — body: `{ title?, status? }`
-- [ ] Authorization: same team membership check as POST
-- [ ] `make code-quality && make test` in `control-plane-backend`
-- [ ] Regenerate `controlPlaneOpenApi.ts`
-
-Can be implemented in parallel with Phase 6A/6B (no frontend dependency yet).
+- [x] `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` — body: `{ title?, updated_at? }` (`status` deferred — no column exists yet)
+- [x] Authorization: same team membership check as POST
+- [x] `make code-quality && make test` in `control-plane-backend` (91 tests pass)
+- [x] Regenerate `controlPlaneOpenApi.ts`
 
 ---
 
@@ -312,6 +330,31 @@ Completed in one session — no outstanding items.
 
 - [x] `fred.test.assistant` graph agent (no LLM): exercises `echo`, `hitl choice`, `hitl text`,
   `trace`+sources, `error`, `long` scenarios; registered in `apps/fred-agents` registry
+- [x] `fred.test.assistant` expanded into the managed-agent tuning and routing probe:
+  `prompts.system`, `prompts.planning`, `prompts.routing`, `settings.verbose`,
+  `settings.delay_ms`, `chat_options.attach_files`,
+  `chat_options.libraries_selection`; optional `model routing` /
+  `model planning` scenarios prove graph operation-aware routing without making
+  the default UI-validation path depend on an LLM (2026-05-06)
+- [x] `tuning_values` moved from `GraphAgentDefinition` to base `AgentDefinition` — all agent
+  families (ReAct, Graph, Deep, Proxy) now carry typed tuning values (2026-05-06)
+- [x] `TuningScalar` + `TuningValue` typed aliases replace all `Dict[str, Any]` in the
+  tuning surface; `FieldSpec.default` and `AgentTuning.values` are now strongly typed (2026-05-06)
+- [x] `inline_tuning: dict[str, TuningValue] | None` added to `RuntimeExecuteRequest` and
+  internal `_AgentExecuteRequest`; direct-template path in `_resolve_agent_instance` applies
+  inline overrides via `_apply_runtime_tuning` — enables CLI to inject session-local tuning
+  without a managed agent instance (2026-05-06)
+- [x] ReAct silent-drop gap closed: non-`prompts.system` tuning values now reach
+  `render_prompt_template` via `extra_tokens` (keys dot-to-underscore transformed) (2026-05-06)
+- [x] CLI `/inspect` — fetches `GET /agents/templates`, renders grouped FieldSpec table
+  (kind, description, tags, field key/type/default/range, MCP servers) with color (2026-05-06)
+- [x] CLI `/run <scenario>` — sends scenario keyword as message; tab-completes the 8
+  `fred.test.assistant` scenario keywords (`echo`, `error`, `hitl choice`, `hitl text`,
+  `long`, `model planning`, `model routing`, `trace`) (2026-05-06)
+- [x] CLI `/tune key=value` + `/tuning` — session-local tuning overrides stored in
+  `current_inline_tuning`; prompt badge `~N` in yellow when overrides are active;
+  values forwarded as `inline_tuning` on every execute/stream request (2026-05-06)
+- [x] `GET /agents/templates` added to `AgentPodClient.list_templates()` (2026-05-06)
 - [x] History schema: `Channel.hitl_request` / `Channel.hitl_response`, `HitlRequestPart`,
   `HitlResponsePart`, `make_hitl_request` / `make_hitl_response` factories; sources extracted
   from `final` payload and stored in `ChatMetadata.sources` (see BACKLOG.md §6.4.F)
@@ -370,6 +413,54 @@ AFTER 6B + F2                                                               │
 - [ ] Phase F.2 — `fix/remote-agent-runtime-execute-contract`: make remote invocation use the public `RuntimeExecuteRequest` shape
 - [ ] Phase F.3 — `refactor/local-agent-execute-projection`: remove duplicate local `_AgentExecuteRequest` construction and keep one projection path
 - [ ] Phase F.4 — `fix/team-memory-history-cap`: enforce `conversation_history_max_turns` on TeamAgent append
+
+---
+
+## C1 — Pod Catalog Exposure + Agent Instance Configuration Contract (Dimitri) · Blocks form UI
+
+**Ref**: `docs/backlog/BACKLOG.md` §3d
+
+**Why**: Team admins must be able to select which MCP tools to activate and
+which model profile to use when creating or editing an agent. Currently the
+pod catalogs (`mcp_catalog.yaml`, `models_catalog.yaml`) are private to the
+runtime — the control-plane and frontend have zero visibility. Without this
+contract, the form can only show static read-only lists and cannot write
+tool or model selections back to the instance.
+
+Additionally: when the pod is redeployed with a changed catalog, any enrolled
+instance that referenced a now-missing server or profile must surface a clear
+error to the admin ("delete and recreate") rather than failing silently at
+execution time.
+
+**Sequence**: backend contract first (fred-runtime endpoints → control-plane
+schemas and service → OpenAPI regen), frontend form last.
+
+**Tasks**:
+
+*fred-runtime (C1-A):*
+- [x] `GET /agents/mcp-catalog` → `McpCatalogResponse` (all catalog servers, no URLs/credentials)
+- [ ] `GET /agents/model-profiles` → `ModelProfilesResponse` (all profiles, `is_default` from `default_by_capability`) — deferred
+- [x] Extend `_apply_runtime_tuning`: filter MCP servers to `selected_mcp_server_ids` (`model_profile_id` deferred)
+- [x] `make code-quality && make test` in `fred-runtime`
+
+*control-plane-backend (C1-B):*
+- [ ] `ManagedModelProfileRef` in `config/models.py` — deferred
+- [ ] `AgentTemplateSummary.available_model_profiles` populated from pod fan-out — deferred
+- [x] `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`: add `mcp_server_ids`; reject unknown IDs with 422 (`model_profile_id` deferred)
+- [x] `ManagedAgentTuning`: add `selected_mcp_server_ids` (`model_profile_id` deferred)
+- [x] `ManagedAgentInstanceSummary`: add `runtime_status`, `catalog_warnings`
+- [x] Enrollment service: validate IDs against live catalog, store selection
+- [x] Drift detection in `list_managed_agent_instances`: compare stored IDs vs live catalog; `runtime_status = "unavailable"` when pod unreachable
+- [x] Regenerate `controlPlaneOpenApi.ts`
+- [x] `make code-quality && make test` in `control-plane-backend`
+
+*frontend (C1-C — after C1-B merged):*
+- [x] `AgentFormBody`: MCP checkbox multi-select from `mcp_servers` on the template
+- [ ] `AgentFormBody`: model profile picker from `available_model_profiles` — deferred
+- [x] Wire `mcp_server_ids` into `AgentFormPayload` and create/update mutations (`model_profile_id` deferred)
+- [x] `AgentCard`: "pod unreachable" badge for `runtime_status = "unavailable"`
+- [x] `AgentCard`: MCP drift warning banner when `catalog_warnings` non-empty
+- [ ] `make code-quality` in `frontend` — no lint script; `tsc --noEmit` + `npm run build` both pass
 
 ---
 

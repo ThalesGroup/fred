@@ -188,6 +188,7 @@ class AgentInstanceStore:
         *,
         display_name: str | None = None,
         description: str | None = None,
+        enabled: bool | None = None,
         tuning: ManagedAgentTuning | None = None,
         session: AsyncSession | None = None,
     ) -> AgentInstanceRecord | None:
@@ -212,6 +213,8 @@ class AgentInstanceStore:
                 row.display_name = display_name
             if description is not None:
                 row.description = description
+            if enabled is not None:
+                row.enabled = enabled
             if tuning is not None:
                 row.tuning_json = tuning.model_dump_json()
             row.updated_at = _utcnow()

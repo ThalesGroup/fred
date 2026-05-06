@@ -65,6 +65,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .context import ConversationTurn
+from .models import TuningValue
 
 
 class FrozenModel(BaseModel):
@@ -423,6 +424,16 @@ class RuntimeExecuteRequest(BaseModel):
             "Used to seed memory in sub-agents invoked via context.invoke_agent(). "
             "Graph sub-agents receive history through build_turn_state; "
             "ReAct sub-agents receive it as a leading SystemMessage."
+        ),
+    )
+
+    # Dev / CLI — inline tuning for direct template execution
+    inline_tuning: dict[str, TuningValue] | None = Field(
+        default=None,
+        description=(
+            "Optional tuning value overrides for direct template execution (agent_id mode). "
+            "Ignored when agent_instance_id is set. "
+            "Intended for CLI and dev tooling — not for production frontend calls."
         ),
     )
 

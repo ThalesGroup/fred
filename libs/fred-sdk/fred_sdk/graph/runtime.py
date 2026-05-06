@@ -41,6 +41,7 @@ from ..contracts.context import (
     ToolInvocationResult,
     UiPart,
 )
+from ..contracts.models import TuningValue
 from ..contracts.runtime import HumanInputRequest, RuntimeServices
 
 
@@ -82,6 +83,30 @@ class GraphNodeContext(Protocol):
 
     @property
     def model(self) -> BaseChatModel | None:
+        raise NotImplementedError()
+
+    @property
+    def tuning_values(self) -> dict[str, TuningValue]:
+        """
+        Admin-set tuning field values for the current managed agent instance.
+
+        Why this exists:
+        - graph steps need to read values stored by the team admin at enrollment
+          time (system prompt, planning instructions, feature flags, thresholds)
+          without reaching into runtime internals
+
+        How to use it:
+        - call inside any node handler to read a specific field value
+        - always provide a typed default so the step degrades gracefully when
+          the admin left the field blank
+
+        Example:
+        ```python
+        system_prompt = context.tuning_values.get("prompts.system", "")
+        verbose = context.tuning_values.get("settings.verbose", False)
+        delay_ms = int(context.tuning_values.get("settings.delay_ms", 0))
+        ```
+        """
         raise NotImplementedError()
 
     def emit_status(self, status: str, detail: str | None = None) -> None:

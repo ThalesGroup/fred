@@ -142,6 +142,38 @@ Do not expose runtime pod URLs or Kubernetes topology to the frontend.
 - `key`, `type`, `title`, `description`, `required`, `default`, `enum`, `min`, `max`, `pattern`, `item_type`
 - `ui: ManagedAgentUiHints` — `hide`, `group`, `multiline`, `textarea`, `max_lines`, `placeholder`, `markdown`
 
+#### Managed tuning taxonomy
+
+`ManagedAgentFieldSpec.key` values are not one undifferentiated bag.
+
+For the first `swift` release, treat them as three distinct families:
+
+- `prompts.*`
+  - author-defined instructions
+  - `prompts.system` is the broad per-instance system prompt override
+  - `prompts.<step_or_operation>` is a narrower phase-specific prompt
+- `settings.*`
+  - typed business or runtime behavior knobs
+  - thresholds, limits, booleans, delays, verbosity flags
+- `chat_options.*`
+  - frontend-only chat configuration hints
+  - whether the UI exposes attachments, library pickers, and similar affordances
+
+This split is intentional:
+
+- the control plane remains a pure proxy for field descriptors and stored values
+- the frontend may render all three families
+- the runtime should only interpret the families that belong to execution
+- on create/update, control-plane validates known values against the declared
+  field contract (type, enum, min/max, pattern) before persisting them
+
+Do not model platform-owned selectors as generic tuning fields. In particular:
+
+- MCP server selection belongs in typed managed-agent contract fields such as
+  `selected_mcp_server_ids`
+- model selection belongs in typed managed-agent contract fields such as
+  `model_profile_id` and the model-routing policy surface
+
 **`ManagedMcpServerRef`** — MCP tool reference in a template:
 
 - `id` — logical server id
@@ -161,9 +193,27 @@ It exists so control-plane can resolve:
 
 Use it for runtime resolution and backend validation only.
 
-**Field value forwarding:** `ManagedAgentTuning.values` (the user-set field values dict) is forwarded verbatim as `AgentTuning.values` in the runtime binding response. The runtime applies known field keys in `_apply_runtime_tuning`:
+**Field value forwarding:** `ManagedAgentTuning.values` (the user-set field values
+dict) is forwarded verbatim as `AgentTuning.values` in the runtime binding response.
 
-- `prompts.system` → `ReActAgentDefinition.system_prompt_template` (blank value = keep agent default)
+Execution semantics:
+
+- all known values are forwarded for all agent types so the runtime or frontend
+  can read them through the normal typed surfaces
+- `prompts.system` is special:
+  - ReAct/Deep runtime also mirrors non-blank `prompts.system` onto
+    `ReActAgentDefinition.system_prompt_template`
+  - blank value means "keep the author-defined default prompt"
+- Graph agents read prompt and setting values through `context.tuning_values`
+- `chat_options.*` values are stored with the instance and are primarily consumed
+  by the frontend chat surface, not by runtime orchestration
+
+This contract is intentionally narrow:
+
+- prompt fields describe instructions
+- settings fields describe agent behavior
+- chat-option fields describe UI affordances
+- MCP/model selection stays in dedicated typed product/runtime contracts
 
 ### 3.4 Managed agent instance writes
 

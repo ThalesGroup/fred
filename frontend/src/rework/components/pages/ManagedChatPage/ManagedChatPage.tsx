@@ -23,9 +23,11 @@ import { ChatInputBar } from "@shared/molecules/ChatInputBar/ChatInputBar";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
+import { AgentOptionsPanel } from "@shared/organisms/AgentOptionsPanel/AgentOptionsPanel";
 import { useToast } from "../../../../components/ToastProvider";
 import { ChatSseCallbacks, useChatSse } from "../../../../hooks/useChatSse";
 import type { AwaitingHumanEvent, ChatMessage, VectorSearchHit } from "../../../../slices/agentic/agenticOpenApi";
+import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
@@ -148,6 +150,11 @@ export default function ManagedChatPage() {
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
 
+  // Runtime context options — held in local state, passed to send() on each turn.
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
+  const [searchPolicy, setSearchPolicy] = useState<SearchPolicyName>("hybrid");
+  const [ragScope, setRagScope] = useState<"corpus_only" | "hybrid" | "general_only">("hybrid");
+
   // Agent display name — never show the raw agent_instance_id to the user.
   const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
     { teamId: teamId ?? "" },
@@ -219,11 +226,15 @@ export default function ManagedChatPage() {
       bindSessionId(sid);
       registerSession({
         teamId,
-        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId },
+        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: text.slice(0, 120) },
       }).catch(() => {});
     }
 
-    send(text, sid);
+    send(text, sid, {
+      selected_document_libraries_ids: selectedLibraryIds.length > 0 ? selectedLibraryIds : null,
+      search_policy: searchPolicy,
+      search_rag_scope: ragScope,
+    });
   };
 
   const handleHitlAnswer = (answer: string | boolean, freeText?: string) => {
@@ -296,8 +307,19 @@ export default function ManagedChatPage() {
           />
         </div>
 
-        {/* Right panel slot — Phase 6C (AgentOptionsPanel) mounts here */}
-        {rightPanelOpen && <div className={styles.rightPanel} />}
+        {rightPanelOpen && (
+          <div className={styles.rightPanel}>
+            <AgentOptionsPanel
+              teamId={teamId}
+              selectedLibraryIds={selectedLibraryIds}
+              onLibraryChange={setSelectedLibraryIds}
+              searchPolicy={searchPolicy}
+              onSearchPolicyChange={setSearchPolicy}
+              ragScope={ragScope}
+              onRagScopeChange={setRagScope}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

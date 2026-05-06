@@ -42,6 +42,7 @@ from fred_sdk.contracts.models import (
     GraphAgentDefinition,
     GraphConditionalDefinition,
     GraphDefinition,
+    TuningValue,
 )
 from fred_sdk.contracts.runtime import (
     AgentRuntime,
@@ -112,6 +113,7 @@ class _GraphNodeExecutionContext:
     node_id: str
     allowed_tool_refs: frozenset[str]
     runtime_tools: Mapping[str, BaseTool]
+    tuning_values: dict[str, TuningValue]
     _events: list[RuntimeEvent] = field(default_factory=list)
     _resume_payload: object | None = None
     # Live event sink injected by the executor when streaming is active.
@@ -981,6 +983,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 node_id=node_id,
                 allowed_tool_refs=self._allowed_tool_refs,
                 runtime_tools=self._runtime_tools,
+                tuning_values=self._definition.tuning_values,
                 _resume_payload=resume_payload,
                 # Inject the live-emit sink so invoke_model can forward token
                 # deltas directly to the queue without buffering.
@@ -1186,6 +1189,7 @@ class _DeterministicGraphExecutor(Executor[BaseModel, BaseModel]):
                 node_id=member_id,
                 allowed_tool_refs=self._allowed_tool_refs,
                 runtime_tools=self._runtime_tools,
+                tuning_values=self._definition.tuning_values,
                 _live_emit=None,
             )
             node_span = _start_runtime_span(

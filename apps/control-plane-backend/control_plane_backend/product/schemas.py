@@ -91,6 +91,27 @@ class ManagedAgentInstanceSummary(BaseModel):
             "Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised."
         ),
     )
+    selected_mcp_server_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Admin-chosen MCP server IDs active for this instance. "
+            "Empty list means all servers declared by the template are active."
+        ),
+    )
+    runtime_status: Literal["ok", "unavailable"] = Field(
+        default="ok",
+        description=(
+            "ok when the pod is reachable at listing time; "
+            "unavailable when the pod cannot be contacted."
+        ),
+    )
+    catalog_warnings: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Non-empty when stored MCP server IDs are absent from the live pod catalog. "
+            "Admin must delete and recreate the instance to resolve."
+        ),
+    )
 
 
 class ExecutionPreparation(BaseModel):
@@ -155,14 +176,25 @@ class CreateSessionRequest(BaseModel):
 
 
 class UpdateSessionRequest(BaseModel):
-    """Refresh control-plane-owned session metadata after a managed turn."""
+    """Update control-plane-owned session metadata.
 
-    updated_at: datetime = Field(
-        ...,
+    All fields are optional — send only what needs changing.
+    Typical callers:
+    - frontend after a completed turn: ``{ "updated_at": "<iso>" }``
+    - user renames a session: ``{ "title": "My analysis" }``
+    """
+
+    updated_at: datetime | None = Field(
+        default=None,
         description=(
             "Frontend-observed last activity timestamp. Used only for "
             "control-plane session metadata freshness, not runtime message history."
         ),
+    )
+    title: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Human-readable session title shown in the sidebar.",
     )
 
 
@@ -184,7 +216,16 @@ class CreateAgentInstanceRequest(BaseModel):
         description=(
             "Optional initial values for the template's tunable fields. "
             "Keys must match ManagedAgentFieldSpec.key values from the template. "
-            "Unknown keys are silently dropped."
+            "Unknown keys are ignored. Known values are validated against the "
+            "declared field type and constraints."
+        ),
+    )
+    mcp_server_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional subset of MCP server IDs to activate for this instance. "
+            "None means all servers declared by the template are active. "
+            "Unknown IDs are rejected with HTTP 422."
         ),
     )
 
@@ -194,13 +235,26 @@ class UpdateAgentInstanceRequest(BaseModel):
 
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=500)
+    status: Literal["enabled", "disabled"] | None = Field(
+        default=None,
+        description="Set to 'enabled' or 'disabled' to toggle the instance. None leaves the current status unchanged.",
+    )
     tuning_field_values: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Replaces the stored field values for this instance. "
             "Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. "
-            "Unknown keys are silently dropped. "
+            "Unknown keys are ignored. Known values are validated against the "
+            "declared field type and constraints. "
             "Pass null to leave existing values unchanged."
+        ),
+    )
+    mcp_server_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Replaces the active MCP server selection for this instance. "
+            "None means leave the existing selection unchanged. "
+            "Unknown IDs (not in the instance's declared mcp_servers) are rejected with 422."
         ),
     )
 

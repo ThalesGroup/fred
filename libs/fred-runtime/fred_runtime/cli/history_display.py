@@ -312,6 +312,7 @@ def run_single_turn(
     stream: bool,
     color_enabled: bool,
     resume_payload: Any = None,
+    inline_tuning: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, Any] | None]:
     """
     Execute one prompt and print the most useful runtime output.
@@ -327,6 +328,7 @@ def run_single_turn(
             user_id=user_id,
             team_id=team_id,
             resume_payload=resume_payload,
+            inline_tuning=inline_tuning,
         )
         if "error" in payload:
             print(
@@ -362,6 +364,7 @@ def run_single_turn(
         user_id=user_id,
         team_id=team_id,
         resume_payload=resume_payload,
+        inline_tuning=inline_tuning,
     ):
         if verbose:
             print(json.dumps(event, ensure_ascii=False))

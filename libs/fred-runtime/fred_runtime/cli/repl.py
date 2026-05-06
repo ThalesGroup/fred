@@ -33,7 +33,10 @@ from .repl_helpers import (
     execution_mode_label,
     fmt_bytes,
     parse_mode_command,
+    parse_tuning_value,
     print_help,
+    print_inspect,
+    print_tuning_table,
 )
 
 
@@ -109,11 +112,21 @@ def run_interactive_chat(
     current_session_id = session_id
     current_mode: ExecutionMode = mode
     current_team_id = team_id
+    current_inline_tuning: dict[str, Any] = {}
     while True:
         try:
+            tuning_badge = (
+                colorize(
+                    f" ~{len(current_inline_tuning)}",
+                    color=ANSI_YELLOW,
+                    enabled=color_enabled,
+                )
+                if current_inline_tuning
+                else ""
+            )
             prompt = (
                 f"{colorize(current_agent, color=ANSI_CYAN, enabled=color_enabled, bold=True)}"
-                "> "
+                f"{tuning_badge}> "
             )
             message = input(prompt).strip()
         except EOFError:
@@ -1161,6 +1174,87 @@ def run_interactive_chat(
         if message in {"/quit", "/exit"}:
             return 0
 
+        # ── /inspect ───────────────────────────────────────────────────────
+        if message == "/inspect":
+            try:
+                templates = client.list_templates()
+            except Exception as exc:
+                print(
+                    colorize(
+                        f"  Could not load templates: {exc}",
+                        color=ANSI_RED,
+                        enabled=color_enabled,
+                    )
+                )
+                continue
+            print_inspect(templates, current_agent, color_enabled=color_enabled)
+            continue
+
+        # ── /run <scenario> ────────────────────────────────────────────────
+        if message.startswith("/run"):
+            scenario = message.removeprefix("/run").strip()
+            if not scenario:
+                print(
+                    colorize(
+                        "  Usage: /run <scenario>  (tab-complete for available scenarios)",
+                        color=ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                continue
+            message = scenario
+
+        # ── /tuning / /tune ────────────────────────────────────────────────
+        if message == "/tuning":
+            print_tuning_table(current_inline_tuning, color_enabled=color_enabled)
+            continue
+        if message.startswith("/tune"):
+            arg = message.removeprefix("/tune").strip()
+            if not arg:
+                print_tuning_table(current_inline_tuning, color_enabled=color_enabled)
+                continue
+            if "=" not in arg:
+                print(
+                    colorize(
+                        "  Usage: /tune key=value  (clear with key=)",
+                        color=ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+                continue
+            key, _, raw_val = arg.partition("=")
+            key = key.strip()
+            if not key:
+                print(
+                    colorize(
+                        "  Key cannot be empty.",
+                        color=ANSI_YELLOW,
+                        enabled=color_enabled,
+                    )
+                )
+                continue
+            if not raw_val:
+                current_inline_tuning.pop(key, None)
+                print(
+                    colorize(
+                        f"  Cleared tuning override for {key!r}.",
+                        color=ANSI_DIM,
+                        enabled=color_enabled,
+                    )
+                )
+            else:
+                value = parse_tuning_value(raw_val)
+                current_inline_tuning[key] = value
+                val_repr = repr(value) if not isinstance(value, str) else f'"{value}"'
+                print(
+                    colorize(
+                        f"  Set {key} = {val_repr}",
+                        color=ANSI_GREEN,
+                        enabled=color_enabled,
+                    )
+                )
+            continue
+
         if message.startswith("/"):
             bare = message.split()[0]
             _USAGE_HINTS: dict[str, str] = {
@@ -1199,6 +1293,7 @@ def run_interactive_chat(
                 verbose=verbose,
                 stream=(current_mode == "stream"),
                 color_enabled=color_enabled,
+                inline_tuning=current_inline_tuning or None,
             )
             while hitl is not None:
                 req = hitl.get("request") or {}
@@ -1241,6 +1336,7 @@ def run_interactive_chat(
                     stream=(current_mode == "stream"),
                     color_enabled=color_enabled,
                     resume_payload=resume_value,
+                    inline_tuning=current_inline_tuning or None,
                 )
         if exit_code != 0:
             print("The request failed. Use /help for commands or try another agent.")

@@ -101,6 +101,7 @@ export default function TeamAgentsPage() {
             Object.keys(payload.tuningFieldValues).length > 0
               ? payload.tuningFieldValues
               : undefined,
+          mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} created` });
@@ -128,10 +129,31 @@ export default function TeamAgentsPage() {
             Object.keys(payload.tuningFieldValues).length > 0
               ? payload.tuningFieldValues
               : undefined,
+          mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} updated` });
       setEditingInstance(null);
+      await refetchInstances();
+    } catch (error: unknown) {
+      const err = error as { data?: { detail?: string }; message?: string };
+      showError({
+        summary: `Failed to update ${agentsNicknameSingular.toLowerCase()}`,
+        detail: err?.data?.detail || err?.message || String(error),
+      });
+    }
+  };
+
+  const handleToggleEnabled = async (instance: ManagedAgentInstanceSummary) => {
+    if (!teamId) return;
+    const newStatus = instance.status === "enabled" ? "disabled" : "enabled";
+    try {
+      await patchManagedInstance({
+        teamId,
+        agentInstanceId: instance.agent_instance_id,
+        updateAgentInstanceRequest: { status: newStatus },
+      }).unwrap();
+      showSuccess({ summary: `${agentsNicknameSingular} ${newStatus}` });
       await refetchInstances();
     } catch (error: unknown) {
       const err = error as { data?: { detail?: string }; message?: string };
@@ -155,6 +177,7 @@ export default function TeamAgentsPage() {
             agentInstanceId: instance.agent_instance_id,
           }).unwrap();
           showSuccess({ summary: `${agentsNicknameSingular} deleted` });
+          setEditingInstance(null);
           await refetchInstances();
         } catch (error: unknown) {
           const err = error as { data?: { detail?: string }; message?: string };
@@ -223,7 +246,7 @@ export default function TeamAgentsPage() {
                 templateCategory={template?.category}
                 canManageAgents={canManageAgents}
                 onEdit={() => setEditingInstance(instance)}
-                onDelete={() => handleDelete(instance)}
+                onToggleEnabled={() => handleToggleEnabled(instance)}
               />
             );
 
@@ -256,6 +279,7 @@ export default function TeamAgentsPage() {
           setEditingInstance(null);
         }}
         onSubmit={editingInstance ? handleEdit : handleEnroll}
+        onDelete={editingInstance ? () => handleDelete(editingInstance) : undefined}
       />
     </div>
   );

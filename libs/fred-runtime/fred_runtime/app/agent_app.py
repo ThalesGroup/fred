@@ -84,6 +84,7 @@ from fred_sdk.contracts.models import (
     GraphAgentDefinition,
     MCPServerConfiguration,
     ReActAgentDefinition,
+    TuningValue,
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
@@ -754,6 +755,10 @@ class _AgentExecuteRequest(BaseModel):
         default=(),
         description="Prior conversation turns forwarded by the calling agent.",
     )
+    inline_tuning: dict[str, TuningValue] | None = Field(
+        default=None,
+        description="Optional inline tuning overrides. Honored only in agent_id (direct template) mode.",
+    )
 
     @model_validator(mode="after")
     def _require_message_or_resume(self) -> "_AgentExecuteRequest":
@@ -801,6 +806,7 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         checkpoint_id=r.checkpoint_id,
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
+        inline_tuning=r.inline_tuning,
     )
 
 
@@ -811,6 +817,18 @@ class _AgentTemplateSummary(BaseModel):
     kind: ExecutionCategory
     default_tuning: AgentTuning
     available_mcp_servers: list[MCPServerConfiguration] = Field(default_factory=list)
+
+
+class _McpCatalogEntry(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    enabled: bool
+    transport: str | None = None
+
+
+class _McpCatalogResponse(BaseModel):
+    servers: list[_McpCatalogEntry]
 
 
 class _ResolvedAgentInstance(BaseModel):
@@ -834,7 +852,7 @@ def _apply_runtime_tuning(
     definition: ReActAgentDefinition | GraphAgentDefinition, tuning: AgentTuning
 ) -> ReActAgentDefinition | GraphAgentDefinition:
     """
-    Overlay persisted business tuning onto one registered ReAct template.
+    Overlay persisted business tuning onto one registered agent template.
 
     Why this exists:
     - control-plane stores the full effective tuning for a managed agent
@@ -848,18 +866,29 @@ def _apply_runtime_tuning(
     - `definition = _apply_runtime_tuning(template_definition, resolution.tuning)`
     """
 
+    mcp_servers = tuning.mcp_servers
+    if tuning.selected_mcp_server_ids:
+        selected = frozenset(tuning.selected_mcp_server_ids)
+        mcp_servers = [s for s in mcp_servers if s.id in selected]
+
     update: dict[str, object] = {
         "role": tuning.role,
         "description": tuning.description,
         "tags": tuple(tuning.tags),
         "fields": tuple(field.model_copy(deep=True) for field in tuning.fields),
         "default_mcp_servers": tuple(
-            server.model_copy(deep=True) for server in tuning.mcp_servers
+            server.model_copy(deep=True) for server in mcp_servers
         ),
+        # Forward all values for all agent types so every execution surface can
+        # read admin-set tuning (graph steps via context.tuning_values, ReAct
+        # prompting via definition.tuning_values).
+        "tuning_values": dict(tuning.values),
     }
-    system_prompt = tuning.values.get("prompts.system")
-    if isinstance(system_prompt, str) and system_prompt.strip():
-        update["system_prompt_template"] = system_prompt
+    if isinstance(definition, ReActAgentDefinition):
+        # Also overlay system_prompt_template directly for ReAct runtime compatibility.
+        system_prompt = tuning.values.get("prompts.system")
+        if isinstance(system_prompt, str) and system_prompt.strip():
+            update["system_prompt_template"] = system_prompt
     return definition.model_copy(update=update)
 
 
@@ -921,6 +950,18 @@ async def _resolve_agent_instance(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Unknown agent_id: {request.agent_id!r}. "
                 f"Known agents: {list(registry.keys())}",
+            )
+        if request.inline_tuning:
+            definition = _apply_runtime_tuning(
+                definition,
+                AgentTuning(
+                    role=definition.role,
+                    description=definition.description,
+                    tags=list(definition.tags),
+                    fields=list(definition.fields),
+                    mcp_servers=list(definition.default_mcp_servers),
+                    values=request.inline_tuning,
+                ),
             )
         return _ResolvedExecutionTarget(
             definition=definition,
@@ -1752,11 +1793,24 @@ async def _iterate_runtime_event_payloads(
         user_groups=ctx.get("user_groups"),
         language=ctx.get("language"),
         access_token=access_token,
+        refresh_token=ctx.get("refresh_token"),
+        access_token_expires_at=ctx.get("access_token_expires_at"),
         trace_id=ctx.get("trace_id"),
         correlation_id=correlation_id,
         agent_instance_id=request.agent_instance_id,
         template_agent_id=definition.agent_id,
         execution_action=execution_action,
+        # Chat options forwarded from the frontend RuntimeContext.
+        # These were present in ctx but were silently dropped, causing
+        # ContextAwareTool and all KF search helpers to always use defaults.
+        selected_document_libraries_ids=ctx.get("selected_document_libraries_ids"),
+        selected_document_uids=ctx.get("selected_document_uids"),
+        selected_chat_context_ids=ctx.get("selected_chat_context_ids"),
+        search_policy=ctx.get("search_policy"),
+        search_rag_scope=ctx.get("search_rag_scope"),
+        include_session_scope=ctx.get("include_session_scope"),
+        include_corpus_scope=ctx.get("include_corpus_scope"),
+        deep_search=ctx.get("deep_search"),
     )
 
     binding = BoundRuntimeContext(
@@ -1979,6 +2033,40 @@ def _build_agent_router(
             )
             for definition in registry.values()
         ]
+
+    @router.get("/mcp-catalog")
+    async def get_mcp_catalog() -> _McpCatalogResponse:
+        """
+        Return the full MCP server catalog declared in mcp_catalog.yaml.
+
+        Why this endpoint exists:
+        - control-plane drift detection needs to compare stored instance
+          selections against the live pod catalog at listing time
+        - returns ALL servers (enabled and disabled) so the caller can
+          distinguish "configured but disabled" from "absent from catalog"
+
+        How to use it:
+        - call from control-plane agent-instance listing to populate
+          catalog_warnings when stored mcp_server_ids are no longer present
+
+        Example:
+        - `GET /fred/agents/v2/agents/mcp-catalog`
+        """
+        mcp_configuration = get_runtime_context().config.mcp_configuration
+        if mcp_configuration is None:
+            return _McpCatalogResponse(servers=[])
+        return _McpCatalogResponse(
+            servers=[
+                _McpCatalogEntry(
+                    id=srv.id,
+                    name=srv.name,
+                    description=srv.description,
+                    enabled=srv.enabled,
+                    transport=srv.transport,
+                )
+                for srv in mcp_configuration.servers
+            ]
+        )
 
     @router.get("/sessions", dependencies=_auth_deps)
     async def list_sessions(user_id: str) -> list[str]:

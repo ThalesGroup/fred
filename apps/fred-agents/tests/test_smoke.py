@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_runtime.app import agent_app as agent_app_module
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -72,6 +73,94 @@ class StaticChatModelFactory:
         return self.build(definition, binding)
 
 
+class RecordingStaticChatModelFactory(StaticChatModelFactory):
+    """
+    Test chat-model factory that records requested operation labels.
+
+    Why this helper exists:
+    - the graph test assistant now includes an optional model-probe scenario
+      that should exercise operation-aware routing without needing a live model
+
+    How to use it:
+    - construct with one deterministic fake model
+    - inspect `requested_operations` after the streamed turn completes
+
+    Example:
+    - `factory = RecordingStaticChatModelFactory(model)`
+    """
+
+    def __init__(self, model: ToolFriendlyFakeChatModel) -> None:
+        super().__init__(model)
+        self.requested_operations: list[str | None] = []
+
+    def build_for_operation(
+        self, *, definition, binding, purpose: str, operation: str | None
+    ):
+        self.requested_operations.append(operation)
+        return super().build_for_operation(
+            definition=definition,
+            binding=binding,
+            purpose=purpose,
+            operation=operation,
+        )
+
+
+def _build_offline_agents_app(monkeypatch, tmp_path, factory) -> FastAPI:
+    """
+    Build the fred-agents pod app with an offline MCP catalog and fake model factory.
+
+    Why this helper exists:
+    - the smoke tests need the same fully offline pod wiring multiple times
+      without duplicating environment and monkeypatch setup
+
+    How to use it:
+    - pass the pytest `monkeypatch`, a temporary directory, and a test chat
+      model factory
+    - returns the fully initialized FastAPI app
+
+    Example:
+    - `app = _build_offline_agents_app(monkeypatch, tmp_path, factory)`
+    """
+
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: factory,
+    )
+    config_file = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
+    offline_mcp_catalog = tmp_path / "mcp_catalog.yaml"
+    offline_mcp_catalog.write_text("version: v1\nservers: []\n", encoding="utf-8")
+    monkeypatch.setenv("CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(offline_mcp_catalog))
+
+    from fred_agents.main import create_app
+
+    return create_app()
+
+
+def _parse_sse_payloads(stream_text: str) -> list[dict[str, object]]:
+    """
+    Parse SSE `data:` lines from one streamed runtime response.
+
+    Why this helper exists:
+    - several smoke tests need the final runtime events without repeating the
+      same JSON extraction logic inline
+
+    How to use it:
+    - pass `response.text` from a streaming execute call
+    - returns the decoded JSON payloads in stream order
+
+    Example:
+    - `payloads = _parse_sse_payloads(stream_response.text)`
+    """
+
+    return [
+        json.loads(line.removeprefix("data: "))
+        for line in stream_text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+
 def test_fred_agents_pod_registers_and_streams_sentinel_offline(
     monkeypatch, tmp_path
 ) -> None:
@@ -94,20 +183,11 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
     model = ToolFriendlyFakeChatModel(
         responses=[AIMessage(content="Sentinel is ready.")]
     )
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
+    app = _build_offline_agents_app(
+        monkeypatch,
+        tmp_path,
+        StaticChatModelFactory(model),
     )
-    config_file = Path(__file__).resolve().parents[1] / "config" / "configuration.yaml"
-    offline_mcp_catalog = tmp_path / "mcp_catalog.yaml"
-    offline_mcp_catalog.write_text("version: v1\nservers: []\n", encoding="utf-8")
-    monkeypatch.setenv("CONFIG_FILE", str(config_file))
-    monkeypatch.setenv("FRED_MCP_CATALOG_FILE", str(offline_mcp_catalog))
-
-    from fred_agents.main import create_app
-
-    app = create_app()
 
     with TestClient(app) as client:
         assert client.get("/api/v1/agents").status_code == 404
@@ -125,6 +205,26 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         }
         assert "fred.github.sentinel" in template_ids
         assert "fred.github.rag_expert" in template_ids
+        assert "fred.test.assistant" in template_ids
+
+        test_assistant_template = next(
+            template
+            for template in templates_response.json()
+            if template["template_agent_id"] == "fred.test.assistant"
+        )
+        field_keys = {
+            field["key"]
+            for field in test_assistant_template["default_tuning"]["fields"]
+        }
+        assert {
+            "prompts.system",
+            "prompts.planning",
+            "prompts.routing",
+            "settings.verbose",
+            "settings.delay_ms",
+            "chat_options.attach_files",
+            "chat_options.libraries_selection",
+        }.issubset(field_keys)
 
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
@@ -137,12 +237,95 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         )
         assert stream_response.status_code == 200
 
-    payloads = [
-        json.loads(line.removeprefix("data: "))
-        for line in stream_response.text.splitlines()
-        if line.startswith("data: ")
-    ]
+    payloads = _parse_sse_payloads(stream_response.text)
     assert payloads
     assert not any("error" in payload for payload in payloads)
     assert payloads[-1]["kind"] == "final"
     assert payloads[-1]["content"] == "Sentinel is ready."
+
+
+def test_fred_test_assistant_echo_stays_off_model_routing_path(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Verify the no-LLM test-assistant scenarios do not request operation routing.
+
+    Why this test exists:
+    - the test assistant should remain safe for offline UI work even when the
+      pod has a model factory configured
+    - only the explicit model-probe scenario should touch operation-aware model
+      routing
+
+    How to use it:
+    - run via `make test` from the `fred-agents` project
+
+    Example:
+    - `pytest tests/test_smoke.py -q`
+    """
+
+    factory = RecordingStaticChatModelFactory(
+        ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+    )
+    app = _build_offline_agents_app(monkeypatch, tmp_path, factory)
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/fred/agents/v2/agents/execute/stream",
+            json={
+                "agent_id": "fred.test.assistant",
+                "input": "echo hello from smoke test",
+                "session_id": "test-assistant-echo",
+                "runtime_context": {"user_id": "test-user"},
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = _parse_sse_payloads(stream_response.text)
+    assert payloads
+    assert payloads[-1]["kind"] == "final"
+    assert "Echo: echo hello from smoke test" in str(payloads[-1]["content"])
+    assert factory.requested_operations == []
+
+
+def test_fred_test_assistant_model_probe_uses_operation_aware_routing(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Verify the optional model-probe scenario requests an explicit routing operation.
+
+    Why this test exists:
+    - the test assistant should double as a deterministic exerciser for graph
+      operation-aware model routing when a fake or real model is available
+
+    How to use it:
+    - run via `make test` from the `fred-agents` project
+
+    Example:
+    - `pytest tests/test_smoke.py -q`
+    """
+
+    factory = RecordingStaticChatModelFactory(
+        ToolFriendlyFakeChatModel(
+            responses=[AIMessage(content="Routing probe model response.")]
+        )
+    )
+    app = _build_offline_agents_app(monkeypatch, tmp_path, factory)
+
+    with TestClient(app) as client:
+        stream_response = client.post(
+            "/fred/agents/v2/agents/execute/stream",
+            json={
+                "agent_id": "fred.test.assistant",
+                "input": "model routing explain the selection",
+                "session_id": "test-assistant-model-routing",
+                "runtime_context": {"user_id": "test-user"},
+            },
+        )
+        assert stream_response.status_code == 200
+
+    payloads = _parse_sse_payloads(stream_response.text)
+    assert payloads
+    assert payloads[-1]["kind"] == "final"
+    assert "operation **`routing`**" in str(payloads[-1]["content"])
+    assert "Routing probe model response." in str(payloads[-1]["content"])
+    assert "routing" in factory.requested_operations

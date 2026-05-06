@@ -179,6 +179,62 @@ class SessionMetadataStore:
             )
             return _row_to_record(row)
 
+    async def update_metadata(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        *,
+        title: str | None = None,
+        updated_at: datetime | None = None,
+        session: AsyncSession | None = None,
+    ) -> SessionMetadataRecord | None:
+        """
+        Update one or more control-plane metadata fields for a team-scoped session.
+
+        Why this function exists:
+        - ``update_last_activity`` only handles the ``updated_at`` freshness field;
+          title edits need a single-roundtrip path that sets whichever fields are
+          provided without touching the others.
+
+        How to use it:
+        - pass only the fields that should change; ``None`` means "leave as-is".
+        - returns ``None`` when the session does not belong to ``team_id``.
+
+        Example:
+        - ``await store.update_metadata(session_id, team_id, title="My chat")``
+        """
+        values: dict[str, object] = {}
+        if title is not None:
+            values["title"] = title
+        if updated_at is not None:
+            values["updated_at"] = updated_at
+        if not values:
+            return await self.get(session_id, session)
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(  # type: ignore[assignment]
+                update(SessionMetadataRow)
+                .where(
+                    SessionMetadataRow.session_id == session_id,
+                    SessionMetadataRow.team_id == str(team_id),
+                )
+                .values(**values)
+            )
+            if result.rowcount == 0:
+                return None
+            row = (
+                (
+                    await s.execute(
+                        select(SessionMetadataRow).where(
+                            SessionMetadataRow.session_id == session_id,
+                            SessionMetadataRow.team_id == str(team_id),
+                        )
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            return _row_to_record(row)
+
     async def delete(
         self,
         session_id: str,

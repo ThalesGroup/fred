@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
@@ -26,28 +26,16 @@ export interface AgentCardProps {
   templateCategory?: string;
   canManageAgents: boolean;
   onEdit: () => void;
-  onDelete: () => void;
+  onToggleEnabled: () => void;
 }
 
-/**
- * Displays one managed agent instance as a card.
- *
- * Enabled cards are wrapped by the caller in a <Link> to the managed chat
- * route. On hover the descriptive content blurs and a "Start Chat" overlay
- * appears — the gradient border animates during that state.
- *
- * Disabled cards render the same structure but without the hover effects and
- * with dimmed icon / muted text colors driven by the `data-enabled` cascade.
- *
- * Footer action buttons stay unblurred so they remain accessible on hover.
- */
 export default function AgentCard({
   instance,
   templateDisplayName,
   templateCategory,
   canManageAgents,
   onEdit,
-  onDelete,
+  onToggleEnabled,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
   const { t } = useTranslation();
@@ -67,8 +55,16 @@ export default function AgentCard({
                 <span className={styles.agentStatus} data-status={instance.status}>
                   {instance.status}
                 </span>
+                {instance.runtime_status === "unavailable" && (
+                  <span className={styles.runtimeUnavailable}>
+                    {t("rework.agentCard.runtimeUnavailable", "Runtime unavailable")}
+                  </span>
+                )}
                 {templateCategory && (
                   <span className={styles.agentCategory}>{templateCategory}</span>
+                )}
+                {templateDisplayName && (
+                  <span className={styles.agentTemplate}>{templateDisplayName}</span>
                 )}
               </div>
             </div>
@@ -78,39 +74,38 @@ export default function AgentCard({
           </div>
         </div>
 
-        <div className={styles.footer}>
-          {templateDisplayName && (
-            <div className={styles.agentTemplate}>{templateDisplayName}</div>
-          )}
-          {canManageAgents && (
-            <div className={styles.actions}>
-              <Button
-                color={"error"}
-                variant={"text"}
-                size={"medium"}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDelete();
-                }}
-              >
-                {t("common.delete")}
-              </Button>
-              <Button
-                color={"on-surface"}
-                variant={"text"}
-                size={"medium"}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onEdit();
-                }}
-              >
-                {t("rework.agentCard.settings", "Settings")}
-              </Button>
-            </div>
-          )}
-        </div>
+        {instance.catalog_warnings && instance.catalog_warnings.length > 0 && (
+          <div className={styles.catalogWarning}>
+            {t("rework.agentCard.catalogWarning", "MCP configuration drift — recreate to resolve")}
+          </div>
+        )}
+
+        {canManageAgents && (
+          <div className={styles.actions}>
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: isEnabled ? "visibility" : "visibility_off" }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleEnabled();
+              }}
+            />
+            <IconButton
+              color="on-surface"
+              variant="icon"
+              size="medium"
+              icon={{ category: "outlined", type: "edit" }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit();
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {isEnabled && (

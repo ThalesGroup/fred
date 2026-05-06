@@ -540,10 +540,16 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             len(bound_tools),
             [bt.tool.name for bt in bound_tools],
         )
+        tuning_tokens = {
+            k.replace(".", "_"): str(v)
+            for k, v in self.definition.tuning_values.items()
+            if isinstance(v, str) and v.strip()
+        }
         system_prompt = _render_prompt_template(
             policy.system_prompt_template or "",
             binding=binding,
             agent_id=self.definition.agent_id,
+            extra_tokens=tuning_tokens or None,
         )
         logger.debug(
             "[V2][EXECUTOR] system_prompt_preview=%r",

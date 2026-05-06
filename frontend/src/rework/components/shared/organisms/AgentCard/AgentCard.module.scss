@@ -141,6 +141,29 @@
   font: var(--font-label-large);
 }
 
+.agentTemplate {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.runtimeUnavailable {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  padding: 0.1rem 0.5rem;
+  color: var(--error);
+  font: var(--font-label-small);
+  text-transform: uppercase;
+}
+
+.catalogWarning {
+  margin: 0 var(--spacing-m);
+  border-radius: var(--radius-xs);
+  background: var(--warning-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-warning-container);
+  font: var(--font-body-small);
+}
+
 .agentDescription {
   display: -webkit-box;
   min-width: 0;
@@ -151,24 +174,12 @@
   font: var(--font-body-medium);
 }
 
-/* ── Footer (not blurred — actions stay accessible on hover) ───────────────── */
-
-.footer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  border-top: 1px solid var(--outline-muted);
-  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-s);
-}
-
-.agentTemplate {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
+/* ── Actions row (not blurred — stays accessible on hover) ─────────────────── */
 
 .actions {
   display: flex;
   justify-content: flex-end;
+  padding: 0 var(--spacing-2xs) var(--spacing-2xs);
 }
 
 /* ── "Start Chat" hover overlay ────────────────────────────────────────────── */

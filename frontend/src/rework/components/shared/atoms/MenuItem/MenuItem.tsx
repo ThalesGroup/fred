@@ -18,6 +18,7 @@ import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
   label?: string;
+  description?: string;
   children?: ReactNode;
   icon?: IconProps;
   role?: "option" | "menuitem";
@@ -28,6 +29,7 @@ export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
 
 function MenuItem({
   label,
+  description,
   children,
   icon,
   role = "option",
@@ -64,7 +66,16 @@ function MenuItem({
           </span>
         )}
 
-        {children ? children : <span className={styles["label"]}>{label}</span>}
+        {children ? (
+          children
+        ) : description ? (
+          <span className={styles["content"]}>
+            <span className={styles["label"]}>{label}</span>
+            <span className={styles["description"]}>{description}</span>
+          </span>
+        ) : (
+          <span className={styles["label"]}>{label}</span>
+        )}
       </div>
     </li>
   );

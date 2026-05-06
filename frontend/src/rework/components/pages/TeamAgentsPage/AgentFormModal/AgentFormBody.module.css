@@ -48,9 +48,9 @@
 .templateUnavailableNotice {
   margin: 0;
   border-radius: var(--radius-s);
-  background: color-mix(in srgb, var(--warning, var(--tertiary)) 12%, transparent);
+  background: var(--warning-container);
   padding: var(--spacing-s) var(--spacing-m);
-  color: var(--on-surface-retreat);
+  color: var(--on-warning-container);
   font: var(--font-body-small);
 }
 
@@ -78,23 +78,14 @@
   list-style: none;
 }
 
-.mcpItem {
+.tabStrip {
+  display: flex;
+}
+
+.sectionContent {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3xs);
-  border-radius: var(--radius-s);
-  background: var(--surface-container);
-  padding: var(--spacing-s) var(--spacing-m);
-}
-
-.mcpName {
-  color: var(--on-surface);
-  font: var(--font-label-medium);
-}
-
-.mcpTools {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
+  gap: var(--spacing-m);
 }
 
 .metadataFooter {
