@@ -572,7 +572,7 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     ToolContentBlock(
                         kind=ToolContentKind.TEXT,
                         text=(
-                            "Langfuse summary failed. Check LANGFUSE_HOST/"
+                            "Langfuse summary failed. Check LANGFUSE_BASE_URL/"
                             "LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY and trace filters."
                         ),
                     ),
@@ -1316,7 +1316,7 @@ def _summarize_langfuse_conversation(
     credentials = _langfuse_credentials()
     if credentials is None:
         raise RuntimeError(
-            "Langfuse credentials are not configured. Expected LANGFUSE_HOST, "
+            "Langfuse credentials are not configured. Expected LANGFUSE_BASE_URL, "
             "LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY."
         )
     host, public_key, secret_key = credentials

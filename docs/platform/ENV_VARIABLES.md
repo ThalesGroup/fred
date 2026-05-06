@@ -59,7 +59,7 @@ Note:
 | --- | --- | --- |
 | `LANGFUSE_PUBLIC_KEY` | agentic | Langfuse public key. |
 | `LANGFUSE_SECRET_KEY` | agentic | Langfuse secret key. |
-| `LANGFUSE_HOST` | agentic | Langfuse host URL used by current runtime code. |
+| `LANGFUSE_BASE_URL` | agentic | Langfuse base URL used by current runtime code. |
 
 ## 2) Startup Configuration and Feature-Switch Variables
 

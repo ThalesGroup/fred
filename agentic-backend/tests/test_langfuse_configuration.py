@@ -61,20 +61,20 @@ class _ConfigCapturingAgent:
             yield None
 
 
-def test_get_langfuse_credentials_requires_explicit_host(
+def test_get_langfuse_credentials_requires_explicit_base_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
 
     assert get_langfuse_credentials() is None
 
 
-def test_build_langfuse_tracer_stays_disabled_without_host(
+def test_build_langfuse_tracer_stays_disabled_without_base_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
     monkeypatch.setattr(v2_adapters, "_LANGFUSE_TRACER", False)

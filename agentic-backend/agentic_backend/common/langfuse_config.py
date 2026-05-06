@@ -28,7 +28,7 @@ def _coerce_optional_string(value: str | None) -> str | None:
 
     Example:
     ```python
-    host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
+    host = _coerce_optional_string(os.getenv("LANGFUSE_BASE_URL"))
     ```
     """
 
@@ -61,7 +61,7 @@ def get_langfuse_credentials() -> tuple[str, str, str] | None:
     ```
     """
 
-    host = _coerce_optional_string(os.getenv("LANGFUSE_HOST"))
+    host = _coerce_optional_string(os.getenv("LANGFUSE_BASE_URL"))
     public_key = _coerce_optional_string(os.getenv("LANGFUSE_PUBLIC_KEY"))
     secret_key = _coerce_optional_string(os.getenv("LANGFUSE_SECRET_KEY"))
     if not host or not public_key or not secret_key:
