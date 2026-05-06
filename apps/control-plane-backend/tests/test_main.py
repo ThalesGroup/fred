@@ -107,6 +107,7 @@ class _FakeAgentInstanceStore:
         *,
         display_name: str | None = None,
         description: str | None = None,
+        enabled: bool | None = None,
         tuning: ManagedAgentTuning | None = None,
     ) -> AgentInstanceRecord | None:
         record = next(
@@ -123,6 +124,8 @@ class _FakeAgentInstanceStore:
             record.display_name = display_name
         if description is not None:
             record.description = description
+        if enabled is not None:
+            record.enabled = enabled
         if tuning is not None:
             record.tuning = tuning
         return record

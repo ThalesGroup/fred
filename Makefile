@@ -33,12 +33,23 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: ## Run non-integration test suites in backend submodules
+test: ## Run non-integration test suites in backend submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
 		env -u VIRTUAL_ENV $(MAKE) -C $$dir test; \
 	done
+	@echo ""
+	@echo "  ── Coverage summary ───────────────────────────────────────────"
+	@for dir in $(TEST_DIRS); do \
+		if [ -f "$$dir/.venv/bin/coverage" ] && [ -f "$$dir/.coverage" ]; then \
+			pct=$$(cd "$$dir" && .venv/bin/coverage report --skip-empty 2>/dev/null | awk '/^TOTAL/{print $$NF}'); \
+			printf "  %-44s %s\n" "$$dir" "$${pct:-n/a}"; \
+		else \
+			printf "  %-44s %s\n" "$$dir" "no data"; \
+		fi; \
+	done
+	@echo "  ───────────────────────────────────────────────────────────────"
 
 ##@ Run
 

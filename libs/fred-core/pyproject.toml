@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "2.0.1"
+version = "2.0.2"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -74,6 +74,39 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.2.1",
     "ruff>=0.12.5",
+]
+
+[tool.coverage.run]
+source = ["fred_core"]
+omit = [
+  # Database / SQL: requires live Postgres or Alembic migrations
+  "fred_core/history/*",
+  "fred_core/sql/alembic_env.py",
+  "fred_core/sql/base_sql.py",
+  # Object-storage and search backends: requires MinIO, OpenSearch, or OpenFGA
+  "fred_core/filesystem/minio_filesystem.py",
+  "fred_core/store/minio_content_store.py",
+  "fred_core/store/opensearch_mapping_validator.py",
+  "fred_core/logs/opensearch_log_store.py",
+  "fred_core/kpi/opensearch_kpi_store.py",
+  "fred_core/security/rebac/openfga_engine.py",
+  # AI model factories: requires live provider credentials (OpenAI, Azure, Ollama, Vertex)
+  "fred_core/model/factory.py",
+  # OIDC / Keycloak HTTP clients: requires a live auth service
+  "fred_core/security/oidc.py",
+  "fred_core/security/outbound.py",
+  "fred_core/security/backend_to_backend_auth.py",
+  # KPI infrastructure: process daemon and multi-backend writer require live sinks
+  "fred_core/kpi/kpi_process.py",
+  "fred_core/kpi/kpi_writer.py",
+  # Interactive CLI: browser / terminal auth flow, not unit-testable
+  "fred_core/cli/auth.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
 ]
 
 [tool.pytest.ini_options]

@@ -57,6 +57,18 @@ addopts = "-ra"
 markers = ["integration: marks tests that require external services"]
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["fred_runtime"]
+omit = [
+  "fred_runtime/cli/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+]
+
 [tool.uv.sources]
 # Local path overrides for mono-repo development only.
 # These are ignored when the package is built and published — the published

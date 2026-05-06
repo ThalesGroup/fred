@@ -205,23 +205,35 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
         }
         assert "fred.github.sentinel" in template_ids
         assert "fred.github.rag_expert" in template_ids
-        assert "fred.test.assistant" in template_ids
+        assert "fred.github.test_assistant" in template_ids
 
         test_assistant_template = next(
             template
             for template in templates_response.json()
-            if template["template_agent_id"] == "fred.test.assistant"
+            if template["template_agent_id"] == "fred.github.test_assistant"
         )
         field_keys = {
             field["key"]
             for field in test_assistant_template["default_tuning"]["fields"]
         }
         assert {
+            # prompt type
             "prompts.system",
             "prompts.planning",
             "prompts.routing",
+            # boolean + integer (existing)
             "settings.verbose",
             "settings.delay_ms",
+            # new scalar types
+            "settings.greeting",  # string
+            "settings.language",  # select
+            "settings.timeout_s",  # number
+            "settings.notes",  # text-multiline
+            "settings.tags",  # array
+            # credentials
+            "credentials.api_key",  # secret
+            "credentials.webhook_url",  # url
+            # chat options
             "chat_options.attach_files",
             "chat_options.libraries_selection",
         }.issubset(field_keys)
@@ -272,7 +284,7 @@ def test_fred_test_assistant_echo_stays_off_model_routing_path(
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
             json={
-                "agent_id": "fred.test.assistant",
+                "agent_id": "fred.github.test_assistant",
                 "input": "echo hello from smoke test",
                 "session_id": "test-assistant-echo",
                 "runtime_context": {"user_id": "test-user"},
@@ -315,7 +327,7 @@ def test_fred_test_assistant_model_probe_uses_operation_aware_routing(
         stream_response = client.post(
             "/fred/agents/v2/agents/execute/stream",
             json={
-                "agent_id": "fred.test.assistant",
+                "agent_id": "fred.github.test_assistant",
                 "input": "model routing explain the selection",
                 "session_id": "test-assistant-model-routing",
                 "runtime_context": {"user_id": "test-user"},
