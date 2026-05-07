@@ -36,7 +36,7 @@ _COMMANDS: tuple[str, ...] = (
     "/whoami",
 )
 
-# Scenario keywords for fred.test.assistant — used for /run tab-completion.
+# Scenario keywords for fred.github.test_assistant — used for /run tab-completion.
 _TEST_ASSISTANT_SCENARIOS: tuple[str, ...] = (
     "echo",
     "error",

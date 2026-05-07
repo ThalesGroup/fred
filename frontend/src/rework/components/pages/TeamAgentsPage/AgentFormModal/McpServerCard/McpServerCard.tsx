@@ -26,13 +26,14 @@ interface McpServerCardProps {
   server: ManagedMcpServerRef;
   checked: boolean;
   disabled: boolean;
-  tuningFieldValues: Record<string, unknown>;
+  /** Per-server config values keyed by the field's local key (matches config_fields[].key). */
+  configValues: Record<string, unknown>;
   onToggle: () => void;
-  onTuningChange: (key: string, value: unknown) => void;
+  onConfigChange: (key: string, value: unknown) => void;
 }
 
-function resolveValue(field: ManagedAgentFieldSpec, tuningFieldValues: Record<string, unknown>): unknown {
-  const stored = tuningFieldValues[field.key];
+function resolveValue(field: ManagedAgentFieldSpec, configValues: Record<string, unknown>): unknown {
+  const stored = configValues[field.key];
   if (stored !== undefined && stored !== null) return stored;
   if (field.default !== undefined && field.default !== null) return field.default;
   if (field.type === "boolean") return false;
@@ -60,9 +61,9 @@ export function McpServerCard({
   server,
   checked,
   disabled,
-  tuningFieldValues,
+  configValues,
   onToggle,
-  onTuningChange,
+  onConfigChange,
 }: McpServerCardProps) {
   const enumOptionDescriptions = useEnumOptionDescriptions();
   const configFields = server.config_fields ?? [];
@@ -87,7 +88,7 @@ export function McpServerCard({
       {hasOptions && (
         <div className={styles.subForm}>
           {configFields.map((field) => {
-            const value = resolveValue(field, tuningFieldValues);
+            const value = resolveValue(field, configValues);
 
             if (field.type === "boolean") {
               return (
@@ -96,7 +97,7 @@ export function McpServerCard({
                   label={field.title}
                   description={field.description ?? ""}
                   checked={Boolean(value)}
-                  onChange={(v) => onTuningChange(field.key, v)}
+                  onChange={(v) => onConfigChange(field.key, v)}
                 />
               );
             }
@@ -118,7 +119,7 @@ export function McpServerCard({
                       key: opt,
                       description: enumOptionDescriptions[field.key]?.[opt],
                     }))}
-                    onChange={(v) => onTuningChange(field.key, v)}
+                    onChange={(v) => onConfigChange(field.key, v)}
                     disabled={disabled}
                   />
                 </div>

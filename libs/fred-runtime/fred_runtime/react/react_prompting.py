@@ -31,32 +31,34 @@ Example:
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import ReActAgentDefinition
+
+# Matches only {simple_identifier} — same pattern as the validator so the two
+# surfaces stay in sync. Non-simple patterns ({}, {0}, {x.y}) are not touched.
+_SIMPLE_TOKEN_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 def safe_prompt_token_map(
     binding: BoundRuntimeContext, *, agent_id: str
 ) -> dict[str, str]:
     """
-    Build the safe prompt-template variables for one ReAct-style runtime call.
+    Build the runtime values for the canonical PROMPT_SAFE_TOKENS at call time.
 
     Why this exists:
-    - prompt templates often need concrete values such as `today`,
-      `response_language`, `session_id`, and `user_id`
-    - keeping that mapping in one helper makes it obvious which runtime values are
-      allowed to appear in prompts
+    - prompt templates need concrete runtime values for {today}, {response_language},
+      {session_id}, {user_id}, and {agent_id}
+    - keeping that mapping in one helper makes it obvious which values are injected
 
     How to use:
-    - call this before formatting a prompt template that contains placeholders like
-      `{today}` or `{response_language}`
+    - call this before rendering a prompt template
 
     Example:
     - `safe_prompt_token_map(binding, agent_id="custodian")`
     """
-
     response_language = normalize_response_language(binding.runtime_context.language)
     return {
         "agent_id": agent_id,
@@ -67,28 +69,6 @@ def safe_prompt_token_map(
     }
 
 
-class _LiteralFriendlyDict(dict[str, str]):
-    """
-    Preserve unknown prompt placeholders as literals during template rendering.
-
-    Why this exists:
-    - a template may still contain a placeholder such as `{question}` or
-      `{document_name}` that is not provided by the runtime prompt values
-    - preserving the placeholder text avoids a `KeyError` and makes the missing
-      value visible in the rendered prompt
-
-    How to use:
-    - create through `render_prompt_template(...)`; callers should not need to use
-      this class directly
-
-    Example:
-    - `template.format_map(_LiteralFriendlyDict({"agent_id": "custodian"}))`
-    """
-
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
-
-
 def render_prompt_template(
     template: str,
     *,
@@ -97,28 +77,35 @@ def render_prompt_template(
     extra_tokens: dict[str, str] | None = None,
 ) -> str:
     """
-    Render one ReAct-style system prompt template with runtime-safe variables.
+    Render one ReAct-style system prompt template with runtime-safe substitution.
 
     Why this exists:
     - agent definitions store prompt templates such as
       `"Today is {today}. Respond in {response_language}."`
-    - formatting should stay centralized so ReAct and Deep produce the same final
-      prompt text
+    - the renderer is centralized so ReAct and Deep produce the same final prompt
 
     How to use:
     - pass the template plus the active bound runtime context and agent id
-    - pass extra_tokens to inject admin-set tuning values (e.g. prompts.planning
-      becomes the token `prompts_planning` inside the template)
+    - extra_tokens is an internal mechanism for SDK-level agent developer templates
+      (e.g. prompts.planning injected as prompts_planning); it is not available to
+      user-authored prompts submitted via the control-plane UI
+
+    Safety guarantee:
+    - only {simple_identifier} patterns present in the merged token map are
+      substituted; everything else (code braces, dotted notation, empty braces)
+      is preserved as a literal — this function never raises an exception
 
     Example:
     - `render_prompt_template(template, binding=binding, agent_id="custodian")`
-    - `render_prompt_template(template, binding=binding, agent_id="x", extra_tokens={"prompts_planning": "..."})`
     """
-
     tokens = safe_prompt_token_map(binding, agent_id=agent_id)
     if extra_tokens:
         tokens = {**tokens, **extra_tokens}
-    return template.format_map(_LiteralFriendlyDict(tokens))
+
+    def _replace(m: re.Match[str]) -> str:
+        return tokens.get(m.group(1), m.group(0))
+
+    return _SIMPLE_TOKEN_RE.sub(_replace, template)
 
 
 def normalize_response_language(language: str | None) -> str:

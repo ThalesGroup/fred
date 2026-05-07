@@ -399,7 +399,7 @@ Source count is `message.metadata.sources.length`.
 
 ### 1.8 Validation
 
-> **Test agent:** `fred.test.assistant` — a no-LLM, no-MCP graph agent in `apps/fred-agents`
+> **Test agent:** `fred.github.test_assistant` — a no-LLM, no-MCP graph agent in `apps/fred-agents`
 > that exercises all major SSE event types without any external service.
 > Keyword-prefix routing: `echo` | `hitl choice` | `hitl text` | `trace` | `error` | `long`.
 > Enroll it in a local pod and use `fred-agents-cli` or the managed chat UI to run each scenario.
@@ -499,8 +499,9 @@ always opens in a separate `DebugDrawer`.
 
 - `ChatMessagesArea` never contains debug output — ever.
 - Debug results always render in `DebugDrawer`, which is a separate DOM subtree.
-- Agent options are described by the agent (via `ExecutionPreparation` metadata or a
-  dedicated options endpoint) — they are never hardcoded per agent name or ID in frontend code.
+- Agent options are described by the agent via typed `ExecutionPreparation`
+  contract data (`effective_chat_options` now, richer descriptors later) — they
+  are never hardcoded per agent name or ID in frontend code.
 - Debug tools are visible only when `FrontendBootstrap.permissions` includes `debug_tools`.
   The section is fully absent when the permission is missing — no placeholder shown.
 - The panel is collapsible. The toggle button lives in the chat header (`TogglePanelButton`).
@@ -555,10 +556,11 @@ type FolderScopeDescriptor = {
 }
 ```
 
-**Source:** the descriptor is returned by the agent via `ExecutionPreparation` metadata
-(field name TBD — document the contract here when the backend defines it). Until that
-endpoint exists, use a local typed stub for development. Unknown `kind` values are silently
-skipped (forward-compatible).
+**Source:** phase 1 now ships a typed `ExecutionPreparation.effective_chat_options`
+surface from control-plane for the current search/attachment affordances. Richer
+descriptor unions can still arrive via `ExecutionPreparation` later for
+frontend-generic rendering. Unknown future `kind` values should still be
+silently skipped (forward-compatible).
 
 **Effect:** selected option values are passed to `RuntimeExecuteRequest` (in `runtime_context`
 or a dedicated `options` field — to be defined with the backend). Until the wire protocol is
@@ -685,7 +687,9 @@ Additional per-message controls:
   `useListAllTagsKnowledgeFlowV1TagsGetQuery`; bound-library read-only mode when
   `boundLibraryIds` prop is set) and **Search options** (policy: strict/hybrid/semantic;
   scope: corpus/hybrid/general — controlled pill groups backed by `ButtonGroupItem`).
-- [ ] Wire descriptor from `ExecutionPreparation` metadata (typed stub until backend ready)
+- [ ] Replace the current local stub/hardcoded defaults with
+  `ExecutionPreparation.effective_chat_options`, then layer richer descriptors on
+  top when the backend exposes them
 - [x] Hold selected option values (`selectedLibraryIds`, `searchPolicy`, `ragScope`) in
   `ManagedChatPage` state; pass as `RuntimeContext` to `send()` on every turn.
 
@@ -752,8 +756,8 @@ change.
 | `mcp_servers` pass-through | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response. | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section. | ~~Backend + frontend~~ Done |
 | Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`. | `KfVectorSearchForm` is still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY` — cannot delete until that old component is migrated. | None — defer until `AgentToolsSelection` migrates |
 | File attachments | No file attachment UI in `ManagedChatPage`. Old UI used `POST /agentic/v1/chatbot/upload` (deprecated). | Agreed direction: attachments upload directly to knowledge-flow. Spec needed: endpoint selection (new KF upload route vs. existing), returned document UID flow into `RuntimeContext.selected_document_uids`, UI as paperclip icon in `ChatInputBar`. | Spec + KF endpoint decision |
-| Agent-library hard binding indicator | `AgentOptionsPanel` library picker is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the picker should switch to read-only (lock icon) showing the bound libraries. | `ManagedAgentInstanceSummary` does not expose MCP server config field values. Needs either a new field on the summary or a separate fetch of the instance's full tuning. | Backend: expose bound library IDs in instance summary |
-| `chat_options.*` in wrong form tab | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active. | Platform layer done (2026-05-06): `MCPServerConfiguration.config_fields` added to fred-sdk, `mcp_catalog.yaml` extended for KF search servers, control-plane enrichment updated, `chat_options.*` removed from `general_assistant` + `rag_expert`. **Remaining:** frontend rendering in `AgentFormBody` Tools tab. RFC: `docs/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md`. | Frontend only |
+| Agent-library hard binding indicator | `AgentOptionsPanel` library picker is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the picker should switch to read-only (lock icon) showing the bound libraries. | Backend contract is now in place: `ManagedAgentInstanceSummary.mcp_config_values` is exposed and `prepare-execution` resolves typed `effective_chat_options`. **Remaining:** frontend must derive/read the bound-library state from that data instead of leaving the picker always interactive. | Frontend only |
+| `chat_options.*` in wrong form tab | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active. | **Partially fixed (2026-05-06):** `McpServerCard` now reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and tri-state selection is preserved (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls. `ManagedChatPage` now consumes `effective_chat_options` from `useChatSse` and passes it to `AgentOptionsPanel` which gates its sections. **Remaining:** move MCP `config_fields` controls to the "Tools" tab (currently rendered inline inside `McpServerCard` in the Tools tab — layout is correct, but they are not yet in a dedicated sub-section per server). | Frontend only |
 
 ---
 
@@ -765,7 +769,7 @@ change.
 | 6A – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
 | 6B – Markdown & content | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass. |
 | Code quality audit | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`). |
-| 6C – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Platform layer for `AgentFormBody` Tools tab done (2026-05-06): `MCPServerConfiguration.config_fields`, catalog extension, control-plane enrichment. Frontend rendering (`AgentFormBody` Tools tab) and debug tools still pending. |
+| 6C – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. Remaining: debug tools section (`DebugDrawer`). |
 | 6D – Advanced parts | Deferred | After 6C |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

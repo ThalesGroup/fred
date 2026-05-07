@@ -867,7 +867,7 @@ def _apply_runtime_tuning(
     """
 
     mcp_servers = tuning.mcp_servers
-    if tuning.selected_mcp_server_ids:
+    if tuning.selected_mcp_server_ids is not None:
         selected = frozenset(tuning.selected_mcp_server_ids)
         mcp_servers = [s for s in mcp_servers if s.id in selected]
 

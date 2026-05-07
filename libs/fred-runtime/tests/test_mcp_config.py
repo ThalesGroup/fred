@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.mcp_config import McpCatalogConfiguration, McpServerEntry
 
@@ -67,3 +69,28 @@ def test_agent_pod_config_mcp_configuration_defaults_to_none(
 ) -> None:
     """get_mcp_configuration() must return None before set_mcp_configuration is called."""
     assert minimal_config.get_mcp_configuration() is None
+
+
+def test_load_mcp_catalog_rejects_duplicate_server_ids(tmp_path) -> None:
+    """The external MCP catalog must fail fast when two servers share one id."""
+    from fred_runtime.app._catalogs import load_mcp_catalog
+
+    catalog_path = tmp_path / "mcp_catalog.yaml"
+    catalog_path.write_text(
+        """
+version: v1
+servers:
+  - id: "dup"
+    name: "First"
+    transport: "streamable_http"
+    url: "http://localhost:8111/one"
+  - id: "dup"
+    name: "Second"
+    transport: "streamable_http"
+    url: "http://localhost:8111/two"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate MCP server id"):
+        load_mcp_catalog(catalog_path)

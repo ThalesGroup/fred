@@ -196,16 +196,31 @@ class AgentTuning(BaseModel):
     tags: List[str] = Field(default_factory=list)
     fields: List[FieldSpec] = Field(default_factory=list)
     mcp_servers: list[MCPServerRef] = Field(default_factory=list)
-    selected_mcp_server_ids: list[str] = Field(
-        default_factory=list,
+    selected_mcp_server_ids: list[str] | None = Field(
+        default=None,
         description=(
-            "Admin-chosen subset of mcp_servers IDs to activate for this instance. "
-            "Empty list means all declared servers are active."
+            "Admin-chosen MCP server activation policy. "
+            "None means inherit the template default selection (all declared "
+            "servers active); [] means activate no MCP servers; a non-empty "
+            "list means activate exactly that subset."
+        ),
+    )
+    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-server MCP configuration values keyed first by server id and "
+            "then by FieldSpec.key. This stays distinct from generic agent "
+            "tuning so tool-owned options do not masquerade as prompts or "
+            "runtime settings."
         ),
     )
     values: dict[str, TuningValue] = Field(
         default_factory=dict,
-        description="User-set field values keyed by FieldSpec.key, forwarded from control-plane.",
+        description=(
+            "User-set agent tuning values keyed by FieldSpec.key, forwarded "
+            "from control-plane. This surface is reserved for agent-authored "
+            "fields such as prompts.* and settings.*."
+        ),
     )
 
     def dump(self) -> str:

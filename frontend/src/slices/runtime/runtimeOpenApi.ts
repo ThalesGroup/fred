@@ -746,13 +746,27 @@ export type AgentTuning = {
   /** The agent's mandatory description for the UI. */
   description: string;
   fields?: FieldSpec[];
+  /** Per-server MCP configuration values keyed first by server id and then by FieldSpec.key. This stays distinct from generic agent tuning so tool-owned options do not masquerade as prompts or runtime settings. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  };
   mcp_servers?: McpServerRef[];
   /** The agent's mandatory role for discovery. */
   role: string;
-  /** Admin-chosen subset of mcp_servers IDs to activate for this instance. Empty list means all declared servers are active. */
-  selected_mcp_server_ids?: string[];
+  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
+  selected_mcp_server_ids?: string[] | null;
   tags?: string[];
-  /** User-set field values keyed by FieldSpec.key, forwarded from control-plane. */
+  /** User-set agent tuning values keyed by FieldSpec.key, forwarded from control-plane. This surface is reserved for agent-authored fields such as prompts.* and settings.*. */
   values?: {
     [key: string]:
       | string

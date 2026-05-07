@@ -75,6 +75,8 @@ type AgentFormBodyProps = {
   description: string;
   tuningFieldValues: Record<string, unknown>;
   selectedMcpServerIds: string[] | null;
+  /** Per-server MCP config values: outer key = server id, inner key = config_fields[].key. */
+  mcpConfigValues: Record<string, Record<string, unknown>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   editInstance?: ManagedAgentInstanceSummary;
@@ -82,6 +84,7 @@ type AgentFormBodyProps = {
   onDescriptionChange: (v: string) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onMcpSelectionChange: (ids: string[]) => void;
+  onMcpConfigChange: (serverId: string, key: string, value: unknown) => void;
 };
 
 export function AgentFormBody({
@@ -92,6 +95,7 @@ export function AgentFormBody({
   description,
   tuningFieldValues,
   selectedMcpServerIds,
+  mcpConfigValues,
   isSubmitting,
   submitAttempted,
   editInstance,
@@ -99,6 +103,7 @@ export function AgentFormBody({
   onDescriptionChange,
   onTuningChange,
   onMcpSelectionChange,
+  onMcpConfigChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<SectionKey>("settings");
@@ -211,9 +216,9 @@ export function AgentFormBody({
                           server={server}
                           checked={checked}
                           disabled={isSubmitting}
-                          tuningFieldValues={tuningFieldValues}
+                          configValues={mcpConfigValues[server.id] ?? {}}
                           onToggle={toggle}
-                          onTuningChange={onTuningChange}
+                          onConfigChange={(key, val) => onMcpConfigChange(server.id, key, val)}
                         />
                       );
                     })}

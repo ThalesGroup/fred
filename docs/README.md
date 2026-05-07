@@ -17,6 +17,7 @@ Start here, then follow the links to the relevant section.
 | **A product manager** tracking progress | [`WORKPLAN.md`](WORKPLAN.md) → [`backlog/BACKLOG.md`](backlog/BACKLOG.md) |
 | **An architect** reviewing or proposing a change | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts) |
 | **Writing an agent** with the SDK | [`authoring/`](#authoring--agent-sdk) |
+| **Choosing how to run Fred** (standalone vs teams) | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md) |
 | **Deploying** the platform | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md) |
 | **An AI assistant** (Claude Code) | See [`../CLAUDE.md`](../CLAUDE.md) — mandatory read order defined there |
 
@@ -44,6 +45,7 @@ reference documents in the same folder or in `design/`. This prevents circular r
 |---|---|
 | Understand the system architecture | [`design/`](#design--architecture-contracts) |
 | Set up a dev environment | [`platform/DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) |
+| Choose standalone vs full-stack mode | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md) |
 | Validate or debug a running service from the terminal | [`platform/CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) |
 | Deploy Fred | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md) |
 | Write an agent with the SDK | [`authoring/`](#authoring--agent-sdk) |
@@ -89,6 +91,7 @@ guides. Read the developer contract first.
 | File | Purpose |
 |---|---|
 | [`DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) | **Start here** — build, test, PR conventions |
+| [`OPERATING_MODES.md`](platform/OPERATING_MODES.md) | Standalone (single pod, no auth) vs full-stack (Keycloak + teams) — choose your mode |
 | [`CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) | **CLI pattern** — every backend exposes `make cli` / `fred-{component}-cli` |
 | [`PYTHON_CODING_GUIDELINES.md`](platform/PYTHON_CODING_GUIDELINES.md) | Python style and quality rules |
 | [`FRONTEND_CODING_GUIDELINES.md`](platform/FRONTEND_CODING_GUIDELINES.md) | Frontend CSS/design-system rules — mandatory before touching `src/rework/` |

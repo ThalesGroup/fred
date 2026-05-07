@@ -149,7 +149,8 @@ Model profile selection follows the same rule:
 - Runtime pod: add `config_fields` to `ManagedMcpServerRef` in pod config/contracts
 - Control plane backend: pass `mcp_servers` through `AgentTemplateSummary` (one field addition)
 - Control plane backend: accept `mcp_config_values` in `CreateAgentInstanceRequest` /
-  `UpdateAgentInstanceRequest` (or namespace under `tuning_field_values`)
+  `UpdateAgentInstanceRequest` and persist them separately from generic
+  `tuning_field_values` — implemented 2026-05-06
 - Control plane backend: expose typed MCP/model selectors for managed instances
 - Frontend: render a "Tools" section in the form using the same `renderTuningField` logic
 

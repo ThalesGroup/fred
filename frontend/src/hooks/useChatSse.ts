@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from "uuid";
 import { upsertOne } from "../components/chatbot/ChatBotUtils";
 import { KeyCloakService } from "../security/KeycloakService";
 import type { AwaitingHumanEvent, ChatMessage, RuntimeContext } from "../slices/agentic/agenticOpenApi";
+import type { EffectiveChatOptions } from "../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
@@ -71,6 +72,7 @@ export function useChatSse(
   const messagesRef = useRef<ChatMessage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waitResponse, setWaitResponse] = useState(false);
+  const [effectiveChatOptions, setEffectiveChatOptions] = useState<EffectiveChatOptions | null>(null);
 
   const setAll = useCallback((next: ChatMessage[]) => {
     messagesRef.current = next;
@@ -320,6 +322,7 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
 
       const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
       const exchangeId = uuidv4();
       const effectiveSessionId = sessionId ?? "draft";
@@ -377,6 +380,7 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
 
       const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
       const sessionId = pending.session_id;
       const exchangeId = uuidv4();
@@ -425,6 +429,7 @@ export function useChatSse(
   return {
     messages,
     waitResponse,
+    effectiveChatOptions,
     send,
     sendHitlResume,
     abort,

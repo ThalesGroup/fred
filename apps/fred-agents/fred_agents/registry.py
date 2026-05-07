@@ -31,7 +31,6 @@ from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
-from fred_agents.simple_assistant import SIMPLE_ASSISTANT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
 
 
@@ -39,27 +38,27 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     """
     Build the pod agent registry.
 
-    Why this function exists:
-    - the pod should expose one clear place where agent definitions are
-      assembled
-    - tests can call the same builder without importing FastAPI startup code
-
-    How to use it:
-    - call once at module import for the default registry
-    - extend the returned mapping with additional definitions later
-
-    Example:
-    - `registry = build_registry()`
+    Agent lineup:
+    - fred.github.assistant    General-purpose ReAct agent. Pure LLM baseline,
+                               no MCP by default. Admins equip it with catalog
+                               MCP servers via the control-plane agent form.
+                               First entry → default agent in fred-agents-cli.
+    - fred.github.sentinel     Monitoring ReAct agent. Requires OpenSearch MCP.
+                               Expected to fail gracefully in standalone mode —
+                               useful for validating error detection and handling.
+    - fred.github.rag_expert   Document-grounded ReAct agent. Uses the Fred
+                               built-in knowledge.search declared_tool_ref (not
+                               MCP). Reference for ReAct/built-in-tool pattern.
+    - fred.github.test_assistant  No-LLM graph agent. Exercises every SSE event
+                               type without any external service. Used for UI
+                               validation and integration scenario testing.
     """
 
     return {
         # First entry is the default agent selected by fred-agents-cli on connect.
-        # simple_assistant is pure LLM — works with a model alone, no MCP servers.
-        SIMPLE_ASSISTANT_AGENT.agent_id: SIMPLE_ASSISTANT_AGENT,
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
-        # No-LLM test agent for UI validation — exercises all SSE event types.
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
     }
 

@@ -1096,7 +1096,7 @@ implementation until the TTL policy is agreed.
 - `run_scenario_file()` extended: `${env:VAR}` substitution → `ScenarioSkipped`; `history_has_messages` and `kpi_turn_recorded` check kinds; `agent_instance_id` propagation; `hitl` step type (two-phase pause/resume)
 - `apps/fred-agents/tests/scenarios/s1_raw_echo.yaml` — raw `agent_id` path, no env var required
 - `apps/fred-agents/tests/scenarios/s1_managed_echo.yaml` — managed path, requires `FRED_AGENT_INSTANCE_ID`
-- `apps/fred-agents/tests/scenarios/s1_hitl_resume.yaml` — HITL two-phase flow with `fred.test.assistant`
+- `apps/fred-agents/tests/scenarios/s1_hitl_resume.yaml` — HITL two-phase flow with `fred.github.test_assistant`
 - `test_scenarios.py` catches `ScenarioSkipped` → `pytest.skip()`
 
 ---
@@ -1944,16 +1944,29 @@ result in empty lists — template discovery itself must not fail.
 
 ```python
 mcp_server_ids: list[str] | None = None
-# If None → inherit all enabled servers the template declares.
-# If present → use exactly this subset (validated against available_mcp_servers).
+# If None → inherit the template default selection (all declared servers active).
+# If []   → activate no MCP servers.
+# If list → use exactly this subset (validated against available_mcp_servers).
 # Unknown IDs are rejected with HTTP 422, not silently dropped.
+
+mcp_config_values: dict[str, dict[str, TuningValue]] | None = None
+# Dedicated per-server MCP configuration keyed by server id then config-field key.
+# Only selected or inherited-active servers may be configured.
+# Unknown server ids or config keys are rejected with HTTP 422.
 
 model_profile_id: str | None = None
 # If None → runtime uses its default_by_capability["chat"] profile.
 # If present → validated against available_model_profiles; 422 on unknown.
 ```
 
-`UpdateAgentInstanceRequest` gains the same two fields with identical semantics.
+`UpdateAgentInstanceRequest` gains the same two fields with patch semantics:
+
+- omitted field → leave current value unchanged
+- `mcp_server_ids = null` → reset to template default selection
+- `mcp_server_ids = []` → activate no MCP servers
+- `mcp_server_ids = [...]` → activate exactly that subset
+- `mcp_config_values = null` → clear all stored MCP config
+- `mcp_config_values = {...}` → replace the stored MCP config map
 
 Validation rule: if an ID is supplied that does not appear in the live
 template's available catalog, the control-plane returns HTTP 422 with a
@@ -1965,7 +1978,7 @@ When creating or patching an instance, the service:
 1. Fetches the live template catalog to validate supplied IDs.
 2. Stores the resolved `mcp_server_ids` and `model_profile_id` in
    `ManagedAgentTuning` (new fields: `selected_mcp_server_ids`,
-   `model_profile_id`).
+   `mcp_config_values`, `model_profile_id`).
 3. The runtime receives these in `ExecutionPreparation` tuning and applies
    them in `_apply_runtime_tuning`.
 
@@ -2007,7 +2020,7 @@ The UI contract for warnings:
 
 `_apply_runtime_tuning` (fred-runtime) extended to:
 - filter `default_mcp_servers` to only the IDs in `tuning.selected_mcp_server_ids`
-  (when non-empty; empty = keep all declared servers)
+  (when not `None`; `None` = keep template default selection, `[]` = activate none)
 - select the model profile by `tuning.model_profile_id` via the model router
   (when set; unset = keep current default routing)
 
@@ -2027,10 +2040,15 @@ The UI contract for warnings:
 - [x] Extend `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest` with
   `mcp_server_ids` (`model_profile_id` deferred)
 - [x] Extend `ManagedAgentTuning` with `selected_mcp_server_ids` (`model_profile_id` deferred)
+- [x] Extend `ManagedAgentTuning` with dedicated `mcp_config_values`
 - [x] Extend `ManagedAgentInstanceSummary` with `runtime_status` and
   `catalog_warnings`
+- [x] Extend `ManagedAgentInstanceSummary` / `ExecutionPreparation` with
+  `mcp_config_values` and typed `effective_chat_options`
 - [x] Enrollment service: validate supplied IDs against live catalog, store
   selection, reject unknown IDs with 422
+- [x] Validate and persist per-server MCP config; reject unknown server ids and
+  config keys with 422
 - [x] Drift detection in `list_managed_agent_instances`: compare stored IDs
   against live catalog per instance
 - [x] Regenerate `controlPlaneOpenApi.ts`
@@ -2044,7 +2062,9 @@ The UI contract for warnings:
   (`model_profile_id` deferred)
 - [x] `AgentCard`: show "pod unreachable" badge when `runtime_status = "unavailable"`
 - [x] `AgentCard`: show MCP drift warning banner when `catalog_warnings` is non-empty
-- [ ] `make code-quality` in `frontend` — no lint script; `tsc --noEmit` + build pass
+- [x] `McpServerCard` reads/writes per-server `configValues` keyed by `config_fields[].key`; `AgentFormBody` passes server-scoped slices via `mcpConfigValues`; `AgentFormModal` stores `mcpConfigValues` separately from `tuningValues` and preserves tri-state selection (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` in create/update requests (2026-05-06)
+- [x] `useChatSse` exposes `effectiveChatOptions` captured from each `prepare-execution` response; `AgentOptionsPanel` gates library/search/scope sections on the options prop; `ManagedChatPage` syncs search defaults from agent config on first turn (2026-05-06)
+- [x] `tsc --noEmit` + `npm run build` pass in frontend
 
 ---
 
@@ -2056,8 +2076,14 @@ The UI contract for warnings:
   with `is_default` correctly set from `default_by_capability`
 - [ ] Creating an instance with a valid subset of `mcp_server_ids` stores the
   subset and the runtime executes with only those servers active
+- [ ] Creating an instance with `mcp_server_ids = []` stores "activate none"
+  and the runtime executes with no MCP servers active
 - [ ] Creating an instance with an unknown `mcp_server_id` returns HTTP 422
   naming the unknown ID
+- [ ] Creating or patching an instance with unknown `mcp_config_values` server
+  ids or config keys returns HTTP 422 naming the offending entry
+- [ ] `prepare-execution` returns typed `effective_chat_options` resolved from
+  `mcp_config_values` plus any agent-authored chat affordances
 - [ ] After disabling a server in `mcp_catalog.yaml` and restarting the pod,
   a previously enrolled instance that used that server shows a `catalog_warnings`
   entry in `GET /teams/{team_id}/agent-instances`
@@ -2067,6 +2093,51 @@ The UI contract for warnings:
   `catalog_warnings` is empty (no false drift alarms)
 - [ ] `make code-quality && make test` pass in `fred-runtime` and
   `control-plane-backend`
+
+### 3d.9 Prompt Safety — Safe Rendering + Validation at Persistence
+
+**RFC**: `docs/rfc/PROMPT-SAFETY-RFC.md` — Slices A + B + C implemented (2026-05-07).
+
+**Problem**: `str.format_map()` in `react_prompting.py` crashed on `{toto.toto}`
+(AttributeError) and code braces `{ ... }` (ValueError). No validation happened
+at save time — the agent was created successfully but broke on the first message.
+
+**Implemented (2026-05-07)**:
+
+- [x] `fred_sdk.contracts.prompt_utils` — new module: `PROMPT_SAFE_TOKENS` canonical
+  registry, `PromptTemplateError` model, `validate_prompt_template()` validator
+- [x] `fred_runtime/react/react_prompting.py` — renderer replaced: `str.format_map()` +
+  `_LiteralFriendlyDict` removed; regex-based substitution replaces only
+  `{simple_identifier}` patterns present in the token map; code braces and dotted
+  notation are preserved as literals and never crash
+- [x] `control_plane_backend/product/service.py` — `_validate_tuning_field_values`
+  calls `validate_prompt_template` for `"prompt"` type fields; any unknown
+  `{token}` → 422 before DB write; error message names the bad pattern and lists
+  all supported tokens
+- [x] 26 offline tests added: `fred_sdk/tests/test_prompt_utils.py` (clean/invalid/
+  edge cases) + 4 new tests in `control_plane_backend/tests/test_main.py`
+  (create-then-reject, valid tokens, code braces, patch rejection)
+- [x] `make code-quality && make test` pass in `fred-sdk` (189), `fred-runtime` (302),
+  `control-plane-backend` (106)
+
+**Supported template tokens** (canonical whitelist — single source of truth in
+`PROMPT_SAFE_TOKENS`):
+
+| Token | Injected value |
+|---|---|
+| `{today}` | ISO-8601 date at execution time |
+| `{response_language}` | Human-readable language (English, français…) |
+| `{session_id}` | Active session identifier |
+| `{user_id}` | Authenticated user identifier |
+| `{agent_id}` | Agent definition identifier |
+
+**Remaining (Slice D — prompt library)**:
+
+- [ ] `Prompt` entity DB table + migration in `control-plane-backend`
+- [ ] CRUD endpoints: `POST/GET/PUT/DELETE /control-plane/v1/teams/{id}/prompts`
+- [ ] `controlPlaneOpenApi.ts` regenerated
+- [ ] `AgentFormModal` — [Import from library] button + `PromptPickerModal`
+- [ ] Frontend inline error display next to prompt textarea (uses error detail from 422)
 
 ---
 
@@ -2382,7 +2453,7 @@ developer testing and devops session management.
 - [x] `/inspect` — renders the current agent's FieldSpec table grouped by `ui.group`, with
   key, type, required, default, range, description, and available MCP servers
 - [x] `/run <scenario>` — sends scenario keyword directly as message text; tab-completes the 8
-  `fred.test.assistant` scenario keywords; falls through to the normal send path
+  `fred.github.test_assistant` scenario keywords; falls through to the normal send path
 - [x] `/tune key=value` — sets a session-local tuning override (parsed to bool/int/float/str);
   `/tune key=` clears a specific override; stored in `current_inline_tuning` dict
 - [x] `/tuning` — renders active in-session overrides as a key→value table in green

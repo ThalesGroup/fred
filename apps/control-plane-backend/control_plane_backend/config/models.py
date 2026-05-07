@@ -11,6 +11,7 @@ from fred_core.common import (
     PostgresStoreConfig,
     TemporalSchedulerConfig,
 )
+from fred_sdk.contracts.models import TuningValue
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel, Field, model_validator
 
@@ -108,19 +109,29 @@ class ManagedAgentTuning(BaseModel):
     tags: list[str] = Field(default_factory=list)
     fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
     mcp_servers: list[ManagedMcpServerRef] = Field(default_factory=list)
-    selected_mcp_server_ids: list[str] = Field(
-        default_factory=list,
+    selected_mcp_server_ids: list[str] | None = Field(
+        default=None,
         description=(
-            "Admin-chosen subset of mcp_servers IDs to activate for this instance. "
-            "Empty list means all declared servers are active."
+            "Admin-chosen MCP server activation policy. "
+            "None means inherit the template default selection (all declared "
+            "servers active); [] means activate no MCP servers; a non-empty "
+            "list means activate exactly that subset."
         ),
     )
-    values: dict[str, Any] = Field(
+    mcp_config_values: dict[str, dict[str, TuningValue]] = Field(
         default_factory=dict,
         description=(
-            "User-set field values keyed by ManagedAgentFieldSpec.key. "
-            "Only keys present in `fields` are stored. "
-            "Frozen snapshot — not re-merged when the template evolves."
+            "Per-server MCP configuration values keyed first by server id and "
+            "then by ManagedAgentFieldSpec.key. Only keys declared by the "
+            "matching server's config_fields are stored."
+        ),
+    )
+    values: dict[str, TuningValue] = Field(
+        default_factory=dict,
+        description=(
+            "User-set agent tuning values keyed by ManagedAgentFieldSpec.key. "
+            "Only keys present in `fields` are stored. Frozen snapshot — not "
+            "re-merged when the template evolves."
         ),
     )
 

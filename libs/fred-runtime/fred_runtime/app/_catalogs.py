@@ -39,7 +39,7 @@ from typing import Any, Literal
 
 import yaml
 from fred_sdk.contracts.models import MCPServerConfiguration
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .config import AgentPodConfig
 
@@ -113,6 +113,36 @@ class _McpCatalog(_CatalogFile):
 
     version: Literal["v1"] = "v1"
     servers: list[MCPServerConfiguration] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _reject_duplicate_server_ids(self) -> "_McpCatalog":
+        """
+        Reject duplicate MCP server ids in one catalog.
+
+        Why this exists:
+        - the managed-agent contract now stores per-server config keyed by MCP
+          server id, so duplicates would make selection and config resolution
+          ambiguous and unsafe
+
+        How to use it:
+        - triggered automatically during `_McpCatalog.model_validate(...)`
+
+        Example:
+        - `load_mcp_catalog("./config/mcp_catalog.yaml")`
+        """
+
+        seen: set[str] = set()
+        duplicates: list[str] = []
+        for server in self.servers:
+            if server.id in seen and server.id not in duplicates:
+                duplicates.append(server.id)
+            seen.add(server.id)
+        if duplicates:
+            duplicates_text = ", ".join(repr(server_id) for server_id in duplicates)
+            raise ValueError(
+                f"Duplicate MCP server id(s) in catalog: {duplicates_text}"
+            )
+        return self
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:

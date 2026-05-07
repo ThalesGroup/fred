@@ -599,10 +599,32 @@ export type ManagedAgentInstanceSummary = {
   created_by?: string | null;
   /** Current user-set values for this instance's tunable fields. Keyed by ManagedAgentFieldSpec.key. Empty when no fields have been customised. */
   tuning_field_values?: {
-    [key: string]: any;
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
   };
-  /** Admin-chosen MCP server IDs active for this instance. Empty list means all servers declared by the template are active. */
-  selected_mcp_server_ids?: string[];
+  /** Per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Empty when no MCP options have been customised. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  };
+  /** Admin-chosen MCP server activation policy for this instance. Null means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
+  selected_mcp_server_ids?: string[] | null;
   /** ok when the pod is reachable at listing time; unavailable when the pod cannot be contacted. */
   runtime_status?: "ok" | "unavailable";
   /** Non-empty when stored MCP server IDs are absent from the live pod catalog. Admin must delete and recreate the instance to resolve. */
@@ -615,9 +637,31 @@ export type CreateAgentInstanceRequest = {
   description?: string | null;
   /** Optional initial values for the template's tunable fields. Keys must match ManagedAgentFieldSpec.key values from the template. Unknown keys are ignored. Known values are validated against the declared field type and constraints. */
   tuning_field_values?: {
-    [key: string]: any;
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
   } | null;
-  /** Optional subset of MCP server IDs to activate for this instance. None means all servers declared by the template are active. Unknown IDs are rejected with HTTP 422. */
+  /** Optional per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Only selected or inherited-active servers may be configured; unknown server ids or option keys are rejected with HTTP 422. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  } | null;
+  /** Optional MCP server activation policy for this instance. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
   mcp_server_ids?: string[] | null;
 };
 export type UpdateAgentInstanceRequest = {
@@ -625,11 +669,33 @@ export type UpdateAgentInstanceRequest = {
   description?: string | null;
   /** Set to 'enabled' or 'disabled' to toggle the instance. None leaves the current status unchanged. */
   status?: ("enabled" | "disabled") | null;
-  /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are ignored. Known values are validated against the declared field type and constraints. Pass null to leave existing values unchanged. */
+  /** Replaces the stored field values for this instance. Keys must match ManagedAgentFieldSpec.key values frozen at enrollment. Unknown keys are ignored. Known values are validated against the declared field type and constraints. Omit the field to leave existing values unchanged; pass null to clear the stored agent tuning values. */
   tuning_field_values?: {
-    [key: string]: any;
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
   } | null;
-  /** Replaces the active MCP server selection for this instance. None means leave the existing selection unchanged. Unknown IDs (not in the instance's declared mcp_servers) are rejected with 422. */
+  /** Replaces the stored per-server MCP configuration values. Omit the field to leave the current MCP config unchanged; pass null to clear all stored MCP config for the instance. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  } | null;
+  /** Replaces the MCP server activation policy for this instance. Omit the field to leave the current selection unchanged; pass null to reset to the template default selection (all declared servers active); pass [] to activate no MCP servers; pass a non-empty list to activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
   mcp_server_ids?: string[] | null;
 };
 export type ManagedAgentTuning = {
@@ -638,11 +704,33 @@ export type ManagedAgentTuning = {
   tags?: string[];
   fields?: ManagedAgentFieldSpec[];
   mcp_servers?: ManagedMcpServerRef[];
-  /** Admin-chosen subset of mcp_servers IDs to activate for this instance. Empty list means all declared servers are active. */
-  selected_mcp_server_ids?: string[];
-  /** User-set field values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
+  /** Admin-chosen MCP server activation policy. None means inherit the template default selection (all declared servers active); [] means activate no MCP servers; a non-empty list means activate exactly that subset. */
+  selected_mcp_server_ids?: string[] | null;
+  /** Per-server MCP configuration values keyed first by server id and then by ManagedAgentFieldSpec.key. Only keys declared by the matching server's config_fields are stored. */
+  mcp_config_values?: {
+    [key: string]: {
+      [key: string]:
+        | string
+        | number
+        | number
+        | boolean
+        | (string | number | number | boolean)[]
+        | {
+            [key: string]: string | number | number | boolean;
+          };
+    };
+  };
+  /** User-set agent tuning values keyed by ManagedAgentFieldSpec.key. Only keys present in `fields` are stored. Frozen snapshot — not re-merged when the template evolves. */
   values?: {
-    [key: string]: any;
+    [key: string]:
+      | string
+      | number
+      | number
+      | boolean
+      | (string | number | number | boolean)[]
+      | {
+          [key: string]: string | number | number | boolean;
+        };
   };
 };
 export type ManagedAgentRuntimeBinding = {
@@ -693,6 +781,14 @@ export type ExecutionGrant = {
   /** Optional logical storage scope name for session state. MUST NOT be a raw connection string, secret, or infrastructure credential. */
   storage_scope?: string | null;
 };
+export type EffectiveChatOptions = {
+  attach_files?: boolean;
+  libraries_selection?: boolean;
+  search_policy_selection?: boolean;
+  default_search_policy?: "strict" | "hybrid" | "semantic";
+  rag_scope_selection?: boolean;
+  default_search_rag_scope?: "corpus_only" | "hybrid" | "general_only";
+};
 export type ExecutionPreparation = {
   agent_instance_id: string;
   team_id: string;
@@ -708,6 +804,8 @@ export type ExecutionPreparation = {
   supports_streaming?: boolean;
   supports_hitl?: boolean;
   supports_ui_parts?: boolean;
+  /** Resolved chat-option surface derived from the stored managed-agent configuration. The frontend should render only the affordances enabled here rather than hard-code agent- or tool-specific rules. */
+  effective_chat_options?: EffectiveChatOptions;
   expires_at: string;
   runtime_display_name?: string | null;
   grant_refresh_required?: boolean;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 
@@ -195,11 +195,18 @@ export default function ManagedChatPage() {
     onError: (msg) => showError({ summary: "Agent error", detail: msg }),
   };
 
-  const { messages, waitResponse, send, sendHitlResume, reset, replaceAllMessages } = useChatSse({
+  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, reset, replaceAllMessages } = useChatSse({
     agentInstanceId: agentInstanceId ?? "",
     teamId: teamId ?? "",
     ...sseCallbacks,
   });
+
+  // Sync search defaults from the agent's effective options after the first prepare-execution.
+  useEffect(() => {
+    if (!effectiveChatOptions) return;
+    if (effectiveChatOptions.default_search_policy) setSearchPolicy(effectiveChatOptions.default_search_policy);
+    if (effectiveChatOptions.default_search_rag_scope) setRagScope(effectiveChatOptions.default_search_rag_scope);
+  }, [effectiveChatOptions]);
 
   const conversationMessages = useMemo(() => toConversationMessages(messages, waitResponse), [messages, waitResponse]);
 
@@ -317,6 +324,7 @@ export default function ManagedChatPage() {
               onSearchPolicyChange={setSearchPolicy}
               ragScope={ragScope}
               onRagScopeChange={setRagScope}
+              options={effectiveChatOptions}
             />
           </div>
         )}

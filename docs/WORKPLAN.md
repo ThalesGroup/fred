@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-04-28
+Last updated: 2026-05-07
 
 ---
 
@@ -328,9 +328,9 @@ becoming operationally expensive.
 
 Completed in one session — no outstanding items.
 
-- [x] `fred.test.assistant` graph agent (no LLM): exercises `echo`, `hitl choice`, `hitl text`,
+- [x] `fred.github.test_assistant` graph agent (no LLM): exercises `echo`, `hitl choice`, `hitl text`,
   `trace`+sources, `error`, `long` scenarios; registered in `apps/fred-agents` registry
-- [x] `fred.test.assistant` expanded into the managed-agent tuning and routing probe:
+- [x] `fred.github.test_assistant` expanded into the managed-agent tuning and routing probe:
   `prompts.system`, `prompts.planning`, `prompts.routing`, `settings.verbose`,
   `settings.delay_ms`, `chat_options.attach_files`,
   `chat_options.libraries_selection`; optional `model routing` /
@@ -349,7 +349,7 @@ Completed in one session — no outstanding items.
 - [x] CLI `/inspect` — fetches `GET /agents/templates`, renders grouped FieldSpec table
   (kind, description, tags, field key/type/default/range, MCP servers) with color (2026-05-06)
 - [x] CLI `/run <scenario>` — sends scenario keyword as message; tab-completes the 8
-  `fred.test.assistant` scenario keywords (`echo`, `error`, `hitl choice`, `hitl text`,
+  `fred.github.test_assistant` scenario keywords (`echo`, `error`, `hitl choice`, `hitl text`,
   `long`, `model planning`, `model routing`, `trace`) (2026-05-06)
 - [x] CLI `/tune key=value` + `/tuning` — session-local tuning overrides stored in
   `current_inline_tuning`; prompt badge `~N` in yellow when overrides are active;
@@ -368,25 +368,38 @@ Completed in one session — no outstanding items.
 
 ---
 
-## Sequence Summary
+## Sequence Summary (as of 2026-05-07)
 
 ```
-NOW (parallel)
-├── Simon:   S1 E2E validation ──────────────────────────────────► unblocks 6A
-├── Simon:   S2 Observability hardening ── CLOSED 2026-04-26 ───► shipped
-├── Florian: F1 updated_at strategy + PATCH impl ────────────────► unblocks 6A
-├── Florian: F2 PATCH session endpoint ──────────────────────────► unblocks 6C
-├── Olélia:  O1 Evaluation RFC → harness ────────────────────────► independent
-└── Parallel: D1 Control-plane CLI live validation + closeout ───► backend ergonomics track
+CLOSED / SHIPPED
+├── S2  Observability hardening ─────────────────────────────────── 2026-04-26 ✅
+├── S3  Runtime CLI ergonomics + session purge ──────────────────── 2026-04-26 ✅
+├── D1  Control-plane developer CLI ─────────────────────────────── 2026-04-25 ✅
+├── F1  Session updated_at + PATCH impl ─────────────────────────── ✅
+├── F2  PATCH session endpoint ──────────────────────────────────── 2026-05-06 ✅
+├── 6A  Chat UI architecture (Félix) ────────────────────────────── ✅
+├── 6B  Markdown rendering (Dimitri) ────────────────────────────── 2026-05-04 ✅
+├── M1  Multi-agent conversational memory (core) ────────────────── 2026-05-05 ✅
+├── C1  Pod catalog exposure + agent instance config ────────────── 2026-05-06 ✅ (model profiles deferred)
+└── P1  Prompt safety rendering fix + persistence validation ─────── 2026-05-07 ✅ (Slice D deferred)
 
-AFTER S1 + F1 CLOSED
-└── Félix:   6A Chat UI architecture ──────────────────────────────────────┐
-                                                                            │
-AFTER 6A                                                                    │
-└── Félix:   6B Markdown rendering ─────────────────────────────────────── │
-                                                                            │
-AFTER 6B + F2                                                               │
-└── Félix:   6C Agent options + session title ──────────────────────────── ┘
+NOW (parallel)
+├── Simon:    S1  E2E live stack validation ─────────────────────────────► closes Phase 3b gate
+├── Félix:    6C  Agent options panel + session title ──────────────────► unblocked (6A+6B+F2 done)
+├── Olélia:   O1  Evaluation RFC → harness ──────────────────────────────► independent
+└── Dimitri:  swift branch commit + M1 F.1–F.4 hardening (4 branches)
+
+NEXT UP — Dimitri (next few days)
+├── Commit  swift branch — C1 + P1 + version bumps + fred-agents + docs
+├── M1-F.1  fix/memory-agent-checkpoint-isolation
+├── M1-F.2  fix/remote-agent-runtime-execute-contract
+├── M1-F.3  refactor/local-agent-execute-projection
+├── M1-F.4  fix/team-memory-history-cap
+├── C1-def  GET /agents/model-profiles + ManagedModelProfileRef + form picker (deferred from C1)
+└── P1-D    Prompt library: Prompt CRUD + AgentFormModal picker + frontend 422 display
+
+NEXT UP — Félix (unblocked now)
+└── 6C  Agent options panel refinements + session title inline edit
 ```
 
 ---
@@ -448,11 +461,19 @@ schemas and service → OpenAPI regen), frontend form last.
 - [ ] `AgentTemplateSummary.available_model_profiles` populated from pod fan-out — deferred
 - [x] `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`: add `mcp_server_ids`; reject unknown IDs with 422 (`model_profile_id` deferred)
 - [x] `ManagedAgentTuning`: add `selected_mcp_server_ids` (`model_profile_id` deferred)
+- [x] `ManagedAgentTuning`: add dedicated `mcp_config_values` per MCP server; validate unknown server IDs / config keys with 422
 - [x] `ManagedAgentInstanceSummary`: add `runtime_status`, `catalog_warnings`
+- [x] `ManagedAgentInstanceSummary` / `ExecutionPreparation`: expose `mcp_config_values` and resolved `effective_chat_options`
 - [x] Enrollment service: validate IDs against live catalog, store selection
+- [x] Enrollment/update service: preserve tri-state MCP selection (`null` = inherit default, `[]` = activate none, list = exact subset)
 - [x] Drift detection in `list_managed_agent_instances`: compare stored IDs vs live catalog; `runtime_status = "unavailable"` when pod unreachable
 - [x] Regenerate `controlPlaneOpenApi.ts`
 - [x] `make code-quality && make test` in `control-plane-backend`
+
+*catalog/runtime hardening (C1-D):*
+- [x] Reject duplicate MCP server IDs when loading `mcp_catalog.yaml`
+- [x] Remove duplicate `mcp-knowledge-flow-prometheus-ops` entry from `apps/fred-agents/config/mcp_catalog.yaml`
+- [x] `make code-quality && make test` in `fred-agents`
 
 *frontend (C1-C — after C1-B merged):*
 - [x] `AgentFormBody`: MCP checkbox multi-select from `mcp_servers` on the template
@@ -460,7 +481,31 @@ schemas and service → OpenAPI regen), frontend form last.
 - [x] Wire `mcp_server_ids` into `AgentFormPayload` and create/update mutations (`model_profile_id` deferred)
 - [x] `AgentCard`: "pod unreachable" badge for `runtime_status = "unavailable"`
 - [x] `AgentCard`: MCP drift warning banner when `catalog_warnings` non-empty
-- [ ] `make code-quality` in `frontend` — no lint script; `tsc --noEmit` + `npm run build` both pass
+- [x] `McpServerCard` reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and preserves tri-state (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls (2026-05-06)
+- [x] `useChatSse` exposes `effectiveChatOptions` from each prepare-execution; `AgentOptionsPanel` gates sections on it; `ManagedChatPage` syncs search defaults from agent config (2026-05-06)
+- [x] `tsc --noEmit` + `npm run build` pass
+
+---
+
+## P1 — Prompt Safety: Rendering Fix + Persistence Validation (Dimitri) · Done 2026-05-07
+
+**Ref**: `docs/rfc/PROMPT-SAFETY-RFC.md` · `docs/backlog/BACKLOG.md` §3d.9
+
+**Why**: Production incident 2026-05-06 — system prompts with code braces
+(`ExcelScript.Workbook { ... }`) or unknown `{token}` patterns crashed the agent
+silently at turn-start with `AttributeError` / `ValueError`. No validation existed
+at save time.
+
+- [x] `fred_sdk.contracts.prompt_utils` — `PROMPT_SAFE_TOKENS` registry + `PromptTemplateError` + `validate_prompt_template`
+- [x] `react_prompting.py` — regex renderer replaces `format_map` + `_LiteralFriendlyDict`; crash-proof for all brace patterns
+- [x] `control_plane_backend/product/service.py` — `_validate_tuning_field_values` calls validator for `"prompt"` fields; unknown tokens → 422
+- [x] 26 new offline tests across `fred-sdk` and `control-plane-backend`
+- [x] `make code-quality && make test` green in all three packages
+
+**Remaining (Slice D — prompt library, separate branch)**:
+- [ ] `Prompt` entity CRUD in `control-plane-backend` + DB migration
+- [ ] `AgentFormModal` [Import from library] button + `PromptPickerModal`
+- [ ] Frontend inline 422 error display next to prompt textarea
 
 ---
 
@@ -469,6 +514,6 @@ schemas and service → OpenAPI regen), frontend form last.
 | Decision | Owner | Blocking |
 |---|---|---|
 | Option A/B/C for `updated_at` freshness | Florian + all | F1, then Félix 6A wiring |
-| Whether `ExecutionPreparation` should expose agent runtime options | Simon + Florian | Félix 6C scope |
+| Whether `ExecutionPreparation` should expose agent runtime options | Simon + Florian | Resolved 2026-05-06: yes — typed `effective_chat_options` on `ExecutionPreparation` |
 | Checkpoint TTL policy for standalone mode | Simon | BACKLOG.md §3b.9, non-urgent |
 | `session_purge_queue` keep or repurpose | Florian | BACKLOG.md §6.4.E, non-urgent |

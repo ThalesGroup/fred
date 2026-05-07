@@ -541,7 +541,7 @@ async def error_step(
     await asyncio.sleep(0.1 + delay)
 
     raise RuntimeError(
-        "This is a deliberate test error from fred.test.assistant. "
+        "This is a deliberate test error from fred.github.test_assistant. "
         "The runtime should catch it, emit a node_error SSE event, "
         "and route via on_error to the finalize step."
     )
@@ -636,7 +636,7 @@ async def fallback_step(
     context.emit_status("fallback", "No matching scenario — showing help.")
 
     lines = [
-        "**fred.test.assistant** — available test scenarios:",
+        "**fred.github.test_assistant** — available test scenarios:",
         "",
         _SCENARIO_TABLE,
         "",

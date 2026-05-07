@@ -17,6 +17,7 @@ import ButtonGroupItem from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGro
 import Icon from "@shared/atoms/Icon/Icon";
 import { useListAllTagsKnowledgeFlowV1TagsGetQuery } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { EffectiveChatOptions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./AgentOptionsPanel.module.css";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
@@ -31,6 +32,8 @@ interface AgentOptionsPanelProps {
   onRagScopeChange: (s: RagScope) => void;
   // When non-empty the agent is hard-bound to these library IDs — picker is read-only.
   boundLibraryIds?: string[];
+  /** Resolved from ExecutionPreparation. Null = not yet received; show all sections as safe default. */
+  options?: EffectiveChatOptions | null;
 }
 
 const SEARCH_POLICIES: { value: SearchPolicyName; label: string }[] = [
@@ -54,14 +57,20 @@ export function AgentOptionsPanel({
   ragScope,
   onRagScopeChange,
   boundLibraryIds = [],
+  options = null,
 }: AgentOptionsPanelProps) {
   const { t } = useTranslation();
 
-  const { data: allTags = [], isLoading } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
-    type: "document",
-    ownerFilter: "team",
-    teamId,
-  });
+  // When options is null (not yet received) show everything as a safe default.
+  const showLibraries = options == null || options.libraries_selection !== false;
+  const showSearchPolicy = options == null || options.search_policy_selection !== false;
+  const showRagScope = options == null || options.rag_scope_selection !== false;
+  const showSearchSection = showSearchPolicy || showRagScope;
+
+  const { data: allTags = [], isLoading } = useListAllTagsKnowledgeFlowV1TagsGetQuery(
+    { type: "document", ownerFilter: "team", teamId },
+    { skip: !showLibraries },
+  );
 
   const isBound = boundLibraryIds.length > 0;
 
@@ -82,90 +91,98 @@ export function AgentOptionsPanel({
   return (
     <div className={styles.panel}>
       {/* ── Libraries ── */}
-      <section className={styles.section}>
-        <h3 className={styles.sectionLabel}>{librarySectionLabel}</h3>
+      {showLibraries && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionLabel}>{librarySectionLabel}</h3>
 
-        {isLoading && <p className={styles.emptyNote}>{t("chat.options.loadingLibraries", "Loading…")}</p>}
+          {isLoading && <p className={styles.emptyNote}>{t("chat.options.loadingLibraries", "Loading…")}</p>}
 
-        {!isLoading && allTags.length === 0 && (
-          <p className={styles.emptyNote}>{t("chat.options.noLibraries", "No document libraries available.")}</p>
-        )}
+          {!isLoading && allTags.length === 0 && (
+            <p className={styles.emptyNote}>{t("chat.options.noLibraries", "No document libraries available.")}</p>
+          )}
 
-        {!isLoading && allTags.length > 0 && isBound && (
-          <ul className={styles.libraryList}>
-            {allTags
-              .filter((tag) => boundLibraryIds.includes(tag.id))
-              .map((tag) => (
-                <li key={tag.id} className={styles.libraryItem}>
-                  <span className={styles.libraryBoundIcon}>
-                    <Icon category="outlined" type="lock" />
-                  </span>
-                  <span className={styles.libraryName}>{tag.name}</span>
-                </li>
-              ))}
-          </ul>
-        )}
-
-        {!isLoading && allTags.length > 0 && !isBound && (
-          <ul className={styles.libraryList}>
-            {allTags.map((tag) => {
-              const checked = selectedLibraryIds.includes(tag.id);
-              return (
-                <li key={tag.id} className={styles.libraryItem}>
-                  <label className={styles.libraryCheckboxLabel}>
-                    <input
-                      type="checkbox"
-                      className={styles.libraryCheckbox}
-                      checked={checked}
-                      onChange={(e) => handleLibraryToggle(tag.id, e.target.checked)}
-                    />
+          {!isLoading && allTags.length > 0 && isBound && (
+            <ul className={styles.libraryList}>
+              {allTags
+                .filter((tag) => boundLibraryIds.includes(tag.id))
+                .map((tag) => (
+                  <li key={tag.id} className={styles.libraryItem}>
+                    <span className={styles.libraryBoundIcon}>
+                      <Icon category="outlined" type="lock" />
+                    </span>
                     <span className={styles.libraryName}>{tag.name}</span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                  </li>
+                ))}
+            </ul>
+          )}
 
-      <div className={styles.divider} />
+          {!isLoading && allTags.length > 0 && !isBound && (
+            <ul className={styles.libraryList}>
+              {allTags.map((tag) => {
+                const checked = selectedLibraryIds.includes(tag.id);
+                return (
+                  <li key={tag.id} className={styles.libraryItem}>
+                    <label className={styles.libraryCheckboxLabel}>
+                      <input
+                        type="checkbox"
+                        className={styles.libraryCheckbox}
+                        checked={checked}
+                        onChange={(e) => handleLibraryToggle(tag.id, e.target.checked)}
+                      />
+                      <span className={styles.libraryName}>{tag.name}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {showLibraries && showSearchSection && <div className={styles.divider} />}
 
       {/* ── Search options ── */}
-      <section className={styles.section}>
-        <h3 className={styles.sectionLabel}>{t("chat.options.search", "Search options")}</h3>
+      {showSearchSection && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionLabel}>{t("chat.options.search", "Search options")}</h3>
 
-        <div className={styles.optionRow}>
-          <span className={styles.optionRowLabel}>{t("chat.options.policy", "Policy")}</span>
-          <div className={styles.pillGroup}>
-            {SEARCH_POLICIES.map((opt) => (
-              <ButtonGroupItem
-                key={opt.value}
-                label={opt.label}
-                size="xs"
-                color="secondary"
-                selected={searchPolicy === opt.value}
-                onClick={() => onSearchPolicyChange(opt.value)}
-              />
-            ))}
-          </div>
-        </div>
+          {showSearchPolicy && (
+            <div className={styles.optionRow}>
+              <span className={styles.optionRowLabel}>{t("chat.options.policy", "Policy")}</span>
+              <div className={styles.pillGroup}>
+                {SEARCH_POLICIES.map((opt) => (
+                  <ButtonGroupItem
+                    key={opt.value}
+                    label={opt.label}
+                    size="xs"
+                    color="secondary"
+                    selected={searchPolicy === opt.value}
+                    onClick={() => onSearchPolicyChange(opt.value)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-        <div className={styles.optionRow}>
-          <span className={styles.optionRowLabel}>{t("chat.options.scope", "Scope")}</span>
-          <div className={styles.pillGroup}>
-            {RAG_SCOPES.map((opt) => (
-              <ButtonGroupItem
-                key={opt.value}
-                label={opt.label}
-                size="xs"
-                color="secondary"
-                selected={ragScope === opt.value}
-                onClick={() => onRagScopeChange(opt.value)}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+          {showRagScope && (
+            <div className={styles.optionRow}>
+              <span className={styles.optionRowLabel}>{t("chat.options.scope", "Scope")}</span>
+              <div className={styles.pillGroup}>
+                {RAG_SCOPES.map((opt) => (
+                  <ButtonGroupItem
+                    key={opt.value}
+                    label={opt.label}
+                    size="xs"
+                    color="secondary"
+                    selected={ragScope === opt.value}
+                    onClick={() => onRagScopeChange(opt.value)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

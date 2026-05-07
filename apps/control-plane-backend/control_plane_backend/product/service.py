@@ -5,13 +5,14 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, Sequence, cast
 from uuid import uuid4
 
 import httpx
 from fred_core import KeycloakUser, RBACProvider
 from fred_core.common import PERSONAL_TEAM_ID, TeamId
 from fred_sdk.contracts.execution import ExecutionGrant, ExecutionGrantAction
+from fred_sdk.contracts.prompt_utils import validate_prompt_template
 
 from control_plane_backend.agent_instances.store import AgentInstanceRecord
 from control_plane_backend.config.models import (
@@ -23,6 +24,7 @@ from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
     CreateSessionRequest,
+    EffectiveChatOptions,
     ExecutionPreparation,
     FrontendBootstrap,
     ManagedAgentInstanceSummary,
@@ -70,6 +72,23 @@ class _RuntimeTemplatePayload:
 
     @classmethod
     def model_validate(cls, data: dict) -> "_RuntimeTemplatePayload":
+        """
+        Build one control-plane template payload from the runtime response shape.
+
+        Why this function exists:
+        - control-plane keeps its own typed managed-agent models, so runtime
+          template payloads need one normalization step before aggregation
+        - MCP catalog metadata such as `display_name` and `config_fields` is
+          enriched here onto each declared `ManagedMcpServerRef`
+
+        How to use it:
+        - call with one raw `/agents/templates` item returned by a runtime pod
+        - the method returns a `_RuntimeTemplatePayload` ready for
+          `AgentTemplateSummary` projection
+
+        Example:
+        - `template = _RuntimeTemplatePayload.model_validate(raw_template)`
+        """
         tuning = ManagedAgentTuning.model_validate(
             data.get("default_tuning")
             or {
@@ -212,6 +231,7 @@ def _validate_tuning_field_values(
     field_specs: Sequence[ManagedAgentFieldSpec],
     submitted_values: dict[str, Any],
     context_label: str,
+    reject_unknown_keys: bool = False,
 ) -> dict[str, Any]:
     """
     Filter and validate submitted tuning values against one frozen field-spec list.
@@ -224,7 +244,9 @@ def _validate_tuning_field_values(
     How to use it:
     - pass the frozen `ManagedAgentFieldSpec` list from the template or stored
       instance together with the submitted values dict
-    - unknown keys are ignored to preserve current write compatibility
+    - unknown keys are ignored by default to preserve current write
+      compatibility; pass `reject_unknown_keys=True` for dedicated typed
+      contracts such as `mcp_config_values`
     - invalid values raise `EnrollmentError(http_status=422)`
 
     Example:
@@ -280,6 +302,8 @@ def _validate_tuning_field_values(
     for key, value in submitted_values.items():
         field = specs_by_key.get(key)
         if field is None:
+            if reject_unknown_keys:
+                _fail(key, "unknown key")
             continue
         if value is None:
             continue
@@ -290,6 +314,13 @@ def _validate_tuning_field_values(
                 _fail(key, f"expected a string for type {field.type!r}")
             if field.pattern is not None and re.fullmatch(field.pattern, value) is None:
                 _fail(key, f"value does not match pattern {field.pattern!r}")
+            if field.type == "prompt":
+                prompt_errors = validate_prompt_template(value)
+                if prompt_errors:
+                    details = "; ".join(
+                        f"'{e.pattern}': {e.reason}" for e in prompt_errors
+                    )
+                    _fail(key, f"invalid template syntax — {details}")
         elif field.type == "select":
             if not isinstance(value, str):
                 _fail(key, "expected a string for type 'select'")
@@ -354,6 +385,217 @@ def _validate_mcp_server_ids(
             http_status=422,
         )
     return submitted_ids
+
+
+def _selected_mcp_servers(
+    *,
+    declared_servers: Sequence[Any],
+    selected_server_ids: list[str] | None,
+) -> list[Any]:
+    """
+    Resolve the active MCP server refs for one managed instance.
+
+    Why this function exists:
+    - the managed-agent contract now distinguishes three states for MCP
+      selection: inherit template defaults (`None`), activate none (`[]`), or
+      activate one exact subset (non-empty list)
+
+    How to use it:
+    - pass the declared server list and the stored selection value
+    - the returned list preserves the template order for deterministic UI and
+      effective-chat-option resolution
+
+    Example:
+    - `_selected_mcp_servers(declared_servers=tuning.mcp_servers, selected_server_ids=None)`
+    """
+
+    if selected_server_ids is None:
+        return list(declared_servers)
+    selected = frozenset(selected_server_ids)
+    return [server for server in declared_servers if server.id in selected]
+
+
+def _prune_inactive_mcp_config_values(
+    *,
+    declared_servers: Sequence[Any],
+    selected_server_ids: list[str] | None,
+    stored_values: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """
+    Drop stored MCP config for servers that are no longer active.
+
+    Why this function exists:
+    - changing the MCP selection should not leave behind hidden config for
+      servers that are no longer active for the instance
+
+    How to use it:
+    - call after applying a new `selected_mcp_server_ids` value and before
+      persisting the updated tuning payload
+
+    Example:
+    - `_prune_inactive_mcp_config_values(..., selected_server_ids=["mcp-search"], stored_values=base.mcp_config_values)`
+    """
+
+    active_ids = {
+        server.id
+        for server in _selected_mcp_servers(
+            declared_servers=declared_servers,
+            selected_server_ids=selected_server_ids,
+        )
+    }
+    return {
+        server_id: values
+        for server_id, values in stored_values.items()
+        if server_id in active_ids
+    }
+
+
+def _validate_mcp_config_values(
+    *,
+    declared_servers: Sequence[Any],
+    selected_server_ids: list[str] | None,
+    submitted_values: dict[str, dict[str, Any]],
+    context_label: str,
+) -> dict[str, dict[str, Any]]:
+    """
+    Validate one dedicated per-server MCP configuration payload.
+
+    Why this function exists:
+    - MCP tool options are no longer generic tuning-field keys; they need a
+      dedicated typed validator keyed by server id and then by config-field key
+
+    How to use it:
+    - pass the declared MCP server refs, the target selected-server policy, and
+      the nested submitted values map
+    - unknown or inactive server ids raise HTTP 422
+    - unknown config keys raise HTTP 422 because `mcp_config_values` is a
+      dedicated typed contract, not a compatibility bag
+
+    Example:
+    - `_validate_mcp_config_values(declared_servers=tuning.mcp_servers, selected_server_ids=None, submitted_values={"mcp-search": {"chat_options.search_policy": "hybrid"}}, context_label="agent enrollment")`
+    """
+
+    active_servers = {
+        server.id: server
+        for server in _selected_mcp_servers(
+            declared_servers=declared_servers,
+            selected_server_ids=selected_server_ids,
+        )
+    }
+    validated: dict[str, dict[str, Any]] = {}
+    for server_id, server_values in submitted_values.items():
+        server = active_servers.get(server_id)
+        if server is None:
+            raise EnrollmentError(
+                f"Unknown or inactive MCP server ID {server_id!r} in {context_label}.",
+                http_status=422,
+            )
+        if not isinstance(server_values, dict):
+            raise EnrollmentError(
+                f"Invalid mcp_config_values entry for server {server_id!r} during {context_label}: expected an object.",
+                http_status=422,
+            )
+        typed_values = _validate_tuning_field_values(
+            field_specs=server.config_fields,
+            submitted_values=server_values,
+            context_label=f"{context_label} for MCP server {server_id!r}",
+            reject_unknown_keys=True,
+        )
+        if typed_values:
+            validated[server_id] = typed_values
+    return validated
+
+
+def _as_bool(value: object) -> bool:
+    """
+    Return a strict boolean view of one stored tuning value.
+
+    Why this function exists:
+    - resolved chat options combine values coming from generic tuning and
+      per-tool config, both of which are stored as union-typed payloads
+    - the frontend contract should only treat literal `True` / `False` values
+      as booleans, never truthy strings or numbers
+
+    How to use it:
+    - pass any stored tuning value before assigning it to a boolean field on a
+      typed outward-facing contract
+
+    Example:
+    - `_as_bool(tuning.values.get("chat_options.attach_files"))`
+    """
+
+    return isinstance(value, bool) and value
+
+
+def _resolve_effective_chat_options(
+    tuning: ManagedAgentTuning,
+) -> EffectiveChatOptions:
+    """
+    Resolve the chat-option surface exposed by one managed agent instance.
+
+    Why this function exists:
+    - the managed chat UI must consume one explicit typed contract instead of
+      inferring search controls from hard-coded agent or MCP ids
+    - prompts/settings and tool config have different ownership, but the UI
+      still needs one merged chat-affordance view
+
+    How to use it:
+    - call when building frontend-facing execution-preparation payloads
+    - template order decides precedence when multiple active MCP servers expose
+      the same option key
+
+    Example:
+    - `options = _resolve_effective_chat_options(instance.tuning)`
+    """
+
+    options = EffectiveChatOptions(
+        attach_files=_as_bool(tuning.values.get("chat_options.attach_files"))
+    )
+    active_servers = _selected_mcp_servers(
+        declared_servers=tuning.mcp_servers,
+        selected_server_ids=tuning.selected_mcp_server_ids,
+    )
+
+    for server in active_servers:
+        field_defaults = {field.key: field.default for field in server.config_fields}
+        server_values = tuning.mcp_config_values.get(server.id, {})
+
+        if "chat_options.libraries_selection" in field_defaults:
+            value = server_values.get(
+                "chat_options.libraries_selection",
+                field_defaults["chat_options.libraries_selection"],
+            )
+            options.libraries_selection = options.libraries_selection or _as_bool(value)
+
+        if (
+            not options.search_policy_selection
+            and "chat_options.search_policy" in field_defaults
+        ):
+            value = server_values.get(
+                "chat_options.search_policy",
+                field_defaults["chat_options.search_policy"],
+            )
+            if value in {"strict", "hybrid", "semantic"}:
+                options.search_policy_selection = True
+                options.default_search_policy = cast(
+                    Literal["strict", "hybrid", "semantic"], value
+                )
+
+        if (
+            not options.rag_scope_selection
+            and "chat_options.search_rag_scope" in field_defaults
+        ):
+            value = server_values.get(
+                "chat_options.search_rag_scope",
+                field_defaults["chat_options.search_rag_scope"],
+            )
+            if value in {"corpus_only", "hybrid", "general_only"}:
+                options.rag_scope_selection = True
+                options.default_search_rag_scope = cast(
+                    Literal["corpus_only", "hybrid", "general_only"], value
+                )
+
+    return options
 
 
 async def list_agent_templates(
@@ -444,7 +686,11 @@ async def list_managed_agent_instances(
             continue
 
         warnings: list[str] = []
-        for sid in record.tuning.selected_mcp_server_ids:
+        active_servers = _selected_mcp_servers(
+            declared_servers=record.tuning.mcp_servers,
+            selected_server_ids=record.tuning.selected_mcp_server_ids,
+        )
+        for sid in (server.id for server in active_servers):
             if sid not in catalog:
                 warnings.append(f"MCP server '{sid}' is no longer in the pod catalog.")
             elif not catalog[sid]:
@@ -460,7 +706,20 @@ def _record_to_summary(
     runtime_status: Literal["ok", "unavailable"] = "ok",
     catalog_warnings: list[str] | None = None,
 ) -> ManagedAgentInstanceSummary:
-    """Build a frontend-facing summary from a DB-backed agent instance record."""
+    """
+    Build one frontend-facing summary from a DB-backed agent instance record.
+
+    Why this function exists:
+    - the product listing surface needs one canonical projection from stored
+      managed-agent records to the summary contract returned to the UI
+
+    How to use it:
+    - pass one store record plus optional runtime-status/warning annotations
+      computed by the caller
+
+    Example:
+    - `_record_to_summary(record, runtime_status="unavailable")`
+    """
     return ManagedAgentInstanceSummary(
         agent_instance_id=record.agent_instance_id,
         team_id=record.team_id,
@@ -472,7 +731,12 @@ def _record_to_summary(
         updated_at=record.updated_at,
         created_by=record.created_by,
         tuning_field_values=record.tuning.values,
-        selected_mcp_server_ids=list(record.tuning.selected_mcp_server_ids),
+        mcp_config_values=record.tuning.mcp_config_values,
+        selected_mcp_server_ids=(
+            list(record.tuning.selected_mcp_server_ids)
+            if record.tuning.selected_mcp_server_ids is not None
+            else None
+        ),
         runtime_status=runtime_status,
         catalog_warnings=catalog_warnings or [],
     )
@@ -523,6 +787,9 @@ async def enroll_agent_instance(
     - pass a validated team, the authenticated user, and the typed enrollment
       request
     - pass request-scoped product dependencies when available
+    - `tuning_field_values` configures agent-authored fields only
+    - `mcp_server_ids` and `mcp_config_values` configure tool activation and
+      per-tool options through dedicated typed surfaces
 
     Example:
     - `item = await enroll_agent_instance(user=user, team_id=team_id, request=body, deps=deps)`
@@ -590,6 +857,17 @@ async def enroll_agent_instance(
             context_label="agent enrollment",
         )
         tuning = tuning.model_copy(update={"selected_mcp_server_ids": validated_ids})
+    if request.mcp_config_values:
+        tuning = tuning.model_copy(
+            update={
+                "mcp_config_values": _validate_mcp_config_values(
+                    declared_servers=tuning.mcp_servers,
+                    selected_server_ids=tuning.selected_mcp_server_ids,
+                    submitted_values=request.mcp_config_values,
+                    context_label="agent enrollment",
+                )
+            }
+        )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -623,9 +901,12 @@ async def update_agent_instance(
       values after enrollment without re-enrolling from scratch
 
     How to use it:
-    - pass only the fields to change; None fields are left unchanged
-    - tuning_field_values replaces the stored values dict entirely (filtered to
-      known keys); pass None to leave existing values untouched
+    - pass only the fields to change
+    - omitted fields are left unchanged
+    - `tuning_field_values=None` clears stored agent tuning values
+    - `mcp_server_ids=None` resets the instance to the template default MCP
+      selection; `mcp_server_ids=[]` activates no MCP servers
+    - `mcp_config_values=None` clears stored per-server MCP config
 
     Policy — frozen snapshot:
     - field specs (ManagedAgentFieldSpec) are frozen at enrollment time
@@ -640,27 +921,63 @@ async def update_agent_instance(
     if record is None:
         return None
 
+    tuning_fields_set = request.model_fields_set
     new_tuning: ManagedAgentTuning | None = None
-    if request.tuning_field_values is not None or request.mcp_server_ids is not None:
+    if {
+        "tuning_field_values",
+        "mcp_server_ids",
+        "mcp_config_values",
+    } & tuning_fields_set:
         base = record.tuning
-        if request.tuning_field_values is not None:
+        if "mcp_server_ids" in tuning_fields_set:
+            if request.mcp_server_ids is None:
+                base = base.model_copy(update={"selected_mcp_server_ids": None})
+            else:
+                available = frozenset(srv.id for srv in base.mcp_servers)
+                validated_ids = _validate_mcp_server_ids(
+                    submitted_ids=request.mcp_server_ids,
+                    available_ids=available,
+                    context_label="agent update",
+                )
+                base = base.model_copy(
+                    update={"selected_mcp_server_ids": validated_ids}
+                )
             base = base.model_copy(
                 update={
-                    "values": _validate_tuning_field_values(
-                        field_specs=base.fields,
-                        submitted_values=request.tuning_field_values,
-                        context_label="agent update",
+                    "mcp_config_values": _prune_inactive_mcp_config_values(
+                        declared_servers=base.mcp_servers,
+                        selected_server_ids=base.selected_mcp_server_ids,
+                        stored_values=base.mcp_config_values,
                     )
                 }
             )
-        if request.mcp_server_ids is not None:
-            available = frozenset(srv.id for srv in base.mcp_servers)
-            validated_ids = _validate_mcp_server_ids(
-                submitted_ids=request.mcp_server_ids,
-                available_ids=available,
-                context_label="agent update",
-            )
-            base = base.model_copy(update={"selected_mcp_server_ids": validated_ids})
+        if "tuning_field_values" in tuning_fields_set:
+            if request.tuning_field_values is None:
+                base = base.model_copy(update={"values": {}})
+            else:
+                base = base.model_copy(
+                    update={
+                        "values": _validate_tuning_field_values(
+                            field_specs=base.fields,
+                            submitted_values=request.tuning_field_values,
+                            context_label="agent update",
+                        )
+                    }
+                )
+        if "mcp_config_values" in tuning_fields_set:
+            if request.mcp_config_values is None:
+                base = base.model_copy(update={"mcp_config_values": {}})
+            else:
+                base = base.model_copy(
+                    update={
+                        "mcp_config_values": _validate_mcp_config_values(
+                            declared_servers=base.mcp_servers,
+                            selected_server_ids=base.selected_mcp_server_ids,
+                            submitted_values=request.mcp_config_values,
+                            context_label="agent update",
+                        )
+                    }
+                )
         new_tuning = base
 
     updated = await store.update(
@@ -715,6 +1032,8 @@ async def prepare_execution(
     How to use it:
     - call after team membership has already been validated
     - pass request-scoped product dependencies when available
+    - the returned payload now includes `effective_chat_options`, the typed
+      chat-affordance surface resolved from the stored managed-agent config
 
     Example:
     - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
@@ -772,6 +1091,7 @@ async def prepare_execution(
         execute_stream_url=f"{prefix}/agents/execute/stream",
         messages_url_template=f"{prefix}/agents/sessions/{{session_id}}/messages",
         execution_grant=grant,
+        effective_chat_options=_resolve_effective_chat_options(instance.tuning),
         expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
         runtime_display_name=source.runtime_id,
     )

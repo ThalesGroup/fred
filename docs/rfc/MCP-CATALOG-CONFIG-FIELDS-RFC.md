@@ -117,6 +117,21 @@ It extends to also copy `config_fields`, mapping each raw dict entry into
 `ManagedMcpServerRef.config_fields` already exists in `control_plane_backend/config/models.py`
 with an empty default — no schema change needed there.
 
+### 3.4.1 Status after backend contract freeze (2026-05-06)
+
+The backend side of this RFC is now implemented:
+
+- create/update payloads accept dedicated `mcp_config_values`
+- `ManagedAgentInstanceSummary` exposes stored `mcp_config_values`
+- `ExecutionPreparation` exposes resolved `effective_chat_options`
+- MCP selection semantics are tri-state:
+  - `null` = inherit template default selection
+  - `[]` = activate no MCP servers
+  - non-empty list = exact subset
+- duplicate MCP server ids are rejected when loading `mcp_catalog.yaml`
+
+The remaining work is frontend wiring in `AgentFormBody` and `ManagedChatPage`.
+
 ### 3.5 Agent template cleanup
 
 `chat_options.*` field specs are removed from all agent template definitions in
@@ -130,12 +145,20 @@ currently declares them). Those fields now live exclusively in the catalog.
 
 In the Tools tab, for each `ManagedMcpServerRef` that has non-empty `config_fields`
 AND is currently checked (active), render those fields indented beneath the server
-checkbox using the existing `TuningFieldRenderer`. Values are stored in
-`tuningFieldValues` using the field `key` (e.g., `"chat_options.libraries_selection"`)
-— the existing keying scheme is preserved, so the runtime receives them identically.
+checkbox using the existing `TuningFieldRenderer`.
 
-No new state shape is needed in `AgentFormModal`. The `onTuningChange` callback already
-handles arbitrary string keys.
+Values must be stored in a dedicated MCP config payload:
+
+```typescript
+type McpConfigValues = Record<string, Record<string, TuningValue>>
+```
+
+That means:
+
+- outer key = MCP server id
+- inner key = `config_field.key`
+- generic agent tuning state (`tuningFieldValues`) remains reserved for
+  agent-authored `prompts.*` / `settings.*`
 
 ---
 
@@ -169,19 +192,22 @@ chat_options below them. Rejected because:
 | Control-plane product service enrichment loop | Extend to copy `config_fields` from catalog entry into `ManagedMcpServerRef` | Yes |
 | `ManagedMcpServerRef` in `config/models.py` | No change — `config_fields` already exists | No |
 | `fred-agents` agent templates | Remove `chat_options.*` `FieldSpec` declarations | Yes |
-| Frontend `AgentFormBody` | Render `config_fields` beneath active server checkboxes | Yes |
+| Control-plane create/update/summary contracts | Add dedicated `mcp_config_values` and `ExecutionPreparation.effective_chat_options` | Yes |
+| Frontend `AgentFormBody` | Render `config_fields` beneath active server checkboxes using `mcp_config_values` | Yes |
 | `controlPlaneOpenApi.ts` | Regenerate after `ManagedMcpServerRef.config_fields` is confirmed populated | Yes |
 
 ---
 
 ## 6. Contract boundary
 
-`config_fields` in the catalog are **user-facing configuration hints for the
-enrollment UI only**. They are not MCP protocol parameters and do not affect how the
-MCP server operates at runtime. The values submitted by the user flow into
-`tuning_field_values` under their `key` (e.g., `"chat_options.libraries_selection"`)
-and reach the runtime as `RuntimeContext` fields, exactly as they do today. The catalog
-does not change runtime execution semantics.
+`config_fields` in the catalog are **user-facing configuration hints owned by the
+tool layer**. They are not MCP protocol parameters. The values submitted by the
+user are persisted in `mcp_config_values[server_id][field_key]`, not flattened
+into generic `tuning_field_values`.
+
+Control-plane may still resolve some of those tool-owned values into typed
+frontend/runtime affordances. Phase 1 of that resolution is
+`ExecutionPreparation.effective_chat_options`.
 
 ---
 

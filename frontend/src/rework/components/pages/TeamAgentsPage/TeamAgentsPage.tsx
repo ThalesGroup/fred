@@ -28,6 +28,7 @@ import {
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import {
+  type CreateAgentInstanceRequest,
   type ManagedAgentInstanceSummary,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
@@ -37,6 +38,9 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useState } from "react";
 import styles from "./TeamAgentsPage.module.css";
+
+type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
+type AgentRequestMcpConfigValues = NonNullable<CreateAgentInstanceRequest["mcp_config_values"]>;
 
 /**
  * Lists the managed agent instances for the current team and exposes
@@ -99,9 +103,13 @@ export default function TeamAgentsPage() {
           description: payload.description || undefined,
           tuning_field_values:
             Object.keys(payload.tuningFieldValues).length > 0
-              ? payload.tuningFieldValues
+              ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
               : undefined,
           mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
+          mcp_config_values:
+            Object.keys(payload.mcpConfigValues).length > 0
+              ? (payload.mcpConfigValues as AgentRequestMcpConfigValues)
+              : undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} created` });
@@ -127,9 +135,13 @@ export default function TeamAgentsPage() {
           description: payload.description || undefined,
           tuning_field_values:
             Object.keys(payload.tuningFieldValues).length > 0
-              ? payload.tuningFieldValues
+              ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
               : undefined,
           mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
+          mcp_config_values:
+            Object.keys(payload.mcpConfigValues).length > 0
+              ? (payload.mcpConfigValues as AgentRequestMcpConfigValues)
+              : undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} updated` });

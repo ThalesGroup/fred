@@ -123,7 +123,7 @@ Two distinct concepts:
 - `display_name`, `description`, `category`
 - `tags`, `capabilities`, `team_instantiable`, `status`
 - `default_tuning_fields: list[ManagedAgentFieldSpec]` — field descriptors the frontend renders dynamically at enrollment
-- `mcp_servers: list[ManagedMcpServerRef]` — MCP tool references advertised by the template; `display_name` enriched from the pod's MCP catalog; `config_fields` for per-instance tool configuration (Phase 2, currently empty)
+- `mcp_servers: list[ManagedMcpServerRef]` — MCP tool references advertised by the template; `display_name` enriched from the pod's MCP catalog; `config_fields` for per-instance tool configuration declared by the tool catalog
 
 The control plane is a **pure proxy** for these values — it does not interpret them. The runtime pod is the author; the control plane aggregates and forwards.
 
@@ -133,7 +133,15 @@ The control plane is a **pure proxy** for these values — it does not interpret
 - `team_id`, `template_id`
 - `display_name`, `description`, `status`
 - `created_at`, `updated_at`, `created_by`
-- `tuning_field_values: dict[str, Any]` — frozen snapshot of user-set field values at enrollment; keys constrained to `ManagedAgentFieldSpec.key`
+- `tuning_field_values: dict[str, TuningValue]` — frozen snapshot of user-set
+  agent tuning values at enrollment; keys constrained to
+  `ManagedAgentFieldSpec.key`
+- `mcp_config_values: dict[str, dict[str, TuningValue]]` — per-server MCP
+  configuration keyed by server id then config-field key
+- `selected_mcp_server_ids: list[str] | null`
+  - `null` = inherit template default selection (all declared servers active)
+  - `[]` = activate no MCP servers
+  - non-empty list = activate exactly that subset
 
 Do not expose runtime pod URLs or Kubernetes topology to the frontend.
 
@@ -166,6 +174,8 @@ This split is intentional:
 - the runtime should only interpret the families that belong to execution
 - on create/update, control-plane validates known values against the declared
   field contract (type, enum, min/max, pattern) before persisting them
+- MCP `config_fields` are **not** stored in `tuning_field_values`; they live in
+  dedicated `mcp_config_values` keyed by server id
 
 Do not model platform-owned selectors as generic tuning fields. In particular:
 
@@ -179,7 +189,7 @@ Do not model platform-owned selectors as generic tuning fields. In particular:
 - `id` — logical server id
 - `display_name` — human label (enriched from runtime MCP catalog at proxy time)
 - `require_tools: list[str]` — tool names the agent requires
-- `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters (Phase 2; empty today)
+- `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters owned by the MCP tool and persisted via `mcp_config_values`
 
 ### 3.3 Runtime binding stays internal
 
@@ -194,7 +204,9 @@ It exists so control-plane can resolve:
 Use it for runtime resolution and backend validation only.
 
 **Field value forwarding:** `ManagedAgentTuning.values` (the user-set field values
-dict) is forwarded verbatim as `AgentTuning.values` in the runtime binding response.
+dict) is forwarded verbatim as `AgentTuning.values` in the runtime binding
+response. `ManagedAgentTuning.mcp_config_values` is forwarded separately as
+`AgentTuning.mcp_config_values`.
 
 Execution semantics:
 
@@ -205,14 +217,16 @@ Execution semantics:
     `ReActAgentDefinition.system_prompt_template`
   - blank value means "keep the author-defined default prompt"
 - Graph agents read prompt and setting values through `context.tuning_values`
-- `chat_options.*` values are stored with the instance and are primarily consumed
-  by the frontend chat surface, not by runtime orchestration
+- tool-owned chat options are resolved from `mcp_config_values` into a typed
+  `effective_chat_options` surface exposed by `ExecutionPreparation`
 
 This contract is intentionally narrow:
 
 - prompt fields describe instructions
 - settings fields describe agent behavior
-- chat-option fields describe UI affordances
+- chat-option fields that remain agent-authored describe UI affordances
+- tool-owned UI affordances live in `mcp_config_values` and resolve into
+  `effective_chat_options`
 - MCP/model selection stays in dedicated typed product/runtime contracts
 
 ### 3.4 Managed agent instance writes

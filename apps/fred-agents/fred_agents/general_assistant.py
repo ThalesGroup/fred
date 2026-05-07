@@ -12,68 +12,69 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-General-purpose assistant ReAct agent — configurable with any Knowledge Flow tool.
+General-purpose assistant ReAct agent — the default Fred agent.
 
 Why this module exists:
-- all other agents in this pod are scoped to a specific task (monitoring, RAG)
-- this agent is the generic configurable template: team admins equip it with the
-  Knowledge Flow MCP tools their use case needs and guide it via a system prompt
-- it is the fully-equipped configurable template: team admins pick which KF
-  tools to activate and specialise the role via the system prompt field
+- provides the single general-purpose agent that covers the full range of use
+  cases: pure LLM conversation when no tools are active, document search when
+  Knowledge Flow MCP servers are equipped, and anything in between
+- replaces the former split between `simple_assistant` (no MCP) and the old
+  `general_assistant` (all KF MCP servers by default), which was confusing
+
+Key design:
+- no `default_mcp_servers`: starts as a pure-LLM agent that works standalone
+  without any external service
+- admins equip it with catalog MCP servers via the control-plane agent form;
+  the system prompt handles both the tool-equipped and no-tool cases
+- one `prompts.system` field lets admins specialise the role without creating a
+  new agent template
 
 How to use it:
-- import `GENERAL_ASSISTANT_AGENT` and add it to a pod registry
-- chat with it using `fred-agents-cli`; add KF tools via the control-plane form
+- import `GENERAL_ASSISTANT_AGENT` and register it first in the pod registry
+  so that `fred-agents-cli` selects it as the default agent on connect
+- equip with Knowledge Flow MCP servers via the control-plane form to enable
+  search, tabular, or monitoring capabilities
 
 Example:
 - `from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT`
 """
 
-from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-    MCP_SERVER_KNOWLEDGE_FLOW_FS,
-    MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
-    MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
-    MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS,
-    MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
-    FieldSpec,
-    MCPServerRef,
-    UIHints,
-)
+from fred_sdk import FieldSpec, UIHints
 from fred_sdk.contracts.models import ReActAgentDefinition, ReActPolicy
 
 _SYSTEM_PROMPT = """\
 You are a helpful, knowledgeable, and concise assistant.
 Answer questions clearly and directly. When you are uncertain, say so.
-If tools are available, use them to ground your answers in real data before responding.
+
+If search or data tools are available, use them to ground your answers in real \
+data before responding.
+If no tools are available, answer from your training knowledge and say so clearly \
+— do not pretend to have access to a document corpus or live data you cannot reach.
 """
 
 
 class GeneralAssistantDefinition(ReActAgentDefinition):
     """
-    Configurable general-purpose ReAct agent served by the standalone agents pod.
+    General-purpose ReAct agent — the default Fred open-source agent.
 
     Why this class exists:
-    - it is the generic Fred agent: team admins configure it with any combination
-      of Knowledge Flow MCP tools and a custom system prompt for their use case
-    - it works with zero external services and scales up to the full Knowledge
-      Flow toolkit without code changes; for a pure LLM baseline use
-      `simple_assistant` instead
+    - single entry point for general conversation, document search, and data
+      analysis depending on which MCP servers the admin activates
+    - works standalone with zero external dependencies (pure LLM baseline)
+    - scales up to the full Knowledge Flow toolkit without any code change
 
     Key design choices:
-    - all Knowledge Flow MCP servers are declared in `default_mcp_servers` so the
-      control-plane enrolls them when a team creates an instance; team admins
-      can review which tools are active from the agent form
-    - `prompts.system` field lets team admins specialise the agent role (search
-      assistant, monitoring assistant, data analyst …) without creating a new
+    - no `default_mcp_servers`: admins choose which catalog servers to activate
+      from the control-plane agent form; this makes the standalone baseline
+      unambiguous and prevents silent failures when MCP services are unreachable
+    - system prompt explicitly handles both the tool-equipped and no-tool cases
+      so the agent never claims capabilities it does not have
+    - one `prompts.system` field lets admins specialise the role without a new
       template
-    - `chat_options.*` fields are frontend configuration hints — they are read by
-      the chat UI to show or hide file attachments and library selection
 
     How to use it:
-    - instantiate once and register it in the pod registry
-    - team admins then create instances via the control-plane form
+    - instantiate once and register it first in the pod registry (CLI default)
+    - team admins create instances and pick MCP tools via the control-plane form
 
     Example:
     - `definition = GeneralAssistantDefinition()`
@@ -82,21 +83,12 @@ class GeneralAssistantDefinition(ReActAgentDefinition):
     agent_id: str = "fred.github.assistant"
     role: str = "General-purpose assistant"
     description: str = (
-        "A helpful, concise assistant configurable with any Knowledge Flow tool. "
-        "Equip it with search, monitoring, or data tools and guide it via its system prompt."
+        "A helpful, concise assistant. Works standalone from model knowledge. "
+        "Equip it with Knowledge Flow search or data tools via the agent form "
+        "to ground answers in your documents and live data."
     )
     tags: tuple[str, ...] = ("general", "react")
     system_prompt_template: str = _SYSTEM_PROMPT
-
-    default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_STATISTICS),
-    )
 
     fields: tuple[FieldSpec, ...] = (
         FieldSpec(

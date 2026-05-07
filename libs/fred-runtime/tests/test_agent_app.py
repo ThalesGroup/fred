@@ -1223,3 +1223,63 @@ def test_apply_runtime_tuning_ignores_blank_system_prompt() -> None:
         assert result.system_prompt_template == original, (
             f"blank {blank!r} should not override"
         )
+
+
+def test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none() -> None:
+    """
+    Ensure _apply_runtime_tuning distinguishes None from [] for MCP activation.
+
+    Why this exists:
+    - the managed-agent contract now uses a tri-state MCP selection:
+      None=inherited default, []=activate none, non-empty list=exact subset
+    - runtime execution must therefore not collapse [] back to "all tools"
+
+    How to use it:
+    - run in the default offline fred-runtime test suite
+
+    Example:
+    - `pytest tests/test_agent_app.py::test_apply_runtime_tuning_treats_empty_mcp_selection_as_activate_none -q`
+    """
+    from fred_sdk.contracts.models import AgentTuning, MCPServerRef
+
+    from fred_runtime.app.agent_app import _apply_runtime_tuning
+
+    definition = _EchoAgent().model_copy(
+        update={
+            "default_mcp_servers": (
+                MCPServerRef(id="mcp-search"),
+                MCPServerRef(id="mcp-storage"),
+            )
+        }
+    )
+
+    inherited = cast(
+        _EchoAgent,
+        _apply_runtime_tuning(
+            definition,
+            AgentTuning(
+                role=definition.role,
+                description=definition.description,
+                mcp_servers=list(definition.default_mcp_servers),
+                selected_mcp_server_ids=None,
+            ),
+        ),
+    )
+    disabled = cast(
+        _EchoAgent,
+        _apply_runtime_tuning(
+            definition,
+            AgentTuning(
+                role=definition.role,
+                description=definition.description,
+                mcp_servers=list(definition.default_mcp_servers),
+                selected_mcp_server_ids=[],
+            ),
+        ),
+    )
+
+    assert [server.id for server in inherited.default_mcp_servers] == [
+        "mcp-search",
+        "mcp-storage",
+    ]
+    assert list(disabled.default_mcp_servers) == []

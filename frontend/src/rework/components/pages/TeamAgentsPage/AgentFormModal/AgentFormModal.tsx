@@ -34,6 +34,8 @@ export type AgentFormPayload = {
   description: string;
   tuningFieldValues: Record<string, unknown>;
   selectedMcpServerIds: string[] | null;
+  /** Per-server MCP config values: outer key = server id, inner key = config_fields[].key. */
+  mcpConfigValues: Record<string, Record<string, unknown>>;
 };
 
 type AgentFormModalProps = {
@@ -54,6 +56,7 @@ type FormState = {
   description: string;
   tuningValues: Record<string, unknown>;
   selectedMcpServerIds: string[] | null;
+  mcpConfigValues: Record<string, Record<string, unknown>>;
 };
 
 export default function AgentFormModal({
@@ -79,6 +82,7 @@ export default function AgentFormModal({
     description: "",
     tuningValues: {},
     selectedMcpServerIds: null,
+    mcpConfigValues: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
@@ -88,13 +92,14 @@ export default function AgentFormModal({
       return;
     }
     if (mode === "edit" && editInstance) {
-      const stored = editInstance.selected_mcp_server_ids ?? [];
       setForm({
         templateId: editInstance.template_id,
         displayName: editInstance.display_name,
         description: editInstance.description ?? "",
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
-        selectedMcpServerIds: stored.length > 0 ? stored : null,
+        // Preserve tri-state: null = inherit default, [] = none, [...] = exact subset.
+        selectedMcpServerIds: editInstance.selected_mcp_server_ids ?? null,
+        mcpConfigValues: (editInstance.mcp_config_values as Record<string, Record<string, unknown>>) ?? {},
       });
       setStep(2);
     } else {
@@ -104,6 +109,7 @@ export default function AgentFormModal({
         description: "",
         tuningValues: {},
         selectedMcpServerIds: null,
+        mcpConfigValues: {},
       });
       setStep(1);
     }
@@ -117,12 +123,23 @@ export default function AgentFormModal({
       description: tpl?.description ?? "",
       tuningValues: {},
       selectedMcpServerIds: null,
+      mcpConfigValues: {},
     });
     setStep(2);
   };
 
   const handleTuningChange = (key: string, value: unknown) => {
     setForm((prev) => ({ ...prev, tuningValues: { ...prev.tuningValues, [key]: value } }));
+  };
+
+  const handleMcpConfigChange = (serverId: string, key: string, value: unknown) => {
+    setForm((prev) => ({
+      ...prev,
+      mcpConfigValues: {
+        ...prev.mcpConfigValues,
+        [serverId]: { ...prev.mcpConfigValues[serverId], [key]: value },
+      },
+    }));
   };
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === form.templateId);
@@ -141,6 +158,7 @@ export default function AgentFormModal({
       description: form.description.trim(),
       tuningFieldValues: form.tuningValues,
       selectedMcpServerIds: form.selectedMcpServerIds,
+      mcpConfigValues: form.mcpConfigValues,
     });
   };
 
@@ -200,15 +218,15 @@ export default function AgentFormModal({
               description={form.description}
               tuningFieldValues={form.tuningValues}
               selectedMcpServerIds={form.selectedMcpServerIds}
+              mcpConfigValues={form.mcpConfigValues}
               isSubmitting={isSubmitting}
               submitAttempted={submitAttempted}
               editInstance={editInstance}
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
               onTuningChange={handleTuningChange}
-              onMcpSelectionChange={(ids) =>
-                setForm((prev) => ({ ...prev, selectedMcpServerIds: ids.length > 0 ? ids : null }))
-              }
+              onMcpSelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedMcpServerIds: ids }))}
+              onMcpConfigChange={handleMcpConfigChange}
             />
           )}
         </div>

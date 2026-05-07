@@ -49,6 +49,11 @@ from .openai_compat import (
     OpenAIToolCall,
     OpenAIToolCallFunction,
 )
+from .prompt_utils import (
+    PROMPT_SAFE_TOKENS,
+    PromptTemplateError,
+    validate_prompt_template,
+)
 from .runtime import RuntimeErrorEvent, TurnPersistedEvent
 
 __all__ = [
@@ -79,4 +84,8 @@ __all__ = [
     "OpenAIModelList",
     "OpenAIToolCall",
     "OpenAIToolCallFunction",
+    # Prompt template token registry and validation
+    "PROMPT_SAFE_TOKENS",
+    "PromptTemplateError",
+    "validate_prompt_template",
 ]
