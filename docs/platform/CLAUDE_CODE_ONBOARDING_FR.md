@@ -10,6 +10,9 @@ avoir besoin d'accéder à Jira ou de connaître le code.
 
 ## Partie 1 — Stratégie de branches (Simon + Dimitri)
 
+> La référence complète en anglais est [`BRANCH_STRATEGY.md`](BRANCH_STRATEGY.md).
+> Cette section en résume les points essentiels pour l'équipe.
+
 ### Le modèle adopté
 
 Fred utilise un modèle de **branches de release long-terme**, identifiées par des

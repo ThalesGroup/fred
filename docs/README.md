@@ -91,6 +91,7 @@ guides. Read the developer contract first.
 | File | Purpose |
 |---|---|
 | [`DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) | **Start here** — build, test, PR conventions |
+| [`BRANCH_STRATEGY.md`](platform/BRANCH_STRATEGY.md) | **Branch model** — long-lived release branches, feature workflow, tagging, hotfix, future cycles |
 | [`CLAUDE_CODE_ONBOARDING_FR.md`](platform/CLAUDE_CODE_ONBOARDING_FR.md) | **Onboarding** — branch strategy, Claude Code install, how to query the repo (FR) |
 | [`OPERATING_MODES.md`](platform/OPERATING_MODES.md) | Standalone (single pod, no auth) vs full-stack (Keycloak + teams) — choose your mode |
 | [`CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) | **CLI pattern** — every backend exposes `make cli` / `fred-{component}-cli` |

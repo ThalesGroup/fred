@@ -6,27 +6,26 @@ We follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## Delivery Flow
 
-### 1) Integration flow (`develop`)
+Fred uses a **long-lived release branch** model. See [`BRANCH_STRATEGY.md`](BRANCH_STRATEGY.md)
+for the full branching workflow. This document covers only the tag convention and
+what each tag triggers in CI.
 
-- Features are merged into `develop`.
-- `develop` is automatically deployed to the integration platform.
-- The team validates behavior on this integration environment.
+### Integration
 
-### 2) Production candidate (`main`)
+Features are merged into the current long-lived release branch (currently `swift`)
+via pull requests. The branch is continuously deployed to the integration environment
+for validation. There is no separate `develop` or `main` branch.
 
-- When integration validation is considered acceptable, changes are merged from `develop` to `main`.
-- `main` is the reference branch for production delivery.
+### Release tags
 
-### 3) Release tags on `main`
+We use two tag families, applied directly on the release branch:
 
-We use two tag families:
-
-- Code release tag: `code/vX.Y.Z`
+- Code release tag: `vX.Y.Z`
 - Chart release tag: `chart/vA.B.C`
 
-#### Code tag (`code/vX.Y.Z`)
+#### Code tag (`vX.Y.Z`)
 
-Tagging `main` with `code/vX.Y.Z` triggers image builds:
+Tagging the release branch with `vX.Y.Z` triggers image builds:
 
 - `fred-agents:<X.Y.Z>`
 - `control-plane-backend:<X.Y.Z>`
@@ -35,9 +34,10 @@ Tagging `main` with `code/vX.Y.Z` triggers image builds:
 
 #### Chart tag (`chart/vA.B.C`)
 
-Tagging `main` with `chart/vA.B.C` triggers Helm chart packaging.
+Tagging the release branch with `chart/vA.B.C` triggers Helm chart packaging.
 
-Production deployment uses chart versions that reference images built from `main`.
+Production deployment uses chart versions that reference images built from the
+release branch tag.
 
 ## Customer Forks
 
@@ -50,16 +50,15 @@ The expected pattern remains the same:
 - release tags for code and charts,
 - production rollout from images/charts generated from that production branch.
 
-For rules on how to structure a fork so that merging from `develop` remains permanently conflict-free, see [FORKING_GUIDE.md](./FORKING_GUIDE.md).
+For rules on how to structure a fork so that merging from the release branch remains permanently conflict-free, see [FORKING_GUIDE.md](./FORKING_GUIDE.md).
 
 ## Tagging Sequence (Recommended)
 
-1. Validate on integration (`develop`).
-2. Merge to `main`.
-3. Create code tag `code/vX.Y.Z`.
-4. Update chart image references and deployment defaults as needed.
-5. Create chart tag `chart/vA.B.C`.
-6. Deploy production from the released chart/images.
+1. Validate on the release branch (currently `swift`).
+2. Create code tag `vX.Y.Z` on the release branch.
+3. Update chart image references and deployment defaults as needed.
+4. Create chart tag `chart/vA.B.C`.
+5. Deploy production from the released chart/images.
 
 ## Versioning Rules (`major.minor.patch`)
 

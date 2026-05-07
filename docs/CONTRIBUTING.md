@@ -95,18 +95,18 @@ This is the repository-wide contract for:
 - mandatory quality/test commands,
 - and strict separation between offline default tests and integration tests.
 
-## 🚚 Release And Versioning
+## 🚚 Branch Strategy, Release And Versioning
 
-Release delivery and tag/versioning policy is documented in:
+Fred uses a **long-lived release branch** model — one named branch per active release
+cycle, no `main`/`develop` split. The current integration branch is `swift`.
+All pull requests target `swift`. Releases are tags on `swift`.
 
-- [`docs/VERSIONING.md`](./VERSIONING.md)
+Full details:
 
-This includes:
-
-- `develop -> integration` validation flow,
-- promotion to `main` for production,
-- `code/vX.Y.Z` and `chart/vA.B.C` tags,
-- semantic versioning policy (`major.minor.patch`).
+- [`docs/platform/BRANCH_STRATEGY.md`](platform/BRANCH_STRATEGY.md) — branching model,
+  daily workflow, feature branch naming, hotfix process, opening a new release cycle
+- [`docs/platform/VERSIONING.md`](platform/VERSIONING.md) — tag convention (`vX.Y.Z`,
+  `chart/vA.B.C`), CI triggers, semantic versioning rules (`major.minor.patch`)
 
 ---
 
