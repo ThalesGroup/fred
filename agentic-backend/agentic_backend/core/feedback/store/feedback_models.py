@@ -14,11 +14,11 @@
 
 from __future__ import annotations
 
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
-from fred_core.sql.mixin import TimestampMixin
 
 
 class FeedbackRow(Base, TimestampMixin):

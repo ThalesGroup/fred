@@ -13,8 +13,9 @@ Create Date: 2026-05-07 18:05:27.796417
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b5393ea7a65d"
@@ -35,28 +36,55 @@ def upgrade() -> None:
     # server_default=CURRENT_TIMESTAMP for future inserts; existing rows get sentinel.
     with op.batch_alter_table("agent", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("created_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "created_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
         batch_op.add_column(
-            sa.Column("updated_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "updated_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
     op.execute(f"UPDATE agent SET created_at = '{SENTINEL}', updated_at = '{SENTINEL}'")
 
     # -- mcp-server: no prior timestamps --
     with op.batch_alter_table("mcp-server", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("created_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "created_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
         batch_op.add_column(
-            sa.Column("updated_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "updated_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
-    op.execute(f"UPDATE \"mcp-server\" SET created_at = '{SENTINEL}', updated_at = '{SENTINEL}'")
+    op.execute(
+        f"UPDATE \"mcp-server\" SET created_at = '{SENTINEL}', updated_at = '{SENTINEL}'"
+    )
 
     # -- feedbacks: had created_at (no server_default), no updated_at --
     # Add updated_at back-filled from created_at, then normalise server_defaults.
     with op.batch_alter_table("feedbacks", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("updated_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "updated_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
         batch_op.alter_column(
             "created_at",
@@ -87,7 +115,12 @@ def upgrade() -> None:
     # Back-fill created_at from updated_at when it predates the sentinel.
     with op.batch_alter_table("session", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("created_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "created_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
         batch_op.alter_column(
             "updated_at",
@@ -129,12 +162,25 @@ def upgrade() -> None:
     # Back-fill from the existing `timestamp` domain column (message time).
     with op.batch_alter_table("session_history", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("created_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "created_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
         batch_op.add_column(
-            sa.Column("updated_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "updated_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
-    op.execute("UPDATE session_history SET created_at = timestamp, updated_at = timestamp")
+    op.execute(
+        "UPDATE session_history SET created_at = timestamp, updated_at = timestamp"
+    )
+
 
 def downgrade() -> None:
     """Downgrade schema."""

@@ -16,8 +16,9 @@ Create Date: 2026-05-07 18:08:41.631834
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "ee06c110f46c"
@@ -73,12 +74,24 @@ def upgrade() -> None:
     # The UPDATE immediately overwrites existing rows with their actual gcuAcceptedAt.
     with op.batch_alter_table("users", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("created_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "created_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
         batch_op.add_column(
-            sa.Column("updated_at", ts_type, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP"))
+            sa.Column(
+                "updated_at",
+                ts_type,
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            )
         )
-    op.execute('UPDATE users SET created_at = "gcuAcceptedAt", updated_at = "gcuAcceptedAt"')
+    op.execute(
+        'UPDATE users SET created_at = "gcuAcceptedAt", updated_at = "gcuAcceptedAt"'
+    )
 
 
 def downgrade() -> None:

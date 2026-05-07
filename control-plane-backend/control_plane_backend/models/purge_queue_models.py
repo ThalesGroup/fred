@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base
-from fred_core.sql.mixin import TimestampMixin
 
 
 class PurgeQueueRow(Base, TimestampMixin):
