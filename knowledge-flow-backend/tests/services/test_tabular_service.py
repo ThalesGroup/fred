@@ -315,6 +315,57 @@ async def test_tabular_processor_keeps_mixed_numeric_and_text_column_as_string(t
     assert [column.dtype for column in artifact.columns] == ["integer", "string", "string"]
 
 
+@pytest.mark.asyncio
+async def test_tabular_processor_cleans_temporary_parquet_after_upload(tmp_path, monkeypatch):
+    """
+    Ensure the DuckDB-generated Parquet temp file is deleted after content-store upload.
+
+    Why this exists:
+    - Tabular ingestion briefly materializes a Parquet artifact on local disk
+      before uploading it to shared content storage.
+    - The temporary file should not remain on disk once processing completes.
+
+    How to use:
+    - Patch the generated Parquet path to a known location, run
+      `TabularProcessor.process(...)`, and assert the file existed during
+      upload but not afterwards.
+    """
+    csv_path = tmp_path / "sales.csv"
+    csv_path.write_text("city,amount\nParis,10\nLyon,20\n", encoding="utf-8")
+
+    tracked_parquet_path = tmp_path / "tracked-temp.parquet"
+    observed: dict[str, object] = {"seen_during_upload": False}
+
+    class _TrackedNamedTemporaryFile:
+        def __enter__(self):
+            self._handle = tracked_parquet_path.open("w+b")
+            return self._handle
+
+        def __exit__(self, exc_type, exc, tb):
+            self._handle.close()
+
+    processor = TabularProcessor()
+    metadata = _metadata(document_uid="doc-temp-cleanup", file_name="sales.csv")
+    original_put_file = processor.content_store.put_file
+
+    def _tracked_put_file(key: str, file_path: Path, *, content_type: str):
+        observed["seen_during_upload"] = tracked_parquet_path.exists()
+        assert file_path == tracked_parquet_path
+        return original_put_file(key, file_path, content_type=content_type)
+
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor.tempfile.NamedTemporaryFile",
+        lambda *args, **kwargs: _TrackedNamedTemporaryFile(),
+    )
+    monkeypatch.setattr(processor.content_store, "put_file", _tracked_put_file)
+
+    processed_metadata = processor.process(str(csv_path), metadata)
+
+    assert processed_metadata.file.row_count == 2
+    assert observed["seen_during_upload"] is True
+    assert not tracked_parquet_path.exists()
+
+
 @pytest.mark.integration
 def test_tabular_processor_limits_python_rss_growth_for_large_csv(tmp_path):
     content_store = ApplicationContext.get_instance().get_content_store()
