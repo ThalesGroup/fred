@@ -32,7 +32,7 @@ export default function TeamContentNavbar() {
   const navigationItems: NavigationMenuItemProps[] = [
     {
       type: "link",
-      label: agentsNicknamePlural.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
+      label: (agentsNicknamePlural ?? "...").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
       icon: { category: "outlined", type: agentIconName as IconType, filled: true },
       linkProps: { to: `/team/${teamId}/agents` },
     },
