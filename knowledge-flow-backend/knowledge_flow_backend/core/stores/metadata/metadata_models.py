@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fred_core.models.base import JsonColumn, TimestampColumn
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import Index, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,13 +29,14 @@ from knowledge_flow_backend.models.base import Base
 TagIdsColumn = ARRAY(String).with_variant(JSON(), "sqlite")
 
 
-class MetadataRow(Base):
+class MetadataRow(Base, TimestampMixin):
     """ORM model for the ``metadata`` table."""
 
     __tablename__ = "metadata"
 
     document_uid: Mapped[str] = mapped_column(String, primary_key=True)
     source_tag: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    # TODO: use created_at (from TimestampMixin) instead of date_added_to_kb in a future PR
     date_added_to_kb: Mapped[datetime | None] = mapped_column(TimestampColumn, nullable=True)
     tag_ids: Mapped[list | None] = mapped_column(TagIdsColumn, nullable=True)
     doc: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)

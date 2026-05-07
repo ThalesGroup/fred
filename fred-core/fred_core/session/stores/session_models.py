@@ -14,16 +14,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models.base import Base, JsonColumn
+from fred_core.sql.mixin import TimestampMixin
 
 
-class SessionRow(Base):
+class SessionRow(Base, TimestampMixin):
     """ORM model for the ``session`` table.
 
     Schema matches the existing table created by the legacy PostgresJsonSessionStore.
@@ -32,6 +32,7 @@ class SessionRow(Base):
     """
 
     __tablename__ = "session"
+    __table_args__ = (Index("ix_session_updated_at", "updated_at"),)
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -40,7 +41,4 @@ class SessionRow(Base):
     session_data: Mapped[dict[str, Any]] = mapped_column(
         JsonColumn,
         nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
     )

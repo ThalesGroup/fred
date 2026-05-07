@@ -15,13 +15,14 @@
 from __future__ import annotations
 
 from fred_core.models.base import JsonColumn
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from knowledge_flow_backend.models.base import Base
 
 
-class ResourceRow(Base):
+class ResourceRow(Base, TimestampMixin):
     """ORM model for the ``resource`` table."""
 
     __tablename__ = "resource"
