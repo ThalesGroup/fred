@@ -24,7 +24,7 @@ import type { FrontendConfigDto, FrontendFlags, Properties, UserSecurity } from 
 export interface AppConfig {
   frontend_basename: string; // Base name used by the frontend
   feature_flags: Record<string, boolean>;
-  properties: Record<string, string>;
+  properties: Properties;
   user_auth: UserSecurity; // from OpenAPI types
   permissions: string[];
 }
@@ -43,17 +43,50 @@ const normalizeFlags = (ff?: FrontendFlags): Record<string, boolean> => ({
   ...(ff?.enableElecWarfare !== undefined ? { enableElecWarfare: ff.enableElecWarfare } : {}),
 });
 
-const normalizeProps = (p?: Properties): Record<string, string> => {
-  const out: Record<string, string> = {};
-  if (p?.logoName !== undefined) out.logoName = String(p.logoName);
-  if (p?.logoNameDark !== undefined) out.logoNameDark = String((p as any).logoNameDark);
-  if (p?.siteDisplayName !== undefined) out.siteDisplayName = String((p as any).siteDisplayName);
-  if ((p as any)?.releaseBrand !== undefined) out.releaseBrand = String((p as any).releaseBrand);
-  if ((p as any)?.releaseCodename !== undefined) out.releaseCodename = String((p as any).releaseCodename);
-  if ((p as any)?.logoHeight !== undefined) out.logoHeight = String((p as any).logoHeight);
-  if ((p as any)?.logoWidth !== undefined) out.logoWidth = String((p as any).logoWidth);
-  if ((p as any)?.faviconName !== undefined) out.faviconName = String((p as any).faviconName);
-  if ((p as any)?.faviconNameDark !== undefined) out.faviconNameDark = String((p as any).faviconNameDark);
+/**
+ * Keeps the supported frontend properties provided by backend configuration.
+ *
+ * Why this exists:
+ * - Several UI components read frontend settings during the first render.
+ * - Copying each supported field explicitly avoids silently dropping config keys such as `agentsNicknamePlural`.
+ *
+ * How to use it:
+ * - Pass the `frontend_settings.properties` payload from the backend.
+ * - Read the returned object through `getConfig().properties` or `useFrontendProperties()`.
+ *
+ * Example:
+ * - `const properties = normalizeProps(settings.frontend_settings.properties);`
+ */
+const normalizeProps = (p?: Properties): Properties => {
+  const out: Properties = {};
+  if (p?.logoName !== undefined) out.logoName = p.logoName;
+  if (p?.logoNameDark !== undefined) out.logoNameDark = p.logoNameDark;
+  if (p?.logoHeight !== undefined) out.logoHeight = p.logoHeight;
+  if (p?.logoWidth !== undefined) out.logoWidth = p.logoWidth;
+  if (p?.faviconName !== undefined) out.faviconName = p.faviconName;
+  if (p?.faviconNameDark !== undefined) out.faviconNameDark = p.faviconNameDark;
+  if (p?.siteDisplayName !== undefined) out.siteDisplayName = p.siteDisplayName;
+  if (p?.siteTitle !== undefined) out.siteTitle = p.siteTitle;
+  if (p?.siteSubtitle !== undefined) out.siteSubtitle = p.siteSubtitle;
+  if (p?.releaseBrand !== undefined) out.releaseBrand = p.releaseBrand;
+  if (p?.agentsNicknameSingular !== undefined) out.agentsNicknameSingular = p.agentsNicknameSingular;
+  if (p?.agentsNicknamePlural !== undefined) out.agentsNicknamePlural = p.agentsNicknamePlural;
+  if (p?.agentIconName !== undefined) out.agentIconName = p.agentIconName;
+  if (p?.contactSupportLink !== undefined) out.contactSupportLink = p.contactSupportLink;
+  if (p?.showAgentRestoreFromConfiguration !== undefined) {
+    out.showAgentRestoreFromConfiguration = p.showAgentRestoreFromConfiguration;
+  }
+  if (p?.showAgentDisableButton !== undefined) out.showAgentDisableButton = p.showAgentDisableButton;
+  if (p?.showAgentCode !== undefined) out.showAgentCode = p.showAgentCode;
+  if (p?.allowAgentSwitchInOneConversation !== undefined) {
+    out.allowAgentSwitchInOneConversation = p.allowAgentSwitchInOneConversation;
+  }
+  if (p?.defaultTeamBannerFile !== undefined) out.defaultTeamBannerFile = p.defaultTeamBannerFile;
+  if (p?.defaultPersonalBannerFile !== undefined) out.defaultPersonalBannerFile = p.defaultPersonalBannerFile;
+  if (p?.defaultTeamAvatarFile !== undefined) out.defaultTeamAvatarFile = p.defaultTeamAvatarFile;
+  if (p?.defaultPersonalAvatarFile !== undefined) out.defaultPersonalAvatarFile = p.defaultPersonalAvatarFile;
+  if (p?.gcuVersion !== undefined) out.gcuVersion = p.gcuVersion;
+  if (p?.uploadWarning !== undefined) out.uploadWarning = p.uploadWarning;
   return out;
 };
 
@@ -111,7 +144,7 @@ export const getConfig = (): AppConfig => {
 export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConfig().feature_flags?.[flag];
 
 /** Properties helper */
-export const getProperty = (key: string): string => getConfig().properties?.[key];
+export const getProperty = <K extends keyof Properties>(key: K): Properties[K] => getConfig().properties?.[key];
 
 const normalizeBasename = (basename: string): string => {
   if (!basename || basename === "/") return "";

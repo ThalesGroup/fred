@@ -12,31 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useMemo } from "react";
-import { useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery } from "../slices/agentic/agenticOpenApi";
+import { getConfig } from "../common/config";
 import type { Properties } from "../slices/agentic/agenticOpenApi";
 
 /**
- * Custom hook to access frontend properties from the configuration.
+ * Custom hook to access frontend properties from the bootstrapped frontend configuration.
  *
- * This hook wraps the frontend config query and exposes only the properties object.
- * The query is configured with aggressive caching since frontend config rarely changes
- * (only on helm chart redeployment).
+ * Why this exists:
+ * - Frontend properties are already loaded by `loadConfig()` before React mounts.
+ * - Reading the bootstrapped config avoids a second async fetch and removes first-render races in navigation components.
+ *
+ * How to use it:
+ * - Call the hook inside a React component and destructure the properties you need.
+ * - The hook returns the same backend-provided properties stored in the shared frontend config.
+ *
+ * Example:
+ * - `const { agentsNicknamePlural, siteDisplayName } = useFrontendProperties();`
  *
  * @returns The frontend properties object containing configuration like agentsNickname, etc.
  */
 export function useFrontendProperties(): Properties {
-  const { data: frontendConfig } = useGetFrontendConfigAgenticV1ConfigFrontendSettingsGetQuery(undefined, {
-    // Cache for 1 hour (3600 seconds) since config rarely changes
-    pollingInterval: 0,
-    // Keep unused data in cache for 1 hour
-    refetchOnMountOrArgChange: 3600,
-    // Keep data fresh in cache even when component unmounts
-    refetchOnFocus: false,
-    refetchOnReconnect: false,
-  });
-
-  return useMemo(() => {
-    return frontendConfig?.frontend_settings?.properties || ({} as Properties);
-  }, [frontendConfig]);
+  return getConfig().properties;
 }
