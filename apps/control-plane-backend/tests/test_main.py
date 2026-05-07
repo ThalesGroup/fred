@@ -1,3 +1,13 @@
+"""
+Offline integration tests for the control-plane-backend product API.
+
+Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tuning
+     field validation (type/enum/min-max/pattern), MCP server selection (C1),
+     mcp_config_values per-server config;
+     §3d.9 (P1) — prompt template validation at persistence boundary (unknown tokens → 422);
+     §6.4.D — PATCH session endpoint (updated_at, title).
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

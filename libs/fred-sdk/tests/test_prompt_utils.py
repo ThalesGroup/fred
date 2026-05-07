@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for fred_sdk.contracts.prompt_utils."""
+"""
+Tests for fred_sdk.contracts.prompt_utils.
+
+Ref: docs/backlog/BACKLOG.md §3d.9 (P1) — PROMPT_SAFE_TOKENS registry,
+     validate_prompt_template (unknown tokens → error, non-simple braces preserved),
+     crash-proof rendering for code braces and dotted-notation patterns.
+"""
 
 import pytest
 
@@ -20,7 +26,6 @@ from fred_sdk.contracts.prompt_utils import (
     PROMPT_SAFE_TOKENS,
     validate_prompt_template,
 )
-
 
 # ---------------------------------------------------------------------------
 # PROMPT_SAFE_TOKENS registry

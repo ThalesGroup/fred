@@ -1,3 +1,11 @@
+"""
+Tests for PrometheusKPIStore label cardinality and dimension handling.
+
+Ref: docs/WORKPLAN.md S2 — Prometheus cardinality fix: session_id and user_id
+     removed from label dimensions; turn-level KPI quantities (tool_count,
+     input_tokens, output_tokens) now captured correctly.
+"""
+
 from __future__ import annotations
 
 from uuid import uuid4

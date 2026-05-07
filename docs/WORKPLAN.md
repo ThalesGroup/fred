@@ -15,7 +15,7 @@ Last updated: 2026-05-07
 | **Félix** | Frontend (rework design system, chat UI, migration) |
 | **Simon** | Backend — fred-runtime, fred-sdk, observability |
 | **Florian** | Backend — control-plane-backend, APIs, DB |
-| **Olélia** | Agent evaluation (deepeval) — parallel track |
+| **Odélia** | Agent evaluation (deepeval) — parallel track |
 
 ---
 
@@ -271,7 +271,7 @@ See `FRED-RUNTIME-QUALITY.md §R1b` for exact file-by-file breakdown and fix app
 
 ---
 
-## O1 — Agent Evaluation Track (Olélia) · Parallel, independent
+## O1 — Agent Evaluation Track (Odélia) · Parallel, independent
 
 **Ref**: `docs/rfc/AGENT-EVALUATION-RFC.md`
 
@@ -386,7 +386,7 @@ CLOSED / SHIPPED
 NOW (parallel)
 ├── Simon:    S1  E2E live stack validation ─────────────────────────────► closes Phase 3b gate
 ├── Félix:    6C  Agent options panel + session title ──────────────────► unblocked (6A+6B+F2 done)
-├── Olélia:   O1  Evaluation RFC → harness ──────────────────────────────► independent
+├── Odélia:   O1  Evaluation RFC → harness ──────────────────────────────► independent
 └── Dimitri:  swift branch commit + M1 F.1–F.4 hardening (4 branches)
 
 NEXT UP — Dimitri (next few days)

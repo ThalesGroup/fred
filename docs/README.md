@@ -14,7 +14,7 @@ Start here, then follow the links to the relevant section.
 | **A developer** touching an API boundary or execution path | [`design/`](#design--architecture-contracts) |
 | **A developer** working on the chat UI | [`backlog/CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) then [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) |
 | **A UX designer** reviewing component rendering | [`ux/COMPONENT-UX.md`](ux/COMPONENT-UX.md) then [`design/CHAT-COMPONENT-SPECS.md`](design/CHAT-COMPONENT-SPECS.md) |
-| **A product manager** tracking progress | [`WORKPLAN.md`](WORKPLAN.md) → [`backlog/BACKLOG.md`](backlog/BACKLOG.md) |
+| **A product manager** tracking progress | [`STATUS.md`](STATUS.md) → [`WORKPLAN.md`](WORKPLAN.md) → [`backlog/BACKLOG.md`](backlog/BACKLOG.md) |
 | **An architect** reviewing or proposing a change | [`rfc/`](#rfc--technical-proposals) → [`design/`](#design--architecture-contracts) |
 | **Writing an agent** with the SDK | [`authoring/`](#authoring--agent-sdk) |
 | **Choosing how to run Fred** (standalone vs teams) | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md) |
@@ -91,6 +91,7 @@ guides. Read the developer contract first.
 | File | Purpose |
 |---|---|
 | [`DEVELOPER_CONTRACT.md`](platform/DEVELOPER_CONTRACT.md) | **Start here** — build, test, PR conventions |
+| [`CLAUDE_CODE_ONBOARDING_FR.md`](platform/CLAUDE_CODE_ONBOARDING_FR.md) | **Onboarding** — branch strategy, Claude Code install, how to query the repo (FR) |
 | [`OPERATING_MODES.md`](platform/OPERATING_MODES.md) | Standalone (single pod, no auth) vs full-stack (Keycloak + teams) — choose your mode |
 | [`CLI-CONVENTION.md`](platform/CLI-CONVENTION.md) | **CLI pattern** — every backend exposes `make cli` / `fred-{component}-cli` |
 | [`PYTHON_CODING_GUIDELINES.md`](platform/PYTHON_CODING_GUIDELINES.md) | Python style and quality rules |
@@ -189,6 +190,7 @@ Runbooks and operational guides for the platform.
 
 | File | Purpose |
 |---|---|
+| [`STATUS.md`](STATUS.md) | **Daily snapshot** — who owns what, what was done this week, feature→test map. Start here for quick status. |
 | [`WORKPLAN.md`](WORKPLAN.md) | **Current sprint** — who does what, in what order, what is parallel |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution guidelines |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Code of conduct |

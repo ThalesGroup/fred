@@ -1,3 +1,10 @@
+"""
+Offline unit tests for session lifecycle actions (scheduler-driven).
+
+Ref: docs/backlog/BACKLOG.md §6.4.E — session lifecycle policies, purge queue,
+     due-candidate listing, delete-and-mark-done action.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

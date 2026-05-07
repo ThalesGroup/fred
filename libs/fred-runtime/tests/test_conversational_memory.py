@@ -7,6 +7,9 @@ Coverage:
 - C.3  RemoteSseAgentInvoker includes invocation_turns in the HTTP payload
 
 All tests are offline — no LLM or HTTP calls are made.
+
+Ref: docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md M1 phases C+D — runtime wiring
+     (_graph_input injection, LocalRegistryAgentInvoker, RemoteSseAgentInvoker).
 """
 
 from __future__ import annotations

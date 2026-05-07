@@ -11,8 +11,8 @@ from fred_core.common import (
     PostgresStoreConfig,
     TemporalSchedulerConfig,
 )
-from fred_sdk.contracts.models import TuningValue
 from fred_core.scheduler import SchedulerBackend
+from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, model_validator
 
 

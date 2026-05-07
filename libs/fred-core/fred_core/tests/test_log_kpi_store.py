@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Tests for KpiLogStore structured JSON output.
+
+Ref: docs/WORKPLAN.md S2 — structured KPI log output for agent.turn_completed,
+     agent.turn_error_total, agent.tool_failed_total (was silent no-op before S2).
+"""
+
 from __future__ import annotations
 
 import json

@@ -12,6 +12,9 @@ Coverage:
 - B.4  _make_agent_invoke_step passes prior_turns
 
 All tests are offline — no external services required.
+
+Ref: docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md M1 phases A+B — SDK primitives
+     (ConversationTurn, ConversationalState, TeamAgent state, build_turn_state).
 """
 
 from __future__ import annotations

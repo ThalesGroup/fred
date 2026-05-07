@@ -1,3 +1,11 @@
+"""
+Offline unit tests for the fred-runtime agent execution app.
+
+Ref: docs/backlog/BACKLOG.md §3d — managed agent tuning application, MCP server
+     selection (C1), tuning value application via _apply_runtime_tuning, KPI emission.
+     Also covers: docs/backlog/BACKLOG.md §3d.9 (P1 — prompts.system overlay).
+"""
+
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,9 @@
-"""Offline unit tests for McpCatalogConfiguration and AgentPodConfig MCP wiring."""
+"""
+Offline unit tests for McpCatalogConfiguration and AgentPodConfig MCP wiring.
+
+Ref: docs/backlog/BACKLOG.md §3d (C1) — MCP catalog loading, duplicate detection,
+     tri-state server selection (null=inherit, []=none, list=exact subset).
+"""
 
 from __future__ import annotations
 

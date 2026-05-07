@@ -1,3 +1,10 @@
+"""
+Offline unit tests for the control-plane developer CLI.
+
+Ref: docs/WORKPLAN.md D1 — control-plane `make cli` commands: templates, instances,
+     enrollment, runtime binding, sessions, execution preparation, lifecycle inspection.
+"""
+
 from __future__ import annotations
 
 import importlib
