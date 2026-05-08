@@ -6,7 +6,7 @@ Small control-plane service for team lifecycle and policy-driven conversation op
 
 Control Plane follows the same startup configuration contract as Agentic and Knowledge Flow.
 
-Read: [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+Read: [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/swift/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
 
 Key point: always use `ENV_FILE` + `CONFIG_FILE` (same names in every backend).
 

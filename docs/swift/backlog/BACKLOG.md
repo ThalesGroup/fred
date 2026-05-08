@@ -2131,13 +2131,46 @@ at save time — the agent was created successfully but broke on the first messa
 | `{user_id}` | Authenticated user identifier |
 | `{agent_id}` | Agent definition identifier |
 
-**Remaining (Slice D — prompt library)**:
+**Remaining (next slices, in order)**:
 
-- [ ] `Prompt` entity DB table + migration in `control-plane-backend`
-- [ ] CRUD endpoints: `POST/GET/PUT/DELETE /control-plane/v1/teams/{id}/prompts`
+**Slice D — team/personal prompt library**
+
+- [ ] `Prompt` entity DB table + migration in `control-plane-backend`; `team_id`
+  stored as plain `TeamId` and must accept the reserved `personal` team
+- [ ] Typed schemas + CRUD endpoints:
+  `POST/GET/PUT/DELETE /control-plane/v1/teams/{id}/prompts`
 - [ ] `controlPlaneOpenApi.ts` regenerated
-- [ ] `AgentFormModal` — [Import from library] button + `PromptPickerModal`
-- [ ] Frontend inline error display next to prompt textarea (uses error detail from 422)
+- [ ] Dedicated `Prompts` page in frontend for any team, including `personal`
+- [ ] `AgentFormModal` keeps manual prompt editing and gains `[Import from library]`
+  + `[Save as prompt]` flows backed by prompt CRUD
+- [ ] Frontend inline 422 error display next to prompt textarea (uses error detail from 422)
+- [ ] Importing or saving a prompt never creates a live prompt reference from the
+  agent instance; the stored agent config keeps only snapshot text in `prompts.*`
+
+### 3d.10 Prompt Marketplace — Global Published Prompts
+
+**Goal**: after 3d.9 lands, expose a global prompt catalog without conflating
+team library records and marketplace records.
+
+**Design rules**:
+
+- `Prompt` and `PublishedPrompt` are separate control-plane resources
+- team prompt → marketplace is an explicit publish-by-copy flow
+- editing or deleting a team prompt must never silently mutate already-published
+  marketplace entries or existing agent instances
+- importing from the marketplace is copy-based, not a live binding
+
+**Tasks**:
+
+- [ ] Freeze typed published-prompt contracts (`PublishedPromptSummary`,
+  `PublishedPromptDetail`, publish/unpublish request surface)
+- [ ] Add the minimal control-plane publish + list/detail + unpublish surface
+- [ ] Add a frontend global prompt marketplace page
+- [ ] Add `Publish to marketplace` from the team/personal `Prompts` page
+- [ ] Add marketplace import into the prompt-management flow after the read surface lands
+
+**Starts only after**: 3d.9 prompt CRUD + dedicated `Prompts` page +
+`AgentFormModal` import/save ergonomics are merged.
 
 ---
 

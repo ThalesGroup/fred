@@ -8,6 +8,11 @@ from fred_core.common import TeamId
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from control_plane_backend.models.base import Base
+from control_plane_backend.prompts.store import (
+    PromptAlreadyExistsError,
+    PromptRecord,
+    PromptStore,
+)
 from control_plane_backend.sessions.store import (
     SessionMetadataRecord,
     SessionMetadataStore,
@@ -245,5 +250,141 @@ async def test_session_metadata_store_update_last_activity_returns_none_for_miss
         )
 
         assert result is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_prompt_store_create_list_update_and_delete(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify the prompt store supports the full offline CRUD and ordering cycle.
+
+    Why this test exists:
+    - the prompt library must be a first-class control-plane storage surface
+      before any frontend prompt-management screen is built
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_metadata_stores.py -q`
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "prompts.sqlite3")
+
+    try:
+        store = PromptStore(engine)
+        older = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+        newer = datetime(2026, 1, 1, 10, 5, tzinfo=timezone.utc)
+
+        created = await store.create(
+            PromptRecord(
+                prompt_id="prompt-1",
+                team_id=TeamId("personal"),
+                name="Daily brief",
+                description="Ops baseline",
+                text="Today is {today}.",
+                created_by="alice",
+                created_at=older,
+                updated_at=older,
+            )
+        )
+        second = await store.create(
+            PromptRecord(
+                prompt_id="prompt-2",
+                team_id=TeamId("personal"),
+                name="Follow-up",
+                description=None,
+                text="Respond in {response_language}.",
+                created_by="alice",
+                created_at=newer,
+                updated_at=newer,
+            )
+        )
+
+        listed = await store.list_by_team(TeamId("personal"))
+        fetched = await store.get_for_team("prompt-1", TeamId("personal"))
+        updated = await store.update(
+            "prompt-1",
+            TeamId("personal"),
+            name="Daily brief v2",
+            description="Refined",
+            text="Today is {today}. Session: {session_id}.",
+        )
+        deleted = await store.delete("prompt-2", TeamId("personal"))
+        missing_delete = await store.delete("prompt-2", TeamId("personal"))
+
+        assert created.name == "Daily brief"
+        assert second.name == "Follow-up"
+        assert [item.prompt_id for item in listed] == ["prompt-2", "prompt-1"]
+        assert fetched is not None
+        assert fetched.text == "Today is {today}."
+        assert updated is not None
+        assert updated.name == "Daily brief v2"
+        assert updated.description == "Refined"
+        assert updated.text == "Today is {today}. Session: {session_id}."
+        assert deleted is True
+        assert missing_delete is False
+        assert await store.get("prompt-2") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_prompt_store_rejects_duplicate_name_within_same_team(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify prompt names stay unique per team while different teams may reuse them.
+
+    Why this test exists:
+    - the prompt library must avoid ambiguous team-local prompt labels without
+      imposing a global naming registry
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_metadata_stores.py -q`
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "prompts-unique.sqlite3")
+
+    try:
+        store = PromptStore(engine)
+        await store.create(
+            PromptRecord(
+                prompt_id="prompt-1",
+                team_id=TeamId("fredlab"),
+                name="Shared name",
+                description=None,
+                text="Today is {today}.",
+                created_by="alice",
+            )
+        )
+        await store.create(
+            PromptRecord(
+                prompt_id="prompt-2",
+                team_id=TeamId("other-team"),
+                name="Shared name",
+                description=None,
+                text="Respond in {response_language}.",
+                created_by="bob",
+            )
+        )
+
+        with pytest.raises(PromptAlreadyExistsError):
+            await store.create(
+                PromptRecord(
+                    prompt_id="prompt-3",
+                    team_id=TeamId("fredlab"),
+                    name="Shared name",
+                    description="duplicate",
+                    text="Session is {session_id}.",
+                    created_by="alice",
+                )
+            )
     finally:
         await engine.dispose()

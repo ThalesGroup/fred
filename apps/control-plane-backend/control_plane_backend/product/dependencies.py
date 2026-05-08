@@ -9,6 +9,7 @@ from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
+from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
@@ -39,6 +40,7 @@ class ProductServiceDependencies:
     team_dependencies: TeamServiceDependencies
     get_agent_instance_store: Callable[[], AgentInstanceStore]
     get_session_metadata_store: Callable[[], SessionMetadataStore]
+    get_prompt_store: Callable[[], PromptStore]
 
 
 def build_product_service_dependencies(
@@ -64,6 +66,7 @@ def build_product_service_dependencies(
         team_dependencies=build_team_service_dependencies(container),
         get_agent_instance_store=container.get_agent_instance_store,
         get_session_metadata_store=container.get_session_metadata_store,
+        get_prompt_store=container.get_prompt_store,
     )
 
 

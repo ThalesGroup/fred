@@ -25,6 +25,7 @@ from control_plane_backend.config.models import (
     LocalContentStorageConfig,
     MinioContentStorageConfig,
 )
+from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.policies.policy_loader import (
     load_conversation_policy_catalog,
 )
@@ -85,6 +86,7 @@ class ApplicationContext:
         self._rebac_engine: RebacEngine | None = None
         self._agent_instance_store: AgentInstanceStore | None = None
         self._session_metadata_store: SessionMetadataStore | None = None
+        self._prompt_store: PromptStore | None = None
 
     def _resolve_policy_catalog_path(self) -> Path:
         configured = Path(self.configuration.policies.purge_catalog_path)
@@ -197,6 +199,27 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._session_metadata_store
+
+    def get_prompt_store(self) -> PromptStore:
+        """
+        Return the shared prompt-library store for this process.
+
+        Why this function exists:
+        - prompt CRUD is now a first-class control-plane product surface and
+          needs the same lazy shared-store wiring as agent instances and
+          session metadata
+
+        How to use it:
+        - call from product dependency builders or tests that need the prompt
+          persistence surface
+
+        Example:
+        - `store = container.get_prompt_store()`
+        """
+
+        if self._prompt_store is None:
+            self._prompt_store = PromptStore(engine=self.get_pg_async_engine())
+        return self._prompt_store
 
     async def shutdown(self) -> None:
         """

@@ -34,6 +34,7 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
+from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.product.service import _RuntimeTemplatePayload
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.metadata_store import TeamMetadata
@@ -76,6 +77,25 @@ def _make_record(
             role=display_name,
             description=description or display_name,
         ),
+    )
+
+
+def _make_prompt_record(
+    *,
+    prompt_id: str = "prompt-1",
+    team_id: str = "personal",
+    name: str = "Daily brief",
+    description: str | None = "Ops baseline",
+    text: str = "Today is {today}.",
+    created_by: str | None = "internal-admin",
+) -> PromptRecord:
+    return PromptRecord(
+        prompt_id=prompt_id,
+        team_id=TeamId(team_id),
+        name=name,
+        description=description,
+        text=text,
+        created_by=created_by,
     )
 
 
@@ -214,6 +234,95 @@ def _patch_session_store(
 ) -> None:
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_session_metadata_store",
+        lambda _self: store,
+    )
+
+
+class _FakePromptStore:
+    """In-memory stand-in for PromptStore used in offline tests."""
+
+    def __init__(self, records: list[PromptRecord] | None = None) -> None:
+        self._records: list[PromptRecord] = list(records or [])
+
+    async def create(self, record: PromptRecord) -> PromptRecord:
+        if any(
+            existing.team_id == record.team_id and existing.name == record.name
+            for existing in self._records
+        ):
+            from control_plane_backend.prompts.store import PromptAlreadyExistsError
+
+            raise PromptAlreadyExistsError(record.name)
+        self._records.append(record)
+        return record
+
+    async def list_by_team(
+        self,
+        team_id: TeamId,
+        *,
+        limit: int = 100,
+    ) -> list[PromptRecord]:
+        records = [record for record in self._records if record.team_id == team_id]
+        return records[:limit]
+
+    async def get(self, prompt_id: str) -> PromptRecord | None:
+        return next((r for r in self._records if r.prompt_id == prompt_id), None)
+
+    async def get_for_team(
+        self,
+        prompt_id: str,
+        team_id: TeamId,
+    ) -> PromptRecord | None:
+        return next(
+            (
+                r
+                for r in self._records
+                if r.prompt_id == prompt_id and r.team_id == team_id
+            ),
+            None,
+        )
+
+    async def update(
+        self,
+        prompt_id: str,
+        team_id: TeamId,
+        *,
+        name: str,
+        description: str | None,
+        text: str,
+    ) -> PromptRecord | None:
+        record = await self.get_for_team(prompt_id, team_id)
+        if record is None:
+            return None
+        if any(
+            existing.prompt_id != prompt_id
+            and existing.team_id == team_id
+            and existing.name == name
+            for existing in self._records
+        ):
+            from control_plane_backend.prompts.store import PromptAlreadyExistsError
+
+            raise PromptAlreadyExistsError(name)
+        record.name = name
+        record.description = description
+        record.text = text
+        return record
+
+    async def delete(self, prompt_id: str, team_id: TeamId) -> bool:
+        before = len(self._records)
+        self._records = [
+            r
+            for r in self._records
+            if not (r.prompt_id == prompt_id and r.team_id == team_id)
+        ]
+        return len(self._records) < before
+
+
+def _patch_prompt_store(
+    monkeypatch: pytest.MonkeyPatch,
+    store: _FakePromptStore,
+) -> None:
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_prompt_store",
         lambda _self: store,
     )
 
@@ -2881,6 +2990,163 @@ async def test_list_agent_instances_sets_unavailable_when_pod_unreachable(
     assert item["catalog_warnings"] == []
     assert item["selected_mcp_server_ids"] == ["mcp-search"]
     assert item["mcp_config_values"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Prompt library CRUD
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_prompts_returns_team_scoped_summaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prompt list returns team-scoped summaries without the prompt text body."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakePromptStore(
+        [
+            _make_prompt_record(prompt_id="prompt-1", team_id="personal"),
+            _make_prompt_record(prompt_id="prompt-2", team_id="other-team"),
+        ]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/personal/prompts")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == [
+        {
+            "id": "prompt-1",
+            "name": "Daily brief",
+            "description": "Ops baseline",
+            "created_by": "internal-admin",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_prompt_persists_summary_and_rejects_duplicate_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prompt create stores one team-scoped record and later rejects duplicates."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakePromptStore([])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        created = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={
+                "name": "Daily brief",
+                "description": "Ops baseline",
+                "text": "Today is {today}.",
+            },
+        )
+        duplicate = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={
+                "name": "Daily brief",
+                "description": "Duplicate",
+                "text": "Respond in {response_language}.",
+            },
+        )
+
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["name"] == "Daily brief"
+    assert created_body["description"] == "Ops baseline"
+    assert "id" in created_body
+    assert len(store._records) == 1
+    assert store._records[0].text == "Today is {today}."
+    assert duplicate.status_code == 409
+    assert "already exists" in duplicate.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_update_and_delete_prompt_use_team_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prompt detail, replace, and delete operate strictly inside one team scope."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakePromptStore([_make_prompt_record()])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        detail = await client.get("/control-plane/v1/teams/personal/prompts/prompt-1")
+        updated = await client.put(
+            "/control-plane/v1/teams/personal/prompts/prompt-1",
+            json={
+                "name": "Daily brief v2",
+                "description": "Refined",
+                "text": "Session is {session_id}.",
+            },
+        )
+        deleted = await client.delete(
+            "/control-plane/v1/teams/personal/prompts/prompt-1"
+        )
+        missing = await client.get("/control-plane/v1/teams/personal/prompts/prompt-1")
+
+    assert detail.status_code == 200
+    assert detail.json()["text"] == "Today is {today}."
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Daily brief v2"
+    assert store._records == []
+    assert deleted.status_code == 204
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_prompt_library_rejects_invalid_prompt_template_before_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prompt CRUD validates template text before any prompt row is written."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakePromptStore([])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={
+                "name": "Bad prompt",
+                "description": None,
+                "text": "Hello {unknown_token}.",
+            },
+        )
+
+    assert resp.status_code == 422
+    assert "{unknown_token}" in resp.json()["detail"]
+    assert store._records == []
 
 
 # ---------------------------------------------------------------------------

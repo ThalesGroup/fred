@@ -47,6 +47,7 @@ It exists to freeze:
 - agent template discovery
 - managed agent instance metadata
 - team-scoped managed agent instance CRUD
+- team-scoped prompt library CRUD
 - session metadata list/create/delete
 - session preferences
 - feedback metadata
@@ -174,6 +175,9 @@ This split is intentional:
 - the runtime should only interpret the families that belong to execution
 - on create/update, control-plane validates known values against the declared
   field contract (type, enum, min/max, pattern) before persisting them
+- when the frontend imports a saved prompt, the prompt text is copied into the
+  matching `prompts.*` key; managed agent instances do not store a `prompt_id`
+  or any other live prompt-library reference
 - MCP `config_fields` are **not** stored in `tuning_field_values`; they live in
   dedicated `mcp_config_values` keyed by server id
 
@@ -263,7 +267,35 @@ history:
 
 It must not inline full message history.
 
-### 3.6 Feedback
+### 3.6 Prompt library
+
+Freeze prompt management as a first-class control-plane contract separate from
+managed agent instances:
+
+- `PromptSummary`
+- `PromptDetail`
+- `CreatePromptRequest`
+- `UpdatePromptRequest`
+
+Rules:
+
+- prompt ownership is team-scoped
+- the reserved system team `personal` is the personal prompt library; do not
+  introduce a parallel user-scoped prompt API
+- prompt `text` uses the same template-validation contract as agent
+  `prompts.*` tuning values
+- importing or saving a prompt from the agent form is a control-plane workflow,
+  but the managed agent instance stores only copied `prompts.*` text, never a
+  live prompt reference
+
+The global prompt marketplace is a follow-up control-plane surface:
+
+- publishing must create a separate published snapshot, not mutate team prompt
+  ownership in place
+- agent instances and team prompt records must not point at mutable global
+  marketplace rows
+
+### 3.7 Feedback
 
 Feedback must align with managed execution semantics:
 
@@ -271,7 +303,7 @@ Feedback must align with managed execution semantics:
 - stay product/audit oriented
 - do not depend on runtime transport DTOs
 
-### 3.7 MCP server administration
+### 3.8 MCP server administration
 
 MCP endpoints belong in control-plane, but this migration should not drag the
 entire legacy agent authoring model with them.
@@ -280,7 +312,7 @@ Prefer a neutral control-plane contract over direct reuse of
 `agentic_backend.core.agents.agent_spec.MCPServerConfiguration` if reuse would
 keep a hard dependency on `agentic-backend`.
 
-### 3.8 Attachment metadata
+### 3.9 Attachment metadata
 
 Only metadata belongs in this phase by default.
 
@@ -362,8 +394,9 @@ The following remain outside the first Phase 3a implementation slice:
 - runtime history migration details beyond linking to `fred-runtime`
 - binary attachment upload routing decision
 - frontend SSE transport migration
+- global prompt marketplace publication / moderation surface
 - removal of legacy `agentic-backend` code paths
-- feedback, MCP, and session metadata CRUD
+- feedback CRUD and full MCP server administration surface
 
 ---
 

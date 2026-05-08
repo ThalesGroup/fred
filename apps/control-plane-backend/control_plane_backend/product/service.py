@@ -19,10 +19,15 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
+from control_plane_backend.prompts.store import (
+    PromptAlreadyExistsError,
+    PromptRecord,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
+    CreatePromptRequest,
     CreateSessionRequest,
     EffectiveChatOptions,
     ExecutionPreparation,
@@ -30,8 +35,11 @@ from control_plane_backend.product.schemas import (
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PermissionSummary,
+    PromptDetail,
+    PromptSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
+    UpdatePromptRequest,
     UpdateSessionRequest,
 )
 from control_plane_backend.sessions.store import (
@@ -761,6 +769,14 @@ class EnrollmentError(Exception):
         self.http_status = http_status
 
 
+class PromptRequestError(Exception):
+    """Raised when prompt-library CRUD cannot be completed as requested."""
+
+    def __init__(self, message: str, *, http_status: int = 400) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
 class SessionAlreadyExistsError(Exception):
     """Raised when control-plane session metadata already exists."""
 
@@ -1126,6 +1142,255 @@ async def get_runtime_binding(
         enabled=instance.enabled,
         tuning=instance.tuning,
     )
+
+
+# ---------------------------------------------------------------------------
+# Prompt library
+# ---------------------------------------------------------------------------
+
+
+def _validate_prompt_library_text(
+    *,
+    text: str,
+    context_label: str,
+) -> None:
+    """
+    Validate one saved prompt-library text payload before persistence.
+
+    Why this function exists:
+    - managed-agent tuning validation already protects inline `prompts.*`
+      values, but the prompt library needs the same persistence-time safety at
+      its own CRUD boundary
+
+    How to use it:
+    - call before creating or updating one `Prompt` record
+    - invalid template syntax raises `PromptRequestError(http_status=422)`
+
+    Example:
+    - `_validate_prompt_library_text(text=request.text, context_label="prompt create")`
+    """
+
+    prompt_errors = validate_prompt_template(text)
+    if not prompt_errors:
+        return
+    details = "; ".join(f"'{error.pattern}': {error.reason}" for error in prompt_errors)
+    raise PromptRequestError(
+        f"Invalid prompt template during {context_label}: {details}.",
+        http_status=422,
+    )
+
+
+def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
+    """Project one stored prompt record into the list/command summary shape.
+
+    Why this function exists:
+    - prompt list surfaces should hide the full prompt text by default while
+      keeping one consistent typed projection
+
+    How to use it:
+    - call after reading prompt records from the store for list/create/update
+      responses
+
+    Example:
+    - `summary = _prompt_record_to_summary(record)`
+    """
+
+    return PromptSummary(
+        id=record.prompt_id,
+        name=record.name,
+        description=record.description,
+        created_by=record.created_by,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
+    """Project one stored prompt record into the full detail response shape.
+
+    Why this function exists:
+    - prompt inspection flows need the saved text, team scope, and metadata in
+      one stable outward-facing contract
+
+    How to use it:
+    - call after reading one prompt record for the detail endpoint or CLI
+      inspection flows
+
+    Example:
+    - `detail = _prompt_record_to_detail(record)`
+    """
+
+    return PromptDetail(
+        id=record.prompt_id,
+        team_id=record.team_id,
+        name=record.name,
+        description=record.description,
+        text=record.text,
+        created_by=record.created_by,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+async def create_prompt(
+    *,
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: CreatePromptRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """
+    Create one team-scoped prompt-library record.
+
+    Why this function exists:
+    - prompt authoring must become a first-class control-plane product surface
+      instead of staying buried inside managed-agent instance forms
+
+    How to use it:
+    - call from the prompt-library POST route after team membership is checked
+    - invalid template syntax raises `PromptRequestError(422)`
+    - duplicate prompt names inside the same team raise `PromptRequestError(409)`
+
+    Example:
+    - `summary = await create_prompt(user=user, team_id=team_id, request=body, deps=deps)`
+    """
+
+    _validate_prompt_library_text(
+        text=request.text,
+        context_label=f"prompt create for team {team_id!r}",
+    )
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=team_id,
+        name=request.name,
+        description=request.description,
+        text=request.text,
+        created_by=user.username if user else None,
+    )
+    try:
+        created = await deps.get_prompt_store().create(record)
+    except PromptAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Prompt name {request.name!r} already exists for team {team_id!r}.",
+            http_status=409,
+        ) from exc
+    return _prompt_record_to_summary(created)
+
+
+async def list_prompts(
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+    *,
+    limit: int = 100,
+) -> list[PromptSummary]:
+    """
+    List prompt-library records for one team, newest first.
+
+    Why this function exists:
+    - prompt management needs a stable control-plane listing surface separate
+      from managed-agent CRUD
+
+    How to use it:
+    - call from the team prompts route after team membership is checked
+
+    Example:
+    - `prompts = await list_prompts(team_id, deps, limit=100)`
+    """
+
+    records = await deps.get_prompt_store().list_by_team(team_id, limit=limit)
+    return [_prompt_record_to_summary(record) for record in records]
+
+
+async def get_prompt(
+    team_id: TeamId,
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> PromptDetail | None:
+    """
+    Return one full prompt-library record for one team.
+
+    Why this function exists:
+    - operators need to inspect saved prompt text independently from agent
+      bindings
+
+    How to use it:
+    - call from the prompt detail route with the resolved team scope
+
+    Example:
+    - `detail = await get_prompt(team_id, prompt_id, deps)`
+    """
+
+    record = await deps.get_prompt_store().get_for_team(prompt_id, team_id)
+    if record is None:
+        return None
+    return _prompt_record_to_detail(record)
+
+
+async def update_prompt(
+    team_id: TeamId,
+    prompt_id: str,
+    request: UpdatePromptRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """
+    Replace one team-scoped prompt-library record.
+
+    Why this function exists:
+    - the initial prompt-library slice intentionally keeps one simple mutable
+      record model instead of version graphs or per-field patch semantics
+
+    How to use it:
+    - call from the prompt PUT route after team membership is checked
+    - returns `None` when the prompt does not belong to `team_id`
+    - invalid template syntax raises `PromptRequestError(422)`
+    - duplicate names raise `PromptRequestError(409)`
+
+    Example:
+    - `summary = await update_prompt(team_id, prompt_id, request, deps)`
+    """
+
+    _validate_prompt_library_text(
+        text=request.text,
+        context_label=f"prompt update for team {team_id!r}",
+    )
+    try:
+        updated = await deps.get_prompt_store().update(
+            prompt_id,
+            team_id,
+            name=request.name,
+            description=request.description,
+            text=request.text,
+        )
+    except PromptAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Prompt name {request.name!r} already exists for team {team_id!r}.",
+            http_status=409,
+        ) from exc
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
+
+
+async def delete_prompt(
+    team_id: TeamId,
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """
+    Delete one team-scoped prompt-library record.
+
+    Why this function exists:
+    - prompt-library cleanup belongs to control-plane product lifecycle, not to
+      managed-agent instance writes
+
+    How to use it:
+    - call from the prompt DELETE route after team membership is checked
+
+    Example:
+    - `deleted = await delete_prompt(team_id, prompt_id, deps)`
+    """
+
+    return await deps.get_prompt_store().delete(prompt_id, team_id)
 
 
 # ---------------------------------------------------------------------------

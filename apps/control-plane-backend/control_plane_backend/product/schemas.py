@@ -199,6 +199,40 @@ class SessionListItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class PromptSummary(BaseModel):
+    """Small team-scoped prompt-library projection used for listings."""
+
+    id: str
+    name: str
+    description: str | None = None
+    created_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class PromptDetail(PromptSummary):
+    """Full team-scoped prompt-library payload including prompt text."""
+
+    team_id: TeamId
+    text: str
+
+
+class CreatePromptRequest(BaseModel):
+    """Request body for creating one team-scoped prompt-library record."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    text: str = Field(..., min_length=1)
+
+
+class UpdatePromptRequest(BaseModel):
+    """Request body for replacing one team-scoped prompt-library record."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    text: str = Field(..., min_length=1)
+
+
 class CreateSessionRequest(BaseModel):
     """Register session metadata in control-plane at session creation time."""
 

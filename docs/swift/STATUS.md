@@ -3,10 +3,14 @@
 **Purpose**: One-page queryable snapshot of team activity. Updated each session.
 Answers "what's next?", "who owns X?", "what was done this week?", "what's blocked?"
 
+**AI assistants**: for structured queries ("status of S1", "what is C1-deferred?")
+read [`docs/data/id-legend.yaml`](data/id-legend.yaml) first — it is faster than scanning prose.
+For sprint-level structured data, read [`docs/data/sprint.yaml`](data/sprint.yaml).
+
 Ask Claude Code directly: *"What is Simon working on?"* · *"What tests cover MCP config?"*
 · *"What is the next backend task for Dimitri?"* · *"What's blocking Félix?"*
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ---
 
@@ -30,10 +34,12 @@ Last updated: 2026-05-07
 |---|---|---|---|
 | S1 — E2E live stack validation (managed + HITL scenarios) | Simon | In progress | [BACKLOG §3b.7](backlog/BACKLOG.md) |
 | 6C — Agent options panel + session title inline edit | Félix | In progress (unblocked) | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) |
-| M1 F.1–F.4 — Multi-agent memory hardening (4 branches) | Dimitri | Next up | [MULTI-AGENT-MEMORY-BACKLOG](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| M1-F.1..F.4 — Multi-agent memory hardening (4 branches) | Dimitri | Next up | [MULTI-AGENT-MEMORY-BACKLOG](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| P1-D1 — Team/personal prompt library + dedicated page | Codex | **Done 2026-05-08** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| P1-D2 — AgentFormModal import/save + inline 422 display | Dimitri | Queued (after P1-D1 merged) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
 | C1-deferred — Model profiles endpoint + form picker | Dimitri | Queued | [BACKLOG §3d](backlog/BACKLOG.md) |
-| P1-D — Prompt library CRUD + AgentFormModal picker | Dimitri | Queued | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| O1 — Agent evaluation harness (deepeval) | Olélia | RFC exists, impl not started | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
+| P1-E — Global prompt marketplace publication | Dimitri | Deferred until P1-D2 lands | [BACKLOG §3d.10](backlog/BACKLOG.md) |
+| O1 — Agent evaluation harness (deepeval) | Odélia | RFC exists, impl not started | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
 
 ---
 
@@ -64,6 +70,33 @@ Last updated: 2026-05-07
 | 6A — Chat UI architecture (new component tree) | Félix | — | [CHAT-UI-BACKLOG §1](backlog/CHAT-UI-BACKLOG.md) |
 | F1 — Session `updated_at` strategy + PATCH impl | Florian | — | [BACKLOG §6.4.D](backlog/BACKLOG.md) |
 | R1 — fred-runtime quality refactor (P1–P5) | Simon | 2026-04-27 | [WORKPLAN R1](WORKPLAN.md) |
+
+---
+
+## Milestones
+
+| Milestone | Tracks | Target | Status | Completion |
+|---|---|---|---|---|
+| Phase 3 complete — E2E validated + M1 hardened | S1 + M1-F.1..F.4 | TBD | In progress | ~60% |
+| Prompt library shipped — P1-D1 + P1-D2 | P1-D1 ✅ + P1-D2 | TBD | In progress | 50% |
+| Chat UI Phase 6 complete — 6C shipped | 6C | TBD | In progress | ~80% |
+| Frontend agentic-backend removal — Phase 5E | 5E | TBD | Not started | 0% |
+| Agent evaluation v1 — O1 harness live | O1 | TBD | Not started | 0% |
+| Model profiles — C1-deferred shipped | C1-deferred | TBD | Queued | 0% |
+
+> Target dates to be defined. Track them in `docs/data/sprint.yaml` when known.
+
+---
+
+## Velocity (last 2 weeks — 2026-04-25 → 2026-05-08)
+
+| Metric | Value |
+|---|---|
+| Items closed | 11 (S2, S3, D1, F1, F2, R1, 6A, 6B, M1-core, C1, P1) |
+| Sub-items closed | 4 (C1-A, C1-B, C1-C, C1-D) + P1-D1 (Codex) |
+| Items opened net | +2 (M1-F.1..F.4 hardening branches, P1-D2) |
+| Items deferred | 2 (C1-deferred, P1-E) |
+| Subjective velocity | **On track** — backend contracts closed; chat UI and memory hardening in flight |
 
 ---
 

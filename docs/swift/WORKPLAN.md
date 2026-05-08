@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ---
 
@@ -396,7 +396,9 @@ NEXT UP — Dimitri (next few days)
 ├── M1-F.3  refactor/local-agent-execute-projection
 ├── M1-F.4  fix/team-memory-history-cap
 ├── C1-def  GET /agents/model-profiles + ManagedModelProfileRef + form picker (deferred from C1)
-└── P1-D    Prompt library: Prompt CRUD + AgentFormModal picker + frontend 422 display
+├── P1-D1   Team/personal prompt library: CRUD + OpenAPI regen + dedicated `Prompts` page
+├── P1-D2   AgentFormModal prompt import/save + inline 422 display
+└── P1-E    Global prompt marketplace publication (after P1-D1 + P1-D2)
 
 NEXT UP — Félix (unblocked now)
 └── 6C  Agent options panel refinements + session title inline edit
@@ -502,10 +504,13 @@ at save time.
 - [x] 26 new offline tests across `fred-sdk` and `control-plane-backend`
 - [x] `make code-quality && make test` green in all three packages
 
-**Remaining (Slice D — prompt library, separate branch)**:
-- [ ] `Prompt` entity CRUD in `control-plane-backend` + DB migration
-- [ ] `AgentFormModal` [Import from library] button + `PromptPickerModal`
-- [ ] Frontend inline 422 error display next to prompt textarea
+**Remaining (next prompt slices, separate branch)**:
+- [ ] P1-D1 — team/personal prompt library in `control-plane-backend`:
+  `Prompt` entity CRUD + DB migration + OpenAPI regen + dedicated `Prompts` page
+- [ ] P1-D2 — `AgentFormModal` keeps manual prompt editing and adds
+  `[Import from library]` + `[Save as prompt]` + inline 422 display
+- [ ] P1-E — global prompt marketplace publication-by-copy after the team/personal
+  prompt library is stable
 
 ---
 
