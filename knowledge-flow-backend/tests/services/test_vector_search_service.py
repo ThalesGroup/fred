@@ -199,3 +199,25 @@ async def test_similarity_search_zero_k(monkeypatch, test_user):
     )
     assert isinstance(results, list)
     assert results == []
+
+
+async def test_default_policy_falls_back_to_semantic_when_hybrid_unsupported(monkeypatch, test_user):
+    """
+    Default policy is `hybrid`, but the DummyVectorStore only implements ANN.
+    Expectation: service should gracefully fall back to semantic instead of raising TypeError.
+    """
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    vector_svc = VectorSearchService()
+
+    results = await vector_svc.search(
+        question="What is RAG?",
+        user=test_user,
+        top_k=2,
+        document_library_tags_ids=None,
+        policy_name=None,
+    )
+
+    assert len(results) == 2
+    assert all(getattr(hit, "content", None) for hit in results)

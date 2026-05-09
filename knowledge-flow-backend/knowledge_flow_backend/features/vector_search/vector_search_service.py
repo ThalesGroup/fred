@@ -171,6 +171,37 @@ class VectorSearchService:
                 actor=self._kpi_actor(user=user),
             )
 
+    def _resolve_policy_for_backend(self, policy: SearchPolicyName) -> SearchPolicyName:
+        """
+        Ensure the requested policy is compatible with the configured vector-store backend.
+
+        Why this exists:
+        - Some deployments use a vector store backend that only supports ANN (semantic) search.
+        - The UI/agents default to `hybrid`, which requires `hybrid_search` support.
+        - In dev/offline environments this mismatch should degrade gracefully instead of 500'ing.
+
+        How to use:
+        - Call this before selecting the search strategy function.
+
+        Example:
+            policy = self._resolve_policy_for_backend(SearchPolicyName.hybrid)
+        """
+        if policy == SearchPolicyName.hybrid and not isinstance(self.vector_store, SupportsHybridSearch):
+            logger.warning(
+                "[SEARCH_POLICY] requested=%s but backend=%s has no hybrid_search; falling back to semantic",
+                policy.value,
+                type(self.vector_store).__name__,
+            )
+            return SearchPolicyName.semantic
+        if policy == SearchPolicyName.strict and not isinstance(self.vector_store, SupportsFullTextSearch):
+            logger.warning(
+                "[SEARCH_POLICY] requested=%s but backend=%s has no full_text_search; falling back to semantic",
+                policy.value,
+                type(self.vector_store).__name__,
+            )
+            return SearchPolicyName.semantic
+        return policy
+
     # ---------- helpers -------------------------------------------------------
 
     async def _collect_document_ids_from_tags(self, tags_ids: Optional[List[str]], user: KeycloakUser) -> Set[str]:
@@ -563,7 +594,7 @@ class VectorSearchService:
                     authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
 
             # Search function dispatch
-            policy_key = policy_name or SearchPolicyName.hybrid
+            policy_key = self._resolve_policy_for_backend(policy_name or SearchPolicyName.hybrid)
             logger.debug(
                 "[SEARCH_POLICY] received=%r resolved=%r question_preview=%r",
                 policy_name,
