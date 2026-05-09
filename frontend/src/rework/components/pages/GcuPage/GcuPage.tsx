@@ -33,7 +33,8 @@ export default function GcuPage() {
 
   const [gcuMarkdown, setGcuMarkdown] = useState<string>("");
   const [hasReachedBottom, setHasReachedBottom] = useState(false);
-  const bottomRef = useRef(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -54,27 +55,28 @@ export default function GcuPage() {
   }, [i18n.language]);
 
   useEffect(() => {
+    if (hasReachedBottom) return;
+    const root = contentRef.current;
+    const target = bottomRef.current;
+    if (!root || !target) return;
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setHasReachedBottom(true);
-          observer.unobserve(entry.target);
-        } else {
-          setHasReachedBottom(false);
+          observer.disconnect();
         }
       },
       {
-        root: null,
-        threshold: 1.0,
+        root,
+        threshold: 0.01,
       },
     );
 
-    if (bottomRef.current) {
-      observer.observe(bottomRef.current);
-    }
+    observer.observe(target);
 
     return () => observer.disconnect();
-  }, [gcuMarkdown]);
+  }, [gcuMarkdown, hasReachedBottom]);
 
   const handleAcceptGcu = async () => {
     await trigger().unwrap();
@@ -82,9 +84,9 @@ export default function GcuPage() {
   };
 
   return (
-    <div className={styles.gcuContainer}>
+      <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
-      <div className={styles.gcuContent}>
+      <div className={styles.gcuContent} ref={contentRef}>
         <MarkdownRenderer content={gcuMarkdown} />
         <div ref={bottomRef} />
       </div>
