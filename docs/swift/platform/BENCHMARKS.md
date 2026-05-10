@@ -14,7 +14,7 @@ This captures the current local bench state so future work can restart from know
   - Per-run detailed logging is at DEBUG.
 
 
-## Woring Locally versus deployed
+## Working Locally versus deployed
 
 Checkout the configuration_bench.yaml agentic and knowledge flow files. These are the ones used for bechmarks. 
 Not that the yaml parameters actavate KPI so-called summary logs that quickly tells you whats going on. 

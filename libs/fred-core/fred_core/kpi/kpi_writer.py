@@ -161,7 +161,10 @@ class KPIWriter(BaseKPIWriter):
         try:
             self.store.ensure_ready()
         except Exception as e:
-            logger.warning(f"[KPI] ensure_ready failed (continuing best-effort): {e}")
+            logger.warning(
+                "[KPI] ensure_ready failed (continuing best-effort): %s",
+                e,
+            )
         self._start_summary_thread_if_enabled()
 
     # ---- generic emit --------------------------------------------------------

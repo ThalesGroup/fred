@@ -134,6 +134,23 @@ For engineers building agents with `fred-sdk`.
 
 ---
 
+### `data/` — Machine-readable sprint state
+
+Structured data layer for fast AI and tool queries. **Always update these files
+at the same time as the corresponding prose document** (STATUS.md or a backlog
+checkbox). Both layers must stay in sync.
+
+| File | Purpose | Update trigger |
+|---|---|---|
+| [`data/id-legend.yaml`](data/id-legend.yaml) | **Canonical ID registry** — every task ID, owner, status, domain, backlog cross-reference | When a new ID is created, a status changes, or a sub-item is added |
+| [`data/sprint.yaml`](data/sprint.yaml) | **Live sprint state** — milestones with % done, in-progress, next-up, blockers, velocity | At the start and end of each session; when a task moves state |
+
+The IDs defined in `id-legend.yaml` are the same IDs used in commit messages,
+backlog checkboxes, and STATUS.md. Canonical ID convention: see
+[`../../CLAUDE.md §Task ID Convention`](../../CLAUDE.md).
+
+---
+
 ### `backlog/` — Project state and sequencing
 
 Current migration state, feature backlogs, and audit reports.
@@ -169,8 +186,10 @@ the resulting decisions get encoded in the `design/` contracts.
 | File | Subject |
 |---|---|
 | [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md) | Agentic pod architecture and migration direction |
-| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md) | Agent evaluation framework (deepeval) |
+| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md) | Agent evaluation framework (deepeval) — O1 track |
 | [`AGENT-INSTANCE-FORM-RFC.md`](rfc/AGENT-INSTANCE-FORM-RFC.md) | Agent instance management form — template browser, tuning fields, MCP tools |
+| [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md) | Cross-turn conversational memory for graph agents — M1 track |
+| [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md) | Prompt library — versioning, analytics, 3-level hierarchy, chat context picker — P1-D1b..D3 |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md) | SDK v2 design proposal |
 | [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture |
 

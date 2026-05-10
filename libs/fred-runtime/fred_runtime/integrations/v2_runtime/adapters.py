@@ -25,7 +25,8 @@ import logging
 import os
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Generator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol, TypedDict, cast
@@ -35,7 +36,7 @@ from fred_core.common import OwnerFilter
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.log_structures import LogFilter, LogQuery, LogQueryResult
-from fred_core.portable import LoggingTracer, Tracer, get_tracer
+from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
 from fred_sdk.authoring.api import (
     ArtifactPublicationError,
@@ -186,52 +187,61 @@ class LangfuseTracerAdapter(TracerPort):
     def start_span(
         self,
         name: str,
-        context: PortableContext | None = None,
-        attributes: Mapping[str, JsonScalar] | None = None,
+        *,
+        context: object | None = None,
+        attributes: Mapping[str, object] | None = None,
         parent: "SpanPort | None" = None,
+        **kwargs: object,
     ) -> SpanPort:
-        context = context or PortableContext(
-            request_id="unknown",
-            correlation_id="unknown",
-            actor="unknown",
-            tenant="unknown",
-            environment=PortableEnvironment.DEV,
+        portable_context = (
+            context
+            if isinstance(context, PortableContext)
+            else PortableContext(
+                request_id="unknown",
+                correlation_id="unknown",
+                actor="unknown",
+                tenant="unknown",
+                environment=PortableEnvironment.DEV,
+            )
         )
         trace_seed = (
-            context.trace_id
-            or context.request_id
-            or context.correlation_id
-            or context.session_id
-            or context.actor
+            portable_context.trace_id
+            or portable_context.request_id
+            or portable_context.correlation_id
+            or portable_context.session_id
+            or portable_context.actor
         )
         trace_id = self._client.create_trace_id(seed=trace_seed)
         metadata: dict[str, object] = {
-            "agent_id": context.agent_id,
-            "agent_name": context.agent_name,
-            "session_id": context.session_id,
-            "fred_session_id": context.session_id,
-            "exchange_id": context.baggage.get("exchange_id"),
-            "checkpoint_id": context.baggage.get("checkpoint_id"),
-            "correlation_id": context.correlation_id,
-            "trace_id": context.trace_id,
-            "request_id": context.request_id,
-            "actor": context.actor,
-            "user_id": context.user_id,
-            "user_name": context.user_name,
-            "team_id": context.team_id,
-            "agent_instance_id": context.baggage.get("agent_instance_id"),
-            "template_agent_id": context.baggage.get("template_agent_id"),
-            "execution_action": context.baggage.get("execution_action"),
-            "tenant": context.tenant,
-            "environment": context.environment.value,
+            "agent_id": portable_context.agent_id,
+            "agent_name": portable_context.agent_name,
+            "session_id": portable_context.session_id,
+            "fred_session_id": portable_context.session_id,
+            "exchange_id": portable_context.baggage.get("exchange_id"),
+            "checkpoint_id": portable_context.baggage.get("checkpoint_id"),
+            "correlation_id": portable_context.correlation_id,
+            "trace_id": portable_context.trace_id,
+            "request_id": portable_context.request_id,
+            "actor": portable_context.actor,
+            "user_id": portable_context.user_id,
+            "user_name": portable_context.user_name,
+            "team_id": portable_context.team_id,
+            "agent_instance_id": portable_context.baggage.get("agent_instance_id"),
+            "template_agent_id": portable_context.baggage.get("template_agent_id"),
+            "execution_action": portable_context.baggage.get("execution_action"),
+            "tenant": portable_context.tenant,
+            "environment": portable_context.environment.value,
         }
-        if context.baggage:
-            metadata["baggage"] = dict(context.baggage)
+        if portable_context.baggage:
+            metadata["baggage"] = dict(portable_context.baggage)
         if attributes:
             metadata.update(attributes)
+        if kwargs:
+            metadata.update(kwargs)
         trace_context: LangfuseTraceContext = {"trace_id": trace_id}
-        if parent is not None:
-            trace_context["parent_span_id"] = parent.span_id
+        parent_span_id = parent.span_id if parent is not None else None
+        if parent_span_id is not None:
+            trace_context["parent_span_id"] = parent_span_id
         span = cast(
             "_LangfuseSpanLike",
             self._client.start_observation(
@@ -1799,7 +1809,7 @@ def _langfuse_get_json(
     return raw
 
 
-class KPIWriterMetricsAdapter:
+class KPIWriterMetricsAdapter(MetricsProvider):
     """
     Adapts a fred-core BaseKPIWriter to the MetricsProvider protocol.
 
@@ -1816,15 +1826,17 @@ class KPIWriterMetricsAdapter:
     def __init__(self, kpi: BaseKPIWriter) -> None:
         self._kpi = kpi
 
+    @contextmanager
     def timer(
         self,
         name: str,
         *,
         dims: dict[str, str | None] | None = None,
         groups: list[str] | None = None,
-    ):
-        return self._kpi.timer(
+    ) -> Generator[dict[str, str | None], None, None]:
+        with self._kpi.timer(
             name,
             dims=dims,
             actor=KPIActor(type="system", groups=groups),
-        )
+        ) as recorded_dims:
+            yield recorded_dims

@@ -155,14 +155,14 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             if not self.client.indices.exists(index=self.index):
                 self.client.indices.create(index=self.index, body=KPI_INDEX_MAPPING)
-                logger.info(f"[OPENSEARCH][KPI] created index '{self.index}'.")
+                logger.info("[OPENSEARCH][KPI] created index '%s'", self.index)
             else:
-                logger.info(f"[OPENSEARCH][KPI] index '{self.index}' already exists.")
+                logger.info("[OPENSEARCH][KPI] index '%s' already exists.", self.index)
                 self._ensure_dim_mapping("service", {"type": "keyword"})
                 # Validate existing mapping matches expected mapping
                 validate_index_mapping(self.client, self.index, KPI_INDEX_MAPPING)
         except OpenSearchException as e:
-            logger.error(f"[OPENSEARCH][KPI] ensure_ready failed: {e}")
+            logger.error("[OPENSEARCH][KPI] ensure_ready failed: %s", e)
             raise
 
     def _ensure_dim_mapping(self, name: str, mapping: Dict[str, Any]) -> None:
@@ -191,7 +191,7 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             self.client.index(index=self.index, body=event.to_doc())
         except OpenSearchException as e:
-            logger.error(f"[OPENSEARCH][KPI] index_event failed: {e}")
+            logger.error("[OPENSEARCH][KPI] index_event failed: %s", e)
             raise
 
     def bulk_index(self, events: List[KPIEvent]) -> None:
@@ -204,9 +204,11 @@ class OpenSearchKPIStore(BaseKPIStore):
         try:
             resp = self.client.bulk(body=actions)
             if resp.get("errors"):
-                logger.warning("[KPI] bulk_index completed with partial errors.")
+                logger.warning(
+                    "[OPENSEARCH][KPI] bulk_index completed with partial errors."
+                )
         except OpenSearchException as e:
-            logger.error(f"[OPENSEARCH][KPI] bulk_index failed: {e}")
+            logger.error("[OPENSEARCH][KPI] bulk_index failed: %s", e)
             raise
 
     # -- reads -----------------------------------------------------------------

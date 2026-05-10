@@ -43,3 +43,9 @@ Notes
 building agents or workflows, you likely want `fred-sdk` instead. In most
 cases, end users should not install `fred-core` directly because it is pulled
 in transitively by `fred-sdk`.
+
+Development validation
+----------------------
+- `make test` runs the default offline test suite.
+- `make coverage-offline` runs the canonical offline coverage command with
+  terminal missing-line output.

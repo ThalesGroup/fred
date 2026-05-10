@@ -205,6 +205,8 @@ class _FakeSessionMetadataStore:
         *,
         title: str | None = None,
         updated_at: datetime | None = None,
+        context_prompt_id: str | None = None,
+        clear_context_prompt: bool = False,
     ) -> SessionMetadataRecord | None:
         for record in self._records:
             if record.session_id == session_id and record.team_id == team_id:
@@ -212,8 +214,15 @@ class _FakeSessionMetadataStore:
                     record.title = title
                 if updated_at is not None:
                     record.updated_at = updated_at
+                if context_prompt_id is not None:
+                    record.context_prompt_id = context_prompt_id
+                elif clear_context_prompt:
+                    record.context_prompt_id = None
                 return record
         return None
+
+    async def get(self, session_id: str) -> SessionMetadataRecord | None:
+        return next((r for r in self._records if r.session_id == session_id), None)
 
 
 class _DuplicateSessionMetadataStore:
@@ -305,6 +314,7 @@ class _FakePromptStore:
         record.name = name
         record.description = description
         record.text = text
+        record.version += 1
         return record
 
     async def delete(self, prompt_id: str, team_id: TeamId) -> bool:
@@ -315,6 +325,52 @@ class _FakePromptStore:
             if not (r.prompt_id == prompt_id and r.team_id == team_id)
         ]
         return len(self._records) < before
+
+    async def increment_import_count(self, prompt_id: str, team_id: TeamId) -> None:
+        for r in self._records:
+            if r.prompt_id == prompt_id and r.team_id == team_id:
+                r.import_count += 1
+
+    async def increment_session_count(self, prompt_id: str, team_id: TeamId) -> None:
+        for r in self._records:
+            if r.prompt_id == prompt_id and r.team_id == team_id:
+                r.session_count += 1
+
+    async def update_score(
+        self, prompt_id: str, team_id: TeamId, score: float
+    ) -> PromptRecord | None:
+        record = await self.get_for_team(prompt_id, team_id)
+        if record is None:
+            return None
+        record.score = score
+        return record
+
+    async def list_context_prompts(
+        self,
+        personal_team_id: TeamId,
+        team_id: TeamId,
+    ) -> list:
+        from control_plane_backend.prompts.store import ContextPromptRecord
+
+        seen_ids: set[str] = set()
+        results = []
+        for r in self._records:
+            if r.team_id in (personal_team_id, team_id) and r.prompt_id not in seen_ids:
+                seen_ids.add(r.prompt_id)
+                scope = "personal" if r.team_id == personal_team_id else "team"
+                results.append(
+                    ContextPromptRecord(
+                        prompt_id=r.prompt_id,
+                        name=r.name,
+                        description=r.description,
+                        scope=scope,
+                        version=r.version,
+                        session_count=r.session_count,
+                        score=r.score,
+                    )
+                )
+        results.sort(key=lambda r: (-r.session_count, r.name))
+        return results
 
 
 def _patch_prompt_store(
@@ -968,6 +1024,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     enabled BOOLEAN NOT NULL,
                     created_by VARCHAR,
                     tuning_json TEXT,
+                    prompt_refs_json TEXT,
                     created_at DATETIME NOT NULL DEFAULT (now()),
                     updated_at DATETIME NOT NULL DEFAULT (now())
                 )
@@ -3023,14 +3080,17 @@ async def test_list_prompts_returns_team_scoped_summaries(
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body == [
-        {
-            "id": "prompt-1",
-            "name": "Daily brief",
-            "description": "Ops baseline",
-            "created_by": "internal-admin",
-        }
-    ]
+    assert len(body) == 1
+    item = body[0]
+    assert item["id"] == "prompt-1"
+    assert item["name"] == "Daily brief"
+    assert item["description"] == "Ops baseline"
+    assert item["created_by"] == "internal-admin"
+    assert item["version"] == 1
+    assert item["import_count"] == 0
+    assert item["session_count"] == 0
+    # score is null and response_model_exclude_none=True strips null fields
+    assert item.get("score") is None
 
 
 @pytest.mark.asyncio
@@ -3343,3 +3403,211 @@ async def test_patch_agent_instance_rejects_unknown_prompt_token(
     assert "{unknown_var}" in resp.json()["detail"]
     # Stored record must be unchanged
     assert store._records[0].tuning.values.get("prompts.system") is None
+
+
+# ---------------------------------------------------------------------------
+# P1-D1b — versioning, analytics, context integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_prompt_update_increments_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PUT on an existing prompt auto-increments version in the summary response."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    record = _make_prompt_record()
+    record.version = 1
+    store = _FakePromptStore([record])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.put(
+            "/control-plane/v1/teams/personal/prompts/prompt-1",
+            json={
+                "name": "Daily brief v2",
+                "description": "Refined",
+                "text": "New {today}.",
+            },
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_context_prompts_returns_personal_and_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /prompts/context returns the union of personal and team prompts with scope field."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    personal = _make_prompt_record(
+        prompt_id="p-personal", team_id="personal", name="My prompt"
+    )
+    team_p = _make_prompt_record(
+        prompt_id="p-team", team_id="bid-team", name="Team prompt"
+    )
+    team_p.session_count = 5
+    store = _FakePromptStore([personal, team_p])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/teams/bid-team/prompts/context")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    ids = [item["id"] for item in body]
+    assert "p-personal" in ids
+    assert "p-team" in ids
+    # team prompt has higher session_count so should appear first
+    assert body[0]["id"] == "p-team"
+    assert body[0]["scope"] == "team"
+    assert body[1]["scope"] == "personal"
+
+
+@pytest.mark.asyncio
+async def test_promote_prompt_copies_to_target_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /prompts/{id}/promote creates a copy in the target team."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakePromptStore([_make_prompt_record()])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/prompts/prompt-1/promote",
+            json={"target_team_id": "bid-team"},
+        )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["name"] == "Daily brief"
+    assert body["version"] == 1
+    assert body["import_count"] == 0
+    assert body["session_count"] == 0
+    assert body["score"] is None
+    # Two records now: original in personal, copy in bid-team
+    assert len(store._records) == 2
+    copy = next(r for r in store._records if str(r.team_id) == "bid-team")
+    assert copy.text == "Today is {today}."
+
+
+@pytest.mark.asyncio
+async def test_promote_prompt_returns_409_on_name_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /prompts/{id}/promote → 409 when a same-name prompt already exists in target."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    source = _make_prompt_record(
+        prompt_id="p-src", team_id="personal", name="Shared name"
+    )
+    conflict = _make_prompt_record(
+        prompt_id="p-conflict", team_id="bid-team", name="Shared name"
+    )
+    store = _FakePromptStore([source, conflict])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.post(
+            "/control-plane/v1/teams/personal/prompts/p-src/promote",
+            json={"target_team_id": "bid-team"},
+        )
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_patch_prompt_score_updates_and_returns_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH /prompts/{id} sets the quality score and returns the updated summary."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    store = _FakePromptStore([_make_prompt_record()])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/prompts/prompt-1",
+            json={"score": 4.5},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["score"] == 4.5
+    assert store._records[0].score == 4.5
+
+
+@pytest.mark.asyncio
+async def test_patch_session_sets_context_prompt_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATCH /sessions/{id} with context_prompt_id stores and returns the reference."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.get_team_by_id_from_service",
+        _fake_get_team_by_id,
+    )
+    session_record = SessionMetadataRecord(
+        session_id="sess-1",
+        team_id=TeamId("personal"),
+        agent_instance_id=None,
+        user_id="alice",
+        title=None,
+        context_prompt_id=None,
+    )
+    session_store = _FakeSessionMetadataStore([session_record])
+    prompt_record = _make_prompt_record(prompt_id="ctx-prompt", team_id="personal")
+    prompt_store = _FakePromptStore([prompt_record])
+    app = create_app()
+    _patch_session_store(monkeypatch, session_store)
+    _patch_prompt_store(monkeypatch, prompt_store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/sessions/sess-1",
+            json={"context_prompt_id": "ctx-prompt"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["context_prompt_id"] == "ctx-prompt"
+    # session_count should be incremented
+    assert prompt_store._records[0].session_count == 1

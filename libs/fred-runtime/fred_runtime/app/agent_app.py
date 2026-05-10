@@ -1825,18 +1825,6 @@ async def _iterate_runtime_event_payloads(
         registry=registry,
         access_token=access_token,
     )
-    if isinstance(definition, GraphAgentDefinition):
-        runtime: ReActRuntime | GraphRuntime = GraphRuntime(
-            definition=definition,
-            services=services,
-        )
-    else:
-        runtime = ReActRuntime(
-            definition=definition,
-            services=services,
-        )
-    runtime.bind(binding)
-
     # session_id drives LangGraph checkpointing: the agent resumes its graph
     # state on every turn. Falls back to request_id for one-shot calls so
     # LangGraph's checkpointer invariant (thread_id required internally) is met.
@@ -1847,10 +1835,16 @@ async def _iterate_runtime_event_payloads(
         invocation_turns=getattr(request, "invocation_turns", ()),
     )
 
+    runtime: ReActRuntime | GraphRuntime | None = None
     try:
-        await runtime.activate()
-        executor = await runtime.get_executor()
         if isinstance(definition, GraphAgentDefinition):
+            runtime = GraphRuntime(
+                definition=definition,
+                services=services,
+            )
+            runtime.bind(binding)
+            await runtime.activate()
+            executor = await runtime.get_executor()
             # Graph agents receive their typed input schema; the agent's
             # build_turn_state() maps it to graph state before the first node runs.
             # The standard contract is a single "message" field in the input schema.
@@ -1863,12 +1857,25 @@ async def _iterate_runtime_event_payloads(
                 graph_input = input_cls.model_validate(
                     {"message": request.message or ""}
                 )
-            executor_input: ReActInput | object = graph_input
+            async for event in executor.stream(graph_input, execution_config):
+                payload = event.model_dump(mode="json")
+                if not isinstance(payload, dict):
+                    raise RuntimeError(
+                        "RuntimeEvent payload must serialize to a JSON object."
+                    )
+                yield payload
         else:
+            runtime = ReActRuntime(
+                definition=definition,
+                services=services,
+            )
+            runtime.bind(binding)
+            await runtime.activate()
+            executor = await runtime.get_executor()
             # On HITL resume, messages are ignored by the codec — the graph
             # resumes from its checkpointed interrupt via Command(resume=...).
             # On a normal turn, the user message is the only input.
-            executor_input = ReActInput(
+            react_input = ReActInput(
                 messages=(
                     ()
                     if request.resume_payload is not None
@@ -1879,20 +1886,21 @@ async def _iterate_runtime_event_payloads(
                     )
                 ),
             )
-        async for event in executor.stream(executor_input, execution_config):
-            payload = event.model_dump(mode="json")
-            if not isinstance(payload, dict):
-                raise RuntimeError(
-                    "RuntimeEvent payload must serialize to a JSON object."
-                )
-            yield payload
+            async for event in executor.stream(react_input, execution_config):
+                payload = event.model_dump(mode="json")
+                if not isinstance(payload, dict):
+                    raise RuntimeError(
+                        "RuntimeEvent payload must serialize to a JSON object."
+                    )
+                yield payload
     except Exception as exc:
         logger.exception(
             "[fred-runtime] agent execution error agent_id=%s", definition.agent_id
         )
         yield RuntimeErrorEvent(message=str(exc)).model_dump(mode="json")
     finally:
-        await runtime.dispose()
+        if runtime is not None:
+            await runtime.dispose()
 
 
 def _terminal_execute_payload(

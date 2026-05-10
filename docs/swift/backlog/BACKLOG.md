@@ -2133,19 +2133,92 @@ at save time — the agent was created successfully but broke on the first messa
 
 **Remaining (next slices, in order)**:
 
-**Slice D — team/personal prompt library**
+---
 
-- [ ] `Prompt` entity DB table + migration in `control-plane-backend`; `team_id`
-  stored as plain `TeamId` and must accept the reserved `personal` team
-- [ ] Typed schemas + CRUD endpoints:
-  `POST/GET/PUT/DELETE /control-plane/v1/teams/{id}/prompts`
-- [ ] `controlPlaneOpenApi.ts` regenerated
-- [ ] Dedicated `Prompts` page in frontend for any team, including `personal`
-- [ ] `AgentFormModal` keeps manual prompt editing and gains `[Import from library]`
-  + `[Save as prompt]` flows backed by prompt CRUD
-- [ ] Frontend inline 422 error display next to prompt textarea (uses error detail from 422)
-- [ ] Importing or saving a prompt never creates a live prompt reference from the
-  agent instance; the stored agent config keeps only snapshot text in `prompts.*`
+**Slice D1 — backend CRUD (P1-D1) · Done 2026-05-08 — Codex**
+
+- [x] `PromptRow` ORM model (`prompt_models.py`) — `team_id`, `name`, `description`, `text`, `created_by`, timestamps
+- [x] `PromptStore` full CRUD (`prompts/store.py`)
+- [x] Alembic migration `9c4e1a2b3d4f_add_prompt_table.py`
+- [x] Pydantic schemas: `PromptSummary`, `PromptDetail`, `CreatePromptRequest`, `UpdatePromptRequest`
+- [x] API endpoints: `POST/GET /teams/{id}/prompts`, `GET/PUT/DELETE /teams/{id}/prompts/{pid}`
+
+---
+
+**Slice D1b — backend extension: versioning + analytics + context integration (P1-D1b) · Done 2026-05-10 — Dimitri**
+
+**RFC**: `docs/swift/rfc/PROMPT-LIBRARY-RFC.md` — full design authority for this and following slices.
+
+- [x] Alembic migration: add `version int DEFAULT 1`, `import_count int DEFAULT 0`,
+  `session_count int DEFAULT 0`, `score float NULLABLE`, `avg_input_tokens int NULLABLE`,
+  `avg_output_tokens int NULLABLE` to `prompt` table
+- [x] Alembic migration: add `prompt_refs_json TEXT NULLABLE` to `agent_instance` table
+- [x] Alembic migration: add `context_prompt_id varchar NULLABLE` to `session_metadata` table
+- [x] `PromptStore.update()` auto-increments `version` on every call
+- [x] `PromptStore.increment_import_count(prompt_id, team_id)` — atomic counter update
+- [x] `PromptStore.increment_session_count(prompt_id, team_id)` — atomic counter update
+- [x] `PromptStore.list_context_prompts(personal_team_id, team_id)` — union query returning `ContextPromptSummary`
+- [x] `ProductService` session PATCH: accept `context_prompt_id`; call `increment_session_count`
+- [x] `ProductService` prepare_execution: resolve `context_prompt_text` from `context_prompt_id`
+- [x] New endpoint: `GET /teams/{id}/prompts/context` → union personal + team, ordered by `session_count DESC`
+- [x] New endpoint: `POST /teams/{id}/prompts/{pid}/promote` → copy-by-value to target team; 409 on name conflict
+- [x] New endpoint: `PATCH /teams/{id}/prompts/{pid}` → score update only (range 0.0–5.0)
+- [x] Extended schemas: `PromptSummary` gains `version`, `import_count`, `session_count`, `score`, `avg_input_tokens`, `avg_output_tokens`
+- [x] New schemas: `ContextPromptSummary`, `PromptScoreUpdateRequest`, `PromptPromoteRequest`
+- [x] `ExecutionPreparation` response gains `context_prompt_text: str | null`
+- [x] `controlPlaneOpenApi.ts` regenerated
+- [x] `make code-quality && make test` in `control-plane-backend`
+- Note: `prompt_refs` write on agent import deferred to P1-D2 (frontend carries the ref in UpdateAgentInstanceRequest)
+
+---
+
+**Slice D2 — frontend: PromptsPage + AgentFormModal (P1-D2)**
+
+*Depends on: P1-D1b (OpenAPI regenerated)*
+
+- [ ] `PromptsPage` — new rework page under `frontend/src/rework/components/pages/PromptsPage/`
+  - table: name, description, version badge, `import_count`, `session_count`, score stars (or "-"), `updated_at`, actions
+  - create modal: name (required), description, text textarea with live 422 validation
+  - edit modal: same fields + shows current version number
+  - delete with confirmation dialog
+  - score edit (admin only): inline 0–5 star picker
+  - "Promote to team" action: target team picker → `POST /prompts/{id}/promote`
+- [ ] Route + nav entry for `PromptsPage`
+- [ ] `AgentFormModal` — `[Import from library]` button on every `prompt`-type field
+  - `PromptPickerModal`: shows team library (name, version, session_count, score), search by name, preview panel, `[Use]` → copies text + stores `prompt_ref`
+- [ ] `AgentFormModal` — `[Save as prompt]` button on every `prompt`-type field
+  - `SavePromptModal`: name + description → `POST /teams/{id}/prompts`
+- [ ] `AgentFormModal` — version drift badge when `prompt_ref` exists:
+  - version matches current → green "Imported from [name] v2"
+  - version stale → amber "Imported from [name] v2 — current is v5" + `[Review]` action
+- [ ] `AgentFormModal` — inline 422 error list below each prompt textarea
+- [ ] `tsc --noEmit` + Prettier pass
+
+---
+
+**Slice D3 — chat context picker (P1-D3)**
+
+*Depends on: P1-D1b*
+
+- [ ] Replace free textarea in `AgentOptionsPanel` / session init surface with a library picker
+- [ ] Source: `GET /teams/{team_id}/prompts/context` (union personal + team)
+- [ ] Display: personal group + team group, ordered by `session_count DESC`, score stars when non-null
+- [ ] Selection → `PATCH /sessions/{id} { context_prompt_id }` → increments `session_count`
+- [ ] "Clear context" → `PATCH /sessions/{id} { context_prompt_id: null }`
+- [ ] "Edit in personal library" shortcut → navigates to `PromptsPage` scoped to personal team
+- [ ] `tsc --noEmit` + Prettier pass
+
+---
+
+**Slice D-F — token cost KPI integration (P1-F) · DEFERRED**
+
+*Depends on: O1 evaluation track + fred-core KPI store changes (coordinate with Simon)*
+
+- [ ] Add `context_prompt_id` label to KPI turn events in `fred-core` KPI store
+- [ ] Add `agent_prompt_version` label to KPI turn events (correlates system prompt version)
+- [ ] Background aggregation job or Langfuse query → writes `avg_input_tokens` / `avg_output_tokens` to `PromptRow`
+- [ ] Requires its own RFC amendment before implementation starts
+- Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema; UI shows "N/A" until this lands.
 
 ### 3d.10 Prompt Marketplace — Global Published Prompts
 

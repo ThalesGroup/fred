@@ -10,7 +10,7 @@ For sprint-level structured data, read [`docs/data/sprint.yaml`](data/sprint.yam
 Ask Claude Code directly: *"What is Simon working on?"* · *"What tests cover MCP config?"*
 · *"What is the next backend task for Dimitri?"* · *"What's blocking Félix?"*
 
-Last updated: 2026-05-08
+Last updated: 2026-05-10
 
 ---
 
@@ -35,18 +35,23 @@ Last updated: 2026-05-08
 | S1 — E2E live stack validation (managed + HITL scenarios) | Simon | In progress | [BACKLOG §3b.7](backlog/BACKLOG.md) |
 | 6C — Agent options panel + session title inline edit | Félix | In progress (unblocked) | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) |
 | M1-F.1..F.4 — Multi-agent memory hardening (4 branches) | Dimitri | Next up | [MULTI-AGENT-MEMORY-BACKLOG](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
-| P1-D1 — Team/personal prompt library + dedicated page | Codex | **Done 2026-05-08** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| P1-D2 — AgentFormModal import/save + inline 422 display | Dimitri | Queued (after P1-D1 merged) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| P1-D1 — Backend prompt CRUD | Codex | **Done 2026-05-08** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| P1-D1b — Backend extension (versioning, analytics, context) | Dimitri | **Done 2026-05-10** | [BACKLOG §3d.9](backlog/BACKLOG.md) · [RFC](rfc/PROMPT-LIBRARY-RFC.md) |
+| P1-D2 — PromptsPage + AgentFormModal (import, drift badge, 422) | TBD | **Next — unblocked** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| P1-D3 — Chat context picker (replaces free textarea) | Félix | **Next — unblocked** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
 | C1-deferred — Model profiles endpoint + form picker | Dimitri | Queued | [BACKLOG §3d](backlog/BACKLOG.md) |
-| P1-E — Global prompt marketplace publication | Dimitri | Deferred until P1-D2 lands | [BACKLOG §3d.10](backlog/BACKLOG.md) |
+| P1-E — Global prompt marketplace | Dimitri | Deferred (after P1-D2 + P1-D3) | [BACKLOG §3d.10](backlog/BACKLOG.md) |
+| P1-F — Token cost KPI integration | Simon + Dimitri | Deferred (after O1 + fred-core) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
 | O1 — Agent evaluation harness (deepeval) | Odélia | RFC exists, impl not started | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
 
 ---
 
-## Closed This Week (2026-05-01 → 2026-05-07)
+## Closed This Week (2026-05-01 → 2026-05-10)
 
 | Feature | Owner | Closed | Backlog ref | Tests |
 |---|---|---|---|---|
+| P1-D1b — Backend extension: versioning, analytics, context integration | Dimitri | 2026-05-10 | [BACKLOG §3d.9](backlog/BACKLOG.md) | `test_main.py` (6 new tests, 120 passing) |
+| R1b-A — fred-runtime raw type-check cleanup + baseline emptied | Codex | 2026-05-09 | [FRED-RUNTIME-QUALITY](backlog/FRED-RUNTIME-QUALITY.md) | `make code-quality`, `make test`, raw `basedpyright` |
 | C1 — Pod catalog exposure + MCP tri-state selection | Dimitri | 2026-05-06 | [BACKLOG §3d](backlog/BACKLOG.md) | `test_mcp_config.py`, `test_agent_app.py`, `test_main.py` |
 | P1 — Prompt safety: rendering fix + persistence validation | Dimitri | 2026-05-07 | [BACKLOG §3d.9](backlog/BACKLOG.md) | `test_prompt_utils.py`, `test_main.py` |
 | F2 — PATCH session endpoint (`updated_at`, `title`) | Florian | 2026-05-06 | [BACKLOG §6.4.D](backlog/BACKLOG.md) | `test_main.py` |
@@ -69,7 +74,7 @@ Last updated: 2026-05-08
 | D1 — Control-plane developer CLI (`make cli`) | Dimitri | 2026-04-25 | [BACKLOG](backlog/BACKLOG.md) |
 | 6A — Chat UI architecture (new component tree) | Félix | — | [CHAT-UI-BACKLOG §1](backlog/CHAT-UI-BACKLOG.md) |
 | F1 — Session `updated_at` strategy + PATCH impl | Florian | — | [BACKLOG §6.4.D](backlog/BACKLOG.md) |
-| R1 — fred-runtime quality refactor (P1–P5) | Simon | 2026-04-27 | [WORKPLAN R1](WORKPLAN.md) |
+| R1 — fred-runtime quality refactor (P1–P5 only) | Simon | 2026-04-27 | [WORKPLAN R1](WORKPLAN.md) |
 
 ---
 
@@ -88,15 +93,15 @@ Last updated: 2026-05-08
 
 ---
 
-## Velocity (last 2 weeks — 2026-04-25 → 2026-05-08)
+## Velocity (last 2 weeks — 2026-04-25 → 2026-05-09)
 
 | Metric | Value |
 |---|---|
-| Items closed | 11 (S2, S3, D1, F1, F2, R1, 6A, 6B, M1-core, C1, P1) |
-| Sub-items closed | 4 (C1-A, C1-B, C1-C, C1-D) + P1-D1 (Codex) |
-| Items opened net | +2 (M1-F.1..F.4 hardening branches, P1-D2) |
+| Items closed | 11 major items (S2, S3, D1, F1, F2, R1, 6A, 6B, M1-core, C1, P1) |
+| Sub-items closed | 6 (C1-A, C1-B, C1-C, C1-D, P1-D1, R1b-A) |
+| Items opened net | +3 (M1-F.1..F.4 hardening branches, P1-D2, R1b reopened) |
 | Items deferred | 2 (C1-deferred, P1-E) |
-| Subjective velocity | **On track** — backend contracts closed; chat UI and memory hardening in flight |
+| Subjective velocity | **On track, with caution** — `fred-runtime` raw type debt is closed, but coverage and file-splitting hardening should still be paid down before more runtime-surface growth |
 
 ---
 

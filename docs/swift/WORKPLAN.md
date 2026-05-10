@@ -3,7 +3,7 @@
 Short-cycle execution plan. Updated as items close.
 Backlogs contain the full specs — this document answers **who does what, in what order, and what runs in parallel**.
 
-Last updated: 2026-05-08
+Last updated: 2026-05-09
 
 ---
 
@@ -242,7 +242,7 @@ Full audit of all rework frontend code for design-system compliance.
 
 ---
 
-## R1 — fred-runtime Quality Refactor (Simon/Dimitri) · Parallel, independent
+## R1 / R1b — fred-runtime Quality Refactor (Simon/Dimitri) · Parallel, independent
 
 **Ref**: `docs/backlog/FRED-RUNTIME-QUALITY.md`
 
@@ -268,6 +268,29 @@ at boundaries, `PodApplicationContext` container, ≥ 70% offline unit coverage.
 - No file > 600 lines: `agent_app.py` (2 578 lines) needs router extraction into `fred_runtime/app/routers/`
 
 See `FRED-RUNTIME-QUALITY.md §R1b` for exact file-by-file breakdown and fix approach.
+
+**Status (2026-05-09 follow-up audit):** R1b is now active and partially
+closed. Raw `basedpyright` is now clean in `fred-runtime`; the baseline file is
+emptied; total offline coverage is still 65%; logging-style cleanup started;
+and the largest runtime files remain monolithic.
+
+| R1b slice | Goal | Status |
+|---|---|---|
+| R1b-A | Raw `basedpyright` clean in `fred-runtime`; baseline emptied or removed | `[x]` ✅ 2026-05-09 |
+| R1b-B | Remaining `Any` / `dict[str, Any]` boundaries converged or explicitly marked opaque | `[ ]` |
+| R1b-C | Offline runtime coverage back to `>= 70%`; focused tests added for high-risk files | `[ ]` |
+| R1b-D | Logging uniformity pass: no new `logger.*(f"...")`, touched files normalised | `[~]` 2026-05-09 started |
+| R1b-E | Split `agent_app.py` first, then `integrations/v2_runtime/adapters.py` by concern | `[ ]` |
+
+**Execution rule:** while R1b is open, do not add new runtime-facing feature
+logic to `agent_app.py`, `integrations/v2_runtime/adapters.py`, or
+`runtime_context.py` without first paying down the seam you are extending.
+
+**Next round order (for Codex or Claude):**
+1. `R1b-E1` — split `agent_app.py` into execute/session/admin router modules.
+2. `R1b-C1` — add focused coverage for `graph_runtime.py`.
+3. `R1b-B1` — tighten `runtime_context.py` and `cli/pod_client.py` boundaries.
+4. `R1b-E2 / D2` — split `integrations/v2_runtime/adapters.py` by concern and continue log normalization.
 
 ---
 

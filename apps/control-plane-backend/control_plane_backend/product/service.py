@@ -26,6 +26,7 @@ from control_plane_backend.prompts.store import (
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    ContextPromptSummary,
     CreateAgentInstanceRequest,
     CreatePromptRequest,
     CreateSessionRequest,
@@ -36,6 +37,8 @@ from control_plane_backend.product.schemas import (
     ManagedAgentRuntimeBinding,
     PermissionSummary,
     PromptDetail,
+    PromptPromoteRequest,
+    PromptScoreUpdateRequest,
     PromptSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
@@ -1036,6 +1039,7 @@ async def prepare_execution(
     user: KeycloakUser,
     team_id: TeamId,
     agent_instance_id: str,
+    session_id: str | None = None,
     deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
     """
@@ -1099,6 +1103,14 @@ async def prepare_execution(
         expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
     )
 
+    context_prompt_text: str | None = None
+    if session_id is not None:
+        session_record = await deps.get_session_metadata_store().get(session_id)
+        if session_record is not None and session_record.context_prompt_id is not None:
+            prompt = await deps.get_prompt_store().get(session_record.context_prompt_id)
+            if prompt is not None:
+                context_prompt_text = prompt.text
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1110,6 +1122,7 @@ async def prepare_execution(
         effective_chat_options=_resolve_effective_chat_options(instance.tuning),
         expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
         runtime_display_name=source.runtime_id,
+        context_prompt_text=context_prompt_text,
     )
 
 
@@ -1200,6 +1213,12 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
         name=record.name,
         description=record.description,
         created_by=record.created_by,
+        version=record.version,
+        import_count=record.import_count,
+        session_count=record.session_count,
+        score=record.score,
+        avg_input_tokens=record.avg_input_tokens,
+        avg_output_tokens=record.avg_output_tokens,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -1227,6 +1246,12 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
         description=record.description,
         text=record.text,
         created_by=record.created_by,
+        version=record.version,
+        import_count=record.import_count,
+        session_count=record.session_count,
+        score=record.score,
+        avg_input_tokens=record.avg_input_tokens,
+        avg_output_tokens=record.avg_output_tokens,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -1393,6 +1418,82 @@ async def delete_prompt(
     return await deps.get_prompt_store().delete(prompt_id, team_id)
 
 
+async def list_context_prompts(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> list[ContextPromptSummary]:
+    """Return personal + team prompts for the chat context picker, ordered by session_count DESC."""
+
+    personal_team_id = TeamId(PERSONAL_TEAM_ID)
+    records = await deps.get_prompt_store().list_context_prompts(
+        personal_team_id, team_id
+    )
+    return [
+        ContextPromptSummary(
+            id=r.prompt_id,
+            name=r.name,
+            description=r.description,
+            scope=r.scope,  # type: ignore[arg-type]
+            version=r.version,
+            session_count=r.session_count,
+            score=r.score,
+        )
+        for r in records
+    ]
+
+
+async def promote_prompt(
+    user: KeycloakUser,
+    team_id: TeamId,
+    prompt_id: str,
+    request: PromptPromoteRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """Copy one prompt from team_id to request.target_team_id. Returns the new copy."""
+
+    store = deps.get_prompt_store()
+    source = await store.get_for_team(prompt_id, team_id)
+    if source is None:
+        raise PromptRequestError(
+            f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
+        )
+    target_team_id = TeamId(request.target_team_id)
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=target_team_id,
+        name=source.name,
+        description=source.description,
+        text=source.text,
+        created_by=user.username if user else None,
+    )
+    try:
+        created = await store.create(record)
+    except PromptAlreadyExistsError:
+        raise PromptRequestError(
+            f"Prompt name {source.name!r} already exists in team {request.target_team_id!r}. "
+            "Rename the existing prompt or the source before promoting.",
+            http_status=409,
+        )
+    return _prompt_record_to_summary(created)
+
+
+async def update_prompt_score(
+    team_id: TeamId,
+    prompt_id: str,
+    request: PromptScoreUpdateRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """Set the explicit quality score (0.0–5.0) for one team-scoped prompt."""
+
+    updated = await deps.get_prompt_store().update_score(
+        prompt_id, team_id, request.score
+    )
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
+
+
 # ---------------------------------------------------------------------------
 # Session metadata
 # ---------------------------------------------------------------------------
@@ -1480,14 +1581,34 @@ async def update_session_activity(
     Example:
     - `await update_session_activity(team_id, session_id, request, deps)`
     """
-    record = await deps.get_session_metadata_store().update_metadata(
+    store = deps.get_session_metadata_store()
+    prompt_store = deps.get_prompt_store()
+
+    record = await store.update_metadata(
         session_id=session_id,
         team_id=team_id,
         title=request.title,
         updated_at=request.updated_at,
+        context_prompt_id=request.context_prompt_id,
+        clear_context_prompt=request.clear_context_prompt,
     )
     if record is None:
         return None
+
+    if request.context_prompt_id is not None:
+        # Resolve which team owns this prompt to increment the right counter.
+        # Try the session's team first, then personal. Silently skip if not found
+        # (the prompt may have been deleted; the session continues normally).
+        prompt = await prompt_store.get_for_team(request.context_prompt_id, team_id)
+        if prompt is None:
+            prompt = await prompt_store.get_for_team(
+                request.context_prompt_id, PERSONAL_TEAM_ID
+            )
+        if prompt is not None:
+            await prompt_store.increment_session_count(
+                request.context_prompt_id, prompt.team_id
+            )
+
     return _record_to_item(record)
 
 
@@ -1513,6 +1634,7 @@ def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
         team_id=record.team_id,
         agent_instance_id=record.agent_instance_id,
         title=record.title,
+        context_prompt_id=record.context_prompt_id,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )

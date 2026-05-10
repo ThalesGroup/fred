@@ -128,8 +128,14 @@ meta:
       notes: "Deferred from C1 because model-profiles catalog was absent; separate branch needed"
 
 # ─── PROMPT SAFETY + LIBRARY TRACK (P1) ───────────────────────────────────────
-# P1 = core safety fix (done). P1-D1/D2/E = prompt library slices (separate branches).
-# Sub-item notation: P1-D<n> = 'D' for 'deferred slice', P1-E = marketplace extension.
+# P1     = core safety fix (done)
+# P1-D1  = backend CRUD (done by Codex)
+# P1-D1b = backend extension: versioning + analytics + context integration (open)
+# P1-D2  = frontend PromptsPage + AgentFormModal (open, depends on P1-D1b)
+# P1-D3  = chat context picker replacing free textarea (open, depends on P1-D1b)
+# P1-E   = marketplace (deferred)
+# P1-F   = token cost KPI integration (deferred)
+# RFC authority: docs/swift/rfc/PROMPT-LIBRARY-RFC.md
 
 - id: P1
   domain: prompt
@@ -137,27 +143,50 @@ meta:
   owner: Dimitri
   status: done
   closed: "2026-05-07"
-  backlog_ref: "docs/backlog/BACKLOG.md §3d.9"
+  backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9"
   notes: >
     Production incident 2026-05-06 — str.format_map() crash on code-brace patterns.
     Core fix shipped. Prompt library slices follow as separate branches.
   sub_items:
     - id: "P1-D1"
-      title: "Team/personal prompt library — CRUD + DB migration + Prompts page"
+      title: "Backend CRUD — PromptRow, PromptStore, migration, schemas, CRUD endpoints"
       status: done
       closed: "2026-05-08"
-      notes: "Completed by Codex. Backend CRUD + OpenAPI regen + frontend Prompts page."
-      backlog_ref: "docs/backlog/BACKLOG.md §3d.9 Slice D"
-    - id: "P1-D2"
-      title: "AgentFormModal prompt import/save + inline 422 display"
+      notes: "Completed by Codex. Backend only — no frontend, no versioning, no analytics."
+      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D1"
+    - id: "P1-D1b"
+      title: "Backend extension — versioning, analytics counters, score, context integration"
       status: open
-      backlog_ref: "docs/backlog/BACKLOG.md §3d.9 Slice D"
-      notes: "Starts after P1-D1 merged"
+      owner: Dimitri
+      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D1b"
+      rfc_ref: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
+      notes: >
+        version counter, import_count, session_count, score, avg_tokens on PromptRow.
+        prompt_refs on agent_instance. context_prompt_id on session.
+        New endpoints: /prompts/context (union), /prompts/{id}/promote, PATCH score.
+        ExecutionPreparation.context_prompt_text. OpenAPI regen.
+    - id: "P1-D2"
+      title: "Frontend — PromptsPage + AgentFormModal (import, save, version drift, 422)"
+      status: open
+      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D2"
+      notes: "Depends on P1-D1b (OpenAPI regen). PromptsPage CRUD + score rating + AgentFormModal additions."
+    - id: "P1-D3"
+      title: "Chat context picker — replaces free textarea with team library union picker"
+      status: open
+      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D3"
+      notes: "Depends on P1-D1b. Personal + team union, ordered by session_count. PATCH session."
     - id: "P1-E"
       title: "Global prompt marketplace publication (publish-by-copy)"
       status: deferred
-      backlog_ref: "docs/backlog/BACKLOG.md §3d.10"
-      notes: "Starts only after P1-D1 + P1-D2 fully land"
+      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.10"
+      notes: "Starts only after P1-D2 + P1-D3 land."
+    - id: "P1-F"
+      title: "Token cost KPI integration (avg_input/output_tokens per prompt)"
+      status: deferred
+      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D-F"
+      notes: >
+        Requires fred-core KPI store changes + O1. Fields reserved in schema (nullable).
+        UI shows N/A until this track lands. Needs own RFC amendment before starting.
 
 # ─── AGENT EVALUATION TRACK (O1) ──────────────────────────────────────────────
 

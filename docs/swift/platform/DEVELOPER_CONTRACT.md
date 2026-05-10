@@ -51,6 +51,14 @@ Read [`FRONTEND_CODING_GUIDELINES.md`](./FRONTEND_CODING_GUIDELINES.md) before t
 - Keep code strongly typed end-to-end.
   - Prefer explicit types (`Enum`/`Literal`/typed models) over magic strings.
   - Shared runtime choices (like scheduler backends) must use one typed definition from `fred_core`, not duplicated string literals.
+  - `Any` and `dict[str, Any]` are not acceptable at contract, service, CLI, or persistence boundaries. If an external payload is genuinely opaque, keep it local to the adapter and mark it with a short `# opaque` or `# open bag` comment.
+  - If a package uses a `basedpyright` baseline, do not treat the baseline as proof the package is type-clean. Run raw `basedpyright` as well and report whether the baseline still masks errors in the touched area.
+- Keep logging uniform.
+  - Reuse the existing logger families and channel split already documented for the component.
+  - Prefer deferred formatting (`logger.info("...", value)`) over eager f-strings in log calls.
+  - Avoid one-off prefixes or ad hoc log shapes when a component already has a visible convention.
+- Keep module size intentional.
+  - If a file is already very large (around `600+` lines), do not add another concern to it without extracting a focused module first or in the same change.
 - Keep unit tests infrastructure-free.
   - Unit/default tests must not require Docker or external services.
   - No dependency on running Keycloak, Temporal, OpenFGA, MinIO, Postgres, etc.
@@ -69,6 +77,7 @@ Read [`FRONTEND_CODING_GUIDELINES.md`](./FRONTEND_CODING_GUIDELINES.md) before t
 - Validate every change before proposing merge.
   - Run `make code-quality` in each modified Python project.
   - Run `make test` in each modified project.
+  - When a touched Python project has a non-empty `basedpyright` baseline, also run raw `basedpyright` and include the result in the close-out / PR notes.
 
 ## 3) Expected Test Behavior
 
@@ -87,6 +96,7 @@ Each PR must explicitly confirm:
 - Scope kept minimal (no over-engineering).
 - `make code-quality` executed on touched projects.
 - `make test` executed on touched projects.
+- Raw `basedpyright` executed for any touched package that keeps a non-empty baseline file, with the result stated explicitly.
 - New external dependency tests marked as integration.
 - Documentation updated when behavior/rules changed.
 
@@ -98,4 +108,4 @@ When prompting an assistant, start with:
 
 Short prompt template:
 
-`Read docs/DEVELOPER_CONTRACT.md first. Keep changes minimal, keep default tests fully offline (no third-party services), document each changed function with why/how (example for shared helpers), and prefer shrinking/reusing code instead of growing it.`
+`Read docs/DEVELOPER_CONTRACT.md first. Keep changes minimal, keep default tests fully offline (no third-party services), document each changed function with why/how (example for shared helpers), avoid new Any/dict[str, Any] at boundaries, run raw basedpyright when a baseline exists, and prefer shrinking/reusing code instead of growing it.`

@@ -75,6 +75,10 @@ This section cannot be skipped. If the answer to any question is "no" or
 ```
 ```
 
+**Raw `basedpyright` output (required if a touched package keeps a non-empty baseline file):**
+```
+```
+
 **`make test` output (paste the summary line — pass count, 0 failures):**
 ```
 ```

@@ -1,6 +1,6 @@
 # fred-runtime Quality Backlog
 
-**Last updated:** 2026-04-27
+**Last updated:** 2026-05-09
 **Scope:** `libs/fred-runtime` only
 **Reference standard:** `apps/control-plane-backend` (structure, DI, typing, test conventions)
 
@@ -22,6 +22,12 @@ merges independently and leaves the codebase working.
   and return type must use a concrete type. `Any` is allowed only for
   genuinely opaque external payloads (e.g. `resume_payload` from graph
   agents) and must be accompanied by a one-line comment explaining why.
+- **Do not let baselines hide debt.** If `make type-check` passes only because
+  a non-empty `basedpyright` baseline masks errors, the package is not
+  considered type-clean. Raw `basedpyright` must be tracked separately.
+- **Uniform logs only.** Prefer deferred formatting in all log calls, keep the
+  existing logger-family split (`fred.runtime`, KPI, `fred.security.audit`),
+  and do not introduce new `logger.*(f"...")` calls.
 - **>70% offline unit test coverage per phase.** Coverage is measured by
   `uv run pytest --cov=fred_runtime --cov-report=term-missing` after each
   phase. The 70% threshold applies to new and modified files only.
@@ -30,16 +36,16 @@ merges independently and leaves the codebase working.
 
 ---
 
-## Current State Snapshot
+## Current State Snapshot (2026-05-09 follow-up audit)
 
 | File | Lines | Problem |
 |---|---|---|
-| `fred_runtime/client.py` | 3 880 | 8 concerns in one module |
-| `fred_runtime/app/agent_app.py` | 2 756 | No container, 14 `Any` usages, module globals |
-| `fred_runtime/common/kf_workspace_client.py` | 535 | Dead `requests` import, wrong exception types |
-| `fred_runtime/runtime_support/user_token_refresher.py` | ~50 | Blocking `requests.post()` on async path |
-| `fred_runtime/app/config.py` | 417 | `Any | None` for MCP configuration |
-| `tests/` | 6 files | No `conftest.py`, 3× duplicated fixture code, no coverage target |
+| `fred_runtime/app/agent_app.py` | 2 887 | Still concentrates routing, execution prep, history, KPI/audit, and app boot |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | 1 830 | Mixed concerns (tracing, tool invokers, artifacts, resource IO, digests) |
+| `fred_runtime/graph/graph_runtime.py` | 1 922 | Critical execution path with only 18% offline coverage |
+| `fred_runtime/runtime_context.py` | 249 | Remaining `Any`-typed dependency fields keep transitional plumbing loose |
+| `fred_runtime/common/*` MCP/KF helpers | 300–650 | Logging style still mixed; some adapter boundaries remain raw `dict` / `Any` payloads |
+| Package-level validation | — | raw `basedpyright` now passes and the baseline is empty; total offline coverage is still 65% |
 
 ---
 
@@ -837,7 +843,8 @@ Phase 5 can start in parallel with Phase 4 (touches different files).
 
 This backlog is closed when all of the following are true:
 
-- `[x]` `make code-quality` passes with zero warnings in `libs/fred-runtime` ✅ Phase 1
+- `[x]` `make code-quality` passes in `libs/fred-runtime` ✅ Phase 1
+- `[x]` Raw `basedpyright` passes with zero errors in `libs/fred-runtime` and the baseline file is empty or removed ✅ 2026-05-09
 - `[x]` New/modified files (P1–P5) report ≥ 70% coverage: `agent_app.py` 74%, `context.py` 95%, all new P4/P5 files 100% ✅ 2026-04-27
 - `[x]` No `import requests` in any source file under `fred_runtime/` (excluding `.venv`) ✅ Phase 1
 - `[x]` `from fred_runtime.client import AgentPodClient, run_scenario_file, main` still works (shim intact) ✅ 2026-04-27
@@ -845,18 +852,52 @@ This backlog is closed when all of the following are true:
 - `[x]` All ring-buffer state is instance-level, not module-global ✅ Phase 4
 - `[x]` `PodApplicationContext` is present and wired via `app.state` ✅ Phase 4
 - `[ ]` `grep -r "Any" fred_runtime/ | grep -v "# opaque\|# open bag\|\.venv"` returns zero results on function boundaries — **deferred to R1b** (see below)
+- `[~]` Runtime logging is uniform at touched sites: no `logger.*(f"...")`, no new ad hoc prefixes, existing technical/audit/KPI channels preserved
+- `[ ]` Offline package coverage is back to at least 70%, and every file touched in R1b is at or above 70%
 - `[ ]` No file in `fred_runtime/` exceeds 600 lines (excluding generated files) — **deferred to R1b** (see below)
 
 ---
 
 ## R1b — Remaining Quality Gates (Deferred)
 
-**Status:** `[ ]` Not started
+**Status:** `[~]` In progress — Gate A closed 2026-05-09; Gates B/C/D/E remain
 **Prerequisite:** R1 (P1–P5) complete ✅
 
-Two DoD gates from R1 were not closed by P1–P5 and require dedicated follow-up work:
+The 2026-05-09 follow-up audit and follow-up fix pass confirmed that
+`fred-runtime` is still below the target structural bar despite the earlier
+P1–P5 cleanup:
 
-### Gate A — `Any` zero at function boundaries
+- raw `basedpyright` debt is now closed
+- total offline coverage is 65%
+- logging styles are still mixed at runtime helper boundaries
+- `agent_app.py` and `adapters.py` remain monolithic
+
+R1b is therefore the active hardening track for `fred-runtime`.
+
+### Gate A — Raw type-check clean and baseline removed or emptied
+
+**Status:** `[x]` Complete — 2026-05-09
+
+The following raw `basedpyright` errors were removed in the 2026-05-09 quality pass:
+
+| File | Location | Current error |
+|---|---|---|
+| `fred_runtime/app/agent_app.py` | `RuntimeServices(... metrics=KPIWriterMetricsAdapter(...))` | `reportArgumentType` |
+| `fred_runtime/app/agent_app.py` | `executor.stream(executor_input, execution_config)` | `reportArgumentType` |
+| `fred_runtime/deep/deep_runtime.py` | `definition` override | `reportIncompatibleMethodOverride` |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | `start_span(...)` override | `reportIncompatibleMethodOverride` |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | `parent.span_id` | `reportAttributeAccessIssue` |
+
+**Validation completed:**
+- raw `basedpyright` in `libs/fred-runtime`: `0 errors, 0 warnings, 0 notes`
+- `make code-quality` in `libs/fred-runtime`: passes
+- `.baseline/basedpyright-baseline.json` now contains `{ "files": {} }`
+
+The follow-up work from here is not more raw type-fixing; it is boundary
+convergence (`Any` removal), coverage hardening, logging consistency, and file
+splitting.
+
+### Gate B — `Any` zero at function boundaries
 
 Remaining `Any` usages after P5 (checked 2026-04-27):
 
@@ -872,14 +913,84 @@ Remaining `Any` usages after P5 (checked 2026-04-27):
 - `cli/pod_client.py`: Introduce response TypedDicts or dataclasses for `get_kpi_turns`, `get_audit_events`, `get_checkpoint_stats`.
 - Utilities: Mark remaining `Any` with `# opaque` comment to satisfy the grep gate without removing them.
 
-### Gate B — No file > 600 lines
+### Gate C — Coverage hardening for high-risk runtime files
+
+Coverage snapshot from the 2026-05-09 offline run:
+
+| File | Coverage | Risk |
+|---|---|---|
+| `fred_runtime/app/agent_app.py` | 74% | Large HTTP/runtime seam; acceptable locally but still concentrated |
+| `fred_runtime/graph/graph_runtime.py` | 18% | Core execution path; currently under-tested |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | 33% | Cross-cutting adapter surface; low confidence |
+| `fred_runtime/common/mcp_runtime.py` | 16% | Important tool/runtime lifecycle logic |
+| `fred_runtime/common/context_aware_tool.py` | 15% | KPI/tool wrapping path under-tested |
+
+**Fix approach:**
+- bring total offline package coverage back to at least 70%
+- every file touched by R1b must reach at least 70%
+- add dedicated focused tests when modifying `graph_runtime.py`, `adapters.py`, `mcp_runtime.py`, or `context_aware_tool.py`; do not rely only on broad `test_agent_app.py` coverage
+
+### Gate D — Logging uniformity
+
+**Status:** `[~]` Partial progress — 2026-05-09
+
+Resolved in the 2026-05-09 pass:
+
+- raw `logger.*(f"...")` calls were removed from `fred_runtime/`
+- touched files now use deferred formatting
+
+Still open:
+
+- helper modules still use ad hoc prefixes such as `[MCP]`, `[KF]`, and
+  component-local strings inconsistently
+
+**Fix approach:**
+- keep `logger.*(f"...")` at zero
+- when touching runtime logging, preserve the documented logger-family split:
+  `fred.runtime` for technical logs, KPI store for structured KPI events,
+  `fred.security.audit` for audit events
+- normalise log formatting style in touched files before adding new log lines
+
+### Next Round — Strict Order
+
+For the next runtime-quality session, work in this order and do not mix in new
+runtime-surface features until at least step 1 is complete:
+
+1. **R1b-E1 — split `agent_app.py` first**
+   - extract execute/session/admin routers
+   - keep `create_agent_app()` as composition root
+   - validation: raw `basedpyright`, `make code-quality`, `make test`
+
+2. **R1b-C1 — raise focused coverage on `graph_runtime.py`**
+   - add direct unit tests for phase timers, node routing, final-event shaping,
+     and graph output normalization
+   - validation: targeted pytest + full `make test`
+
+3. **R1b-B1 — converge `runtime_context.py` and `cli/pod_client.py` boundaries**
+   - replace remaining non-opaque `Any` / raw dict returns with typed DTOs or
+     protocols
+   - validation: raw `basedpyright`, grep for `Any`, `make code-quality`
+
+4. **R1b-E2 / D2 — split `integrations/v2_runtime/adapters.py` by concern**
+   - tracing/observability
+   - tool invokers
+   - artifact/resource IO
+   - digest/log summarization helpers
+
+If Claude or Codex picks this up later, they should start by reading:
+- `docs/swift/platform/DEVELOPER_CONTRACT.md`
+- `docs/swift/backlog/FRED-RUNTIME-QUALITY.md`
+- `docs/swift/WORKPLAN.md`
+- then inspect `libs/fred-runtime/fred_runtime/app/agent_app.py`
+
+### Gate E — No file > 600 lines
 
 Files currently over limit (checked 2026-04-27):
 
 | File | Lines | Action needed |
 |---|---|---|
-| `fred_runtime/app/agent_app.py` | 2 578 | Split into router modules: `_execute_router.py`, `_session_router.py`, `_admin_router.py`; keep `agent_app.py` as composition root (< 200 lines) |
-| `fred_runtime/integrations/v2_runtime/adapters.py` | 714 | Out of scope for R1; evaluate in a separate integrations quality pass |
+| `fred_runtime/app/agent_app.py` | 2 887 | Split into router modules: `_execute_router.py`, `_session_router.py`, `_admin_router.py`; keep `agent_app.py` as composition root (< 200 lines) |
+| `fred_runtime/integrations/v2_runtime/adapters.py` | 1 830 | Split by concern: tracing/observability, tool invokers, artifact/resource IO, log-digest helpers |
 
 **Fix approach for `agent_app.py`:**
 1. Extract route handlers for `/agents/execute*` into `fred_runtime/app/routers/execute.py`
@@ -887,6 +998,10 @@ Files currently over limit (checked 2026-04-27):
 3. Extract `/agents/kpi-turns`, `/agents/audit-events` into `fred_runtime/app/routers/admin.py`
 4. Keep `create_agent_app()` factory, lifespan, and shared helpers in `agent_app.py` (target: ~200 lines)
 5. The OpenAI compat router is already separate (`openai_compat_router.py`) — no change needed there
+
+**Rule while R1b is open:** do not add new runtime-facing feature logic to
+`agent_app.py`, `integrations/v2_runtime/adapters.py`, or `runtime_context.py`
+without first extracting or tightening the specific seam you are touching.
 
 ---
 

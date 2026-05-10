@@ -157,13 +157,13 @@ class OpenSearchLogStore(BaseLogStore):
         try:
             if not self.client.indices.exists(index=self.index):
                 self.client.indices.create(index=self.index, body=LOG_INDEX_MAPPING)
-                logger.info(f"[LOG] created index '{self.index}'.")
+                logger.info("[OPENSEARCH][LOG] created index '%s'.", self.index)
             else:
-                logger.info(f"[LOG] index '{self.index}' already exists.")
+                logger.info("[OPENSEARCH][LOG] index '%s' already exists.", self.index)
                 # If you have a generic validator like KPI does, call it here:
                 # validate_index_mapping(self.client, self.index, LOG_INDEX_MAPPING)
         except OpenSearchException as e:
-            logger.error(f"[LOG] ensure_ready failed: {e}")
+            logger.error("[OPENSEARCH][LOG] ensure_ready failed: %s", e)
             raise
 
     # -- writes ----------------------------------------------------------------
@@ -171,7 +171,8 @@ class OpenSearchLogStore(BaseLogStore):
         try:
             self.client.index(index=self.index, body=_doc_from_event(event))
         except OpenSearchException as e:
-            raise e
+            logger.error("[OPENSEARCH][LOG] index_event failed: %s", e)
+            raise
 
     def bulk_index(self, events: List[LogEventDTO]) -> None:
         if not events:
@@ -183,9 +184,11 @@ class OpenSearchLogStore(BaseLogStore):
         try:
             resp = self.client.bulk(body=actions)
             if resp.get("errors"):
-                print("[LOG] bulk_index completed with partial errors.")
+                logger.warning(
+                    "[OPENSEARCH][LOG] bulk_index completed with partial errors."
+                )
         except OpenSearchException as e:
-            print(f"[LOG] bulk_index failed: {e}")
+            logger.error("[OPENSEARCH][LOG] bulk_index failed: %s", e)
             raise
 
     # -- reads -----------------------------------------------------------------

@@ -182,6 +182,73 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet: build.query<
+      GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse,
+      GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts` }),
+    }),
+    postTeamPromptControlPlaneV1TeamsTeamIdPromptsPost: build.mutation<
+      PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse,
+      PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts`,
+        method: "POST",
+        body: queryArg.createPromptRequest,
+      }),
+    }),
+    getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet: build.query<
+      GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse,
+      GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/context` }),
+    }),
+    getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: build.query<
+      GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse,
+      GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}` }),
+    }),
+    putTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPut: build.mutation<
+      PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiResponse,
+      PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
+        method: "PUT",
+        body: queryArg.updatePromptRequest,
+      }),
+    }),
+    deleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDelete: build.mutation<
+      DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiResponse,
+      DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
+        method: "DELETE",
+      }),
+    }),
+    patchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatch: build.mutation<
+      PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiResponse,
+      PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}`,
+        method: "PATCH",
+        body: queryArg.promptScoreUpdateRequest,
+      }),
+    }),
+    postPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost: build.mutation<
+      PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse,
+      PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/promote`,
+        method: "POST",
+        body: queryArg.promptPromoteRequest,
+      }),
+    }),
     getAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGet: build.query<
       GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse,
       GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg
@@ -230,6 +297,9 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
         method: "POST",
+        params: {
+          session_id: queryArg.sessionId,
+        },
       }),
     }),
   }),
@@ -337,6 +407,54 @@ export type DeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentI
   teamId: string;
   agentInstanceId: string;
 };
+export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse =
+  /** status 200 Successful Response */ PromptSummary[];
+export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg = {
+  teamId: string;
+};
+export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse =
+  /** status 201 Successful Response */ PromptSummary;
+export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiArg = {
+  teamId: string;
+  createPromptRequest: CreatePromptRequest;
+};
+export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse =
+  /** status 200 Successful Response */ ContextPromptSummary[];
+export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg = {
+  teamId: string;
+};
+export type GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiResponse =
+  /** status 200 Successful Response */ PromptDetail;
+export type GetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutApiArg = {
+  teamId: string;
+  promptId: string;
+  updatePromptRequest: UpdatePromptRequest;
+};
+export type DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiResponse = unknown;
+export type DeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiResponse =
+  /** status 200 Successful Response */ PromptSummary;
+export type PatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchApiArg = {
+  teamId: string;
+  promptId: string;
+  promptScoreUpdateRequest: PromptScoreUpdateRequest;
+};
+export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse =
+  /** status 201 Successful Response */ PromptSummary;
+export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiArg = {
+  teamId: string;
+  promptId: string;
+  promptPromoteRequest: PromptPromoteRequest;
+};
 export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiResponse =
   /** status 200 Successful Response */ ManagedAgentRuntimeBinding;
 export type GetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetApiArg = {
@@ -370,6 +488,7 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
 export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostApiArg = {
   teamId: string;
   agentInstanceId: string;
+  sessionId?: string | null;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -698,6 +817,61 @@ export type UpdateAgentInstanceRequest = {
   /** Replaces the MCP server activation policy for this instance. Omit the field to leave the current selection unchanged; pass null to reset to the template default selection (all declared servers active); pass [] to activate no MCP servers; pass a non-empty list to activate exactly that subset. Unknown IDs are rejected with HTTP 422. */
   mcp_server_ids?: string[] | null;
 };
+export type PromptSummary = {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_by?: string | null;
+  version?: number;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type CreatePromptRequest = {
+  name: string;
+  description?: string | null;
+  text: string;
+};
+export type ContextPromptSummary = {
+  id: string;
+  name: string;
+  description?: string | null;
+  scope: "personal" | "team";
+  version: number;
+  session_count: number;
+  score?: number | null;
+};
+export type PromptDetail = {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_by?: string | null;
+  version?: number;
+  import_count?: number;
+  session_count?: number;
+  score?: number | null;
+  avg_input_tokens?: number | null;
+  avg_output_tokens?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  team_id: string;
+  text: string;
+};
+export type UpdatePromptRequest = {
+  name: string;
+  description?: string | null;
+  text: string;
+};
+export type PromptScoreUpdateRequest = {
+  score: number;
+};
+export type PromptPromoteRequest = {
+  target_team_id: string;
+};
 export type ManagedAgentTuning = {
   role: string;
   description: string;
@@ -747,6 +921,7 @@ export type SessionListItem = {
   team_id: string;
   agent_instance_id?: string | null;
   title?: string | null;
+  context_prompt_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -761,6 +936,10 @@ export type UpdateSessionRequest = {
   updated_at?: string | null;
   /** Human-readable session title shown in the sidebar. */
   title?: string | null;
+  /** Library prompt to use as chat context for this session. Null clears the current context. Send the sentinel value '__clear__' or omit the field entirely to leave it unchanged. */
+  context_prompt_id?: string | null;
+  /** Set to true to explicitly clear context_prompt_id to null. */
+  clear_context_prompt?: boolean;
 };
 export type ExecutionGrantAction = "execute" | "resume";
 export type ExecutionGrant = {
@@ -810,6 +989,8 @@ export type ExecutionPreparation = {
   runtime_display_name?: string | null;
   grant_refresh_required?: boolean;
   max_session_idle_seconds?: number | null;
+  /** Resolved text of the session's context prompt, if one is set. The runtime injects this as a conversation-level context. Null when no context prompt is configured for the session. */
+  context_prompt_text?: string | null;
 };
 export const {
   useHealthzControlPlaneV1HealthzGetQuery,
@@ -847,6 +1028,17 @@ export const {
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
+  useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
+  useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
+  useLazyGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
+  useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
+  usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
+  useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
+  usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
+  usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
   useGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
   useLazyGetAgentInstanceRuntimeControlPlaneV1AgentInstancesAgentInstanceIdRuntimeGetQuery,
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,

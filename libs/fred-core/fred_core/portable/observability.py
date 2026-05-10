@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Generator
@@ -56,6 +57,24 @@ class Span:
     Callers always call end() explicitly (the runtime does not use a context
     manager here because span lifetime often crosses await boundaries).
     """
+
+    @property
+    def span_id(self) -> str | None:
+        """
+        Return the backend span identifier when the implementation exposes one.
+
+        Why this exists:
+        - some tracing backends can create parent/child relationships only when
+          the caller can read a stable span id from the current span
+
+        How to use it:
+        - treat `None` as "this backend does not expose parent-linking ids"
+
+        Example:
+        - `if span.span_id is not None: trace_context["parent_span_id"] = span.span_id`
+        """
+
+        return None
 
     def set_attribute(self, key: str, value: Any) -> None:
         """Record one key/value attribute on this span."""
@@ -80,7 +99,11 @@ class Tracer:
     def start_span(
         self,
         name: str,
-        **attributes: Any,
+        *,
+        context: object | None = None,
+        attributes: Mapping[str, object] | None = None,
+        parent: Span | None = None,
+        **kwargs: object,
     ) -> Span:
         """Open a new span. Returns a no-op Span by default."""
         return Span()
@@ -106,8 +129,41 @@ class LoggingTracer(Tracer):
     def __init__(self, logger: logging.Logger | None = None) -> None:
         self._logger = logger or logging.getLogger("fred_core.traces")
 
-    def start_span(self, name: str, **attributes: Any) -> Span:
-        return _LoggingSpan(name=name, logger=self._logger, extra=attributes)
+    def start_span(
+        self,
+        name: str,
+        *,
+        context: object | None = None,
+        attributes: Mapping[str, object] | None = None,
+        parent: Span | None = None,
+        **kwargs: object,
+    ) -> Span:
+        """
+        Open a new logging-backed span.
+
+        Why this exists:
+        - runtime code passes structured attributes and optional parent spans
+          through one shared tracing seam
+
+        How to use it:
+        - pass `attributes=` for the canonical attribute bag
+        - optional `parent` contributes `parent_span_id` when available
+
+        Example:
+        - `tracer.start_span("agent.run", attributes={"agent_id": "demo"})`
+        """
+
+        del context
+        combined_attributes: dict[str, object] = dict(attributes or {})
+        combined_attributes.update(kwargs)
+        parent_span_id = parent.span_id if parent is not None else None
+        if parent_span_id is not None:
+            combined_attributes.setdefault("parent_span_id", parent_span_id)
+        return _LoggingSpan(
+            name=name,
+            logger=self._logger,
+            extra=combined_attributes,
+        )
 
 
 @dataclass

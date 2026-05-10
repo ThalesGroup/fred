@@ -12,10 +12,10 @@
 # Full ID registry: docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-08"
+  last_updated: "2026-05-09"
   sprint_week: "2026-05-07"
-  status_doc: "docs/STATUS.md"
-  id_legend: "docs/data/id-legend.yaml"
+  status_doc: "docs/swift/STATUS.md"
+  id_legend: "docs/swift/data/id-legend.yaml"
 
 # ─── MILESTONES ───────────────────────────────────────────────────────────────
 
@@ -29,12 +29,16 @@ milestones:
     notes: "S1 live-stack run is the gate; M1 hardening branches follow on swift"
 
   - id: MS-prompt-library
-    title: "Prompt library shipped — P1-D1 merged + P1-D2 done"
+    title: "Prompt library shipped — P1-D1b + P1-D2 + P1-D3 done"
     target_date: TBD
-    pct_done: 50
+    pct_done: 40
     on_track: true
-    blocking_items: [P1-D2]
-    notes: "P1-D1 completed by Codex 2026-05-08; P1-D2 is next"
+    blocking_items: [P1-D2, P1-D3]
+    notes: >
+      P1-D1 backend CRUD done by Codex (2026-05-08). P1-D1b backend extension
+      (versioning, analytics, context integration, 3 new endpoints) done by Dimitri
+      (2026-05-10). controlPlaneOpenApi.ts regenerated. P1-D2 (PromptsPage + AgentFormModal)
+      and P1-D3 (chat context picker) are now unblocked.
 
   - id: MS-chat-ui-phase6
     title: "Chat UI Phase 6 complete — 6C shipped"
@@ -91,6 +95,18 @@ in_progress:
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:
+  - id: P1-D2
+    title: "Frontend — PromptsPage + AgentFormModal additions"
+    owner: TBD
+    depends_on: [P1-D1b]
+    milestone: MS-prompt-library
+
+  - id: P1-D3
+    title: "Chat context picker (replaces free textarea)"
+    owner: Félix
+    depends_on: [P1-D1b]
+    milestone: MS-prompt-library
+
   - id: M1-F.1
     title: "fix/memory-agent-checkpoint-isolation"
     owner: Dimitri
@@ -148,6 +164,11 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) ──────────────────────────────────────────
 
 recently_closed:
+  - id: P1-D1b
+    title: "Prompt library extension — versioning, analytics, context integration"
+    owner: Dimitri
+    closed: "2026-05-10"
+
   - id: P1-D1
     title: "Team/personal prompt library — CRUD + DB migration + Prompts page"
     owner: Codex

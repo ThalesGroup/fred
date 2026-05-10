@@ -25,6 +25,7 @@ class SessionMetadataRow(Base):
     )
     user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    context_prompt_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
