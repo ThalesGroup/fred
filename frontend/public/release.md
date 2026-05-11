@@ -1,16 +1,15 @@
-**Unreleased** — XXXX-XX-XX
+**v1.5.4** — 2026-05-11
 
 - **Features**
 
-  - add capacity to specify custom RetryPolicy for Temporal activities (#1576)
-  - feat: added fast lite md processor (#1593)
-  - expose metrics for prometheus scraping on control plane (#1592)
-  - add configurable upload warning alert to document upload drawer (#1597)
+  - Add markdown processor for chat attachments (#1593)
+  - Expose metrics for prometheus scraping on control plane (#1592)
+  - Add configurable upload warning alert to document upload drawer (#1597)
 
 - **Bug Fixes**
 
-  - typo in link in mail to request to join a team (#1589)
-  - spurious langfuse error log (#1594)
+  - Typo in link in mail to request to join a team (#1589)
+  - Spurious langfuse error log (#1594)
 
 **v1.5.3** — 2026-05-03
 
