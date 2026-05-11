@@ -160,7 +160,7 @@ Current migration state, feature backlogs, and audit reports.
 |---|---|
 | [`BACKLOG.md`](backlog/BACKLOG.md) | **Master backlog** — migration Phases 0→7, status and sequencing |
 | [`FRONTEND-BACKLOG.md`](backlog/FRONTEND-BACKLOG.md) | Frontend Phase 5 adaptation plan |
-| [`CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) | Chat UI quality build-out (Phases 6A→6D) |
+| [`CHAT-UI-BACKLOG.md`](backlog/CHAT-UI-BACKLOG.md) | Chat UI quality build-out (Phases CHAT-01→CHAT-04) |
 | [`MULTI-AGENT-MEMORY-BACKLOG.md`](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) | Cross-turn conversational memory for graph agents (RFC: `rfc/MULTI-AGENT-MEMORY-RFC.md`) |
 | [`RUNTIME-FEATURE-AUDIT.md`](backlog/RUNTIME-FEATURE-AUDIT.md) | Current runtime feature inventory against target architecture |
 
@@ -186,10 +186,10 @@ the resulting decisions get encoded in the `design/` contracts.
 | File | Subject |
 |---|---|
 | [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md) | Agentic pod architecture and migration direction |
-| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md) | Agent evaluation framework (deepeval) — O1 track |
+| [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md) | Agent evaluation framework (deepeval) — EVAL-01 track |
 | [`AGENT-INSTANCE-FORM-RFC.md`](rfc/AGENT-INSTANCE-FORM-RFC.md) | Agent instance management form — template browser, tuning fields, MCP tools |
-| [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md) | Cross-turn conversational memory for graph agents — M1 track |
-| [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md) | Prompt library — versioning, analytics, 3-level hierarchy, chat context picker — P1-D1b..D3 |
+| [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md) | Cross-turn conversational memory for graph agents — MEMORY-01 track |
+| [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md) | Prompt library — versioning, analytics, 3-level hierarchy, chat context picker — PROMPT-03..D3 |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md) | SDK v2 design proposal |
 | [`DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md`](rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md) | Distributed agent architecture |
 

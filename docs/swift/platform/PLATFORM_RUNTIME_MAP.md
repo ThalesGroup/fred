@@ -30,7 +30,7 @@ Fred has three active API surfaces:
 
 > **`agentic-backend` is removed.** It was the former chat/session runtime and agent orchestration
 > surface. It has been archived to `ignored/fred/agentic-backend` and is no longer active.
-> The backend migration is complete. What remains is Phase 5E: removing the ~30 frontend files that
+> The backend migration is complete. What remains is Phase FRONT-05: removing the ~30 frontend files that
 > still import types from `agenticOpenApi.ts` (generated from the removed service's schema).
 > See [`docs/swift/backlog/FRONTEND-BACKLOG.md §7`](../backlog/FRONTEND-BACKLOG.md).
 

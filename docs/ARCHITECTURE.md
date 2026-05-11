@@ -40,5 +40,5 @@ active service. The backend migration from `agentic-backend` is complete.
 ## Current migration state (2026-05-11)
 
 The backend migration from `agentic-backend` is complete. One frontend cleanup
-remains: Phase 5E removes ~30 residual imports from `agenticOpenApi.ts`.
+remains: Phase FRONT-05 removes ~30 residual imports from `agenticOpenApi.ts`.
 Tracked in `docs/swift/backlog/FRONTEND-BACKLOG.md §7`.

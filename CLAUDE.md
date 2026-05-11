@@ -114,23 +114,24 @@ Fix before proceeding. Do not report done with red tests or lint errors.
 
 ## Task IDs and the registry
 
-Format for new items (post 2026-05-08): `<DOMAIN>-<N>[-<sub>]`
+Format: `DOMAIN-NN` — a 4-7 letter domain code and a two-digit sequential number.
 
-| Prefix | Area |
+| Code | Area |
 |---|---|
-| `CP` | control-plane features (product, session, admin APIs) |
-| `RT` | runtime features (execution, SSE, HITL, checkpoints) |
-| `CU` | chat-UI components and phases |
-| `FE` | frontend/rework migration |
-| `MA` | multi-agent and memory features |
-| `EV` | evaluation and benchmarking |
-| `OBS` | observability, devops, CLI ergonomics |
+| `CHAT` | Chat UI — options panel, attachments, sessions, rendering |
+| `CTRLP` | Control plane — APIs, sessions, instances, lifecycle, MCP |
+| `EVAL` | Agent evaluation, scoring, harness |
+| `FRONT` | Frontend migration and refactor (excluding chat UI) |
+| `MEMORY` | Multi-agent conversational memory |
+| `OBSERV` | Observability, metrics, Prometheus, KPIs |
+| `OPS` | CLI, deployment, environment ops |
+| `PROMPT` | Prompt safety, library, context picker, marketplace |
+| `QUALITY` | Quality refactors — typing, file size, test coverage |
+| `RUNTIME` | Execution contracts, SDK, ChatContext, runtime CLI |
+| `VALID` | End-to-end validation, live-stack scenarios |
 
-Sub-phase suffixes: `-a`, `-b`, `-c` for major sub-features; `.1`, `.2`, `.3` for
-individual task items. Examples: `CP-1`, `RT-3-a`, `CU-4.1`, `MA-2-b.3`.
-
-Legacy IDs (S, F, M, C, P, O, D, R, 6x, 5x) — see `docs/swift/data/id-legend.yaml`
-for full disambiguation. **Never rename a legacy ID.**
+Examples: `MEMORY-01`, `PROMPT-04`, `CHAT-03`. No sub-phase suffixes.
+If an item needs a parent relationship, use the `parent:` field in `id-legend.yaml`.
 
 Rules:
 1. Every new item gets an ID before implementation starts.

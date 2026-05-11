@@ -1,363 +1,318 @@
-# docs/data/id-legend.yaml
+# docs/swift/data/id-legend.yaml
 #
-# Canonical registry of every task/feature identifier used across the project.
-# AI assistants: read this file FIRST when answering "what is X?", "who owns Y?",
-# or "what is the status of Z?" — it is faster than chasing cross-references.
+# Canonical registry of every tracked item in the project.
+# AI assistants: read this file first when answering "what is X?", "who
+# owns Y?", or "what is the status of Z?".
 #
-# Humans: update this file whenever you add, close, or defer a tracked item.
-#
-# Convention for NEW items (post-2026-05-08): see CLAUDE.md § Task ID Convention
-# Convention for EXISTING items (pre-2026-05-08): preserved as-is below (legacy
-# notation S1/C1/6C/M1-F.1 etc.) — renaming would break backlog cross-references.
-#
-# status values: open | in_progress | done | deferred | not_started
+# Convention: id is `DOMAIN-NN` (e.g. MEMORY-02, PROMPT-04). Domain codes
+# are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-11"  # RT-1 + FE-1 closed
-  convention_doc: "CLAUDE.md § Task ID Convention"
-  sprint_state: "docs/data/sprint.yaml"
+  last_updated: "2026-05-11"
+  id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
+  status_values: [open, in_progress, done, deferred, not_started]
+  domains:
+    CHAT:    "Chat UI — options panel, attachments, sessions, rendering"
+    CTRLP:   "Control plane — APIs, sessions, instances, lifecycle, MCP"
+    EVAL:    "Agent evaluation, scoring, harness"
+    FRONT:   "Frontend migration and refactor (excluding chat UI)"
+    MEMORY:  "Multi-agent conversational memory"
+    OBSERV:  "Observability, metrics, Prometheus, KPIs"
+    OPS:     "CLI, deployment, environment ops"
+    PROMPT:  "Prompt safety, library, context picker, marketplace"
+    QUALITY: "Quality refactors — typing, file size, test coverage"
+    RUNTIME: "Execution contracts, SDK, ChatContext, runtime CLI"
+    VALID:   "End-to-end validation, live-stack scenarios"
+  rules:
+    - "One ID = one tracked unit of work (has or could have owner/status/blockers)."
+    - "Sub-tasks live in the backlog file referenced under refs.backlog."
 
-# ─── SIMON TRACK — runtime validation & observability ─────────────────────────
+items:
 
-- id: S1
-  domain: runtime-validation
-  title: "E2E live stack validation (managed + HITL scenarios)"
-  owner: Simon
-  status: in_progress
-  closed: null
-  blocked_on: "Live pod available + FRED_AGENT_INSTANCE_ID set"
-  backlog_ref: "docs/backlog/BACKLOG.md §3b.7"
-  notes: >
-    Scenario automation complete (2026-04-26); three YAML scenarios wired.
-    Live stack run still pending — gate for Phase 3b closure.
+  # ── CHAT ──────────────────────────────────────────────────────────────
 
-- id: S2
-  domain: observability
-  title: "Prometheus cardinality fix + observability hardening"
-  owner: Simon
-  status: done
-  closed: "2026-04-26"
-  backlog_ref: "docs/backlog/BACKLOG.md §7.3"
+  - id: CHAT-01
+    title: "Chat UI architecture — new ManagedChatPage component tree"
+    status: done
+    owner: Félix
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §1"
 
-- id: S3
-  domain: runtime
-  title: "Runtime CLI ergonomics + session purge"
-  owner: "Simon + Dimitri"
-  status: done
-  closed: "2026-04-26"
-  backlog_ref: "docs/backlog/BACKLOG.md §6.4.B §6.4.G"
+  - id: CHAT-02
+    title: "Markdown rendering — react-markdown, CodeBlock, SourceBadge"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-04"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §2"
 
-# ─── FLORIAN TRACK — control-plane APIs & session lifecycle ───────────────────
+  - id: CHAT-03
+    title: "Agent options panel and session title inline edit"
+    status: in_progress
+    owner: Félix
+    blocked_on: "VALID-01 — runtime SSE validation must be confirmed first"
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §3"
 
-- id: F1
-  domain: control-plane
-  title: "Session updated_at strategy + PATCH implementation"
-  owner: Florian
-  status: done
-  closed: "2026-05-06"
-  backlog_ref: "docs/backlog/BACKLOG.md §6.4.D"
+  - id: CHAT-04
+    title: "Attachment support and file upload in chat"
+    status: not_started
+    owner: Félix
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
 
-- id: F2
-  domain: control-plane
-  title: "PATCH session endpoint (title, updated_at body)"
-  owner: Florian
-  status: done
-  closed: "2026-05-06"
-  backlog_ref: "docs/backlog/BACKLOG.md §6.4.D"
+  # ── CTRLP ─────────────────────────────────────────────────────────────
 
-# ─── MULTI-AGENT MEMORY TRACK (M1) ────────────────────────────────────────────
-# Internal phases labelled A–F follow the MULTI-AGENT-MEMORY-BACKLOG convention.
-# Sub-items M1-F.1..F.4 are hardening branches on the swift branch.
+  - id: CTRLP-01
+    title: "Session updated_at field — strategy and PATCH implementation"
+    status: done
+    owner: Florian
+    closed: "2026-05-06"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.D"
 
-- id: M1
-  domain: multi-agent
-  title: "Multi-agent conversational memory — core implementation"
-  owner: Dimitri
-  status: done
-  closed: "2026-05-05"
-  backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md"
-  notes: >
-    Phases A–E complete and validated. Four hardening branches (M1-F.1..F.4)
-    remain open on swift branch before the feature is fully closed.
-  sub_items:
-    - id: "M1-F.1"
-      title: "fix/memory-agent-checkpoint-isolation"
-      status: open
-      notes: "Isolate persisted graph state per agent within a shared session"
-    - id: "M1-F.2"
-      title: "fix/remote-agent-runtime-execute-contract"
-      status: open
-      notes: "Remote invocation must use public RuntimeExecuteRequest shape"
-    - id: "M1-F.3"
-      title: "refactor/local-agent-execute-projection"
-      status: open
-      notes: "Remove duplicate local _AgentExecuteRequest construction path"
-    - id: "M1-F.4"
-      title: "fix/team-memory-history-cap"
-      status: open
-      notes: "Enforce conversation_history_max_turns on TeamAgent history append"
+  - id: CTRLP-02
+    title: "PATCH /sessions — title and updated_at body fields"
+    status: done
+    owner: Florian
+    closed: "2026-05-06"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.D"
 
-# ─── POD CATALOG + AGENT INSTANCE CONFIG CONTRACT (C1) ────────────────────────
-# Sub-items C1-A..D follow WORKPLAN sub-phase convention (A=runtime, B=CP, C=FE, D=hardening).
-# WARNING: prefix C ≠ Chat UI here. Use context (domain field) to disambiguate.
+  - id: CTRLP-03
+    title: "MCP pod catalog exposure and agent instance configuration contract"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-06"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d"
 
-- id: C1
-  domain: control-plane
-  title: "Pod catalog exposure + agent instance configuration contract"
-  owner: Dimitri
-  status: done
-  closed: "2026-05-06"
-  backlog_ref: "docs/backlog/BACKLOG.md §3d"
-  notes: "Model profiles deferred to C1-deferred; all MCP tri-state work complete."
-  sub_items:
-    - id: "C1-A"
-      title: "fred-runtime — GET /agents/mcp-catalog endpoint"
-      status: done
-    - id: "C1-B"
-      title: "control-plane-backend — MCP schemas, service, drift detection"
-      status: done
-    - id: "C1-C"
-      title: "Frontend — MCP checkbox form, AgentCard drift warnings"
-      status: done
-    - id: "C1-D"
-      title: "Catalog/runtime hardening (duplicate ID rejection in mcp_catalog.yaml)"
-      status: done
-    - id: "C1-deferred"
-      title: "GET /agents/model-profiles + ManagedModelProfileRef + form picker"
-      status: open
-      notes: "Deferred from C1 because model-profiles catalog was absent; separate branch needed"
+  - id: CTRLP-04
+    title: "Model profiles endpoint and form picker"
+    status: open
+    owner: Dimitri
+    parent: CTRLP-03
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d"
+    notes: "Deferred from CTRLP-03 — model-profiles catalog was absent at time of implementation."
 
-# ─── PROMPT SAFETY + LIBRARY TRACK (P1) ───────────────────────────────────────
-# P1     = core safety fix (done)
-# P1-D1  = backend CRUD (done by Codex)
-# P1-D1b = backend extension: versioning + analytics + context integration (open)
-# P1-D2  = frontend PromptsPage + AgentFormModal (open, depends on P1-D1b)
-# P1-D3  = chat context picker replacing free textarea (open, depends on P1-D1b)
-# P1-E   = marketplace (deferred)
-# P1-F   = token cost KPI integration (deferred)
-# RFC authority: docs/swift/rfc/PROMPT-LIBRARY-RFC.md
+  - id: CTRLP-05
+    title: "Developer CLI for the control plane (make cli)"
+    status: done
+    owner: Dimitri
+    closed: "2026-04-25"
+    refs:
+      backlog: "docs/swift/backlog/CONTROL-PLANE-CLI-BACKLOG.md"
 
-- id: P1
-  domain: prompt
-  title: "Prompt safety — safe rendering + persistence validation"
-  owner: Dimitri
-  status: done
-  closed: "2026-05-07"
-  backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9"
-  notes: >
-    Production incident 2026-05-06 — str.format_map() crash on code-brace patterns.
-    Core fix shipped. Prompt library slices follow as separate branches.
-  sub_items:
-    - id: "P1-D1"
-      title: "Backend CRUD — PromptRow, PromptStore, migration, schemas, CRUD endpoints"
-      status: done
-      closed: "2026-05-08"
-      notes: "Completed by Codex. Backend only — no frontend, no versioning, no analytics."
-      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D1"
-    - id: "P1-D1b"
-      title: "Backend extension — versioning, analytics counters, score, context integration"
-      status: open
-      owner: Dimitri
-      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D1b"
-      rfc_ref: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
-      notes: >
-        version counter, import_count, session_count, score, avg_tokens on PromptRow.
-        prompt_refs on agent_instance. context_prompt_id on session.
-        New endpoints: /prompts/context (union), /prompts/{id}/promote, PATCH score.
-        ExecutionPreparation.context_prompt_text. OpenAPI regen.
-    - id: "P1-D2"
-      title: "Frontend — PromptsPage + AgentFormModal (import, save, version drift, 422)"
-      status: open
-      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D2"
-      notes: "Depends on P1-D1b (OpenAPI regen). PromptsPage CRUD + score rating + AgentFormModal additions."
-    - id: "P1-D3"
-      title: "Chat context picker — replaces free textarea with team library union picker"
-      status: open
-      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D3"
-      notes: "Depends on P1-D1b. Personal + team union, ordered by session_count. PATCH session."
-    - id: "P1-E"
-      title: "Global prompt marketplace publication (publish-by-copy)"
-      status: deferred
-      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.10"
-      notes: "Starts only after P1-D2 + P1-D3 land."
-    - id: "P1-F"
-      title: "Token cost KPI integration (avg_input/output_tokens per prompt)"
-      status: deferred
-      backlog_ref: "docs/swift/backlog/BACKLOG.md §3d.9 Slice D-F"
-      notes: >
-        Requires fred-core KPI store changes + O1. Fields reserved in schema (nullable).
-        UI shows N/A until this track lands. Needs own RFC amendment before starting.
+  # ── EVAL ──────────────────────────────────────────────────────────────
 
-# ─── AGENT EVALUATION TRACK (O1) ──────────────────────────────────────────────
+  - id: EVAL-01
+    title: "Agent evaluation harness (deepeval)"
+    status: not_started
+    owner: Odélia
+    refs:
+      rfc: "docs/swift/rfc/AGENT-EVALUATION-RFC.md"
 
-- id: O1
-  domain: evaluation
-  title: "Agent evaluation harness (deepeval)"
-  owner: Odélia
-  status: not_started
-  backlog_ref: "docs/rfc/AGENT-EVALUATION-RFC.md"
-  notes: "RFC exists and scoped; implementation not started. Independent of migration track."
+  # ── FRONT ─────────────────────────────────────────────────────────────
 
-# ─── CONTROL-PLANE DEVELOPER CLI (D1) ────────────────────────────────────────
+  - id: FRONT-01
+    title: "Frontend bootstrap — remove agentic-backend dependency from shell startup"
+    status: done
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §Phase 5A"
 
-- id: D1
-  domain: control-plane
-  title: "Control-plane developer CLI (make cli)"
-  owner: Dimitri
-  status: done
-  closed: "2026-04-25"
-  backlog_ref: "docs/backlog/CONTROL-PLANE-CLI-BACKLOG.md"
+  - id: FRONT-02
+    title: "Team identity and session sidebar migration to control-plane"
+    status: done
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §Phase 5B"
 
-# ─── FRED-RUNTIME QUALITY REFACTOR (R1) ──────────────────────────────────────
-# Sub-items R1-P1..P5 follow the quality phase numbering in FRED-RUNTIME-QUALITY.md.
-# WARNING: prefix P here means 'Phase', not 'Prompt'. Use domain field to disambiguate.
+  - id: FRONT-03
+    title: "Agent catalog migration — control-plane templates and managed instances"
+    status: done
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §Phase 5C"
 
-- id: R1
-  domain: runtime
-  title: "fred-runtime quality refactor (P1–P5)"
-  owner: Simon
-  status: done
-  closed: "2026-04-27"
-  backlog_ref: "docs/backlog/FRED-RUNTIME-QUALITY.md"
-  notes: >
-    R1b gates (Any-zero at function boundaries, no file > 600 lines) deferred.
-    See FRED-RUNTIME-QUALITY.md §R1b for exact breakdown.
-  sub_items:
-    - id: "R1-P1"
-      title: "Fix async/sync correctness (kf_workspace_client, user_token_refresher)"
-      status: done
-      closed: "2026-04-27"
-    - id: "R1-P2"
-      title: "Shared test fixtures (tests/conftest.py)"
-      status: done
-      closed: "2026-04-27"
-    - id: "R1-P3"
-      title: "Split client.py → fred_runtime/cli/ package"
-      status: done
-      closed: "2026-04-27"
-    - id: "R1-P4"
-      title: "Introduce PodApplicationContext container"
-      status: done
-      closed: "2026-04-27"
-    - id: "R1-P5"
-      title: "Eliminate Any at all typed boundaries"
-      status: done
-      closed: "2026-04-27"
+  - id: FRONT-04
+    title: "ManagedChatPage — SSE connector wiring and execution prep"
+    status: done
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §Phase 5D"
 
-# ─── EXECUTION CONTEXT ROUND-TRIP (RT-1, FE-1) ───────────────────────────────
-# RFC authority: docs/swift/rfc/EXECUTION-CONTEXT-RFC.md
+  - id: FRONT-05
+    title: "Remove residual agenticOpenApi imports from frontend"
+    status: not_started
+    owner: Félix
+    refs:
+      backlog: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
+    notes: "~30 files affected; rework path (11 files) is high priority, legacy chatbot/monitoring surfaces are lower."
 
-- id: RT-1
-  domain: runtime
-  title: "Typed ChatContext contract — replace untyped runtime_context dict"
-  owner: Dimitri
-  status: done
-  closed: "2026-05-11"
-  rfc_ref: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
-  notes: >
-    Changed RuntimeExecuteRequest.runtime_context from dict[str, Any] to RuntimeContext.
-    Fixed search_policy to Literal["strict","hybrid","semantic"].
-    Added context_prompt_text field to RuntimeContext (Group C).
-    Added bound_library_ids to EffectiveChatOptions + wired in service.py.
-    Regenerated runtimeOpenApi.ts + controlPlaneOpenApi.ts.
-    All tests pass: 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane).
-  sub_items:
-    - id: "RT-1-a"
-      title: "fred-sdk: RuntimeContext field type + search_policy Literal + context_prompt_text"
-      status: done
-      closed: "2026-05-11"
-    - id: "RT-1-b"
-      title: "control-plane-backend: bound_library_ids on EffectiveChatOptions + service wiring"
-      status: done
-      closed: "2026-05-11"
-    - id: "RT-1-c"
-      title: "fred-runtime: verify compatibility + regenerate runtimeOpenApi.ts"
-      status: done
-      closed: "2026-05-11"
+  - id: FRONT-06
+    title: "Wire typed ChatContext through useChatSse"
+    status: done
+    owner: Félix
+    closed: "2026-05-11"
+    refs:
+      rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
 
-- id: FE-1
-  domain: frontend
-  title: "Wire ChatContext in useChatSse — forward context_prompt_text + typed chat options"
-  owner: Félix
-  status: done
-  closed: "2026-05-11"
-  rfc_ref: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
-  notes: >
-    RuntimeContext import switched from agenticOpenApi to runtimeOpenApi.
-    context_prompt_text forwarded from ExecutionPreparation per turn.
-    ManagedChatPage passes bound_library_ids from effective_chat_options to AgentOptionsPanel.
-    tsc clean, prettier clean.
+  # ── MEMORY ────────────────────────────────────────────────────────────
 
-# ─── CHAT UI PHASES (Phase 6 / legacy notation) ───────────────────────────────
-# These follow the CHAT-UI-BACKLOG §n section numbering.
-# New chat-UI items after this convention was established use prefix CU- (see CLAUDE.md).
+  - id: MEMORY-01
+    title: "Multi-agent conversational memory — core SDK and runtime implementation"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-05"
+    refs:
+      rfc: "docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md"
+      backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md"
+    notes: "Phases A–E complete. Four hardening items (MEMORY-02..05) remain before full closeout."
 
-- id: "6A"
-  domain: chat-ui
-  title: "Chat UI architecture — new component tree for ManagedChatPage"
-  owner: Félix
-  status: done
-  backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §1"
+  - id: MEMORY-02
+    title: "Isolate persisted checkpoint state per agent within a shared session"
+    status: open
+    owner: Dimitri
+    parent: MEMORY-01
+    refs:
+      backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.1"
 
-- id: "6B"
-  domain: chat-ui
-  title: "Markdown rendering (react-markdown, CodeBlock, SourceBadge)"
-  owner: Dimitri
-  status: done
-  closed: "2026-05-04"
-  backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §2"
+  - id: MEMORY-03
+    title: "Align remote agent invoker with public RuntimeExecuteRequest contract"
+    status: open
+    owner: Dimitri
+    parent: MEMORY-01
+    refs:
+      backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.2"
 
-- id: "6C"
-  domain: chat-ui
-  title: "Agent options panel + session title inline edit"
-  owner: Félix
-  status: in_progress
-  blocked_on: "S1 gate — runtime SSE validation must be confirmed first"
-  backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §3"
+  - id: MEMORY-04
+    title: "Remove duplicate local AgentExecuteRequest construction path"
+    status: open
+    owner: Dimitri
+    parent: MEMORY-01
+    refs:
+      backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.3"
 
-- id: "6D"
-  domain: chat-ui
-  title: "Attachment support + file upload in chat"
-  owner: Félix
-  status: not_started
-  backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §4"
+  - id: MEMORY-05
+    title: "Enforce conversation_history_max_turns in TeamAgent history append"
+    status: open
+    owner: Dimitri
+    parent: MEMORY-01
+    refs:
+      backlog: "docs/swift/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.4"
 
-# ─── FRONTEND MIGRATION PHASES (Phase 5 / legacy notation) ───────────────────
-# These follow FRONTEND-BACKLOG §Phase 5x section convention.
-# New frontend items use prefix FE- (see CLAUDE.md).
+  # ── OBSERV ────────────────────────────────────────────────────────────
 
-- id: "5A"
-  domain: frontend
-  title: "Frontend bootstrap — remove agentic-backend dependency from shell boot"
-  status: done
-  backlog_ref: "docs/backlog/FRONTEND-BACKLOG.md §Phase 5A"
+  - id: OBSERV-01
+    title: "Prometheus cardinality fix and observability hardening"
+    status: done
+    owner: Simon
+    closed: "2026-04-26"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §7.3"
 
-- id: "5B"
-  domain: frontend
-  title: "Team identity + session sidebar migration to control-plane"
-  status: done
-  backlog_ref: "docs/backlog/FRONTEND-BACKLOG.md §Phase 5B"
+  # ── PROMPT ────────────────────────────────────────────────────────────
 
-- id: "5C"
-  domain: frontend
-  title: "Agent catalog migration (control-plane templates + managed instances)"
-  status: done
-  backlog_ref: "docs/backlog/FRONTEND-BACKLOG.md §Phase 5C"
+  - id: PROMPT-01
+    title: "Prompt safety — safe rendering and persistence validation"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-07"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    notes: "Emergency fix for str.format_map() crash on code-brace patterns (production incident 2026-05-06)."
 
-- id: "5D"
-  domain: frontend
-  title: "ManagedChatPage — SSE connector wiring and execution prep"
-  status: done
-  backlog_ref: "docs/backlog/FRONTEND-BACKLOG.md §Phase 5D"
+  - id: PROMPT-02
+    title: "Prompt library backend CRUD — PromptRow, PromptStore, migrations, REST endpoints"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-08"
+    parent: PROMPT-01
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    notes: "Implemented by Codex. Backend only — no frontend, no versioning, no analytics."
 
-- id: "5E"
-  domain: frontend
-  title: "Remove agenticOpenApi imports — frontend agentic-backend cleanup"
-  status: not_started
-  backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
-  notes: >
-    Backend migration is complete (agentic-backend archived to ignored/).
-    Remaining work: ~30 frontend files still import types from agenticOpenApi.ts.
-    Rework path (11 files) is high priority; legacy surfaces (chatbot/, monitoring/) are
-    lower priority and will be removed when those surfaces are formally deprecated.
-    See FRONTEND-BACKLOG.md §7.2 for the concrete file list.
+  - id: PROMPT-03
+    title: "Prompt library backend extension — versioning, analytics, scoring, context integration"
+    status: open
+    owner: Dimitri
+    parent: PROMPT-01
+    refs:
+      rfc: "docs/swift/rfc/PROMPT-LIBRARY-RFC.md"
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    notes: "Adds version counter, analytics counters, score, avg_tokens; new endpoints /prompts/context, /prompts/{id}/promote, PATCH score."
+
+  - id: PROMPT-04
+    title: "Prompt library frontend — PromptsPage CRUD and AgentFormModal integration"
+    status: open
+    owner: Félix
+    parent: PROMPT-01
+    blocked_on: PROMPT-03
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+
+  - id: PROMPT-05
+    title: "Chat context picker — replace free textarea with team library union picker"
+    status: open
+    owner: Félix
+    parent: PROMPT-01
+    blocked_on: PROMPT-03
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+
+  - id: PROMPT-06
+    title: "Global prompt marketplace — publish-by-copy feature"
+    status: deferred
+    owner: Dimitri
+    parent: PROMPT-01
+    blocked_on: "PROMPT-04 and PROMPT-05"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.10"
+
+  - id: PROMPT-07
+    title: "Token cost KPI integration per prompt — avg input and output tokens"
+    status: deferred
+    owner: Dimitri
+    parent: PROMPT-01
+    blocked_on: "EVAL-01 and fred-core KPI store extension"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3d.9"
+    notes: "Token fields reserved in schema as nullable; UI shows N/A until this lands."
+
+  # ── QUALITY ───────────────────────────────────────────────────────────
+
+  - id: QUALITY-01
+    title: "fred-runtime quality refactor — async correctness, file splitting, typing, test fixtures"
+    status: done
+    owner: Simon
+    closed: "2026-04-27"
+    refs:
+      backlog: "docs/swift/backlog/FRED-RUNTIME-QUALITY.md"
+    notes: "R1b gates (Any-zero at function boundaries, no file > 600 lines) deferred; see backlog §R1b."
+
+  # ── RUNTIME ───────────────────────────────────────────────────────────
+
+  - id: RUNTIME-01
+    title: "Runtime CLI ergonomics and session purge commands"
+    status: done
+    owner: "Simon + Dimitri"
+    closed: "2026-04-26"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §6.4.B"
+
+  - id: RUNTIME-02
+    title: "Typed ChatContext contract — replace untyped runtime_context dict with RuntimeContext model"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-11"
+    refs:
+      rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+
+  # ── VALID ─────────────────────────────────────────────────────────────
+
+  - id: VALID-01
+    title: "End-to-end live stack validation — managed agent and HITL scenarios"
+    status: in_progress
+    owner: Simon
+    blocked_on: "Live pod available and FRED_AGENT_INSTANCE_ID set"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.7"
+    notes: "Scenario automation complete (2026-04-26); live stack run pending — gates Phase 3b closure."

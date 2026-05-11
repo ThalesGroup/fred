@@ -8,12 +8,13 @@
 # checkbox. Both files must stay in sync (id-legend.yaml owns the full history;
 # sprint.yaml owns the live sprint window only).
 #
-# ID convention: see CLAUDE.md § Task ID Convention
-# Full ID registry: docs/data/id-legend.yaml
+# ID convention: DOMAIN-MOT court (ex: MEM-CHKPT, PROMPT-FORM, CU-OPTIONS)
+# Items fermés dans recently_closed conservent leurs anciens IDs (référence historique).
+# Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-09"
-  sprint_week: "2026-05-07"
+  last_updated: "2026-05-11"
+  sprint_week: "2026-05-11"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
 
@@ -21,240 +22,287 @@ meta:
 
 milestones:
   - id: MS-phase3-complete
-    title: "Phase 3 complete — E2E validated + M1 memory hardened"
+    title: "Phase 3 complète — E2E validé + mémoire multi-agent durcie"
     target_date: TBD
     pct_done: 60
     on_track: true
-    blocking_items: [S1, M1-F.1, M1-F.2, M1-F.3, M1-F.4]
-    notes: "S1 live-stack run is the gate; M1 hardening branches follow on swift"
+    blocking_items: [RT-E2E, MEM-CHKPT, MEM-REMOTE, MEM-LOCAL, MEM-CAP]
+    notes: "RT-E2E (live-stack) est le gate principal ; branches MEM-* suivent sur swift"
 
   - id: MS-prompt-library
-    title: "Prompt library shipped — P1-D1b + P1-D2 + P1-D3 done"
+    title: "Bibliothèque de prompts livrée — PROMPT-FORM + PROMPT-CTX done"
     target_date: TBD
     pct_done: 40
     on_track: true
-    blocking_items: [P1-D2, P1-D3]
+    blocking_items: [PROMPT-FORM, PROMPT-CTX]
     notes: >
-      P1-D1 backend CRUD done by Codex (2026-05-08). P1-D1b backend extension
-      (versioning, analytics, context integration, 3 new endpoints) done by Dimitri
-      (2026-05-10). controlPlaneOpenApi.ts regenerated. P1-D2 (PromptsPage + AgentFormModal)
-      and P1-D3 (chat context picker) are now unblocked.
+      Backend CRUD (PROMPT-02) fait par Codex (2026-05-08). Extension backend PROMPT-03
+      (versioning, analytics, context integration) faite par Dimitri (2026-05-10).
+      controlPlaneOpenApi.ts régénéré. PROMPT-FORM et PROMPT-CTX sont débloqués.
 
   - id: MS-chat-ui-phase6
-    title: "Chat UI Phase 6 complete — 6C shipped"
+    title: "Chat UI Phase 6 complète — CU-OPTIONS livré"
     target_date: TBD
     pct_done: 80
     on_track: true
-    blocking_items: [6C]
-    notes: "6A+6B done; 6C in progress; soft gate on S1"
+    blocking_items: [CU-OPTIONS]
+    notes: "CHAT-01+CHAT-02 done ; CU-OPTIONS en cours ; soft gate sur RT-E2E"
 
   - id: MS-frontend-agentic-removal
-    title: "Frontend agentic-backend full removal (Phase 5E)"
+    title: "Suppression agentic-backend frontend — FE-CLEANUP done"
     target_date: TBD
     pct_done: 0
     on_track: true
-    blocking_items: [5E]
-    notes: "Not started; prerequisite for production architecture completeness"
+    blocking_items: [FE-CLEANUP]
+    notes: "Non démarré ; prérequis pour l'architecture de production complète"
 
   - id: MS-agent-evaluation
-    title: "Agent evaluation v1 — O1 harness live"
+    title: "Évaluation agents v1 — EVAL-HARNESS en prod"
     target_date: TBD
     pct_done: 0
     on_track: true
-    blocking_items: [O1]
-    notes: "Independent track; RFC written; no implementation started"
+    blocking_items: [EVAL-HARNESS]
+    notes: "Track indépendant ; RFC écrit ; implémentation non démarrée"
 
   - id: MS-model-profiles
-    title: "Model profiles — C1-deferred shipped"
+    title: "Profils modèles livrés — CP-MODELS shipped"
     target_date: TBD
     pct_done: 0
     on_track: true
-    blocking_items: [C1-deferred]
-    notes: "Deferred from C1; separate branch needed once model-profiles catalog exists"
+    blocking_items: [CP-MODELS]
+    notes: "Reporté depuis CTRLP-03 ; branche séparée nécessaire quand le catalogue model-profiles existe"
 
 # ─── IN PROGRESS ──────────────────────────────────────────────────────────────
 
 in_progress:
-  - id: S1
-    title: "E2E live stack validation (managed + HITL scenarios)"
+  - id: RT-E2E
+    legacy_id: VALID-01
+    title: "Validation E2E live stack (managed + HITL scenarios)"
     owner: Simon
     blocked: true
-    blocked_on: "Live pod available + FRED_AGENT_INSTANCE_ID set"
+    blocked_on: "Live pod disponible + FRED_AGENT_INSTANCE_ID set"
     milestone: MS-phase3-complete
     backlog_ref: "docs/backlog/BACKLOG.md §3b.7"
+    best_effort_side: "Préparation des scripts de scénarios en avance"
 
-  - id: "6C"
-    title: "Agent options panel + session title inline edit"
+  - id: CU-OPTIONS
+    legacy_id: "CHAT-03"
+    title: "Chat UI : panneau options agent + édition inline titre session"
     owner: Félix
-    blocked: false
-    blocked_on: null
-    soft_gate: "S1 — unblocked to continue but full sign-off waits for S1"
+    blocked: true
+    blocked_on: "Félix indisponible semaine du 2026-05-11"
+    soft_gate: "RT-E2E — validation SSE requise avant sign-off final"
     milestone: MS-chat-ui-phase6
     backlog_ref: "docs/backlog/CHAT-UI-BACKLOG.md §3"
+
+  - id: MEM-CHKPT
+    legacy_id: "MEMORY-02"
+    title: "Mémoire : isolation checkpoints par agent"
+    owner: Marc
+    blocked: false
+    milestone: MS-phase3-complete
+    backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.1"
+
+  - id: MEM-REMOTE
+    legacy_id: "MEMORY-03"
+    title: "Mémoire : contrat agent distant (RuntimeExecuteRequest)"
+    owner: Dimitri
+    blocked: false
+    milestone: MS-phase3-complete
+    backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.2"
+
+  - id: MEM-LOCAL
+    legacy_id: "MEMORY-04"
+    title: "Mémoire : agent local unifié (supprimer duplication)"
+    owner: Dimitri
+    blocked: false
+    milestone: MS-phase3-complete
+    backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.3"
+
+  - id: MEM-CAP
+    legacy_id: "MEMORY-05"
+    title: "Mémoire : cap historique équipe (conversation_history_max_turns)"
+    owner: Simon
+    best_effort: true
+    blocked: false
+    milestone: MS-phase3-complete
+    backlog_ref: "docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md §F.4"
+
+  - id: PROMPT-FORM
+    legacy_id: "PROMPT-04"
+    title: "Prompts : formulaire agent (import, save, version drift, 422)"
+    owner: Dimitri
+    blocked: false
+    depends_on: [MEM-REMOTE, MEM-LOCAL]
+    milestone: MS-prompt-library
+    backlog_ref: "docs/backlog/BACKLOG.md §3d.9"
+    notes: "Démarre après fermeture MEM-REMOTE + MEM-LOCAL"
+
+  - id: EVAL-HARNESS
+    legacy_id: EVAL-01
+    title: "Évaluation : harness deepeval (skeleton HTTP runner)"
+    owner: Marc
+    best_effort: true
+    blocked: false
+    milestone: MS-agent-evaluation
+    backlog_ref: "docs/rfc/AGENT-EVALUATION-RFC.md"
+    notes: "Marc bootstrap mi-semaine après MEM-CHKPT ; Odélia reste propriétaire nominale"
+
+  - id: CP-DOC-RT1
+    title: "Doc : alignement CONTROL-PLANE-PRODUCT-CONTRACT avec RUNTIME-02 (context_prompt_text, bound_library_ids)"
+    owner: Florian
+    best_effort: true
+    blocked: false
+
+  - id: CP-TTL
+    title: "Config : durée des checkpoints standalone (null / 30 / 90 jours)"
+    owner: Florian
+    best_effort: true
+    blocked: false
+    backlog_ref: "docs/backlog/BACKLOG.md §6.4"
 
 # ─── NEXT UP (ordered by priority) ───────────────────────────────────────────
 
 next_up:
-  - id: P1-D2
-    title: "Frontend — PromptsPage + AgentFormModal additions"
-    owner: TBD
-    depends_on: [P1-D1b]
-    milestone: MS-prompt-library
-
-  - id: P1-D3
-    title: "Chat context picker (replaces free textarea)"
+  - id: PROMPT-CTX
+    legacy_id: "PROMPT-05"
+    title: "Prompts : sélecteur de contexte (remplace textarea libre)"
     owner: Félix
-    depends_on: [P1-D1b]
+    blocked: true
+    blocked_on: "Félix indisponible semaine du 2026-05-11"
+    depends_on: [PROMPT-03]
     milestone: MS-prompt-library
+    backlog_ref: "docs/backlog/BACKLOG.md §3d.9"
 
-  - id: M1-F.1
-    title: "fix/memory-agent-checkpoint-isolation"
-    owner: Dimitri
-    depends_on: []
-    milestone: MS-phase3-complete
-
-  - id: M1-F.2
-    title: "fix/remote-agent-runtime-execute-contract"
-    owner: Dimitri
-    depends_on: []
-    milestone: MS-phase3-complete
-
-  - id: M1-F.3
-    title: "refactor/local-agent-execute-projection"
-    owner: Dimitri
-    depends_on: []
-    milestone: MS-phase3-complete
-
-  - id: M1-F.4
-    title: "fix/team-memory-history-cap"
-    owner: Dimitri
-    depends_on: []
-    milestone: MS-phase3-complete
-
-  - id: P1-D2
-    title: "AgentFormModal prompt import/save + inline 422 display"
-    owner: Dimitri
-    depends_on: [P1-D1]
-    milestone: MS-prompt-library
-
-  - id: C1-deferred
-    title: "GET /agents/model-profiles + ManagedModelProfileRef + form picker"
+  - id: CP-MODELS
+    legacy_id: "CTRLP-04"
+    title: "Control Plane : profils modèles (GET /agents/model-profiles + form picker)"
     owner: Dimitri
     depends_on: []
     milestone: MS-model-profiles
+    backlog_ref: "docs/backlog/BACKLOG.md §3d"
 
-  - id: P1-E
-    title: "Global prompt marketplace publication"
+  - id: PROMPT-MKT
+    legacy_id: "PROMPT-06"
+    title: "Prompts : marketplace publication (publish-by-copy)"
     owner: Dimitri
-    depends_on: [P1-D1, P1-D2]
+    depends_on: [PROMPT-02, PROMPT-FORM]
     milestone: MS-prompt-library
+    backlog_ref: "docs/backlog/BACKLOG.md §3d.10"
 
-  - id: O1
-    title: "Agent evaluation harness (deepeval)"
-    owner: Odélia
-    depends_on: []
-    milestone: MS-agent-evaluation
-
-  - id: "5E"
-    title: "Full agentic-backend removal from frontend runtime path"
+  - id: FE-CLEANUP
+    legacy_id: "FRONT-05"
+    title: "Frontend : suppression complète agentic-backend (agenticOpenApi)"
     owner: Félix
-    depends_on: ["6C"]
+    depends_on: [CU-OPTIONS]
     milestone: MS-frontend-agentic-removal
+    backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
 
-# ─── RECENTLY CLOSED (last 2 weeks) ──────────────────────────────────────────
+# ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
-  - id: P1-D1b
+  - id: RUNTIME-02
+    title: "Typed ChatContext contract (RuntimeContext, search_policy, context_prompt_text)"
+    owner: Dimitri
+    closed: "2026-05-11"
+
+  - id: FRONT-06
+    title: "Wire ChatContext in useChatSse (context_prompt_text, bound_library_ids)"
+    owner: "Félix/Dimitri"
+    closed: "2026-05-11"
+
+  - id: PROMPT-03
     title: "Prompt library extension — versioning, analytics, context integration"
     owner: Dimitri
     closed: "2026-05-10"
 
-  - id: P1-D1
+  - id: PROMPT-02
     title: "Team/personal prompt library — CRUD + DB migration + Prompts page"
     owner: Codex
     closed: "2026-05-08"
 
-  - id: P1
+  - id: PROMPT-01
     title: "Prompt safety — safe rendering + persistence validation"
     owner: Dimitri
     closed: "2026-05-07"
 
-  - id: C1
+  - id: CTRLP-03
     title: "Pod catalog exposure + agent instance configuration contract"
     owner: Dimitri
     closed: "2026-05-06"
 
-  - id: F2
+  - id: CTRLP-02
     title: "PATCH session endpoint (title, updated_at)"
     owner: Florian
     closed: "2026-05-06"
 
-  - id: M1
+  - id: MEMORY-01
     title: "Multi-agent conversational memory — core (phases A–E)"
     owner: Dimitri
     closed: "2026-05-05"
 
-  - id: "6B"
+  - id: "CHAT-02"
     title: "Markdown rendering (react-markdown, CodeBlock, SourceBadge)"
     owner: Dimitri
     closed: "2026-05-04"
 
-  - id: F1
+  - id: CTRLP-01
     title: "Session updated_at strategy + PATCH implementation"
     owner: Florian
     closed: "2026-05-06"
 
-  - id: "6A"
+  - id: "CHAT-01"
     title: "Chat UI architecture — new component tree for ManagedChatPage"
     owner: Félix
     closed: "2026-05-04"
 
-  - id: S2
+  - id: OBSERV-01
     title: "Prometheus cardinality fix + observability hardening"
     owner: Simon
     closed: "2026-04-26"
 
-  - id: S3
+  - id: RUNTIME-01
     title: "Runtime CLI ergonomics + session purge"
     owner: "Simon + Dimitri"
     closed: "2026-04-26"
 
-  - id: D1
+  - id: CTRLP-05
     title: "Control-plane developer CLI (make cli)"
     owner: Dimitri
     closed: "2026-04-25"
 
-  - id: R1
-    title: "fred-runtime quality refactor (P1–P5)"
+  - id: QUALITY-01
+    title: "fred-runtime quality refactor (PROMPT-01–P5)"
     owner: Simon
     closed: "2026-04-27"
 
 # ─── BLOCKERS ─────────────────────────────────────────────────────────────────
 
 blockers:
-  - item: S1
-    reason: "Live pod + FRED_AGENT_INSTANCE_ID environment variable required for live-stack run"
+  - item: RT-E2E
+    reason: "Live pod + FRED_AGENT_INSTANCE_ID requis pour le run live-stack"
     owner: Simon
-    unblocked_by: "Standing up the integration pod and exporting the env var"
+    unblocked_by: "Mise en place du pod d'intégration + export de la variable d'env"
 
-  - item: "6C"
-    reason: "Soft gate — S1 runtime SSE validation should be confirmed before 6C is signed off"
+  - item: CU-OPTIONS
+    reason: "Félix indisponible semaine du 2026-05-11 + soft gate RT-E2E"
     owner: Félix
-    unblocked_by: "S1 completion (not hard-blocking active development)"
+    unblocked_by: "Retour de Félix + RT-E2E completion"
 
-  - item: "M1-F.1..F.4"
-    reason: "Waiting on swift branch commit to be clean before opening 4 separate branches"
-    owner: Dimitri
-    unblocked_by: "swift branch commit including C1 + P1 + version bumps"
+  - item: PROMPT-CTX
+    reason: "Félix indisponible semaine du 2026-05-11"
+    owner: Félix
+    unblocked_by: "Retour de Félix"
 
 # ─── VELOCITY ─────────────────────────────────────────────────────────────────
 
 velocity:
-  period: "2026-04-25 → 2026-05-08"
-  items_closed: 12
+  period: "2026-04-25 → 2026-05-11"
+  items_closed: 14
   items_opened_net: 2
   items_deferred: 2
   assessment: "on_track"
   note: >
-    Strong backend closure week. Prompt library (P1-D1) completed by Codex.
-    M1 hardening and S1 live-stack are the remaining Phase 3 gates.
+    Forte vélocité backend. RUNTIME-02 + FRONT-06 (ChatContext typé) fermés le 2026-05-11.
+    Branches MEM-* et EVAL-HARNESS démarrent cette semaine.
+    RT-E2E reste le gate principal pour la Phase 3.

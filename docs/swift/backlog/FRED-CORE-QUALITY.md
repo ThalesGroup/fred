@@ -364,9 +364,9 @@ To keep risk low and avoid churn, work in this order:
    `local_content_store.py`
 3. **Phase 4A + Phase 3A** — split `cli/auth.py` and tighten its cache/session
    payload typing in the same track
-4. **Phase 4B + Phase 3B + Phase 5B** — split `model/factory.py`, tighten
+4. **Phase 4B + Phase 3B + Phase FRONT-02** — split `model/factory.py`, tighten
    `model/http_clients.py`, and add focused tests for the extracted pure logic
-5. **Phase 4C + Phase 2C + Phase 5C** — split `kpi/kpi_writer.py`, normalize
+5. **Phase 4C + Phase 2C + Phase FRONT-03** — split `kpi/kpi_writer.py`, normalize
    its logging, and test extracted summary/formatting helpers
 6. **Phase 4D** — split `security/rebac/rebac_engine.py` last, preserving the
    current public engine surface and behavior

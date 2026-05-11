@@ -71,7 +71,7 @@ and fills the `TextArea`.
 
 - **Content preview** — cards show name + description only. Full prompt text preview requires the
   backend `GET /teams/{id}/prompts/context` response to include a `text_snippet` field (tracked in
-  P1-D1b). No extra fetches until then.
+  PROMPT-03). No extra fetches until then.
 - **Loading state** — no skeleton shown while `isLoadingSelection` is true; button goes disabled
   but the grid stays visible with stale content. Consider a spinner overlay on the grid during load.
 
@@ -155,7 +155,7 @@ _(none yet)_
   following MUI palette mode). Not yet wired to the app theme context.
 
 - **Drawer width** — `min(480px, 90vw)`. The spec mentions ≥ 720px for debug drawers
-  (Phase 6C). Confirm whether `TraceDetailDrawer` should follow the same wider spec or
+  (Phase CHAT-03). Confirm whether `TraceDetailDrawer` should follow the same wider spec or
   stay narrower.
 
 - **Lazy load flash** — Monaco loads lazily; the `<pre>` fallback shows briefly. Consider
@@ -238,7 +238,7 @@ _(none yet)_
 
 #### Resolved
 
-- **Markdown** — Phase 6B: `AssistantMessage` now renders via `MarkdownRenderer` (2026-05-04).
+- **Markdown** — Phase CHAT-02: `AssistantMessage` now renders via `MarkdownRenderer` (2026-05-04).
 
 ---
 

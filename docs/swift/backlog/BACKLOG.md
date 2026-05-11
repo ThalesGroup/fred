@@ -844,7 +844,7 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
   - [ ] Frontend: render `ManagedMcpServerRef.config_fields` beneath active server checkboxes in `AgentFormBody` Tools tab
 - [x] Add agent instance CRUD endpoints (→ Phase 3c — POST enroll + DELETE unenroll done)
 - [x] Add read-only team-scoped agent instance listing endpoint (→ Phase 3a)
-- [x] Add session create + list endpoints (→ Phase 5D — `POST/GET /teams/{team_id}/sessions`); delete deferred
+- [x] Add session create + list endpoints (→ Phase FRONT-04 — `POST/GET /teams/{team_id}/sessions`); delete deferred
 - [ ] Add session preference get/update endpoints (→ Phase 3b)
 - [ ] Add feedback CRUD endpoints (→ Phase 3b)
 - [ ] Add MCP server CRUD endpoints (→ Phase 3b)
@@ -1090,9 +1090,9 @@ implementation until the TTL policy is agreed.
 - [ ] Langfuse-visible trace metadata includes the required managed execution identity fields
 - [x] one runtime pod can expose a scrapeable Prometheus metrics surface again when configured
 - [x] one developer can inspect pod KPIs locally from `fred-agents-cli` without Grafana/Prometheus dashboards
-- [x] no frontend code is required to validate these backend guarantees — S1 scenarios run via `make test-integration-only`
+- [x] no frontend code is required to validate these backend guarantees — VALID-01 scenarios run via `make test-integration-only`
 
-**S1 scenario automation (2026-04-26):**
+**VALID-01 scenario automation (2026-04-26):**
 - `run_scenario_file()` extended: `${env:VAR}` substitution → `ScenarioSkipped`; `history_has_messages` and `kpi_turn_recorded` check kinds; `agent_instance_id` propagation; `hitl` step type (two-phase pause/resume)
 - `apps/fred-agents/tests/scenarios/s1_raw_echo.yaml` — raw `agent_id` path, no env var required
 - `apps/fred-agents/tests/scenarios/s1_managed_echo.yaml` — managed path, requires `FRED_AGENT_INSTANCE_ID`
@@ -2135,7 +2135,7 @@ at save time — the agent was created successfully but broke on the first messa
 
 ---
 
-**Slice D1 — backend CRUD (P1-D1) · Done 2026-05-08 — Codex**
+**Slice PROMPT-02 — backend CRUD (PROMPT-02) · Done 2026-05-08 — Codex**
 
 - [x] `PromptRow` ORM model (`prompt_models.py`) — `team_id`, `name`, `description`, `text`, `created_by`, timestamps
 - [x] `PromptStore` full CRUD (`prompts/store.py`)
@@ -2145,7 +2145,7 @@ at save time — the agent was created successfully but broke on the first messa
 
 ---
 
-**Slice D1b — backend extension: versioning + analytics + context integration (P1-D1b) · Done 2026-05-10 — Dimitri**
+**Slice PROMPT-03 — backend extension: versioning + analytics + context integration (PROMPT-03) · Done 2026-05-10 — Dimitri**
 
 **RFC**: `docs/swift/rfc/PROMPT-LIBRARY-RFC.md` — full design authority for this and following slices.
 
@@ -2168,13 +2168,13 @@ at save time — the agent was created successfully but broke on the first messa
 - [x] `ExecutionPreparation` response gains `context_prompt_text: str | null`
 - [x] `controlPlaneOpenApi.ts` regenerated
 - [x] `make code-quality && make test` in `control-plane-backend`
-- Note: `prompt_refs` write on agent import deferred to P1-D2 (frontend carries the ref in UpdateAgentInstanceRequest)
+- Note: `prompt_refs` write on agent import deferred to PROMPT-04 (frontend carries the ref in UpdateAgentInstanceRequest)
 
 ---
 
-**Slice D2 — frontend: PromptsPage + AgentFormModal (P1-D2)**
+**Slice PROMPT-04 — frontend: PromptsPage + AgentFormModal (PROMPT-04)**
 
-*Depends on: P1-D1b (OpenAPI regenerated)*
+*Depends on: PROMPT-03 (OpenAPI regenerated)*
 
 - [x] `PromptsPage` — core CRUD (2026-05-10, Dimitri)
   - table: name, description, version, score columns
@@ -2194,9 +2194,9 @@ at save time — the agent was created successfully but broke on the first messa
 
 ---
 
-**Slice D3 — chat context picker (P1-D3)**
+**Slice PROMPT-05 — chat context picker (PROMPT-05)**
 
-*Depends on: P1-D1b*
+*Depends on: PROMPT-03*
 
 - [ ] Replace free textarea in `AgentOptionsPanel` / session init surface with a library picker
 - [ ] Source: `GET /teams/{team_id}/prompts/context` (union personal + team)
@@ -2208,9 +2208,9 @@ at save time — the agent was created successfully but broke on the first messa
 
 ---
 
-**Slice D-F — token cost KPI integration (P1-F) · DEFERRED**
+**Slice D-F — token cost KPI integration (PROMPT-07) · DEFERRED**
 
-*Depends on: O1 evaluation track + fred-core KPI store changes (coordinate with Simon)*
+*Depends on: EVAL-01 evaluation track + fred-core KPI store changes (coordinate with Simon)*
 
 - [ ] Add `context_prompt_id` label to KPI turn events in `fred-core` KPI store
 - [ ] Add `agent_prompt_version` label to KPI turn events (correlates system prompt version)
@@ -2349,7 +2349,7 @@ The first required operating mode for Phase 5 is:
 | 3b – Backend completeness gate | Code ✓; validation items open | Run in parallel — not blocking Phase 4 |
 | 3c – Execution preparation | Partial | A + B + C + D + E all done; ingress URL convention + deployment hardening remain (parallel, non-blocking). `AgentTuning.values` forwarding + `prompts.system` application in `_apply_runtime_tuning` done (2026-05-04). |
 | 4 – Frontend SSE | ✓ Complete | `useChatSse` + `ManagedChatPage` + `TeamAgentsPage`; session_id upfront; history from `messages_url_template`; build passes |
-| 5 – Frontend adaptation | In progress | 5A bootstrap ✓; 5B no-security baseline ✓; 5C managed agent surface ✓; 5D session/chat convergence ✓ — see `FRONTEND-BACKLOG.md` |
+| 5 – Frontend adaptation | In progress | FRONT-01 bootstrap ✓; FRONT-02 no-security baseline ✓; FRONT-03 managed agent surface ✓; FRONT-04 session/chat convergence ✓ — see `FRONTEND-BACKLOG.md` |
 
 ### Phase 3c Remaining
 
@@ -2452,7 +2452,7 @@ isolated in the adapter layer (`react_message_codec.py`).
   - actual purge deletes both `session_history` rows AND checkpoint state
   - requires admin authorization
 
-#### D. Control-Plane Session Metadata (→ Phase 5D — partially done)
+#### D. Control-Plane Session Metadata (→ Phase FRONT-04 — partially done)
 
 - [x] Control-plane session metadata record created from the frontend on first turn:
   `POST /teams/{team_id}/sessions` with `{ session_id, agent_instance_id, title? }` —
@@ -2470,7 +2470,7 @@ isolated in the adapter layer (`react_message_codec.py`).
   - the solution must preserve control-plane as a management-plane component,
     not a conversation-history serving plane
   Decision:
-  - Phase 6A uses the smallest control-plane metadata refresh path:
+  - Phase CHAT-01 uses the smallest control-plane metadata refresh path:
     `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` with
     `{ "updated_at": "<ISO datetime>" }`.
   - The frontend calls it after a completed managed turn. The endpoint updates

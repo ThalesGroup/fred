@@ -19,20 +19,20 @@ Last updated: 2026-05-09
 
 ---
 
-## Current Priority: Gate Before Phase 6A
+## Current Priority: Gate Before Phase CHAT-01
 
-Two backend items must close before Félix starts the Chat UI (Phase 6A).
+Two backend items must close before Félix starts the Chat UI (Phase CHAT-01).
 They can run in parallel between Simon and Florian.
 
 ```
-Simon ──────[ S1: E2E validation ]──────────────────────────────────────┐
-                                                                         ├──► Félix: Phase 6A
-Florian ────[ F1: updated_at strategy + impl ]──────────────────────────┘
+Simon ──────[ VALID-01: E2E validation ]──────────────────────────────────────┐
+                                                                         ├──► Félix: Phase CHAT-01
+Florian ────[ CTRLP-01: updated_at strategy + impl ]──────────────────────────┘
 ```
 
 ---
 
-## S1 — Backend E2E Validation (Simon) · Phase 3b gate
+## VALID-01 — Backend E2E Validation (Simon) · Phase 3b gate
 
 **Why**: the SSE execution chain has never been formally validated without the frontend.
 All UI work that follows rests on this foundation.
@@ -60,7 +60,7 @@ Three scenarios to validate, in order:
 
 ---
 
-## F1 — Session `updated_at` Strategy (Florian) · Phase 6 gate
+## CTRLP-01 — Session `updated_at` Strategy (Florian) · Phase 6 gate
 
 **Why**: the sidebar sorts sessions by `updated_at`. Today this field is set at session creation and never updated. Every conversation appears in creation order, not activity order.
 
@@ -79,12 +79,12 @@ Three scenarios to validate, in order:
 **Tasks**:
 - [x] Decide and document option in BACKLOG.md §6.4.D
 - [x] If A: implement `PATCH /control-plane/v1/teams/{team_id}/sessions/{session_id}` (body: `{ updated_at }`)
-- [x] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after F1 lands)
+- [x] If A: wire call in `ManagedChatPage` on each `turn_persisted` SSE event (Félix, after CTRLP-01 lands)
 - [x] `make code-quality && make test` in `control-plane-backend`
 
 ---
 
-## S2 — Prometheus Cardinality Fix + Observability Hardening (Simon/Dimitri) · Closed 2026-04-26
+## OBSERV-01 — Prometheus Cardinality Fix + Observability Hardening (Simon/Dimitri) · Closed 2026-04-26
 
 **Why**: `session_id` and `user_id` as Prometheus label dimensions create unbounded cardinality. Also closes the turn-level KPI gap and opens a dedicated security audit channel.
 
@@ -167,7 +167,7 @@ Updated docs:
 
 ---
 
-## Phase 6A — Chat UI Architecture (Félix) · Starts after S1 + F1
+## Phase CHAT-01 — Chat UI Architecture (Félix) · Starts after VALID-01 + CTRLP-01
 
 **Ref**: `docs/backlog/CHAT-UI-BACKLOG.md` §1
 
@@ -178,7 +178,7 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 ```
 [x] Step 1 — Atoms (no deps):
       MessageBubble · StreamingCursor · ToolBadge · TogglePanelButton
-      (SourceBadge deferred to Phase 6B)
+      (SourceBadge deferred to Phase CHAT-02)
 
 [x] Step 2 — Molecules (need atoms):
       UserMessage · AssistantMessage · ChatInputBar
@@ -194,7 +194,7 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 [x] Step 6 — Normalise history from runtime messages_url_template
 ```
 
-**Validation criteria** (must pass before 6B starts):
+**Validation criteria** (must pass before CHAT-02 starts):
 - User messages right-aligned, agent messages left-aligned
 - StreamingCursor visible during delta, gone on final
 - ThinkingAccordion opens on first tool_call, closes on final
@@ -206,14 +206,14 @@ Build the new component tree for `ManagedChatPage`. No markdown yet. Full spec i
 
 ---
 
-## Phase 6B — Markdown Rendering (Dimitri) · Done 2026-05-04
+## Phase CHAT-02 — Markdown Rendering (Dimitri) · Done 2026-05-04
 
 **Ref**: `docs/backlog/CHAT-UI-BACKLOG.md` §2
 
 - [x] Audit `package.json` for `react-markdown` — present at `^9.1.0`
 - [x] Document library choice in CHAT-UI-BACKLOG.md §2.2
 - [x] Implement `MarkdownRenderer` molecule (react-markdown + remark-gfm + rehype-sanitize + inline `rehypeCitations` plugin)
-- [x] Implement `SourceBadge` atom (Phase 6B prerequisite, deferred from 6A)
+- [x] Implement `SourceBadge` atom (Phase CHAT-02 prerequisite, deferred from CHAT-01)
 - [x] Implement `CodeBlock` molecule (monospace + copy)
 - [x] Wire into `AssistantMessage`; thread `onSourceClick` through `AssistantTurn` → `SourcesPanel` activeIndex highlight
 - [x] Prettier + `tsc --noEmit` pass (zero new errors)
@@ -231,7 +231,7 @@ Full audit of all rework frontend code for design-system compliance.
 
 ---
 
-## F2 — PATCH Session Endpoint · Done 2026-05-06
+## CTRLP-02 — PATCH Session Endpoint · Done 2026-05-06
 
 **Ref**: `docs/backlog/BACKLOG.md` §6.4.D, `docs/backlog/CHAT-UI-BACKLOG.md` §3
 
@@ -242,7 +242,7 @@ Full audit of all rework frontend code for design-system compliance.
 
 ---
 
-## R1 / R1b — fred-runtime Quality Refactor (Simon/Dimitri) · Parallel, independent
+## QUALITY-01 / R1b — fred-runtime Quality Refactor (Simon/Dimitri) · Parallel, independent
 
 **Ref**: `docs/backlog/FRED-RUNTIME-QUALITY.md`
 
@@ -255,7 +255,7 @@ at boundaries, `PodApplicationContext` container, ≥ 70% offline unit coverage.
 
 | Phase | Goal | Effort | Status |
 |---|---|---|---|
-| P1 | Fix async/sync correctness (`kf_workspace_client.py`, `user_token_refresher.py`) | 1 h | `[x]` ✅ 2026-04-27 |
+| PROMPT-01 | Fix async/sync correctness (`kf_workspace_client.py`, `user_token_refresher.py`) | 1 h | `[x]` ✅ 2026-04-27 |
 | P2 | Shared test fixtures (`tests/conftest.py`) | 1 h | `[x]` ✅ 2026-04-27 |
 | P3 | Split `client.py` → `fred_runtime/cli/` package | 3 h | `[x]` ✅ 2026-04-27 |
 | P4 | Introduce `PodApplicationContext` container | 4 h | `[x]` ✅ 2026-04-27 |
@@ -263,7 +263,7 @@ at boundaries, `PodApplicationContext` container, ≥ 70% offline unit coverage.
 
 **Done when**: all gates in `FRED-RUNTIME-QUALITY.md §Definition of Done` are ticked.
 
-**Status (2026-04-27):** P1–P5 all complete. Two DoD gates deferred to **R1b**:
+**Status (2026-04-27):** PROMPT-01–P5 all complete. Two DoD gates deferred to **R1b**:
 - `Any` zero at function boundaries: `runtime_context.py` + `cli/pod_client.py` need typed DTOs and circular-import analysis
 - No file > 600 lines: `agent_app.py` (2 578 lines) needs router extraction into `fred_runtime/app/routers/`
 
@@ -288,13 +288,13 @@ logic to `agent_app.py`, `integrations/v2_runtime/adapters.py`, or
 
 **Next round order (for Codex or Claude):**
 1. `R1b-E1` — split `agent_app.py` into execute/session/admin router modules.
-2. `R1b-C1` — add focused coverage for `graph_runtime.py`.
+2. `R1b-CTRLP-03` — add focused coverage for `graph_runtime.py`.
 3. `R1b-B1` — tighten `runtime_context.py` and `cli/pod_client.py` boundaries.
 4. `R1b-E2 / D2` — split `integrations/v2_runtime/adapters.py` by concern and continue log normalization.
 
 ---
 
-## O1 — Agent Evaluation Track (Odélia) · Parallel, independent
+## EVAL-01 — Agent Evaluation Track (Odélia) · Parallel, independent
 
 **Ref**: `docs/rfc/AGENT-EVALUATION-RFC.md`
 
@@ -311,7 +311,7 @@ Current state: RFC exists, no implementation started.
 
 ---
 
-## D1 — Control-Plane Developer CLI · Important next backend ergonomics track
+## CTRLP-05 — Control-Plane Developer CLI · Important next backend ergonomics track
 
 **Ref**: `docs/backlog/CONTROL-PLANE-CLI-BACKLOG.md`
 
@@ -345,7 +345,7 @@ becoming operationally expensive.
 
 ---
 
-## S3 — Runtime CLI Ergonomics + Session Purge (Simon/Dimitri) · Closed 2026-04-26
+## RUNTIME-01 — Runtime CLI Ergonomics + Session Purge (Simon/Dimitri) · Closed 2026-04-26
 
 **Ref**: `docs/backlog/BACKLOG.md` §6.4.B, §6.4.G
 
@@ -395,41 +395,41 @@ Completed in one session — no outstanding items.
 
 ```
 CLOSED / SHIPPED
-├── S2  Observability hardening ─────────────────────────────────── 2026-04-26 ✅
-├── S3  Runtime CLI ergonomics + session purge ──────────────────── 2026-04-26 ✅
-├── D1  Control-plane developer CLI ─────────────────────────────── 2026-04-25 ✅
-├── F1  Session updated_at + PATCH impl ─────────────────────────── ✅
-├── F2  PATCH session endpoint ──────────────────────────────────── 2026-05-06 ✅
-├── 6A  Chat UI architecture (Félix) ────────────────────────────── ✅
-├── 6B  Markdown rendering (Dimitri) ────────────────────────────── 2026-05-04 ✅
-├── M1  Multi-agent conversational memory (core) ────────────────── 2026-05-05 ✅
-├── C1  Pod catalog exposure + agent instance config ────────────── 2026-05-06 ✅ (model profiles deferred)
-└── P1  Prompt safety rendering fix + persistence validation ─────── 2026-05-07 ✅ (Slice D deferred)
+├── OBSERV-01  Observability hardening ─────────────────────────────────── 2026-04-26 ✅
+├── RUNTIME-01  Runtime CLI ergonomics + session purge ──────────────────── 2026-04-26 ✅
+├── CTRLP-05  Control-plane developer CLI ─────────────────────────────── 2026-04-25 ✅
+├── CTRLP-01  Session updated_at + PATCH impl ─────────────────────────── ✅
+├── CTRLP-02  PATCH session endpoint ──────────────────────────────────── 2026-05-06 ✅
+├── CHAT-01  Chat UI architecture (Félix) ────────────────────────────── ✅
+├── CHAT-02  Markdown rendering (Dimitri) ────────────────────────────── 2026-05-04 ✅
+├── MEMORY-01  Multi-agent conversational memory (core) ────────────────── 2026-05-05 ✅
+├── CTRLP-03  Pod catalog exposure + agent instance config ────────────── 2026-05-06 ✅ (model profiles deferred)
+└── PROMPT-01  Prompt safety rendering fix + persistence validation ─────── 2026-05-07 ✅ (Slice D deferred)
 
 NOW (parallel)
-├── Simon:    S1  E2E live stack validation ─────────────────────────────► closes Phase 3b gate
-├── Félix:    6C  Agent options panel + session title ──────────────────► unblocked (6A+6B+F2 done)
-├── Odélia:   O1  Evaluation RFC → harness ──────────────────────────────► independent
-└── Dimitri:  swift branch commit + M1 F.1–F.4 hardening (4 branches)
+├── Simon:    VALID-01  E2E live stack validation ─────────────────────────────► closes Phase 3b gate
+├── Félix:    CHAT-03  Agent options panel + session title ──────────────────► unblocked (CHAT-01+CHAT-02+CTRLP-02 done)
+├── Odélia:   EVAL-01  Evaluation RFC → harness ──────────────────────────────► independent
+└── Dimitri:  swift branch commit + MEMORY-01 F.1–F.4 hardening (4 branches)
 
 NEXT UP — Dimitri (next few days)
-├── Commit  swift branch — C1 + P1 + version bumps + fred-agents + docs
-├── M1-F.1  fix/memory-agent-checkpoint-isolation
-├── M1-F.2  fix/remote-agent-runtime-execute-contract
-├── M1-F.3  refactor/local-agent-execute-projection
-├── M1-F.4  fix/team-memory-history-cap
-├── C1-def  GET /agents/model-profiles + ManagedModelProfileRef + form picker (deferred from C1)
-├── P1-D1   Team/personal prompt library: CRUD + OpenAPI regen + dedicated `Prompts` page
-├── P1-D2   AgentFormModal prompt import/save + inline 422 display
-└── P1-E    Global prompt marketplace publication (after P1-D1 + P1-D2)
+├── Commit  swift branch — CTRLP-03 + PROMPT-01 + version bumps + fred-agents + docs
+├── MEMORY-02  fix/memory-agent-checkpoint-isolation
+├── MEMORY-03  fix/remote-agent-runtime-execute-contract
+├── MEMORY-04  refactor/local-agent-execute-projection
+├── MEMORY-05  fix/team-memory-history-cap
+├── CTRLP-03-def  GET /agents/model-profiles + ManagedModelProfileRef + form picker (deferred from CTRLP-03)
+├── PROMPT-02   Team/personal prompt library: CRUD + OpenAPI regen + dedicated `Prompts` page
+├── PROMPT-04   AgentFormModal prompt import/save + inline 422 display
+└── PROMPT-06    Global prompt marketplace publication (after PROMPT-02 + PROMPT-04)
 
 NEXT UP — Félix (unblocked now)
-└── 6C  Agent options panel refinements + session title inline edit
+└── CHAT-03  Agent options panel refinements + session title inline edit
 ```
 
 ---
 
-## M1 — Multi-Agent Conversational Memory (Dimitri) · Core implemented, hardening pending (2026-05-05)
+## MEMORY-01 — Multi-Agent Conversational Memory (Dimitri) · Core implemented, hardening pending (2026-05-05)
 
 **Ref**: `docs/rfc/MULTI-AGENT-MEMORY-RFC.md` · `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
 
@@ -454,7 +454,7 @@ NEXT UP — Félix (unblocked now)
 
 ---
 
-## C1 — Pod Catalog Exposure + Agent Instance Configuration Contract (Dimitri) · Blocks form UI
+## CTRLP-03 — Pod Catalog Exposure + Agent Instance Configuration Contract (Dimitri) · Blocks form UI
 
 **Ref**: `docs/backlog/BACKLOG.md` §3d
 
@@ -475,13 +475,13 @@ schemas and service → OpenAPI regen), frontend form last.
 
 **Tasks**:
 
-*fred-runtime (C1-A):*
+*fred-runtime (CTRLP-03):*
 - [x] `GET /agents/mcp-catalog` → `McpCatalogResponse` (all catalog servers, no URLs/credentials)
 - [ ] `GET /agents/model-profiles` → `ModelProfilesResponse` (all profiles, `is_default` from `default_by_capability`) — deferred
 - [x] Extend `_apply_runtime_tuning`: filter MCP servers to `selected_mcp_server_ids` (`model_profile_id` deferred)
 - [x] `make code-quality && make test` in `fred-runtime`
 
-*control-plane-backend (C1-B):*
+*control-plane-backend (CTRLP-03):*
 - [ ] `ManagedModelProfileRef` in `config/models.py` — deferred
 - [ ] `AgentTemplateSummary.available_model_profiles` populated from pod fan-out — deferred
 - [x] `CreateAgentInstanceRequest` / `UpdateAgentInstanceRequest`: add `mcp_server_ids`; reject unknown IDs with 422 (`model_profile_id` deferred)
@@ -495,12 +495,12 @@ schemas and service → OpenAPI regen), frontend form last.
 - [x] Regenerate `controlPlaneOpenApi.ts`
 - [x] `make code-quality && make test` in `control-plane-backend`
 
-*catalog/runtime hardening (C1-D):*
+*catalog/runtime hardening (CTRLP-03):*
 - [x] Reject duplicate MCP server IDs when loading `mcp_catalog.yaml`
 - [x] Remove duplicate `mcp-knowledge-flow-prometheus-ops` entry from `apps/fred-agents/config/mcp_catalog.yaml`
 - [x] `make code-quality && make test` in `fred-agents`
 
-*frontend (C1-C — after C1-B merged):*
+*frontend (CTRLP-03 — after CTRLP-03 merged):*
 - [x] `AgentFormBody`: MCP checkbox multi-select from `mcp_servers` on the template
 - [ ] `AgentFormBody`: model profile picker from `available_model_profiles` — deferred
 - [x] Wire `mcp_server_ids` into `AgentFormPayload` and create/update mutations (`model_profile_id` deferred)
@@ -512,7 +512,7 @@ schemas and service → OpenAPI regen), frontend form last.
 
 ---
 
-## P1 — Prompt Safety: Rendering Fix + Persistence Validation (Dimitri) · Done 2026-05-07
+## PROMPT-01 — Prompt Safety: Rendering Fix + Persistence Validation (Dimitri) · Done 2026-05-07
 
 **Ref**: `docs/rfc/PROMPT-SAFETY-RFC.md` · `docs/backlog/BACKLOG.md` §3d.9
 
@@ -528,11 +528,11 @@ at save time.
 - [x] `make code-quality && make test` green in all three packages
 
 **Remaining (next prompt slices, separate branch)**:
-- [ ] P1-D1 — team/personal prompt library in `control-plane-backend`:
+- [ ] PROMPT-02 — team/personal prompt library in `control-plane-backend`:
   `Prompt` entity CRUD + DB migration + OpenAPI regen + dedicated `Prompts` page
-- [ ] P1-D2 — `AgentFormModal` keeps manual prompt editing and adds
+- [ ] PROMPT-04 — `AgentFormModal` keeps manual prompt editing and adds
   `[Import from library]` + `[Save as prompt]` + inline 422 display
-- [ ] P1-E — global prompt marketplace publication-by-copy after the team/personal
+- [ ] PROMPT-06 — global prompt marketplace publication-by-copy after the team/personal
   prompt library is stable
 
 ---
@@ -541,7 +541,7 @@ at save time.
 
 | Decision | Owner | Blocking |
 |---|---|---|
-| Option A/B/C for `updated_at` freshness | Florian + all | F1, then Félix 6A wiring |
+| Option A/B/C for `updated_at` freshness | Florian + all | CTRLP-01, then Félix CHAT-01 wiring |
 | Whether `ExecutionPreparation` should expose agent runtime options | Simon + Florian | Resolved 2026-05-06: yes — typed `effective_chat_options` on `ExecutionPreparation` |
 | Checkpoint TTL policy for standalone mode | Simon | BACKLOG.md §3b.9, non-urgent |
 | `session_purge_queue` keep or repurpose | Florian | BACKLOG.md §6.4.E, non-urgent |

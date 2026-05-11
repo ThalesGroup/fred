@@ -49,7 +49,7 @@ and answers in plain language.
 **Feature progress**
 - *"What is the status of the prompt library feature?"*
 - *"How far along is chat UI Phase 6?"*
-- *"What is P1-D2?"*
+- *"What is PROMPT-04?"*
 
 **Planning and roadmap**
 - *"What are the next three things Dimitri will work on?"*
@@ -83,10 +83,10 @@ closed still marked open?"* Flag discrepancies to the item owner.
 When you need to close a sprint item, add a tracked feature, or record a decision,
 ask Claude to do it:
 
-- *"Mark M1-F.1 as done in id-legend.yaml and STATUS.md."*
+- *"Mark MEMORY-02 as done in id-legend.yaml and STATUS.md."*
 - *"Add a new tracked item for the onboarding flow review, owned by Claire,
   in the next sprint."*
-- *"Update STATUS.md to show that S1 is now unblocked."*
+- *"Update STATUS.md to show that VALID-01 is now unblocked."*
 
 Claude will show you the proposed change before writing anything. Review it and
 confirm. You do not need to understand the file format — Claude handles that.

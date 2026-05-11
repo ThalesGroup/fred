@@ -9,7 +9,7 @@
 
 ## 1. Why This RFC Exists
 
-Before implementing the P1-D3 chat context picker and the `bound_library_ids` feature,
+Before implementing the PROMPT-05 chat context picker and the `bound_library_ids` feature,
 we need to agree on the data model. The current model is not as clean as expected.
 This RFC maps it precisely, names the problems, and proposes the minimum change.
 
@@ -313,7 +313,7 @@ state using this table exactly. Identity fields (`user_id`, `team_id`, `session_
 are NOT set by the frontend — they are set by the runtime adapter from `ExecutionGrant`.
 Auth token fields (`access_token`, `refresh_token`) are set as they are today.
 `context_prompt_text` is forwarded from the last `ExecutionPreparation` response;
-it changes only when the user changes the session context prompt (P1-D3).
+it changes only when the user changes the session context prompt (PROMPT-05).
 
 ---
 
@@ -358,7 +358,7 @@ minus the `dict[str, Any]` problem.
 **Enabled immediately:**
 - Typed execute request — Pydantic validates the boundary, no `Any`
 - `bound_library_ids` works end to end
-- `context_prompt_text` wired — P1-D3 can proceed
+- `context_prompt_text` wired — PROMPT-05 can proceed
 - Round-trip is documented — no developer needs to grep the frontend to understand what the runtime expects
 - `search_policy` is now a literal type — frontend type system catches invalid values
 
@@ -391,7 +391,7 @@ fields to `RuntimeContext` Group C and a corresponding declaration to
 
 ## 11. Implementation Sequence
 
-### Task RT-1-a — `fred-sdk` changes (no runtime behavior change)
+### Task RUNTIME-02 — `fred-sdk` changes (no runtime behavior change)
 
 ```
 fred_sdk/contracts/execution.py:
@@ -407,7 +407,7 @@ fred_sdk/contracts/context.py:
 make code-quality && make test in libs/fred-sdk
 ```
 
-### Task RT-1-b — Control-plane backend
+### Task RUNTIME-02 — Control-plane backend
 
 ```
 control_plane_backend/product/schemas.py:
@@ -420,7 +420,7 @@ make code-quality && make test in apps/control-plane-backend
 generate-openapi → commit controlPlaneOpenApi.ts
 ```
 
-### Task RT-1-c — Fred-runtime regeneration and compatibility check
+### Task RUNTIME-02 — Fred-runtime regeneration and compatibility check
 
 ```
 Regenerate runtimeOpenApi.ts from fred-runtime OpenAPI schema.
@@ -430,7 +430,7 @@ Verify that internal callers of RuntimeContext still work with the typed model.
 make code-quality && make test in libs/fred-runtime
 ```
 
-### Task FE-1 — Frontend (depends on RT-1-a and RT-1-b)
+### Task FRONT-06 — Frontend (depends on RUNTIME-02 and RUNTIME-02)
 
 ```
 useChatSse.ts:

@@ -168,7 +168,7 @@ The bootstrap payload must not be stretched into a transport/routing registry.
 
 ---
 
-## 2 Phase 5A - Bootstrap Convergence
+## 2 Phase FRONT-01 - Bootstrap Convergence
 
 ### 2.1 Goal
 
@@ -222,7 +222,7 @@ This makes the app partially migrated but not converged.
 
 ---
 
-## 3 Phase 5B - No-Security Personal-Only Baseline
+## 3 Phase FRONT-02 - No-Security Personal-Only Baseline
 
 ### 3.1 Goal
 
@@ -359,7 +359,7 @@ mechanism rather than creating a second wave of special-case endpoint logic.
 
 ---
 
-### 4.4 Backend Hardening Tasks Recommended Before Or During Phase 5A
+### 4.4 Backend Hardening Tasks Recommended Before Or During Phase FRONT-01
 
 - [x] Remove duplicated personal-team shaping between bootstrap and temporary
   user-details endpoints
@@ -394,7 +394,7 @@ mechanism rather than creating a second wave of special-case endpoint logic.
 
 ---
 
-## 5 Phase 5C - Managed Agent Surface
+## 5 Phase FRONT-03 - Managed Agent Surface
 
 ### 5.1 Goal
 
@@ -470,7 +470,7 @@ Current implementation note:
 
 ---
 
-### 5.3 Status Note (Phase 5C complete)
+### 5.3 Status Note (Phase FRONT-03 complete)
 
 The agent selection surface is now fully migrated:
 
@@ -518,7 +518,7 @@ and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-IN
 
 ---
 
-## 6 Phase 5D - Session And Chat Shell Convergence
+## 6 Phase FRONT-04 - Session And Chat Shell Convergence
 
 ### 6.1 Goal
 
@@ -596,7 +596,7 @@ This creates a hybrid UX even when execution itself is migrated.
 - [x] Freeze which backend owns sidebar session metadata (see §6.2 above)
 - [x] Remove default sidebar/session dependency on legacy agentic session APIs
 - [x] Decide whether session metadata is moved to control-plane or omitted:
-      **Decision: moved to control-plane — implemented in Phase 5D**
+      **Decision: moved to control-plane — implemented in Phase FRONT-04**
 - [x] Ensure managed chat history loading uses prepared runtime `messages_url_template` only
       — implemented in `ManagedChatPage`: calls `prepare-execution` on mount when `?session=<id>`
       is present, expands `{session_id}` in the template, fetches history with bearer token
@@ -633,7 +633,7 @@ This creates a hybrid UX even when execution itself is migrated.
 
 ---
 
-## 7 Phase 5E - Agentic-Backend Removal From Frontend
+## 7 Phase FRONT-05 - Agentic-Backend Removal From Frontend
 
 ### 7.1 Goal
 
@@ -706,23 +706,23 @@ Do not treat the following as Phase 5 starting requirements:
 
 ## 9 Current Frontend Gaps To Use As Input
 
-These are concrete migration signals still visible in the codebase (updated after Phase 5D):
+These are concrete migration signals still visible in the codebase (updated after Phase FRONT-04):
 
 - `frontend/src/common/config.tsx` now only handles the tiny pre-auth
   `/config.json` bootstrap, but bootstrap failure handling is still not
-  converged into one typed recovery path (open 5A task)
+  converged into one typed recovery path (open FRONT-01 task)
 - `frontend/src/pages/Chat.tsx` still lists legacy raw agents from
   `agentic-backend` — this is the legacy chat path, not the managed path; intentionally
   left until the old chat surfaces are formally deprecated
 - `frontend/src/components/chatbot/ChatBot.tsx` still reads legacy session
   metadata from `agentic-backend` — same as above, legacy surface
 - ~~the managed sidebar uses an intentional placeholder for session metadata~~
-  **done**: `ChatList.tsx` now fetches from `GET /teams/{team_id}/sessions` (Phase 5D)
+  **done**: `ChatList.tsx` now fetches from `GET /teams/{team_id}/sessions` (Phase FRONT-04)
 - the personal-only shell still leaves some collaborative/discovery UI decisions
   open, especially marketplace visibility
 - backend hardening for the synthetic `personal` team remains open and should be
   closed before treating the no-security baseline as fully robust
-- 5B validation: `active team = personal` after hard refresh + navigation with
+- FRONT-02 validation: `active team = personal` after hard refresh + navigation with
   `available_teams` size 1 — two smoke-test items still unconfirmed
 
 These gaps should inform the sequencing, not trigger ad hoc fixes.
@@ -759,11 +759,11 @@ we can answer "yes" to all of the following:
 
 | Sub-phase | Status | Remaining |
 |---|---|---|
-| 5A – Bootstrap convergence | ✓ Complete | Bootstrap failure recovery screen (minor, deferred) |
-| 5B – No-security personal-only baseline | ✓ Substantially complete | 2 smoke-test validation items |
+| FRONT-01 – Bootstrap convergence | ✓ Complete | Bootstrap failure recovery screen (minor, deferred) |
+| FRONT-02 – No-security personal-only baseline | ✓ Substantially complete | 2 smoke-test validation items |
 | Backend readiness gates | Partial | Bootstrap permissions for route guards; personal-team doc; offline test |
-| 5C – Managed agent surface | ✓ Complete | Legacy authoring decision (intentionally deferred) |
-| 5D – Session and chat shell convergence | ✓ Complete | PATCH/DELETE session endpoints (deferred to Phase 6) |
-| 5E – Knowledge-flow and shared shell alignment | Planned | — |
+| FRONT-03 – Managed agent surface | ✓ Complete | Legacy authoring decision (intentionally deferred) |
+| FRONT-04 – Session and chat shell convergence | ✓ Complete | PATCH/DELETE session endpoints (deferred to Phase 6) |
+| FRONT-05 – Knowledge-flow and shared shell alignment | Planned | — |
 
 Security-enabled hardening should come after the no-security baseline is clean.

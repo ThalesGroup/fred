@@ -845,7 +845,7 @@ This backlog is closed when all of the following are true:
 
 - `[x]` `make code-quality` passes in `libs/fred-runtime` ✅ Phase 1
 - `[x]` Raw `basedpyright` passes with zero errors in `libs/fred-runtime` and the baseline file is empty or removed ✅ 2026-05-09
-- `[x]` New/modified files (P1–P5) report ≥ 70% coverage: `agent_app.py` 74%, `context.py` 95%, all new P4/P5 files 100% ✅ 2026-04-27
+- `[x]` New/modified files (PROMPT-01–P5) report ≥ 70% coverage: `agent_app.py` 74%, `context.py` 95%, all new P4/P5 files 100% ✅ 2026-04-27
 - `[x]` No `import requests` in any source file under `fred_runtime/` (excluding `.venv`) ✅ Phase 1
 - `[x]` `from fred_runtime.client import AgentPodClient, run_scenario_file, main` still works (shim intact) ✅ 2026-04-27
 - `[x]` `fred-agents-cli --help` resolves correctly ✅ 2026-04-27
@@ -861,11 +861,11 @@ This backlog is closed when all of the following are true:
 ## R1b — Remaining Quality Gates (Deferred)
 
 **Status:** `[~]` In progress — Gate A closed 2026-05-09; Gates B/C/D/E remain
-**Prerequisite:** R1 (P1–P5) complete ✅
+**Prerequisite:** QUALITY-01 (PROMPT-01–P5) complete ✅
 
 The 2026-05-09 follow-up audit and follow-up fix pass confirmed that
 `fred-runtime` is still below the target structural bar despite the earlier
-P1–P5 cleanup:
+PROMPT-01–P5 cleanup:
 
 - raw `basedpyright` debt is now closed
 - total offline coverage is 65%
@@ -961,7 +961,7 @@ runtime-surface features until at least step 1 is complete:
    - keep `create_agent_app()` as composition root
    - validation: raw `basedpyright`, `make code-quality`, `make test`
 
-2. **R1b-C1 — raise focused coverage on `graph_runtime.py`**
+2. **R1b-CTRLP-03 — raise focused coverage on `graph_runtime.py`**
    - add direct unit tests for phase timers, node routing, final-event shaping,
      and graph output normalization
    - validation: targeted pytest + full `make test`

@@ -46,7 +46,7 @@ and maintainable as the number of agents grows.
 
 ## 2. Design Principles
 
-**P1 — Execution belongs to Fred. Scoring does not.**
+**PROMPT-01 — Execution belongs to Fred. Scoring does not.**
 
 Fred knows how to talk to its agents, navigate Keycloak auth, and interpret SSE
 events. Fred should not own LLM-as-judge calibration, HTML report generation,
@@ -379,7 +379,7 @@ ordering constraints.
 | OQ-1 | Should `EvalTrace` be a typed Pydantic model in `fred-sdk`, or an untyped dict in `fred-runtime`? | Typing the contract in fred-sdk makes it easier to evolve; adding it to fred-sdk adds a contract obligation. |
 | OQ-2 | Should the eval pod use a dedicated team/user identity, or reuse developer credentials? | Security hygiene in shared environments. |
 | OQ-3 | Promptfoo vs Inspect AI — final choice? | Promptfoo is recommended (broader adoption, YAML-first, CI-native). Inspect AI is better suited to structured benchmark tasks (MMLU-style). Both are compatible with this architecture. |
-| OQ-4 | Should baseline files be committed to the repo or stored externally? | Committing baselines enables PR-level regression detection. External storage (S3, artifact store) scales better across many agents. |
+| OQ-4 | Should baseline files be committed to the repo or stored externally? | Committing baselines enables PR-level regression detection. External storage (RUNTIME-01, artifact store) scales better across many agents. |
 
 ---
 

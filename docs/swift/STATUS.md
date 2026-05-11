@@ -3,9 +3,9 @@
 **Purpose**: One-page queryable snapshot of team activity. Updated each session.
 Answers "what's next?", "who owns X?", "what was done this week?", "what's blocked?"
 
-**AI assistants**: for structured queries ("status of S1", "what is C1-deferred?")
-read [`docs/data/id-legend.yaml`](data/id-legend.yaml) first — it is faster than scanning prose.
-For sprint-level structured data, read [`docs/data/sprint.yaml`](data/sprint.yaml).
+**AI assistants**: for structured queries read [`docs/data/id-legend.yaml`](data/id-legend.yaml)
+first — it is faster than scanning prose. For sprint-level structured data, read
+[`docs/data/sprint.yaml`](data/sprint.yaml).
 
 Ask Claude Code directly: *"What is Simon working on?"* · *"What tests cover MCP config?"*
 · *"What is the next backend task for Dimitri?"* · *"What's blocking Félix?"*
@@ -16,143 +16,155 @@ Last updated: 2026-05-11
 
 ## Team
 
-| Person | Role |
+| Personne | Rôle |
 |---|---|
-| **Dimitri** | Lead architect — backend contracts, runtime design, cross-cutting |
-| **Félix** | Frontend — rework design system, chat UI migration |
-| **Simon** | Backend — fred-runtime, fred-sdk, observability, E2E validation |
+| **Dimitri** | Lead architect — contrats backend, runtime design, transversal |
+| **Félix** | Frontend — design system rework, migration chat UI |
+| **Simon** | Backend — fred-runtime, fred-sdk, observabilité, validation E2E |
 | **Florian** | Backend — control-plane-backend, APIs, DB, session lifecycle |
-| **Odélia** | Agent evaluation — deepeval track (independent) |
-| **Claire** | Team organisation, planning |
-| **Arnaud** | Team organisation, planning |
+| **Marc** | Conception agents complexes — multi-agent, évaluation, frontend si besoin |
+| **Odélia** | Évaluation agents — track deepeval (indépendant) |
+| **Claire** | Organisation équipe, planning |
+| **Arnaud** | Organisation équipe, planning |
 
 ---
 
-## In Progress Now (week of 2026-05-11)
+## Semaine du 2026-05-11 — Disponibilités
 
-| Feature | Owner | Status | Backlog ref |
-|---|---|---|---|
-| S1 — E2E live stack validation (managed + HITL scenarios) | Simon | In progress | [BACKLOG §3b.7](backlog/BACKLOG.md) |
-| 6C — Agent options panel + session title inline edit | Félix | In progress (unblocked) | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) |
-| M1-F.1..F.4 — Multi-agent memory hardening (4 branches) | Dimitri | Next up | [MULTI-AGENT-MEMORY-BACKLOG](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
-| P1-D2 — PromptsPage core CRUD + route + nav | Dimitri | In progress (core done; AgentFormModal extensions remain) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| P1-D3 — Chat context picker (replaces free textarea) | Félix | Next — unblocked | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| C1-deferred — Model profiles endpoint + form picker | Dimitri | Queued | [BACKLOG §3d](backlog/BACKLOG.md) |
-| P1-E — Global prompt marketplace | Dimitri | Deferred (after P1-D2 + P1-D3) | [BACKLOG §3d.10](backlog/BACKLOG.md) |
-| P1-F — Token cost KPI integration | Simon + Dimitri | Deferred (after O1 + fred-core) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| O1 — Agent evaluation harness (deepeval) | Odélia | RFC exists, impl not started | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
+| Personne | Disponibilité | Priorité |
+|---|---|---|
+| **Dimitri** | Plein temps sur swift | MEM-REMOTE → MEM-LOCAL → PROMPT-FORM |
+| **Marc** | Plein temps sur swift | MEM-CHKPT → EVAL-HARNESS |
+| **Simon** | Best effort (support kea) | MEM-CAP + préparation scripts RT-E2E |
+| **Florian** | Best effort (support kea) | CP-DOC-RT1 + CP-TTL |
+| **Félix** | Indisponible | — |
 
 ---
 
-## Closed This Week (2026-05-01 → 2026-05-11)
+## Tâches actives (semaine du 2026-05-11)
 
-| Feature | Owner | Closed | Backlog ref | Tests |
+| ID | Nom | Owner | Statut | Ref |
 |---|---|---|---|---|
-| RT-1 — Typed ChatContext contract: `RuntimeExecuteRequest.runtime_context dict→RuntimeContext`, `search_policy` Literal, `context_prompt_text` field, `EffectiveChatOptions.bound_library_ids` | Dimitri | 2026-05-11 | [EXECUTION-CONTEXT-RFC](rfc/EXECUTION-CONTEXT-RFC.md) | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
-| FE-1 — Wire ChatContext in useChatSse: `RuntimeContext` from runtimeOpenApi, forward `context_prompt_text`, pass `bound_library_ids` to AgentOptionsPanel | Félix/Dimitri | 2026-05-11 | [EXECUTION-CONTEXT-RFC](rfc/EXECUTION-CONTEXT-RFC.md) | tsc clean, prettier clean |
-| P1-D1b — Backend extension: versioning, analytics, context integration | Dimitri | 2026-05-10 | [BACKLOG §3d.9](backlog/BACKLOG.md) | `test_main.py` (6 new tests, 120 passing) |
-| R1b-A — fred-runtime raw type-check cleanup + baseline emptied | Codex | 2026-05-09 | [FRED-RUNTIME-QUALITY](backlog/FRED-RUNTIME-QUALITY.md) | `make code-quality`, `make test`, raw `basedpyright` |
-| C1 — Pod catalog exposure + MCP tri-state selection | Dimitri | 2026-05-06 | [BACKLOG §3d](backlog/BACKLOG.md) | `test_mcp_config.py`, `test_agent_app.py`, `test_main.py` |
-| P1 — Prompt safety: rendering fix + persistence validation | Dimitri | 2026-05-07 | [BACKLOG §3d.9](backlog/BACKLOG.md) | `test_prompt_utils.py`, `test_main.py` |
-| F2 — PATCH session endpoint (`updated_at`, `title`) | Florian | 2026-05-06 | [BACKLOG §6.4.D](backlog/BACKLOG.md) | `test_main.py` |
-| fred-agents cleanup (remove simple_assistant, fix IDs) | Dimitri | 2026-05-07 | [WORKPLAN](WORKPLAN.md) | `test_smoke.py` |
-| Version bumps: fred-core 2.0.3, fred-sdk 2.0.4, fred-runtime 2.0.5 | Dimitri | 2026-05-07 | — | — |
-| OPERATING_MODES.md — standalone vs full-stack guide | Dimitri | 2026-05-07 | — | — |
+| MEM-CHKPT | Mémoire : isolation checkpoints | Marc | En cours | [§F.1](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| MEM-REMOTE | Mémoire : contrat agent distant | Dimitri | En cours | [§F.2](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| MEM-LOCAL | Mémoire : agent local unifié | Dimitri | En cours | [§F.3](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| MEM-CAP | Mémoire : cap historique équipe | Simon | Best effort | [§F.4](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
+| PROMPT-FORM | Prompts : formulaire agent | Dimitri | Après MEM-REMOTE + MEM-LOCAL | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| EVAL-HARNESS | Évaluation : harness deepeval | Marc | Best effort mi-semaine | [AGENT-EVALUATION-RFC](rfc/AGENT-EVALUATION-RFC.md) |
+| CP-DOC-RT1 | Doc : alignement contrat ChatContext | Florian | Best effort | [CONTROL-PLANE-CONTRACT](design/CONTROL-PLANE-PRODUCT-CONTRACT.md) |
+| CP-TTL | Config : durée des checkpoints | Florian | Best effort | [BACKLOG §6.4](backlog/BACKLOG.md) |
+| RT-E2E | Validation E2E live stack | Simon | **Bloqué** — pod manquant | [BACKLOG §3b.7](backlog/BACKLOG.md) |
+| CU-OPTIONS | Chat UI : panneau options | Félix | **Suspendu** — indisponible | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) |
+| PROMPT-CTX | Prompts : sélecteur contexte | Félix | **Suspendu** — indisponible | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+
+## File d'attente
+
+| ID | Nom | Owner | Attend |
+|---|---|---|---|
+| CP-MODELS | Control Plane : profils modèles | Dimitri | Catalogue model-profiles |
+| PROMPT-MKT | Prompts : marketplace | Dimitri | PROMPT-FORM |
+| FE-CLEANUP | Frontend : nettoyage agentic | Félix | CU-OPTIONS + retour Félix |
+| PROMPT-KPI | Prompts : KPI tokens | Simon + Dimitri | EVAL-HARNESS + fred-core |
 
 ---
 
-## Recently Closed (last 30 days — reference)
+## Fermé cette semaine (2026-05-01 → 2026-05-11)
 
-| Feature | Owner | Closed | Ref |
+| ID | Nom | Owner | Fermé | Tests |
+|---|---|---|---|---|
+| RUNTIME-02 | ChatContext typé (RuntimeContext, search_policy, context_prompt_text) | Dimitri | 2026-05-11 | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
+| FRONT-06 | Wire ChatContext dans useChatSse (context_prompt_text, bound_library_ids) | Félix/Dimitri | 2026-05-11 | tsc clean, prettier clean |
+| PROMPT-03 | Extension backend prompts : versioning, analytics, context integration | Dimitri | 2026-05-10 | `test_main.py` (6 new tests, 120 passing) |
+| R1b-A | fred-runtime raw type-check cleanup + baseline emptied | Codex | 2026-05-09 | `make code-quality`, `make test`, raw `basedpyright` |
+| CTRLP-03 | Pod catalog exposure + MCP tri-state selection | Dimitri | 2026-05-06 | `test_mcp_config.py`, `test_agent_app.py`, `test_main.py` |
+| PROMPT-01 | Prompt safety : rendering fix + persistence validation | Dimitri | 2026-05-07 | `test_prompt_utils.py`, `test_main.py` |
+| CTRLP-02 | PATCH session endpoint (`updated_at`, `title`) | Florian | 2026-05-06 | `test_main.py` |
+| — | fred-agents cleanup (remove simple_assistant, fix IDs) | Dimitri | 2026-05-07 | `test_smoke.py` |
+| — | Version bumps : fred-core 2.0.3, fred-sdk 2.0.4, fred-runtime 2.0.5 | Dimitri | 2026-05-07 | — |
+| — | OPERATING_MODES.md — standalone vs full-stack guide | Dimitri | 2026-05-07 | — |
+
+---
+
+## Fermé récemment (30 derniers jours — référence)
+
+| ID | Nom | Owner | Fermé |
 |---|---|---|---|
-| 6B — Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri | 2026-05-04 | [CHAT-UI-BACKLOG §2](backlog/CHAT-UI-BACKLOG.md) |
-| M1 — Multi-agent conversational memory (core, phases A–E) | Dimitri | 2026-05-05 | [MULTI-AGENT-MEMORY-BACKLOG](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
-| Agent FieldSpec declarations (all 3 production agents) | Dimitri | 2026-05-04 | [BACKLOG §3d](backlog/BACKLOG.md) |
-| AgentFormModal refactor (template browser, tuning fields) | Dimitri | 2026-04-28 | [AGENT-INSTANCE-FORM-RFC](rfc/AGENT-INSTANCE-FORM-RFC.md) |
-| S2 — Prometheus cardinality fix + observability hardening | Simon | 2026-04-26 | [BACKLOG §7.3](backlog/BACKLOG.md) |
-| S3 — Runtime CLI ergonomics + session purge | Simon/Dimitri | 2026-04-26 | [BACKLOG §6.4.B](backlog/BACKLOG.md) |
-| D1 — Control-plane developer CLI (`make cli`) | Dimitri | 2026-04-25 | [BACKLOG](backlog/BACKLOG.md) |
-| 6A — Chat UI architecture (new component tree) | Félix | — | [CHAT-UI-BACKLOG §1](backlog/CHAT-UI-BACKLOG.md) |
-| F1 — Session `updated_at` strategy + PATCH impl | Florian | — | [BACKLOG §6.4.D](backlog/BACKLOG.md) |
-| R1 — fred-runtime quality refactor (P1–P5 only) | Simon | 2026-04-27 | [WORKPLAN R1](WORKPLAN.md) |
+| CHAT-02 | Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri | 2026-05-04 |
+| MEMORY-01 | Mémoire multi-agent conversationnelle — core (phases A–E) | Dimitri | 2026-05-05 |
+| — | Agent FieldSpec declarations (3 agents de production) | Dimitri | 2026-05-04 |
+| — | AgentFormModal refactor (template browser, tuning fields) | Dimitri | 2026-04-28 |
+| OBSERV-01 | Prometheus cardinality fix + observabilité | Simon | 2026-04-26 |
+| RUNTIME-01 | Runtime CLI ergonomics + session purge | Simon/Dimitri | 2026-04-26 |
+| CTRLP-05 | Control-plane developer CLI (`make cli`) | Dimitri | 2026-04-25 |
+| CHAT-01 | Chat UI architecture — new component tree ManagedChatPage | Félix | 2026-05-04 |
+| CTRLP-01 | Session `updated_at` strategy + PATCH impl | Florian | 2026-05-06 |
+| QUALITY-01 | fred-runtime quality refactor (PROMPT-01–P5 only) | Simon | 2026-04-27 |
 
 ---
 
 ## Milestones
 
-| Milestone | Tracks | Target | Status | Completion |
-|---|---|---|---|---|
-| Phase 3 complete — E2E validated + M1 hardened | S1 + M1-F.1..F.4 | TBD | In progress | ~60% |
-| Prompt library shipped — P1-D1 + P1-D2 | P1-D1 ✅ + P1-D2 | TBD | In progress | 50% |
-| Chat UI Phase 6 complete — 6C shipped | 6C | TBD | In progress | ~80% |
-| Frontend agenticOpenApi cleanup — Phase 5E (backend already removed) | 5E | TBD | Not started | 0% |
-| Agent evaluation v1 — O1 harness live | O1 | TBD | Not started | 0% |
-| Model profiles — C1-deferred shipped | C1-deferred | TBD | Queued | 0% |
+| Milestone | Items bloquants | Statut | Avancement |
+|---|---|---|---|
+| Phase 3 complète — E2E + mémoire durcie | RT-E2E + MEM-CHKPT/REMOTE/LOCAL/CAP | En cours | ~60% |
+| Bibliothèque de prompts — PROMPT-FORM + PROMPT-CTX | PROMPT-FORM ✳ + PROMPT-CTX ⏸ | En cours | ~40% |
+| Chat UI Phase 6 — CU-OPTIONS livré | CU-OPTIONS ⏸ | En cours | ~80% |
+| Frontend nettoyage agentic — FE-CLEANUP | FE-CLEANUP | Non démarré | 0% |
+| Évaluation agents v1 — EVAL-HARNESS | EVAL-HARNESS ✳ | Démarrage | ~5% |
+| Profils modèles — CP-MODELS | CP-MODELS | En attente | 0% |
 
-> Target dates to be defined. Track them in `docs/data/sprint.yaml` when known.
-
----
-
-## Velocity (last 2 weeks — 2026-04-25 → 2026-05-09)
-
-| Metric | Value |
-|---|---|
-| Items closed | 11 major items (S2, S3, D1, F1, F2, R1, 6A, 6B, M1-core, C1, P1) |
-| Sub-items closed | 6 (C1-A, C1-B, C1-C, C1-D, P1-D1, R1b-A) |
-| Items opened net | +3 (M1-F.1..F.4 hardening branches, P1-D2, R1b reopened) |
-| Items deferred | 2 (C1-deferred, P1-E) |
-| Subjective velocity | **On track, with caution** — `fred-runtime` raw type debt is closed, but coverage and file-splitting hardening should still be paid down before more runtime-surface growth |
+> ✳ en cours cette semaine · ⏸ suspendu (Félix indisponible)
 
 ---
 
-## Blocked / Pending Decisions
+## Bloqueurs
 
-| Item | Blocked on | Owner |
+| Item | Bloqué sur | Owner |
 |---|---|---|
-| S1 live stack scenarios | Live pod available + `FRED_AGENT_INSTANCE_ID` set | Simon |
-| M1 F.1–F.4 hardening branches | Swift branch commit | Dimitri |
-| 6C full completion | S1 gate (runtime SSE validation confirmed) | Félix |
+| RT-E2E | Live pod disponible + `FRED_AGENT_INSTANCE_ID` set | Simon |
+| CU-OPTIONS | Félix indisponible + gate RT-E2E | Félix |
+| PROMPT-CTX | Félix indisponible | Félix |
 
 ---
 
-## Feature → Tests quick reference
+## Feature → Tests (référence rapide)
 
-| Feature area | Test file(s) | Package |
+| Domaine | Fichier(s) de test | Package |
 |---|---|---|
 | Managed agent CRUD, tuning validation, execution prep | `test_main.py` | `control-plane-backend` |
 | Control-plane developer CLI commands | `test_cli.py` | `control-plane-backend` |
 | Session lifecycle, purge policies | `test_lifecycle_actions.py` | `control-plane-backend` |
 | ReBAC policy engine | `test_policy_engine.py` | `control-plane-backend` |
-| Agent runtime (tuning application, MCP selection, KPI) | `test_agent_app.py` | `fred-runtime` |
-| MCP catalog loading + tri-state selection (C1) | `test_mcp_config.py` | `fred-runtime` |
-| Multi-agent memory — runtime wiring (M1 phases C+D) | `test_conversational_memory.py` | `fred-runtime` |
-| Prompt safety token registry + validation (P1) | `test_prompt_utils.py` | `fred-sdk` |
-| Multi-agent memory — SDK primitives (M1 phases A+B) | `test_conversational_memory.py` | `fred-sdk` |
+| Agent runtime (tuning, MCP selection, KPI) | `test_agent_app.py` | `fred-runtime` |
+| MCP catalog loading + tri-state selection (CTRLP-03) | `test_mcp_config.py` | `fred-runtime` |
+| Mémoire multi-agent — runtime wiring (MEMORY-01 phases C+D) | `test_conversational_memory.py` | `fred-runtime` |
+| Prompt safety token registry + validation (PROMPT-01) | `test_prompt_utils.py` | `fred-sdk` |
+| Mémoire multi-agent — SDK primitives (MEMORY-01 phases A+B) | `test_conversational_memory.py` | `fred-sdk` |
 | SSE execution contracts, `ExecutionGrant`, events | `test_execution_contracts.py` | `fred-sdk` |
-| Prometheus KPI cardinality + labels (S2) | `test_prometheus_kpi_store.py` | `fred-core` |
-| Structured KPI log output (S2) | `test_log_kpi_store.py` | `fred-core` |
-| CLI KPI ring buffer display (S2/S3) | `test_kpi_display.py` | `fred-runtime` |
-| History store, HITL persistence, session purge (S3) | `test_history.py` | `fred-runtime` |
+| Prometheus KPI cardinality + labels (OBSERV-01) | `test_prometheus_kpi_store.py` | `fred-core` |
+| Structured KPI log output (OBSERV-01) | `test_log_kpi_store.py` | `fred-core` |
+| CLI KPI ring buffer display (OBSERV-01/RUNTIME-01) | `test_kpi_display.py` | `fred-runtime` |
+| History store, HITL persistence, session purge (RUNTIME-01) | `test_history.py` | `fred-runtime` |
 | Pod client, CLI session commands | `test_client.py` | `fred-runtime` |
 
 ---
 
-## How to use this file (for Claire and Arnaud)
+## Comment utiliser ce fichier (pour Claire et Arnaud)
 
-Open this repository in **VS Code** and install the **Claude Code** extension (see
-[claude.ai/code](https://claude.ai/code)). Then ask questions directly in the chat panel:
+Ouvrez ce dépôt dans **VS Code** et installez l'extension **Claude Code** (voir
+[claude.ai/code](https://claude.ai/code)). Posez vos questions directement dans le panneau chat :
 
-- *"What is Simon working on this week?"*
-- *"What was closed since Monday?"*
-- *"Who owns the chat UI?"*
-- *"What tests cover the MCP configuration feature?"*
-- *"What is blocking Félix?"*
-- *"Where is the prompt safety feature tracked?"*
+- *"Que fait Simon cette semaine ?"*
+- *"Qu'est-ce qui a été fermé depuis lundi ?"*
+- *"Qui est propriétaire du chat UI ?"*
+- *"Quels tests couvrent la configuration MCP ?"*
+- *"Qu'est-ce qui bloque Félix ?"*
+- *"Où est tracée la bibliothèque de prompts ?"*
 
-Claude Code reads this file plus the linked backlogs and code to answer. No Jira login needed.
+Claude Code lit ce fichier ainsi que les backlogs et le code liés pour répondre. Pas besoin de Jira.
 
-For deeper dives:
-- Feature specs → [`backlog/BACKLOG.md`](backlog/BACKLOG.md)
-- Sprint details → [`WORKPLAN.md`](WORKPLAN.md)
-- Architecture decisions → [`design/`](design/)
-- Technical proposals → [`rfc/`](rfc/)
+Pour aller plus loin :
+- Specs fonctionnelles → [`backlog/BACKLOG.md`](backlog/BACKLOG.md)
+- Détails du sprint → [`WORKPLAN.md`](WORKPLAN.md)
+- Décisions d'architecture → [`design/`](design/)
+- Propositions techniques → [`rfc/`](rfc/)

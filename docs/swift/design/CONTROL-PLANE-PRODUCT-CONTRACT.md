@@ -300,7 +300,7 @@ Accessed via:
 
 **Control-plane must not proxy or cache message content.** If the frontend needs message history, it calls runtime directly using the `messages_url_template` from `ExecutionPreparation`.
 
-**Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/5D)_
+**Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/FRONT-04)_
 
 Will contain: session title (user-editable or auto-generated), creation timestamp, last activity timestamp, status (active, archived, deleted), preferences (language, display settings), `agent_instance_id` and `team_id` for sidebar grouping.
 
@@ -388,7 +388,7 @@ Control-plane  (target state)
 - [ ] `GET /agents/sessions` admin endpoint (no required `user_id`, filterable by `team_id`, `agent_instance_id`, date range)
 - [ ] `DELETE /agents/sessions/{session_id}` to purge message history
 - [ ] `POST /agents/sessions/purge` for bulk retention-policy execution
-- [ ] Control-plane session metadata CRUD (Phase 3b / Phase 5D)
+- [ ] Control-plane session metadata CRUD (Phase 3b / Phase FRONT-04)
 - [ ] CLI `/sessions --all` and `/sessions --team <team_id>` commands
 - [ ] CLI `/checkpoint delete <session_id>` command
 - [ ] SQLite → Postgres migration path for existing `session_history` tables

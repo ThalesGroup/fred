@@ -1,6 +1,6 @@
 # RFC — Safe Prompt Authoring, Validation, and Library
 
-**Status**: Slices A + B + C implemented (2026-05-07) · Slice D backend implemented (2026-05-08) · P1-D1b in progress · Slice E / P1-E deferred  
+**Status**: Slices A + B + C implemented (2026-05-07) · Slice D backend implemented (2026-05-08) · PROMPT-03 in progress · Slice E / PROMPT-06 deferred  
 **Author**: Dimitri Tombroff  
 **Date**: 2026-05-07 (safety) — 2026-05-09 (library extension)  
 **Area**: `fred-sdk`, `fred-runtime`, `control-plane-backend`, `frontend`  
@@ -185,7 +185,7 @@ Swift already sends the full payload in a single `CreateAgentInstanceRequest`. W
 
 ---
 
-## Part 2 — Library Architecture (Slices D, E / P1-D1b through P1-F)
+## Part 2 — Library Architecture (Slices D, E / PROMPT-03 through PROMPT-07)
 
 ### 6. Context — what Slice D established
 
@@ -238,10 +238,10 @@ personal/{user_id}          team/{team_id}          marketplace
 ─────────────────          ──────────────          ───────────
 Alice's private space  →   Shared team space  →    Global catalog
                  promote            promote
-                 (copy)             (copy, P1-E)
+                 (copy)             (copy, PROMPT-06)
 ```
 
-All three levels use the same `PromptRow` structure (scoped by `team_id`). The marketplace uses a separate `PublishedPromptRow` table — unchanged from §Slice E, deferred to P1-E.
+All three levels use the same `PromptRow` structure (scoped by `team_id`). The marketplace uses a separate `PublishedPromptRow` table — unchanged from §Slice E, deferred to PROMPT-06.
 
 **Reserved team ids:**
 - `personal` resolves to the calling user's personal team (existing control-plane convention)
@@ -269,7 +269,7 @@ session_count        int        NOT NULL  DEFAULT 0
 
 score                float      NULLABLE  DEFAULT NULL
                                 Explicit quality rating, range 0.0–5.0.
-                                Set by admin or by the evaluation track (O1).
+                                Set by admin or by the evaluation track (EVAL-01).
                                 NULL = not yet rated.
 
 avg_input_tokens     int        NULLABLE  DEFAULT NULL
@@ -351,13 +351,13 @@ Body: { "target_team_id": "bid-and-capture" }
 
 Creates a new `PromptRow` in `target_team_id` with the same name, description, and text. Returns `409 Conflict` if the same name already exists in the target team.
 
-**Authorization:** caller must be a member of both source and target team. Promotion to marketplace is a separate flow (P1-E).
+**Authorization:** caller must be a member of both source and target team. Promotion to marketplace is a separate flow (PROMPT-06).
 
 #### 8.7 Analytics model
 
 Three tiers, implemented progressively.
 
-**Tier 1 — Usage counters (in scope, P1-D1b)**
+**Tier 1 — Usage counters (in scope, PROMPT-03)**
 
 | Field | Source event | Updated by |
 |---|---|---|
@@ -366,11 +366,11 @@ Three tiers, implemented progressively.
 
 Counters are incremented atomically: `UPDATE prompt SET import_count = import_count + 1`.
 
-**Tier 2 — Score (in scope, P1-D2 UI)**
+**Tier 2 — Score (in scope, PROMPT-04 UI)**
 
-`score: float | null` is exposed in `PromptSummary`. Admin sets it via `PATCH /teams/{team_id}/prompts/{id}` with `{ "score": 4.5 }`. The evaluation track (O1) may also set it programmatically.
+`score: float | null` is exposed in `PromptSummary`. Admin sets it via `PATCH /teams/{team_id}/prompts/{id}` with `{ "score": 4.5 }`. The evaluation track (EVAL-01) may also set it programmatically.
 
-**Tier 3 — Token cost (out of scope, deferred to P1-F)**
+**Tier 3 — Token cost (out of scope, deferred to PROMPT-07)**
 
 Fields `avg_input_tokens` and `avg_output_tokens` are reserved in the schema now (nullable). UI displays "N/A" with tooltip. Computation requires KPI integration — separate track.
 
@@ -439,7 +439,7 @@ class PromptDetail(PromptSummary):
 | Promote personal → team X | Member of team X |
 | Promote team X → team Y | Member of both X and Y |
 | Set score | Team admin |
-| Promote to marketplace | Global admin (P1-E, out of scope) |
+| Promote to marketplace | Global admin (PROMPT-06, out of scope) |
 
 ---
 
@@ -483,7 +483,7 @@ Rejected: privacy concern (personal prompts would reveal which team members used
 
 ### 9.10 Score computed automatically from agent KPIs
 
-Rejected for V1: requires evaluation track (O1) to land first. The admin-settable float keeps the field live without coupling the release to O1.
+Rejected for V1: requires evaluation track (EVAL-01) to land first. The admin-settable float keeps the field live without coupling the release to EVAL-01.
 
 ### 9.11 Separate context_template table for chat context prompts
 
@@ -506,7 +506,7 @@ Rejected: the difference is in *how* a prompt is used, not *what* it is. One tab
 | `ExecutionPreparation` response | `context_prompt_text: str \| null` | Additive |
 | `PATCH /sessions/{id}` body | `context_prompt_id` optional field | Additive |
 | `AgentFormModal` | Inline 422 errors next to textarea; import/save actions (Slice D UI); version-drift banner | UI addition |
-| `controlPlaneOpenApi.ts` | Regenerated after P1-D1b lands | Required |
+| `controlPlaneOpenApi.ts` | Regenerated after PROMPT-03 lands | Required |
 
 ---
 
@@ -514,9 +514,9 @@ Rejected: the difference is in *how* a prompt is used, not *what* it is. One tab
 
 | Item | Where tracked |
 |---|---|
-| Global prompt marketplace (`PublishedPromptRow`, publish/unpublish) | P1-E |
-| Token cost KPI integration (`avg_input/output_tokens` computation) | P1-F |
-| Automatic score derivation from evaluation results | O1 + P1-F |
+| Global prompt marketplace (`PublishedPromptRow`, publish/unpublish) | PROMPT-06 |
+| Token cost KPI integration (`avg_input/output_tokens` computation) | PROMPT-07 |
+| Automatic score derivation from evaluation results | EVAL-01 + PROMPT-07 |
 | Full text version history (`PromptVersion` table) | Future RFC if needed |
 | Prompt admin role distinct from team admin | Future RFC if needed |
 | Prompt search / tagging / categorisation | Future RFC |
@@ -532,24 +532,24 @@ Slice B   (control-plane-backend: validate_prompt_template called at save time)
   ↓
 Slice C   (test coverage + 422 error shape — done when B lands)
   ↓
-Slice D1  (team/personal prompt CRUD + OpenAPI regen)                ← done (Codex 2026-05-08)
+Slice PROMPT-02  (team/personal prompt CRUD + OpenAPI regen)                ← done (Codex 2026-05-08)
   ↓
-P1-D1b   (DB schema extension: version, counters, score, token fields;
+PROMPT-03   (DB schema extension: version, counters, score, token fields;
           /prompts/context endpoint; session PATCH with context_prompt_id;
           ExecutionPreparation gains context_prompt_text)
   ↓
-P1-D2    (frontend: PromptsPage + AgentFormModal import/save + version-drift banner)
+PROMPT-04    (frontend: PromptsPage + AgentFormModal import/save + version-drift banner)
   ↓
-P1-D3    (frontend: chat context picker replaces free textarea)
+PROMPT-05    (frontend: chat context picker replaces free textarea)
   ↓
-P1-F     (token cost KPI integration — deferred, requires O1 + simon)
+PROMPT-07     (token cost KPI integration — deferred, requires EVAL-01 + simon)
   ↓
-P1-E     (global prompt marketplace — separate track)
+PROMPT-06     (global prompt marketplace — separate track)
 ```
 
-### P1-D1b — Backend extension
+### PROMPT-03 — Backend extension
 
-**Owner**: Dimitri | **Depends on**: P1-D1 (done)
+**Owner**: Dimitri | **Depends on**: PROMPT-02 (done)
 
 ```
 Alembic migration:
@@ -576,9 +576,9 @@ ProductService:
 API endpoints: GET /prompts/context, POST /prompts/{id}/promote, PATCH /prompts/{id}
 ```
 
-### P1-D2 — Frontend: PromptsPage + AgentFormModal
+### PROMPT-04 — Frontend: PromptsPage + AgentFormModal
 
-**Owner**: Félix or Dimitri | **Depends on**: P1-D1b (OpenAPI regenerated)
+**Owner**: Félix or Dimitri | **Depends on**: PROMPT-03 (OpenAPI regenerated)
 
 ```
 PromptsPage (new rework page):
@@ -593,9 +593,9 @@ AgentFormModal:
   Inline 422 error display below textarea
 ```
 
-### P1-D3 — Chat context picker
+### PROMPT-05 — Chat context picker
 
-**Owner**: Félix | **Depends on**: P1-D1b
+**Owner**: Félix | **Depends on**: PROMPT-03
 
 ```
 AgentOptionsPanel or session init surface:
@@ -607,11 +607,11 @@ AgentOptionsPanel or session init surface:
   "Clear context" → PATCH with context_prompt_id: null
 ```
 
-### P1-F — Token cost KPI integration (DEFERRED)
+### PROMPT-07 — Token cost KPI integration (DEFERRED)
 
-**Owner**: Simon + Dimitri | **Depends on**: O1, fred-core KPI store changes
+**Owner**: Simon + Dimitri | **Depends on**: EVAL-01, fred-core KPI store changes
 
-Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displays "N/A". When P1-F starts it will need its own RFC amendment covering: `context_prompt_id` label in fred-core KPI turn events, aggregation worker, and write-back to `PromptRow`.
+Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displays "N/A". When PROMPT-07 starts it will need its own RFC amendment covering: `context_prompt_id` label in fred-core KPI turn events, aggregation worker, and write-back to `PromptRow`.
 
 ---
 
@@ -624,8 +624,8 @@ Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displ
 | Live link at agent instance level? | No. Snapshot text + `prompt_refs` metadata for drift detection |
 | Live link at session level? | Yes — session is ephemeral, no permanence risk |
 | Personal prompts visible in team chat? | Yes — union query via `/prompts/context` endpoint |
-| Score source? | Admin-set float; evaluation track (O1) may set it later |
-| Token cost computation? | Deferred to P1-F. Fields reserved, display "N/A" |
+| Score source? | Admin-set float; evaluation track (EVAL-01) may set it later |
+| Token cost computation? | Deferred to PROMPT-07. Fields reserved, display "N/A" |
 | Promotion: conflict on same name? | 409 Conflict — caller renames first |
 | Promotion: transfer or copy? | Always copy. Source unchanged |
 | Versioning: immutable history vs counter? | Counter only (V1). Additive history table if demand materialises |

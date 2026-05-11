@@ -59,7 +59,7 @@ Fred is composed of four main runtime components:
    - Integrates with:
      - LLM/embedding providers.
      - **Either** SQLite + ChromaDB (dev default) **or** PostgreSQL + pgvector (prod); OpenSearch is optional.
-     - Optional object store (e.g., MinIO, S3) for raw documents.
+     - Optional object store (e.g., MinIO, RUNTIME-01) for raw documents.
 
 In local dev, these run with **no external data services** (SQLite + ChromaDB embedded).  
 In production, you typically deploy:
@@ -101,7 +101,7 @@ Files of interest:
 
 **Tabular runtime** → `storage.tabular_store` + shared `content_storage`.
   - In this recommended dataset-centric design, there is no dedicated tabular SQL database or `TABULAR_POSTGRES_PASSWORD`.
-  - For MinIO/S3-compatible deployments, provide object-store credentials under `content_storage`; `storage.tabular_store` tunes artifact layout and query/runtime limits.
+  - For MinIO/RUNTIME-01-compatible deployments, provide object-store credentials under `content_storage`; `storage.tabular_store` tunes artifact layout and query/runtime limits.
 
 For concrete examples of model configuration, see the main [`README.md`](../README.md#model-configuration).
 
@@ -126,7 +126,7 @@ In a production-like setup you will typically manage:
    - Both store document metadata and vectors; pick based on platform standards.
 
 3. **Object Storage (optional but recommended)**
-   - MinIO, S3, or equivalent.
+   - MinIO, RUNTIME-01, or equivalent.
    - Holds raw ingested documents (PDF, DOCX, PPTX, CSV…).
    - Knowledge Flow stores metadata and vectors in your chosen backend (PostgreSQL/pgvector or OpenSearch), and content in the object store.
    - The same object store also holds tabular Parquet artifacts under the configured `storage.tabular_store.artifacts_prefix`.

@@ -603,8 +603,8 @@ fred-doc-hr                          ← agent name label
 
 ### 5.2 Content
 
-- **Phase 6A:** plain text rendered in a `<p>` with `white-space: pre-wrap`
-- **Phase 6B:** replaced by `<MarkdownRenderer>` — no structural change to `AssistantMessage`
+- **Phase CHAT-01:** plain text rendered in a `<p>` with `white-space: pre-wrap`
+- **Phase CHAT-02:** replaced by `<MarkdownRenderer>` — no structural change to `AssistantMessage`
 
 ### 5.3 Streaming Cursor
 

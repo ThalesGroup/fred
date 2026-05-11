@@ -102,7 +102,7 @@ Workflows MAY:
  - LangGraph / LangChain execution
  - LLM, tool, retriever, embedding calls
  - Database access (SQLite in dev, PostgreSQL in prod, OpenSearch if enabled)
- - Object storage (MinIO/S3)
+ - Object storage (MinIO/RUNTIME-01)
  - CPU-heavy processing
 
 #### 2.3 Timeouts and retries are mandatory

@@ -194,7 +194,7 @@ Quel est l'état de la fonctionnalité de mémoire multi-agent ?
 ```
 
 ```
-Qu'est-ce que C1 et quel est son état d'avancement ?
+Qu'est-ce que CTRLP-03 et quel est son état d'avancement ?
 ```
 
 ```
@@ -242,7 +242,7 @@ Quelles tâches sont planifiées pour les prochains jours ?
 ```
 
 ```
-Qu'est-ce qui doit être fait avant que Félix puisse commencer la phase 6C ?
+Qu'est-ce qui doit être fait avant que Félix puisse commencer la phase CHAT-03 ?
 ```
 
 ```

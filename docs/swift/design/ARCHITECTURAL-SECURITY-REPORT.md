@@ -18,7 +18,7 @@ This separation enables:
 * **High performance (direct streaming, no proxy bottleneck)**
 * **Clear responsibility boundaries**
 
-To securely connect both worlds, the system uses a **short-lived authorization token** called an **Execution Grant**, following a well-known pattern similar to **S3/MinIO presigned URLs**.
+To securely connect both worlds, the system uses a **short-lived authorization token** called an **Execution Grant**, following a well-known pattern similar to **RUNTIME-01/MinIO presigned URLs**.
 
 ---
 
@@ -122,11 +122,11 @@ No trust based on:
 
 ---
 
-## 5. Analogy: S3 / MinIO Presigned URL
+## 5. Analogy: RUNTIME-01 / MinIO Presigned URL
 
 This architecture is equivalent to a widely used pattern:
 
-| Feature   | File Storage (S3 / MinIO) | Agent Execution (This System) |
+| Feature   | File Storage (RUNTIME-01 / MinIO) | Agent Execution (This System) |
 | --------- | ------------------------- | ----------------------------- |
 | Authority | Storage server            | Control Plane                 |
 | Resource  | File                      | Agent                         |

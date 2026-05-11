@@ -4,7 +4,7 @@
 
 ### 0.1 Context
 
-Phase 5D delivered a functional `ManagedChatPage` wired to the SSE runtime
+Phase FRONT-04 delivered a functional `ManagedChatPage` wired to the SSE runtime
 connector. The page works but is minimal: plain text bubbles, no markdown, no
 reasoning trace, no source citations.
 
@@ -43,7 +43,7 @@ surface.
   via `useState`.
 - The SSE connector (`useChatSse`) is the only execution wire. Do not add
   WebSocket or REST polling for message content.
-- Keep existing `HitlPrompt` component unchanged in Phase 6A.
+- Keep existing `HitlPrompt` component unchanged in Phase CHAT-01.
 - Never hand-edit `runtimeOpenApi.ts` — it is generated.
 - **Never show technical identifiers in user-facing UI.** `agent_instance_id`, session UUIDs,
   runtime IDs, and any other internal key must never appear as visible text in a label,
@@ -99,7 +99,7 @@ Simple ownership rule:
 
 ---
 
-## 1 Phase 6A — Page Architecture & Core Layout
+## 1 Phase CHAT-01 — Page Architecture & Core Layout
 
 ### 1.1 Goal
 
@@ -135,9 +135,9 @@ Alignment convention (OpenWebUI / OpenAI):
 - **User message**: right-aligned, max-width 65%, background `--surface-container-high`
 - **Agent turn**: left-aligned, max-width 75%, background `--surface-container`
 
-> **Three-column layout note (Phase 6C prerequisite):** the page must be built with three
-> columns from Phase 6A — left sidebar, centre chat area, right options panel. The right
-> panel returns `null` while Phase 6C is not yet landed, so no structural refactor is needed
+> **Three-column layout note (Phase CHAT-03 prerequisite):** the page must be built with three
+> columns from Phase CHAT-01 — left sidebar, centre chat area, right options panel. The right
+> panel returns `null` while Phase CHAT-03 is not yet landed, so no structural refactor is needed
 > later. See §3.7 for the full three-column spec.
 
 ---
@@ -172,7 +172,7 @@ Alignment convention (OpenWebUI / OpenAI):
 |---|---|---|
 | `ChatMessagesArea` | `organisms/ChatMessagesArea/` | Scrollable message list, auto-scroll, empty state |
 | `AssistantTurn` | `organisms/AssistantTurn/` | Groups ThoughtTrace + AssistantMessage + SourcesPanel for one exchange |
-| `AgentOptionsPanel` | `organisms/AgentOptionsPanel/` | Right-side collapsible panel: agent-specific options + admin debug tools (Phase 6C) |
+| `AgentOptionsPanel` | `organisms/AgentOptionsPanel/` | Right-side collapsible panel: agent-specific options + admin debug tools (Phase CHAT-03) |
 
 ---
 
@@ -347,7 +347,7 @@ Source count is `message.metadata.sources.length`.
 - [x] Create `MessageBubble` atom with `role` variant prop — `atoms/MessageBubble/MessageBubble.tsx`
 - [x] Create `StreamingCursor` atom (CSS blink animation) — `atoms/StreamingCursor/StreamingCursor.tsx`
 - [x] Create `ToolBadge` atom (running / success / error variants) — `atoms/ToolBadge/ToolBadge.tsx`
-- [x] Create `SourceBadge` atom (superscript index, onClick scroll) — `atoms/SourceBadge/SourceBadge.tsx` (done Phase 6B)
+- [x] Create `SourceBadge` atom (superscript index, onClick scroll) — `atoms/SourceBadge/SourceBadge.tsx` (done Phase CHAT-02)
 
 **Molecules**
 
@@ -383,7 +383,7 @@ Source count is `message.metadata.sources.length`.
   (`onTurnPersisted` callback added to `ChatSseCallbacks`; `ManagedChatPage` owns the PATCH call)
 - [x] Replace temp `MessageBubble` with `UserMessage` + `AssistantMessage` + `AssistantTurn`
 - [x] Establish three-column layout in `ManagedChatPage` (left sidebar, chat area, right panel
-  slot) — right slot renders `null` until Phase 6C; no structural refactor needed later
+  slot) — right slot renders `null` until Phase CHAT-03; no structural refactor needed later
 - [x] Add `TogglePanelButton` atom to the chat header (wires to `rightPanelOpen: boolean` state)
 - [x] Map SSE events to `ConversationMessage` state (replace current `Turn[]` grouping model)
 - [x] Normalise history-loaded messages (from runtime `messages_url_template`) to `ConversationMessage[]`;
@@ -425,7 +425,7 @@ Source count is `message.metadata.sources.length`.
 
 ---
 
-## 2 Phase 6B — Markdown & Content Rendering
+## 2 Phase CHAT-02 — Markdown & Content Rendering
 
 ### 2.1 Goal
 
@@ -479,11 +479,11 @@ elements before sanitization.
 
 ---
 
-## 3 Phase 6C — Agent Options Panel & Debug Tools
+## 3 Phase CHAT-03 — Agent Options Panel & Debug Tools
 
 ### 3.1 Goal
 
-Fill the right-side `AgentOptionsPanel` slot established in Phase 6A with two concerns:
+Fill the right-side `AgentOptionsPanel` slot established in Phase CHAT-01 with two concerns:
 
 1. **Agent-specific options** — configurable parameters declared by the agent and rendered
    generically by the frontend (folder/subfolder scope for RAG, model override if exposed, etc.)
@@ -657,7 +657,7 @@ Required header content:
 | "New chat" button | local action | Clears state, generates new `session_id` |
 
 **Agent switching — explicitly deferred.**
-Switching the active agent within an open conversation is not in scope for Phase 6C.
+Switching the active agent within an open conversation is not in scope for Phase CHAT-03.
 The entry point for changing agents remains the team agents page (`TeamAgentsPage`).
 A future phase may add an in-chat agent picker — the header slot is reserved for it,
 but no implementation is started now.
@@ -672,7 +672,7 @@ Additional per-message controls:
 
 #### Layout
 
-- [x] Confirm three-column layout slot is properly wired in `ManagedChatPage` (from Phase 6A)
+- [x] Confirm three-column layout slot is properly wired in `ManagedChatPage` (from Phase CHAT-01)
 - [x] Mount `AgentOptionsPanel` in the right slot; verify panel open/close does not reflow
   `ChatMessagesArea`
 
@@ -728,9 +728,9 @@ Additional per-message controls:
 
 ---
 
-## 4 Phase 6D — Advanced Message Parts (deferred)
+## 4 Phase CHAT-04 — Advanced Message Parts (deferred)
 
-Features deferred until Phases 6A–6C are stable:
+Features deferred until Phases CHAT-01–CHAT-03 are stable:
 
 - Geo/Map rendering (`GeoPart`)
 - Document download/view links (`LinkPart`)
@@ -766,10 +766,10 @@ change.
 | Phase | Status | Notes |
 |---|---|---|
 | AgentFormModal refactor | ✅ Done (2026-04-28) | `TemplateBrowser` + `TemplateCard` + `TuningFieldRenderer` + `AgentFormBody` extracted; all field types; grouping; MCP read-only section; edit context bar + metadata footer. RFC: `docs/rfc/AGENT-INSTANCE-FORM-RFC.md`. |
-| 6A – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
-| 6B – Markdown & content | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass. |
+| CHAT-01 – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
+| CHAT-02 – Markdown & content | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass. |
 | Code quality audit | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`). |
-| 6C – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. Remaining: debug tools section (`DebugDrawer`). |
-| 6D – Advanced parts | Deferred | After 6C |
+| CHAT-03 – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. Remaining: debug tools section (`DebugDrawer`). |
+| CHAT-04 – Advanced parts | Deferred | After CHAT-03 |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).
