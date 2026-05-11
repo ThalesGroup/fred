@@ -233,19 +233,31 @@ Canonical source: [`docs/swift/platform/PLATFORM_RUNTIME_MAP.md`](./docs/swift/p
 
 This defines:
 
-- `fred-runtime` (execution surface, target), Knowledge Flow API, Control Plane API responsibilities.
-- `agentic-backend` is being migrated out — do not add execution logic there.
+- `fred-runtime` (execution framework library), `apps/fred-agents` (production agent pod), Knowledge Flow API, Control Plane API responsibilities.
+- `agentic-backend` has been **removed** from the active monorepo (archived in `ignored/fred/agentic-backend`). Do not reference it as a target or active service.
 - Knowledge Flow / Agentic / Control Plane Temporal worker responsibilities.
 
 ---
 
-## Active Migration
+## Current Architecture State (as of 2026-05-11)
 
-Fred is mid-migration from `agentic-backend` to `fred-runtime` + `control-plane-backend`.
+The backend migration from `agentic-backend` is **complete**. What the monorepo has today:
 
-- New execution code → `fred-runtime` / `fred-sdk`
-- New product/session/admin code → `control-plane-backend`
-- Migration plan: [`docs/swift/backlog/BACKLOG.md`](./docs/swift/backlog/BACKLOG.md) (Phases 0–6)
+| Component | Role |
+|---|---|
+| `libs/fred-sdk` | Shared execution contracts and SDK |
+| `libs/fred-runtime` | Execution framework library (agent engine, SSE, HITL, checkpoints) |
+| `apps/fred-agents` | Production agent pod — runnable agent definitions built on `fred-runtime` |
+| `apps/control-plane-backend` | Product/session/admin APIs, ExecutionGrant issuance |
+| `knowledge-flow-backend` | Ingestion, documents, retrieval |
+| `ignored/fred/agentic-backend` | **Removed** — archived for reference only |
+
+**What remains of the migration:** the frontend still imports ~30 types from `agenticOpenApi.ts`
+(a file generated from the now-removed `agentic-backend` schema). This is Phase 5E — a
+frontend-only cleanup tracked in [`docs/swift/backlog/FRONTEND-BACKLOG.md §7`](./docs/swift/backlog/FRONTEND-BACKLOG.md).
+
+- New execution code → `libs/fred-runtime` / `libs/fred-sdk` / `apps/fred-agents`
+- New product/session/admin code → `apps/control-plane-backend`
 - Phase 1 execution contracts frozen: [`docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md)
 - Phase 3a product boundary: [`docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md)
 
@@ -253,14 +265,11 @@ Fred is mid-migration from `agentic-backend` to `fred-runtime` + `control-plane-
 
 ## Continuation Rules
 
-When continuing the migration:
-
 - treat `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` as the execution contract source of truth
-- treat `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` as the product/session/admin source of truth for Phase 3a
+- treat `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` as the product/session/admin source of truth
 - treat `docs/swift/backlog/BACKLOG.md` as the sequencing and status source of truth
 - prefer editing contract source files over adding compatibility layers
 - if a needed type is missing, fix `fred-sdk` or the FastAPI schema first and regenerate instead of adding local mirror DTOs
-- do not recreate `agentic-backend` behavior inside `fred-runtime`
 - do not add abstractions "for later"; add only what the current phase needs
 - if the documentation leaves a migration choice ambiguous, stop at the smallest safe change and update the docs/swift/backlog rather than improvising
 - if several options exist, choose the smallest one aligned with the documented architecture

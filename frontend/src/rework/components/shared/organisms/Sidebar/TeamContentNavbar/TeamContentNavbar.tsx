@@ -73,6 +73,12 @@ export default function TeamContentNavbar() {
       icon: { category: "outlined", type: "folder", filled: true },
       linkProps: { to: `/team/${teamId}/resources` },
     },
+    {
+      type: "link",
+      label: "Prompts",
+      icon: { category: "outlined", type: "edit_note", filled: true },
+      linkProps: { to: `/team/${teamId}/prompts` },
+    },
   ];
 
   const bannerStyle = {

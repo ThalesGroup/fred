@@ -2176,14 +2176,12 @@ at save time — the agent was created successfully but broke on the first messa
 
 *Depends on: P1-D1b (OpenAPI regenerated)*
 
-- [ ] `PromptsPage` — new rework page under `frontend/src/rework/components/pages/PromptsPage/`
-  - table: name, description, version badge, `import_count`, `session_count`, score stars (or "-"), `updated_at`, actions
-  - create modal: name (required), description, text textarea with live 422 validation
-  - edit modal: same fields + shows current version number
+- [x] `PromptsPage` — core CRUD (2026-05-10, Dimitri)
+  - table: name, description, version, score columns
+  - create/edit modal: name (required), description, text textarea
   - delete with confirmation dialog
-  - score edit (admin only): inline 0–5 star picker
-  - "Promote to team" action: target team picker → `POST /prompts/{id}/promote`
-- [ ] Route + nav entry for `PromptsPage`
+  - deferred: score star picker, "Promote to team" action, import_count/session_count/updated_at columns
+- [x] Route + nav entry for `PromptsPage` (2026-05-10, Dimitri)
 - [ ] `AgentFormModal` — `[Import from library]` button on every `prompt`-type field
   - `PromptPickerModal`: shows team library (name, version, session_count, score), search by name, preview panel, `[Use]` → copies text + stores `prompt_ref`
 - [ ] `AgentFormModal` — `[Save as prompt]` button on every `prompt`-type field
@@ -2192,7 +2190,7 @@ at save time — the agent was created successfully but broke on the first messa
   - version matches current → green "Imported from [name] v2"
   - version stale → amber "Imported from [name] v2 — current is v5" + `[Review]` action
 - [ ] `AgentFormModal` — inline 422 error list below each prompt textarea
-- [ ] `tsc --noEmit` + Prettier pass
+- [x] `tsc --noEmit` + Prettier pass (2026-05-10, Dimitri)
 
 ---
 

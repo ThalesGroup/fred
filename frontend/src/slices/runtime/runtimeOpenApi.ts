@@ -324,6 +324,33 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
+export type RuntimeContext = {
+  access_token?: string | null;
+  access_token_expires_at?: number | null;
+  agent_instance_id?: string | null;
+  attachments_markdown?: string | null;
+  checkpoint_id?: string | null;
+  context_prompt_text?: string | null;
+  correlation_id?: string | null;
+  deep_search?: boolean | null;
+  exchange_id?: string | null;
+  execution_action?: ("execute" | "resume") | null;
+  include_corpus_scope?: boolean | null;
+  include_session_scope?: boolean | null;
+  language?: string | null;
+  refresh_token?: string | null;
+  search_policy?: ("strict" | "hybrid" | "semantic") | null;
+  search_rag_scope?: ("corpus_only" | "hybrid" | "general_only") | null;
+  selected_chat_context_ids?: string[] | null;
+  selected_document_libraries_ids?: string[] | null;
+  selected_document_uids?: string[] | null;
+  session_id?: string | null;
+  team_id?: string | null;
+  template_agent_id?: string | null;
+  trace_id?: string | null;
+  user_groups?: string[] | null;
+  user_id?: string | null;
+};
 export type RuntimeExecuteRequest = {
   /** Direct template agent_id. For internal/dev use only. */
   agent_id?: string | null;
@@ -351,10 +378,8 @@ export type RuntimeExecuteRequest = {
   invocation_turns?: ConversationTurn[];
   /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
   resume_payload?: any | null;
-  /** Optional per-request context passthrough (language, user_groups, etc.). Kept for transitional compatibility; prefer execution_grant for identity fields. In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' unless runtime_context.user_id is explicitly provided. */
-  runtime_context?: {
-    [key: string]: any;
-  } | null;
+  /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id) in this model are superseded by execution_grant for managed execution — set them only in dev/direct mode. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
+  runtime_context?: RuntimeContext | null;
   /** Session identifier for multi-turn continuity. Keep stable across turns. */
   session_id?: string | null;
 };

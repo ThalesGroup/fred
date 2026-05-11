@@ -56,6 +56,27 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ---
 
+### `PromptPicker`
+
+**Location:** `src/rework/components/shared/molecules/PromptPicker/PromptPicker.tsx`
+**Status:** `Functional`
+
+Inline prompt library picker used inside `TuningFieldRenderer` for `type: "prompt"` tuning fields.
+Renders a toggle button ("Pick from library"). When open, shows all available `ContextPromptSummary`
+items as a card grid (auto-fill columns, min 240px). Each card: name + scope badge + description (2
+lines clamped). Clicking a card calls `onSelect(id)` and closes itself; the parent fetches full text
+and fills the `TextArea`.
+
+#### Open UX issues
+
+- **Content preview** — cards show name + description only. Full prompt text preview requires the
+  backend `GET /teams/{id}/prompts/context` response to include a `text_snippet` field (tracked in
+  P1-D1b). No extra fetches until then.
+- **Loading state** — no skeleton shown while `isLoadingSelection` is true; button goes disabled
+  but the grid stays visible with stale content. Consider a spinner overlay on the grid during load.
+
+---
+
 ### `ThoughtTrace`
 
 **Location:** `src/rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`

@@ -37,6 +37,7 @@
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
   width: 100%;
+  height: 100%;
   --blur: 0px;
   --newChatDisplay: none;
 
@@ -119,23 +120,6 @@
   gap: var(--spacing-xs);
 }
 
-.agentStatus {
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-  font: var(--font-label-small);
-  text-transform: uppercase;
-}
-
-.agentStatus[data-status="enabled"] {
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  color: var(--success);
-}
-
-.agentStatus[data-status="disabled"] {
-  background: color-mix(in srgb, var(--error) 12%, transparent);
-  color: var(--error);
-}
-
 .agentCategory {
   color: var(--agent-meta-color);
   font: var(--font-label-large);
@@ -144,15 +128,6 @@
 .agentTemplate {
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
-}
-
-.runtimeUnavailable {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--error) 12%, transparent);
-  padding: 0.1rem 0.5rem;
-  color: var(--error);
-  font: var(--font-label-small);
-  text-transform: uppercase;
 }
 
 .catalogWarning {

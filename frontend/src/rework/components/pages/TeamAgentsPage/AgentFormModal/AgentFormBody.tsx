@@ -80,6 +80,7 @@ type AgentFormBodyProps = {
   isSubmitting: boolean;
   submitAttempted: boolean;
   editInstance?: ManagedAgentInstanceSummary;
+  teamId?: string;
   onDisplayNameChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onTuningChange: (key: string, value: unknown) => void;
@@ -99,6 +100,7 @@ export function AgentFormBody({
   isSubmitting,
   submitAttempted,
   editInstance,
+  teamId,
   onDisplayNameChange,
   onDescriptionChange,
   onTuningChange,
@@ -142,6 +144,7 @@ export function AgentFormBody({
         value={tuningFieldValues[field.key]}
         onChange={onTuningChange}
         disabled={isSubmitting}
+        teamId={teamId}
         error={
           submitAttempted && field.required && !tuningFieldValues[field.key] ? `${field.title} is required` : undefined
         }

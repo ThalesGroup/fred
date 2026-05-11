@@ -145,7 +145,7 @@ export default function ManagedChatPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showError } = useToast();
 
-  const [sessionId, setSessionId] = useState<string | null>(() => searchParams.get("session"));
+  const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
@@ -168,7 +168,6 @@ export default function ManagedChatPage() {
 
   const bindSessionId = useCallback(
     (sid: string) => {
-      setSessionId(sid);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -200,6 +199,13 @@ export default function ManagedChatPage() {
     teamId: teamId ?? "",
     ...sseCallbacks,
   });
+
+  // Clear local state whenever the user navigates to a different session.
+  useEffect(() => {
+    reset();
+    setPendingHitl(null);
+    setInput("");
+  }, [sessionId, reset]);
 
   // Sync search defaults from the agent's effective options after the first prepare-execution.
   useEffect(() => {
@@ -251,8 +257,6 @@ export default function ManagedChatPage() {
   };
 
   const handleNewConversation = () => {
-    reset();
-    setSessionId(null);
     setPendingHitl(null);
     setSearchParams(
       (prev) => {
@@ -262,6 +266,7 @@ export default function ManagedChatPage() {
       },
       { replace: true },
     );
+    // reset() and setInput("") are handled by the sessionId useEffect above.
   };
 
   return (
@@ -325,6 +330,7 @@ export default function ManagedChatPage() {
               ragScope={ragScope}
               onRagScopeChange={setRagScope}
               options={effectiveChatOptions}
+              boundLibraryIds={effectiveChatOptions?.bound_library_ids ?? undefined}
             />
           </div>
         )}

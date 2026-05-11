@@ -633,21 +633,62 @@ This creates a hybrid UX even when execution itself is migrated.
 
 ---
 
-## 7 Phase 5E - Knowledge-Flow And Shared Shell Alignment
+## 7 Phase 5E - Agentic-Backend Removal From Frontend
 
 ### 7.1 Goal
 
-Keep non-chat pages compatible with the same active-team/bootstrap model.
+Remove all frontend imports from `agenticOpenApi.ts` and the two companion agentic
+API slices (`agenticInspectionApi.ts`, `agenticSourceApi.ts`).
+
+**Context:** `agentic-backend` has been removed from the active monorepo (archived to
+`ignored/fred/agentic-backend`). The backend migration is complete. What remains is
+purely a frontend cleanup: ~30 files still import types from `agenticOpenApi.ts`, a
+file that was generated from the now-removed service's schema.
+
+The types needed by the rework/managed path already exist in `runtimeOpenApi.ts`
+(generated from `apps/fred-agents`). The old `components/` and `pages/` tree
+(legacy chat, MCP hub, monitoring) is a lower priority — those surfaces will be
+formally deprecated when the rework path is complete.
 
 ---
 
-### 7.2 Tasks
+### 7.2 Files Still Importing From `agenticOpenApi`
 
-- [x] Review knowledge/resource pages for dependence on `/control-plane/v1/user`
-  as bootstrap
-- [ ] Ensure personal-team-only mode does not break knowledge-flow navigation
-- [x] Ensure shared UI properties come from the converged bootstrap path, not
-  legacy agentic config endpoints
+**Rework path (highest priority — migrate to `runtimeOpenApi`):**
+- `hooks/useChatSse.ts` — `AwaitingHumanEvent`, `ChatMessage` (RuntimeContext done)
+- `rework/components/pages/ManagedChatPage/ManagedChatPage.tsx` — `AwaitingHumanEvent`, `ChatMessage`, `VectorSearchHit`
+- `rework/components/pages/ManagedChatPage/MessageBubble/MessageBubble.tsx` — `ChatMessage`
+- `rework/components/pages/ManagedChatPage/useSessionHistory.ts` — `ChatMessage`
+- `rework/components/shared/molecules/ThoughtTrace/ThoughtTrace.tsx`
+- `rework/components/shared/molecules/SourcesPanel/SourcesPanel.tsx`
+- `rework/components/shared/molecules/SourcesPanel/SourceCard/SourceCard.tsx`
+- `rework/components/shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal.tsx`
+- `rework/components/shared/molecules/HitlPrompt/HitlPrompt.tsx`
+- `rework/components/shared/organisms/AssistantTurn/AssistantTurn.tsx`
+- `rework/utils/traceUtils.ts`
+
+**Shared hooks (used by both rework and legacy):**
+- `hooks/useAgentSelector.ts` — `ChatMessage`
+- `hooks/useGroupMessages.ts` — `ChatMessage`
+- `common/agent.ts` — `Agent`
+
+**Legacy surfaces (lower priority — deprecate with the surface):**
+- `pages/Chat.tsx` — `useListAgentsAgenticV1AgentsGetQuery` (live API call)
+- `hooks/useAgentUpdater.ts` — `Agent2`, live API call
+- `components/chatbot/` — 10 files (`ChatBotUtils`, `citations`, `HitlInlineCard`, `MessageRuntimeContextHeader`, `MessageRuntimeContextPopover`, `MessagesArea`, `ReasoningStepBadge`, `ReasoningStepsAccordion`, `SourceDetailsDialog`, `Sources`, `SourceTile`, `tokenUsage`, `TraceDetailDialog`)
+- `components/agentHub/` — `AgentToolsSelection`, `TuningForm`, `toolParamsRegistry`
+- `components/mcpHub/` — `McpServerCard`, `McpServerForm`
+- `components/monitoring/` — `KpiDashboard`, `TokenUsageChart`, `LogConsoleTile`
+
+---
+
+### 7.3 Tasks
+
+- [ ] Migrate rework path files (11 files above) to `runtimeOpenApi` types
+- [ ] Migrate shared hooks (3 files above)
+- [ ] Formally deprecate legacy `pages/Chat.tsx` and `components/chatbot/` surfaces
+- [ ] Delete `agenticOpenApi.ts` once all imports are cleared
+- [ ] Delete `agenticInspectionApi.ts` and `agenticSourceApi.ts` once consumers are removed
 
 ---
 

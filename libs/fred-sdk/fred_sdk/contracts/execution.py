@@ -64,7 +64,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .context import ConversationTurn
+from .context import ConversationTurn, RuntimeContext
 from .models import TuningValue
 
 
@@ -405,14 +405,16 @@ class RuntimeExecuteRequest(BaseModel):
         ),
     )
 
-    # Optional per-request runtime context (transitional)
-    runtime_context: dict[str, Any] | None = Field(
+    # Optional per-request runtime context (typed)
+    runtime_context: RuntimeContext | None = Field(
         default=None,
         description=(
-            "Optional per-request context passthrough (language, user_groups, etc.). "
-            "Kept for transitional compatibility; prefer execution_grant for identity fields. "
-            "In agent_id direct mode (no execution_grant), user_id defaults to 'unknown' "
-            "unless runtime_context.user_id is explicitly provided."
+            "Per-request execution context carrying per-turn user retrieval selections "
+            "(library IDs, search policy, context prompt text) and user auth delegation. "
+            "Group A identity fields (user_id, team_id, session_id) in this model are "
+            "superseded by execution_grant for managed execution — set them only in dev/direct mode. "
+            "Group B auth fields (access_token, refresh_token) are required when the runtime "
+            "calls knowledge-flow backend on behalf of the user."
         ),
     )
 
@@ -463,22 +465,19 @@ class RuntimeExecuteRequest(BaseModel):
         """Return user_id from execution_grant or runtime_context, in that order."""
         if self.execution_grant is not None:
             return self.execution_grant.user_id
-        ctx = self.runtime_context or {}
-        return ctx.get("user_id")
+        return self.runtime_context.user_id if self.runtime_context else None
 
     def effective_team_id(self) -> str | None:
         """Return team_id from execution_grant or runtime_context, in that order."""
         if self.execution_grant is not None:
             return self.execution_grant.team_id
-        ctx = self.runtime_context or {}
-        return ctx.get("team_id")
+        return self.runtime_context.team_id if self.runtime_context else None
 
     def effective_session_id(self) -> str | None:
         """Return session_id, preferring the top-level field over runtime_context."""
         if self.session_id is not None:
             return self.session_id
-        ctx = self.runtime_context or {}
-        return ctx.get("session_id")
+        return self.runtime_context.session_id if self.runtime_context else None
 
     # Convenience alias used by internal callers that expect "message"
     @property
@@ -502,7 +501,7 @@ class RuntimeExecuteRequest(BaseModel):
         """
         ctx: dict[str, Any] = {}
         if self.runtime_context:
-            ctx.update(self.runtime_context)
+            ctx.update(self.runtime_context.model_dump(exclude_none=True))
         if self.session_id is not None:
             ctx["session_id"] = self.session_id
         if self.checkpoint_id is not None:
@@ -518,14 +517,14 @@ class RuntimeExecuteRequest(BaseModel):
         trace_id = (
             self.execution_grant.trace_id
             if self.execution_grant is not None
-            else (self.runtime_context or {}).get("trace_id")
+            else (self.runtime_context.trace_id if self.runtime_context else None)
         )
         if trace_id:
             ctx["trace_id"] = trace_id
         correlation_id = (
             self.execution_grant.correlation_id
             if self.execution_grant is not None
-            else (self.runtime_context or {}).get("correlation_id")
+            else (self.runtime_context.correlation_id if self.runtime_context else None)
         )
         if correlation_id:
             ctx["correlation_id"] = correlation_id

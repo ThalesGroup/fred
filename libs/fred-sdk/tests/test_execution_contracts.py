@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.execution import (
     ActorContext,
     ExecutionGrant,
@@ -348,7 +349,7 @@ def test_effective_user_id_from_runtime_context_fallback() -> None:
     req = RuntimeExecuteRequest(
         agent_id="my-agent",
         input="hello",
-        runtime_context={"user_id": "ctx-user"},
+        runtime_context=RuntimeContext(user_id="ctx-user"),
     )
     assert req.effective_user_id() == "ctx-user"
 
@@ -368,7 +369,7 @@ def test_effective_session_id_prefers_top_level() -> None:
         agent_id="my-agent",
         input="hello",
         session_id="top-level-session",
-        runtime_context={"session_id": "ctx-session"},
+        runtime_context=RuntimeContext(session_id="ctx-session"),
     )
     assert req.effective_session_id() == "top-level-session"
 
@@ -377,7 +378,7 @@ def test_effective_session_id_falls_back_to_context() -> None:
     req = RuntimeExecuteRequest(
         agent_id="my-agent",
         input="hello",
-        runtime_context={"session_id": "ctx-session"},
+        runtime_context=RuntimeContext(session_id="ctx-session"),
     )
     assert req.effective_session_id() == "ctx-session"
 
@@ -400,7 +401,7 @@ def test_to_legacy_context_merges_fields() -> None:
         session_id="sess-abc",
         checkpoint_id="cp-1",
         execution_grant=grant,
-        runtime_context={"language": "fr"},
+        runtime_context=RuntimeContext(language="fr"),
     )
     ctx = req.to_legacy_context()
     assert ctx["session_id"] == "sess-abc"
@@ -421,11 +422,11 @@ def test_to_legacy_context_without_grant() -> None:
         session_id="sess-xyz",
         checkpoint_id="cp-ctx",
         resume_payload={"choice_id": "ok"},
-        runtime_context={
-            "user_id": "ctx-user",
-            "trace_id": "trace-ctx",
-            "correlation_id": "corr-ctx",
-        },
+        runtime_context=RuntimeContext(
+            user_id="ctx-user",
+            trace_id="trace-ctx",
+            correlation_id="corr-ctx",
+        ),
     )
     ctx = req.to_legacy_context()
     assert ctx["session_id"] == "sess-xyz"

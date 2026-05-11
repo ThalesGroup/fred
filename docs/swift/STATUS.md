@@ -10,7 +10,7 @@ For sprint-level structured data, read [`docs/data/sprint.yaml`](data/sprint.yam
 Ask Claude Code directly: *"What is Simon working on?"* · *"What tests cover MCP config?"*
 · *"What is the next backend task for Dimitri?"* · *"What's blocking Félix?"*
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ---
 
@@ -28,17 +28,15 @@ Last updated: 2026-05-10
 
 ---
 
-## In Progress Now (week of 2026-05-07)
+## In Progress Now (week of 2026-05-11)
 
 | Feature | Owner | Status | Backlog ref |
 |---|---|---|---|
 | S1 — E2E live stack validation (managed + HITL scenarios) | Simon | In progress | [BACKLOG §3b.7](backlog/BACKLOG.md) |
 | 6C — Agent options panel + session title inline edit | Félix | In progress (unblocked) | [CHAT-UI-BACKLOG §3](backlog/CHAT-UI-BACKLOG.md) |
 | M1-F.1..F.4 — Multi-agent memory hardening (4 branches) | Dimitri | Next up | [MULTI-AGENT-MEMORY-BACKLOG](backlog/MULTI-AGENT-MEMORY-BACKLOG.md) |
-| P1-D1 — Backend prompt CRUD | Codex | **Done 2026-05-08** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| P1-D1b — Backend extension (versioning, analytics, context) | Dimitri | **Done 2026-05-10** | [BACKLOG §3d.9](backlog/BACKLOG.md) · [RFC](rfc/PROMPT-LIBRARY-RFC.md) |
-| P1-D2 — PromptsPage + AgentFormModal (import, drift badge, 422) | TBD | **Next — unblocked** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
-| P1-D3 — Chat context picker (replaces free textarea) | Félix | **Next — unblocked** | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| P1-D2 — PromptsPage core CRUD + route + nav | Dimitri | In progress (core done; AgentFormModal extensions remain) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
+| P1-D3 — Chat context picker (replaces free textarea) | Félix | Next — unblocked | [BACKLOG §3d.9](backlog/BACKLOG.md) |
 | C1-deferred — Model profiles endpoint + form picker | Dimitri | Queued | [BACKLOG §3d](backlog/BACKLOG.md) |
 | P1-E — Global prompt marketplace | Dimitri | Deferred (after P1-D2 + P1-D3) | [BACKLOG §3d.10](backlog/BACKLOG.md) |
 | P1-F — Token cost KPI integration | Simon + Dimitri | Deferred (after O1 + fred-core) | [BACKLOG §3d.9](backlog/BACKLOG.md) |
@@ -46,10 +44,12 @@ Last updated: 2026-05-10
 
 ---
 
-## Closed This Week (2026-05-01 → 2026-05-10)
+## Closed This Week (2026-05-01 → 2026-05-11)
 
 | Feature | Owner | Closed | Backlog ref | Tests |
 |---|---|---|---|---|
+| RT-1 — Typed ChatContext contract: `RuntimeExecuteRequest.runtime_context dict→RuntimeContext`, `search_policy` Literal, `context_prompt_text` field, `EffectiveChatOptions.bound_library_ids` | Dimitri | 2026-05-11 | [EXECUTION-CONTEXT-RFC](rfc/EXECUTION-CONTEXT-RFC.md) | 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane), tsc clean |
+| FE-1 — Wire ChatContext in useChatSse: `RuntimeContext` from runtimeOpenApi, forward `context_prompt_text`, pass `bound_library_ids` to AgentOptionsPanel | Félix/Dimitri | 2026-05-11 | [EXECUTION-CONTEXT-RFC](rfc/EXECUTION-CONTEXT-RFC.md) | tsc clean, prettier clean |
 | P1-D1b — Backend extension: versioning, analytics, context integration | Dimitri | 2026-05-10 | [BACKLOG §3d.9](backlog/BACKLOG.md) | `test_main.py` (6 new tests, 120 passing) |
 | R1b-A — fred-runtime raw type-check cleanup + baseline emptied | Codex | 2026-05-09 | [FRED-RUNTIME-QUALITY](backlog/FRED-RUNTIME-QUALITY.md) | `make code-quality`, `make test`, raw `basedpyright` |
 | C1 — Pod catalog exposure + MCP tri-state selection | Dimitri | 2026-05-06 | [BACKLOG §3d](backlog/BACKLOG.md) | `test_mcp_config.py`, `test_agent_app.py`, `test_main.py` |
@@ -85,7 +85,7 @@ Last updated: 2026-05-10
 | Phase 3 complete — E2E validated + M1 hardened | S1 + M1-F.1..F.4 | TBD | In progress | ~60% |
 | Prompt library shipped — P1-D1 + P1-D2 | P1-D1 ✅ + P1-D2 | TBD | In progress | 50% |
 | Chat UI Phase 6 complete — 6C shipped | 6C | TBD | In progress | ~80% |
-| Frontend agentic-backend removal — Phase 5E | 5E | TBD | Not started | 0% |
+| Frontend agenticOpenApi cleanup — Phase 5E (backend already removed) | 5E | TBD | Not started | 0% |
 | Agent evaluation v1 — O1 harness live | O1 | TBD | Not started | 0% |
 | Model profiles — C1-deferred shipped | C1-deferred | TBD | Queued | 0% |
 

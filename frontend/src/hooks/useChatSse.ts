@@ -17,7 +17,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { upsertOne } from "../components/chatbot/ChatBotUtils";
 import { KeyCloakService } from "../security/KeycloakService";
-import type { AwaitingHumanEvent, ChatMessage, RuntimeContext } from "../slices/agentic/agenticOpenApi";
+import type { AwaitingHumanEvent, ChatMessage } from "../slices/agentic/agenticOpenApi";
 import type { EffectiveChatOptions } from "../slices/controlPlane/controlPlaneOpenApi";
 import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../slices/controlPlane/controlPlaneOpenApi";
 import type {
@@ -25,6 +25,7 @@ import type {
   AwaitingHumanRuntimeEvent,
   FinalRuntimeEvent,
   NodeErrorRuntimeEvent,
+  RuntimeContext,
   StatusRuntimeEvent,
   ToolCallRuntimeEvent,
   ToolResultRuntimeEvent,
@@ -324,6 +325,11 @@ export function useChatSse(
       const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
+      const effectiveContext: RuntimeContext = {
+        ...(runtimeContext ?? {}),
+        ...(prep.context_prompt_text != null ? { context_prompt_text: prep.context_prompt_text } : {}),
+      };
+
       const exchangeId = uuidv4();
       const effectiveSessionId = sessionId ?? "draft";
 
@@ -349,7 +355,7 @@ export function useChatSse(
             execution_grant: prep.execution_grant,
             input,
             session_id: sessionId,
-            runtime_context: runtimeContext ?? null,
+            runtime_context: effectiveContext,
           },
           prep.execute_stream_url,
           token,

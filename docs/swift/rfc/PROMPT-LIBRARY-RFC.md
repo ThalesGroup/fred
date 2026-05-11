@@ -1,16 +1,195 @@
-# RFC — Prompt Library Architecture (Extended)
+# RFC — Safe Prompt Authoring, Validation, and Library
 
-**Status**: Proposed  
-**Date**: 2026-05-09  
+**Status**: Slices A + B + C implemented (2026-05-07) · Slice D backend implemented (2026-05-08) · P1-D1b in progress · Slice E / P1-E deferred  
 **Author**: Dimitri Tombroff  
-**Supersedes**: `PROMPT-SAFETY-RFC.md §Slice D` (basic library) — this RFC extends and partially revises that slice.  
-**Related backlog items**: P1-D1b, P1-D2, P1-D3, P1-F
+**Date**: 2026-05-07 (safety) — 2026-05-09 (library extension)  
+**Area**: `fred-sdk`, `fred-runtime`, `control-plane-backend`, `frontend`  
+**Supersedes**: `PROMPT-SAFETY-RFC.md` (deleted — all content absorbed here)
 
 ---
 
-## 1. Context — what Slice D established
+## Part 1 — Safety: Rendering, Validation, and Atomic Creation (Slices A, B, C)
 
-`PROMPT-SAFETY-RFC.md §Slice D` defined a minimal first-class prompt library:
+### 1. The problem
+
+#### 1.1 The rendering crash
+
+System prompt templates are rendered at execution time using Python's `str.format_map()`.
+The `_LiteralFriendlyDict` guard handles one case — a simple unknown key:
+
+```
+{unknown_key}  →  __missing__("unknown_key")  →  literal "{unknown_key}"   ✓
+```
+
+But it does not protect against:
+
+| Pattern in template | What Python does | Result |
+|---|---|---|
+| `{toto.toto}` | resolves `dict['toto']` → returns `"{toto}"` (str), then accesses `.toto` on it | `AttributeError: 'str' object has no attribute 'toto'` |
+| `{}` | empty field name | `ValueError: Single '}' encountered in format string` |
+| `function main() { ... }` | unbalanced brace, depending on surrounding chars | `ValueError` |
+| `{0}` | positional reference | accesses index 0 of the dict values — unexpected |
+
+All of these crash the agent silently at turn-start with no indication that the system prompt is the cause.
+
+Real production incident (2026-05-06): a system prompt containing Excel VBA with curly braces (`function main(workbook: ExcelScript.Workbook) { ... }`) triggered:
+
+```
+AttributeError: 'str' object has no attribute 'toto'
+  File "react_prompting.py", line 111, in render_prompt_template
+      return template.format_map(
+```
+
+#### 1.2 No validation at save time
+
+The control-plane `_validate_tuning_field_values` treats `"prompt"` fields as free-form strings — any text is stored unconditionally. Validation (and the crash) only surfaces when the user sends their first message.
+
+#### 1.3 Poor creation UX
+
+The `develop` (kea) flow creates an empty agent shell first and applies the system prompt in a second update call. If the prompt is rejected at step 2, the empty agent record already exists and must be manually deleted. Swift's atomic `CreateAgentInstanceRequest` avoids this, but without save-time validation the outcome is identical: the agent is created, the user cannot chat with it, and they have no actionable error message.
+
+#### 1.4 No independent prompt management
+
+A prompt lives only as an inline string inside an agent instance. There is no way to author a prompt separately, reuse it across agents, or maintain a team-scoped prompt library as a first-class control-plane object.
+
+---
+
+### 2. Design rule — prompt resources and agent bindings stay separate
+
+- a `Prompt` is a control-plane product resource with its own CRUD lifecycle
+- a managed agent instance stores prompt text only through its `prompts.*` tuning values
+- importing a prompt into an agent is a **copy** operation, not a live binding
+- publishing a team prompt to a global catalog is also a **copy** operation
+- the personal prompt library reuses the reserved control-plane team `personal`; no parallel user-scoped prompt API is introduced
+
+---
+
+### 3. Slice A — Canonical token registry + safe rendering engine
+
+#### A.1 Central token registry (`fred-sdk`)
+
+`fred_sdk.contracts.prompt_utils` defines the canonical set of supported template tokens — the single source of truth imported by the renderer, the validator, and (eventually) the UI hint API.
+
+```python
+PROMPT_SAFE_TOKENS: dict[str, str] = {
+    "today":             "ISO-8601 date at execution time (e.g. 2026-05-07)",
+    "response_language": "Human-readable response language (e.g. English, français)",
+    "session_id":        "Active session identifier",
+    "user_id":           "Authenticated user identifier",
+    "agent_id":          "Agent definition identifier",
+}
+```
+
+Adding a new supported token requires editing exactly this dict — no other site needs to change.
+
+> **TODO (UI, deferred):** Expose `PROMPT_SAFE_TOKENS` via a lightweight read-only endpoint (e.g. `GET /control-plane/v1/prompt-tokens`) so that the prompt textarea can show an inline "supported variables" hint panel. Until that endpoint exists, the frontend hard-codes the list. Tracked in BACKLOG as a UX improvement.
+
+#### A.2 Safe rendering engine (`fred-runtime`)
+
+Replace `str.format_map()` with a regex-based substitution that only rewrites tokens present in the merged token map and passes everything else through unchanged.
+
+```
+{today}              →  "2026-05-07"      (canonical token, substituted)
+{response_language}  →  "English"         (canonical token, substituted)
+{my_custom_var}      →  "{my_custom_var}" (not in map, preserved as literal)
+{toto.toto}          →  "{toto.toto}"     (not a simple identifier, untouched)
+{}                   →  "{}"              (not a simple identifier, untouched)
+function() { ... }   →  "function() { ... }" (no brace pattern match, untouched)
+```
+
+```python
+_SIMPLE_TOKEN_RE = re.compile(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}')
+
+def render_prompt_template(template: str, *, tokens: dict[str, str]) -> str:
+    def _replace(m: re.Match) -> str:
+        return tokens.get(m.group(1), m.group(0))
+    return _SIMPLE_TOKEN_RE.sub(_replace, template)
+```
+
+The pattern `[a-zA-Z_][a-zA-Z0-9_]*` never matches `toto.toto`, `0`, or the empty string. Those pass through unchanged.
+
+**Two-tier token map:**
+
+| Surface | Authored by | Token set | Validated at persistence |
+|---|---|---|---|
+| `prompts.*` tuning value (UI form) | Team admin / end user | `PROMPT_SAFE_TOKENS` only | Yes — strict (Slice B) |
+| `system_prompt_template` in Python `AgentDefinition` | Agent developer | `PROMPT_SAFE_TOKENS` + runtime extras | No — developer responsibility |
+
+**Scope**: `fred_runtime/react/react_prompting.py` (`render_prompt_template` + `_LiteralFriendlyDict` removed). Same change applies to `fred_runtime/deep/deep_runtime.py`.  
+**No API contract change. No migration. No schema change.**
+
+---
+
+### 4. Slice B — Prompt template validation at persistence (`control-plane-backend`)
+
+`validate_prompt_template(text: str) -> list[PromptTemplateError]` in `fred_sdk.contracts.prompt_utils`. Called by the control-plane service before storing any `prompts.*` field value.
+
+```python
+class PromptTemplateError(BaseModel):
+    pattern: str          # the offending text fragment
+    reason: str           # human-readable explanation
+    token_hint: str | None = None  # set when a close-but-wrong token is detected
+```
+
+The validator runs two passes:
+
+**Pass 1 — Non-simple brace patterns (always an error):**
+
+| Found | Error reason |
+|---|---|
+| `{}` | "Empty placeholder — not a valid template token" |
+| `{0}`, `{1}` | "Positional placeholder — not supported in prompt templates" |
+| `{toto.toto}` | "Dotted attribute syntax is not supported in prompt templates" |
+| `{ space }` | "Whitespace in placeholder — not a valid template token" |
+
+**Pass 2 — Unknown simple tokens:**
+
+Any `{identifier}` not in `PROMPT_SAFE_TOKENS` is an error. The error message lists all supported tokens.
+
+**Validation policy:**
+
+| Situation | HTTP response |
+|---|---|
+| Any non-simple brace pattern | `422` with list of `PromptTemplateError` |
+| Any unknown `{identifier}` token | `422` with list of `PromptTemplateError` |
+| Template contains no `{...}` patterns | `200` / `201` |
+| Template uses only canonical tokens | `200` / `201` |
+
+No warnings, no partial acceptance. The error payload lists every offending pattern in one response.
+
+**Where validation is called:**
+- `_validate_tuning_field_values()` — when `field.type == "prompt"`
+- Prompt library create/update (Slice D)
+
+---
+
+### 5. Slice C — Atomic creation guarantee
+
+Swift already sends the full payload in a single `CreateAgentInstanceRequest`. With Slice B in place, validation runs before the INSERT — the agent is either created fully valid or not created at all.
+
+**What this slice adds:**
+- Explicit test coverage for the create-then-reject scenario (bad prompt → 422, no agent row written; fix prompt → 201, agent created).
+- The structured error shape from Slice B is forwarded as-is from the 422 body:
+
+```json
+{
+  "detail": "prompts.system contains invalid template patterns",
+  "errors": [
+    { "pattern": "{toto.toto}", "reason": "Dotted attribute syntax is not supported in prompt templates" },
+    { "pattern": "{}", "reason": "Empty placeholder — not a valid template token" }
+  ]
+}
+```
+
+- The frontend `AgentFormModal` must surface these errors next to the prompt textarea, not as a generic toast. (UI implementation tracked as a TODO in `CHAT-UI-BACKLOG.md`.)
+
+---
+
+## Part 2 — Library Architecture (Slices D, E / P1-D1b through P1-F)
+
+### 6. Context — what Slice D established
+
+`§Slice D` in the original safety RFC defined a minimal first-class prompt library:
 
 - `PromptRow` scoped to a `team_id`
 - CRUD endpoints `POST/GET/PUT/DELETE /teams/{id}/prompts`
@@ -18,60 +197,41 @@
 - Personal prompts = reserved `personal` team (no separate user API)
 - No versioning, no analytics, no cross-team visibility — explicitly deferred
 
-Slice D backend was implemented by Codex (2026-05-08):
-`PromptRow`, `PromptStore`, Alembic migration, Pydantic schemas, API endpoints.
+Slice D backend was implemented by Codex (2026-05-08): `PromptRow`, `PromptStore`, Alembic migration, Pydantic schemas, API endpoints.
 
-This RFC covers the follow-up: **versioning, analytics, personal→team visibility,
-chat context integration as a live library reference, and promotion flows.**
+This part covers the follow-up: **versioning, analytics, personal→team visibility, chat context integration, and promotion flows.**
 
 ---
 
-## 2. Problem
+### 7. Extended problem
 
-### 2.1 No quality signal
+#### 7.1 No quality signal
 
-Without versioning and usage analytics, the library is a flat list with no
-indication of which prompts are mature, how often they are used, or whether
-a given agent is running on an outdated prompt version. After three months,
-the library becomes a graveyard — no one knows what is still relevant.
+Without versioning and usage analytics, the library is a flat list with no indication of which prompts are mature, how often they are used, or whether a given agent is running on an outdated prompt version.
 
-### 2.2 Personal prompts are invisible in team conversations
+#### 7.2 Personal prompts are invisible in team conversations
 
-Alice works in the `bid-and-capture` team. She experiments with a useful
-context prompt in her personal space. When she opens a conversation with the
-team Bid agent, she has no way to apply her personal prompt — the context
-picker only shows team prompts. She either rewrites it by hand or gives up.
-The team never benefits from her work.
+When a user opens a conversation with a team agent, she has no way to apply a personal prompt — the context picker only shows team prompts.
 
-### 2.3 Chat context is a free textarea
+#### 7.3 Chat context is a free textarea
 
-The current `AgentOptionsPanel` exposes a free textarea for conversation
-context. This reproduces the "foire à l'empoigne" problem: every user
-invents a mediocre "respond in French" rather than picking the curated
-version the team agreed on. There is no usage data, no curation, no
-quality signal.
+The current `AgentOptionsPanel` exposes a free textarea for conversation context. Without curation or a quality signal, every user invents their own version of the same prompt.
 
-### 2.4 No token cost visibility
+#### 7.4 No token cost visibility
 
-Prompt quality cannot be assessed purely by usage count. A prompt that
-produces short, precise answers is cheaper than one that generates verbose
-outputs. Without token cost data per prompt, the team has no way to evaluate
-whether a change improved or degraded efficiency.
+A prompt that produces short, precise answers is cheaper than a verbose one. Without token cost data per prompt, the team cannot evaluate efficiency changes.
 
-### 2.5 No path to influence the library
+#### 7.5 No path to influence the library
 
-A team member who writes a good personal prompt has no mechanism to share
-it. The team library can only grow via admin action. This creates a bottleneck
-and discourages experimentation.
+A team member who writes a good personal prompt has no mechanism to share it. The library can only grow via admin action.
 
 ---
 
-## 3. Proposed Design
+### 8. Proposed Design
 
-### 3.1 Scope hierarchy
+#### 8.1 Scope hierarchy
 
-Three levels, strictly ordered. Promotion between levels is always
-**copy-by-value** — never a live link.
+Three levels, strictly ordered. Promotion between levels is always **copy-by-value** — never a live link.
 
 ```
 personal/{user_id}          team/{team_id}          marketplace
@@ -81,15 +241,13 @@ Alice's private space  →   Shared team space  →    Global catalog
                  (copy)             (copy, P1-E)
 ```
 
-All three levels use the same `PromptRow` structure (scoped by `team_id`).
-The marketplace uses a separate `PublishedPromptRow` table — unchanged from
-`PROMPT-SAFETY-RFC.md §Slice E`, deferred to P1-E.
+All three levels use the same `PromptRow` structure (scoped by `team_id`). The marketplace uses a separate `PublishedPromptRow` table — unchanged from §Slice E, deferred to P1-E.
 
 **Reserved team ids:**
 - `personal` resolves to the calling user's personal team (existing control-plane convention)
 - Named team ids resolve normally
 
-### 3.2 Data model — extended PromptRow
+#### 8.2 Data model — extended PromptRow
 
 Extends the Codex-built `PromptRow` via a new Alembic migration:
 
@@ -98,10 +256,8 @@ PromptRow (additions to existing schema)
 ─────────────────────────────────────────────────────────────────────
 version              int        NOT NULL  DEFAULT 1
                                 Auto-incremented on every PUT.
-                                Starts at 1 on creation.
                                 Monotonic, never reused.
-                                There is no history table — only the
-                                current version is stored.
+                                No history table — only current version stored.
 
 import_count         int        NOT NULL  DEFAULT 0
                                 Incremented each time this prompt is
@@ -109,46 +265,25 @@ import_count         int        NOT NULL  DEFAULT 0
 
 session_count        int        NOT NULL  DEFAULT 0
                                 Incremented each time a user selects
-                                this prompt as their chat context for
-                                a session.
+                                this prompt as their chat context for a session.
 
 score                float      NULLABLE  DEFAULT NULL
                                 Explicit quality rating, range 0.0–5.0.
-                                Set by admin or by the evaluation track
-                                (O1). Never auto-computed in this RFC.
-                                NULL = not yet rated. Displayed as
-                                star rating in the UI when non-null.
+                                Set by admin or by the evaluation track (O1).
+                                NULL = not yet rated.
 
 avg_input_tokens     int        NULLABLE  DEFAULT NULL
 avg_output_tokens    int        NULLABLE  DEFAULT NULL
-                                Average token counts per turn in
-                                conversations where this prompt was
-                                active (as agent system prompt or chat
-                                context). Updated by background
-                                aggregation — see §3.6. NULL = no
-                                data yet. Displayed as "N/A" in UI.
+                                Average token counts per turn in conversations
+                                where this prompt was active. Updated by
+                                background aggregation — see §8.7. NULL = no data yet.
 ```
-
-**No history table.** The monotonic `version` counter is the only versioning
-artifact. If full history is needed later, a `PromptVersion` table can be
-added additively — the integer counter makes it unambiguous which row a
-historical snapshot corresponds to.
 
 **Uniqueness constraint unchanged:** `(team_id, name)` unique within team.
 
-### 3.3 Agent integration — prompt_refs
+#### 8.3 Agent integration — prompt_refs
 
-**Revisiting PROMPT-SAFETY-RFC §3.4 rejection.**
-
-The previous RFC rejected live references in agent instances to avoid
-cascade-deletion and referential integrity complexity. That decision stands
-for the *text* — the agent instance still stores a snapshot copy of the
-prompt text in `prompts.*` tuning values.
-
-What we add here is a **metadata-only back-reference** stored alongside the
-snapshot: which library prompt was the source, and at which version. This
-reference is purely informational — deleting the library prompt does not
-break the agent (the text copy remains). There is no foreign key constraint.
+The agent instance still stores a snapshot copy of the prompt text in `prompts.*` tuning values. We add a **metadata-only back-reference** alongside the snapshot: which library prompt was the source, and at which version. This reference is purely informational — deleting the library prompt does not break the agent (the text copy remains). There is no foreign key constraint.
 
 ```
 ManagedAgentInstance
@@ -161,40 +296,21 @@ Shape:
 }
 ```
 
-`prompt_refs` is written by the control-plane service when the admin
-imports a library prompt. It is cleared for a field when the admin
-overwrites that field manually (no library source → no ref).
+`prompt_refs` is written by the control-plane service when the admin imports a library prompt. It is cleared for a field when the admin overwrites that field manually.
 
-**UI consequence:** when the current library version > stored ref version,
-the `AgentFormModal` shows a non-blocking banner:
+**UI consequence:** when the current library version > stored ref version, `AgentFormModal` shows a non-blocking banner:
+> *"prompts.system was imported from "Bid Expert v2" — current version is v5. [Review and update]"*
 
-> *"prompts.system was imported from "Bid Expert v2" — current version is v5.
->  [Review and update]"*
+#### 8.4 Chat context integration — live reference at session level
 
-The admin can choose to reimport or ignore. This is informational only —
-no action is forced.
-
-### 3.4 Chat context integration — live reference at session level
-
-**Why this is different from the §3.4 rejection.**
-
-The previous RFC rejected live references at the *agent instance* level
-because agent instances are long-lived configuration objects. Session context
-is ephemeral: a session ends, the reference is gone. There is no cascade
-problem, no "what happens if the prompt is deleted" permanence issue. A
-missing or deleted prompt at session start simply means no context is injected
-— the session continues normally.
-
-**Design:**
+Session context is ephemeral: a session ends, the reference is gone. A missing or deleted prompt at session start simply means no context is injected — the session continues normally.
 
 ```
 Session (control-plane DB)
   context_prompt_id:  str | null   DEFAULT NULL
 ```
 
-When a user selects a context from the library picker, `context_prompt_id`
-is stored on the session (via the existing
-`PATCH /sessions/{id}` endpoint — body extended with `context_prompt_id`).
+When a user selects a context from the library picker, `context_prompt_id` is stored on the session (via the existing `PATCH /sessions/{id}` endpoint — body extended with `context_prompt_id`).
 
 At execution preparation time, control-plane resolves the prompt text:
 
@@ -203,66 +319,41 @@ ExecutionPreparation (response)
   context_prompt_text:  str | null
 ```
 
-The runtime receives the current text of the referenced prompt and injects
-it as a conversation-level context. If the prompt was updated since the user
-selected it, they get the new text at next session start — intentional: live
-reference means always-current.
+The runtime receives the current text of the referenced prompt and injects it as a conversation-level context. `PromptRow.session_count` is incremented when `context_prompt_id` is written to the session.
 
-**Incrementing session_count:** control-plane increments
-`PromptRow.session_count` when `context_prompt_id` is written to the session.
+#### 8.5 Personal → team visibility in chat context picker
 
-### 3.5 Personal → team visibility in chat context picker
-
-The chat context picker (in `AgentOptionsPanel` or session init surface)
-fetches from a new endpoint:
+The chat context picker fetches from a new endpoint:
 
 ```
 GET /control-plane/v1/teams/{team_id}/prompts/context
 ```
 
-This endpoint returns the **union** of:
-1. Prompts scoped to the calling user's `personal` team
-2. Prompts scoped to `team_id`
-
-Ordered by `session_count DESC, name ASC`. The response includes a
-`scope` field on each item (`"personal"` or `"team"`) so the UI can
-render a visual separator.
+Returns the **union** of the calling user's `personal` prompts and `team_id` prompts. Ordered by `session_count DESC, name ASC`. Each item carries a `scope` field (`"personal"` or `"team"`) so the UI can render a visual separator.
 
 ```json
 [
-  { "id": "...", "name": "Analyse appel d'offres", "scope": "personal",
-    "session_count": 12, "score": null },
-  { "id": "...", "name": "Répondre en français",  "scope": "team",
-    "session_count": 48, "score": 4.5 }
+  { "id": "...", "name": "Analyse appel d'offres", "scope": "personal", "session_count": 12, "score": null },
+  { "id": "...", "name": "Répondre en français",  "scope": "team",     "session_count": 48, "score": 4.5  }
 ]
 ```
 
-This endpoint is **read-only** — it does not mutate or cross-pollinate the
-underlying team-scoped records.
+This endpoint is **read-only** — it does not mutate the underlying records.
 
-### 3.6 Promotion flows
+#### 8.6 Promotion flows
 
-All promotion flows are **copy-by-value**. The source prompt is never modified.
-The destination starts at `version=1`, `import_count=0`, `session_count=0`,
-`score=null`.
+All promotion flows are **copy-by-value**. The source prompt is never modified. The destination starts at `version=1`, `import_count=0`, `session_count=0`, `score=null`.
 
 ```
 POST /control-plane/v1/teams/{team_id}/prompts/{id}/promote
 Body: { "target_team_id": "bid-and-capture" }
 ```
 
-Creates a new `PromptRow` in `target_team_id` with the same name, description,
-and text. If a prompt with the same name already exists in the target team, the
-endpoint returns `409 Conflict` — the caller must rename first.
+Creates a new `PromptRow` in `target_team_id` with the same name, description, and text. Returns `409 Conflict` if the same name already exists in the target team.
 
-**Authorization:** the caller must be a member of **both** the source team and
-the target team. Personal → team promotion requires team membership. Promotion
-to marketplace is a separate flow (Slice E, P1-E).
+**Authorization:** caller must be a member of both source and target team. Promotion to marketplace is a separate flow (P1-E).
 
-Promotion does **not** update `import_count` or `session_count` on the source.
-Those counters track active use, not lineage.
-
-### 3.7 Analytics model
+#### 8.7 Analytics model
 
 Three tiers, implemented progressively.
 
@@ -273,57 +364,34 @@ Three tiers, implemented progressively.
 | `import_count` | Admin imports prompt into agent | `service.py` — agent create/update path |
 | `session_count` | User selects prompt as chat context | `service.py` — session PATCH path |
 
-Counters are incremented atomically with `UPDATE prompt SET import_count = import_count + 1`.
-No race condition handling required at this scale.
+Counters are incremented atomically: `UPDATE prompt SET import_count = import_count + 1`.
 
 **Tier 2 — Score (in scope, P1-D2 UI)**
 
-`score: float | null` is exposed in the `PromptSummary` response. The UI
-renders it as a star rating (0–5) when non-null, as "-" when null.
-
-Admin can set the score via:
-```
-PATCH /control-plane/v1/teams/{team_id}/prompts/{id}
-Body: { "score": 4.5 }
-```
-
-The evaluation track (O1) may also set it programmatically via the same
-endpoint once the evaluation harness is live.
+`score: float | null` is exposed in `PromptSummary`. Admin sets it via `PATCH /teams/{team_id}/prompts/{id}` with `{ "score": 4.5 }`. The evaluation track (O1) may also set it programmatically.
 
 **Tier 3 — Token cost (out of scope, deferred to P1-F)**
 
-Fields `avg_input_tokens` and `avg_output_tokens` are added to the schema
-now (nullable) so the UI can display "N/A" with a tooltip explaining what
-the metric will show. No computation logic is wired in this RFC.
+Fields `avg_input_tokens` and `avg_output_tokens` are reserved in the schema now (nullable). UI displays "N/A" with tooltip. Computation requires KPI integration — separate track.
 
-**Required integration (P1-F):**
-- KPI turn events must carry a `context_prompt_id` label (for chat context)
-  and an optional `agent_prompt_version` label (for system prompts)
-- A background aggregation job or Langfuse query computes the averages and
-  writes them back to `PromptRow` via an internal service call
-- This requires changes to `fred-core` (KPI store), `fred-runtime` (turn events),
-  and a new aggregation worker — separate track, coordinate with Simon
-
-### 3.8 API surface — full delta
-
-**New or modified endpoints (control-plane-backend):**
+#### 8.8 API surface — full delta
 
 ```
-# Extended response (add version, import_count, session_count, score, avg_input_tokens, avg_output_tokens)
-GET  /teams/{team_id}/prompts               → list[PromptSummary]  ← breaking: adds fields
-GET  /teams/{team_id}/prompts/{id}          → PromptDetail         ← breaking: adds fields
-PUT  /teams/{team_id}/prompts/{id}          → PromptSummary        ← auto-increments version
+# Extended response (adds version, import_count, session_count, score, avg_input/output_tokens)
+GET   /teams/{team_id}/prompts                 → list[PromptSummary]  ← breaking: adds fields
+GET   /teams/{team_id}/prompts/{id}            → PromptDetail         ← breaking: adds fields
+PUT   /teams/{team_id}/prompts/{id}            → PromptSummary        ← auto-increments version
 
 # New
-GET  /teams/{team_id}/prompts/context       → list[ContextPromptSummary]  (union personal+team)
-POST /teams/{team_id}/prompts/{id}/promote  → 201 PromptSummary
-PATCH /teams/{team_id}/prompts/{id}         → 200 PromptSummary    (score update only)
+GET   /teams/{team_id}/prompts/context         → list[ContextPromptSummary]
+POST  /teams/{team_id}/prompts/{id}/promote    → 201 PromptSummary
+PATCH /teams/{team_id}/prompts/{id}            → 200 PromptSummary (score update only)
 
-# Extended (add context_prompt_id to body)
-PATCH /sessions/{session_id}                → existing endpoint, body gains context_prompt_id
+# Extended body
+PATCH /sessions/{session_id}                   → gains context_prompt_id
 
-# Extended (add context_prompt_text to response)
-POST /execution/prepare                     → existing endpoint, response gains context_prompt_text
+# Extended response
+POST  /execution/prepare                       → gains context_prompt_text
 ```
 
 **New Pydantic schemas:**
@@ -345,9 +413,7 @@ class PromptPromoteRequest(BaseModel):
     target_team_id: str
 ```
 
-**Extended schemas (additive — backward compatible reads, but new required
-fields on PromptSummary means clients that deserialize strictly will need
-an update after OpenAPI regen):**
+**Extended schemas (additive on reads, but `PromptSummary` gains required fields — OpenAPI regen required):**
 
 ```python
 class PromptSummary(BaseModel):  # additions
@@ -358,12 +424,12 @@ class PromptSummary(BaseModel):  # additions
     avg_input_tokens: int | None
     avg_output_tokens: int | None
 
-class PromptDetail(PromptSummary):  # unchanged inheritance
+class PromptDetail(PromptSummary):
     team_id: TeamId
     text: str
 ```
 
-### 3.9 Authorization
+#### 8.9 Authorization
 
 | Operation | Required membership |
 |---|---|
@@ -372,88 +438,118 @@ class PromptDetail(PromptSummary):  # unchanged inheritance
 | GET /context for team X | Member of team X (personal prompts appended automatically) |
 | Promote personal → team X | Member of team X |
 | Promote team X → team Y | Member of both X and Y |
-| Set score | Team admin (same rule as agent instance admin) |
+| Set score | Team admin |
 | Promote to marketplace | Global admin (P1-E, out of scope) |
 
 ---
 
-## 4. Alternatives Considered
+## 9. Alternatives Considered
 
-### 4.1 Full version history table
+### 9.1 Keep `format_map` but wrap in try/except and return an error event
 
-A `PromptVersion(prompt_id, version, text, updated_at, updated_by)` table
-would allow diff views and text rollback. Rejected for V1: the simple
-monotonic counter plus snapshot gives 80% of the value (detecting drift
-between agent config and current library) at 5% of the complexity. Add if
-user demand materialises.
+Rejected. An error event mid-conversation is worse than a 422 at save time — the agent appears broken with no actionable message.
 
-### 4.2 Auto-propagate library updates to agents (live binding)
+### 9.2 Escape all literal braces at save time (`{` → `{{`)
 
-When the library prompt changes, all agents using it update automatically.
-Rejected: same reasoning as PROMPT-SAFETY-RFC §3.4. Agents in production
-would silently change behavior. The `prompt_refs` metadata + "update
-available" banner gives the signal without the risk.
+Rejected. Permanently mutates the stored text. A prompt containing `{today}` would be stored as `{{today}}`. Round-trips break.
 
-### 4.3 Denormalized "last used by" instead of counters
+### 9.3 Use a full template engine (Jinja2, Mako)
 
-Storing the last user/session to use a prompt rather than counters.
-Rejected: privacy concern (personal prompts would reveal which team members
-used which prompts). Counters are sufficient for curation decisions and
-reveal no individual behavior.
+Rejected. The template surface is intentionally small — five canonical tokens, strict whitelist. A full template engine adds a dependency, a security surface (template injection), and a much more complex validation story.
 
-### 4.4 Score computed automatically from agent KPIs
+### 9.4 Store prompt by live reference in agent instance
 
-Derive score from HITL rate, session length, user feedback signals.
-Rejected for V1: requires evaluation track (O1) to land first. The admin-
-settable float keeps the field live without coupling the release to O1
-completion.
+Rejected. Adds referential integrity constraints, cascade semantics, and policy decisions ("what happens to agents when the prompt is deleted") we do not want to decide now. Snapshot copy is conservative and reversible.
 
-### 4.5 Separate context_template table for chat context prompts
+### 9.5 Add a separate user-scoped prompt API
 
-A distinct table for "context prompts" vs "library prompts". Rejected:
-the difference is in *how* a prompt is used, not in what it is. The same
-text can serve as an agent system prompt and as a user's chat context.
-One table with usage counters separated by type (`import_count` vs
-`session_count`) is cleaner and avoids duplicated curation effort.
+Rejected. `personal` already exists as a first-class reserved team. A parallel user-owned prompt surface would duplicate authorization, navigation, and product semantics.
+
+### 9.6 Mix team library and global marketplace in one mutable record
+
+Rejected. One record flipping between "team-only" and "global" creates awkward moderation, audit, and update semantics. They are distinct product records.
+
+### 9.7 Full version history table
+
+A `PromptVersion(prompt_id, version, text, updated_at, updated_by)` table would allow diff views and rollback. Rejected for V1: the monotonic counter + snapshot gives 80% of the value at 5% of the complexity. Add if demand materialises.
+
+### 9.8 Auto-propagate library updates to agents (live binding)
+
+When the library prompt changes, all agents update automatically. Rejected: agents in production would silently change behavior. The `prompt_refs` metadata + "update available" banner gives the signal without the risk.
+
+### 9.9 Denormalized "last used by" instead of counters
+
+Rejected: privacy concern (personal prompts would reveal which team members used which prompts). Counters are sufficient for curation decisions.
+
+### 9.10 Score computed automatically from agent KPIs
+
+Rejected for V1: requires evaluation track (O1) to land first. The admin-settable float keeps the field live without coupling the release to O1.
+
+### 9.11 Separate context_template table for chat context prompts
+
+Rejected: the difference is in *how* a prompt is used, not *what* it is. One table with `import_count` vs `session_count` is cleaner.
 
 ---
 
-## 5. Impact on Existing Contracts
+## 10. Impact on Existing Contracts
 
 | Area | Change | Backward compatible |
 |---|---|---|
-| `prompt` DB table | 6 new columns via migration | Yes — nullable or defaulted |
-| `agent_instance` DB table / JSON | `prompt_refs jsonb` column | Yes — nullable |
+| `fred_sdk.contracts.prompt_utils` | New module: `PROMPT_SAFE_TOKENS` + `PromptTemplateError` + `validate_prompt_template()` | Additive |
+| `fred_runtime/react/react_prompting.py` | `render_prompt_template` reimplemented; `_LiteralFriendlyDict` removed | Yes — same signature, broader safety |
+| `fred_runtime/deep/deep_runtime.py` | Same `render_prompt_template` import | Yes |
+| `control_plane_backend/product/service.py` | `_validate_tuning_field_values` calls `validate_prompt_template` for `"prompt"` type fields | New 422s for previously accepted bad input — intentional |
+| `prompt` DB table | 6 new columns via Alembic migration | Yes — nullable or defaulted |
+| `agent_instance` DB table | `prompt_refs jsonb` column | Yes — nullable |
 | `session` DB table | `context_prompt_id` column | Yes — nullable |
 | `PromptSummary` schema | 6 new fields | Breaking for strict deserializers — OpenAPI regen required |
 | `ExecutionPreparation` response | `context_prompt_text: str \| null` | Additive |
 | `PATCH /sessions/{id}` body | `context_prompt_id` optional field | Additive |
-| `controlPlaneOpenApi.ts` | Regenerate after P1-D1b backend lands | Required |
-| `runtimeOpenApi.ts` | Regenerate after context_prompt_text lands in ExecutionPreparation | Required |
+| `AgentFormModal` | Inline 422 errors next to textarea; import/save actions (Slice D UI); version-drift banner | UI addition |
+| `controlPlaneOpenApi.ts` | Regenerated after P1-D1b lands | Required |
 
 ---
 
-## 6. Out of Scope — This RFC
+## 11. Out of Scope
 
 | Item | Where tracked |
 |---|---|
 | Global prompt marketplace (`PublishedPromptRow`, publish/unpublish) | P1-E |
-| Token cost KPI integration (avg_input/output_tokens computation) | P1-F |
+| Token cost KPI integration (`avg_input/output_tokens` computation) | P1-F |
 | Automatic score derivation from evaluation results | O1 + P1-F |
-| Full text version history (PromptVersion table) | Future RFC if needed |
-| "Prompt admin" role distinct from team admin | Future RFC if needed |
+| Full text version history (`PromptVersion` table) | Future RFC if needed |
+| Prompt admin role distinct from team admin | Future RFC if needed |
 | Prompt search / tagging / categorisation | Future RFC |
 
 ---
 
-## 7. Implementation Sequence
+## 12. Implementation Sequence
 
-Four tasks in dependency order.
+```
+Slice A   (fred-sdk prompt_utils module + fred-runtime safe renderer)
+  ↓
+Slice B   (control-plane-backend: validate_prompt_template called at save time)
+  ↓
+Slice C   (test coverage + 422 error shape — done when B lands)
+  ↓
+Slice D1  (team/personal prompt CRUD + OpenAPI regen)                ← done (Codex 2026-05-08)
+  ↓
+P1-D1b   (DB schema extension: version, counters, score, token fields;
+          /prompts/context endpoint; session PATCH with context_prompt_id;
+          ExecutionPreparation gains context_prompt_text)
+  ↓
+P1-D2    (frontend: PromptsPage + AgentFormModal import/save + version-drift banner)
+  ↓
+P1-D3    (frontend: chat context picker replaces free textarea)
+  ↓
+P1-F     (token cost KPI integration — deferred, requires O1 + simon)
+  ↓
+P1-E     (global prompt marketplace — separate track)
+```
 
-### P1-D1b — Backend extension (amends Codex's work)
+### P1-D1b — Backend extension
 
-**Owner**: Dimitri  
-**Depends on**: P1-D1 (done)
+**Owner**: Dimitri | **Depends on**: P1-D1 (done)
 
 ```
 Alembic migration:
@@ -463,7 +559,6 @@ Alembic migration:
   ALTER TABLE prompt ADD COLUMN score float NULLABLE;
   ALTER TABLE prompt ADD COLUMN avg_input_tokens int NULLABLE;
   ALTER TABLE prompt ADD COLUMN avg_output_tokens int NULLABLE;
-
   ALTER TABLE agent_instance ADD COLUMN prompt_refs jsonb NULLABLE;
   ALTER TABLE session ADD COLUMN context_prompt_id varchar NULLABLE;
 
@@ -474,106 +569,66 @@ PromptStore:
   list_context_prompts(personal_team_id, team_id) → union query
 
 ProductService:
-  agent create/update → write prompt_refs when source is library import
-  agent create/update → call increment_import_count
+  agent create/update → write prompt_refs + call increment_import_count
   session PATCH → accept context_prompt_id, call increment_session_count
   prepare_execution → resolve context_prompt_text from context_prompt_id
 
-API (product/api.py):
-  GET  /teams/{id}/prompts/context          → new endpoint
-  POST /teams/{id}/prompts/{id}/promote     → new endpoint
-  PATCH /teams/{id}/prompts/{id}            → new (score update)
-
-Schemas (product/schemas.py):
-  PromptSummary          ← add 6 analytics fields
-  ContextPromptSummary   ← new
-  PromptScoreUpdateRequest ← new
-  PromptPromoteRequest   ← new
-  ExecutionPreparation   ← add context_prompt_text
-
-generate-openapi + commit controlPlaneOpenApi.ts
-make code-quality && make test (control-plane-backend)
+API endpoints: GET /prompts/context, POST /prompts/{id}/promote, PATCH /prompts/{id}
 ```
 
 ### P1-D2 — Frontend: PromptsPage + AgentFormModal
 
-**Owner**: Félix or Dimitri  
-**Depends on**: P1-D1b (OpenAPI regenerated)
+**Owner**: Félix or Dimitri | **Depends on**: P1-D1b (OpenAPI regenerated)
 
 ```
 PromptsPage (new rework page):
   Route: /teams/:teamId/prompts
-  Nav entry in sidebar
-  Table: name, description, version badge, import_count,
-         session_count, score (stars | -), updated_at, actions
-  Create modal: name (required), description, text textarea
-  Edit modal: same fields, shows current version
-  Delete with confirmation
-  Score edit inline (admin only)
-  "Promote to team" action → target team picker → POST promote
+  Table: name, description, version badge, import_count, session_count, score, updated_at
+  Create/edit/delete modals; score edit inline (admin); "Promote to team" action
 
-AgentFormModal (extends existing):
-  [Import from library] → PromptPickerModal
-    - shows team library (name, version, session_count, score)
-    - search by name
-    - preview panel
-    - [Use] → copies text into textarea, stores prompt_ref internally
+AgentFormModal:
+  [Import from library] → PromptPickerModal (preview panel, [Use] copies text + stores prompt_ref)
   [Save as prompt] → SavePromptModal (name, description → POST to team library)
-  version badge when field has a prompt_ref:
-    "Imported from [name] v2" — if version matches current → green
-    "Imported from [name] v2 — current is v5" → amber + [Review]
-  Inline 422 error display below textarea (list of PromptTemplateError)
-
-tsc --noEmit + npm run build pass
+  Version-drift banner when prompt_ref version < current library version
+  Inline 422 error display below textarea
 ```
 
 ### P1-D3 — Chat context picker
 
-**Owner**: Félix  
-**Depends on**: P1-D1b
+**Owner**: Félix | **Depends on**: P1-D1b
 
 ```
 AgentOptionsPanel or session init surface:
-  Replace free textarea with a library picker
+  Replace free textarea with library picker
   Source: GET /teams/{team_id}/prompts/context
-  Shows personal prompts (grouped) + team prompts (grouped)
-  Ordered by session_count DESC
-  Displays score stars when non-null
+  Personal prompts (grouped) + team prompts (grouped), ordered by session_count DESC
+  Score stars when non-null
   User selects → PATCH /sessions/{id} { context_prompt_id }
-  "Clear context" action → PATCH with context_prompt_id: null
-  "Edit in personal library" shortcut → navigates to PromptsPage
-
-make code-quality on frontend
+  "Clear context" → PATCH with context_prompt_id: null
 ```
 
 ### P1-F — Token cost KPI integration (DEFERRED)
 
-**Owner**: Simon + Dimitri  
-**Depends on**: O1 evaluation track, fred-core KPI store changes
+**Owner**: Simon + Dimitri | **Depends on**: O1, fred-core KPI store changes
 
-```
-Not in scope for this sprint.
-Fields avg_input_tokens / avg_output_tokens exist in DB and schema.
-UI displays "N/A" with tooltip: "Token data available after evaluation
-integration lands."
-
-When P1-F starts it will need its own RFC amendment covering:
-  - context_prompt_id label in fred-core KPI turn events
-  - aggregation query / worker
-  - update path back to PromptRow
-```
+Fields `avg_input_tokens` / `avg_output_tokens` exist in DB and schema. UI displays "N/A". When P1-F starts it will need its own RFC amendment covering: `context_prompt_id` label in fred-core KPI turn events, aggregation worker, and write-back to `PromptRow`.
 
 ---
 
-## 8. Open Questions — Resolved
+## 13. Resolved Decisions
 
 | Question | Resolution |
 |---|---|
-| Versioning: immutable history vs counter? | Counter only (V1). Additive history table if demand materialises. |
-| Live link at agent level? | No. Snapshot text + metadata prompt_refs for drift detection. |
-| Live link at session level? | Yes — session is ephemeral, no permanence risk. |
-| Personal prompts visible in team chat? | Yes — union query via /prompts/context endpoint. |
-| Score source? | Admin-set float. Evaluation track (O1) may set it later via PATCH. |
-| Token cost computation? | Deferred to P1-F. Fields reserved, display "N/A". |
-| Promotion: conflict on same name? | 409 Conflict — caller renames first. |
-| Promotion: does it transfer or copy? | Always copy. Source unchanged. |
+| Unknown tokens → warn or block? | Block with 422 — no warnings accepted |
+| User-authored prompts: which tokens? | `PROMPT_SAFE_TOKENS` only — internal `extra_tokens` not in user-facing validation |
+| Live link at agent instance level? | No. Snapshot text + `prompt_refs` metadata for drift detection |
+| Live link at session level? | Yes — session is ephemeral, no permanence risk |
+| Personal prompts visible in team chat? | Yes — union query via `/prompts/context` endpoint |
+| Score source? | Admin-set float; evaluation track (O1) may set it later |
+| Token cost computation? | Deferred to P1-F. Fields reserved, display "N/A" |
+| Promotion: conflict on same name? | 409 Conflict — caller renames first |
+| Promotion: transfer or copy? | Always copy. Source unchanged |
+| Versioning: immutable history vs counter? | Counter only (V1). Additive history table if demand materialises |
+| Prompt CRUD scope? | Team-scoped only; personal uses reserved `personal` team |
+| Agent instances: live prompt id or text copy? | Text copy only — no live library reference |
+| Global marketplace: same branch as team library? | No — Slice E is a separate follow-up track |

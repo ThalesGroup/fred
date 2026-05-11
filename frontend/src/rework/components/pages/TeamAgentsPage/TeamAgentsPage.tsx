@@ -21,10 +21,7 @@ import { useToast } from "../../../../components/ToastProvider";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import {
-  type AgentFormPayload,
-  default as AgentFormModal,
-} from "./AgentFormModal/AgentFormModal.tsx";
+import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import {
@@ -61,14 +58,9 @@ export default function TeamAgentsPage() {
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
 
-  const { data: fetchedTeam } = useGetTeamQuery(
-    { teamId: teamId || "" },
-    { skip: !teamId || isPersonalTeam },
-  );
+  const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
-  const canManageAgents = Array.isArray(team?.permissions)
-    ? team.permissions.includes("can_update_agents")
-    : false;
+  const canManageAgents = Array.isArray(team?.permissions) ? team.permissions.includes("can_update_agents") : false;
 
   const {
     data: managedInstances = [],
@@ -248,9 +240,7 @@ export default function TeamAgentsPage() {
       ) : (
         <div className={styles.agentList}>
           {managedInstances.map((instance) => {
-            const template = availableTemplates.find(
-              (tpl) => tpl.template_id === instance.template_id,
-            );
+            const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
             const card = (
               <AgentCard
                 instance={instance}
@@ -285,6 +275,7 @@ export default function TeamAgentsPage() {
         mode={editingInstance ? "edit" : "create"}
         editInstance={editingInstance ?? undefined}
         teamName={team?.name}
+        teamId={teamId}
         templates={availableTemplates}
         onClose={() => {
           setIsEnrollOpen(false);

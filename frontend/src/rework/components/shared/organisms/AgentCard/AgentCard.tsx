@@ -52,14 +52,6 @@ export default function AgentCard({
             <div className={styles.agentIdentity}>
               <div className={styles.agentName}>{instance.display_name}</div>
               <div className={styles.agentMeta}>
-                <span className={styles.agentStatus} data-status={instance.status}>
-                  {instance.status}
-                </span>
-                {instance.runtime_status === "unavailable" && (
-                  <span className={styles.runtimeUnavailable}>
-                    {t("rework.agentCard.runtimeUnavailable", "Runtime unavailable")}
-                  </span>
-                )}
                 {templateCategory && (
                   <span className={styles.agentCategory}>{templateCategory}</span>
                 )}

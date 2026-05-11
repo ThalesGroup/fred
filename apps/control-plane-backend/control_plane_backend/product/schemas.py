@@ -84,6 +84,15 @@ class EffectiveChatOptions(BaseModel):
     default_search_rag_scope: Literal["corpus_only", "hybrid", "general_only"] = (
         "hybrid"
     )
+    bound_library_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "When non-null, the agent is configured to use exactly these library IDs. "
+            "The frontend must render the library picker as read-only and send exactly "
+            "this list in RuntimeContext.selected_document_libraries_ids. "
+            "Null means the user can freely select from all available libraries."
+        ),
+    )
 
 
 class ManagedAgentInstanceSummary(BaseModel):

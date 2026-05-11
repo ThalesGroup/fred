@@ -17,6 +17,7 @@ import GdprPage from "@components/pages/GdprPage/GdprPage.tsx";
 import ManagedChatPage from "@components/pages/ManagedChatPage/ManagedChatPage.tsx";
 import MarketplaceTeams from "@components/pages/marketplace/MarketplaceTeams/MarketplaceTeams.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
+import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
 import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouteObject } from "react-router-dom";
@@ -77,6 +78,10 @@ export const routes: RouteObject[] = [
       {
         path: "team/:teamId/managed-chat/:agentInstanceId",
         element: <ManagedChatPage />,
+      },
+      {
+        path: "team/:teamId/prompts",
+        element: <PromptsPage />,
       },
       {
         path: "team/:teamId/*",

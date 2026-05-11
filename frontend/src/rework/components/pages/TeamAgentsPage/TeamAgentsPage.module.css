@@ -28,6 +28,7 @@
 .agentList {
   display: grid;
   grid-template-columns: repeat(auto-fit, 320px);
+  grid-auto-rows: minmax(210px, auto);
   justify-content: center;
   gap: var(--spacing-m);
   padding: 0 var(--spacing-l) var(--spacing-l);

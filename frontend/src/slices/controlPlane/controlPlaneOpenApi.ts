@@ -967,6 +967,8 @@ export type EffectiveChatOptions = {
   default_search_policy?: "strict" | "hybrid" | "semantic";
   rag_scope_selection?: boolean;
   default_search_rag_scope?: "corpus_only" | "hybrid" | "general_only";
+  /** When non-null, the agent is configured to use exactly these library IDs. The frontend must render the library picker as read-only and send exactly this list in RuntimeContext.selected_document_libraries_ids. Null means the user can freely select from all available libraries. */
+  bound_library_ids?: string[] | null;
 };
 export type ExecutionPreparation = {
   agent_instance_id: string;

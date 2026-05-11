@@ -559,8 +559,14 @@ def _resolve_effective_chat_options(
     - `options = _resolve_effective_chat_options(instance.tuning)`
     """
 
+    _raw_bound_ids = tuning.values.get("chat_options.bound_library_ids")
     options = EffectiveChatOptions(
-        attach_files=_as_bool(tuning.values.get("chat_options.attach_files"))
+        attach_files=_as_bool(tuning.values.get("chat_options.attach_files")),
+        bound_library_ids=(
+            [str(v) for v in _raw_bound_ids]
+            if isinstance(_raw_bound_ids, list)
+            else None
+        ),
     )
     active_servers = _selected_mcp_servers(
         declared_servers=tuning.mcp_servers,
@@ -577,6 +583,17 @@ def _resolve_effective_chat_options(
                 field_defaults["chat_options.libraries_selection"],
             )
             options.libraries_selection = options.libraries_selection or _as_bool(value)
+
+        if (
+            options.bound_library_ids is None
+            and "chat_options.bound_library_ids" in field_defaults
+        ):
+            value = server_values.get(
+                "chat_options.bound_library_ids",
+                field_defaults["chat_options.bound_library_ids"],
+            )
+            if isinstance(value, list):
+                options.bound_library_ids = [str(v) for v in value]
 
         if (
             not options.search_policy_selection

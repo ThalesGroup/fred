@@ -6,39 +6,33 @@ Use it before adding endpoints, workflows, or policies.
 
 ## 1) API Applications
 
-Fred has four API surfaces (one is being migrated out of the runtime path — see migration note below):
+Fred has three active API surfaces:
 
-1. **Fred Runtime** (`fred-runtime`) — **target execution surface**
-   - Main role: agent execution, SSE streaming, HITL pause/resume, checkpoints, runtime history.
-   - All execution is team-scoped and authorized via `ExecutionGrant` from control-plane.
+1. **Fred Agents pod** (`apps/fred-agents`) — **production agent execution surface**
+   - Main role: hosts runnable agent definitions built on `fred-runtime` and `fred-sdk`.
    - Exposes: `POST /agents/execute`, `POST /agents/execute/stream`, `GET /agents/sessions/...`
    - Secondary surface: `POST /v1/chat/completions` (OpenAI compat, for external tools only).
-   - Runtime pods validate authorization but do not own tenancy, permissions, or routing.
+   - All execution is team-scoped and authorized via `ExecutionGrant` from control-plane.
    - Runtime observability is part of the execution surface: logs, KPI, metrics, and trace payloads must retain `user_id`, `team_id`, `agent_instance_id`, `session_id`, and trace correlation fields, including when exported to Langfuse.
-   - Each pod exposes `make cli` / `fred-agents-cli` as its first-class backend validation client. See [CLI-CONVENTION.md](CLI-CONVENTION.md).
+   - The execution framework itself lives in `libs/fred-runtime`; the agent definitions live here.
+   - Exposes `make cli` / `fred-agents-cli` as its first-class backend validation client. See [CLI-CONVENTION.md](CLI-CONVENTION.md).
 
 2. **Knowledge Flow Backend API** (`knowledge-flow-backend`)
    - Main role: ingestion, documents, tags/libraries, retrieval-facing operations.
    - Typical concerns: content lifecycle, metadata, vectors, document pipelines.
 
 3. **Control Plane API** (`control-plane-backend`)
-   - Main role: teams/users operations, policy-driven lifecycle control, **and (target) all product/session/admin concerns**.
-   - Current concerns: team membership changes, policy evaluation, purge orchestration.
-   - Target concerns (Phases 3–5): agent template/instance management, session metadata, MCP servers, permissions, frontend config, feedback.
+   - Main role: teams/users operations, policy-driven lifecycle control, and all product/session/admin concerns.
+   - Concerns: team membership, policy evaluation, purge orchestration, agent template/instance management, session metadata, MCP servers, permissions, frontend config, feedback.
    - Control-plane is the **sole authority** for: agentic pod discovery, agent enrollment, managed agent instance lifecycle, and `ExecutionGrant` issuance.
-   - Phase 3a rule: keep control-plane APIs metadata-oriented. Session history and execution stay in `fred-runtime`.
+   - Keep control-plane APIs metadata-oriented. Session history and execution stay in `apps/fred-agents`.
    - Control-plane must issue enough identity/context for runtime observability enrichment; runtime validates and emits it but does not invent tenancy semantics locally.
 
-4. **Agentic Backend API** (`agentic-backend`) — **being migrated out**
-   - Current role: chat/session runtime and agent orchestration (frontend-facing).
-   - This component is being progressively replaced by `fred-runtime` (execution) and `control-plane-backend` (product/session/admin).
-   - Do not add new features here. New execution behavior goes to `fred-runtime`; new product/admin behavior goes to `control-plane-backend`.
-   - See [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](../design/RUNTIME-EXECUTION-CONTRACT.md) and `BACKLOG.md` for the migration plan.
-
-> **Migration rule:** Rule 3 below ("Chat/session runtime behavior → Agentic API") is superseded.
-> New chat/execution behavior goes to `fred-runtime`.
-> New product/session/admin behavior goes to `control-plane-backend`.
-> For the first control-plane migration slice, follow [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md).
+> **`agentic-backend` is removed.** It was the former chat/session runtime and agent orchestration
+> surface. It has been archived to `ignored/fred/agentic-backend` and is no longer active.
+> The backend migration is complete. What remains is Phase 5E: removing the ~30 frontend files that
+> still import types from `agenticOpenApi.ts` (generated from the removed service's schema).
+> See [`docs/swift/backlog/FRONTEND-BACKLOG.md §7`](../backlog/FRONTEND-BACKLOG.md).
 
 ## 2) Temporal Applications (Workers)
 
@@ -62,7 +56,7 @@ When adding new behavior, decide with these rules:
 
 1. **User/team/admin API?** Put it in **Control Plane API**.
 2. **Document ingestion/indexing pipeline?** Put it in **Knowledge Flow** (API + Temporal if async/batch).
-3. **Agent execution, SSE streaming, HITL, checkpoints?** Put it in **fred-runtime**. _(Rule supersedes the old "Agentic API" rule.)_
+3. **Agent execution, SSE streaming, HITL, checkpoints?** New agent definitions go in `apps/fred-agents`; execution framework changes go in `libs/fred-runtime`.
 4. **Policy-driven scheduled lifecycle action?** Put it in **Control Plane Temporal**.
 5. **Cross-backend shared primitive?** Put it in **fred-core** (only if truly shared, stable, and minimal).
 6. **New runtime contract type (execution identity, authorization, events)?** Put it in **fred-sdk** (`libs/fred-sdk/fred_sdk/contracts/`).
@@ -83,6 +77,14 @@ browser or a running frontend.
 | `control-plane-backend` | `fred-cp-cli` | planned |
 
 Full specification: [`CLI-CONVENTION.md`](CLI-CONVENTION.md).
+
+## 5) Future: Kubernetes-Native Runtime Discovery (FRDC v1 — Proposed)
+
+The current `runtime_catalog_sources` config is a static list maintained manually. A proposed follow-up — the **Fred Runtime Discovery Contract (FRDC v1)** — defines a Kubernetes-native auto-discovery mechanism using Service labels (`fred.io/runtime=true`) and annotations. When implemented, this would replace the static catalog with a reconciler loop that watches the Kubernetes API for labeled Services.
+
+**Current status:** Proposed. Not yet implemented. The static catalog in `§5.1` is the authoritative production mechanism. See [`docs/swift/rfc/AGENTIC-POD-RFC.md`](../rfc/AGENTIC-POD-RFC.md) for the full spec.
+
+---
 
 ## 5) Startup Model (Same Pattern Across Apps)
 

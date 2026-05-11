@@ -13,7 +13,7 @@
 # status values: open | in_progress | done | deferred | not_started
 
 meta:
-  last_updated: "2026-05-08"
+  last_updated: "2026-05-11"  # RT-1 + FE-1 closed
   convention_doc: "CLAUDE.md § Task ID Convention"
   sprint_state: "docs/data/sprint.yaml"
 
@@ -244,6 +244,50 @@ meta:
       status: done
       closed: "2026-04-27"
 
+# ─── EXECUTION CONTEXT ROUND-TRIP (RT-1, FE-1) ───────────────────────────────
+# RFC authority: docs/swift/rfc/EXECUTION-CONTEXT-RFC.md
+
+- id: RT-1
+  domain: runtime
+  title: "Typed ChatContext contract — replace untyped runtime_context dict"
+  owner: Dimitri
+  status: done
+  closed: "2026-05-11"
+  rfc_ref: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+  notes: >
+    Changed RuntimeExecuteRequest.runtime_context from dict[str, Any] to RuntimeContext.
+    Fixed search_policy to Literal["strict","hybrid","semantic"].
+    Added context_prompt_text field to RuntimeContext (Group C).
+    Added bound_library_ids to EffectiveChatOptions + wired in service.py.
+    Regenerated runtimeOpenApi.ts + controlPlaneOpenApi.ts.
+    All tests pass: 189 (fred-sdk), 302 (fred-runtime), 120 (control-plane).
+  sub_items:
+    - id: "RT-1-a"
+      title: "fred-sdk: RuntimeContext field type + search_policy Literal + context_prompt_text"
+      status: done
+      closed: "2026-05-11"
+    - id: "RT-1-b"
+      title: "control-plane-backend: bound_library_ids on EffectiveChatOptions + service wiring"
+      status: done
+      closed: "2026-05-11"
+    - id: "RT-1-c"
+      title: "fred-runtime: verify compatibility + regenerate runtimeOpenApi.ts"
+      status: done
+      closed: "2026-05-11"
+
+- id: FE-1
+  domain: frontend
+  title: "Wire ChatContext in useChatSse — forward context_prompt_text + typed chat options"
+  owner: Félix
+  status: done
+  closed: "2026-05-11"
+  rfc_ref: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+  notes: >
+    RuntimeContext import switched from agenticOpenApi to runtimeOpenApi.
+    context_prompt_text forwarded from ExecutionPreparation per turn.
+    ManagedChatPage passes bound_library_ids from effective_chat_options to AgentOptionsPanel.
+    tsc clean, prettier clean.
+
 # ─── CHAT UI PHASES (Phase 6 / legacy notation) ───────────────────────────────
 # These follow the CHAT-UI-BACKLOG §n section numbering.
 # New chat-UI items after this convention was established use prefix CU- (see CLAUDE.md).
@@ -308,7 +352,12 @@ meta:
 
 - id: "5E"
   domain: frontend
-  title: "Full agentic-backend removal from frontend runtime path"
+  title: "Remove agenticOpenApi imports — frontend agentic-backend cleanup"
   status: not_started
-  backlog_ref: "docs/backlog/FRONTEND-BACKLOG.md §Phase 5E"
-  notes: "Last gate: agentic-backend must be zero-dependency in the frontend bundle"
+  backlog_ref: "docs/swift/backlog/FRONTEND-BACKLOG.md §7"
+  notes: >
+    Backend migration is complete (agentic-backend archived to ignored/).
+    Remaining work: ~30 frontend files still import types from agenticOpenApi.ts.
+    Rework path (11 files) is high priority; legacy surfaces (chatbot/, monitoring/) are
+    lower priority and will be removed when those surfaces are formally deprecated.
+    See FRONTEND-BACKLOG.md §7.2 for the concrete file list.
