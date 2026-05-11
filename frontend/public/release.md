@@ -10,6 +10,7 @@
 
   - Typo in link in mail to request to join a team (#1589)
   - Spurious langfuse error log (#1594)
+  - Cannot read properties of undefined (reading 'toLowerCase') in TeamContentNavbar (#1609)
 
 **v1.5.3** — 2026-05-03
 
