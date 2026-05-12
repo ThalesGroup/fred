@@ -14,6 +14,7 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import LanguageIcon from "@mui/icons-material/Language";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UploadIcon from "@mui/icons-material/Upload";
@@ -26,8 +27,9 @@ import { EmptyState } from "../../EmptyState";
 
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
-import { buildTree, findNode, TagNode } from "../../../shared/utils/tagTree";
+import { buildTree, findNode, fullPath, TagNode } from "../../../shared/utils/tagTree";
 import { useListUsersQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useGetUserDetailsControlPlaneV1UserGetQuery } from "../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import {
   DocumentMetadata,
   TagWithItemsId,
@@ -38,17 +40,26 @@ import { useConfirmationDialog } from "../../ConfirmationDialogProvider";
 import { useToast } from "../../ToastProvider";
 import { useDocumentCommands } from "../common/useDocumentCommands";
 import { docHasAnyTag, matchesDocByName } from "./documentHelper";
+import { CrawlSiteDialog } from "./CrawlSiteDialog";
 import { DocumentLibraryTree } from "./DocumentLibraryTree";
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 
 export interface DocumentLibraryListProps {
   teamId?: string;
   canCreateTag?: boolean;
+  refreshToken?: number;
+  preferredTagId?: string | null;
 }
 
-export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLibraryListProps) {
+export default function DocumentLibraryList({
+  teamId,
+  canCreateTag,
+  refreshToken = 0,
+  preferredTagId = null,
+}: DocumentLibraryListProps) {
   const { t } = useTranslation();
   const { showConfirmationDialog } = useConfirmationDialog();
+  const { data: userDetails } = useGetUserDetailsControlPlaneV1UserGetQuery();
 
   /* ---------------- State ---------------- */
   const [expanded, setExpanded] = useLocalStorageState<string[]>("DocumentLibraryList.expanded", []);
@@ -56,6 +67,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   const [forceRoot, setForceRoot] = React.useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = React.useState(false);
   const [openUploadDrawer, setOpenUploadDrawer] = React.useState(false);
+  const [openCrawlDialog, setOpenCrawlDialog] = React.useState(false);
   const [uploadTargetTagId, setUploadTargetTagId] = React.useState<string | null>(null);
   const [downloadingDocUid, setDownloadingDocUid] = React.useState<string | null>(null);
   // Search + selection (docUid -> tag)
@@ -63,6 +75,10 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   const [selectedDocs, setSelectedDocs] = React.useState<Record<string, TagWithItemsId>>({});
   const selectedCount = React.useMemo(() => Object.keys(selectedDocs).length, [selectedDocs]);
   const clearSelection = React.useCallback(() => setSelectedDocs({}), []);
+  const redirectTo =
+    teamId || userDetails?.personalTeam?.id
+      ? `/team/${teamId || userDetails?.personalTeam?.id}/ressources?view=documents`
+      : undefined;
 
   const { data: users = [] } = useListUsersQuery();
   const ownerNamesById = React.useMemo(() => {
@@ -95,12 +111,22 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   const tree = React.useMemo<TagNode | null>(() => (libraryTags ? buildTree(libraryTags) : null), [libraryTags]);
   const hasFolders = Boolean(tree && tree.children.size > 0);
 
+  const resolveNodeTagId = React.useCallback(
+    (node: TagNode | null | undefined): string | null => {
+      if (!node?.tagsHere?.length) return null;
+      const preferred = preferredTagId ? node.tagsHere.find((tag) => tag.id === preferredTagId) : undefined;
+      return preferred?.id || node.tagsHere[0]?.id || null;
+    },
+    [preferredTagId],
+  );
+
   // Derive "can update" from the selected tag's permissions (controls upload + bulk remove)
   const canUpdateSelectedTag = React.useMemo(() => {
     if (!tree || !selectedFolder) return false;
     const node = findNode(tree, selectedFolder);
-    return node?.tagsHere?.[0]?.permissions?.includes("update") ?? false;
-  }, [tree, selectedFolder]);
+    const selectedTagId = resolveNodeTagId(node);
+    return node?.tagsHere?.find((tag) => tag.id === selectedTagId)?.permissions?.includes("update") ?? false;
+  }, [resolveNodeTagId, selectedFolder, tree]);
 
   const getChildren = React.useCallback((n: TagNode) => {
     const arr = Array.from(n.children.values());
@@ -183,7 +209,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
   React.useEffect(() => {
     if (!tree || !selectedFolder) return;
     const node = findNode(tree, selectedFolder);
-    const tagId = node?.tagsHere?.[0]?.id;
+    const tagId = resolveNodeTagId(node);
     setCurrentTagId(tagId || null);
     currentTagIdRef.current = tagId || null;
     if (!tagId) {
@@ -205,7 +231,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
       void loadPage(tagId, cachedDocs.length, false, true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, selectedFolder, loadPage]);
+  }, [tree, selectedFolder, loadPage, resolveNodeTagId]);
 
   const loadMore = React.useCallback(
     (tagId: string) => {
@@ -275,6 +301,25 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
     };
     void run();
   }, [libraryTags, perTagTotals, loadPage]);
+
+  React.useEffect(() => {
+    if (!refreshToken) return;
+    void (async () => {
+      await refetch();
+      if (currentTagIdRef.current) {
+        await loadPage(currentTagIdRef.current, 0, false);
+      }
+    })();
+  }, [loadPage, refetch, refreshToken]);
+
+  React.useEffect(() => {
+    if (!preferredTagId || !libraryTags) return;
+    const preferredTag = libraryTags.find((tag) => tag.id === preferredTagId);
+    if (!preferredTag) return;
+    const targetFolder = fullPath(preferredTag);
+    setForceRoot(false);
+    setSelectedFolder(targetFolder);
+  }, [libraryTags, preferredTagId]);
 
   /* ---------------- Expand/collapse helpers ---------------- */
   const setAllExpanded = (expand: boolean) => {
@@ -485,7 +530,7 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
             onClick={() => {
               if (!selectedFolder) return;
               const node = findNode(tree, selectedFolder);
-              const firstTagId = node?.tagsHere?.[0]?.id;
+              const firstTagId = resolveNodeTagId(node);
               if (firstTagId) {
                 setUploadTargetTagId(firstTagId);
                 setOpenUploadDrawer(true);
@@ -495,6 +540,15 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
             sx={{ borderRadius: "8px" }}
           >
             {t("documentLibrary.uploadInLibrary")}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<LanguageIcon />}
+            onClick={() => setOpenCrawlDialog(true)}
+            disabled={!canCreateTag}
+            sx={{ borderRadius: "8px" }}
+          >
+            Crawl a site
           </Button>
         </Box>
       </Box>
@@ -641,6 +695,12 @@ export default function DocumentLibraryList({ teamId, canCreateTag }: DocumentLi
           }
         }}
         metadata={{ tags: [uploadTargetTagId] }}
+      />
+
+      <CrawlSiteDialog
+        open={openCrawlDialog}
+        onClose={() => setOpenCrawlDialog(false)}
+        redirectTo={redirectTo}
       />
 
       {/* Create-library drawer */}
