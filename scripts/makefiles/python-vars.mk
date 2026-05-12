@@ -17,3 +17,16 @@ export ENV_FILE ?= $(ROOT_DIR)/config/.env
 #export CONFIG_FILE_PROD ?= $(ROOT_DIR)/config/configuration_prod.yaml
 #export CONFIG_FILE_ACADEMY ?= $(ROOT_DIR)/config/configuration_academy.yaml
 export LOG_LEVEL ?= info
+
+# Corporate SSL inspection (e.g. Zscaler) — point uv/pip to the system CA bundle.
+# SSL_CERT_FILE is used by uv (Rust TLS). PIP_CERT is used by pip only.
+# REQUESTS_CA_BUNDLE is intentionally NOT set here: it overrides verify_certs=False in
+# opensearchpy's requests session, breaking connections to services with self-signed certs.
+export SSL_CERT_FILE ?= $(shell test -f /etc/ssl/certs/ca-certificates.crt && echo /etc/ssl/certs/ca-certificates.crt)
+export PIP_CERT ?= $(SSL_CERT_FILE)
+
+# Bypass corporate proxy for local services (Keycloak, Temporal, Postgres, etc.).
+# Without this, http_proxy routes localhost requests through the corporate proxy,
+# which cannot reach the k3d-mapped ports and breaks OIDC token validation.
+export no_proxy ?= localhost,app-keycloak,127.0.0.1,::1
+export NO_PROXY ?= $(no_proxy)
