@@ -1,19 +1,19 @@
-name: Build and Push Docker Image for develop
+name: Build and Push Docker Image for main
 
 on:
   push:
     branches:
-      - develop
+      - main
   pull_request:
     branches:
-      - develop
+      - main
 
 env:
   REGISTRY: ghcr.io
   PRODUCTION_FASTAPI_DOCS_ENABLED: "true"
 
 jobs:
-  build-and-push-develop:
+  build-and-push-main:
     runs-on: ubuntu-latest
     permissions:
       contents: read
