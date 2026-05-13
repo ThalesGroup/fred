@@ -19,10 +19,6 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
-from control_plane_backend.prompts.store import (
-    PromptAlreadyExistsError,
-    PromptRecord,
-)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
@@ -44,6 +40,10 @@ from control_plane_backend.product.schemas import (
     UpdateAgentInstanceRequest,
     UpdatePromptRequest,
     UpdateSessionRequest,
+)
+from control_plane_backend.prompts.store import (
+    PromptAlreadyExistsError,
+    PromptRecord,
 )
 from control_plane_backend.sessions.store import (
     SessionMetadataAlreadyExistsError,

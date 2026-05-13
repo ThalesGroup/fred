@@ -34,8 +34,8 @@ from control_plane_backend.config.models import (
     RuntimeCatalogSourceConfig,
 )
 from control_plane_backend.main import create_app
-from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.product.service import _RuntimeTemplatePayload
+from control_plane_backend.prompts.store import PromptRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.metadata_store import TeamMetadata
 from control_plane_backend.teams.schemas import (
