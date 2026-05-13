@@ -21,6 +21,9 @@ from fred_core.common import ModelConfiguration
 
 from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import (
     BasePdfOcrExtractor,
+    RemotePdfOcrImage,
+    RemotePdfOcrPage,
+    RemotePdfOcrResult,
 )
 
 
@@ -54,7 +57,7 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
 
     Example:
         `extractor = MistralPdfOcrExtractor(cfg)`
-        `markdown = extractor.extract_pdf_markdown(Path("/tmp/report.pdf"))`
+        `result = extractor.extract_pdf_result(Path("/tmp/report.pdf"), include_images=True)`
     """
 
     def __init__(self, ocr_cfg: ModelConfiguration) -> None:
@@ -68,16 +71,19 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
         self.signed_url_expiry_hours = int(self.settings.get("signed_url_expiry_hours") or 1)
         self.include_image_base64 = bool(self.settings.get("include_image_base64") or False)
 
-    def extract_pdf_markdown(self, file_path: Path) -> str:
+    def extract_pdf_result(self, file_path: Path, *, include_images: bool = False) -> RemotePdfOcrResult:
         """
         Why:
             Upload one PDF to Mistral's Files API, obtain a short-lived signed
             URL, and submit it to the OCR endpoint to receive per-page
-            markdown.
+            markdown and optional per-image payloads.
 
         How to use:
-            Pass one local PDF path. The method returns the concatenated page
-            markdown produced by Mistral OCR.
+            Pass one local PDF path. Set `include_images=True` when the caller
+            plans to enrich OCR image references with a vision model.
+
+        Example:
+            `result = extractor.extract_pdf_result(Path("/tmp/report.pdf"), include_images=True)`
         """
         with httpx.Client(
             headers={"Authorization": f"Bearer {self.api_key}"},
@@ -85,24 +91,27 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
         ) as client:
             file_id = self._upload_pdf(client, file_path)
             signed_url = self._get_signed_url(client, file_id)
-            response = self._process_document(client, signed_url)
+            response = self._process_document(client, signed_url, include_images=include_images)
 
         pages = response.get("pages")
         if not isinstance(pages, list):
             raise ValueError("Mistral OCR response did not include a 'pages' array.")
 
-        parts: list[str] = []
+        ocr_pages: list[RemotePdfOcrPage] = []
         for page in pages:
             if not isinstance(page, dict):
                 continue
             markdown = page.get("markdown")
-            if isinstance(markdown, str) and markdown.strip():
-                parts.append(markdown.strip())
+            if not isinstance(markdown, str) or not markdown.strip():
+                continue
+            images = self._extract_page_images(page)
+            ocr_pages.append(RemotePdfOcrPage(markdown=markdown.strip(), images=images))
 
-        markdown = "\n\n".join(parts).strip()
+        result = RemotePdfOcrResult(pages=ocr_pages)
+        markdown = result.to_markdown()
         if not markdown:
             raise ValueError("Mistral OCR returned no markdown content.")
-        return markdown
+        return result
 
     def _upload_pdf(self, client: httpx.Client, file_path: Path) -> str:
         response = client.post(
@@ -129,7 +138,49 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
             raise ValueError("Mistral signed-url response did not include a valid URL.")
         return signed_url
 
-    def _process_document(self, client: httpx.Client, signed_url: str) -> Dict[str, Any]:
+    def _extract_page_images(self, page_payload: Dict[str, Any]) -> list[RemotePdfOcrImage]:
+        """
+        Why:
+            Normalize Mistral's page image payload into the provider-agnostic
+            OCR image container used by Fred's remote OCR post-processing.
+
+        How to use:
+            Pass one `pages[]` JSON object from the OCR response. The helper
+            keeps only images that expose both an identifier and base64 data.
+
+        Example:
+            `images = self._extract_page_images(page_payload)`
+        """
+        raw_images = page_payload.get("images")
+        if not isinstance(raw_images, list):
+            return []
+
+        images: list[RemotePdfOcrImage] = []
+        for image_payload in raw_images:
+            if not isinstance(image_payload, dict):
+                continue
+            image_id = image_payload.get("id") or image_payload.get("image_id") or image_payload.get("name")
+            image_base64 = image_payload.get("image_base64") or image_payload.get("base64")
+            if not isinstance(image_id, str) or not image_id:
+                continue
+            if not isinstance(image_base64, str) or not image_base64:
+                continue
+            images.append(RemotePdfOcrImage(image_id=image_id, image_base64=image_base64))
+        return images
+
+    def _process_document(self, client: httpx.Client, signed_url: str, *, include_images: bool) -> Dict[str, Any]:
+        """
+        Why:
+            Submit the uploaded PDF to Mistral OCR with the exact image payload
+            level required by the caller.
+
+        How to use:
+            Pass an authenticated client, the signed document URL, and whether
+            the OCR response should include base64 page images.
+
+        Example:
+            `payload = self._process_document(client, signed_url, include_images=True)`
+        """
         response = client.post(
             f"{self.base_url}/ocr",
             json={
@@ -138,7 +189,7 @@ class MistralPdfOcrExtractor(BasePdfOcrExtractor):
                     "type": "document_url",
                     "document_url": signed_url,
                 },
-                "include_image_base64": self.include_image_base64,
+                "include_image_base64": include_images or self.include_image_base64,
             },
         )
         response.raise_for_status()

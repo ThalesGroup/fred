@@ -15,6 +15,7 @@
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional, Type
 
@@ -35,9 +36,11 @@ from knowledge_flow_backend.common.processing_profile_context import get_current
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
+from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import RemotePdfOcrResult
 from knowledge_flow_backend.core.processors.input.common.ocr.pdf_ocr_factory import build_pdf_ocr_extractor
 
 logger = logging.getLogger(__name__)
+_MARKDOWN_IMAGE_REFERENCE_PATTERN = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 
 
 def _annotate_markdown_tables(md_content: str, tables_markdown: list[str]) -> str:
@@ -116,7 +119,44 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         except Exception:
             return None
 
-    def _convert_with_remote_ocr(self, file_path: Path, output_markdown_path: Path) -> bool:
+    def _describe_remote_ocr_images(
+        self,
+        ocr_result: RemotePdfOcrResult,
+        image_describer,
+    ) -> str:
+        """
+        Why:
+            Replace remote OCR image references such as `img-12.jpeg` with
+            `vision_model` descriptions so the remote OCR path preserves the
+            same image-enrichment behavior as the local Docling path.
+
+        How:
+            Pass the structured OCR result and an initialized image describer.
+            The helper matches markdown image targets against OCR image IDs and
+            substitutes each reference with the generated description.
+
+        Example:
+            `markdown = self._describe_remote_ocr_images(result, image_describer)`
+        """
+        markdown = ocr_result.to_markdown()
+        images_by_id = {image.image_id: image.image_base64 for page in ocr_result.pages for image in page.images if image.image_id and image.image_base64}
+        if not images_by_id:
+            return markdown
+
+        def replace_image(match: re.Match[str]) -> str:
+            image_ref = match.group(1).strip()
+            image_base64 = images_by_id.get(image_ref)
+            if not image_base64:
+                return match.group(0)
+            try:
+                return image_describer.describe(image_base64)
+            except Exception as exc:
+                logger.warning("[PROCESSOR][PDF] Remote OCR image description failed for %s: %s", image_ref, exc)
+                return "Image could not be described."
+
+        return _MARKDOWN_IMAGE_REFERENCE_PATTERN.sub(replace_image, markdown)
+
+    def _convert_with_remote_ocr(self, file_path: Path, output_markdown_path: Path, image_describer) -> bool:
         """
         Why:
             Offload PDF OCR to a remote API model when one is configured, so
@@ -126,6 +166,9 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             Call with the source PDF path and target markdown path. The method
             returns `True` when remote OCR succeeded and wrote the markdown,
             otherwise `False` so the caller can fall back to local Docling OCR.
+
+        Example:
+            `self._convert_with_remote_ocr(pdf_path, output_md, image_describer)`
         """
         ocr_cfg = self._resolve_ocr_model_config()
         extractor = build_pdf_ocr_extractor(ocr_cfg)
@@ -145,7 +188,10 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             ocr_cfg.name,
             file_path.name,
         )
-        markdown = extractor.extract_pdf_markdown(file_path)
+        ocr_result = extractor.extract_pdf_result(file_path, include_images=image_describer is not None)
+        markdown = ocr_result.to_markdown()
+        if image_describer is not None:
+            markdown = self._describe_remote_ocr_images(ocr_result, image_describer)
         output_markdown_path.write_text(markdown, encoding="utf-8")
         return True
 
@@ -259,7 +305,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             output_dir.mkdir(parents=True, exist_ok=True)
             if pdf_options.do_ocr:
                 try:
-                    if self._convert_with_remote_ocr(file_path, output_markdown_path):
+                    if self._convert_with_remote_ocr(file_path, output_markdown_path, image_describer):
                         return {
                             "doc_dir": str(output_dir),
                             "md_file": str(output_markdown_path),

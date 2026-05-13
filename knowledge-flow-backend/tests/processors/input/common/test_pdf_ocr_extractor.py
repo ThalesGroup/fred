@@ -16,13 +16,14 @@ from pathlib import Path
 
 from fred_core.common import ModelConfiguration
 
-from knowledge_flow_backend.core.processors.input.common.base_pdf_ocr_extractor import (
+from knowledge_flow_backend.core.processors.input.common.ocr.base_pdf_ocr_extractor import (
     BasePdfOcrExtractor,
+    RemotePdfOcrResult,
 )
-from knowledge_flow_backend.core.processors.input.common.mistral_pdf_ocr_extractor import (
+from knowledge_flow_backend.core.processors.input.common.ocr.mistral_pdf_ocr_extractor import (
     MistralPdfOcrExtractor,
 )
-from knowledge_flow_backend.core.processors.input.common.pdf_ocr_extractor import (
+from knowledge_flow_backend.core.processors.input.common.ocr.pdf_ocr_factory import (
     build_pdf_ocr_extractor,
 )
 
@@ -93,7 +94,7 @@ def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_p
             raise AssertionError(f"Unexpected GET url {url}")
 
     monkeypatch.setattr(
-        "knowledge_flow_backend.core.processors.input.common.mistral_pdf_ocr_extractor.httpx.Client",
+        "knowledge_flow_backend.core.processors.input.common.ocr.mistral_pdf_ocr_extractor.httpx.Client",
         FakeClient,
     )
 
@@ -105,9 +106,12 @@ def test_mistral_pdf_ocr_extractor_concatenates_page_markdown(monkeypatch, tmp_p
         )
     )
 
-    markdown = extractor.extract_pdf_markdown(pdf_path)
+    result = extractor.extract_pdf_result(pdf_path, include_images=True)
+    markdown = result.to_markdown()
 
     assert markdown == "# Page 1\n\nSecond page"
+    assert isinstance(result, RemotePdfOcrResult)
     assert requests[0][1] == "https://api.mistral.ai/v1/files"
     assert requests[1][1] == "https://api.mistral.ai/v1/files/file-123/url"
     assert requests[2][1] == "https://api.mistral.ai/v1/ocr"
+    assert requests[2][2]["include_image_base64"] is True
