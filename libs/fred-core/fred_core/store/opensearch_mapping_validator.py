@@ -60,7 +60,7 @@ def validate_index_mapping(
             if field_name not in current_properties:
                 error_msg = f"Missing root field: '{field_name}'"
                 if allow_missing_fields:
-                    logger.warning(f"[OPENSEARCH][MAPPING] {error_msg}")
+                    logger.warning("[OPENSEARCH][MAPPING] %s", error_msg)
                 else:
                     mismatches.append(error_msg)
                 continue
@@ -76,20 +76,23 @@ def validate_index_mapping(
             error_msg = (
                 f"Index '{index_name}' has mapping validation errors: {mismatches}"
             )
-            logger.error(f"[OPENSEARCH][MAPPING] {error_msg}")
+            logger.error("[OPENSEARCH][MAPPING] %s", error_msg)
 
             if strict:
                 raise MappingValidationError(error_msg)
         else:
             logger.info(
-                f"[OPENSEARCH][MAPPING] Index '{index_name}' mapping validation passed"
+                "[OPENSEARCH][MAPPING] index '%s' mapping validation passed",
+                index_name,
             )
 
     except Exception as e:
         if isinstance(e, MappingValidationError):
             raise
         logger.error(
-            f"[MAPPING] Failed to validate mapping for index '{index_name}': {e}"
+            "[OPENSEARCH][MAPPING] validation failed for index '%s': %s",
+            index_name,
+            e,
         )
         if strict:
             raise MappingValidationError(

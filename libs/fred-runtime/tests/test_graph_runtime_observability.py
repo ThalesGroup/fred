@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import cast
 
 from fred_core.portable import InMemoryMetricsProvider, Span, Tracer
@@ -28,7 +29,16 @@ class _RecordingTracer(Tracer):
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def start_span(self, name: str, *, context=None, attributes=None, **kwargs) -> Span:  # type: ignore[override]
+    def start_span(
+        self,
+        name: str,
+        *,
+        context: object | None = None,
+        attributes: Mapping[str, object] | None = None,
+        parent: Span | None = None,
+        **kwargs: object,
+    ) -> Span:
+        del parent
         span = _RecordingSpan()
         self.calls.append(
             {

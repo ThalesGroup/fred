@@ -11,11 +11,15 @@ from pydantic import BaseModel
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
+    CreatePromptRequest,
     ExecutionPreparation,
     FrontendBootstrap,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    PromptDetail,
+    PromptSummary,
     SessionListItem,
+    UpdatePromptRequest,
 )
 from control_plane_backend.scheduler.policies.policy_models import (
     LifecycleTrigger,
@@ -258,6 +262,63 @@ class ControlPlaneApiClient:
         if not isinstance(payload, list):
             raise RuntimeError("Agent instances response must be a JSON array.")
         return [ManagedAgentInstanceSummary.model_validate(item) for item in payload]
+
+    def list_prompts(self, team_id: str) -> list[PromptSummary]:
+        """Return the prompt-library summaries for one team."""
+
+        payload = self._get_json_payload("GET", f"/teams/{team_id}/prompts")
+        if not isinstance(payload, list):
+            raise RuntimeError("Prompts response must be a JSON array.")
+        return [PromptSummary.model_validate(item) for item in payload]
+
+    def get_prompt(self, team_id: str, prompt_id: str) -> PromptDetail:
+        """Return the full prompt-library payload for one prompt."""
+
+        payload = self._get_json_payload("GET", f"/teams/{team_id}/prompts/{prompt_id}")
+        return PromptDetail.model_validate(payload)
+
+    def create_prompt(
+        self,
+        team_id: str,
+        *,
+        name: str,
+        text: str,
+        description: str | None = None,
+    ) -> PromptSummary:
+        """Create one team-scoped prompt-library record."""
+
+        request = CreatePromptRequest(name=name, text=text, description=description)
+        payload = self._get_json_payload(
+            "POST",
+            f"/teams/{team_id}/prompts",
+            json_body=request.model_dump(mode="json"),
+        )
+        return PromptSummary.model_validate(payload)
+
+    def update_prompt(
+        self,
+        team_id: str,
+        prompt_id: str,
+        *,
+        name: str,
+        text: str,
+        description: str | None = None,
+    ) -> PromptSummary:
+        """Replace one team-scoped prompt-library record."""
+
+        request = UpdatePromptRequest(name=name, text=text, description=description)
+        payload = self._get_json_payload(
+            "PUT",
+            f"/teams/{team_id}/prompts/{prompt_id}",
+            json_body=request.model_dump(mode="json"),
+        )
+        return PromptSummary.model_validate(payload)
+
+    def delete_prompt(self, team_id: str, prompt_id: str) -> None:
+        """Delete one team-scoped prompt-library record."""
+
+        response = self._request("DELETE", f"/teams/{team_id}/prompts/{prompt_id}")
+        response.raise_for_status()
 
     def enroll_agent_instance(
         self,

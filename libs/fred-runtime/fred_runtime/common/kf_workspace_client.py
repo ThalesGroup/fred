@@ -168,7 +168,11 @@ class KfWorkspaceClient(KfBaseClient):
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
             logger.error(
-                f"HTTP error ({status}) reading asset at {path}: {e}", exc_info=True
+                "HTTP error (%s) reading asset at %s: %s",
+                status,
+                path,
+                e,
+                exc_info=True,
             )
             if status == 404:
                 raise WorkspaceRetrievalError(
@@ -179,7 +183,7 @@ class KfWorkspaceClient(KfBaseClient):
                 status_code=status,
             ) from e
         except Exception as e:
-            logger.error(f"General error reading asset {path}: {e}", exc_info=True)
+            logger.error("General error reading asset %s: %s", path, e, exc_info=True)
             raise WorkspaceRetrievalError(
                 f"Failed to read/decode asset '{path}' ({type(e).__name__})."
             ) from e
@@ -255,7 +259,11 @@ class KfWorkspaceClient(KfBaseClient):
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
             logger.error(
-                f"HTTP error ({status}) reading asset {path}: {e}", exc_info=True
+                "HTTP error (%s) reading asset %s: %s",
+                status,
+                path,
+                e,
+                exc_info=True,
             )
             if status == 404:
                 raise WorkspaceRetrievalError(
@@ -266,7 +274,7 @@ class KfWorkspaceClient(KfBaseClient):
                 status_code=status,
             ) from e
         except Exception as e:
-            logger.error(f"General error reading asset {path}: {e}", exc_info=True)
+            logger.error("General error reading asset %s: %s", path, e, exc_info=True)
             raise WorkspaceRetrievalError(
                 f"Failed to read asset '{path}' ({type(e).__name__})."
             ) from e
@@ -349,14 +357,18 @@ class KfWorkspaceClient(KfBaseClient):
                 else e.response.reason_phrase
             )
             logger.error(
-                f"HTTP error ({status}) uploading asset {key}: {detail}", exc_info=True
+                "HTTP error (%s) uploading asset %s: %s",
+                status,
+                key,
+                detail,
+                exc_info=True,
             )
             raise WorkspaceUploadError(
                 f"HTTP failure uploading asset '{key}' (Status: {status}, Detail: {detail}).",
                 status_code=status,
             ) from e
         except Exception as e:
-            logger.error(f"General error uploading asset {key}: {e}", exc_info=True)
+            logger.error("General error uploading asset %s: %s", key, e, exc_info=True)
             raise WorkspaceUploadError(
                 f"Failed to upload asset '{key}' ({type(e).__name__})."
             ) from e

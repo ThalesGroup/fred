@@ -43,6 +43,7 @@ type AgentFormModalProps = {
   isSubmitting: boolean;
   mode: "create" | "edit";
   teamName?: string;
+  teamId?: string;
   templates: AgentTemplateSummary[];
   editInstance?: ManagedAgentInstanceSummary;
   onClose: () => void;
@@ -64,6 +65,7 @@ export default function AgentFormModal({
   isSubmitting,
   mode,
   teamName,
+  teamId,
   templates,
   editInstance,
   onClose,
@@ -222,6 +224,7 @@ export default function AgentFormModal({
               isSubmitting={isSubmitting}
               submitAttempted={submitAttempted}
               editInstance={editInstance}
+              teamId={teamId}
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
               onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
               onTuningChange={handleTuningChange}

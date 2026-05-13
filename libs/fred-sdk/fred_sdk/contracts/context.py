@@ -106,34 +106,55 @@ class RuntimeContext(BaseModel):
     How: attach a RuntimeContext to the runtime binding or execution request.
     Example:
         >>> ctx = RuntimeContext(session_id="s-1", user_id="u-1")
+
+    Field groups:
+    - Group A (identity): session_id, user_id, team_id, exchange_id, checkpoint_id,
+      agent_instance_id, template_agent_id, trace_id, correlation_id, execution_action.
+      DEPRECATED for managed execution — these are superseded by ExecutionGrant.
+      Set them only in dev/direct mode. Will be removed when agentic-backend retires.
+    - Group B (auth delegation): access_token, refresh_token, access_token_expires_at.
+      Required when the runtime calls knowledge-flow backend on behalf of the user.
+      These fields are mutable (refreshed in place by the token refresh logic).
+    - Group C (per-turn retrieval selections): selected_document_libraries_ids,
+      selected_document_uids, context_prompt_text, search_policy, search_rag_scope,
+      include_session_scope, include_corpus_scope, deep_search, selected_chat_context_ids.
+      These are the core fields — set by the frontend per turn, read by retrieval logic.
+    - Group D (content/preferences): language, user_groups, attachments_markdown.
+      Will migrate to session preferences / identity over time.
     """
 
-    language: Optional[str] = None
+    # Group A — Identity (deprecated for managed execution, superseded by ExecutionGrant)
     session_id: Optional[str] = None
     exchange_id: Optional[str] = None
     checkpoint_id: Optional[str] = None
     user_id: Optional[str] = None
     team_id: Optional[str] = None
-    user_groups: list[str] | None = None
     trace_id: Optional[str] = None
     correlation_id: Optional[str] = None
     agent_instance_id: Optional[str] = None
     template_agent_id: Optional[str] = None
     execution_action: Optional[Literal["execute", "resume"]] = None
-    selected_document_libraries_ids: list[str] | None = None
-    selected_document_uids: list[str] | None = None
-    selected_chat_context_ids: list[str] | None = None
-    search_policy: str | None = None
+
+    # Group B — Auth delegation (mutable; refreshed in place by token refresh logic)
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
     access_token_expires_at: Optional[int] = None
-    attachments_markdown: Optional[str] = (
-        None  # if the session has some attachement files, this will hold their markdown representation
-    )
+
+    # Group C — Per-turn retrieval selections (core; set by frontend, read by retrieval)
+    selected_document_libraries_ids: list[str] | None = None
+    selected_document_uids: list[str] | None = None
+    context_prompt_text: str | None = None
+    search_policy: Literal["strict", "hybrid", "semantic"] | None = None
     search_rag_scope: Optional[Literal["corpus_only", "hybrid", "general_only"]] = None
-    deep_search: Optional[bool] = None
     include_session_scope: Optional[bool] = None
     include_corpus_scope: Optional[bool] = None
+    deep_search: Optional[bool] = None
+    selected_chat_context_ids: list[str] | None = None
+
+    # Group D — Content and preferences (will migrate to proper homes over time)
+    language: Optional[str] = None
+    user_groups: list[str] | None = None
+    attachments_markdown: Optional[str] = None
 
 
 class FrozenModel(BaseModel):

@@ -20,6 +20,7 @@ def _setup_test_schema() -> None:
 
     import control_plane_backend.models.agent_instance_models  # noqa: F401
     import control_plane_backend.models.purge_queue_models  # noqa: F401
+    import control_plane_backend.models.prompt_models  # noqa: F401
     import control_plane_backend.models.session_metadata_models  # noqa: F401
     import control_plane_backend.models.team_metadata_models  # noqa: F401
     from control_plane_backend.models.base import Base as CPBase

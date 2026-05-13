@@ -28,6 +28,7 @@ from control_plane_backend.cli import (
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     ManagedAgentInstanceSummary,
+    PromptSummary,
 )
 from control_plane_backend.teams.schemas import Team
 
@@ -110,6 +111,7 @@ def _make_cli_context(
     known_teams: list[Team] | None = None,
     known_templates: list[AgentTemplateSummary] | None = None,
     known_instances: list[ManagedAgentInstanceSummary] | None = None,
+    known_prompts: list[PromptSummary] | None = None,
     auth_session: _FakeAuthSession | None = None,
 ) -> tuple[httpx.Client, ControlPlaneCommandContext]:
     """
@@ -136,6 +138,7 @@ def _make_cli_context(
         known_teams=list(known_teams or []),
         known_templates=list(known_templates or []),
         known_instances=list(known_instances or []),
+        known_prompts=list(known_prompts or []),
     )
     ctx = ControlPlaneCommandContext(
         client=client,
@@ -340,7 +343,14 @@ def test_completion_candidates_suggest_team_and_instance_ids() -> None:
             status="enabled",
         )
     ]
+    state.known_prompts = [
+        PromptSummary(
+            id="prompt-123",
+            name="Daily brief",
+        )
+    ]
     assert completion_candidates("/prepare inst", state=state) == ["instance-123"]
+    assert completion_candidates("/prompt pr", state=state) == ["prompt-123"]
 
 
 def test_control_plane_api_client_injects_bearer_token_and_lists_teams() -> None:
@@ -523,6 +533,10 @@ def test_run_command_team_accepts_visible_team_name_selector(capsys) -> None:
             return httpx.Response(200, json=[])
         if request.method == "GET" and request.url.path.endswith(
             f"/teams/{team_id}/agent-instances"
+        ):
+            return httpx.Response(200, json=[])
+        if request.method == "GET" and request.url.path.endswith(
+            f"/teams/{team_id}/prompts"
         ):
             return httpx.Response(200, json=[])
         return httpx.Response(404)
@@ -732,6 +746,194 @@ def test_run_command_sessions_accepts_visible_team_name(capsys) -> None:
     output = capsys.readouterr().out
     assert "Sessions" in output
     assert "First chat" in output
+    http_client.close()
+
+
+def test_run_command_prompts_accepts_visible_team_name(capsys) -> None:
+    """
+    Verify `/prompts` accepts a readable team selector and prints prompt rows.
+
+    Why this test exists:
+    - prompt-library inspection should follow the same team-selector ergonomics
+      as the rest of the control-plane CLI
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_cli.py -q`
+    """
+
+    team_id = "af27a03a-48d4-451c-aaf4-6d5aa44733f1"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path.endswith(
+            f"/teams/{team_id}/prompts"
+        ):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "prompt-1",
+                        "name": "Daily brief",
+                        "description": "Ops baseline",
+                        "created_by": "alice",
+                        "created_at": "2026-01-01T10:00:00+00:00",
+                        "updated_at": "2026-01-01T10:05:00+00:00",
+                    }
+                ],
+            )
+        return httpx.Response(404)
+
+    http_client, ctx = _make_cli_context(
+        handler,
+        known_teams=[
+            Team(
+                id=TeamId(team_id),
+                name="fredlab",
+                member_count=3,
+            )
+        ],
+    )
+
+    assert run_command("/prompts fredlab", ctx=ctx) is True
+    output = capsys.readouterr().out
+    assert "Prompts" in output
+    assert "Daily brief" in output
+    http_client.close()
+
+
+def test_run_command_prompt_crud_uses_current_team(capsys) -> None:
+    """
+    Verify prompt CRUD commands call the team-scoped HTTP surface and refresh cache.
+
+    Why this test exists:
+    - `make cli` must exercise the full prompt-library lifecycle before any UI
+      prompt-management page is considered ready
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_cli.py -q`
+    """
+
+    seen_requests: list[tuple[str, str, dict[str, object] | None]] = []
+    prompts_payload = [
+        {
+            "id": "prompt-1",
+            "name": "Daily brief v2",
+            "description": "Refined",
+            "created_by": "alice",
+            "created_at": None,
+            "updated_at": None,
+        }
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read().decode("utf-8")) if request.content else None
+        seen_requests.append((request.method, request.url.path, body))
+        if request.method == "POST" and request.url.path.endswith(
+            "/teams/fredlab/prompts"
+        ):
+            assert isinstance(body, dict)
+            return httpx.Response(
+                201,
+                json={
+                    "id": "prompt-1",
+                    "name": body["name"],
+                    "description": body.get("description"),
+                    "created_by": "alice",
+                    "created_at": None,
+                    "updated_at": None,
+                },
+            )
+        if request.method == "PUT" and request.url.path.endswith(
+            "/teams/fredlab/prompts/prompt-1"
+        ):
+            assert isinstance(body, dict)
+            return httpx.Response(
+                200,
+                json={
+                    "id": "prompt-1",
+                    "name": body["name"],
+                    "description": body.get("description"),
+                    "created_by": "alice",
+                    "created_at": None,
+                    "updated_at": None,
+                },
+            )
+        if request.method == "GET" and request.url.path.endswith(
+            "/teams/fredlab/prompts/prompt-1"
+        ):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "prompt-1",
+                    "team_id": "fredlab",
+                    "name": "Daily brief v2",
+                    "description": "Refined",
+                    "text": "Respond in {response_language}.",
+                    "created_by": "alice",
+                    "created_at": None,
+                    "updated_at": None,
+                },
+            )
+        if request.method == "DELETE" and request.url.path.endswith(
+            "/teams/fredlab/prompts/prompt-1"
+        ):
+            return httpx.Response(204)
+        if request.method == "GET" and request.url.path.endswith(
+            "/teams/fredlab/prompts"
+        ):
+            return httpx.Response(200, json=prompts_payload)
+        return httpx.Response(404)
+
+    http_client, ctx = _make_cli_context(handler, current_team_id="fredlab")
+
+    assert (
+        run_command(
+            '/prompt-create "Daily brief" "Today is {today}." "Ops baseline"', ctx=ctx
+        )
+        is True
+    )
+    assert (
+        run_command(
+            '/prompt-update prompt-1 "Daily brief v2" "Respond in {response_language}." "Refined"',
+            ctx=ctx,
+        )
+        is True
+    )
+    assert run_command("/prompt prompt-1", ctx=ctx) is True
+    assert run_command("/prompt-delete prompt-1", ctx=ctx) is True
+
+    output = capsys.readouterr().out
+    assert "Created Prompt" in output
+    assert "Updated Prompt" in output
+    assert "Prompt Detail" in output
+    assert "Deleted prompt prompt-1." in output
+    assert any(
+        method == "POST"
+        and path.endswith("/teams/fredlab/prompts")
+        and body
+        == {
+            "name": "Daily brief",
+            "description": "Ops baseline",
+            "text": "Today is {today}.",
+        }
+        for method, path, body in seen_requests
+    )
+    assert any(
+        method == "PUT"
+        and path.endswith("/teams/fredlab/prompts/prompt-1")
+        and body
+        == {
+            "name": "Daily brief v2",
+            "description": "Refined",
+            "text": "Respond in {response_language}.",
+        }
+        for method, path, body in seen_requests
+    )
     http_client.close()
 
 

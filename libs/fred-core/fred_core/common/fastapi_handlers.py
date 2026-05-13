@@ -54,7 +54,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: AuthorizationError
     ) -> JSONResponse:
         """Handle AuthorizationError by returning a 403 Forbidden response."""
-        logger.warning(f"Authorization denied for user {exc.user_id}: {exc}")
+        logger.warning("Authorization denied for user %s: %s", exc.user_id, exc)
         return JSONResponse(
             status_code=403,
             content={"detail": _authorization_detail_for_client(exc)},
@@ -66,7 +66,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         """Handle all unhandled exceptions by logging and returning 500."""
         logger.error(
-            f"Unhandled exception in {request.method} {request.url}: {exc}",
+            "Unhandled exception in %s %s: %s",
+            request.method,
+            request.url,
+            exc,
             exc_info=True,
         )
         return JSONResponse(

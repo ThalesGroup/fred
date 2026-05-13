@@ -31,6 +31,7 @@ class SessionMetadataRecord:
         agent_instance_id: str | None,
         user_id: str | None,
         title: str | None,
+        context_prompt_id: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -39,6 +40,7 @@ class SessionMetadataRecord:
         self.agent_instance_id = agent_instance_id
         self.user_id = user_id
         self.title = title
+        self.context_prompt_id = context_prompt_id
         self.created_at = created_at
         self.updated_at = updated_at
 
@@ -50,6 +52,7 @@ def _row_to_record(row: SessionMetadataRow) -> SessionMetadataRecord:
         agent_instance_id=row.agent_instance_id,
         user_id=row.user_id,
         title=row.title,
+        context_prompt_id=row.context_prompt_id,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -186,6 +189,8 @@ class SessionMetadataStore:
         *,
         title: str | None = None,
         updated_at: datetime | None = None,
+        context_prompt_id: str | None = None,
+        clear_context_prompt: bool = False,
         session: AsyncSession | None = None,
     ) -> SessionMetadataRecord | None:
         """
@@ -208,6 +213,10 @@ class SessionMetadataStore:
             values["title"] = title
         if updated_at is not None:
             values["updated_at"] = updated_at
+        if context_prompt_id is not None:
+            values["context_prompt_id"] = context_prompt_id
+        elif clear_context_prompt:
+            values["context_prompt_id"] = None
         if not values:
             return await self.get(session_id, session)
         async with use_session(self._sessions, session) as s:

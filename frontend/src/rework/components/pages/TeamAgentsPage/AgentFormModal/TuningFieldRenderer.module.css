@@ -40,3 +40,35 @@
   color: var(--error);
   font: var(--font-body-small);
 }
+
+/* ── Prompt field ─────────────────────────────────────────────────────────── */
+
+/* Picker mode: grid is the primary UI, textarea is hidden */
+.promptPickerMode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.promptPickerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.promptPickerLabel {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+/* Editing mode: textarea is primary, picker is a secondary action */
+.promptFieldWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.promptEditingHeader {
+  display: flex;
+  justify-content: flex-end;
+}

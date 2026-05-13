@@ -79,7 +79,7 @@ class MinioFilesystem(BaseFilesystem):
 
         if not self.client.bucket_exists(bucket_name):
             self.client.make_bucket(bucket_name)
-            logger.info(f"Bucket '{bucket_name}' created.")
+            logger.info("[MINIO_SETUP] bucket=%s created", bucket_name)
 
     def _resolve_path(self, path: str) -> str:
         """

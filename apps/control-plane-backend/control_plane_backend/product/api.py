@@ -13,31 +13,47 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    ContextPromptSummary,
     CreateAgentInstanceRequest,
+    CreatePromptRequest,
     CreateSessionRequest,
     ExecutionPreparation,
     FrontendBootstrap,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    PromptDetail,
+    PromptPromoteRequest,
+    PromptScoreUpdateRequest,
+    PromptSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
+    UpdatePromptRequest,
     UpdateSessionRequest,
 )
 from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
+    PromptRequestError,
     SessionAlreadyExistsError,
     build_frontend_bootstrap,
     create_session,
+    create_prompt,
+    delete_prompt,
     delete_session,
     enroll_agent_instance,
+    get_prompt,
     get_runtime_binding,
     list_agent_templates,
+    list_context_prompts,
     list_managed_agent_instances,
+    list_prompts,
     list_sessions,
     prepare_execution,
+    promote_prompt,
     unenroll_agent_instance,
     update_agent_instance,
+    update_prompt,
+    update_prompt_score,
     update_session_activity,
 )
 from control_plane_backend.teams.service import (
@@ -256,6 +272,272 @@ async def delete_team_agent_instance(
 
 
 @router.get(
+    "/teams/{team_id}/prompts",
+    response_model=list[PromptSummary],
+    response_model_exclude_none=True,
+    summary="List prompt-library records for one team.",
+)
+async def get_team_prompts(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[PromptSummary]:
+    """
+    Return the team-scoped prompt library for one team.
+
+    Why this endpoint exists:
+    - prompt management must be a first-class control-plane product surface,
+      independent from managed-agent instance CRUD
+
+    How to use it:
+    - call with one team id after authentication
+
+    Example:
+    - `GET /control-plane/v1/teams/personal/prompts`
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_prompts(team_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/prompts",
+    response_model=PromptSummary,
+    response_model_exclude_none=True,
+    status_code=201,
+    summary="Create one team-scoped prompt-library record.",
+)
+async def post_team_prompt(
+    team_id: Annotated[TeamId, Path()],
+    body: CreatePromptRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptSummary:
+    """
+    Create one new prompt-library record for the given team.
+
+    Why this endpoint exists:
+    - prompt authoring and reuse should not require creating a managed agent
+      instance first
+
+    How to use it:
+    - call with a team id plus `{ name, text, description? }`
+
+    Example:
+    - `POST /control-plane/v1/teams/personal/prompts`
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        return await create_prompt(user=user, team_id=team_id, request=body, deps=deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.get(
+    "/teams/{team_id}/prompts/context",
+    response_model=list[ContextPromptSummary],
+    summary="List personal + team prompts for the chat context picker.",
+)
+async def get_context_prompts_early(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[ContextPromptSummary]:
+    """
+    Return the union of the calling user's personal prompts and the team's prompts,
+    ordered by session_count DESC then name ASC.
+
+    Registered before ``/prompts/{prompt_id}`` so FastAPI does not swallow
+    the literal segment ``context`` as a path parameter.
+
+    Example:
+    - ``GET /control-plane/v1/teams/bid-and-capture/prompts/context``
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    return await list_context_prompts(user, team_id, deps)
+
+
+@router.get(
+    "/teams/{team_id}/prompts/{prompt_id}",
+    response_model=PromptDetail,
+    response_model_exclude_none=True,
+    summary="Get one team-scoped prompt-library record.",
+)
+async def get_team_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptDetail:
+    """
+    Return the full prompt-library record for one saved prompt.
+
+    Why this endpoint exists:
+    - prompt text inspection belongs to the control-plane product surface, not
+      to managed-agent runtime bindings
+
+    How to use it:
+    - call with one team id and prompt id after authentication
+
+    Example:
+    - `GET /control-plane/v1/teams/personal/prompts/1234`
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    result = await get_prompt(team_id, prompt_id, deps)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.put(
+    "/teams/{team_id}/prompts/{prompt_id}",
+    response_model=PromptSummary,
+    response_model_exclude_none=True,
+    summary="Replace one team-scoped prompt-library record.",
+)
+async def put_team_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    body: UpdatePromptRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptSummary:
+    """
+    Replace one saved prompt-library record for the given team.
+
+    Why this endpoint exists:
+    - prompt management starts with one intentionally simple mutable-record
+      model before any future versioning or publication layers
+
+    How to use it:
+    - call with the full replacement `{ name, text, description? }`
+
+    Example:
+    - `PUT /control-plane/v1/teams/personal/prompts/1234`
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        result = await update_prompt(team_id, prompt_id, body, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.delete(
+    "/teams/{team_id}/prompts/{prompt_id}",
+    status_code=204,
+    response_model=None,
+    summary="Delete one team-scoped prompt-library record.",
+)
+async def delete_team_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """
+    Delete one saved prompt-library record for the given team.
+
+    Why this endpoint exists:
+    - prompt cleanup is a normal product operation and should stay available
+      without entering the agent-creation flow
+
+    How to use it:
+    - call with a team id and prompt id after authentication
+
+    Example:
+    - `DELETE /control-plane/v1/teams/personal/prompts/1234`
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    deleted = await delete_prompt(team_id, prompt_id, deps)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
+        )
+
+
+@router.post(
+    "/teams/{team_id}/prompts/{prompt_id}/promote",
+    response_model=PromptSummary,
+    status_code=201,
+    summary="Copy one prompt by value to a target team.",
+)
+async def post_promote_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    body: PromptPromoteRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptSummary:
+    """
+    Promote one team-scoped prompt to another team by copying its text and metadata.
+
+    The source prompt is never modified. The new copy starts at version 1,
+    import_count 0, session_count 0, score null.
+
+    Returns 409 if a prompt with the same name already exists in the target team —
+    the caller must rename first.
+
+    Example:
+    - ``POST /control-plane/v1/teams/personal/prompts/abc-123/promote``
+      ``{ "target_team_id": "bid-and-capture" }``
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    try:
+        return await promote_prompt(user, team_id, prompt_id, body, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+
+
+@router.patch(
+    "/teams/{team_id}/prompts/{prompt_id}",
+    response_model=PromptSummary,
+    summary="Update the quality score of one team-scoped prompt.",
+)
+async def patch_team_prompt(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    body: PromptScoreUpdateRequest,
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> PromptSummary:
+    """
+    Set the explicit quality score (0.0–5.0) for one team-scoped prompt.
+
+    Score is admin-settable. It will also be writable by the evaluation track (O1)
+    once that harness is live. A null score is displayed as "-" in the UI.
+
+    Example:
+    - ``PATCH /control-plane/v1/teams/bid-and-capture/prompts/abc-123``
+      ``{ "score": 4.5 }``
+    """
+
+    await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
+    result = await update_prompt_score(team_id, prompt_id, body, deps)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.get(
     "/agent-instances/{agent_instance_id}/runtime",
     response_model=ManagedAgentRuntimeBinding,
     response_model_exclude_none=True,
@@ -426,6 +708,7 @@ async def post_prepare_execution(
     agent_instance_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
+    session_id: str | None = None,
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
@@ -434,6 +717,9 @@ async def post_prepare_execution(
 
     Returns an ExecutionPreparation with ingress-relative URLs and a short-lived
     ExecutionGrant scoped to the user/team/instance.
+
+    Pass ``session_id`` (query param) to include ``context_prompt_text`` in the response
+    when the session has a context prompt configured.
     """
     await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
 
@@ -442,6 +728,7 @@ async def post_prepare_execution(
             user=user,
             team_id=team_id,
             agent_instance_id=agent_instance_id,
+            session_id=session_id,
             deps=deps,
         )
     except ExecutionPreparationError as exc:

@@ -19,13 +19,13 @@ applications. It has three planes:
 
 Read in this order before making changes:
 
-1. [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/platform/DEVELOPER_CONTRACT.md) — build, test, PR rules
-2. [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/platform/PLATFORM_RUNTIME_MAP.md) — canonical service map
-3. [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) — migration phase status (Phases 0–7)
-4. [`docs/WORKPLAN.md`](./docs/WORKPLAN.md) — current sprint, who owns what
-5. [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/design/RUNTIME-EXECUTION-CONTRACT.md) — when touching fred-runtime, fred-sdk, SSE, CLI, KPI
-6. [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) — when touching control-plane APIs or sessions
-7. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/backlog/CHAT-UI-BACKLOG.md) — when touching ManagedChatPage or chat UI components
+1. [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/swift/platform/DEVELOPER_CONTRACT.md) — build, test, PR rules
+2. [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/swift/platform/PLATFORM_RUNTIME_MAP.md) — canonical service map
+3. [`docs/backlog/BACKLOG.md`](./docs/swift/backlog/BACKLOG.md) — migration phase status (Phases 0–7)
+4. [`docs/WORKPLAN.md`](./docs/swift/WORKPLAN.md) — current sprint, who owns what
+5. [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md) — when touching fred-runtime, fred-sdk, SSE, CLI, KPI
+6. [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) — when touching control-plane APIs or sessions
+7. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/swift/backlog/CHAT-UI-BACKLOG.md) — when touching ManagedChatPage or chat UI components
 
 ## Key Rules
 
@@ -48,4 +48,4 @@ Read in this order before making changes:
 
 ## Doc Index
 
-Full documentation index: [`docs/README.md`](./docs/README.md)
+Full documentation index: [`docs/README.md`](./docs/swift/README.md)

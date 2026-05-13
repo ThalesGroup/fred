@@ -26,7 +26,7 @@ Fred is built around three platform applications and a publishable SDK stack:
 
 **The key design principle**: the control plane, knowledge flow backend, and frontend are the stable platform. Agent pods — `fred-agents` or any team's own pod built with `fred-sdk` + `fred-runtime` — are independently deployable and register themselves with the control plane. You can ship new agents without touching the platform.
 
-> `agentic-backend` is still present during migration but no new features go there. Execution moves to `fred-agents` / `fred-runtime`; product/session/admin moves to `control-plane-backend`. See [`docs/backlog/BACKLOG.md`](./docs/backlog/BACKLOG.md) for migration status.
+> `agentic-backend` is still present during migration but no new features go there. Execution moves to `fred-agents` / `fred-runtime`; product/session/admin moves to `control-plane-backend`. See [`docs/backlog/BACKLOG.md`](./docs/swift/backlog/BACKLOG.md) for migration status.
 
 See the project site: <https://fredk8.dev>
 
@@ -267,7 +267,7 @@ rules:
 
 This makes it possible to route different teams, agents, or operation types to different models — including mixing providers — without changing any agent code.
 
-For details on all supported match criteria (`team_id`, `agent_id`, `user_id`, `operation`, `purpose`) see [`docs/platform/LLM_ROUTING_FRED.md`](./docs/platform/LLM_ROUTING_FRED.md).
+For details on all supported match criteria (`team_id`, `agent_id`, `user_id`, `operation`, `purpose`) see [`docs/platform/LLM_ROUTING_FRED.md`](./docs/swift/platform/LLM_ROUTING_FRED.md).
 
 #### Set it up according to your development environment
 
@@ -577,13 +577,13 @@ Other infrastructure services remain accessible on their usual ports:
 > [!IMPORTANT]
 > **Access-control reminder (shared environments):**
 > Keycloak app roles and team ReBAC rights are different controls.
-> For the Fred access model and deployment bootstrap rules, see [`docs/platform/REBAC.md`](./docs/platform/REBAC.md).
+> For the Fred access model and deployment bootstrap rules, see [`docs/platform/REBAC.md`](./docs/swift/platform/REBAC.md).
 
 For production deployments (Kubernetes, VMs, on-prem or cloud), refer to:
 
-- [`docs/platform/DEPLOYMENT_GUIDE.md`](./docs/platform/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
-- [`docs/platform/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/platform/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
-- [`docs/platform/REBAC.md`](./docs/platform/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
+- [`docs/platform/DEPLOYMENT_GUIDE.md`](./docs/swift/platform/DEPLOYMENT_GUIDE.md) – high-level deployment guide (components, configuration, external dependencies).
+- [`docs/platform/DEPLOYMENT_GUIDE_OPENSEARCH.md`](./docs/swift/platform/DEPLOYMENT_GUIDE_OPENSEARCH.md) – OpenSearch-specific requirements. Use this only if you choose OpenSearch over the new PostgreSQL/pgvector option.
+- [`docs/platform/REBAC.md`](./docs/swift/platform/REBAC.md) – high-level access model (RBAC/ReBAC/organization/bootstrap).
 
 The rest of this `README.md` focuses on local developer setup and model configuration.
 
@@ -598,7 +598,7 @@ The v2 SDK provides two authoring styles:
 
 Both styles support MCP tool integration and run on the same runtime.
 
-Start with the [agent authoring guide (v2)](./docs/authoring/AGENTS.md). For the design philosophy behind the SDK, see [SDK V2 positioning](./docs/authoring/SDK-V2-POSITIONING.md).
+Start with the [agent authoring guide (v2)](./docs/swift/authoring/AGENTS.md). For the design philosophy behind the SDK, see [SDK V2 positioning](./docs/swift/authoring/SDK-V2-POSITIONING.md).
 
 ## Agent coding academy
 
@@ -654,7 +654,7 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 | Azure OpenAI via Azure APIM | Add `AZURE_APIM_SUBSCRIPTION_KEY` and `AZURE_AD_CLIENT_SECRET` to `.env`; add profile with `provider: azure-apim` |
 | Ollama (local models)       | Add a profile with `provider: openai` and `settings.base_url: <ollama-endpoint>` in `models_catalog.yaml`      |
 
-See `apps/fred-agents/config/models_catalog.yaml` and `knowledge-flow-backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`) for concrete examples. Full routing documentation: [`docs/platform/LLM_ROUTING_FRED.md`](./docs/platform/LLM_ROUTING_FRED.md).
+See `apps/fred-agents/config/models_catalog.yaml` and `knowledge-flow-backend/config/configuration.yaml` (sections `chat_model:` and `embedding_model:`) for concrete examples. Full routing documentation: [`docs/platform/LLM_ROUTING_FRED.md`](./docs/swift/platform/LLM_ROUTING_FRED.md).
 
 ### Advanced Integrations
 
@@ -679,7 +679,7 @@ Persistence options:
 - Generic information
 
   - [Main docs](https://fredk8.dev/docs)
-  - [Features overview](./docs/platform/FEATURES.md)
+  - [Features overview](./docs/swift/platform/FEATURES.md)
 
 - fred-agents pod and runtime libraries
 
@@ -690,14 +690,14 @@ Persistence options:
 
 - Agent authoring (v2 SDK)
 
-  - [Agent authoring guide (v2)](./docs/authoring/AGENTS.md)
-  - [SDK V2 positioning — design philosophy](./docs/authoring/SDK-V2-POSITIONING.md)
-  - [V2 agent creation — React vs Graph](./docs/platform/V2_AGENT_CREATION.md)
+  - [Agent authoring guide (v2)](./docs/swift/authoring/AGENTS.md)
+  - [SDK V2 positioning — design philosophy](./docs/swift/authoring/SDK-V2-POSITIONING.md)
+  - [V2 agent creation — React vs Graph](./docs/swift/platform/V2_AGENT_CREATION.md)
 
 - Architecture RFCs
 
-  - [SDK V2 for industrial-grade agents](./docs/rfc/SDK-V2-RFC.md)
-  - [Distributed agent architecture](./docs/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md)
+  - [SDK V2 for industrial-grade agents](./docs/swift/rfc/SDK-V2-RFC.md)
+  - [Distributed agent architecture](./docs/swift/rfc/DISTRIBUTED-AGENT-ARCHITECTURE-RFC.md)
 
 - Knowledge Flow backend
 
@@ -709,17 +709,17 @@ Persistence options:
 
 - Security-related topics
 
-  - [Security overview](./docs/platform/SECURITY.md)
-  - [Keycloak](./docs/platform/KEYCLOAK.md)
+  - [Security overview](./docs/swift/platform/SECURITY.md)
+  - [Keycloak](./docs/swift/platform/KEYCLOAK.md)
 
 - Developer and contributors guides
 
-  - [Developer Contract (humans + AI)](./docs/platform/DEVELOPER_CONTRACT.md)
-  - [Platform Runtime Map (API apps + Temporal apps)](./docs/platform/PLATFORM_RUNTIME_MAP.md)
+  - [Developer Contract (humans + AI)](./docs/swift/platform/DEVELOPER_CONTRACT.md)
+  - [Platform Runtime Map (API apps + Temporal apps)](./docs/swift/platform/PLATFORM_RUNTIME_MAP.md)
   - [Developer Tools](./developer_tools/README.md)
-  - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
-  - [Python Coding Guide](./docs/platform/PYTHON_CODING_GUIDELINES.md)
-  - [Contributing](./docs/CONTRIBUTING.md)
+  - [Code of Conduct](./docs/swift/CODE_OF_CONDUCT.md)
+  - [Python Coding Guide](./docs/swift/platform/PYTHON_CODING_GUIDELINES.md)
+  - [Contributing](./docs/swift/CONTRIBUTING.md)
 
 ### Licensing Note
 

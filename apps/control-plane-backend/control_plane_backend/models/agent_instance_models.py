@@ -31,6 +31,11 @@ class AgentInstanceRow(Base):
         nullable=True,
         comment="JSON-serialized ManagedAgentTuning payload",
     )
+    prompt_refs_json: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="JSON-serialized prompt_refs: {field_key: {prompt_id, version}}",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

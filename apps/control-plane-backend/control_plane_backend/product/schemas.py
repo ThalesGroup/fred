@@ -84,6 +84,15 @@ class EffectiveChatOptions(BaseModel):
     default_search_rag_scope: Literal["corpus_only", "hybrid", "general_only"] = (
         "hybrid"
     )
+    bound_library_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "When non-null, the agent is configured to use exactly these library IDs. "
+            "The frontend must render the library picker as read-only and send exactly "
+            "this list in RuntimeContext.selected_document_libraries_ids. "
+            "Null means the user can freely select from all available libraries."
+        ),
+    )
 
 
 class ManagedAgentInstanceSummary(BaseModel):
@@ -186,6 +195,14 @@ class ExecutionPreparation(BaseModel):
     runtime_display_name: str | None = None
     grant_refresh_required: bool = False
     max_session_idle_seconds: int | None = None
+    context_prompt_text: str | None = Field(
+        default=None,
+        description=(
+            "Resolved text of the session's context prompt, if one is set. "
+            "The runtime injects this as a conversation-level context. "
+            "Null when no context prompt is configured for the session."
+        ),
+    )
 
 
 class SessionListItem(BaseModel):
@@ -195,8 +212,73 @@ class SessionListItem(BaseModel):
     team_id: TeamId
     agent_instance_id: str | None = None
     title: str | None = None
+    context_prompt_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class PromptSummary(BaseModel):
+    """Small team-scoped prompt-library projection used for listings."""
+
+    id: str
+    name: str
+    description: str | None = None
+    created_by: str | None = None
+    version: int = 1
+    import_count: int = 0
+    session_count: int = 0
+    score: float | None = None
+    avg_input_tokens: int | None = None
+    avg_output_tokens: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class PromptDetail(PromptSummary):
+    """Full team-scoped prompt-library payload including prompt text."""
+
+    team_id: TeamId
+    text: str
+
+
+class ContextPromptSummary(BaseModel):
+    """One prompt entry in the chat-context picker (union of personal + team)."""
+
+    id: str
+    name: str
+    description: str | None = None
+    scope: Literal["personal", "team"]
+    version: int
+    session_count: int
+    score: float | None = None
+
+
+class PromptScoreUpdateRequest(BaseModel):
+    """Request body for updating the quality score of one prompt."""
+
+    score: float = Field(..., ge=0.0, le=5.0)
+
+
+class PromptPromoteRequest(BaseModel):
+    """Request body for promoting (copy-by-value) one prompt to another team."""
+
+    target_team_id: str = Field(..., min_length=1)
+
+
+class CreatePromptRequest(BaseModel):
+    """Request body for creating one team-scoped prompt-library record."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    text: str = Field(..., min_length=1)
+
+
+class UpdatePromptRequest(BaseModel):
+    """Request body for replacing one team-scoped prompt-library record."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=500)
+    text: str = Field(..., min_length=1)
 
 
 class CreateSessionRequest(BaseModel):
@@ -214,6 +296,8 @@ class UpdateSessionRequest(BaseModel):
     Typical callers:
     - frontend after a completed turn: ``{ "updated_at": "<iso>" }``
     - user renames a session: ``{ "title": "My analysis" }``
+    - user selects a context prompt: ``{ "context_prompt_id": "<id>" }``
+    - user clears context prompt: ``{ "context_prompt_id": null }``
     """
 
     updated_at: datetime | None = Field(
@@ -227,6 +311,18 @@ class UpdateSessionRequest(BaseModel):
         default=None,
         max_length=500,
         description="Human-readable session title shown in the sidebar.",
+    )
+    context_prompt_id: str | None = Field(
+        default=None,
+        description=(
+            "Library prompt to use as chat context for this session. "
+            "Null clears the current context. Send the sentinel value '__clear__' "
+            "or omit the field entirely to leave it unchanged."
+        ),
+    )
+    clear_context_prompt: bool = Field(
+        default=False,
+        description="Set to true to explicitly clear context_prompt_id to null.",
     )
 
 

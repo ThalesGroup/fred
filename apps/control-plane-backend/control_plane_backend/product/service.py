@@ -19,10 +19,16 @@ from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
 )
+from control_plane_backend.prompts.store import (
+    PromptAlreadyExistsError,
+    PromptRecord,
+)
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
+    ContextPromptSummary,
     CreateAgentInstanceRequest,
+    CreatePromptRequest,
     CreateSessionRequest,
     EffectiveChatOptions,
     ExecutionPreparation,
@@ -30,8 +36,13 @@ from control_plane_backend.product.schemas import (
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
     PermissionSummary,
+    PromptDetail,
+    PromptPromoteRequest,
+    PromptScoreUpdateRequest,
+    PromptSummary,
     SessionListItem,
     UpdateAgentInstanceRequest,
+    UpdatePromptRequest,
     UpdateSessionRequest,
 )
 from control_plane_backend.sessions.store import (
@@ -548,8 +559,14 @@ def _resolve_effective_chat_options(
     - `options = _resolve_effective_chat_options(instance.tuning)`
     """
 
+    _raw_bound_ids = tuning.values.get("chat_options.bound_library_ids")
     options = EffectiveChatOptions(
-        attach_files=_as_bool(tuning.values.get("chat_options.attach_files"))
+        attach_files=_as_bool(tuning.values.get("chat_options.attach_files")),
+        bound_library_ids=(
+            [str(v) for v in _raw_bound_ids]
+            if isinstance(_raw_bound_ids, list)
+            else None
+        ),
     )
     active_servers = _selected_mcp_servers(
         declared_servers=tuning.mcp_servers,
@@ -566,6 +583,17 @@ def _resolve_effective_chat_options(
                 field_defaults["chat_options.libraries_selection"],
             )
             options.libraries_selection = options.libraries_selection or _as_bool(value)
+
+        if (
+            options.bound_library_ids is None
+            and "chat_options.bound_library_ids" in field_defaults
+        ):
+            value = server_values.get(
+                "chat_options.bound_library_ids",
+                field_defaults["chat_options.bound_library_ids"],
+            )
+            if isinstance(value, list):
+                options.bound_library_ids = [str(v) for v in value]
 
         if (
             not options.search_policy_selection
@@ -755,6 +783,14 @@ class ExecutionPreparationError(Exception):
 
 class EnrollmentError(Exception):
     """Raised when agent instance enrollment fails."""
+
+    def __init__(self, message: str, *, http_status: int = 400) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
+class PromptRequestError(Exception):
+    """Raised when prompt-library CRUD cannot be completed as requested."""
 
     def __init__(self, message: str, *, http_status: int = 400) -> None:
         super().__init__(message)
@@ -1020,6 +1056,7 @@ async def prepare_execution(
     user: KeycloakUser,
     team_id: TeamId,
     agent_instance_id: str,
+    session_id: str | None = None,
     deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
     """
@@ -1083,6 +1120,14 @@ async def prepare_execution(
         expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
     )
 
+    context_prompt_text: str | None = None
+    if session_id is not None:
+        session_record = await deps.get_session_metadata_store().get(session_id)
+        if session_record is not None and session_record.context_prompt_id is not None:
+            prompt = await deps.get_prompt_store().get(session_record.context_prompt_id)
+            if prompt is not None:
+                context_prompt_text = prompt.text
+
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,
         team_id=team_id,
@@ -1094,6 +1139,7 @@ async def prepare_execution(
         effective_chat_options=_resolve_effective_chat_options(instance.tuning),
         expires_at=datetime.fromtimestamp(grant.expires_at, tz=timezone.utc),
         runtime_display_name=source.runtime_id,
+        context_prompt_text=context_prompt_text,
     )
 
 
@@ -1126,6 +1172,343 @@ async def get_runtime_binding(
         enabled=instance.enabled,
         tuning=instance.tuning,
     )
+
+
+# ---------------------------------------------------------------------------
+# Prompt library
+# ---------------------------------------------------------------------------
+
+
+def _validate_prompt_library_text(
+    *,
+    text: str,
+    context_label: str,
+) -> None:
+    """
+    Validate one saved prompt-library text payload before persistence.
+
+    Why this function exists:
+    - managed-agent tuning validation already protects inline `prompts.*`
+      values, but the prompt library needs the same persistence-time safety at
+      its own CRUD boundary
+
+    How to use it:
+    - call before creating or updating one `Prompt` record
+    - invalid template syntax raises `PromptRequestError(http_status=422)`
+
+    Example:
+    - `_validate_prompt_library_text(text=request.text, context_label="prompt create")`
+    """
+
+    prompt_errors = validate_prompt_template(text)
+    if not prompt_errors:
+        return
+    details = "; ".join(f"'{error.pattern}': {error.reason}" for error in prompt_errors)
+    raise PromptRequestError(
+        f"Invalid prompt template during {context_label}: {details}.",
+        http_status=422,
+    )
+
+
+def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
+    """Project one stored prompt record into the list/command summary shape.
+
+    Why this function exists:
+    - prompt list surfaces should hide the full prompt text by default while
+      keeping one consistent typed projection
+
+    How to use it:
+    - call after reading prompt records from the store for list/create/update
+      responses
+
+    Example:
+    - `summary = _prompt_record_to_summary(record)`
+    """
+
+    return PromptSummary(
+        id=record.prompt_id,
+        name=record.name,
+        description=record.description,
+        created_by=record.created_by,
+        version=record.version,
+        import_count=record.import_count,
+        session_count=record.session_count,
+        score=record.score,
+        avg_input_tokens=record.avg_input_tokens,
+        avg_output_tokens=record.avg_output_tokens,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
+    """Project one stored prompt record into the full detail response shape.
+
+    Why this function exists:
+    - prompt inspection flows need the saved text, team scope, and metadata in
+      one stable outward-facing contract
+
+    How to use it:
+    - call after reading one prompt record for the detail endpoint or CLI
+      inspection flows
+
+    Example:
+    - `detail = _prompt_record_to_detail(record)`
+    """
+
+    return PromptDetail(
+        id=record.prompt_id,
+        team_id=record.team_id,
+        name=record.name,
+        description=record.description,
+        text=record.text,
+        created_by=record.created_by,
+        version=record.version,
+        import_count=record.import_count,
+        session_count=record.session_count,
+        score=record.score,
+        avg_input_tokens=record.avg_input_tokens,
+        avg_output_tokens=record.avg_output_tokens,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+async def create_prompt(
+    *,
+    user: KeycloakUser,
+    team_id: TeamId,
+    request: CreatePromptRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """
+    Create one team-scoped prompt-library record.
+
+    Why this function exists:
+    - prompt authoring must become a first-class control-plane product surface
+      instead of staying buried inside managed-agent instance forms
+
+    How to use it:
+    - call from the prompt-library POST route after team membership is checked
+    - invalid template syntax raises `PromptRequestError(422)`
+    - duplicate prompt names inside the same team raise `PromptRequestError(409)`
+
+    Example:
+    - `summary = await create_prompt(user=user, team_id=team_id, request=body, deps=deps)`
+    """
+
+    _validate_prompt_library_text(
+        text=request.text,
+        context_label=f"prompt create for team {team_id!r}",
+    )
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=team_id,
+        name=request.name,
+        description=request.description,
+        text=request.text,
+        created_by=user.username if user else None,
+    )
+    try:
+        created = await deps.get_prompt_store().create(record)
+    except PromptAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Prompt name {request.name!r} already exists for team {team_id!r}.",
+            http_status=409,
+        ) from exc
+    return _prompt_record_to_summary(created)
+
+
+async def list_prompts(
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+    *,
+    limit: int = 100,
+) -> list[PromptSummary]:
+    """
+    List prompt-library records for one team, newest first.
+
+    Why this function exists:
+    - prompt management needs a stable control-plane listing surface separate
+      from managed-agent CRUD
+
+    How to use it:
+    - call from the team prompts route after team membership is checked
+
+    Example:
+    - `prompts = await list_prompts(team_id, deps, limit=100)`
+    """
+
+    records = await deps.get_prompt_store().list_by_team(team_id, limit=limit)
+    return [_prompt_record_to_summary(record) for record in records]
+
+
+async def get_prompt(
+    team_id: TeamId,
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> PromptDetail | None:
+    """
+    Return one full prompt-library record for one team.
+
+    Why this function exists:
+    - operators need to inspect saved prompt text independently from agent
+      bindings
+
+    How to use it:
+    - call from the prompt detail route with the resolved team scope
+
+    Example:
+    - `detail = await get_prompt(team_id, prompt_id, deps)`
+    """
+
+    record = await deps.get_prompt_store().get_for_team(prompt_id, team_id)
+    if record is None:
+        return None
+    return _prompt_record_to_detail(record)
+
+
+async def update_prompt(
+    team_id: TeamId,
+    prompt_id: str,
+    request: UpdatePromptRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """
+    Replace one team-scoped prompt-library record.
+
+    Why this function exists:
+    - the initial prompt-library slice intentionally keeps one simple mutable
+      record model instead of version graphs or per-field patch semantics
+
+    How to use it:
+    - call from the prompt PUT route after team membership is checked
+    - returns `None` when the prompt does not belong to `team_id`
+    - invalid template syntax raises `PromptRequestError(422)`
+    - duplicate names raise `PromptRequestError(409)`
+
+    Example:
+    - `summary = await update_prompt(team_id, prompt_id, request, deps)`
+    """
+
+    _validate_prompt_library_text(
+        text=request.text,
+        context_label=f"prompt update for team {team_id!r}",
+    )
+    try:
+        updated = await deps.get_prompt_store().update(
+            prompt_id,
+            team_id,
+            name=request.name,
+            description=request.description,
+            text=request.text,
+        )
+    except PromptAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Prompt name {request.name!r} already exists for team {team_id!r}.",
+            http_status=409,
+        ) from exc
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
+
+
+async def delete_prompt(
+    team_id: TeamId,
+    prompt_id: str,
+    deps: ProductServiceDependencies,
+) -> bool:
+    """
+    Delete one team-scoped prompt-library record.
+
+    Why this function exists:
+    - prompt-library cleanup belongs to control-plane product lifecycle, not to
+      managed-agent instance writes
+
+    How to use it:
+    - call from the prompt DELETE route after team membership is checked
+
+    Example:
+    - `deleted = await delete_prompt(team_id, prompt_id, deps)`
+    """
+
+    return await deps.get_prompt_store().delete(prompt_id, team_id)
+
+
+async def list_context_prompts(
+    user: KeycloakUser,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> list[ContextPromptSummary]:
+    """Return personal + team prompts for the chat context picker, ordered by session_count DESC."""
+
+    personal_team_id = TeamId(PERSONAL_TEAM_ID)
+    records = await deps.get_prompt_store().list_context_prompts(
+        personal_team_id, team_id
+    )
+    return [
+        ContextPromptSummary(
+            id=r.prompt_id,
+            name=r.name,
+            description=r.description,
+            scope=r.scope,  # type: ignore[arg-type]
+            version=r.version,
+            session_count=r.session_count,
+            score=r.score,
+        )
+        for r in records
+    ]
+
+
+async def promote_prompt(
+    user: KeycloakUser,
+    team_id: TeamId,
+    prompt_id: str,
+    request: PromptPromoteRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary:
+    """Copy one prompt from team_id to request.target_team_id. Returns the new copy."""
+
+    store = deps.get_prompt_store()
+    source = await store.get_for_team(prompt_id, team_id)
+    if source is None:
+        raise PromptRequestError(
+            f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
+        )
+    target_team_id = TeamId(request.target_team_id)
+    record = PromptRecord(
+        prompt_id=str(uuid4()),
+        team_id=target_team_id,
+        name=source.name,
+        description=source.description,
+        text=source.text,
+        created_by=user.username if user else None,
+    )
+    try:
+        created = await store.create(record)
+    except PromptAlreadyExistsError:
+        raise PromptRequestError(
+            f"Prompt name {source.name!r} already exists in team {request.target_team_id!r}. "
+            "Rename the existing prompt or the source before promoting.",
+            http_status=409,
+        )
+    return _prompt_record_to_summary(created)
+
+
+async def update_prompt_score(
+    team_id: TeamId,
+    prompt_id: str,
+    request: PromptScoreUpdateRequest,
+    deps: ProductServiceDependencies,
+) -> PromptSummary | None:
+    """Set the explicit quality score (0.0–5.0) for one team-scoped prompt."""
+
+    updated = await deps.get_prompt_store().update_score(
+        prompt_id, team_id, request.score
+    )
+    if updated is None:
+        return None
+    return _prompt_record_to_summary(updated)
 
 
 # ---------------------------------------------------------------------------
@@ -1215,14 +1598,34 @@ async def update_session_activity(
     Example:
     - `await update_session_activity(team_id, session_id, request, deps)`
     """
-    record = await deps.get_session_metadata_store().update_metadata(
+    store = deps.get_session_metadata_store()
+    prompt_store = deps.get_prompt_store()
+
+    record = await store.update_metadata(
         session_id=session_id,
         team_id=team_id,
         title=request.title,
         updated_at=request.updated_at,
+        context_prompt_id=request.context_prompt_id,
+        clear_context_prompt=request.clear_context_prompt,
     )
     if record is None:
         return None
+
+    if request.context_prompt_id is not None:
+        # Resolve which team owns this prompt to increment the right counter.
+        # Try the session's team first, then personal. Silently skip if not found
+        # (the prompt may have been deleted; the session continues normally).
+        prompt = await prompt_store.get_for_team(request.context_prompt_id, team_id)
+        if prompt is None:
+            prompt = await prompt_store.get_for_team(
+                request.context_prompt_id, PERSONAL_TEAM_ID
+            )
+        if prompt is not None:
+            await prompt_store.increment_session_count(
+                request.context_prompt_id, prompt.team_id
+            )
+
     return _record_to_item(record)
 
 
@@ -1248,6 +1651,7 @@ def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
         team_id=record.team_id,
         agent_instance_id=record.agent_instance_id,
         title=record.title,
+        context_prompt_id=record.context_prompt_id,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )

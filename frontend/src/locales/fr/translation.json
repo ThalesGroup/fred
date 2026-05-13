@@ -1342,9 +1342,12 @@
     "create": "Créer",
     "save": "Sauvegarder",
     "cancel": "Annuler",
+    "delete": "Supprimer",
     "agentCard": {
       "startChat": "Nouveau chat",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "noDescription": "Pas encore de description.",
+      "catalogWarning": "Dérive de configuration MCP — recréer pour résoudre"
     },
     "teamRoles": {
       "member": "Membre",

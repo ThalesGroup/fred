@@ -43,6 +43,8 @@ from control_plane_backend.product.schemas import (
     FrontendBootstrap,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
+    PromptDetail,
+    PromptSummary,
     SessionListItem,
 )
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -63,6 +65,11 @@ _COMMANDS: tuple[str, ...] = (
     "/login-password",
     "/logout",
     "/policy",
+    "/prompt",
+    "/prompt-create",
+    "/prompt-delete",
+    "/prompt-update",
+    "/prompts",
     "/prepare",
     "/quit",
     "/runtime",
@@ -98,6 +105,7 @@ class ControlPlaneShellState:
     known_teams: list[Team] = field(default_factory=list)
     known_templates: list[AgentTemplateSummary] = field(default_factory=list)
     known_instances: list[ManagedAgentInstanceSummary] = field(default_factory=list)
+    known_prompts: list[PromptSummary] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -313,6 +321,17 @@ def print_help() -> None:
     print("  /members [team_id|team_name] List team members")
     print("  /templates [team_id|team_name] List agent templates for a team")
     print("  /instances [team_id|team_name] List managed agent instances for a team")
+    print("  /prompts [team_id|team_name]   List saved prompts for a team")
+    print(
+        "  /prompt <prompt_id>            Inspect one saved prompt from the current team"
+    )
+    print("  /prompt-create <name> <text> [description]")
+    print("                              Create one saved prompt in the current team")
+    print("  /prompt-update <prompt_id> <name> <text> [description]")
+    print("                              Replace one saved prompt in the current team")
+    print(
+        "  /prompt-delete <prompt_id>     Delete one saved prompt from the current team"
+    )
     print("  /enroll <template_id> [display_name]")
     print("                              Enroll one template for the current team")
     print(
@@ -792,6 +811,31 @@ def _print_sessions_table(
     )
 
 
+def _print_prompt_table(
+    prompts: list[PromptSummary],
+    *,
+    color_enabled: bool,
+) -> None:
+    """Render the prompt-library list in a compact table."""
+
+    _print_table(
+        "Prompts",
+        prompts,
+        [
+            ColumnSpec("prompt_id", 36, lambda p: p.id, color=ANSI_CYAN),
+            ColumnSpec("name", 26, lambda p: p.name),
+            ColumnSpec(
+                "updated_at",
+                24,
+                lambda p: (
+                    p.updated_at.isoformat(timespec="seconds") if p.updated_at else "-"
+                ),
+            ),
+        ],
+        color_enabled=color_enabled,
+    )
+
+
 def refresh_known_teams(
     ctx: ControlPlaneCommandContext,
     *,
@@ -845,6 +889,7 @@ def refresh_team_scoped_caches(
     try:
         ctx.state.known_templates = ctx.client.list_agent_templates(team_id)
         ctx.state.known_instances = ctx.client.list_agent_instances(team_id)
+        ctx.state.known_prompts = ctx.client.list_prompts(team_id)
     except httpx.HTTPError:
         if not silent:
             raise
@@ -872,6 +917,7 @@ def completion_candidates(
     stripped = line_buffer.lstrip()
     template_ids = [template.template_id for template in state.known_templates]
     instance_ids = [instance.agent_instance_id for instance in state.known_instances]
+    prompt_ids = [prompt.id for prompt in state.known_prompts]
 
     if stripped.startswith("/team-info "):
         prefix = stripped.removeprefix("/team-info ").strip()
@@ -899,6 +945,9 @@ def completion_candidates(
     if stripped.startswith("/sessions "):
         prefix = stripped.removeprefix("/sessions ").strip()
         return _matching_team_candidates(prefix, teams=state.known_teams)
+    if stripped.startswith("/prompts "):
+        prefix = stripped.removeprefix("/prompts ").strip()
+        return _matching_team_candidates(prefix, teams=state.known_teams)
     if stripped.startswith("/enroll "):
         prefix = stripped.removeprefix("/enroll ").strip()
         return [
@@ -906,6 +955,18 @@ def completion_candidates(
             for template_id in template_ids
             if template_id.startswith(prefix)
         ]
+    if stripped.startswith("/prompt "):
+        prefix = stripped.removeprefix("/prompt ").strip()
+        return [prompt_id for prompt_id in prompt_ids if prompt_id.startswith(prefix)]
+    if stripped.startswith("/prompt-update "):
+        prefix = stripped.removeprefix("/prompt-update ").strip()
+        first_token = prefix.split(" ", 1)[0]
+        return [
+            prompt_id for prompt_id in prompt_ids if prompt_id.startswith(first_token)
+        ]
+    if stripped.startswith("/prompt-delete "):
+        prefix = stripped.removeprefix("/prompt-delete ").strip()
+        return [prompt_id for prompt_id in prompt_ids if prompt_id.startswith(prefix)]
     if stripped.startswith("/unbind "):
         prefix = stripped.removeprefix("/unbind ").strip()
         return [
@@ -1131,6 +1192,7 @@ def run_command(
             ctx.state.current_team_id = None
             ctx.state.known_templates = []
             ctx.state.known_instances = []
+            ctx.state.known_prompts = []
             print("Cleared the current team context.")
             return True
         team = ctx.client.get_team(_resolve_team_selector(ctx, candidate))
@@ -1164,6 +1226,77 @@ def run_command(
         instances = ctx.client.list_agent_instances(team_id)
         ctx.state.known_instances = instances
         _print_instance_table(instances, color_enabled=color_enabled)
+        return True
+
+    if command == "/prompts":
+        team_id = _resolve_team_id(ctx, args[0] if args else None)
+        prompts = ctx.client.list_prompts(team_id)
+        ctx.state.known_prompts = prompts
+        _print_prompt_table(prompts, color_enabled=color_enabled)
+        return True
+
+    if command == "/prompt":
+        if not args:
+            raise ValueError("Usage: /prompt <prompt_id>")
+        team_id = _resolve_team_id(ctx, None)
+        prompt: PromptDetail = ctx.client.get_prompt(team_id, args[0])
+        _print_model_json(
+            "Prompt Detail",
+            json_text=ctx.client.dump_model_json(prompt),
+            color_enabled=color_enabled,
+        )
+        return True
+
+    if command == "/prompt-create":
+        if len(args) < 2:
+            raise ValueError("Usage: /prompt-create <name> <text> [description]")
+        team_id = _resolve_team_id(ctx, None)
+        created = ctx.client.create_prompt(
+            team_id,
+            name=args[0],
+            text=args[1],
+            description=args[2] if len(args) > 2 else None,
+        )
+        ctx.state.known_prompts = ctx.client.list_prompts(team_id)
+        _print_model_json(
+            "Created Prompt",
+            json_text=ctx.client.dump_model_json(created),
+            color_enabled=color_enabled,
+        )
+        return True
+
+    if command == "/prompt-update":
+        if len(args) < 3:
+            raise ValueError(
+                "Usage: /prompt-update <prompt_id> <name> <text> [description]"
+            )
+        team_id = _resolve_team_id(ctx, None)
+        updated = ctx.client.update_prompt(
+            team_id,
+            args[0],
+            name=args[1],
+            text=args[2],
+            description=args[3] if len(args) > 3 else None,
+        )
+        ctx.state.known_prompts = ctx.client.list_prompts(team_id)
+        _print_model_json(
+            "Updated Prompt",
+            json_text=ctx.client.dump_model_json(updated),
+            color_enabled=color_enabled,
+        )
+        return True
+
+    if command == "/prompt-delete":
+        if not args:
+            raise ValueError("Usage: /prompt-delete <prompt_id>")
+        team_id = _resolve_team_id(ctx, None)
+        ctx.client.delete_prompt(team_id, args[0])
+        ctx.state.known_prompts = ctx.client.list_prompts(team_id)
+        print(
+            "Deleted prompt "
+            + colorize(args[0], color=ANSI_CYAN, enabled=color_enabled, bold=True)
+            + "."
+        )
         return True
 
     if command == "/enroll":

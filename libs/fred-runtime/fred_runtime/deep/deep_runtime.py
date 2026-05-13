@@ -30,7 +30,6 @@ from collections.abc import Sequence
 from typing import cast
 
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.models import DeepAgentDefinition
 from fred_sdk.contracts.runtime import Executor
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
@@ -80,8 +79,6 @@ class DeepAgentRuntime(ReActRuntime):
     - same typed input/output and events as ReAct
     - deep-agent planner/runtime from `deepagents`
     """
-
-    definition: DeepAgentDefinition
 
     async def build_executor(
         self, binding: BoundRuntimeContext

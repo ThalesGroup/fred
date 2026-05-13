@@ -1340,9 +1340,12 @@
     "create": "Create",
     "save": "Save",
     "cancel": "Cancel",
+    "delete": "Delete",
     "agentCard": {
       "startChat": "New chat",
-      "settings": "Settings"
+      "settings": "Settings",
+      "noDescription": "No description yet.",
+      "catalogWarning": "MCP configuration drift — recreate to resolve"
     },
     "teamRoles": {
       "member": "Member",

@@ -1726,7 +1726,7 @@ def _start_runtime_span(
         )
     except Exception:
         try:
-            return tracer.start_span(name=name, **span_attributes)
+            return tracer.start_span(name=name, attributes=span_attributes)
         except Exception:
             return None
 
