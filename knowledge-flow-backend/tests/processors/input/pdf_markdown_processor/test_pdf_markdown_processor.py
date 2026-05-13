@@ -19,7 +19,10 @@ from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
 
+from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
     PdfMarkdownProcessor,
@@ -53,6 +56,68 @@ def test_annotate_markdown_tables_treats_backslash_digits_as_literal_text():
     assert "<!-- TABLE_START:id=0 -->" in annotated
     assert "| \\6 |" in annotated
     assert "<!-- TABLE_END -->" in annotated
+
+
+def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    class FakeDocument:
+        pictures = []
+        tables = []
+
+        def export_to_markdown(self, image_mode=None, image_placeholder=None) -> str:
+            return "# ok\n"
+
+    captured: dict[str, object] = {}
+
+    class FakeDocumentConverter:
+        def __init__(self, *, format_options):
+            captured["format_options"] = format_options
+
+        def convert(self, file_path: Path):
+            captured["file_path"] = file_path
+            return type("FakeResult", (), {"document": FakeDocument()})()
+
+    pdf_config = ProcessingConfig.PdfPipelineConfig(
+        backend="docling_parse",
+        images_scale=1.0,
+        generate_picture_images=True,
+        generate_page_images=False,
+        generate_table_images=False,
+        do_table_structure=True,
+        do_ocr=True,
+        ocr_backend="openvino",
+        force_full_page_ocr=False,
+        ocr_batch_size=1,
+        layout_batch_size=2,
+        table_batch_size=3,
+        batch_polling_interval_seconds=0.25,
+        queue_max_size=7,
+    )
+
+    monkeypatch.setattr(
+        processor,
+        "_resolve_effective_options",
+        lambda: (IngestionProcessingProfile.RICH, False, pdf_config),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.DocumentConverter",
+        FakeDocumentConverter,
+    )
+
+    result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path, "doc-123")
+
+    assert Path(result["md_file"]).exists()
+    format_options = captured["format_options"]
+    pdf_format_option = format_options[InputFormat.PDF]
+    pipeline_options = pdf_format_option.pipeline_options
+    assert isinstance(pipeline_options, ThreadedPdfPipelineOptions)
+    assert pipeline_options.images_scale == 1.0
+    assert pipeline_options.ocr_batch_size == 1
+    assert pipeline_options.layout_batch_size == 2
+    assert pipeline_options.table_batch_size == 3
+    assert pipeline_options.batch_polling_interval_seconds == 0.25
+    assert pipeline_options.queue_max_size == 7
+    assert pipeline_options.ocr_options.backend == "openvino"
+    assert pipeline_options.ocr_options.force_full_page_ocr is False
 
 
 @pytest.mark.integration

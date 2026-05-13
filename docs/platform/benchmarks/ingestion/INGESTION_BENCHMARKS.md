@@ -84,6 +84,149 @@ As a result, this benchmark is well suited to validate whether Docling/OCR is a 
 | Medium x3 | 11.409 GiB | 186.87 s | 12.83 cores | 15.62 cores |
 | Rich x3 | 11.868 GiB | 191.80 s | 12.76 cores | 15.57 cores |
 
+## Rich `images_scale` Sensitivity
+
+An additional `rich` benchmark was run on the same ANSSI PDF with the same `openvino` OCR backend, comparing:
+
+- `images_scale=2.0`
+- `images_scale=1.0`
+
+| Setting | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| `images_scale=2.0` | 84.13 s | 3.967 GiB | 5.05 cores | 10.72 cores |
+| `images_scale=1.0` | 87.54 s | 3.392 GiB | 4.95 cores | 12.88 cores |
+
+Observed delta when moving from `2.0` to `1.0`:
+
+- memory: `-0.575 GiB`
+- wall time: `+3.41 s`
+- average CPU: `-0.10` cores
+
+The generated Markdown remained identical for this document.
+
+This makes `images_scale` a strong tuning lever for reducing worker memory pressure in `rich` mode.
+
+## Rich PDF Backend Comparison
+
+An additional `rich` benchmark was run with:
+
+- OCR backend fixed to `openvino`
+- `images_scale=1.0`
+- two PDF backends:
+  - `docling_parse`
+  - `pypdfium2`
+
+| PDF Backend | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| `docling_parse` | 89.74 s | 3.409 GiB | 4.88 cores | 12.85 cores |
+| `pypdfium2` | 81.32 s | 2.938 GiB | 5.30 cores | 13.53 cores |
+
+Observed delta when moving from `docling_parse` to `pypdfium2`:
+
+- memory: `-0.471 GiB`
+- wall time: `-8.42 s`
+- average CPU: `+0.42` cores
+
+However, unlike the `images_scale` comparison, the generated Markdown was **not** identical between the two backends.
+
+This means `pypdfium2` is promising as a lower-memory alternative for `rich`, but it should be treated as a quality/performance tradeoff rather than a drop-in replacement.
+
+## Rich Threaded Pipeline Tuning
+
+An additional `rich` benchmark was run with:
+
+- OCR backend fixed to `openvino`
+- PDF backend fixed to `docling_parse`
+- `images_scale=1.0`
+- two threaded pipeline settings:
+  - Docling defaults: `ocr_batch_size=4`, `layout_batch_size=4`, `table_batch_size=4`, `queue_max_size=100`, `batch_polling_interval_seconds=0.5`
+  - conservative tuning: `ocr_batch_size=1`, `layout_batch_size=1`, `table_batch_size=1`, `queue_max_size=1`, `batch_polling_interval_seconds=0.05`
+
+| Threaded Setting | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| Docling defaults | 74.20 s | 3.457 GiB | 5.33 cores | 12.38 cores |
+| Conservative tuning | 67.79 s | 2.958 GiB | 4.79 cores | 10.54 cores |
+
+Observed delta when moving from Docling defaults to conservative tuning:
+
+- memory: `-0.499 GiB`
+- wall time: `-6.41 s`
+- average CPU: `-0.54` cores
+- peak CPU: `-1.84` cores
+
+The generated Markdown remained identical for this document.
+
+This suggests that for this workload, the biggest gain does not come from switching to `ThreadedPdfPipelineOptions` as a type, but from explicitly tuning the threaded pipeline's batch sizes and queue depth to reduce in-flight page buffering.
+
+## Rich Current vs Optimized Configuration
+
+An additional end-to-end `rich` comparison was run on the same ANSSI PDF to combine the improvements that preserved output fidelity in previous experiments.
+
+Current `rich` configuration:
+
+- `backend=docling_parse`
+- `ocr_backend=openvino`
+- `force_full_page_ocr=false`
+- `images_scale=2.0`
+- `ocr_batch_size=4`
+- `layout_batch_size=4`
+- `table_batch_size=4`
+- `queue_max_size=100`
+- `batch_polling_interval_seconds=0.5`
+
+Optimized `rich` configuration:
+
+- `backend=docling_parse`
+- `ocr_backend=openvino`
+- `force_full_page_ocr=false`
+- `images_scale=1.0`
+- `ocr_batch_size=1`
+- `layout_batch_size=1`
+- `table_batch_size=1`
+- `queue_max_size=1`
+- `batch_polling_interval_seconds=0.05`
+
+| Rich Configuration | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| Current | 71.77 s | 4.061 GiB | 5.40 cores | 11.04 cores |
+| Optimized | 70.77 s | 3.358 GiB | 4.92 cores | 10.64 cores |
+
+Observed delta when moving from current to optimized:
+
+- memory: `-0.703 GiB`
+- wall time: `-1.00 s`
+- average CPU: `-0.48` cores
+- peak CPU: `-0.40` cores
+
+The generated Markdown remained identical for this document.
+
+This is the strongest output-safe tuning combination found so far on this workload.
+
+## Rich `AcceleratorOptions(num_threads=1)` Impact
+
+An additional `rich` benchmark was run on the same ANSSI PDF to isolate the effect of forcing Docling accelerator threads to `1` while keeping the current production-like `rich` configuration unchanged otherwise.
+
+Compared configurations:
+
+- current production-like `rich`
+- current production-like `rich` + `AcceleratorOptions(num_threads=1)`
+
+| Rich Configuration | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| Current | 71.57 s | 4.120 GiB | 5.45 cores | 12.23 cores |
+| Current + `num_threads=1` | 160.77 s | 4.725 GiB | 1.48 cores | 7.16 cores |
+
+Observed delta when forcing `num_threads=1`:
+
+- memory: `+0.605 GiB`
+- wall time: `+89.20 s`
+- average CPU: `-3.97` cores
+- peak CPU: `-5.07` cores
+
+The generated Markdown remained identical for this document.
+
+This means `num_threads=1` is effective if the goal is only to clamp CPU usage, but it is a poor tradeoff for this workload because it significantly increases latency and also increases peak memory usage.
+
 ## Interpretation
 
 ### Memory

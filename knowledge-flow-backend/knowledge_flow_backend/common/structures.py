@@ -317,6 +317,31 @@ class ProcessingConfig(BaseModel):
             default=None,
             description="Override RapidOCR full-page OCR. Set to true to OCR every page even when backend text exists.",
         )
+        ocr_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="OCR batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        layout_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="Layout batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        table_batch_size: int = Field(
+            default=4,
+            ge=1,
+            description="Table-structure batch size used by Docling's threaded StandardPdfPipeline. Larger batches improve throughput but increase memory usage.",
+        )
+        batch_polling_interval_seconds: float = Field(
+            default=0.5,
+            gt=0.0,
+            description="Polling interval in seconds used by Docling's threaded StandardPdfPipeline to accumulate batches before processing.",
+        )
+        queue_max_size: int = Field(
+            default=100,
+            ge=1,
+            description="Maximum inter-stage queue size used by Docling's threaded StandardPdfPipeline. Smaller queues reduce buffering and can lower memory usage.",
+        )
 
     class ProfileInputProcessorConfig(BaseModel):
         model_config = ConfigDict(extra="forbid")

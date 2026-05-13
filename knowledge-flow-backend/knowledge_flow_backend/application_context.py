@@ -1088,6 +1088,11 @@ class ApplicationContext:
             logger.info("     ↳ profile.%s.pdf.do_ocr: %s", profile_name, profile_cfg.pdf.do_ocr)
             logger.info("     ↳ profile.%s.pdf.ocr_backend: %s", profile_name, profile_cfg.pdf.ocr_backend)
             logger.info("     ↳ profile.%s.pdf.force_full_page_ocr: %s", profile_name, profile_cfg.pdf.force_full_page_ocr)
+            logger.info("     ↳ profile.%s.pdf.ocr_batch_size: %s", profile_name, profile_cfg.pdf.ocr_batch_size)
+            logger.info("     ↳ profile.%s.pdf.layout_batch_size: %s", profile_name, profile_cfg.pdf.layout_batch_size)
+            logger.info("     ↳ profile.%s.pdf.table_batch_size: %s", profile_name, profile_cfg.pdf.table_batch_size)
+            logger.info("     ↳ profile.%s.pdf.batch_polling_interval_seconds: %s", profile_name, profile_cfg.pdf.batch_polling_interval_seconds)
+            logger.info("     ↳ profile.%s.pdf.queue_max_size: %s", profile_name, profile_cfg.pdf.queue_max_size)
             logger.info("     ↳ profile.%s.input_processors: %s", profile_name, [entry.suffix for entry in profile_cfg.input_processors])
         vector_type = self.configuration.storage.vector_store
         logger.info(f"  📚 Vector store backend: {vector_type}")

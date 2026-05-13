@@ -24,7 +24,7 @@ from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 from docling.backend.docling_parse_v4_backend import DoclingParseV4DocumentBackend
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+from docling.datamodel.pipeline_options import RapidOcrOptions, ThreadedPdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.base import ImageRefMode
 from pypdf.errors import PdfReadError
@@ -105,6 +105,51 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             allowed = ", ".join(sorted(self._BACKEND_BY_NAME))
             raise InputConversionError(f"Unsupported PDF backend '{backend_name}'. Allowed values: {allowed}") from exc
 
+    def _build_pipeline_options(
+        self,
+        pdf_options: ProcessingConfig.PdfPipelineConfig,
+    ) -> tuple[ThreadedPdfPipelineOptions, RapidOcrOptions | None]:
+        """
+        Why:
+            Centralize Docling pipeline construction so Fred can tune the
+            threaded PDF pipeline in one place and keep conversion behavior
+            stable across profiles and benchmarks.
+
+        How:
+            Pass the resolved per-profile PDF config. The helper returns a
+            fully populated `ThreadedPdfPipelineOptions` plus the effective
+            RapidOCR options used for logging.
+        """
+        pipeline_options = ThreadedPdfPipelineOptions()
+        pipeline_options.images_scale = pdf_options.images_scale
+        pipeline_options.generate_picture_images = pdf_options.generate_picture_images
+        pipeline_options.generate_page_images = pdf_options.generate_page_images
+        pipeline_options.generate_table_images = pdf_options.generate_table_images
+        pipeline_options.do_table_structure = pdf_options.do_table_structure
+        pipeline_options.do_ocr = pdf_options.do_ocr
+        pipeline_options.ocr_batch_size = pdf_options.ocr_batch_size
+        pipeline_options.layout_batch_size = pdf_options.layout_batch_size
+        pipeline_options.table_batch_size = pdf_options.table_batch_size
+        pipeline_options.batch_polling_interval_seconds = pdf_options.batch_polling_interval_seconds
+        pipeline_options.queue_max_size = pdf_options.queue_max_size
+
+        rapid_ocr_options: RapidOcrOptions | None = None
+        if pdf_options.do_ocr:
+            rapid_ocr_options = RapidOcrOptions()
+            if pdf_options.ocr_backend is not None:
+                rapid_ocr_options.backend = pdf_options.ocr_backend
+            if pdf_options.force_full_page_ocr is not None:
+                rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
+            pipeline_options.ocr_options = rapid_ocr_options
+
+        artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
+        if artifacts_dir:
+            artifacts_path = Path(artifacts_dir).expanduser()
+            pipeline_options.artifacts_path = artifacts_path
+            logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
+
+        return pipeline_options, rapid_ocr_options
+
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PDF is readable and contains at least one page."""
         try:
@@ -161,28 +206,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             active_profile, process_images, pdf_options = self._resolve_effective_options()
             image_describer = self._resolve_image_describer(process_images)
             output_dir.mkdir(parents=True, exist_ok=True)
-            # Initialize the DocumentConverter with PDF format options
-            pipeline_options = PdfPipelineOptions()
-
-            pipeline_options.images_scale = pdf_options.images_scale
-            pipeline_options.generate_picture_images = pdf_options.generate_picture_images
-            pipeline_options.generate_page_images = pdf_options.generate_page_images
-            pipeline_options.generate_table_images = pdf_options.generate_table_images
-            pipeline_options.do_table_structure = pdf_options.do_table_structure
-            pipeline_options.do_ocr = pdf_options.do_ocr
-            rapid_ocr_options: RapidOcrOptions | None = None
-            if pdf_options.do_ocr:
-                rapid_ocr_options = RapidOcrOptions()
-                if pdf_options.ocr_backend is not None:
-                    rapid_ocr_options.backend = pdf_options.ocr_backend
-                if pdf_options.force_full_page_ocr is not None:
-                    rapid_ocr_options.force_full_page_ocr = pdf_options.force_full_page_ocr
-                pipeline_options.ocr_options = rapid_ocr_options
-            artifacts_dir = os.getenv("DOCLING_ARTIFACTS_PATH")
-            if artifacts_dir:
-                artifacts_path = Path(artifacts_dir).expanduser()
-                pipeline_options.artifacts_path = artifacts_path
-                logger.info("[PROCESSOR][PDF] Using Docling artifacts path: %s", artifacts_path)
+            pipeline_options, rapid_ocr_options = self._build_pipeline_options(pdf_options)
             # pipeline_options.do_picture_classification = True
             # pipeline_options.do_picture_description = True
             backend_cls = self._resolve_pdf_backend(pdf_options.backend)
@@ -193,12 +217,17 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
                 pipeline_options.force_backend_text = True  # Utilise directement le flux PDF
 
             logger.info(
-                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s",
+                "[PROCESSOR][PDF] Using profile=%s backend=%s process_images=%s ocr_backend=%s force_full_page_ocr=%s ocr_batch_size=%s layout_batch_size=%s table_batch_size=%s queue_max_size=%s batch_polling_interval_seconds=%s",
                 active_profile.value,
                 pdf_options.backend,
                 process_images,
                 getattr(rapid_ocr_options, "backend", None),
                 getattr(rapid_ocr_options, "force_full_page_ocr", None),
+                pipeline_options.ocr_batch_size,
+                pipeline_options.layout_batch_size,
+                pipeline_options.table_batch_size,
+                pipeline_options.queue_max_size,
+                pipeline_options.batch_polling_interval_seconds,
             )
             converter = DocumentConverter(
                 format_options={
