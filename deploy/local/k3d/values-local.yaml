@@ -109,13 +109,13 @@ x-kf-vision-model: &kf-vision-model
   settings:
     base_url: https://api.mistral.ai/v1
 
-x-kf-ocr-model: &kf-ocr-model
-  provider: openai
-  name: mistral-ocr-latest
-  settings:
-    base_url: https://api.mistral.ai/v1
-    request_timeout: 300
-    signed_url_expiry_hours: 1
+# x-kf-ocr-model: &kf-ocr-model
+#   provider: openai
+#   name: mistral-ocr-latest
+#   settings:
+#     base_url: https://api.mistral.ai/v1
+#     request_timeout: 300
+#     signed_url_expiry_hours: 1
 
 x-kf-crossencoder-model: &kf-crossencoder-model
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
@@ -511,7 +511,7 @@ applications:
       embedding_model:    *kf-embedding-model
       chat_model:         *kf-chat-model
       vision_model:       *kf-vision-model
-      ocr_model:          *kf-ocr-model
+      # ocr_model:          *kf-ocr-model
       crossencoder_model: *kf-crossencoder-model
 
       storage:         *kf-storage
@@ -550,7 +550,7 @@ applications:
       embedding_model:    *kf-embedding-model
       chat_model:         *kf-chat-model
       vision_model:       *kf-vision-model
-      ocr_model:          *kf-ocr-model
+      # ocr_model:          *kf-ocr-model
       crossencoder_model: *kf-crossencoder-model
       storage:            *kf-storage
       integrations:
