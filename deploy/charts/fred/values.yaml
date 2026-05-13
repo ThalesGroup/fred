@@ -1353,7 +1353,6 @@ applications:
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
-      TABULAR_POSTGRES_PASSWORD: ""
 
   # ── 3.4 Knowledge Flow Worker (Temporal) ───────────────────────────
   # Toggle Temporal worker pod deployment.
@@ -1525,7 +1524,6 @@ applications:
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
-      TABULAR_POSTGRES_PASSWORD: ""
 
   # ── 3.5 Control Plane Backend ─────────────────────────────────────
   control-plane-backend:
