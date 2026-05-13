@@ -109,6 +109,14 @@ x-kf-vision-model: &kf-vision-model
   settings:
     base_url: https://api.mistral.ai/v1
 
+x-kf-ocr-model: &kf-ocr-model
+  provider: openai
+  name: mistral-ocr-latest
+  settings:
+    base_url: https://api.mistral.ai/v1
+    request_timeout: 300
+    signed_url_expiry_hours: 1
+
 x-kf-crossencoder-model: &kf-crossencoder-model
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
   settings:
@@ -503,6 +511,7 @@ applications:
       embedding_model:    *kf-embedding-model
       chat_model:         *kf-chat-model
       vision_model:       *kf-vision-model
+      ocr_model:          *kf-ocr-model
       crossencoder_model: *kf-crossencoder-model
 
       storage:         *kf-storage
@@ -522,7 +531,6 @@ applications:
       OPENSEARCH_PASSWORD: "FredOpensearch123!!" # pragma: allowlist secret
       OPENFGA_API_TOKEN: "Azerty123_" # pragma: allowlist secret
       FRED_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
-      TABULAR_POSTGRES_PASSWORD: "Azerty123_" # pragma: allowlist secret
       PROMETHEUS_PASSWORD: "" # pragma: allowlist secret
       PROMETHEUS_BEARER_TOKEN: "" # pragma: allowlist secret
 
@@ -542,6 +550,7 @@ applications:
       embedding_model:    *kf-embedding-model
       chat_model:         *kf-chat-model
       vision_model:       *kf-vision-model
+      ocr_model:          *kf-ocr-model
       crossencoder_model: *kf-crossencoder-model
       storage:            *kf-storage
       integrations:

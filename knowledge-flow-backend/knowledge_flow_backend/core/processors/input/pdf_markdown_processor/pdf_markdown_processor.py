@@ -16,7 +16,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Type
+from typing import Optional, Type
 
 import pypdf
 from docling.backend.abstract_backend import AbstractDocumentBackend
@@ -27,6 +27,7 @@ from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import RapidOcrOptions, ThreadedPdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.base import ImageRefMode
+from fred_core.common import ModelConfiguration
 from pypdf.errors import PdfReadError
 
 from knowledge_flow_backend.application_context import get_configuration
@@ -34,6 +35,7 @@ from knowledge_flow_backend.common.processing_profile_context import get_current
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import BaseMarkdownProcessor, InputConversionError
 from knowledge_flow_backend.core.processors.input.common.image_describer import build_image_describer
+from knowledge_flow_backend.core.processors.input.common.ocr.pdf_ocr_factory import build_pdf_ocr_extractor
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         super().__init__()
         self.image_describer = None
         self._warned_missing_vision_model = False
+        self._warned_unsupported_ocr_model = False
 
     def _resolve_effective_options(self) -> tuple[IngestionProcessingProfile, bool, ProcessingConfig.PdfPipelineConfig]:
         processing = get_configuration().processing
@@ -97,6 +100,54 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             return None
         self.image_describer = build_image_describer(get_configuration().vision_model)
         return self.image_describer
+
+    def _resolve_ocr_model_config(self) -> Optional["ModelConfiguration"]:
+        """
+        Why:
+            Keep remote OCR lookup resilient in standalone benchmark/test paths
+            where no global ApplicationContext is available.
+
+        How:
+            Call before attempting remote OCR. The method returns the configured
+            OCR model when available, otherwise `None`.
+        """
+        try:
+            return get_configuration().ocr_model
+        except Exception:
+            return None
+
+    def _convert_with_remote_ocr(self, file_path: Path, output_markdown_path: Path) -> bool:
+        """
+        Why:
+            Offload PDF OCR to a remote API model when one is configured, so
+            constrained worker pods can avoid the heaviest local OCR path.
+
+        How:
+            Call with the source PDF path and target markdown path. The method
+            returns `True` when remote OCR succeeded and wrote the markdown,
+            otherwise `False` so the caller can fall back to local Docling OCR.
+        """
+        ocr_cfg = self._resolve_ocr_model_config()
+        extractor = build_pdf_ocr_extractor(ocr_cfg)
+        if extractor is None:
+            if ocr_cfg and not self._warned_unsupported_ocr_model:
+                logger.warning(
+                    "[PROCESSOR][PDF] OCR model '%s' is configured but not supported for remote OCR; falling back to local Docling OCR.",
+                    ocr_cfg.name,
+                )
+                self._warned_unsupported_ocr_model = True
+            return False
+        assert ocr_cfg is not None
+
+        logger.info(
+            "[PROCESSOR][PDF] Using remote OCR model provider=%s name=%s for %s",
+            ocr_cfg.provider,
+            ocr_cfg.name,
+            file_path.name,
+        )
+        markdown = extractor.extract_pdf_markdown(file_path)
+        output_markdown_path.write_text(markdown, encoding="utf-8")
+        return True
 
     def _resolve_pdf_backend(self, backend_name: str) -> Type[AbstractDocumentBackend]:
         try:
@@ -206,6 +257,20 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
             active_profile, process_images, pdf_options = self._resolve_effective_options()
             image_describer = self._resolve_image_describer(process_images)
             output_dir.mkdir(parents=True, exist_ok=True)
+            if pdf_options.do_ocr:
+                try:
+                    if self._convert_with_remote_ocr(file_path, output_markdown_path):
+                        return {
+                            "doc_dir": str(output_dir),
+                            "md_file": str(output_markdown_path),
+                            "message": "Remote OCR conversion to markdown succeeded.",
+                        }
+                except Exception as exc:
+                    logger.warning(
+                        "[PROCESSOR][PDF] Remote OCR failed for %s; falling back to local Docling OCR: %s",
+                        file_path.name,
+                        exc,
+                    )
             pipeline_options, rapid_ocr_options = self._build_pipeline_options(pdf_options)
             # pipeline_options.do_picture_classification = True
             # pipeline_options.do_picture_description = True

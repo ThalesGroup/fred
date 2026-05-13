@@ -991,6 +991,10 @@ class Configuration(BaseModel):
     chat_model: ModelConfiguration
     embedding_model: ModelConfiguration
     vision_model: Optional[ModelConfiguration] = None
+    ocr_model: Optional[ModelConfiguration] = Field(
+        default=None,
+        description="Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR.",
+    )
     crossencoder_model: Optional[ModelConfiguration] = None
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(

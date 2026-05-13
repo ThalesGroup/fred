@@ -16,11 +16,14 @@
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from dotenv import load_dotenv
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
+
+from fred_core.common import ModelConfiguration
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
@@ -118,6 +121,56 @@ def test_pdf_processor_uses_threaded_pipeline_options(monkeypatch: pytest.Monkey
     assert pipeline_options.queue_max_size == 7
     assert pipeline_options.ocr_options.backend == "openvino"
     assert pipeline_options.ocr_options.force_full_page_ocr is False
+
+
+def test_pdf_processor_uses_remote_ocr_when_model_is_configured(monkeypatch: pytest.MonkeyPatch, processor: PdfMarkdownProcessor, sample_pdf_file: Path, tmp_path: Path):
+    pdf_config = ProcessingConfig.PdfPipelineConfig(
+        backend="docling_parse",
+        images_scale=2.0,
+        generate_picture_images=True,
+        generate_page_images=False,
+        generate_table_images=False,
+        do_table_structure=True,
+        do_ocr=True,
+        ocr_backend="openvino",
+        force_full_page_ocr=False,
+    )
+
+    class FakeExtractor:
+        def extract_pdf_markdown(self, file_path: Path) -> str:
+            return "# OCR markdown\n"
+
+    monkeypatch.setattr(
+        processor,
+        "_resolve_effective_options",
+        lambda: (IngestionProcessingProfile.RICH, False, pdf_config),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.get_configuration",
+        lambda: SimpleNamespace(
+            vision_model=None,
+            ocr_model=ModelConfiguration(
+                provider="openai",
+                name="mistral-ocr-latest",
+                settings={"base_url": "https://api.mistral.ai/v1"},
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.build_pdf_ocr_extractor",
+        lambda cfg: FakeExtractor(),
+    )
+    monkeypatch.setattr(
+        "knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor.DocumentConverter",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("local Docling OCR should not run")),
+    )
+
+    result = processor.convert_file_to_markdown(sample_pdf_file, tmp_path, "doc-ocr")
+
+    md_path = Path(result["md_file"])
+    assert md_path.exists()
+    assert md_path.read_text(encoding="utf-8") == "# OCR markdown\n"
+    assert result["message"] == "Remote OCR conversion to markdown succeeded."
 
 
 @pytest.mark.integration

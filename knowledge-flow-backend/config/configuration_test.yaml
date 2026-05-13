@@ -249,6 +249,7 @@ embedding_model:
   settings:
     base_url: http://localhost:11434
     max_retries: 0
+ocr_model: null
 
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2

@@ -275,6 +275,13 @@ vision_model:
     temperature: 0
     max_retries: 2
     request_timeout: 90
+ocr_model:
+  provider: openai
+  name: mistral-ocr-latest
+  settings:
+    base_url: https://api.mistral.ai/v1
+    request_timeout: 300
+    signed_url_expiry_hours: 1
 
 crossencoder_model:
   name: cross-encoder/ms-marco-MiniLM-L-12-v2
