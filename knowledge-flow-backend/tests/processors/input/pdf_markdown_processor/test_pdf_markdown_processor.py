@@ -19,10 +19,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from dotenv import load_dotenv
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
-
+from dotenv import load_dotenv
 from fred_core.common import ModelConfiguration
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, ProcessingConfig

@@ -14,10 +14,9 @@
 
 import os
 from enum import Enum
-from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class OwnerFilter(str, Enum):
@@ -161,6 +160,7 @@ class InMemoryStoreConfig(BaseModel):
     """
 
     type: Literal["memory"] = "memory"
+
 
 StoreConfig = Annotated[
     Union[
