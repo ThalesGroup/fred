@@ -1,5 +1,21 @@
 # Knowledge Flow Worker PDF Ingestion Benchmark
 
+## Table of Contents
+
+- [Context](#context)
+- [Profile Configuration Used](#profile-configuration-used)
+- [Important Scope Note](#important-scope-note)
+- [Single Ingestion Results](#single-ingestion-results)
+- [Parallel Ingestion Results](#parallel-ingestion-results)
+- [Rich `images_scale` Sensitivity](#rich-imagesscale-sensitivity)
+- [Rich PDF Backend Comparison](#rich-pdf-backend-comparison)
+- [Rich Threaded Pipeline Tuning](#rich-threaded-pipeline-tuning)
+- [Rich Current vs Optimized Configuration](#rich-current-vs-optimized-configuration)
+- [Rich `AcceleratorOptions(num_threads=1)` Impact](#rich-acceleratoroptionsnum_threads1-impact)
+- [Rich Local vs Remote OCR Without Image Description](#rich-local-vs-remote-ocr-without-image-description)
+- [Interpretation](#interpretation)
+- [Recommended Next Step](#recommended-next-step)
+
 ## Context
 
 This benchmark was run locally against the ANSSI PDF:
@@ -11,7 +27,7 @@ Document characteristics:
 - 0.951 MiB (`997,307` bytes)
 - PDF version 1.5
 
-The benchmark was aligned with the production `knowledge-flow-worker` configuration you provided:
+The benchmark was aligned with the production `knowledge-flow-worker` provided configuration:
 
 - Worker memory limit: `7 GiB`
 - Worker CPU limit: `3500m` (`3.5` vCPU)
@@ -227,6 +243,58 @@ The generated Markdown remained identical for this document.
 
 This means `num_threads=1` is effective if the goal is only to clamp CPU usage, but it is a poor tradeoff for this workload because it significantly increases latency and also increases peak memory usage.
 
+## Rich Local vs Remote OCR Without Image Description
+
+An additional `rich` benchmark was run on the same ANSSI PDF with `process_images=false` to isolate OCR/parsing costs and avoid mixing in image-description API latency.
+
+Compared configurations:
+
+- current production-like local OCR:
+  - `backend=docling_parse`
+  - `ocr_backend=openvino`
+  - `images_scale=2.0`
+  - `ocr_batch_size=4`
+  - `layout_batch_size=4`
+  - `table_batch_size=4`
+  - `queue_max_size=100`
+  - `batch_polling_interval_seconds=0.5`
+- optimized local OCR:
+  - `backend=docling_parse`
+  - `ocr_backend=openvino`
+  - `images_scale=1.0`
+  - `ocr_batch_size=1`
+  - `layout_batch_size=1`
+  - `table_batch_size=1`
+  - `queue_max_size=1`
+  - `batch_polling_interval_seconds=0.05`
+- remote OCR:
+  - same `rich` profile
+  - local Docling OCR bypassed through `ocr_model`
+  - no image description
+
+| Rich Configuration | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| Current local OCR | 79.42 s | 3.945 GiB | 5.39 cores | 11.36 cores |
+| Optimized local OCR | 73.57 s | 3.325 GiB | 4.86 cores | 10.29 cores |
+| Remote OCR | 5.86 s | 1.551 GiB | 0.12 cores | 0.10 cores |
+
+Observed deltas:
+
+- optimized local vs current local:
+  - memory: `-0.620 GiB`
+  - wall time: `-5.85 s`
+  - average CPU: `-0.53` cores
+  - peak CPU: `-1.06` cores
+- remote OCR vs current local:
+  - memory: `-2.394 GiB`
+  - wall time: `-73.55 s`
+  - average CPU: `-5.27` cores
+  - peak CPU: `-11.26` cores
+
+In practical terms, moving from the current local OCR path to remote OCR reduced ingestion time from `79.42 s` to `5.86 s`, which is a **13.5x speed-up** on this document and saves about **92.6%** of the wall time.
+
+The optimized local OCR configuration preserves the same Markdown size as the current local OCR run on this document (`133,940` characters), while remote OCR produced a smaller Markdown output (`119,500` characters), which suggests a real output-shape difference even though the performance gains are substantial.
+
 ## Interpretation
 
 ### Memory
@@ -239,7 +307,7 @@ This means `num_threads=1` is effective if the goal is only to clamp CPU usage, 
 
 - `Medium` and `Rich` both average around `5` CPU cores locally during single ingestion.
 - This is above the production worker CPU limit of `3.5` vCPU, so CPU throttling is likely in production.
-- CPU throttling alone does not explain `OOMKilled`, but it may increase processing duration and contention.
+- CPU throttling alone does not explain `OOMKilled` on Kubernetes pods, but it may increase processing duration and contention.
 
 ### Parallelism
 
@@ -255,15 +323,3 @@ Those parallel results are therefore more useful as:
 - overall fleet-capacity indicators
 - upper-bound stress measurements
 - evidence that `medium` and `rich` scale poorly in aggregate memory usage
-
-
-## Recommended Next Step
-
-The most useful follow-up would be a local **end-to-end ingestion benchmark on k3d**, with:
-- real upload flow
-- real worker pod observation
-- memory tracking throughout the full workflow lifecycle
-
-That would let us distinguish between:
-- `Docling/OCR memory cost only`
-- `full worker memory cost during actual ingestion`
