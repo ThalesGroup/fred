@@ -174,6 +174,36 @@ The generated Markdown remained identical for this document.
 
 This suggests that for this workload, the biggest gain does not come from switching to `ThreadedPdfPipelineOptions` as a type, but from explicitly tuning the threaded pipeline's batch sizes and queue depth to reduce in-flight page buffering.
 
+## Rich `queue_max_size` 1 vs 5
+
+An additional `rich` benchmark was run on the same ANSSI PDF to isolate the impact of raising `queue_max_size` from `1` to `5`, while keeping the rest of the optimized local OCR configuration unchanged:
+
+- `backend=docling_parse`
+- `ocr_backend=openvino`
+- `force_full_page_ocr=false`
+- `images_scale=1.0`
+- `ocr_batch_size=1`
+- `layout_batch_size=1`
+- `table_batch_size=1`
+- `batch_polling_interval_seconds=0.05`
+- no image description
+
+| `queue_max_size` | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| `1` | 66.70 s | 2.557 GiB | 4.75 cores | 9.94 cores |
+| `5` | 64.91 s | 2.715 GiB | 5.28 cores | 13.59 cores |
+
+Observed delta when moving from `1` to `5`:
+
+- memory: `+0.158 GiB`
+- wall time: `-1.78 s`
+- average CPU: `+0.53` cores
+- peak CPU: `+3.65` cores
+
+The generated Markdown remained identical for this document (`133,940` characters).
+
+This means `queue_max_size=5` is a reasonable throughput-oriented compromise if a small memory increase is acceptable. It is slightly faster than `1`, but it also increases both memory and CPU usage.
+
 ## Rich Current vs Optimized Configuration
 
 An additional end-to-end `rich` comparison was run on the same ANSSI PDF to combine the improvements that preserved output fidelity in previous experiments.
