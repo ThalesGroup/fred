@@ -17,7 +17,6 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
@@ -31,6 +30,7 @@ from langfuse.langchain import CallbackHandler
 from langgraph.types import Command
 from pydantic import TypeAdapter, ValidationError
 
+from agentic_backend.common.langfuse_config import get_langfuse_credentials
 from agentic_backend.common.rags_utils import ensure_ranks
 from agentic_backend.core.agents.agent_factory import RuntimeAgentInstance
 from agentic_backend.core.agents.runtime_context import RuntimeContext
@@ -550,7 +550,7 @@ class StreamTranscoder:
             resume_payload.pop("checkpoint", None)
 
         # If Langfuse is configured, add the callback handler
-        if os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"):
+        if get_langfuse_credentials() is not None:
             logger.debug("Langfuse credentials found.")
             langfuse_handler = CallbackHandler()
             config["callbacks"] = [langfuse_handler]

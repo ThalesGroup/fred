@@ -14,7 +14,6 @@
 
 import logging
 import math
-import os
 import sys
 import tempfile
 import time
@@ -46,7 +45,6 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables import Runnable, RunnableConfig
-from langfuse import Langfuse
 from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
@@ -64,6 +62,7 @@ from agentic_backend.common.kf_workspace_client import (
     WorkspaceRetrievalError,
     WorkspaceUploadError,
 )
+from agentic_backend.common.langfuse_config import build_langfuse_client
 from agentic_backend.common.structures import (
     AgentChatOptions,
     AgentSettings,
@@ -136,15 +135,7 @@ class AgentFlow:
         self.streaming_memory = MemorySaver()
         self.compiled_graph: Optional[CompiledStateGraph] = None
         self._prepared_context: Optional[Prepared] = None
-        has_public_key = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
-        has_secret_key = os.getenv("LANGFUSE_SECRET_KEY") is not None
-
-        if has_public_key and has_secret_key:
-            # Only initialize if keys are present
-            self.langfuse_client = Langfuse()
-        else:
-            # Set to None if disabled
-            self.langfuse_client = None
+        self.langfuse_client = build_langfuse_client()
 
     def get_compiled_graph(
         self, checkpointer: Optional[object] = None

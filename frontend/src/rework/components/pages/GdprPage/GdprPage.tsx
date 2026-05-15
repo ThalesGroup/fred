@@ -13,7 +13,11 @@ export default function GdprPage() {
   useEffect(() => {
     const base = (import.meta.env?.BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
     const lang = i18n.language?.split("-")[0] ?? "en";
-    const brand = (getProperty("releaseBrand") || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    const brand = (getProperty("releaseBrand") || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
     const fetchMd = (path: string) =>
       fetch(`${base}${path}`, { cache: "no-cache" })
         .then((r) => (r.ok ? r.text() : null))
@@ -24,8 +28,11 @@ export default function GdprPage() {
       ? [`/contrib/${brand}/gdpr.${lang}.md`, `/contrib/${brand}/gdpr.md`, `/gdpr.${lang}.md`, `/gdpr.md`]
       : [`/gdpr.${lang}.md`, `/gdpr.md`];
 
-    candidates.reduce((acc, path) => acc.then((text) => text ?? fetchMd(path)), Promise.resolve<string | null>(null))
-      .then((text) => { if (text) setGdprMarkdown(text); });
+    candidates
+      .reduce((acc, path) => acc.then((text) => text ?? fetchMd(path)), Promise.resolve<string | null>(null))
+      .then((text) => {
+        if (text) setGdprMarkdown(text);
+      });
   }, [i18n.language]);
 
   return (

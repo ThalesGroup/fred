@@ -1,3 +1,28 @@
+**v1.5.4** — 2026-05-11
+
+- **Features**
+
+  - Add markdown processor for chat attachments (#1593)
+  - Expose metrics for prometheus scraping on control plane (#1592)
+  - Add configurable upload warning alert to document upload drawer (#1597)
+
+- **Bug Fixes**
+
+  - Typo in link in mail to request to join a team (#1589)
+  - Spurious langfuse error log (#1594)
+  - Cannot read properties of undefined (reading 'toLowerCase') in TeamContentNavbar (#1609)
+
+**v1.5.3** — 2026-05-03
+
+- **Improvements**
+
+  - Add capacity to specify custom RetryPolicy for Temporal activities (#1576)
+
+- **Bug Fixes**
+
+  - Fixed semantics versus hybrid default values (#1580)
+  - Fixed runtime binding error in agentic when publishing KPIs (#1577)
+
 **v1.5.2** — 2026-05-02
 
 - **Features**
@@ -44,7 +69,6 @@
 - **Improvements**
 
   - Improve temporal worker concurrency and add appropriate metrics (#1521)
-
 
 **v1.4.1** — 2026-04-13
 

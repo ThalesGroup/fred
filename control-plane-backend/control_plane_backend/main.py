@@ -18,6 +18,8 @@ from fred_core import (
 from fred_core.common import read_env_bool
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from control_plane_backend.application_context import (
@@ -225,4 +227,17 @@ def create_app() -> FastAPI:
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)
     app.include_router(router)
+
+    if configuration.app.metrics_enabled:
+        Instrumentator().instrument(app)
+        start_http_server(
+            configuration.app.metrics_port,
+            addr=configuration.app.metrics_address,
+        )
+        logger.info(
+            "[METRICS] Prometheus metrics exposed on %s:%s",
+            configuration.app.metrics_address,
+            configuration.app.metrics_port,
+        )
+
     return app

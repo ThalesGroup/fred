@@ -22,6 +22,9 @@ class AppConfig(BaseModel):
     port: int = 8222
     log_level: str = "info"
     gcu_version: str | None = None
+    metrics_enabled: bool = True
+    metrics_port: int = 9222
+    metrics_address: str = "127.0.0.1"
 
 
 class SchedulerConfig(BaseModel):

@@ -2,10 +2,10 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  box-sizing: border-box;
+  padding: var(--spacing-xl) var(--spacing-m);
   width: 100vw;
   min-height: 100vh;
-  padding: var(--spacing-xl) var(--spacing-m);
-  box-sizing: border-box;
 }
 
 .userSettingsPage {

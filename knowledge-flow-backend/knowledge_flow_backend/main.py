@@ -202,6 +202,11 @@ def create_app() -> FastAPI:
             configuration.app.metrics_port,
             addr=configuration.app.metrics_address,
         )
+        logger.info(
+            "[METRICS] Prometheus metrics exposed on %s:%s",
+            configuration.app.metrics_address,
+            configuration.app.metrics_port,
+        )
 
     # Register exception handlers
     register_exception_handlers(app)

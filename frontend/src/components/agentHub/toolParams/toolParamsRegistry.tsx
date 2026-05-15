@@ -34,5 +34,6 @@ export const TOOL_PARAMS_REGISTRY: Record<string, RegistryEntry> = {
     provider: "kf_vector_search",
     libraries_selection: false,
     search_policy_selection: false,
+    search_policy: "hybrid",
   }),
 };

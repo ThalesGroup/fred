@@ -3,7 +3,11 @@ import { useTranslation } from "react-i18next";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
 import { UserInputSearchPolicy } from "src/components/chatbot/user_input/UserInputSearchPolicy";
 import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
-import { SearchPolicyName, TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  SearchPolicyName,
+  TagType,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+} from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { SwitchRow } from "../SwitchRow/SwitchRow";
 import styles from "./KfVectorSearchForm.module.css";
 
@@ -12,7 +16,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
 
   const { data: allLibs = [] } = useListAllTagsKnowledgeFlowV1TagsGetQuery({
     type: "document" as TagType,
-    ...(teamId ? { ownerFilter: "team", teamId } : {}),
+    ...(teamId ? { ownerFilter: "team", teamId } : { ownerFilter: "personal" }),
   });
 
   const [bindingEnabled, setBindingEnabled] = useState((params.document_library_tags_ids ?? []).length > 0);
@@ -66,9 +70,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
                 />
                 <div className={styles.libraryInfo}>
                   <span className={styles.libraryName}>{lib.name}</span>
-                  {lib.description && (
-                    <span className={styles.fieldDescription}>{lib.description}</span>
-                  )}
+                  {lib.description && <span className={styles.fieldDescription}>{lib.description}</span>}
                 </div>
               </label>
             );
@@ -105,7 +107,9 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
         <div className={styles.fieldRow}>
           <div className={styles.fieldLabel}>
             <span>{t("agentTuning.fields.chat_options_default_search_policy.title")}</span>
-            <span className={styles.fieldDescription}>{t("agentTuning.fields.chat_options_default_search_policy.description")}</span>
+            <span className={styles.fieldDescription}>
+              {t("agentTuning.fields.chat_options_default_search_policy.description")}
+            </span>
           </div>
           <UserInputSearchPolicy
             value={(params.search_policy as SearchPolicyName) ?? "hybrid"}

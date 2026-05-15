@@ -496,7 +496,10 @@ const ChatBotView = ({
                 size="medium"
                 onMouseEnter={() => setLogsBtnTooltipOpen(true)}
                 onMouseLeave={() => setLogsBtnTooltipOpen(false)}
-                onClick={() => { setLogsBtnTooltipOpen(false); logsWidget.setLogsDrawerOpen(true); }}
+                onClick={() => {
+                  setLogsBtnTooltipOpen(false);
+                  logsWidget.setLogsDrawerOpen(true);
+                }}
               >
                 <SearchIcon />
               </IconButton>
@@ -506,7 +509,15 @@ const ChatBotView = ({
             anchor="bottom"
             open={logsWidget.logsDrawerOpen}
             onClose={() => logsWidget.setLogsDrawerOpen(false)}
-            PaperProps={{ sx: { height: logsFullscreen ? "100vh" : "50vh", width: "100%", bgcolor: "background.default", backgroundImage: "none", transition: "height 0.2s ease" } }}
+            PaperProps={{
+              sx: {
+                height: logsFullscreen ? "100vh" : "50vh",
+                width: "100%",
+                bgcolor: "background.default",
+                backgroundImage: "none",
+                transition: "height 0.2s ease",
+              },
+            }}
           >
             <Box
               role="presentation"
@@ -526,7 +537,13 @@ const ChatBotView = ({
                       {logsFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
                     </IconButton>
                   </SimpleTooltip>
-                  <IconButton size="small" onClick={() => { logsWidget.setLogsDrawerOpen(false); setLogsFullscreen(false); }}>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      logsWidget.setLogsDrawerOpen(false);
+                      setLogsFullscreen(false);
+                    }}
+                  >
                     <CloseIcon fontSize="small" />
                   </IconButton>
                 </Stack>
@@ -566,7 +583,15 @@ const ChatBotView = ({
             anchor="right"
             open={debugWidget.debugDrawerOpen}
             onClose={() => debugWidget.setDebugDrawerOpen(false)}
-            PaperProps={{ sx: { width: debugFullscreen ? "100vw" : { xs: "90vw", sm: 480 }, height: "100%", bgcolor: "background.default", backgroundImage: "none", transition: "width 0.2s ease" } }}
+            PaperProps={{
+              sx: {
+                width: debugFullscreen ? "100vw" : { xs: "90vw", sm: 480 },
+                height: "100%",
+                bgcolor: "background.default",
+                backgroundImage: "none",
+                transition: "width 0.2s ease",
+              },
+            }}
           >
             <Box
               role="presentation"
@@ -586,7 +611,13 @@ const ChatBotView = ({
                       {debugFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
                     </IconButton>
                   </SimpleTooltip>
-                  <IconButton size="small" onClick={() => { debugWidget.setDebugDrawerOpen(false); setDebugFullscreen(false); }}>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      debugWidget.setDebugDrawerOpen(false);
+                      setDebugFullscreen(false);
+                    }}
+                  >
                     <CloseIcon fontSize="small" />
                   </IconButton>
                 </Stack>
