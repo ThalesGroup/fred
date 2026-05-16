@@ -61,8 +61,11 @@ dependencies = [
   "pgvector>=0.2.5",
   "psycopg[binary]>=3.2.1",
   # PyTorch for amd64: CPU-only wheels from pytorch-cpu index
-  "torch==2.7.1+cpu; platform_machine == 'x86_64'",
-  "torchvision==0.22.1+cpu; platform_machine == 'x86_64'",
+  "torch==2.7.1+cpu; platform_machine == 'x86_64' and sys_platform == 'linux'",
+  "torchvision==0.22.1+cpu; platform_machine == 'x86_64' and sys_platform == 'linux'",
+  # PyTorch for macOS on Intel (no +cpu builds)
+  "torch==2.7.1; platform_machine == 'x86_64' and sys_platform == 'darwin'",
+  "torchvision==0.22.1; platform_machine == 'x86_64' and sys_platform == 'darwin'",
   # PyTorch for ARM64 (M1/M2 Macs, Graviton, Raspberry Pi)
   "torch==2.7.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
   "torchvision==0.22.1; platform_machine == 'aarch64' or platform_machine == 'arm64'",
@@ -115,8 +118,8 @@ markers = [
 fred-core = { path = "../libs/fred-core", editable = true }
 
 # Keep CPU-only index for x86_64
-torch = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64'" }
-torchvision = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64'" }
+torch = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }
+torchvision = { index = "pytorch-cpu", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" }
 
 [[tool.uv.index]]
 name = "pypi"
@@ -138,7 +141,8 @@ dev = [
 # Using `editable_mode = "compat"` when installing fred-core to make editable install work with Pylance (vscode):
 # https://github.com/microsoft/pylance-release/blob/main/TROUBLESHOOTING.md#editable-install-modules-not-found
 config-settings = { editable_mode = "compat" }
-environments = ["sys_platform == 'linux'"]
+# The lockfile is used for both Linux (deploy/CI) and macOS (local dev).
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
 
 
 [tool.alembic]
@@ -224,4 +228,3 @@ prepend_sys_path = [
 # type = "exec"
 # executable = "ruff"
 # options = "check --fix REVISION_SCRIPT_FILENAME"
-
