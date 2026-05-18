@@ -386,11 +386,23 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
 
-        Raises:
-            TypeError: If the vector_store does not expose full_text_search.
+        Notes:
+            When the current vector store backend does not expose `full_text_search`, this
+            method falls back to semantic ANN search. This keeps local dev backends
+            (e.g. Chroma) usable even when the request policy defaults to `strict`.
         """
         if not isinstance(self.vector_store, SupportsFullTextSearch):
-            raise TypeError(f"Strict search requires a backend exposing full_text_search, but vector_store is {type(self.vector_store).__name__}")
+            logger.warning(
+                "[VECTOR][SEARCH][STRICT] backend=%s lacks full_text_search; falling back to semantic search",
+                type(self.vector_store).__name__,
+            )
+            return await self._semantic(
+                question=question,
+                user=user,
+                k=k,
+                library_tags_ids=library_tags_ids,
+                metadata_terms_extra=metadata_terms_extra,
+            )
         full_text_store = cast(SupportsFullTextSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
@@ -453,11 +465,23 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of search hits with relevant metadata.
 
-        Raises:
-            TypeError: If the vector store does not expose hybrid_search.
+        Notes:
+            When the current vector store backend does not expose `hybrid_search`, this
+            method falls back to semantic ANN search. This keeps local dev backends
+            (e.g. Chroma) usable even when the request policy defaults to `hybrid`.
         """
         if not isinstance(self.vector_store, SupportsHybridSearch):
-            raise TypeError(f"Hybrid search requires a backend exposing hybrid_search, but vector_store is {type(self.vector_store).__name__}")
+            logger.warning(
+                "[VECTOR][SEARCH][HYBRID] backend=%s lacks hybrid_search; falling back to semantic search",
+                type(self.vector_store).__name__,
+            )
+            return await self._semantic(
+                question=question,
+                user=user,
+                k=k,
+                library_tags_ids=library_tags_ids,
+                metadata_terms_extra=metadata_terms_extra,
+            )
         hybrid_store = cast(SupportsHybridSearch, self.vector_store)
 
         metadata_terms: dict[str, Any] = {"retrievable": [True]}
@@ -533,7 +557,6 @@ class VectorSearchService:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
 
         Raises:
-            TypeError: If the vector store does not support the selected search policy.
             Exception: For any other unexpected errors during the search process.
         """
         corpus_hits: List[VectorSearchHit] = []

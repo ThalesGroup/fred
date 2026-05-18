@@ -199,3 +199,37 @@ async def test_similarity_search_zero_k(monkeypatch, test_user):
     )
     assert isinstance(results, list)
     assert results == []
+
+
+async def test_hybrid_policy_falls_back_to_semantic_when_backend_unsupported(monkeypatch, test_user):
+    """Test: hybrid policy should not crash when backend lacks hybrid_search; falls back to semantic."""
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    vector_svc = VectorSearchService()
+    results = await vector_svc.search(
+        question="What is AI?",
+        user=test_user,
+        top_k=2,
+        document_library_tags_ids=None,
+        policy_name=SearchPolicyName.hybrid,
+    )
+    assert isinstance(results, list)
+    assert len(results) == 2
+
+
+async def test_strict_policy_falls_back_to_semantic_when_backend_unsupported(monkeypatch, test_user):
+    """Test: strict policy should not crash when backend lacks full_text_search; falls back to semantic."""
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    vector_svc = VectorSearchService()
+    results = await vector_svc.search(
+        question="What is AI?",
+        user=test_user,
+        top_k=2,
+        document_library_tags_ids=None,
+        policy_name=SearchPolicyName.strict,
+    )
+    assert isinstance(results, list)
+    assert len(results) == 2
