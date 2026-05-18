@@ -48,7 +48,6 @@ Note:
 | Variable | In templates | Purpose |
 | --- | --- | --- |
 | `FRED_POSTGRES_PASSWORD` | agentic, knowledge-flow | Main Postgres password. |
-| `TABULAR_POSTGRES_PASSWORD` | knowledge-flow | Tabular store Postgres password. |
 | `OPENSEARCH_PASSWORD` | agentic, knowledge-flow | OpenSearch authentication. |
 | `MINIO_SECRET_KEY` | knowledge-flow, control-plane | MinIO secret for content storage backends when `type=minio`. |
 | `CLICKHOUSE_PASSWORD` | knowledge-flow | ClickHouse authentication. |
