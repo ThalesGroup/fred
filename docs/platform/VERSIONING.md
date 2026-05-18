@@ -2,96 +2,55 @@
 
 This document defines Fred release delivery and versioning conventions.
 
-We follow [Semantic Versioning 2.0.0](https://semver.org/).
+We follow [Semantic Versioning 2.0.0](https://semver.org/) and [Trunk-Based Development](https://trunkbaseddevelopment.com/).
 
 ## Delivery Flow
 
-### 1) Integration flow (`develop`)
+All development happens on `main`. PRs are merged into `main` continuously. The integration platform is always deployed from `main`, allowing the team to validate behavior before releasing.
 
-- Features are merged into `develop`.
-- `develop` is automatically deployed to the integration platform.
-- The team validates behavior on this integration environment.
+Releasing is done by tagging a commit on `main` that has been validated on integration. The CI triggered by the tag handles everything: versioning all components, building images, and packaging the Helm chart.
 
-### 2) Production candidate (`main`)
+See: [Release from Trunk](https://trunkbaseddevelopment.com/release-from-trunk/)
 
-- When integration validation is considered acceptable, changes are merged from `develop` to `main`.
-- `main` is the reference branch for production delivery.
+### Normal release
 
-### 3) Release tags on `main`
+1. Validate the current state of `main` on the integration platform.
+2. Tag the commit: `X.Y.Z`.
+3. CI builds images `X.Y.Z` and packages the Helm chart `X.Y.Z`.
+4. Deploy production from the released chart.
 
-We use two tag families:
+### Hotfix
 
-- Code release tag: `code/vX.Y.Z`
-- Chart release tag: `chart/vA.B.C`
+Prefer fixing on `main` and releasing a new tag quickly if the fix is low-risk.
 
-#### Code tag (`code/vX.Y.Z`)
+If `main` contains unreleased work that is not ready to ship:
 
-Tagging `main` with `code/vX.Y.Z` triggers image builds:
+1. Fix the bug on `main` first (never skip this step).
+2. Create a release branch from the currently deployed tag: `release/X.Y.Z`.
+3. Cherry-pick the fix onto the release branch.
+4. Tag the release branch with the hotfix version `X.Y.Z+1`.
 
-- `agentic-backend:<X.Y.Z>`
-- `knowledge-flow-backend:<X.Y.Z>`
-- `frontend:<X.Y.Z>`
+Release branches are created late and only when necessary — they are not maintained long-term.
 
-#### Chart tag (`chart/vA.B.C`)
+See: [Late Creation of Release Branches](https://trunkbaseddevelopment.com/branch-for-release/#late-creation-of-release-branches)
 
-Tagging `main` with `chart/vA.B.C` triggers Helm chart packaging.
+## Release Tag
 
-Production deployment uses chart versions that reference images built from `main`.
+A single tag `X.Y.Z` (e.g. `1.6.0`) triggers the full release pipeline: Docker image builds and Helm chart packaging. Code and chart share the same version.
+
+Images produced:
+
+- `agentic-backend:X.Y.Z`
+- `knowledge-flow-backend:X.Y.Z`
+- `control-plane-backend:X.Y.Z`
+- `frontend:X.Y.Z`
+
+The Helm chart uses `appVersion: X.Y.Z` as the default image tag. This can be overridden per-component with `image.tag` in `values.yaml` if needed.
 
 ## Customer Forks
 
 Many production deployments are done from customer forks of Fred.
 
-The expected pattern remains the same:
+The expected pattern remains the same: continuous integration on `main`, release by tag, late release branches only for hotfixes.
 
-- integration branch auto-deployed for validation,
-- promotion to production branch,
-- release tags for code and charts,
-- production rollout from images/charts generated from that production branch.
-
-For rules on how to structure a fork so that merging from `develop` remains permanently conflict-free, see [FORKING_GUIDE.md](./FORKING_GUIDE.md).
-
-## Tagging Sequence (Recommended)
-
-1. Validate on integration (`develop`).
-2. Merge to `main`.
-3. Create code tag `code/vX.Y.Z`.
-4. Update chart image references and deployment defaults as needed.
-5. Create chart tag `chart/vA.B.C`.
-6. Deploy production from the released chart/images.
-
-## Versioning Rules (`major.minor.patch`)
-
-### Patch (`X.Y.Z -> X.Y.Z+1`)
-
-Use patch for backward-compatible corrections:
-
-- bug fixes,
-- security fixes,
-- non-breaking reliability/performance fixes,
-- internal refactors without user-visible behavior changes.
-
-### Minor (`X.Y.Z -> X.Y+1.0`)
-
-Use minor when user-visible behavior changes but remains backward-compatible:
-
-- new features,
-- visible behavior evolution,
-- small configuration additions that do not require migration,
-- no mandatory operator action.
-
-### Major (`X.Y.Z -> X+1.0.0`)
-
-Use major when operators must review release notes before upgrade:
-
-- potential breaking changes,
-- mandatory deployment or configuration migration,
-- required data/process migration,
-- compatibility contract updates.
-
-Major releases must include explicit upgrade guidance in release notes.
-
-## Notes
-
-- Code and chart versions are managed independently (`code/v...` and `chart/v...`).
-- In practice they are often aligned for clarity, but alignment is a convention, not a technical requirement.
+For rules on how to structure a fork so that merging from `main` remains permanently conflict-free, see [FORKING_GUIDE.md](./FORKING_GUIDE.md).
