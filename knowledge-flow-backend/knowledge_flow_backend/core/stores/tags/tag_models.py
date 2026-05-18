@@ -14,23 +14,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from fred_core.models.base import JsonColumn, TimestampColumn
-from sqlalchemy import String
+from fred_core.models.base import JsonColumn
+from fred_core.sql.mixin import TimestampMixin
+from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from knowledge_flow_backend.models.base import Base
 
 
-class TagRow(Base):
+class TagRow(Base, TimestampMixin):
     """ORM model for the ``tag`` table."""
 
     __tablename__ = "tag"
+    __table_args__ = (Index("ix_tag_updated_at", "updated_at"),)
 
     tag_id: Mapped[str] = mapped_column(String, primary_key=True)
-    created_at: Mapped[datetime | None] = mapped_column(TimestampColumn, nullable=True)
-    updated_at: Mapped[datetime | None] = mapped_column(TimestampColumn, index=True, nullable=True)
     owner_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     name: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     path: Mapped[str | None] = mapped_column(String, index=True, nullable=True)

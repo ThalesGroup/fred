@@ -5,13 +5,14 @@ from sqlalchemy import DateTime, Enum, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
+from fred_core.sql.mixin import TimestampMixin
 
 
 class GcuVersionsType(enum.Enum):
     V1 = "v1"
 
 
-class UserRow(Base):
+class UserRow(Base, TimestampMixin):
     __tablename__ = "users"
     __table_args__ = {"extend_existing": True}
 

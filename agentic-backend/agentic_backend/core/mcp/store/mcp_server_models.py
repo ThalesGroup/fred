@@ -15,13 +15,14 @@
 from __future__ import annotations
 
 from fred_core.models.base import JsonColumn
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
 
 
-class McpServerRow(Base):
+class McpServerRow(Base, TimestampMixin):
     """ORM model for the ``mcp-server`` table.
 
     Each row stores a serialised :class:`~agentic_backend.core.agents.agent_spec.MCPServerConfiguration`
