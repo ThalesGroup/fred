@@ -17,13 +17,14 @@ from __future__ import annotations
 from datetime import datetime
 
 from fred_core.models.base import JsonColumn
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
 
 
-class SessionHistoryRow(Base):
+class SessionHistoryRow(Base, TimestampMixin):
     """ORM model for the ``session_history`` table."""
 
     __tablename__ = "session_history"
@@ -33,6 +34,7 @@ class SessionHistoryRow(Base):
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
     rank: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # TODO: created_at (from TimestampMixin) should replace this column in a future PR
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)
     channel: Mapped[str] = mapped_column(String, nullable=False)
