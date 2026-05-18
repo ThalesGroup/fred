@@ -54,6 +54,30 @@ class GeneratedParquetMetadata:
     columns: list[TabularColumnSchema]
 
 
+def cleanup_generated_parquet_file(parquet_path: Path) -> None:
+    """
+    Remove one temporary Parquet artifact generated during CSV ingestion.
+
+    Why this exists:
+    - The tabular pipeline materializes a local Parquet file only as a bridge
+      between DuckDB export and shared content-store upload.
+    - Keeping the cleanup in one helper aligns tabular temp-file handling with
+      the explicit upload cleanup used elsewhere in ingestion.
+
+    How to use:
+    - Pass the temporary Parquet path created for `content_store.put_file(...)`.
+    - The helper removes the file with best-effort logging and never raises on
+      cleanup failures.
+
+    Example:
+    - `cleanup_generated_parquet_file(Path("/tmp/tmpabc.parquet"))`
+    """
+    try:
+        parquet_path.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to clean up temporary Parquet artifact: %s", parquet_path, exc_info=True)
+
+
 class TabularProcessor(BaseOutputProcessor):
     """
     Scalable tabular output processor backed by DuckDB CSV-to-Parquet conversion.
@@ -177,7 +201,7 @@ class TabularProcessor(BaseOutputProcessor):
                 content_type="application/vnd.apache.parquet",
             )
         finally:
-            parquet_path.unlink(missing_ok=True)
+            cleanup_generated_parquet_file(parquet_path)
 
         return TabularArtifactV1(
             dataset_uid=metadata.document_uid,
