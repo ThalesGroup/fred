@@ -14,11 +14,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import Column, Table, insert, select
+from sqlalchemy import Column, Table, func, insert, select
 from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, mapped_column
+
+from fred_core.models.base import TimestampColumn
 
 
 class SeedMarkerMixin:
@@ -36,6 +40,17 @@ class SeedMarkerMixin:
         self, conn: Connection, table: Table, pk_column: Column
     ) -> None:
         conn.execute(insert(table).values({pk_column.name: self.seed_marker_id}))
+
+
+class TimestampMixin:
+    """Adds standard created_at / updated_at audit columns to any ORM model."""
+
+    created_at: Mapped[datetime] = mapped_column(
+        TimestampColumn, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TimestampColumn, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class PydanticJsonMixin:

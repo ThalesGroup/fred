@@ -14,15 +14,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from sqlalchemy import DateTime, Integer, String, Text
+from fred_core.sql.mixin import TimestampMixin
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from agentic_backend.models.base import Base
 
 
-class FeedbackRow(Base):
+class FeedbackRow(Base, TimestampMixin):
     """ORM model for the ``feedbacks`` table."""
 
     __tablename__ = "feedbacks"
@@ -33,7 +32,4 @@ class FeedbackRow(Base):
     agent_id: Mapped[str] = mapped_column(String, nullable=False)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
     user_id: Mapped[str] = mapped_column(String, nullable=False)
