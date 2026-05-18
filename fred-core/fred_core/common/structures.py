@@ -14,10 +14,9 @@
 
 import os
 from enum import Enum
-from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class OwnerFilter(str, Enum):
@@ -163,53 +162,10 @@ class InMemoryStoreConfig(BaseModel):
     type: Literal["memory"] = "memory"
 
 
-class SQLStorageConfig(BaseModel):
-    type: Literal["sql"] = "sql"
-    driver: str
-    mode: Literal["read_and_write", "read_only"]
-    database: Optional[str] = None
-    host: Optional[str] = None
-    port: Optional[int] = None
-    username: Optional[str] = Field(
-        default_factory=lambda: os.getenv("TABULAR_POSTGRES_USERNAME")
-    )
-    # Prefer TABULAR_POSTGRES_PASSWORD; fall back to legacy SQL_PASSWORD for backward compatibility.
-    password: Optional[str] = Field(
-        default_factory=lambda: os.getenv("TABULAR_POSTGRES_PASSWORD")
-    )
-    path: Optional[str] = None
-
-    @model_validator(mode="after")
-    def build_path(self) -> "SQLStorageConfig":
-        if not self.driver:
-            raise ValueError("Driver is required.")
-
-        if self.path:
-            # Facultatif : expanduser si tu veux supporter les "~"
-            self.path = str(Path(self.path).expanduser())
-        else:
-            if not self.database:
-                raise ValueError("Database name is required to build the path.")
-
-            auth = ""
-            if self.username:
-                auth = self.username
-                if self.password:
-                    auth += f":{self.password}"
-                auth += "@"
-
-            host = self.host or "localhost"
-            port = f":{self.port}" if self.port else ""
-            self.path = f"{auth}{host}{port}/{self.database}"
-
-        return self
-
-
 StoreConfig = Annotated[
     Union[
         DuckdbStoreConfig,
         OpenSearchIndexConfig,
-        SQLStorageConfig,
         LogStoreConfig,
         PostgresTableConfig,
         InMemoryStoreConfig,

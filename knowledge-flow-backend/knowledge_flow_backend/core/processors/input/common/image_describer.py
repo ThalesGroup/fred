@@ -112,6 +112,26 @@ def _stringify_content(content: Union[str, List[Any], Dict[str, Any]]) -> str:
     return ""
 
 
+def _normalize_image_data_url(image_base64: str) -> str:
+    """
+    Why:
+        Vision providers do not agree on whether callers should send raw base64
+        bytes or a full `data:image/...;base64,...` URL, and Fred now receives
+        both forms depending on the ingestion path.
+
+    How to use:
+        Pass either a raw base64 payload or an existing data URI. The helper
+        returns a valid `image_url.url` string ready for multimodal model calls.
+
+    Example:
+        `url = _normalize_image_data_url("data:image/jpeg;base64,/9j/4AAQ...")`
+    """
+    normalized = image_base64.strip()
+    if normalized.startswith("data:image/"):
+        return normalized
+    return f"data:image/png;base64,{normalized}"
+
+
 class VisionImageDescriber(BaseImageDescriber):
     """
     Fred rationale:
@@ -128,11 +148,20 @@ class VisionImageDescriber(BaseImageDescriber):
 
     def describe(self, image_base64: str) -> str:
         """
-        Fred rationale:
-        - Multimodal messages are "text + image_url(data:...)".
-        - We stay strict on output (plain text) so callers can inject into Markdown safely.
+        Why:
+            Convert one image payload into a short plain-text description that
+            can be injected safely into Markdown output.
+
+        How to use:
+            Pass either raw image base64 or an existing `data:image/...` URI.
+            The method normalizes the payload for multimodal chat providers and
+            returns a provider-safe plain-text description.
+
+        Example:
+            `description = describer.describe("data:image/jpeg;base64,/9j/4AAQ...")`
         """
         try:
+            image_url = _normalize_image_data_url(image_base64)
             messages = [
                 SystemMessage(content=self.system_prompt),
                 HumanMessage(
@@ -140,7 +169,7 @@ class VisionImageDescriber(BaseImageDescriber):
                         {"type": "text", "text": "Please describe this image."},
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                            "image_url": {"url": image_url},
                         },
                     ]
                 ),
