@@ -80,6 +80,7 @@ def minimal_generalist_config() -> Configuration:
             reload=False,
             reload_dir=".",
             kpi_process_metrics_interval_sec=10,
+            limit_concurrency=None
         ),
         frontend_settings=FrontendSettings(
             feature_flags=FrontendFlags(
