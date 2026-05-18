@@ -14,16 +14,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from fred_core.models.base import TimestampColumn
+from fred_core.sql.mixin import TimestampMixin
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from knowledge_flow_backend.models.base import Base
 
 
-class WorkflowTaskRow(Base):
+class WorkflowTaskRow(Base, TimestampMixin):
     """ORM model for the ``sched_workflow_tasks`` table."""
 
     __tablename__ = "sched_workflow_tasks"
@@ -33,5 +31,3 @@ class WorkflowTaskRow(Base):
     current_filename: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False)
     last_error: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TimestampColumn, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(TimestampColumn, nullable=False)

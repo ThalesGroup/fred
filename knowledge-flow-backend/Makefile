@@ -71,10 +71,6 @@ bench: dev ## Run processor benchmark locally (no server needed). FILE=path PROC
 
 .PHONY: markdown-profile-test
 markdown-profile-test: ## Run recursive markdown profile test script (set INPUT_DIR=... optionally PROFILES=fast,medium,rich OUTPUT_DIR=...)
-	@if [ -z "$(INPUT_DIR)" ]; then \
-		echo "Usage: make markdown-profile-test INPUT_DIR=/path/to/files [PROFILES=fast,medium,rich] [OUTPUT_DIR=./target/markdown-profile-tests] [BASE_URL=http://localhost:8111/knowledge-flow/v1]"; \
-		exit 2; \
-	fi
 	./tests/scripts/test_markdown_profiles.sh \
 		--input-dir "$(INPUT_DIR)" \
 		--profiles "$(PROFILES)" \
@@ -162,6 +158,7 @@ WORKER_DOCKER_NETWORK ?= host
 API_CONTAINER_NAME ?= kf-api
 API_DOCKER_NETWORK ?= host
 PROFILES ?= fast,medium,rich
+INPUT_DIR ?= ./tests/assets
 OUTPUT_DIR ?= ./target/markdown-profile-tests
 BASE_URL ?= http://localhost:8111/knowledge-flow/v1
 TEST_STATE_DIR ?= ./.fred-test
