@@ -7,16 +7,24 @@ This document centralizes the tests added/reorganized around Markdown/PDF ingest
 - Script: `tests/scripts/test_markdown_profiles.sh`
 - Make target: `make markdown-profile-test`
 - Input: recursive folder containing `.pdf`, `.docx`, `.pptx`
+- Default input folder: `tests/assets` (includes `sample.pdf` and `anssi-guide-recommendations-linux_configuration-fr-v1.2_0.pdf`)
 - Output: markdown files under `target/markdown-profile-tests` (default)
 
 Example:
 
 ```bash
 make markdown-profile-test \
-  INPUT_DIR=/path/to/files \
   PROFILES=medium \
   OUTPUT_DIR=./target/markdown-medium \
   BASE_URL=http://localhost:8111/knowledge-flow/v1
+```
+
+To run explicitly on the checked-in ingestion corpus:
+
+```bash
+make markdown-profile-test \
+  INPUT_DIR=./tests/assets \
+  PROFILES=fast,medium,rich
 ```
 
 ## 2) `summary.tsv` Format
