@@ -1,3 +1,9 @@
+**unreleased**
+
+- **Features**
+
+  - Switched the ingestion processor from pymupdf to pymupdf4llm for improved PDF-to-Markdown handling performance in Fast mode.
+
 **v1.5.4** — 2026-05-11
 
 - **Features**
