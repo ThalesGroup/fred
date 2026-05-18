@@ -10,6 +10,7 @@
 - [Rich `images_scale` Sensitivity](#rich-imagesscale-sensitivity)
 - [Rich PDF Backend Comparison](#rich-pdf-backend-comparison)
 - [Rich Threaded Pipeline Tuning](#rich-threaded-pipeline-tuning)
+- [Rich Optimized Tuning: `docling_parse` vs `pypdfium2`](#rich-optimized-tuning-docling_parse-vs-pypdfium2)
 - [Rich Current vs Optimized Configuration](#rich-current-vs-optimized-configuration)
 - [Rich `AcceleratorOptions(num_threads=1)` Impact](#rich-acceleratoroptionsnum_threads1-impact)
 - [Rich Local vs Remote OCR Without Image Description](#rich-local-vs-remote-ocr-without-image-description)
@@ -173,6 +174,36 @@ Observed delta when moving from Docling defaults to conservative tuning:
 The generated Markdown remained identical for this document.
 
 This suggests that for this workload, the biggest gain does not come from switching to `ThreadedPdfPipelineOptions` as a type, but from explicitly tuning the threaded pipeline's batch sizes and queue depth to reduce in-flight page buffering.
+
+## Rich Optimized Tuning: `docling_parse` vs `pypdfium2`
+
+An additional `rich` benchmark was run on the same ANSSI PDF to compare the two PDF backends under the same optimized local OCR tuning:
+
+- `ocr_backend=openvino`
+- `force_full_page_ocr=false`
+- `images_scale=1.0`
+- `ocr_batch_size=1`
+- `layout_batch_size=1`
+- `table_batch_size=1`
+- `queue_max_size=1`
+- `batch_polling_interval_seconds=0.05`
+- no image description
+
+| PDF Backend | Wall Time | Peak RSS | Avg CPU | Peak CPU |
+|---|---:|---:|---:|---:|
+| `docling_parse` | 108.83 s | 2.558 GiB | 4.50 cores | 10.19 cores |
+| `pypdfium2` | 90.57 s | 2.654 GiB | 5.11 cores | 10.24 cores |
+
+Observed delta when moving from optimized `docling_parse` to optimized `pypdfium2`:
+
+- memory: `+0.096 GiB`
+- wall time: `-18.26 s`
+- average CPU: `+0.61` cores
+- peak CPU: `+0.05` cores
+
+The generated Markdown was not identical between the two backends (`133,871` vs `135,006` characters).
+
+This means that with the optimized threaded tuning already in place, `pypdfium2` is faster, but it is no longer the lower-memory option on this document. It should still be treated as a quality/performance tradeoff rather than a drop-in replacement.
 
 ## Rich `queue_max_size` 1 vs 5
 
