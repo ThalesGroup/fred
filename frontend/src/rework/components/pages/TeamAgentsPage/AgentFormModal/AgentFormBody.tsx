@@ -16,7 +16,6 @@ import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { IconType } from "@shared/utils/Type.ts";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   AgentTemplateSummary,
@@ -27,7 +26,7 @@ import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { McpServerCard } from "./McpServerCard/McpServerCard.tsx";
 import styles from "./AgentFormBody.module.css";
 
-type SectionKey = "prompts" | "settings" | "chat" | "tools";
+export type SectionKey = "prompts" | "settings" | "chat" | "tools";
 
 const SECTION_ORDER: SectionKey[] = ["prompts", "settings", "chat", "tools"];
 
@@ -79,6 +78,9 @@ type AgentFormBodyProps = {
   mcpConfigValues: Record<string, Record<string, unknown>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
+  activeSection: SectionKey;
+  onSectionChange: (s: SectionKey) => void;
+  errorSections: Set<SectionKey>;
   editInstance?: ManagedAgentInstanceSummary;
   teamId?: string;
   onDisplayNameChange: (v: string) => void;
@@ -99,6 +101,9 @@ export function AgentFormBody({
   mcpConfigValues,
   isSubmitting,
   submitAttempted,
+  activeSection,
+  onSectionChange,
+  errorSections,
   editInstance,
   teamId,
   onDisplayNameChange,
@@ -108,7 +113,6 @@ export function AgentFormBody({
   onMcpConfigChange,
 }: AgentFormBodyProps) {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<SectionKey>("settings");
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === templateId);
   const templateMissing = mode === "edit" && !selectedTemplate;
@@ -131,8 +135,7 @@ export function AgentFormBody({
   });
 
   const effectiveSection = visibleSections.includes(activeSection) ? activeSection : (visibleSections[0] ?? "settings");
-
-  const defaultSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
+  const activeSectionIndex = Math.max(0, visibleSections.indexOf(effectiveSection));
 
   const nameError = submitAttempted && !displayName.trim() ? t("rework.teams.formAgent.fields.name.label") : undefined;
 
@@ -153,6 +156,23 @@ export function AgentFormBody({
 
   return (
     <div className={styles.body}>
+      {/* Absorbs Chrome's username+password credential heuristic away from real form fields */}
+      <input
+        type="text"
+        autoComplete="username"
+        aria-hidden="true"
+        className={styles.credentialHoneypot}
+        tabIndex={-1}
+        readOnly
+      />
+      <input
+        type="password"
+        autoComplete="new-password"
+        aria-hidden="true"
+        className={styles.credentialHoneypot}
+        tabIndex={-1}
+        readOnly
+      />
       {selectedTemplate ? (
         <div className={styles.contextBar}>
           <span className={styles.contextName}>{selectedTemplate.display_name}</span>
@@ -189,14 +209,25 @@ export function AgentFormBody({
                   key={visibleSections.join(",")}
                   size="small"
                   color="secondary"
-                  defaultSelectedIndex={defaultSectionIndex}
+                  selectedIndex={activeSectionIndex}
+                  onSelectedIndexChange={(i) => onSectionChange(visibleSections[i] as SectionKey)}
                   items={visibleSections.map((s) => ({
                     label: SECTION_LABELS[s],
                     icon: SECTION_ICONS[s],
-                    onClick: () => setActiveSection(s),
+                    hasError: errorSections.has(s),
+                    onClick: () => onSectionChange(s),
                   }))}
                 />
               </div>
+
+              {errorSections.size > 0 && (
+                <div className={styles.validationBanner} role="alert">
+                  {t(
+                    "rework.teams.formAgent.validation.requiredFields",
+                    "Complete the fields marked with * before saving.",
+                  )}
+                </div>
+              )}
 
               <div className={styles.sectionContent}>
                 {effectiveSection === "prompts" && renderFieldList(promptFields)}

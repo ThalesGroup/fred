@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from "@mui/material";
+import { ConfirmationDialog } from "../rework/components/shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { createContext, PropsWithChildren, useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -55,33 +55,22 @@ export const ConfirmationDialogProvider = ({ children }: PropsWithChildren) => {
     <ConfirmationDialogContext.Provider value={{ showConfirmationDialog }}>
       {children}
 
-      {dialogOptions && (
-        <Dialog open={true} onClose={closeConfirmationDialog}>
-          <DialogTitle>{dialogOptions.title}</DialogTitle>
-          {dialogOptions.message && (
-            <DialogContent>
-              <DialogContentText>{dialogOptions.message}</DialogContentText>
-            </DialogContent>
-          )}
-
-          <DialogActions>
-            <Button onClick={closeConfirmationDialog} variant={criticalAction ? "contained" : undefined}>
-              {dialogOptions.cancelButtonLabel || t("confirmationDialog.defaultCancelButtonLabel")}
-            </Button>
-            <Button
-              variant={criticalAction ? undefined : "contained"}
-              onClick={() => {
-                dialogOptions.onConfirm();
-                closeConfirmationDialog();
-              }}
-              color={criticalAction ? "error" : undefined}
-              autoFocus
-            >
-              {dialogOptions.confirmButtonLabel || t("confirmationDialog.defaultConfirmButtonLabel")}
-            </Button>
-          </DialogActions>
-        </Dialog>
-      )}
+      <ConfirmationDialog
+        open={!!dialogOptions}
+        title={dialogOptions?.title ?? ""}
+        message={dialogOptions?.message}
+        confirmLabel={dialogOptions?.confirmButtonLabel || t("confirmationDialog.defaultConfirmButtonLabel")}
+        cancelLabel={dialogOptions?.cancelButtonLabel || t("confirmationDialog.defaultCancelButtonLabel")}
+        criticalAction={criticalAction}
+        onConfirm={() => {
+          dialogOptions?.onConfirm();
+          closeConfirmationDialog();
+        }}
+        onCancel={() => {
+          dialogOptions?.onCancel?.();
+          closeConfirmationDialog();
+        }}
+      />
     </ConfirmationDialogContext.Provider>
   );
 };

@@ -1,0 +1,129 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-s);
+  border: 1px solid var(--outline-retreat);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.trigger:hover:not(:disabled) {
+  border-color: var(--outline);
+  background: var(--surface-container-high);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.trigger:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.icon {
+  font-size: 16px;
+  color: var(--on-surface-retreat);
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  white-space: nowrap;
+}
+
+.prefix {
+  color: var(--on-surface-retreat);
+}
+
+.chevron {
+  font-size: 16px;
+  color: var(--on-surface-retreat);
+  transition: transform 200ms ease-out;
+}
+
+.chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+/* Popover */
+.popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  max-width: 320px;
+  background: var(--surface-container-high);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-m, 12px);
+  box-shadow: var(--shadow-s);
+  list-style: none;
+  margin: 0;
+  padding: var(--spacing-2xs);
+  z-index: 50;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-s);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  color: var(--on-surface);
+  transition: background-color 120ms ease;
+}
+
+.option:hover,
+.option:focus-visible {
+  background: var(--state-on-surface-hover);
+  outline: none;
+}
+
+.option[data-selected="true"] {
+  color: var(--primary);
+}
+
+.optIcon {
+  font-size: 18px;
+  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+}
+
+.option[data-selected="true"] .optIcon {
+  color: var(--primary);
+}
+
+.optText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.optLabel {
+  font: var(--font-label-medium);
+}
+
+.optDesc {
+  font: var(--font-label-small);
+  color: var(--on-surface-retreat);
+}
+
+.check {
+  font-size: 16px;
+  color: var(--primary);
+  flex-shrink: 0;
+}

@@ -1,11 +1,22 @@
+/* Message area — fills the column so the empty state can center vertically.
+   Scroll is owned by .chatColumn above; this element is not a scroll container. */
 .area {
   display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Centered content lane — the only place where width is constrained.
+   flex: 1 so it expands to fill .area, keeping the empty-state text centred. */
+.lane {
   flex: 1;
+  display: flex;
   flex-direction: column;
   gap: var(--spacing-m, 1rem);
-  padding: var(--spacing-l, 1.5rem) var(--spacing-m, 1rem);
-  min-height: 0;
-  overflow-y: auto;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--spacing-xl, 2rem) var(--spacing-l, 1.5rem);
 }
 
 .empty {

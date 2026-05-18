@@ -385,7 +385,7 @@ export function useChatSse(
       await KeyCloakService.ensureFreshToken(30);
       const token = KeyCloakService.GetToken() ?? "";
 
-      const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
+      const prep = await prepareExecution({ teamId, agentInstanceId, action: "resume" }).unwrap();
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
       const sessionId = pending.session_id;

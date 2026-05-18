@@ -16,7 +16,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { PromptPicker } from "@shared/molecules/PromptPicker/PromptPicker.tsx";
-import { useState } from "react";
+import React, { useState } from "react";
 import type { ManagedAgentFieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
@@ -41,6 +41,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
   // true = user explicitly opened picker from editing mode.
   // false = user explicitly chose to write from scratch (override auto-picker for empty fields).
   const [pickerExplicit, setPickerExplicit] = useState<boolean | null>(null);
+  const [chipInput, setChipInput] = useState("");
 
   const { data: contextPrompts = [] } = useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery(
     { teamId: teamId ?? "" },
@@ -163,6 +164,71 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
     );
   }
 
+  if (field.type === "array") {
+    const tags = Array.isArray(value) ? (value as string[]) : [];
+
+    const commitChip = () => {
+      const trimmed = chipInput.trim().replace(/,+$/, "");
+      if (trimmed && !tags.includes(trimmed)) {
+        onChange(field.key, [...tags, trimmed]);
+      }
+      setChipInput("");
+    };
+
+    const handleChipKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
+        commitChip();
+      } else if (e.key === "Backspace" && chipInput === "" && tags.length > 0) {
+        onChange(field.key, tags.slice(0, -1));
+      }
+    };
+
+    return (
+      <div className={styles.field}>
+        <label className={styles.label}>{label}</label>
+        <div
+          className={`${styles.chipField} ${error ? styles.chipFieldError : ""}`}
+          onClick={(e) => {
+            const input = (e.currentTarget as HTMLElement).querySelector("input");
+            input?.focus();
+          }}
+        >
+          {tags.map((tag, i) => (
+            <span key={i} className={styles.chip}>
+              {tag}
+              <button
+                type="button"
+                className={styles.chipRemove}
+                onClick={() =>
+                  onChange(
+                    field.key,
+                    tags.filter((_, j) => j !== i),
+                  )
+                }
+                disabled={disabled}
+                aria-label={`Remove ${tag}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <input
+            className={styles.chipInput}
+            value={chipInput}
+            onChange={(e) => setChipInput(e.target.value)}
+            onKeyDown={handleChipKeyDown}
+            onBlur={commitChip}
+            disabled={disabled}
+            placeholder={tags.length === 0 ? "Type and press Enter to add tags…" : undefined}
+          />
+        </div>
+        {field.description && <p className={styles.hint}>{field.description}</p>}
+        {error && <p className={styles.error}>{error}</p>}
+      </div>
+    );
+  }
+
   const inputType =
     field.type === "secret"
       ? "password"
@@ -177,6 +243,7 @@ export function TuningFieldRenderer({ field, value, onChange, disabled, error, t
       label={label}
       value={String(fieldValue)}
       type={inputType}
+      autoComplete={field.type === "secret" ? "new-password" : undefined}
       min={field.min ?? undefined}
       max={field.max ?? undefined}
       onChange={(e) => onChange(field.key, inputType === "number" ? Number(e.target.value) : e.target.value)}

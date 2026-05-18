@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
-import { SourcesPanel } from "@shared/molecules/SourcesPanel/SourcesPanel";
-import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
+import { HorizontalScrollRow } from "@shared/molecules/HorizontalScrollRow/HorizontalScrollRow";
+import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
+import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
+import { hitToSource } from "../../../../utils/conversationUtils";
+import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import styles from "./AssistantTurn.module.css";
 
 interface AssistantTurnProps {
@@ -29,18 +33,50 @@ interface AssistantTurnProps {
 export function AssistantTurn({ text, traceMessages, sources, isStreaming }: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
 
+  // All hooks before any conditional returns.
+  const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
+
+  const copyAction = useCallback(() => {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }, [text]);
+
+  const actions: Action[] = useMemo(
+    () => [{ id: "copy", icon: "content_copy", label: "Copy response", onClick: copyAction }],
+    [copyAction],
+  );
+
   const hasContent = traceMessages.length > 0 || text.length > 0 || isStreaming;
   if (!hasContent) return null;
 
   return (
     <div className={styles.turn}>
-      {traceMessages.length > 0 && <ThoughtTrace messages={traceMessages} done={!isStreaming} />}
+      {/* ThoughtTrace owns its own expand/collapse — no wrapper needed */}
+      {traceMessages.length > 0 && (
+        <ThoughtTrace messages={traceMessages} done={!isStreaming} />
+      )}
+
       <AssistantMessage
         text={text}
         isStreaming={isStreaming}
-        onSourceClick={sources.length > 0 ? setActiveSourceIndex : undefined}
+        onSourceClick={uiSources.length > 0 ? setActiveSourceIndex : undefined}
       />
-      {!isStreaming && sources.length > 0 && <SourcesPanel sources={sources} activeIndex={activeSourceIndex} />}
+
+      {!isStreaming && uiSources.length > 0 && (
+        <HorizontalScrollRow className={styles.sources}>
+          {uiSources.map((src, i) => (
+            <SourceCard
+              key={src.id}
+              source={src}
+              index={i + 1}
+              onClick={activeSourceIndex === i + 1 ? undefined : () => setActiveSourceIndex(i + 1)}
+            />
+          ))}
+        </HorizontalScrollRow>
+      )}
+
+      {!isStreaming && text && (
+        <ActionBar actions={actions} className={styles.actions} />
+      )}
     </div>
   );
 }

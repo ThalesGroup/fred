@@ -24,6 +24,13 @@
     &::placeholder {
       color: var(--on-surface-retreat);
     }
+
+    &:-webkit-autofill,
+    &:-webkit-autofill:hover,
+    &:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0 100px var(--surface-container-lowest) inset;
+      -webkit-text-fill-color: var(--on-surface);
+    }
   }
 
   &:not(.error) input:not(:disabled) {

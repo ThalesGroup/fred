@@ -1057,6 +1057,7 @@ async def prepare_execution(
     team_id: TeamId,
     agent_instance_id: str,
     session_id: str | None = None,
+    action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
     deps: ProductServiceDependencies,
 ) -> ExecutionPreparation:
     """
@@ -1114,7 +1115,7 @@ async def prepare_execution(
         user_id=user.uid,
         team_id=str(team_id),
         agent_instance_id=agent_instance_id,
-        action=ExecutionGrantAction.EXECUTE,
+        action=action,
         audience=prefix,
         issued_at=now,
         expires_at=now + _EXECUTION_GRANT_TTL_SECONDS,
@@ -1626,6 +1627,30 @@ async def update_session_activity(
                 request.context_prompt_id, prompt.team_id
             )
 
+    return _record_to_item(record)
+
+
+async def get_session(
+    team_id: TeamId,
+    session_id: str,
+    deps: ProductServiceDependencies,
+) -> SessionListItem | None:
+    """
+    Fetch one control-plane session metadata record by ID, scoped to a team.
+
+    Why this function exists:
+    - the chat header needs the session title without loading the full session list
+
+    How to use it:
+    - call from the GET session-by-id route
+    - returns None when the session does not exist or belongs to a different team
+
+    Example:
+    - `item = await get_session(team_id, session_id, deps)`
+    """
+    record = await deps.get_session_metadata_store().get(session_id)
+    if record is None or str(record.team_id) != str(team_id):
+        return None
     return _record_to_item(record)
 
 

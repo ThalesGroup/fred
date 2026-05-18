@@ -20,6 +20,7 @@ import { ComponentPropsWithoutRef } from "react";
 export interface ButtonGroupItemProps extends ComponentPropsWithoutRef<"button"> {
   label: string;
   icon?: IconProps;
+  hasError?: boolean;
 }
 
 export interface ButtonGroupItemPrivateProps {
@@ -34,6 +35,7 @@ export default function ButtonGroupItem({
   icon,
   selected,
   size,
+  hasError,
   ...props
 }: ButtonGroupItemProps & ButtonGroupItemPrivateProps) {
   return (
@@ -45,6 +47,7 @@ export default function ButtonGroupItem({
           </span>
         )}
         <span className={styles.label}>{label}</span>
+        {hasError && <span className={styles.errorDot} aria-hidden="true" />}
       </div>
     </button>
   );

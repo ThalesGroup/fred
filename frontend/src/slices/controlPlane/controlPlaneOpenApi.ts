@@ -271,6 +271,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    getTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGet: build.query<
+      GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse,
+      GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}` }),
+    }),
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: build.mutation<
       PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiResponse,
       PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiArg
@@ -299,6 +305,7 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
         params: {
           session_id: queryArg.sessionId,
+          action: queryArg.action,
         },
       }),
     }),
@@ -471,6 +478,12 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
 };
+export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiResponse =
+  /** status 200 Successful Response */ SessionListItem;
+export type GetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetApiArg = {
+  teamId: string;
+  sessionId: string;
+};
 export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiResponse =
   /** status 200 Successful Response */ SessionListItem;
 export type PatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchApiArg = {
@@ -489,6 +502,7 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
+  action?: "execute" | "resume";
 };
 export type HealthResponse = {
   status?: "ok";
@@ -1046,6 +1060,8 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
+  useLazyGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
   usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation,
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
   usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation,

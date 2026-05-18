@@ -843,6 +843,10 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
   - [x] Remove `chat_options.*` `FieldSpec` declarations from `fred-agents` agent templates (`general_assistant.py`, `rag_expert.py`)
   - [ ] Frontend: render `ManagedMcpServerRef.config_fields` beneath active server checkboxes in `AgentFormBody` Tools tab
 - [x] Add agent instance CRUD endpoints (→ Phase 3c — POST enroll + DELETE unenroll done)
+- [ ] **CTRLP-06** — Atomic enrollment: collect all validation errors (tuning fields, MCP server IDs,
+  MCP config values) before returning; structured 422 body `[{field, message}]` per error.
+  Atomicity already guaranteed (single `store.create()` after all validation). Remaining: fail-last
+  collection + structured response shape. Ref: kea #1601 (partial fix).
 - [x] Add read-only team-scoped agent instance listing endpoint (→ Phase 3a)
 - [x] Add session create + list endpoints (→ Phase FRONT-04 — `POST/GET /teams/{team_id}/sessions`); delete deferred
 - [ ] Add session preference get/update endpoints (→ Phase 3b)

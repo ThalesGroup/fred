@@ -65,7 +65,12 @@ export type MaterialIconType =
   | "edit_note"
   | "tune"
   | "forum"
-  | "build";
+  | "build"
+  | "check_circle"
+  | "content_copy"
+  | "error"
+  | "warning"
+  | "info";
 
 export type CustomIconType = (typeof customIcons)[number];
 export type IconType = MaterialIconType | CustomIconType;

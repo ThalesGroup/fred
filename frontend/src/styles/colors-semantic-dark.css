@@ -1,5 +1,6 @@
 /* Colors semantic - Dark */
 [data-theme="dark"] {
+  color-scheme: dark;
   --primary: var(--indigo-75);
   --on-primary: var(--indigo-10);
   --primary-container: var(--indigo-30);
