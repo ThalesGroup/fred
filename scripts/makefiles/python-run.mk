@@ -5,7 +5,10 @@
 # - LOG_LEVEL
 # And `dev` rule (from `python-deps.mk`)
 
-HOST ?= 0.0.0.0
+# On macOS, binding to 0.0.0.0 can be blocked by local security tooling.
+# Default to loopback on Darwin; keep 0.0.0.0 elsewhere.
+UNAME_S := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')
+HOST ?= $(if $(filter darwin,$(UNAME_S)),127.0.0.1,0.0.0.0)
 UVICORN_OPTIONS ?=
 
 ##@ Run

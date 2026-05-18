@@ -18,6 +18,8 @@ dependencies = [
   "fred-core>=1.5.0",
   "fred-sdk",
   "alembic>=1.18.4",
+  # SQLAlchemy async engine requires greenlet at runtime.
+  "greenlet>=3.4.0",
 ]
 
 [project.scripts]

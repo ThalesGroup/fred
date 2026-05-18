@@ -379,7 +379,9 @@ class FileSystemContentStore(BaseContentStore):
         """
         Flat, recursive listing under 'prefix'.
         """
-        root = self.object_root
+        # Normalize the root path to avoid macOS `/tmp` vs `/private/tmp` mismatch
+        # when `Path.resolve()` is applied in `_safe_under`.
+        root = self.object_root.resolve()
         base = self._safe_under(root, root / (prefix or "").lstrip("/"))
         if not base.exists():
             return []
