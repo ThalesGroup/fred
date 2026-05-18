@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { KeyboardEvent } from "react";
-import TextArea from "@shared/atoms/TextArea/TextArea";
-import IconButton from "@shared/atoms/IconButton/IconButton";
+import { KeyboardEvent, useEffect, useRef } from "react";
 import styles from "./ChatInputBar.module.css";
 
 interface ChatInputBarProps {
@@ -25,6 +23,24 @@ interface ChatInputBarProps {
 }
 
 export function ChatInputBar({ value, onChange, onSend, disabled }: ChatInputBarProps) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const resize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 200);
+    el.style.height = `${next}px`;
+    el.style.overflowY = next >= 200 ? "auto" : "hidden";
+  };
+
+  useEffect(() => {
+    if (!value) {
+      const el = ref.current;
+      if (el) el.style.height = "auto";
+    }
+  }, [value]);
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -34,26 +50,20 @@ export function ChatInputBar({ value, onChange, onSend, disabled }: ChatInputBar
 
   return (
     <div className={styles.bar}>
-      <div className={styles.input}>
-        <TextArea
-          label="Message"
+      <div className={styles.field}>
+        <textarea
+          ref={ref}
+          className={styles.textarea}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
+          rows={1}
           disabled={disabled}
-          rows={2}
-          placeholder="Press Enter to send, Shift+Enter for newline"
+          onChange={(e) => {
+            onChange(e.target.value);
+            resize();
+          }}
+          onKeyDown={handleKeyDown}
         />
       </div>
-      <IconButton
-        color="primary"
-        variant="filled"
-        size="medium"
-        icon={{ category: "outlined", type: "send" }}
-        disabled={!value.trim() || disabled}
-        onClick={onSend}
-        aria-label="Send message"
-      />
     </div>
   );
 }

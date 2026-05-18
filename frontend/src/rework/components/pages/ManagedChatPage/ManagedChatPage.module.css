@@ -17,10 +17,53 @@
   padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
 }
 
-.headerTitle {
+/* ── Header identity block ─────────────────────────────────────────────── */
+.headerMeta {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.headerAgentName {
+  overflow: hidden;
   color: var(--on-surface);
-  font: var(--font-title-small, 600 1rem/1.5 sans-serif);
+  font: var(--font-title-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerSessionTitle {
+  cursor: pointer;
+  max-width: 320px;
+  overflow: hidden;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+  user-select: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerSessionTitle:hover {
+  color: var(--on-surface);
+}
+
+.headerSessionInput {
+  outline: none;
+  border: none;
+  border-bottom: 1px solid var(--outline);
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  max-width: 320px;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.headerSessionInput:focus {
+  border-bottom-color: var(--primary);
 }
 
 /* ── Body: chat column + optional right panel ──────────────────────────── */
@@ -30,13 +73,14 @@
   min-height: 0;
 }
 
-/* Centre column — takes all remaining width */
+/* Centre column — the single scroll container for the whole chat area.
+   Block internally so the sticky input and the message area stack naturally.
+   The scrollbar therefore spans the full column height. */
 .chatColumn {
-  display: flex;
   flex: 1;
-  flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow-y: auto;
 }
 
 /* Right panel slot — Phase 6C (AgentOptionsPanel) fills this */

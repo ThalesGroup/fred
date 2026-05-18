@@ -1,0 +1,15 @@
+.turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-2xs);
+  position: relative;
+}
+
+.actions {
+  /* ActionBar is opacity-0 by default; turn:hover makes it visible */
+}
+
+.turn:hover .actions {
+  opacity: 1;
+}

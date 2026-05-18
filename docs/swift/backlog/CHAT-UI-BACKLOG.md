@@ -741,7 +741,85 @@ Features deferred until Phases CHAT-01–CHAT-03 are stable:
 
 ---
 
-## 5 Known gaps — requires backend work before unblocking frontend
+## 5 Phase CHAT-05 — Design System Enrichment & Enterprise UX Refonte
+
+> **RFC:** [`docs/swift/rfc/CHAT-UI-REFONTE-RFC.md`](../rfc/CHAT-UI-REFONTE-RFC.md)  
+> **Design validation:** 5-step process, each step requires explicit approval before the next begins.  
+> **Rule:** no component is written before Step 4 is validated. Quality of decomposition over speed of delivery.
+
+---
+
+### 5.1 Goal
+
+Enrich the design system with 5 atoms and 7 molecules that are reusable outside the chat
+feature, then decompose `ManagedChatPage` into a thin composition of organisms.
+
+A successful outcome means: a new developer reads the code and understands the structure
+in 10 minutes; the DS has grown by 5–10 named primitives; the page root is under 80 lines.
+
+---
+
+### 5.2 Design validation steps
+
+- [ ] **Step 1 — Component catalog** — atoms and molecules to create or reuse, with generic
+  names and justification. *(validated 2026-05-14 — see RFC §4)*
+- [x] **Step 2 — Organism signatures** — TypeScript prop/callback interfaces for each organism *(validated 2026-05-14)*
+- [x] **Step 3 — Data model** — `Conversation`, `Message` (tree), `Source`, `UserCapabilities`,
+  `ConversationSettings` *(validated 2026-05-14 — `src/rework/types/conversation.ts`)*
+- [x] **Step 4 — Page composition** — skeleton of `ManagedChatPage` showing organism assembly
+  and hooks, under 80 lines *(validated 2026-05-14)*
+- [x] **Step 5 — Implementation order** — atoms → molecules → organisms, each step demonstrable *(validated 2026-05-14)*
+
+---
+
+### 5.3 New atoms (Step 1 validated)
+
+- [x] `NumberedChip` — `atoms/NumberedChip/` — inline citation chip `[N]`, cliquable or static
+- [x] `AccentBar` — `atoms/AccentBar/` — left-border block wrapper, `color` token param
+- [x] `RestrictedBadge` — `atoms/RestrictedBadge/` — lock icon + short label, non-interactive
+- [x] `FaviconIcon` — `atoms/FaviconIcon/` — favicon from URL with fallback to generic icon
+- [x] `IndicatorDot` — `atoms/IndicatorDot/` — coloured status dot, optional pulse animation
+
+### 5.4 New molecules (Step 1 validated)
+
+- [x] `CollapsibleBlock` — `molecules/CollapsibleBlock/` — generic expand/collapse inline section
+- [x] `SourceCard` — `molecules/SourceCard/` — `FaviconIcon` + title + domain + optional `RestrictedBadge`
+- [x] `HorizontalScrollRow` — `molecules/HorizontalScrollRow/` — horizontal scroll + gradient edge fade
+- [x] `ContextualPicker` — `molecules/ContextualPicker/` — trigger button showing current value + popover
+- [x] `ActionBar` — `molecules/ActionBar/` — row of icon-actions, visible on parent hover
+- [x] `InlineDrawer` — `molecules/InlineDrawer/` — non-blocking right-side panel
+- [x] `RichInputField` — `molecules/RichInputField/` — auto-grow textarea with `leftSlot`, `rightSlot`, `topSlot`
+
+### 5.5 Refactors (Step 1 validated)
+
+- [x] `ChatInputBar` → `RichInputField` migration: `ManagedChatPage` now uses `RichInputField`; `ChatInputBar` kept for legacy callers until full migration
+- [x] `SourcesPanel` → `HorizontalScrollRow` + `SourceCard` migration: `AssistantTurn` now uses new components internally; `SourcesPanel` kept for legacy callers
+- [ ] `ThoughtTrace` — audit: if internals reference chat concepts, extract generic parts
+
+### 5.6 Organisms (pending Step 2 validation)
+
+_Signatures to be defined in Step 2._
+
+- [x] `ConversationHeader` — agent name + `SessionTitleEditor` + actions — `organisms/ConversationHeader/`
+- [x] `SessionTitleEditor` — inline editable title, extracted from `ManagedChatPage` — `molecules/SessionTitleEditor/`
+- [x] `UserTurn` — `UserMessage` + `ActionBar` (copy, edit) — `organisms/UserTurn/`
+- [x] `AssistantTurn` — refactored: `CollapsibleBlock` wrapping `ThoughtTrace` + `HorizontalScrollRow` of `SourceCard`s + `ActionBar` — `organisms/AssistantTurn/`
+- [x] `ConversationThread` — maps `ThreadMessage[]` to `UserTurn` / `AssistantTurn` / `HitlPrompt` — `organisms/ConversationThread/`
+- [ ] Sidebar — history grouped by date, fixed-bottom sections (Libraries, Files, Agents, Settings)
+
+### 5.7 Hooks and utilities (pending Step 3 validation)
+
+- [x] `useSessionManager` — session create, bind, title sync, title PATCH (extracted from page) — `core/hooks/useSessionManager.ts`
+- [x] `useUserCapabilities` — single source of truth for `canDebug`, `canManageLibraries`, etc. — `core/hooks/useUserCapabilities.ts`
+- [x] `conversationUtils.ts` — `buildConversation`, `activeThread`, `hitToSource`, `chatMessagesToMessage` — `utils/conversationUtils.ts`
+
+### 5.8 Page refactor (pending Step 4 validation)
+
+- [x] `ManagedChatPage` — reduced to 80 lines (66 code + 14 license header); `useManagedChat` hook extracts all business logic
+
+---
+
+## 6 Known gaps — requires backend work before unblocking frontend
 
 These items are **not** implementation gaps in the frontend — the UI is ready to
 display the data once the backend provides it. Each is blocked on a specific API
@@ -771,5 +849,6 @@ change.
 | Code quality audit | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`). |
 | CHAT-03 – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. Remaining: debug tools section (`DebugDrawer`). |
 | CHAT-04 – Advanced parts | Deferred | After CHAT-03 |
+| CHAT-05 – DS enrichment & refonte | 🔄 In progress | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`; `@rework` alias added to tsconfig. |
 
 > **UX review status** (functional ≠ UX-validated): see [`docs/ux/COMPONENT-UX.md`](../ux/COMPONENT-UX.md).

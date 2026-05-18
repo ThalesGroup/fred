@@ -1,0 +1,49 @@
+.wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--row-gap, var(--spacing-s));
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px; /* prevent clip of focus rings */
+}
+
+.row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Gradient fade overlays — controlled by data attributes set by JS */
+.wrapper::before,
+.wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  z-index: 1;
+}
+
+.wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--scroll-fade-bg, var(--surface-container-lowest)), transparent);
+}
+
+.wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--scroll-fade-bg, var(--surface-container-lowest)), transparent);
+}
+
+.wrapper[data-fade-left="true"]::before {
+  opacity: 1;
+}
+
+.wrapper[data-fade-right="true"]::after {
+  opacity: 1;
+}

@@ -1,5 +1,6 @@
 /* Colors semantic - Light */
 [data-theme="light"] {
+  color-scheme: light;
   --primary: var(--indigo-40);
   --on-primary: var(--indigo-99);
   --primary-container: var(--indigo-90);

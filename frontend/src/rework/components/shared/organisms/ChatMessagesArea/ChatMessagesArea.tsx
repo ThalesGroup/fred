@@ -12,30 +12,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 import styles from "./ChatMessagesArea.module.css";
 
 interface ChatMessagesAreaProps {
   children: ReactNode;
   isEmpty: boolean;
   isLoading: boolean;
-  /** Bumped by parent whenever messages change, to trigger auto-scroll */
+  /** Bumped by parent whenever a new message is added — triggers the initial smooth scroll. */
   scrollVersion: number;
+  /** True while the assistant is streaming — keeps the bottom pinned on every delta. */
+  isStreaming: boolean;
 }
 
-export function ChatMessagesArea({ children, isEmpty, isLoading, scrollVersion }: ChatMessagesAreaProps) {
+// Pixels from the bottom within which we consider the user "at the bottom".
+// Keeps auto-scroll active for small rounding differences without fighting the user.
+const BOTTOM_THRESHOLD_PX = 120;
+
+export function ChatMessagesArea({ children, isEmpty, isLoading, scrollVersion, isStreaming }: ChatMessagesAreaProps) {
+  const areaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Smooth jump when a new turn starts (message count changes).
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [scrollVersion]);
 
+  // During streaming, pin the bottom only when the user is already near it.
+  // If they have scrolled up to read history, this is a no-op — they stay put.
+  // No dependency array — intentionally runs after every render, no-op when not streaming.
+  useLayoutEffect(() => {
+    if (!isStreaming) return;
+    const scrollEl = areaRef.current?.parentElement;
+    if (!scrollEl) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+    if (scrollHeight - scrollTop - clientHeight < BOTTOM_THRESHOLD_PX) {
+      bottomRef.current?.scrollIntoView({ behavior: "instant" });
+    }
+  });
+
   return (
-    <div className={styles.area} role="log" aria-live="polite" aria-label="Conversation">
-      {isLoading && <p className={styles.hint}>Loading conversation history…</p>}
-      {!isLoading && isEmpty && <p className={styles.empty}>Send a message to start the conversation.</p>}
-      {children}
-      <div ref={bottomRef} />
+    <div ref={areaRef} className={styles.area} role="log" aria-live="polite" aria-label="Conversation">
+      <div className={styles.lane}>
+        {isLoading && <p className={styles.hint}>Loading conversation history…</p>}
+        {!isLoading && isEmpty && <p className={styles.empty}>Send a message to start the conversation.</p>}
+        {children}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

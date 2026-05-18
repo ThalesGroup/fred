@@ -1,13 +1,45 @@
 .bar {
-  display: flex;
   flex-shrink: 0;
-  align-items: flex-end;
-  gap: var(--spacing-s, 0.75rem);
-  border-top: 1px solid var(--outline-muted);
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-s) var(--spacing-l) var(--spacing-xl);
   background: var(--surface-container-lowest);
-  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
 }
 
-.input {
-  flex: 1;
+.field {
+  width: 100%;
+  max-width: 680px;
+}
+
+.textarea {
+  display: block;
+  box-sizing: border-box;
+  resize: none;
+  overflow-y: hidden;
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  width: 100%;
+  min-height: 48px;
+  max-height: 200px;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.textarea:hover:not(:disabled) {
+  border-color: var(--outline);
+}
+
+.textarea:focus:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--surface-container-high);
+}
+
+.textarea:disabled {
+  background: var(--state-surface-main-disabled);
+  color: var(--state-on-surface-disabled);
 }

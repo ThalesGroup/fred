@@ -13,9 +13,8 @@
 // limitations under the License.
 
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
-import { StreamingCursor } from "@shared/atoms/StreamingCursor/StreamingCursor";
+import { ThinkingDots } from "@shared/atoms/ThinkingDots/ThinkingDots";
 import { MarkdownRenderer } from "../MarkdownRenderer/MarkdownRenderer";
-import styles from "./AssistantMessage.module.css";
 
 interface AssistantMessageProps {
   text: string;
@@ -29,19 +28,9 @@ export function AssistantMessage({ text, isStreaming, onSourceClick }: Assistant
   return (
     <MessageBubble role="assistant">
       {text ? (
-        <>
-          <MarkdownRenderer text={text} onSourceClick={onSourceClick} />
-          {isStreaming && (
-            <span className={styles.cursor}>
-              <StreamingCursor />
-            </span>
-          )}
-        </>
+        <MarkdownRenderer text={text} onSourceClick={onSourceClick} />
       ) : (
-        // No text yet: show cursor only while waiting for first delta
-        <p className={styles.thinking}>
-          <StreamingCursor />
-        </p>
+        <ThinkingDots />
       )}
     </MessageBubble>
   );

@@ -4,6 +4,15 @@
   gap: var(--spacing-l);
 }
 
+.credentialHoneypot {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .section {
   display: flex;
   flex-direction: column;
@@ -91,5 +100,16 @@
 .metadataFooter {
   margin: 0;
   color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.validationBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-s);
+  background: var(--warning-container);
+  padding: var(--spacing-xs) var(--spacing-m);
+  color: var(--on-warning-container);
   font: var(--font-body-small);
 }

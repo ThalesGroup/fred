@@ -28,7 +28,8 @@
       "@shared/*": ["src/rework/components/shared/*"],
       "@hooks/*": ["src/rework/core/hooks/*"],
       "@models/*": ["src/rework/core/models/*"],
-      "@assets/*": ["src/assets/*"]
+      "@assets/*": ["src/assets/*"],
+      "@rework/*": ["src/rework/*"]
     }
   },
   "include": ["src"],

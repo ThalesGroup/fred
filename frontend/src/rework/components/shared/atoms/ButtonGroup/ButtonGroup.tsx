@@ -22,10 +22,21 @@ interface ButtonGroupProps {
   size: ComponentSize;
   color: ColorTheme;
   defaultSelectedIndex?: number;
+  /** When provided, turns the component into a controlled tab strip. */
+  selectedIndex?: number;
+  onSelectedIndexChange?: (index: number) => void;
 }
 
-export default function ButtonGroup({ items, size, color, defaultSelectedIndex = 0 }: ButtonGroupProps) {
-  const [selectedIndex, setSelectedIndex] = useState(defaultSelectedIndex);
+export default function ButtonGroup({
+  items,
+  size,
+  color,
+  defaultSelectedIndex = 0,
+  selectedIndex,
+  onSelectedIndexChange,
+}: ButtonGroupProps) {
+  const [internalIndex, setInternalIndex] = useState(defaultSelectedIndex);
+  const resolvedIndex = selectedIndex !== undefined ? selectedIndex : internalIndex;
 
   return (
     <div className={styles["button-group"]}>
@@ -35,9 +46,10 @@ export default function ButtonGroup({ items, size, color, defaultSelectedIndex =
           {...item}
           size={size}
           color={color}
-          selected={index === selectedIndex}
+          selected={index === resolvedIndex}
           onClick={(e) => {
-            setSelectedIndex(index);
+            setInternalIndex(index);
+            onSelectedIndexChange?.(index);
             if (item.onClick) {
               item.onClick(e);
             }

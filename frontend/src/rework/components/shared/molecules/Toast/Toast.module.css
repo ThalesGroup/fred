@@ -1,0 +1,138 @@
+/* ── Container ───────────────────────────────────────────────────────────── */
+
+.container {
+  display: flex;
+  position: fixed;
+  right: var(--spacing-m);
+  bottom: var(--spacing-m);
+  flex-direction: column-reverse;
+  gap: var(--spacing-xs);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* ── Toast card ──────────────────────────────────────────────────────────── */
+
+.toast {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-s);
+  border-left: 3px solid var(--toast-accent);
+  border-radius: var(--radius-xs);
+  background: var(--surface-container);
+  width: 340px;
+  pointer-events: auto;
+  color: var(--on-surface);
+}
+
+.toast[data-severity="success"] {
+  --toast-accent: var(--success);
+}
+.toast[data-severity="error"] {
+  --toast-accent: var(--error);
+}
+.toast[data-severity="warning"] {
+  --toast-accent: var(--warning);
+}
+.toast[data-severity="info"] {
+  --toast-accent: var(--secondary);
+}
+
+/* ── Header row: summary + actions ──────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
+}
+
+.summary {
+  flex: 1;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+}
+
+.actionBtn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-3xs);
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--on-surface-muted);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.actionBtn:hover {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+/* ── Detail block ────────────────────────────────────────────────────────── */
+
+.detail {
+  border-top: 1px solid var(--outline-muted);
+  padding: 0 var(--spacing-s) var(--spacing-xs) var(--spacing-s);
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.detailLine {
+  margin: 0;
+  padding: var(--spacing-3xs) 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  font-size: 0.75rem;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.link {
+  color: var(--primary);
+}
+
+/* ── Animations: fade + 4 px lift only ───────────────────────────────────── */
+
+.toastEntering {
+  animation: toastIn 140ms ease both;
+}
+
+.toastExiting {
+  animation: toastOut 110ms ease both;
+}
+
+@keyframes toastIn {
+  from {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(2px);
+    opacity: 0;
+  }
+}

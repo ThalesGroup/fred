@@ -1,0 +1,58 @@
+.display {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  max-width: 400px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  cursor: pointer;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+  transition: background-color 120ms ease;
+}
+
+.display:hover {
+  background: var(--state-on-surface-hover);
+}
+
+.display:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editIcon {
+  font-size: 18px;
+  color: var(--on-surface-retreat);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  flex-shrink: 0;
+}
+
+.display:hover .editIcon {
+  opacity: 1;
+}
+
+.input {
+  font: var(--font-title-large);
+  color: var(--on-surface);
+  background: var(--surface-container-high);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  outline: none;
+  width: 300px;
+  max-width: 400px;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

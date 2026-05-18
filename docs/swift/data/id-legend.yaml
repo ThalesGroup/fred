@@ -61,6 +61,14 @@ items:
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §4"
 
+  - id: CHAT-05
+    title: "Chat UI refonte — DS enrichment, modular architecture, enterprise UX"
+    status: in_progress
+    owner: Dimitri
+    refs:
+      backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §5"
+      rfc: "docs/swift/rfc/CHAT-UI-REFONTE-RFC.md"
+
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
   - id: CTRLP-01
@@ -103,6 +111,19 @@ items:
     closed: "2026-04-25"
     refs:
       backlog: "docs/swift/backlog/CONTROL-PLANE-CLI-BACKLOG.md"
+
+  - id: CTRLP-06
+    title: "Atomic agent enrollment — collect-all validation and structured 422 error response"
+    status: open
+    owner: Florian
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3.10"
+      issue: "kea #1601 (partial fix — atomicity already solved in swift; collect-all and structured errors remain)"
+    notes: >
+      enroll_agent_instance already validates before writing (atomic). What remains:
+      (1) collect all validation errors across tuning fields, MCP server IDs, and MCP config values
+      instead of failing on the first one; (2) return a structured 422 body listing every
+      {field, message} pair so the frontend can surface all problems in one round trip.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 

@@ -1,8 +1,24 @@
 .turn {
   display: flex;
   flex-direction: column;
-  align-self: flex-start;
-  gap: var(--spacing-s, 0.75rem);
+  gap: var(--spacing-s);
   width: 100%;
-  max-width: 75%;
+  position: relative;
+}
+
+.traceSummary {
+  font: var(--font-label-medium);
+  color: var(--on-surface-retreat);
+}
+
+.sources {
+  /* HorizontalScrollRow defaults handle the scroll + gradient fade */
+}
+
+.actions {
+  /* ActionBar is opacity-0 by default; turn:hover makes it visible */
+}
+
+.turn:hover .actions {
+  opacity: 1;
 }

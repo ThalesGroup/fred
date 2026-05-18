@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import Button from "@shared/atoms/Button/Button.tsx";
-import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import { IconType } from "@shared/utils/Type.ts";
@@ -22,9 +21,10 @@ import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type {
   AgentTemplateSummary,
+  ManagedAgentFieldSpec,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import { AgentFormBody } from "./AgentFormBody.tsx";
+import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
 
@@ -60,6 +60,13 @@ type FormState = {
   mcpConfigValues: Record<string, Record<string, unknown>>;
 };
 
+function sectionOfField(field: ManagedAgentFieldSpec): SectionKey {
+  const g = (field.ui?.group ?? "").toLowerCase().trim();
+  if (g === "prompts") return "prompts";
+  if (g === "chat") return "chat";
+  return "settings";
+}
+
 export default function AgentFormModal({
   isOpen,
   isSubmitting,
@@ -87,10 +94,12 @@ export default function AgentFormModal({
     mcpConfigValues: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [activeSection, setActiveSection] = useState<SectionKey>("settings");
 
   useEffect(() => {
     if (!isOpen) {
       setSubmitAttempted(false);
+      setActiveSection("settings");
       return;
     }
     if (mode === "edit" && editInstance) {
@@ -127,6 +136,8 @@ export default function AgentFormModal({
       selectedMcpServerIds: null,
       mcpConfigValues: {},
     });
+    setActiveSection("settings");
+    setSubmitAttempted(false);
     setStep(2);
   };
 
@@ -145,15 +156,23 @@ export default function AgentFormModal({
   };
 
   const selectedTemplate = templates.find((tpl) => tpl.template_id === form.templateId);
-  const requiredTuningKeys = (selectedTemplate?.default_tuning_fields ?? [])
-    .filter((f) => f.required && !f.ui?.hide)
-    .map((f) => f.key);
-  const missingRequired = requiredTuningKeys.some((k) => !form.tuningValues[k]);
+  const requiredFields = (selectedTemplate?.default_tuning_fields ?? []).filter((f) => f.required && !f.ui?.hide);
+  const missingRequired = requiredFields.some((f) => !form.tuningValues[f.key]);
   const canSave = !!form.templateId && !!form.displayName.trim() && !missingRequired && !isSubmitting;
+
+  const errorSections = new Set<SectionKey>(
+    submitAttempted ? requiredFields.filter((f) => !form.tuningValues[f.key]).map((f) => sectionOfField(f)) : [],
+  );
 
   const handleSubmit = async () => {
     setSubmitAttempted(true);
-    if (!canSave) return;
+    if (!canSave) {
+      const firstErrorSection = (["prompts", "settings", "chat"] as const).find((s) => {
+        return requiredFields.some((f) => !form.tuningValues[f.key] && sectionOfField(f) === s);
+      });
+      if (firstErrorSection) setActiveSection(firstErrorSection);
+      return;
+    }
     await onSubmit({
       templateId: form.templateId,
       displayName: form.displayName.trim(),
@@ -201,7 +220,12 @@ export default function AgentFormModal({
               {t("rework.cancel")}
             </Button>
             {step === 2 && (
-              <Button color="primary" variant="filled" size="medium" onClick={handleSubmit} disabled={!canSave}>
+              <Button
+                color={submitAttempted && !canSave ? "warning" : "primary"}
+                variant="filled"
+                size="medium"
+                onClick={handleSubmit}
+              >
                 {mode === "edit" ? t("rework.save") : t("rework.create")}
               </Button>
             )}
@@ -223,6 +247,9 @@ export default function AgentFormModal({
               mcpConfigValues={form.mcpConfigValues}
               isSubmitting={isSubmitting}
               submitAttempted={submitAttempted}
+              activeSection={activeSection}
+              onSectionChange={setActiveSection}
+              errorSections={errorSections}
               editInstance={editInstance}
               teamId={teamId}
               onDisplayNameChange={(v) => setForm((prev) => ({ ...prev, displayName: v }))}
@@ -236,7 +263,9 @@ export default function AgentFormModal({
 
         {mode === "edit" && onDelete && (
           <div className={styles.modalFooter}>
-            <DeleteIconButton onClick={onDelete} aria-label={t("rework.delete", "Delete")} />
+            <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
+              {t("rework.delete", "Delete")}
+            </Button>
           </div>
         )}
       </div>

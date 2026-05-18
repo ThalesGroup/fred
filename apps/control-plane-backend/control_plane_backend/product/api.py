@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import Response
@@ -43,6 +43,7 @@ from control_plane_backend.product.service import (
     enroll_agent_instance,
     get_prompt,
     get_runtime_binding,
+    get_session,
     list_agent_templates,
     list_context_prompts,
     list_managed_agent_instances,
@@ -633,6 +634,36 @@ async def get_team_sessions(
     return await list_sessions(team_id, deps=deps)
 
 
+@router.get(
+    "/teams/{team_id}/sessions/{session_id}",
+    response_model=SessionListItem,
+    response_model_exclude_none=True,
+    summary="Fetch metadata for one team-scoped session.",
+)
+async def get_team_session(
+    team_id: Annotated[TeamId, Path()],
+    session_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> SessionListItem:
+    """
+    Return control-plane metadata for one session by ID, scoped to a team.
+
+    Why this endpoint exists:
+    - the chat header needs the session title without loading the full session list
+
+    Returns 404 when the session does not exist for the given team.
+    """
+    del user
+    item = await get_session(team_id=team_id, session_id=session_id, deps=deps)
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session {session_id!r} not found for team {team_id!r}.",
+        )
+    return item
+
+
 @router.patch(
     "/teams/{team_id}/sessions/{session_id}",
     response_model=SessionListItem,
@@ -709,6 +740,7 @@ async def post_prepare_execution(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
+    action: Literal["execute", "resume"] = "execute",
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
@@ -720,6 +752,9 @@ async def post_prepare_execution(
 
     Pass ``session_id`` (query param) to include ``context_prompt_text`` in the response
     when the session has a context prompt configured.
+
+    Pass ``action=resume`` (query param) when the client intends to send a HITL resume
+    payload — the grant will be issued with action=resume so the runtime accepts it.
     """
     await get_team_by_id_from_service(user, team_id, deps.team_dependencies)
 
@@ -729,6 +764,7 @@ async def post_prepare_execution(
             team_id=team_id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,
+            action=action,
             deps=deps,
         )
     except ExecutionPreparationError as exc:

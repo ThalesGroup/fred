@@ -22,7 +22,7 @@ Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
 | Purpose | Correct token | Common wrong names |
 |---|---|---|
-| Elevated surface (hover states) | `--surface-container-hight` | ~~`--surface-container-high`~~ (missing `h`) |
+| Elevated surface (hover states) | `--surface-container-high` | ~~`--surface-container-hight`~~ (extra `t`) |
 | Surfaces | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` | |
 | Text | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted` | ~~`--on-surface-variant`~~ (doesn't exist) |
 | Status colours | `--success`, `--error`, `--warning`, `--primary` | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
@@ -228,17 +228,19 @@ _(none yet)_
 
 #### Open UX issues
 
-- **Thinking indicator** — when streaming starts but no delta text has arrived yet (tools running),
-  `AssistantMessage` shows a bare blinking cursor. Confirm whether a label ("Thinking…") or a
-  three-dot animation would be a clearer affordance.
-
-- **StreamingCursor position** — cursor now renders in a `<span>` below the last markdown paragraph
-  rather than inline at the end of the last word. Confirm whether this is acceptable or whether an
-  inline-in-last-paragraph approach is preferable.
+_(none — streaming indicator resolved 2026-05-18)_
 
 #### Resolved
 
 - **Markdown** — Phase CHAT-02: `AssistantMessage` now renders via `MarkdownRenderer` (2026-05-04).
+
+- **Thinking indicator replaced with `ThinkingDots` (2026-05-18)** — the bare blinking cursor shown
+  before the first chunk arrived was removed. `ThinkingDots` (three animated wave dots) is shown
+  instead. It communicates processing without visual noise.
+
+- **Inline streaming cursor removed (2026-05-18)** — the `StreamingCursor` rendered after the last
+  markdown paragraph during streaming was removed. Text appearing continuously is the signal;
+  a blinking artifact alongside it is redundant and distracting.
 
 ---
 
@@ -332,13 +334,32 @@ _(none yet)_
 
 #### Open UX issues
 
-- **Auto-scroll override** — currently always scrolls to bottom on any `scrollVersion` bump.
-  If the user has scrolled up to read history and the agent produces a new delta, it will yank them
-  back to the bottom. Discuss: should auto-scroll be paused while the user is scrolled up?
+_(none — layout and scroll behaviour resolved 2026-05-18)_
 
 #### Resolved
 
-_(none yet)_
+- **Scroll container promoted to `.chatColumn` (2026-05-18)** — `overflow-y: auto` was on `.area`
+  (an inner element), which caused the scrollbar to stop at the top of the input field instead of
+  spanning the full browser height. `.chatColumn` is now the single scroll container. `.area` uses
+  `min-height: 100%` so the empty state still centres correctly.
+
+- **Sticky input (2026-05-18)** — `RichInputField` was a flex sibling below the scroll container,
+  which truncated the scrollbar track. It is now `position: sticky; bottom: 0` inside the scroll
+  container so the scrollbar runs the full column height.
+
+- **720px centered lane (2026-05-18)** — content was constrained by scattered `max-width`/`align-self`
+  on individual components (`AssistantTurn`, `MessageBubble`). A single `.lane` wrapper
+  (`max-width: 720px; margin: 0 auto`) is now the only width constraint. All components inside fill
+  the lane width. `RichInputField` uses the same 720px so messages and input share a visible column edge.
+
+- **Streaming auto-scroll with user override (2026-05-18)** — `useLayoutEffect` (no deps) scrolls
+  to bottom on every render during streaming, but only when the user is within 120px of the bottom.
+  If they scroll up to read history, auto-scroll suspends for the rest of that turn and resumes on
+  the next `scrollVersion` increment.
+
+- **Native scrollbar follows active theme (2026-05-18)** — `color-scheme: dark/light` added to
+  `[data-theme]` selectors in the semantic CSS files. Without this, the browser rendered native
+  scrollbars in light mode regardless of the active theme.
 
 ---
 
@@ -482,6 +503,57 @@ Displays one managed agent instance. Enabled cards are wrapped by `TeamAgentsPag
 
 ---
 
+### `Toast` / `ToastProvider`
+
+**Location:** `src/rework/components/shared/molecules/Toast/Toast.tsx`
+**Provider:** `src/components/ToastProvider.tsx` (rewrites the legacy MUI Snackbar in-place; same `useToast` API)
+**Status:** `Approved`
+
+#### Design intent — enterprise monitoring aesthetic
+
+The toast is deliberately styled after the notification patterns found in **Datadog, Kibana, and Splunk**:
+high-information-density, zero decoration, color used only as a semantic signal — never as decoration.
+
+**What the component does:**
+
+- A 340px card anchored `bottom-right`, stacking newest-closest-to-corner (`flex-direction: column-reverse`).
+- The **only** colored element is a `3px solid border-left` in the severity color. Background and text are always neutral surface tokens.
+- Detail text (the `detail` field) renders in `monospace`, 0.75rem — intentionally log-line aesthetic. Error details read like a console, not a UI message.
+- Animation: 140ms opacity fade + 4px vertical lift on enter; 110ms fade-out on exit. Nothing slides or bounces.
+- No icons, no progress bar, no colored background fills. Severity is inferred from the left border alone.
+
+**Design rules that must not be regressed:**
+
+| Rule | Why |
+|---|---|
+| `border-radius: var(--radius-xs)` (4px) only | Larger radii (`--radius-m` = 16px) read as decorative / child-safe. Sharp corners signal a professional tool. |
+| Left border carries all color | Colored surfaces or icons compete with content and look playful. One semantic signal is enough. |
+| Detail font: monospace | Error messages, API traces, and validation strings come from technical systems. Monospace makes them scannable. |
+| No slide animation | Sliding from the edge is theatrical. A fast fade is unobtrusive — the notification informs, it does not perform. |
+| No progress bar | Progress bars gamify the dismiss timer. Enterprise tools (DD, Kibana) don't use them. |
+
+**Severity mapping:**
+
+| Severity | Left border | Auto-dismiss |
+|---|---|---|
+| `success` | `--success` | 6 s |
+| `warning` | `--warning` | 6 s |
+| `info` | `--secondary` | 6 s |
+| `error` | `--error` | Manual only — errors persist until explicitly closed |
+
+Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
+
+#### Open UX issues
+
+_(none — design approved at implementation)_
+
+#### Resolved
+
+- **Replaced MUI `Snackbar` + `Alert`** (2026-05-14) — legacy implementation used MUI components styled with `sx` props outside the design token system. Replaced with a zero-dependency CSS-module molecule using only design tokens.
+- **Design: enterprise aesthetic** (2026-05-14) — initial implementation used `--radius-m`, colored surfaces, large severity icons, slide animation, and progress bar. Rejected as "toy-like". Final design follows the Datadog/Kibana pattern described above.
+
+---
+
 ### `AgentFormModal`
 
 **Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/`
@@ -516,20 +588,366 @@ Create mode: template browser → display name → description → tuning fields
 
 ---
 
+---
+
+## CHAT-05 atoms (Wave 1 + additions)
+
+---
+
+### `ThinkingDots`
+
+**Location:** `src/rework/components/shared/atoms/ThinkingDots/ThinkingDots.tsx`
+**Status:** `Approved`
+
+Three 6px circles with a staggered wave animation (`0s / 0.15s / 0.30s` delay),
+`--on-surface-retreat` colour. Shown in `AssistantMessage` when `isStreaming && !text` — the
+agent is processing but no text has arrived yet (tool calls running, model warming up, etc.).
+Dismissed automatically the moment the first text delta arrives.
+
+**Design rules that must not be regressed:**
+
+| Rule | Why |
+|---|---|
+| Wave animation, not blink | A blink cursor signals "type here". Dots signal "something is computing". |
+| `--on-surface-retreat` colour | Subtle — does not compete with the response text that follows. |
+| Hidden as soon as text arrives | The dots and the text must never coexist. Swap is instant. |
+| No label ("Thinking…") | Labels go stale (the agent may be retrieving, not thinking). Dots are neutral. |
+
+#### Open UX issues
+
+_(none — approved at implementation)_
+
+#### Resolved
+
+- **Implemented as replacement for `StreamingCursor` thinking state (2026-05-18)**.
+
+---
+
+### `IndicatorDot`
+
+**Location:** `src/rework/components/shared/atoms/IndicatorDot/IndicatorDot.tsx`
+**Status:** `Functional`
+
+Coloured status dot. The `status` prop maps to a semantic color token via a `STATUS_COLOR` lookup table (`idle → --on-surface-retreat`, `active → --success`, `warning → --warning`, `error → --error`, `streaming → --primary`). The `streaming` status adds a CSS pulse animation via `data-status="streaming"`.
+
+#### Open UX issues
+
+- **Pulse animation speed** — 1.2 s infinite ease-in-out. Validate with designer: is this too fast (distracting) or too slow (unnoticeable) in the context of a live streaming session?
+- **Size options** — single size (`10px`). If used as a connection-status indicator in a header or sidebar, a smaller `6px` variant may be needed.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `AccentBar`
+
+**Location:** `src/rework/components/shared/atoms/AccentBar/AccentBar.tsx`
+**Status:** `Functional`
+
+Left-border block wrapper. `AccentColor` prop (`primary | success | warning | error | info`) sets `--accent-color` which drives a `4px solid` left border. Content renders in `children`. No background fill.
+
+#### Open UX issues
+
+- **Border width** — 4px is typical for blockquote-style accents. Confirm the width is appropriate when `AccentBar` is used inside dense agent option panels vs. wide chat layouts.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `RestrictedBadge`
+
+**Location:** `src/rework/components/shared/atoms/RestrictedBadge/RestrictedBadge.tsx`
+**Status:** `Functional`
+
+Non-interactive lock icon + label. Uses `material-symbols-outlined` `lock` icon at 14px, `--on-surface-retreat` color, `--surface-container-high` background pill.
+
+#### Open UX issues
+
+- **Label truncation** — no max-width set. Validate with long label text (`"Administrateur seulement"`) inside narrow `SourceCard` widths.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `NumberedChip`
+
+**Location:** `src/rework/components/shared/atoms/NumberedChip/NumberedChip.tsx`
+**Status:** `Functional`
+
+Renders as `<button>` when `onClick` is provided, `<span>` otherwise. Square pill, `--primary` background, white text. Used as source reference badges in `AssistantMessage`.
+
+#### Open UX issues
+
+- **Active state** — no visual distinction between active (currently selected source) and inactive chips. `SourceCard` active state is tracked in `AssistantTurn`, but the chip itself has no visual feedback. Decide if chips should also show an active ring.
+- **Hover state** — `<button>` variant has a `background-color` transition but no distinct hover token. Confirm with designer.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `FaviconIcon`
+
+**Location:** `src/rework/components/shared/atoms/FaviconIcon/FaviconIcon.tsx`
+**Status:** `Functional`
+
+`<img>` that falls back to `material-symbols-outlined` `description` icon on `onError`. 20×20 px, `object-fit: contain`.
+
+#### Open UX issues
+
+- **Fallback legibility** — the `description` material icon is generic. Consider a `language` (globe) icon as fallback for web URLs and `description` only for local documents.
+- **CORS failures** — favicon URLs from external domains may be blocked by CORS. The `onError` fallback handles this gracefully, but the result is that all external sources look the same. Discuss with backend whether favicons should be proxied.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+## CHAT-05 molecules (Waves 2–4)
+
+---
+
+### `CollapsibleBlock`
+
+**Location:** `src/rework/components/shared/molecules/CollapsibleBlock/CollapsibleBlock.tsx`
+**Status:** `Functional`
+
+Expand/collapse section with animated height. Supports both controlled (`open`/`onOpenChange`) and uncontrolled (`defaultOpen`) modes. Chevron rotates 90° via `data-open` attribute. Height animation uses `useRef<HTMLDivElement>` + `requestAnimationFrame` for the close transition.
+
+#### Open UX issues
+
+- **Animation jank** — `requestAnimationFrame` approach works but may jitter on slow devices when closing a tall section. Consider CSS `@keyframes` on `max-height` as an alternative if complaints arise.
+- **Focus management** — when collapsing with keyboard (`Enter` on the trigger), focus stays on the trigger. Confirm this is correct; some patterns move focus to the first child on open.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `HorizontalScrollRow`
+
+**Location:** `src/rework/components/shared/molecules/HorizontalScrollRow/HorizontalScrollRow.tsx`
+**Status:** `Functional`
+
+Horizontal scroll container with gradient fade overlays at left/right edges. ResizeObserver + scroll listener drive `data-fade-left`/`data-fade-right` data attributes. Gradient uses `--scroll-fade-bg` CSS variable (falls back to `--surface-container-lowest`). Callers set `--scroll-fade-bg` on their wrapper if background differs.
+
+#### Open UX issues
+
+- **Keyboard scrollability** — the scroll row has no tab stop of its own; individual children are focusable. Confirm that keyboard users can reach off-screen children via Tab without needing horizontal scroll input.
+- **Fade width** — 32px gradient fade. Confirm visibility of the fade on dark theme backgrounds.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ActionBar`
+
+**Location:** `src/rework/components/shared/molecules/ActionBar/ActionBar.tsx`
+**Status:** `Functional`
+
+Row of icon buttons with tooltips. `opacity: 0` by default; parent controls visibility via `.turn:hover .actions { opacity: 1 }`. `alwaysVisible` prop overrides to `opacity: 1` for accessibility fallback.
+
+#### Open UX issues
+
+- **Touch / mobile** — hover-reveal pattern is invisible on touch devices. Discuss whether a long-press or a permanent reduced-opacity state is needed for mobile.
+- **Tooltip delay** — using native `title` attribute. If the DS tooltip component is adopted, replace for consistent positioning and delay control.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `InlineDrawer`
+
+**Location:** `src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx`
+**Status:** `Functional`
+
+Non-blocking right-side panel. `position: fixed`, slides in from the right via `transform: translateX(100%)` → `translateX(0)`. ESC key closes. `--drawer-width` CSS variable, default `480px`. Does not trap focus (main content stays interactive).
+
+#### Open UX issues
+
+- **Focus trap** — deliberately no focus trap (main content stays interactive per RFC §2.5). Confirm with accessibility review: WCAG 2.1 SC 2.1.2 applies to modal dialogs, not drawers; but screen reader users should be informed the drawer is open.
+- **Mobile** — `480px` fixed width covers most of the screen on narrow viewports. Need a `100vw` breakpoint below ~600px.
+- **Overlay backdrop** — no backdrop, per RFC "no blocking modals". Confirm with designer whether a light scrim (opacity 0.2) behind the drawer would help orient users without feeling modal.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `SourceCard`
+
+**Location:** `src/rework/components/shared/molecules/SourceCard/SourceCard.tsx`
+**Status:** `Functional`
+
+`FaviconIcon` + optional index `NumberedChip` + optional `RestrictedBadge` + 2-line title + domain label. Clickable when `onClick` is provided. Renders `<button>` or `<div>` based on `onClick` presence.
+
+#### Open UX issues
+
+- **Card width** — fixed `200px`. May be too narrow for long document titles and too wide for a compact sources row. Consider `min-content` / `max-content` constraints.
+- **Title clamping** — 2 lines clamped. On hover, confirm the full title is visible (tooltip?). No `title` attribute currently set.
+- **Active visual state** — when the corresponding source is active (`activeSourceIndex === i + 1` in `AssistantTurn`), the card has no visual change. Requires a CSS class or `data-active` attribute passed from the parent.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ContextualPicker`
+
+**Location:** `src/rework/components/shared/molecules/ContextualPicker/ContextualPicker.tsx`
+**Status:** `Functional`
+
+Generic `<T extends string>` trigger button + dropdown listbox. Full ARIA: `role="listbox"`, `role="option"`, `aria-selected`, `aria-expanded`. Mousedown-outside + ESC close. `useId()` for listbox association.
+
+#### Open UX issues
+
+- **Keyboard navigation** — `ArrowUp`/`ArrowDown` through options not yet implemented. Currently Tab-stops on each option but no `aria-activedescendant` tracking.
+- **Multi-select variant** — not implemented; single-value only. If RAG scope needs multi-select, a new variant is needed.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `SessionTitleEditor`
+
+**Location:** `src/rework/components/shared/molecules/SessionTitleEditor/SessionTitleEditor.tsx`
+**Status:** `Functional`
+
+Inline title editor. Display mode: `<button>` with edit icon on hover (opacity 0 → 1). Edit mode: `<input autoFocus>` — Enter commits, Escape cancels, blur commits. `cancelRef` prevents blur from committing after Escape. `aria-label` on both the button and the input.
+
+#### Open UX issues
+
+- **Max-width** — display is capped at `400px`, input at `300px`/`400px`. On very long session titles the display truncates with ellipsis but no tooltip shows the full title. Confirm whether a `title` attribute on the `.text` span is sufficient.
+- **Empty state** — if the user clears the title and commits, the trimmed value is empty so `onCommit` is not called and the display falls back to `placeholder`. Confirm this no-op is the intended UX (alternative: require the user to explicitly cancel).
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `RichInputField`
+
+**Location:** `src/rework/components/shared/molecules/RichInputField/RichInputField.tsx`
+**Status:** `Functional`
+
+Auto-growing textarea with optional `topSlot`, `leftSlot`, `rightSlot`, and `showSendButton`. Height grows with content up to `maxHeight` (200px default); `overflowY` switches from `hidden` to `auto` at max height. Enter (no Shift) sends; Shift+Enter inserts newline.
+
+#### Open UX issues
+
+- **IME composition** — `handleKeyDown` triggers on Enter during CJK composition (selecting a character). Need to check `e.nativeEvent.isComposing` before calling `onSend`.
+- **Paste large content** — pasting 1000+ character text may cause a brief layout shift as the textarea jumps to max height. Not a bug, but worth validating visually.
+- **Placeholder visibility** — the native `<textarea>` placeholder uses `::placeholder` pseudo-element. Confirm it uses `--on-surface-retreat` and is legible on all backgrounds.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+## CHAT-05 organisms (Waves 6–7)
+
+---
+
+### `UserTurn`
+
+**Location:** `src/rework/components/shared/organisms/UserTurn/UserTurn.tsx`
+**Status:** `Functional`
+
+`UserMessage` + `ActionBar` (copy, optional edit). `.turn` has `position: relative`; hover shows actions. Edit action passes `onEdit` prop through to the action bar.
+
+#### Open UX issues
+
+- **Edit action** — `onEdit` prop exists but is not wired in `ConversationThread` yet. When wired, confirm that editing a message and re-sending correctly creates a new branch in the message tree.
+- **Hover zone** — the hover area is the full `.turn` div. On mobile, confirm touch events correctly show/hide the action bar.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ConversationHeader`
+
+**Location:** `src/rework/components/shared/organisms/ConversationHeader/ConversationHeader.tsx`
+**Status:** `Functional`
+
+Agent name + optional `SessionTitleEditor` + "New conversation" button + toggle right panel button. Pure presentational; all state in `useManagedChat`.
+
+#### Open UX issues
+
+- **Agent name display** — no badge or avatar. Confirm with designer whether an `IndicatorDot` showing connection/streaming status should appear next to the agent name.
+- **Header height** — not constrained. Validate that on narrow viewports the agent name + title editor + two buttons don't wrap to a second line.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+### `ConversationThread`
+
+**Location:** `src/rework/components/shared/organisms/ConversationThread/ConversationThread.tsx`
+**Status:** `Functional`
+
+Renders `ThreadMessage[]` as `UserTurn` / `AssistantTurn` / `HitlPrompt`. Wraps `ChatMessagesArea` for scroll-to-bottom behavior. Exports `ThreadMessage` interface.
+
+#### Open UX issues
+
+- **Empty state** — when `messages.length === 0` and not loading, no empty state is shown. Confirm whether a welcome message, agent description, or "Start a conversation" placeholder is needed.
+- **Loading skeleton** — `isLoading` state shows nothing while history fetches. A message skeleton (3 alternating user/assistant placeholder rows) would reduce layout shift on history load.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
 ## UX review agenda
 
 _Priority order for the next UX session. Update before each session._
 
-1. **AgentCard — gradient colours** (are the hardcoded conic-gradient hex stops final branding or should they be tokenised?)
-2. **AgentCard — disabled card affordance** (`cursor: default` + dimmed icon — confirm whether a label or overlay is needed)
-3. **ThoughtTrace — mobile column collapse** (210px column stacks badly on small viewports — breakpoint decision needed)
-4. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
-5. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
-6. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
-7. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
-8. **SourceDetailModal — full design pass** (metadata grid, typography, size — functional but unreviewed)
-9. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
-10. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
-11. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
-12. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
-11. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)
+**CHAT-05 new components (first design review needed):**
+
+1. **InlineDrawer — mobile width** — `480px` covers most of a phone screen; need a `100vw` breakpoint (code change, blocked on breakpoint decision)
+2. **InlineDrawer — WCAG / screen reader** — no focus trap; need `aria-live` region or `aria-label` on the drawer (accessibility review)
+3. **ContextualPicker — keyboard navigation** — `ArrowUp`/`ArrowDown` not wired; `aria-activedescendant` missing (code change needed)
+4. **RichInputField — IME composition** — Enter fires during CJK composition (code change needed; guard with `e.nativeEvent.isComposing`)
+5. **SourceCard — active state** — no visual change when the corresponding source is selected (design decision: border? background?)
+6. **ConversationThread — empty state** — no placeholder when history is empty (product/design decision)
+7. **IndicatorDot — pulse speed** — 1.2 s pulse; validate not distracting during long streaming turns
+8. **ActionBar — touch / mobile** — hover-reveal invisible on touch; need a long-press or always-visible variant (design decision)
+9. **FaviconIcon — fallback icon** — `description` vs `language` for web URLs (design decision)
+10. **NumberedChip — active state** — no ring when the corresponding source is active (design decision)
+
+**Existing components — pending decisions:**
+
+11. **AgentCard — gradient colours** (are the hardcoded conic-gradient hex stops final branding or should they be tokenised?)
+12. **AgentCard — disabled card affordance** (`cursor: default` + dimmed icon — confirm whether a label or overlay is needed)
+13. **ThoughtTrace — mobile column collapse** (210px column stacks badly on small viewports — breakpoint decision needed)
+14. **ThoughtTrace — collapse behaviour** for history-loaded turns (product decision needed)
+15. **TraceEntryRow — primary text truncation** (one line vs two lines for `thought` entries)
+16. **TraceDetailDrawer — theme wiring** (quick code change once design decision is made)
+17. **SourcesPanel — grouping by document** (flat hits vs. grouped by UID — product decision)
+18. **Session title fallback** — `"abc12345…"` vs `"New conversation"` (PM decision, no code change needed)
+19. **AgentFormModal — tuning field groups** — accordion vs. flat scroll for agents with many fields (UX decision — still open)
+20. **AgentFormModal — template browser on mobile** — single-column grid vs. list layout on narrow viewports (UX decision)
+21. **AgentFormModal — single-template auto-collapse** — when one template available, hide browser or show non-interactive card?
+22. **HitlPrompt — elevation and focus** (interaction design; may require Figma update)

@@ -6,7 +6,8 @@
   word-break: break-word;
 }
 
-/* User message: pill on the right, elevated surface */
+/* User message: pill on the right, elevated surface.
+   max-width keeps the bubble readable — 65% of the 720px lane ≈ 468px. */
 .user {
   align-self: flex-end;
   border-radius: var(--radius-m, 12px);
@@ -16,11 +17,10 @@
   color: var(--on-surface);
 }
 
-/* Assistant reply: clean text block, no bubble chrome */
+/* Assistant reply: full-width text block, no bubble chrome.
+   Width is governed by the lane in ChatMessagesArea — not by the bubble itself. */
 .assistant {
-  align-self: flex-start;
   background: transparent;
   padding: var(--spacing-xs, 0.375rem) 0;
-  max-width: 75%;
   color: var(--on-surface);
 }

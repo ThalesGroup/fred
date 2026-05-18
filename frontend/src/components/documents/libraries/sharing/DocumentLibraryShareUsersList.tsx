@@ -44,14 +44,14 @@ export function DocumentLibraryShareUsersList({
   useEffect(() => {
     if (errorFetchingMembers) {
       console.error("Error fetching tag members:", errorFetchingMembers);
-      showError(t("documentLibraryShareDialog.errorFetchingMembers"));
+      showError({ summary: t("documentLibraryShareDialog.errorFetchingMembers") });
     }
   }, [errorFetchingMembers]);
 
   useEffect(() => {
     if (errorFetchingUsers) {
       console.error("Error fetching users:", errorFetchingUsers);
-      showError(t("documentLibraryShareDialog.errorFetchingUsers"));
+      showError({ summary: t("documentLibraryShareDialog.errorFetchingUsers") });
     }
   }, [errorFetchingUsers]);
 
