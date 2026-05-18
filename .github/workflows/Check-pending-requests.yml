@@ -158,6 +158,37 @@ jobs:
         env:
           UV: uv
 
+  # Job to run code quality checks on the frontend
+  frontend-code-quality:
+    runs-on: ubuntu-24.04
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - check: type-check
+          - check: format-check
+          - check: knip
+            continue-on-error: true
+    name: Code Quality - frontend - ${{ matrix.check }}
+    continue-on-error: ${{ matrix.continue-on-error == true }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
+      - name: Run ${{ matrix.check }}
+        run: |
+          cd frontend/
+          make ${{ matrix.check }}
+
   # Job to check the frontend
   frontend-checks:
     runs-on: ubuntu-24.04
