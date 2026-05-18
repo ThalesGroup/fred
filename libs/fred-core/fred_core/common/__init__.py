@@ -31,7 +31,6 @@ from .structures import (
     OwnerFilter,
     PostgresStoreConfig,
     PostgresTableConfig,
-    SQLStorageConfig,
     StoreConfig,
     TemporalSchedulerConfig,
 )
@@ -49,7 +48,6 @@ __all__ = [
     "OwnerFilter",
     "PostgresStoreConfig",
     "PostgresTableConfig",
-    "SQLStorageConfig",
     "StoreConfig",
     "TeamId",
     "PERSONAL_TEAM_ID",
