@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
+from fred_sdk.contracts.execution import ExecutionGrantAction
 from fastapi.responses import Response
 from fred_core import KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
@@ -740,7 +741,7 @@ async def post_prepare_execution(
     deps: ProductDependencies,
     user: KeycloakUser = Depends(get_current_user),
     session_id: str | None = None,
-    action: Literal["execute", "resume"] = "execute",
+    action: ExecutionGrantAction = ExecutionGrantAction.EXECUTE,
 ) -> ExecutionPreparation:
     """
     Prepare an execution context for one team-scoped managed agent instance.
