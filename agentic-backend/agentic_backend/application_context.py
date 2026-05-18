@@ -53,7 +53,6 @@ from fred_core.common import (
     LogStoreConfig,
     OpenSearchIndexConfig,
     PostgresTableConfig,
-    SQLStorageConfig,
 )
 from fred_core.kpi import (
     BaseKPIStore,
@@ -897,14 +896,6 @@ class ApplicationContext:
                         store_cfg.index,
                         os_cfg.secure,
                         os_cfg.verify_certs,
-                    )
-                elif isinstance(store_cfg, SQLStorageConfig):
-                    # Generic SQL storage (could be MySQL, MariaDB, etc.)
-                    logger.info(
-                        "     • %-14s SQLStorage  dsn=%s  table=%s",
-                        label,
-                        getattr(store_cfg, "dsn", "<unset>"),
-                        getattr(store_cfg, "table_name", "<unset>"),
                     )
                 elif isinstance(store_cfg, LogStoreConfig):
                     # No-op KPI / log-only store
