@@ -6,8 +6,8 @@
 # And `dev` rule (from `python-deps.mk`)
 
 HOST ?= 0.0.0.0
+UVICORN_BASE_OPTIONS ?=
 UVICORN_OPTIONS ?=
-
 ##@ Run
 
 .PHONY: run-local
@@ -21,6 +21,7 @@ run-local: ## Run the app assuming dependencies already exist
 		--port ${PORT} \
 		--log-level ${LOG_LEVEL} \
 		--loop ${UVICORN_LOOP} \
+		${UVICORN_BASE_OPTIONS} \
 		${UVICORN_OPTIONS}
 
 

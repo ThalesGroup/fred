@@ -459,6 +459,8 @@ applications:
         - "8000"
         - "--loop"
         - "asyncio"
+        - "--log-level"
+        - "{{ .app.configuration.app.log_level }}"
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -604,6 +606,10 @@ applications:
         address: "127.0.0.1"
         port: 8000
         log_level: "info"
+        # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by Uvicorn.
+        # Set to null to disable the limit, or set a positive integer to reject excess
+        # connections with HTTP 503 before application code runs.
+        limit_concurrency: null
         reload: false
         reload_dir: "."
         metrics_enabled: true # Prometheus exporter
