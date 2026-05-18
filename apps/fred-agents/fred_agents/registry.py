@@ -31,6 +31,7 @@ from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
+from fred_agents.sql_expert import SQL_EXPERT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
 
 
@@ -59,6 +60,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
+        SQL_EXPERT_AGENT.agent_id: SQL_EXPERT_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
     }
 
