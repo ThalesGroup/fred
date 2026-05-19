@@ -1,13 +1,16 @@
-.autocomplete-container {
+.autocompleteContainer {
   position: relative;
 }
 
-.menu-popover {
+.menuPopover {
   top: anchor(bottom);
   left: anchor(left);
   margin: var(--spacing-3xs) 0 0;
   border: none;
   background: transparent;
   padding: 0;
-  overflow: visible;
+  width: anchor-size(width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
