@@ -16,6 +16,50 @@
   display: none;
 }
 
+/* Arrow controls (discoverability for mouse users) */
+.arrowBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 32px;
+  width: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--outline-variant, rgba(255, 255, 255, 0.18));
+  background: color-mix(in srgb, var(--surface-container, #1f1f1f) 75%, transparent);
+  color: var(--on-surface, #fff);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 2;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1;
+  font-size: 20px;
+}
+
+.arrowBtn:hover {
+  background: color-mix(in srgb, var(--surface-container, #1f1f1f) 88%, transparent);
+  border-color: var(--outline, rgba(255, 255, 255, 0.28));
+}
+
+.arrowBtn:focus-visible {
+  outline: 2px solid var(--primary, #5dcaa5);
+  outline-offset: 2px;
+}
+
+.arrowLeft {
+  left: 6px;
+}
+
+.arrowRight {
+  right: 6px;
+}
+
 /* Gradient fade overlays — controlled by data attributes set by JS */
 .wrapper::before,
 .wrapper::after {
@@ -46,4 +90,15 @@
 
 .wrapper[data-fade-right="true"]::after {
   opacity: 1;
+}
+
+/* When there is more content to scroll, show the arrow on that side. */
+.wrapper[data-fade-left="true"] .arrowLeft {
+  opacity: 0.9;
+  pointer-events: auto;
+}
+
+.wrapper[data-fade-right="true"] .arrowRight {
+  opacity: 0.9;
+  pointer-events: auto;
 }

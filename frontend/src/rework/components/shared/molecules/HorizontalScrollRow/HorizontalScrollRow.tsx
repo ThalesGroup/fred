@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, useEffect, useRef, useState } from "react";
+import { PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
 import styles from "./HorizontalScrollRow.module.css";
 
 interface HorizontalScrollRowProps {
@@ -28,6 +28,14 @@ export function HorizontalScrollRow({
   const rowRef = useRef<HTMLDivElement>(null);
   const [fadeLeft, setFadeLeft] = useState(false);
   const [fadeRight, setFadeRight] = useState(false);
+
+  const scrollByPage = useCallback((direction: "left" | "right") => {
+    const el = rowRef.current;
+    if (!el) return;
+    const delta = Math.max(180, Math.round(el.clientWidth * 0.85));
+    const left = direction === "left" ? -delta : delta;
+    el.scrollBy({ left, behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     const el = rowRef.current;
@@ -55,6 +63,16 @@ export function HorizontalScrollRow({
       data-fade-left={fadeLeft}
       data-fade-right={fadeRight}
     >
+      {fadeLeft && (
+        <button
+          type="button"
+          className={`${styles.arrowBtn} ${styles.arrowLeft}`}
+          onClick={() => scrollByPage("left")}
+          aria-label="Scroll left"
+        >
+          ‹
+        </button>
+      )}
       <div
         ref={rowRef}
         className={styles.row}
@@ -62,6 +80,16 @@ export function HorizontalScrollRow({
       >
         {children}
       </div>
+      {fadeRight && (
+        <button
+          type="button"
+          className={`${styles.arrowBtn} ${styles.arrowRight}`}
+          onClick={() => scrollByPage("right")}
+          aria-label="Scroll right"
+        >
+          ›
+        </button>
+      )}
     </div>
   );
 }
