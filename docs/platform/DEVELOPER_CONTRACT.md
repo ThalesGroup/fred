@@ -8,11 +8,11 @@ If you use an AI assistant in VS Code (Codex, Claude, Copilot, Gemini), this is 
 
 Read these files in this order:
 
-1. [`README.md`](../README.md)
+1. [`README.md`](../../README.md)
 2. [`docs/PLATFORM_RUNTIME_MAP.md`](./PLATFORM_RUNTIME_MAP.md)
 3. [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](./CONFIGURATION_AND_POLICY_CONVENTIONS.md)
 4. [`docs/REBAC.md`](./REBAC.md) for access-control related work
-5. [`docs/CONTRIBUTING.md`](./CONTRIBUTING.md)
+5. [`docs/CONTRIBUTING.md`](../CONTRIBUTING.md)
 
 ## 2) Non-Negotiable Engineering Rules
 
