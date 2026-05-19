@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
 import { AssistantMessage } from "@shared/molecules/AssistantMessage/AssistantMessage";
 import { HorizontalScrollRow } from "@shared/molecules/HorizontalScrollRow/HorizontalScrollRow";
 import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
+import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import { hitToSource } from "../../../../utils/conversationUtils";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
@@ -32,9 +33,18 @@ interface AssistantTurnProps {
 
 export function AssistantTurn({ text, traceMessages, sources, isStreaming }: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
+  const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
 
   // All hooks before any conditional returns.
   const uiSources = useMemo(() => sources.map((h, i) => hitToSource(h, i)), [sources]);
+
+  useEffect(() => {
+    if (activeSourceIndex == null) return;
+    const i = activeSourceIndex - 1;
+    const source = sources[i];
+    if (!source) return;
+    setSelected({ source, index: activeSourceIndex });
+  }, [activeSourceIndex, sources]);
 
   const copyAction = useCallback(() => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -68,7 +78,10 @@ export function AssistantTurn({ text, traceMessages, sources, isStreaming }: Ass
               key={src.id}
               source={src}
               index={i + 1}
-              onClick={activeSourceIndex === i + 1 ? undefined : () => setActiveSourceIndex(i + 1)}
+              onClick={() => {
+                setActiveSourceIndex(i + 1);
+                setSelected({ source: sources[i], index: i + 1 });
+              }}
             />
           ))}
         </HorizontalScrollRow>
@@ -76,6 +89,17 @@ export function AssistantTurn({ text, traceMessages, sources, isStreaming }: Ass
 
       {!isStreaming && text && (
         <ActionBar actions={actions} className={styles.actions} />
+      )}
+
+      {selected && (
+        <SourceDetailModal
+          source={selected.source}
+          index={selected.index}
+          onClose={() => {
+            setSelected(null);
+            setActiveSourceIndex(null);
+          }}
+        />
       )}
     </div>
   );
