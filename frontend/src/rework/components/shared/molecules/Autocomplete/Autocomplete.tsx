@@ -53,12 +53,8 @@ export default function Autocomplete<T>({ textInput, options, onSelect, onFieldV
     onFieldValueChange(queryValue);
   }, [queryValue]);
 
-  const toggleMenu = () => {
-    setIsOpen((prev) => !prev);
-  };
-
   return (
-    <div className={styles["autocomplete-container"]} style={{ anchorName: safeAnchorId } as React.CSSProperties}>
+    <div className={styles.autocompleteContainer} style={{ anchorName: safeAnchorId } as React.CSSProperties}>
       <TextInput
         compact={true}
         {...textInput}
@@ -77,14 +73,13 @@ export default function Autocomplete<T>({ textInput, options, onSelect, onFieldV
         id={`${baseId}-menu`}
         ref={popoverRef}
         popover="manual"
-        className={styles["menu-popover"]}
+        className={styles.menuPopover}
         style={{ positionAnchor: safeAnchorId } as React.CSSProperties}
       >
         <Menu
           options={options}
           baseId={baseId}
           onChange={(v) => {
-            toggleMenu();
             onSelect(v);
             setQueryValue("");
           }}

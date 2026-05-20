@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # BUILDER
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/node:22.13.0 AS builder
+FROM mirror.gcr.io/node:24.15.0 AS builder
 
 # Install dependencies
 RUN apt-get update && \
@@ -33,7 +33,7 @@ RUN make build
 # -----------------------------------------------------------------------------
 # RUNTIME
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/nginxinc/nginx-unprivileged:1.27.3-alpine AS runtime
+FROM mirror.gcr.io/nginxinc/nginx-unprivileged:1.31.0-alpine AS runtime
 
 # Copy web app from builder to nginx html directory
 COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
