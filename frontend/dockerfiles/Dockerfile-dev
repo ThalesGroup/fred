@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Frontend development image
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/node:22.13.0
+FROM mirror.gcr.io/node:24.15.0
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
