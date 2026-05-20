@@ -1,4 +1,4 @@
-.sidebar-container {
+.sidebarContainer {
   display: grid;
   position: relative;
   grid-template-rows: auto 64px;
@@ -7,13 +7,13 @@
   height: 100%;
 }
 
-.team-selection-container {
+.teamSelectionContainer {
   grid-row: 1 / span 2;
   height: 100%;
   min-height: 0;
 }
 
-.user-profile-container {
+.userProfileContainer {
   position: absolute;
   bottom: 0;
   padding: 0 var(--spacing-xs) var(--spacing-xs);
