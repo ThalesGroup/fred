@@ -8,6 +8,27 @@ import { fetchBaseQuery, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit
 import type { BaseQueryFn } from "@reduxjs/toolkit/query";
 import { KeyCloakService } from "../security/KeycloakService";
 
+const RETRY_503_DELAY_MS = 2000;
+
+const wait = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Request aborted", "AbortError"));
+      return;
+    }
+
+    const timeout = window.setTimeout(resolve, ms);
+
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException("Request aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+
 export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> => {
   const raw = fetchBaseQuery({
     prepareHeaders: (headers) => {
@@ -32,6 +53,16 @@ export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknow
 
     // 2) First attempt
     let result = await raw(requestArgs, api, extraOptions);
+
+    // If request is rate limited, retry after delay
+    while (result.error && result.error.originalStatus === 503 && !api.signal.aborted) {
+      try {
+        await wait(RETRY_503_DELAY_MS, api.signal);
+        result = await raw(requestArgs, api, extraOptions);
+      } catch {
+        break;
+      }
+    }
 
     // 3) If unauthorized, try ONE refresh + retry
     if (result.error && result.error.status === 401) {
