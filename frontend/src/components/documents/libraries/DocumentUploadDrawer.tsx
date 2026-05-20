@@ -15,7 +15,6 @@
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import {
-  Alert,
   Box,
   Button,
   Drawer,
@@ -31,13 +30,13 @@ import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { usePermissions } from "../../../security/usePermissions";
-import { useLocalizedUploadWarning } from "../../../hooks/useLocalizedUploadWarning";
+import { UploadWarningAlert } from "../../../shared/ui/alerts/UploadWarningAlert";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
-import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
 import {
   IngestionProcessingProfile,
   ProcessDocumentsProgressResponse,
 } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
 import { ProgressFileStatus, ProgressStep } from "../../ProgressStepper";
 import { useToast } from "../../ToastProvider";
 import { DocumentDrawerTable } from "./DocumentDrawerTable";
@@ -56,17 +55,6 @@ interface DocumentUploadDrawerProps {
   metadata?: Record<string, any>;
 }
 
-/**
- * Render the document upload drawer with ingestion controls, progress tracking,
- * and platform-level upload guidance.
- *
- * Why: document upload is a multi-step flow and this component keeps the file
- * selection, processing, and warning banner behavior in one place.
- *
- * How to use: mount it from a document library view, control visibility with
- * `isOpen`, and react to lifecycle events with `onClose` and
- * `onUploadComplete`.
- */
 export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   isOpen,
   onClose,
@@ -79,8 +67,6 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   const { can } = usePermissions();
   // TODO(security): replace this temporary gate with a dedicated permission for profile selection.
   const canSelectProcessingProfile = can("document", "update");
-
-  const { uploadWarning, uploadWarningMessage } = useLocalizedUploadWarning();
 
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [processingProfile, setProcessingProfile] = useState<IngestionProcessingProfile>("fast");
@@ -329,11 +315,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
         {t("documentLibrary.uploadDrawerTitle")}
       </Typography>
 
-      {uploadWarning && uploadWarningMessage && (
-        <Alert severity={uploadWarning.severity ?? "info"} sx={{ mt: 1.5 }}>
-          {uploadWarningMessage}
-        </Alert>
-      )}
+      <UploadWarningAlert sx={{ mt: 1.5 }} />
 
       <FormControl fullWidth sx={{ mt: 2 }}>
         <Typography variant="subtitle2" gutterBottom>

@@ -7,11 +7,11 @@
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ToggleOffOutlinedIcon from "@mui/icons-material/ToggleOffOutlined";
 import ToggleOnOutlinedIcon from "@mui/icons-material/ToggleOnOutlined";
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocalizedUploadWarning } from "../../hooks/useLocalizedUploadWarning";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
+import { UploadWarningAlert } from "../../shared/ui/alerts/UploadWarningAlert";
 import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
@@ -44,16 +44,6 @@ export type ChatAttachmentsWidgetProps = {
   onClose: () => void;
 };
 
-/**
- * Render the conversation attachments widget with upload, preview, delete, and
- * retrieval-toggle controls.
- *
- * Why: attachments are conversation-scoped and this widget groups their list,
- * actions, and platform-provided upload warning in one compact panel.
- *
- * How to use: provide the current session attachments plus the callbacks used
- * to upload new files and refresh the session state after attachment changes.
- */
 const ChatAttachmentsWidget = ({
   attachments,
   sessionId,
@@ -77,7 +67,6 @@ const ChatAttachmentsWidget = ({
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryTitle, setSummaryTitle] = useState("");
   const [summaryText, setSummaryText] = useState("");
-  const { uploadWarning, uploadWarningMessage } = useLocalizedUploadWarning();
   const count = attachments.length;
   const showWarningEmptyDot = count === 0 && (!includeInSearch || disabled);
   const badgeColor = disabled ? "warning" : includeInSearch ? "primary" : "warning";
@@ -179,11 +168,7 @@ const ChatAttachmentsWidget = ({
           </SimpleTooltip>
         }
       >
-        {uploadWarning && uploadWarningMessage && (
-          <Alert severity={uploadWarning.severity ?? "info"} sx={{ mb: 1 }}>
-            {uploadWarningMessage}
-          </Alert>
-        )}
+        <UploadWarningAlert sx={{ mb: 1 }} />
         <ChatWidgetList items={items} emptyText={t("chatbot.attachments.noAttachments", "No attachments yet")} />
         <input
           ref={fileInputRef}
