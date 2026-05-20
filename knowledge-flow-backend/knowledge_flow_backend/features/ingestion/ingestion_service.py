@@ -25,10 +25,10 @@ from knowledge_flow_backend.common.document_structures import DocumentMetadata, 
 from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile, processing_profile_scope
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
-from knowledge_flow_backend.features.ingestion.document_guardrail_service import DocumentGuardrailService
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import ProcessDocumentsProgressResponse
+from knowledge_flow_backend.features.ingestion.document_guardrail_service import DocumentGuardrailService
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,7 @@ class IngestionService:
         pipeline = self.pipeline_manager.get_pipeline_for_profile(normalized_profile)
         processor = pipeline.get_input_processor(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
-
+        
         self.document_guardrail_service.evaluate(
             file_path=file_path,
             processor=processor,

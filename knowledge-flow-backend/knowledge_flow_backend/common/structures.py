@@ -890,7 +890,6 @@ class WorkspaceLayoutConfig(BaseModel):
                     raise ValueError(f"{field_name} must contain placeholder {{{req}}}")
         return self
 
-
 class DocumentMarkingPatternConfig(BaseModel):
     label: str = Field(..., min_length=1, description="Normalized label returned when the regex matches.")
     pattern: str = Field(..., min_length=1, description="Regex used to detect the marking in extracted guardrail text.")
@@ -923,7 +922,6 @@ class DocumentGuardrailConfig(BaseModel):
             raise ValueError("document_guardrail.patterns must not be empty when the guardrail is enabled")
         return self
 
-
 class Configuration(BaseModel):
     app: AppConfig
     integrations: Optional[IntegrationsConfig] = Field(
@@ -941,11 +939,13 @@ class Configuration(BaseModel):
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
-        description="Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used.",
+        description="Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
     )
     document_guardrail: DocumentGuardrailConfig = Field(
         default=None,
-        description=("Optional ingestion-time guardrail for explicit document markings.",),
+        description=(
+            "Optional ingestion-time guardrail for explicit document markings.",
+        ),
     )
     output_processors: Optional[List[ProcessorConfig]] = None
     library_output_processors: Optional[List[LibraryProcessorConfig]] = None

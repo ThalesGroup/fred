@@ -107,7 +107,7 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
     def _select_boundary_lines(self, text: str, *, head: int = 8, tail: int = 8) -> tuple[list[str], list[str]]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         return lines[:head], lines[-tail:] if len(lines) > tail else []
-
+    
     def extract_guardrail_text(self, file_path: Path) -> str | None:
         try:
             reader = pypdf.PdfReader(str(file_path))
