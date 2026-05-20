@@ -74,7 +74,7 @@ export default function Select<T>({
 
   return (
     <div
-      className={styles["select-container"]}
+      className={styles.selectContainer}
       ref={containerRef}
       data-disabled={disabled}
       data-error={error != undefined}
@@ -83,7 +83,7 @@ export default function Select<T>({
       data-size={size}
     >
       {label && (
-        <label className={styles["label"]} id={`${baseId}-label`} htmlFor={`${baseId}-trigger`}>
+        <label className={styles.label} id={`${baseId}-label`} htmlFor={`${baseId}-trigger`}>
           {label}
         </label>
       )}
@@ -91,7 +91,7 @@ export default function Select<T>({
       <button
         id={`${baseId}-trigger`}
         type="button"
-        className={styles["trigger"]}
+        className={styles.trigger}
         onClick={toggleMenu}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -100,9 +100,9 @@ export default function Select<T>({
         data-error={error !== undefined}
         style={{ anchorName: safeAnchorId } as React.CSSProperties}
       >
-        <div className={styles["state-layer"]}>
-          <span className={styles["value"]}>{selectedOption ? selectedOption.label : placeholder}</span>
-          <span className={styles["icon"]} aria-hidden="true">
+        <div className={styles.stateLayer}>
+          <span className={styles.value}>{selectedOption ? selectedOption.label : placeholder}</span>
+          <span className={styles.icon} aria-hidden="true">
             <Icon category={"outlined"} type={"arrow_drop_down"} />
           </span>
         </div>
@@ -112,7 +112,7 @@ export default function Select<T>({
         id={`${baseId}-menu`}
         ref={popoverRef}
         popover="auto"
-        className={styles["menu-popover"]}
+        className={styles.menuPopover}
         style={{ positionAnchor: safeAnchorId } as React.CSSProperties}
       >
         <Menu
@@ -126,7 +126,7 @@ export default function Select<T>({
         />
       </div>
 
-      <span className={styles["error-message"]} id={`${baseId}-error`}>
+      <span className={styles.errorMessage} id={`${baseId}-error`}>
         {error && <>{error}</>}
       </span>
     </div>

@@ -11,13 +11,13 @@ export default function Sidebar() {
   const sidebarMode: SidebarMode = pathname.startsWith("/marketplace") ? "MARKETPLACE" : "TEAM";
 
   return (
-    <div className={styles["sidebar-container"]}>
-      <div className={styles["team-selection-container"]}>
+    <div className={styles.sidebarContainer}>
+      <div className={styles.teamSelectionContainer}>
         <TeamSelectionNavbar />
       </div>
       {sidebarMode === "TEAM" && <TeamContentNavbar />}
       {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-      <div className={styles["user-profile-container"]}>
+      <div className={styles.userProfileContainer}>
         <UserProfile />
       </div>
     </div>

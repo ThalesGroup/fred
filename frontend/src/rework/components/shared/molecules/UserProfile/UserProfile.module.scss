@@ -1,4 +1,4 @@
-.user-profile {
+.userProfile {
   display: flex;
   align-items: center;
   gap: var(--spacing-s);
@@ -8,18 +8,18 @@
   height: 3.5rem;
 }
 
-.user-identity {
+.userIdentity {
   display: flex;
   flex-direction: column;
   margin-right: auto;
 }
 
-.user-identity-name {
+.userIdentityName {
   color: var(--on-surface);
   font: var(--font-body-medium);
 }
 
-.user-identity-id {
+.userIdentityId {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }

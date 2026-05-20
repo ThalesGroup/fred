@@ -7,7 +7,7 @@
   border-radius: var(--spacing-xs);
   background-color: var(--surface-container-highest);
   padding: var(--spacing-xs) 0;
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   max-height: clamp(200px, 40vh, 500px);
   overflow-x: hidden;
@@ -15,7 +15,7 @@
   list-style: none;
 }
 
-.menu-empty {
+.menuEmpty {
   padding: var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-body-large);

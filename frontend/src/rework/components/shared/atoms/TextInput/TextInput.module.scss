@@ -58,9 +58,12 @@
   justify-content: space-between;
   padding: 0 var(--spacing-xs);
   width: 100%;
-  min-height: 1.25rem;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+.input[data-compact="true"] .information {
+  display: none;
 }
 
 .hint {

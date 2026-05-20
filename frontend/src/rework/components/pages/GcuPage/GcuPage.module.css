@@ -22,7 +22,6 @@
 .gcuContent {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-l);
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-m) var(--radius-m) 0 0;
   background-color: var(--surface-container-lowest);
