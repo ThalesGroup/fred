@@ -556,8 +556,7 @@ applications:
       livenessProbe:
         enabled: true
         data:
-          httpGet:
-            path: /agentic/v1/healthz
+          tcpSocket:
             port: 8000
       readinessProbe:
         enabled: true
