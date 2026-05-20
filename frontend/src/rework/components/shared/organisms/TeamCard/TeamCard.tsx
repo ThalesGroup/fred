@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import styles from "./TeamCard.module.scss";
+import styles from "./TeamCard.module.css";
 
 export interface TeamCardProps {
   team: Team;

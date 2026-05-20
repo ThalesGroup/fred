@@ -1,4 +1,4 @@
-import styles from "./TeamSettingsNavbar.module.scss";
+import styles from "./TeamSettingsNavbar.module.css";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { useTranslation } from "react-i18next";
@@ -46,8 +46,8 @@ export default function TeamSettingsNavbar({ team, close, changePanel, panelSele
   ];
 
   return (
-    <div className={styles["team-settings-navbar"]}>
-      <span className={styles["team-settings-back-container"]}>
+    <div className={styles.teamSettingsNavbar}>
+      <span>
         <Button
           color={"primary"}
           variant={"text"}
@@ -58,9 +58,9 @@ export default function TeamSettingsNavbar({ team, close, changePanel, panelSele
           {t("rework.back")}
         </Button>
       </span>
-      <span className={styles["team-name"]}>{team.name}</span>
+      <span className={styles.teamName}>{team.name}</span>
       <NavigationMenu items={navigationMenu}></NavigationMenu>
-      <div className={styles["team-settings-navbar-disconnect"]}>
+      <div className={styles.teamSettingsNavbarDisconnect}>
         <Button
           color={"error"}
           variant={"filled"}

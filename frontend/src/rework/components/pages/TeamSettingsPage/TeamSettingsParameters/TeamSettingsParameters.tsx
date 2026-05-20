@@ -1,4 +1,4 @@
-import styles from "./TeamSettingsParameters.module.scss";
+import styles from "./TeamSettingsParameters.module.css";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import { useTranslation } from "react-i18next";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
@@ -102,10 +102,10 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
   };
 
   return (
-    <div className={styles["team-settings-parameters-container"]}>
-      <div className={`${styles["form-section"]} ${styles["team-images-section"]}`}>
-        <div className={styles["team-banner"]}>
-          <span className={styles["team-banner-title"]}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
+    <div className={styles.teamSettingsParametersContainer}>
+      <div className={`${styles.formSection} ${styles.teamImagesSection}`}>
+        <div className={styles.teamBanner}>
+          <span className={styles.teamBannerTitle}>{t("rework.teamSettings.parameters.teamBannerTitle")}</span>
           <ImageFileInput
             ref={fileInputRef}
             imageUrl={team.banner_image_url ?? `/images/${defaultTeamBannerFile}`}
@@ -116,7 +116,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           />
         </div>
       </div>
-      <div className={styles["form-section"]}>
+      <div className={styles.formSection}>
         <TextArea
           label={t("rework.teamSettings.parameters.description.label")}
           placeholder={t("rework.teamSettings.parameters.description.placeholder")}
@@ -125,12 +125,12 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
           {...register("description", { onBlur: handleSaveDescription })}
         />
       </div>
-      <div className={`${styles["form-section"]} ${styles["private-state"]}`}>
+      <div className={`${styles.formSection} ${styles.privateState}`}>
         {t("rework.teamSettings.parameters.privateTeam")}
         <Switch {...register("isPrivate", { onChange: handleSaveIsPrivate })} />
       </div>
       {/*
-      <div className={styles["form-section"]}>
+      <div className={styles.formSection}>
         <TextArea
           label={t("rework.teamSettings.parameters.teamPrompt.label")}
           maxLength={180}

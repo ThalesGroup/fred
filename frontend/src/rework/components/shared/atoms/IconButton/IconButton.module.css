@@ -1,0 +1,97 @@
+.btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: var(--btn-cursor, pointer);
+  border: 1px solid var(--btn-border, transparent);
+  border-radius: 50%;
+  background-color: var(--btn-background);
+  padding: 0;
+  overflow: hidden;
+  color: var(--btn-text-color);
+  font-size: var(--icon-size);
+
+  :global([class*="material-symbols-"]) {
+    font-size: inherit;
+  }
+}
+
+.stateLayer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--btn-background-surface);
+  width: 100%;
+  height: 100%;
+}
+
+.btn[data-variant="filled"] {
+  --btn-background: var(--main-color);
+  --btn-text-color: var(--on-main-color);
+
+  &:hover:not(:disabled) {
+    --btn-background-surface: var(--state-surface-main-hover);
+  }
+
+  &:active:not(:disabled) {
+    --btn-background-surface: var(--state-surface-main-pressed);
+  }
+}
+
+.btn[data-variant="outlined"] {
+  --btn-border: var(--main-color);
+  --btn-text-color: var(--main-color);
+
+  &:hover:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-hover);
+  }
+
+  &:active:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-pressed);
+  }
+}
+
+.btn[data-variant="icon"] {
+  --btn-text-color: var(--main-color);
+
+  &:hover:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-hover);
+  }
+
+  &:active:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-pressed);
+  }
+}
+
+.btn[data-size="xs"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  --icon-size: 1rem;
+}
+
+.btn[data-size="small"] {
+  width: 2rem;
+  height: 2rem;
+  --icon-size: 1.25rem;
+}
+
+.btn[data-size="medium"] {
+  width: 2.5rem;
+  height: 2.5rem;
+  --icon-size: 1.5rem;
+}
+
+.btn:focus-visible {
+  --btn-outline: var(--on-surface);
+}
+
+.btn:disabled {
+  --btn-background-surface: transparent;
+  --btn-background: var(--state-on-surface-disabled);
+  --btn-text-color: var(--state-text-disabled);
+  --btn-cursor: default;
+
+  &.btn-outlined {
+    --btn-border: var(--state-on-surface-disabled);
+  }
+}

@@ -71,9 +71,7 @@ export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
 
   const { uploadWarning } = useFrontendProperties();
   const uploadWarningMessage = uploadWarning?.messages
-    ? (uploadWarning.messages[i18n.language?.split("-")[0] ?? "en"] ??
-        uploadWarning.messages["en"] ??
-        null)
+    ? (uploadWarning.messages[i18n.language?.split("-")[0] ?? "en"] ?? uploadWarning.messages["en"] ?? null)
     : null;
 
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");

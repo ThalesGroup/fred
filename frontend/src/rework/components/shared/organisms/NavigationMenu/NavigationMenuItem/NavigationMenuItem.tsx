@@ -1,4 +1,4 @@
-import styles from "./NavigationMenuItem.module.scss";
+import styles from "./NavigationMenuItem.module.css";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { LinkProps, NavLink } from "react-router-dom";
 
@@ -36,7 +36,7 @@ export default function NavigationMenuItem({ label, icon, ...props }: Navigation
         to={props.linkProps.to}
         end={false}
         children={({ isActive }) => (
-          <div className={styles["navigation-menu-item"]} data-selected={isActive}>
+          <div className={styles.navigationMenuItem} data-selected={isActive}>
             {Content}
           </div>
         )}
@@ -47,7 +47,7 @@ export default function NavigationMenuItem({ label, icon, ...props }: Navigation
   return (
     <button
       type="button"
-      className={styles["navigation-menu-item"]}
+      className={styles.navigationMenuItem}
       onClick={props.onClick}
       data-selected={props.selected}
       aria-selected={props.selected}

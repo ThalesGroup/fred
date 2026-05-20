@@ -1,4 +1,4 @@
-import styles from "./Select.module.scss";
+import styles from "./Select.module.css";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { OptionModel } from "@models/Option.model.ts";
 import Menu from "@shared/organisms/Menu/Menu.tsx";

@@ -1,4 +1,4 @@
-import styles from "./TeamSettingsPage.module.scss";
+import styles from "./TeamSettingsPage.module.css";
 import { ModalInteractionProps } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
 import TeamSettingsNavbar from "@components/pages/TeamSettingsPage/TeamSettingsNavbar/TeamSettingsNavbar.tsx";
 import { TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -29,7 +29,7 @@ export default function TeamSettingsPage({ modalInteraction, team }: TeamSetting
 
   return (
     <>
-      <div className={styles["team-settings-page"]}>
+      <div className={styles.teamSettingsPage}>
         <TeamSettingsNavbar
           team={team}
           close={modalInteraction.close}

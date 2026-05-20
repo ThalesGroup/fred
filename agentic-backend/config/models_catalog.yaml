@@ -182,16 +182,16 @@ profiles:
     capability: chat
     model:
       provider: openai
-      name: gpt-4o
+      name: chatgpt-4o-latest
       settings:
-        base_url: http://localhost:8383/v1
+        base_url: http://0.0.0.0:8081/v1
 
   - profile_id: default.language.mock
     capability: language
     model:
       provider: openai
-      name: gpt-4o
+      name: chatgpt-4o-latest
       settings:
-        base_url: http://localhost:8383/v1
+        base_url: http://0.0.0.0:8081/v1
 
 rules: []

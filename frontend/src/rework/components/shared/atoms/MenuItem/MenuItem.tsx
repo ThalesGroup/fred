@@ -1,5 +1,5 @@
 import { ComponentPropsWithRef, memo, ReactNode, useId } from "react";
-import styles from "./MenuItem.module.scss";
+import styles from "./MenuItem.module.css";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 export interface MenuItemProps extends ComponentPropsWithRef<"li"> {
@@ -33,7 +33,7 @@ function MenuItem({
       {...rest}
       ref={ref}
       id={id}
-      className={styles["menu-item"]}
+      className={styles.menuItem}
       role={role}
       aria-selected={role === "option" ? selected : undefined}
       aria-disabled={disabled}
@@ -43,14 +43,14 @@ function MenuItem({
       tabIndex={focused ? 0 : -1}
       onClick={disabled ? undefined : onClick}
     >
-      <div className={styles["state-layer"]}>
+      <div className={styles.stateLayer}>
         {icon && (
-          <span className={styles["icon-wrapper"]} aria-hidden="true">
+          <span className={styles.iconWrapper} aria-hidden="true">
             <Icon {...icon} />
           </span>
         )}
 
-        {children ? children : <span className={styles["label"]}>{label}</span>}
+        {children ? children : <span className={styles.label}>{label}</span>}
       </div>
     </li>
   );

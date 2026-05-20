@@ -1,4 +1,4 @@
-import styles from "./AvatarGroup.module.scss";
+import styles from "./AvatarGroup.module.css";
 import UserAvatar, { UserAvatarProps } from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 

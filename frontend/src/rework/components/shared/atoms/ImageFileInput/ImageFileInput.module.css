@@ -1,9 +1,9 @@
-.image-file-input-container {
+.imageFileInputContainer {
   display: inline-block;
   position: relative;
   cursor: pointer;
 
-  .native-input {
+  .nativeInput {
     position: absolute;
     margin: -1px;
     padding: 0;
@@ -14,13 +14,13 @@
     border-width: 0;
     white-space: nowrap;
 
-    &:focus-visible + .image-wrapper {
+    &:focus-visible + .imageWrapper {
       outline: 2px solid var(--primary);
       outline-offset: var(--spacing-2xs);
     }
   }
 
-  .image-wrapper {
+  .imageWrapper {
     display: flex;
     justify-content: center;
     align-items: center;
@@ -30,7 +30,7 @@
     overflow: hidden;
   }
 
-  .image-file-input-image {
+  .imageFileInputImage {
     width: 100%;
     height: 100%;
     object-fit: cover;

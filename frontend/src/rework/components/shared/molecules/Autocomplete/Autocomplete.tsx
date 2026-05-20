@@ -1,4 +1,4 @@
-import styles from "./Autocomplete.module.scss";
+import styles from "./Autocomplete.module.css";
 import TextInput, { TextInputProps } from "@shared/atoms/TextInput/TextInput.tsx";
 import Menu from "@shared/organisms/Menu/Menu.tsx";
 import React, { useEffect, useId, useRef, useState } from "react";

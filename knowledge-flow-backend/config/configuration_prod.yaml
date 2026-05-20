@@ -253,20 +253,20 @@ document_sources:
     description: "Documents manually uploaded by users"
 chat_model:
   provider: openai
-  name: mistral-medium-2508 # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
+  name: chatgpt-4o-latest # any chat-capable model (gpt-4o, gpt-4o-mini, gpt-4.1, etc.)
   settings:
-    base_url: https://api.mistral.ai/v1
+    base_url: http://0.0.0.0:8081/v1
 embedding_model:
   provider: openai
-  name: mistral-embed # or text-embedding-3-small
+  name: text-embedding-ada-002 # or text-embedding-3-small
   settings:
-    base_url: https://api.mistral.ai/v1
+    base_url: http://0.0.0.0:8081/v1
     check_embedding_ctx_length: false
 vision_model:
   provider: openai
-  name: pixtral-12b-2409  # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required
+  name: chatgpt-4o-latest  # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required
   settings:
-    base_url: https://api.mistral.ai/v1
+    base_url: http://0.0.0.0:8081/v1
 # ocr_model:
 #   provider: openai
 #   name: mistral-ocr-latest

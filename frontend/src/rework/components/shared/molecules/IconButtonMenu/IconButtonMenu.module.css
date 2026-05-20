@@ -1,4 +1,4 @@
-.menu-popover {
+.menuPopover {
   top: anchor(bottom);
   right: anchor(right);
   left: auto;

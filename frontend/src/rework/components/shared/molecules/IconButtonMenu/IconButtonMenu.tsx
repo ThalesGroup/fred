@@ -1,4 +1,4 @@
-import styles from "./IconButtonMenu.module.scss";
+import styles from "./IconButtonMenu.module.css";
 import IconButton, { IconButtonProps } from "@shared/atoms/IconButton/IconButton.tsx";
 import React, { useEffect, useId, useRef, useState } from "react";
 import Menu from "@shared/organisms/Menu/Menu.tsx";
@@ -60,7 +60,7 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
         id={`${baseId}-menu`}
         ref={popoverRef}
         popover="auto"
-        className={styles["menu-popover"]}
+        className={styles.menuPopover}
         style={{ positionAnchor: safeAnchorId } as React.CSSProperties}
       >
         <Menu

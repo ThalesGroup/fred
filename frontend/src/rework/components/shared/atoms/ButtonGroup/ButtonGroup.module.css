@@ -1,4 +1,4 @@
-.button-group {
+.buttonGroup {
   display: flex;
   gap: var(--spacing-2xs);
   border-radius: var(--spacing-2xl);

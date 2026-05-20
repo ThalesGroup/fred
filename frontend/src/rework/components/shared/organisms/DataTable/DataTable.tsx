@@ -1,4 +1,4 @@
-import styles from "./DataTable.module.scss";
+import styles from "./DataTable.module.css";
 import React from "react";
 
 interface DataTableProps<T> {
@@ -26,21 +26,21 @@ export default function DataTable<T>({
 
   return (
     <div
-      className={styles["datatable-container"]}
+      className={styles.datatableContainer}
       style={
         { "--grid-layout": tableGridLayout, "--datatable-background-color": backgroundColor } as React.CSSProperties
       }
     >
       {columns.map((column) => (
-        <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-header"]}`} key={column.label}>
-          <span className={styles["header-content"]}>{column.label}</span>
+        <div className={`${styles.datatableCell} ${styles.datatableCellHeader}`} key={column.label}>
+          <span className={styles.headerContent}>{column.label}</span>
         </div>
       ))}
       {data.map((line, lineIndex) => (
-        <div className={styles["datatable-row"]} key={`row-${lineIndex}`}>
+        <div className={styles.datatableRow} key={`row-${lineIndex}`}>
           {columns.map((column) => {
             return (
-              <div className={styles["datatable-cell"]} key={column.label}>
+              <div className={styles.datatableCell} key={column.label}>
                 {column.cellRenderer(line)}
               </div>
             );

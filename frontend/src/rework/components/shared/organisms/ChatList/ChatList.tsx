@@ -1,5 +1,5 @@
 import ChatListItem from "@shared/organisms/ChatList/ChatListItem/ChatListItem.tsx";
-import styles from "./ChatList.module.scss";
+import styles from "./ChatList.module.css";
 import { useTranslation } from "react-i18next";
 import { useGetSessionsAgenticV1ChatbotSessionsGetQuery } from "../../../../../slices/agentic/agenticOpenApi.ts";
 
