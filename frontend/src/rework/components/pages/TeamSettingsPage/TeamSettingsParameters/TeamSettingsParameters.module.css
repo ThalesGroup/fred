@@ -1,0 +1,43 @@
+.teamSettingsParametersContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 720px;
+}
+
+.formSection {
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+.teamImagesSection {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.teamBanner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.teamBannerTitle {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.teamBannerImage {
+  display: flex;
+  border-radius: var(--radius-s);
+  min-width: 0;
+  height: 80px;
+  object-fit: contain;
+}
+
+.privateState {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+}

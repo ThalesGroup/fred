@@ -1,0 +1,19 @@
+.teamSettingsMembersContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  overflow: hidden;
+}
+
+.teamSettingsMembersHeader {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-2xs);
+}
+
+.teamSettingsMembersHeaderTitle {
+  display: flex;
+  align-items: center;
+  color: var(--on-surface);
+  font: var(--font-title-large);
+}

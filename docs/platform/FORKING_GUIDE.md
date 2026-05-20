@@ -1,6 +1,6 @@
 # Forking Fred — The Right Way
 
-This guide is for teams that deploy Fred under their own branding or with organisation-specific content (legal notices, agents, release notes). It defines the one rule that keeps your fork permanently merge-compatible with the open source `develop` branch.
+This guide is for teams that deploy Fred under their own branding or with organisation-specific content (legal notices, agents, release notes). It defines the one rule that keeps your fork permanently merge-compatible with the open source `main` branch.
 
 ---
 
@@ -9,7 +9,7 @@ This guide is for teams that deploy Fred under their own branding or with organi
 > **A fork must never modify a source code file.**
 > Only files under `frontend/public/contrib/<your-brand>/` may be fork-specific.
 
-If this rule is followed, every future `git merge develop` from the open source repository is conflict-free on all code files — forever. Conflicts become structurally impossible.
+If this rule is followed, every future `git merge main` from the open source repository is conflict-free on all code files — forever. Conflicts become structurally impossible.
 
 If this rule is broken, every merge becomes a manual conflict resolution exercise. Over time the fork drifts, the team stops merging, and the fork becomes an unmaintained dead-end.
 
@@ -107,7 +107,7 @@ Once your fork follows the rules above, the full synchronisation workflow is:
 
 ```bash
 # On your fork's integration branch
-git merge develop
+git merge main
 
 # Expected result: no conflicts on any source file.
 # Your contrib/ files are untouched.
@@ -126,4 +126,4 @@ If you encounter a conflict on a source file, treat it as a bug — either in yo
 - [ ] Brand release notes (if any) are in `frontend/public/contrib/<your-brand>/release.md`
 - [ ] No `.tsx`, `.ts`, `.scss`, or `.json` file from `src/` exists in your fork's overlay
 - [ ] Agent code (Kea only) is isolated under `contrib/<your-brand>/` and registered via Helm, not via source patches
-- [ ] `git merge develop` runs with zero conflicts
+- [ ] `git merge main` runs with zero conflicts

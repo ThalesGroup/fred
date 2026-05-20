@@ -91,7 +91,7 @@ Files of interest:
   - **Core Postgres (metadata/tags/vector, etc.)** → `storage.postgres` → `FRED_POSTGRES_PASSWORD` (or `password:` in YAML).
 
 **Tabular runtime** → `storage.tabular_store` + shared `content_storage`.
-  - In this recommended dataset-centric design, there is no dedicated tabular SQL database or `TABULAR_POSTGRES_PASSWORD`.
+  - In this recommended dataset-centric design, there is no dedicated tabular SQL database.
   - For MinIO/S3-compatible deployments, provide object-store credentials under `content_storage`; `storage.tabular_store` tunes artifact layout and query/runtime limits.
 
 For concrete examples of model configuration, see the main [`README.md`](../README.md#model-configuration).

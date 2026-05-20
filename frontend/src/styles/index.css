@@ -12,6 +12,7 @@
 @import "radius.css";
 
 @import "typography.css";
+@import "utils.css";
 
 @font-face {
   font-style: normal;
@@ -88,10 +89,16 @@ html {
 
 body {
   margin: 0;
+  background-color: var(--surface-container-lowest) !important;
   padding: 0;
+  font-size: 12px;
   font-family: var(--font-family);
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
 [data-color="primary"] {
   --main-color: var(--primary);
   --on-main-color: var(--on-primary);
@@ -202,6 +209,18 @@ body {
   --on-main-color: var(--surface-main);
   --container-color: var(--surface-container);
   --on-container-color: var(--on-surface);
+  --hover-color: var(--state-on-surface-hover);
+  --pressed-color: var(--state-on-surface-pressed);
+  --focused-color: var(--state-on-surface-focused);
+  --selected-color: var(--state-on-surface-selected);
+  --on-container-hover-color: var(--state-on-surface-hover);
+  --on-container-pressed-color: var(--state-on-surface-pressed);
+  --on-container-focused-color: var(--state-on-surface-focused);
+  --on-container-selected-color: var(--state-on-surface-selected);
+}
+
+[data-color="on-surface-retreat"] {
+  --main-color: var(--on-surface-retreat);
   --hover-color: var(--state-on-surface-hover);
   --pressed-color: var(--state-on-surface-pressed);
   --focused-color: var(--state-on-surface-focused);

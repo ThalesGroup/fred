@@ -1,4 +1,4 @@
-import styles from "./UserSettingsPage.module.scss";
+import styles from "./UserSettingsPage.module.css";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";

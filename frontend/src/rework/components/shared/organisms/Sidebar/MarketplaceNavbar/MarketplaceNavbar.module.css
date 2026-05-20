@@ -1,0 +1,13 @@
+.marketplaceNavbarContainer {
+  width: 240px;
+}
+
+.marketplaceNavbarTitle {
+  display: flex;
+  align-items: end;
+  padding: 0 0 var(--spacing-xs) var(--spacing-m);
+  height: 56px;
+  color: var(--on-surface);
+
+  font: var(--font-title-medium);
+}
