@@ -449,7 +449,7 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data:
+      data: |-
         - "uvicorn"
         - "agentic_backend.main:create_app"
         - "--factory"
@@ -460,7 +460,11 @@ applications:
         - "--loop"
         - "asyncio"
         - "--log-level"
-        - "{{ .app.configuration.app.log_level }}"
+        - {{ .app.configuration.app.log_level | quote }}
+        {{- with .app.configuration.app.limit_concurrency }}
+        - "--limit-concurrency"
+        - {{ . | quote }}
+        {{- end }}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1198,7 +1202,7 @@ applications:
       tag: ""                 
     command:
       enabled: true
-      data:
+      data: |-
         - "uvicorn"
         - "knowledge_flow_backend.main:create_app"
         - "--factory"
@@ -1388,7 +1392,7 @@ applications:
       tag: ""                 
     command:
       enabled: true
-      data:
+      data: |-
         - "python"
         - "-m"
         - "knowledge_flow_backend.main_worker"
@@ -1560,7 +1564,7 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data:
+      data: |-
         - "uvicorn"
         - "control_plane_backend.main:create_app"
         - "--factory"
@@ -1738,7 +1742,7 @@ applications:
       pullPolicy: IfNotPresent
     command:
       enabled: true
-      data:
+      data: |-
         - "python"
         - "-m"
         - "control_plane_backend.main_worker"

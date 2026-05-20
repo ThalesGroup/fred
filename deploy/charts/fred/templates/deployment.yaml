@@ -80,13 +80,7 @@ spec:
 
           {{- if .app.command.enabled }}
           command:
-            {{- range .app.command.data }}
-            - {{ tpl (toString .) $ | quote }}
-            {{- end }}
-            {{- with .app.configuration.app.limit_concurrency }}
-            - "--limit-concurrency"
-            - {{ . | quote }}
-            {{- end }}
+{{ tpl .app.command.data . | nindent 12 }}
           {{- end }}
 
           {{- if or .app.env .app.extraEnvVars }}
