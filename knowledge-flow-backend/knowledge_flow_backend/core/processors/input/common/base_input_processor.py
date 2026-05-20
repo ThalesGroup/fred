@@ -230,6 +230,25 @@ class BaseInputProcessor(ABC):
     @abstractmethod
     def check_file_validity(self, file_path: Path) -> bool:
         pass
+    
+    def extract_guardrail_text(self, file_path: Path) -> str | None:
+        """
+        Return a lightweight text snippet used by ingestion guardrails.
+
+        Why this exists:
+        - Some deployments need to detect explicit document markings during
+          ingestion without coupling the guardrail to one specific processor
+          implementation.
+        - The default behavior is intentionally no-op so existing processors
+          keep working until they opt in.
+
+        How to use:
+        - Override in format-specific processors when they can expose useful
+          boundary text such as headers, footers, repeated slide text, or
+          top/bottom page excerpts.
+        - Return `None` when no dedicated guardrail text is available.
+        """
+        return None
 
     @abstractmethod
     def extract_file_metadata(self, file_path: Path) -> dict:

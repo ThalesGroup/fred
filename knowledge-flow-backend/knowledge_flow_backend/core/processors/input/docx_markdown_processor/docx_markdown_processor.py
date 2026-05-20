@@ -17,6 +17,7 @@ import logging
 import re
 import subprocess
 import zipfile
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from shutil import which
@@ -177,6 +178,127 @@ class DocxMarkdownProcessor(BaseMarkdownProcessor):
         except Exception as e:
             logger.error(f"Erreur inattendue lors de la vérification de {file_path}: {e}")
         return False
+    
+    def _collect_non_empty_paragraphs(self, paragraphs, *, limit: int | None = None) -> list[str]:
+        lines: list[str] = []
+        for paragraph in paragraphs:
+            text = (getattr(paragraph, "text", "") or "").strip()
+            if not text:
+                continue
+            lines.append(text)
+            if limit is not None and len(lines) >= limit:
+                break
+        return lines
+    
+    def _extract_text_from_docx_xml_part(self, docx_zip: zipfile.ZipFile, part_name: str) -> list[str]:
+        try:
+            xml_bytes = docx_zip.read(part_name)
+            root = ET.fromstring(xml_bytes)
+        except Exception as e:
+            logger.warning("[DOCX][GUARDRAIL] Failed to parse %s: %s", part_name, e)
+            return []
+
+        lines: list[str] = []
+        for elem in root.iter():
+            if elem.tag.endswith("}t") and elem.text:
+                text = elem.text.strip()
+                if text:
+                    lines.append(text)
+
+        return lines
+    
+    def _extract_header_footer_xml_lines(self, file_path: Path) -> tuple[list[str], list[str]]:
+        header_lines: list[str] = []
+        footer_lines: list[str] = []
+
+        try:
+            with zipfile.ZipFile(file_path, "r") as docx_zip:
+                for part_name in docx_zip.namelist():
+                    if part_name.startswith("word/header") and part_name.endswith(".xml"):
+                        header_lines.extend(self._extract_text_from_docx_xml_part(docx_zip, part_name))
+                    elif part_name.startswith("word/footer") and part_name.endswith(".xml"):
+                        footer_lines.extend(self._extract_text_from_docx_xml_part(docx_zip, part_name))
+        except Exception as e:
+            logger.warning("[DOCX][GUARDRAIL] Failed to inspect DOCX xml parts for %s: %s", file_path, e)
+
+        return header_lines, footer_lines
+
+
+    def extract_guardrail_text(self, file_path: Path) -> str | None:
+        """
+        Extract lightweight boundary text for ingestion guardrails.
+
+        Why this exists:
+        - DOCX files often carry visible classification markings in headers
+          and footers.
+        - Some Office/label integrations store visible footer/header markings
+          inside drawing/textbox XML, which python-docx paragraph APIs may not
+          expose directly.
+
+        How to use:
+        - Collect non-empty header/footer paragraphs from every section.
+        - Also inspect raw DOCX header/footer XML parts as a fallback for
+          textbox/shape-based markings.
+        - Add a small body head/tail fallback in case the visible marking is
+          rendered in the main document flow.
+        """
+        try:
+            doc = Document(str(file_path))
+        except Exception as e:
+            logger.warning("[DOCX][GUARDRAIL] Failed to open %s: %s", file_path, e)
+            return None
+
+        header_lines: list[str] = []
+        footer_lines: list[str] = []
+
+        for section in doc.sections:
+            header_lines.extend(self._collect_non_empty_paragraphs(section.header.paragraphs, limit=10))
+            footer_lines.extend(self._collect_non_empty_paragraphs(section.footer.paragraphs, limit=10))
+
+        header_xml_lines, footer_xml_lines = self._extract_header_footer_xml_lines(file_path)
+
+        body_lines = self._collect_non_empty_paragraphs(doc.paragraphs)
+        body_head = body_lines[:5]
+        body_tail = body_lines[-5:] if len(body_lines) > 5 else []
+
+        parts: list[str] = []
+
+        if header_lines:
+            parts.append("HEADER:")
+            parts.extend(dict.fromkeys(header_lines))
+
+        if footer_lines:
+            if parts:
+                parts.append("")
+            parts.append("FOOTER:")
+            parts.extend(dict.fromkeys(footer_lines))
+
+        if header_xml_lines:
+            if parts:
+                parts.append("")
+            parts.append("HEADER_XML:")
+            parts.extend(dict.fromkeys(header_xml_lines))
+
+        if footer_xml_lines:
+            if parts:
+                parts.append("")
+            parts.append("FOOTER_XML:")
+            parts.extend(dict.fromkeys(footer_xml_lines))
+
+        if body_head:
+            if parts:
+                parts.append("")
+            parts.append("BODY_HEAD:")
+            parts.extend(body_head)
+
+        if body_tail:
+            if parts:
+                parts.append("")
+            parts.append("BODY_TAIL:")
+            parts.extend(body_tail)
+
+        result = "\n".join(parts).strip()
+        return result or None
 
     def extract_file_metadata(self, file_path: Path) -> dict:
         try:

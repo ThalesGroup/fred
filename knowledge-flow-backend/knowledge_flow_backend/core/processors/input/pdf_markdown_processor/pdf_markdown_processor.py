@@ -104,6 +104,57 @@ class PdfMarkdownProcessor(BaseMarkdownProcessor):
         self.image_describer = build_image_describer(get_configuration().vision_model)
         return self.image_describer
 
+    def _select_boundary_lines(self, text: str, *, head: int = 8, tail: int = 8) -> tuple[list[str], list[str]]:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        return lines[:head], lines[-tail:] if len(lines) > tail else []
+    
+    def extract_guardrail_text(self, file_path: Path) -> str | None:
+        try:
+            reader = pypdf.PdfReader(str(file_path))
+        except Exception as e:
+            logger.warning("[PDF][GUARDRAIL] Failed to open %s: %s", file_path, e)
+            return None
+
+        page_count = len(reader.pages)
+        if page_count == 0:
+            return None
+
+        page_indexes: list[int] = [0]
+        if page_count > 1:
+            page_indexes.append(page_count - 1)
+
+        parts: list[str] = []
+
+        for page_index in page_indexes:
+            try:
+                text = reader.pages[page_index].extract_text() or ""
+            except Exception as e:
+                logger.warning("[PDF][GUARDRAIL] Failed to extract page %s from %s: %s", page_index + 1, file_path, e)
+                continue
+
+            head_lines, tail_lines = self._select_boundary_lines(text, head=8, tail=8)
+
+            if head_lines:
+                if parts:
+                    parts.append("")
+                parts.append(f"PAGE_{page_index + 1}_TOP:")
+                parts.extend(head_lines)
+
+            if tail_lines:
+                if parts:
+                    parts.append("")
+                parts.append(f"PAGE_{page_index + 1}_BOTTOM:")
+                parts.extend(tail_lines)
+
+        result = "\n".join(parts).strip()
+        if result:
+            logger.info(
+                "[PDF][GUARDRAIL] Extracted guardrail text for %s:\n%s",
+                file_path.name,
+                result,
+            )
+        return result or None
+
     def _resolve_ocr_model_config(self) -> Optional["ModelConfiguration"]:
         """
         Why:
