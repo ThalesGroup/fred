@@ -218,3 +218,15 @@ a {
   --on-container-focused-color: var(--state-on-surface-focused);
   --on-container-selected-color: var(--state-on-surface-selected);
 }
+
+[data-color="on-surface-retreat"] {
+  --main-color: var(--on-surface-retreat);
+  --hover-color: var(--state-on-surface-hover);
+  --pressed-color: var(--state-on-surface-pressed);
+  --focused-color: var(--state-on-surface-focused);
+  --selected-color: var(--state-on-surface-selected);
+  --on-container-hover-color: var(--state-on-surface-hover);
+  --on-container-pressed-color: var(--state-on-surface-pressed);
+  --on-container-focused-color: var(--state-on-surface-focused);
+  --on-container-selected-color: var(--state-on-surface-selected);
+}

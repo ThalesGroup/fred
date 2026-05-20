@@ -4,7 +4,7 @@ import { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 
 export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
-  color: ColorTheme;
+  color: ColorTheme | "on-surface-retreat";
   variant: IconButtonVariant;
   size: ComponentSize;
   icon: IconProps;
