@@ -11,6 +11,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typog
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DeleteIconButton } from "../../shared/ui/buttons/DeleteIconButton";
+import { UploadWarningAlert } from "../../shared/ui/alerts/UploadWarningAlert";
 import { LoadingIcon } from "../../shared/ui/buttons/LoadingIcon";
 import { ToggleIconButton } from "../../shared/ui/buttons/ToggleIconButton";
 import { ViewIconButton } from "../../shared/ui/buttons/ViewIconButton";
@@ -167,6 +168,7 @@ const ChatAttachmentsWidget = ({
           </SimpleTooltip>
         }
       >
+        <UploadWarningAlert sx={{ mb: 1 }} />
         <ChatWidgetList items={items} emptyText={t("chatbot.attachments.noAttachments", "No attachments yet")} />
         <input
           ref={fileInputRef}
