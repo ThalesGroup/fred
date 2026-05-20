@@ -36,7 +36,7 @@ const MenuInternal = <T,>({
 
   if (options.length === 0) {
     return (
-      <div className={`${styles["menu"]} ${styles["menu-empty"]}`} role="status">
+      <div className={`${styles["menu"]} ${styles["menuEmpty"]}`} role="status">
         {noOptionsMessage}
       </div>
     );
@@ -46,7 +46,7 @@ const MenuInternal = <T,>({
     <ul
       ref={listRef}
       id={`${baseId}-listbox`}
-      className={styles["menu"]}
+      className={styles.menu}
       role="listbox"
       aria-activedescendant={activeId}
       tabIndex={-1}
