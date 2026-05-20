@@ -1,51 +1,81 @@
-# AGENT.md
+# Fred Repository Orientation
 
-Quick orientation for AI coding assistants. Read this first, then follow the
-links to the relevant contracts.
+This file is a lightweight orientation guide for AI coding assistants and new contributors.
+
+It is not the primary instruction file.
+
+For mandatory development workflow, governance, and implementation rules, read these files first:
+
+1. `CLAUDE.md` — primary team development workflow and governance guide
+2. `AGENTS.md` — Codex / AI assistant entrypoint and instruction bridge
+3. Any nested `AGENTS.md`, `AGENTS.override.md`, or `CLAUDE.md` files in the target subdirectory
+
+If this file conflicts with `CLAUDE.md` or `AGENTS.md`, follow `CLAUDE.md` and `AGENTS.md`.
+
+---
 
 ## What Fred Is
 
-Fred is a production-ready platform for building and operating multi-agent AI
-applications. It has three planes:
+Fred is an agentic platform organized around several platform planes:
 
-- **Execution** — `libs/fred-runtime` + `apps/fred-agents` (FastAPI SSE pod)
-- **Product / tenancy** — `control-plane-backend` (team, sessions, enrollment)
-- **Knowledge** — `knowledge-flow-backend` (document ingestion + vector search)
-- **Frontend** — `frontend/` (React, rework design system)
+- Execution/runtime plane
+- Product and tenancy plane
+- Knowledge plane
+- Frontend/user-experience plane
 
-`agentic-backend` is being migrated out. Do not add execution logic there.
+The repository contains multiple applications, services, shared packages, and documentation areas. Before making changes, understand which plane and package own the behavior you are modifying.
 
-## Mandatory Context
+---
 
-Read in this order before making changes:
+## Repository Navigation
 
-1. [`docs/platform/DEVELOPER_CONTRACT.md`](./docs/swift/platform/DEVELOPER_CONTRACT.md) — build, test, PR rules
-2. [`docs/platform/PLATFORM_RUNTIME_MAP.md`](./docs/swift/platform/PLATFORM_RUNTIME_MAP.md) — canonical service map
-3. [`docs/backlog/BACKLOG.md`](./docs/swift/backlog/BACKLOG.md) — migration phase status (Phases 0–7)
-4. [`docs/WORKPLAN.md`](./docs/swift/WORKPLAN.md) — current sprint, who owns what
-5. [`docs/design/RUNTIME-EXECUTION-CONTRACT.md`](./docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md) — when touching fred-runtime, fred-sdk, SSE, CLI, KPI
-6. [`docs/design/CONTROL-PLANE-PRODUCT-CONTRACT.md`](./docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md) — when touching control-plane APIs or sessions
-7. [`docs/backlog/CHAT-UI-BACKLOG.md`](./docs/swift/backlog/CHAT-UI-BACKLOG.md) — when touching ManagedChatPage or chat UI components
+Start with:
 
-## Key Rules
+- `CLAUDE.md` for workflow, governance, and development process
+- `AGENTS.md` for Codex-compatible assistant instructions
+- `README.md` for repository-level overview
+- Relevant package-level `README.md` files
+- Relevant `Makefile` targets before inventing new commands
 
-- `agent_instance_id` is the only frontend execution identity — never raw `agent_id`
-- `session_id` is the only conversation identifier — never `thread_id`
-- Control-plane owns product/tenancy/authorization; runtime owns execution only
-- Frontend reads message history from runtime (`messages_url_template`), never from control-plane
-- Never hand-edit generated files (`runtimeOpenApi.ts`, `controlPlaneOpenApi.ts`) — regenerate from source
-- Run `make code-quality && make test` in every touched project
+Do not assume that similar-looking services have identical contracts or runtime behavior. Check the local package documentation and tests.
 
-## Common Make Targets
+---
 
-| Project | Run | Test | Quality |
-|---|---|---|---|
-| `libs/fred-sdk` | — | `make test` | `make code-quality` |
-| `libs/fred-runtime` | `make run` | `make test` | `make code-quality` |
-| `control-plane-backend` | `make run` | `make test` | `make code-quality` |
-| `knowledge-flow-backend` | `make run` | `make test` | `make code-quality` |
-| `frontend` | `make run` | — | `make code-quality` |
+## Development Principle
 
-## Doc Index
+Prefer small, targeted, reversible changes.
 
-Full documentation index: [`docs/README.md`](./docs/swift/README.md)
+Before modifying code:
+
+1. Identify the owning package or service.
+2. Read the relevant local documentation.
+3. Check existing patterns in nearby code.
+4. Reuse existing abstractions instead of creating parallel ones.
+5. Run the relevant quality and test commands defined by the package.
+
+---
+
+## Identity Concepts
+
+Fred commonly distinguishes between:
+
+- `agent_instance_id` — the configured/deployed agent instance
+- `session_id` — a user interaction or conversation session
+- request/message identifiers — individual runtime or transport-level events
+
+Do not conflate these concepts. If changing persistence, runtime execution, tracing, or knowledge integration, verify the expected identity model in the relevant code and contracts.
+
+---
+
+## Common Commands
+
+Prefer existing `make` targets over ad-hoc commands.
+
+Common targets may include:
+
+```bash
+make run
+make test
+make code-quality
+make lint
+make type-check
