@@ -20,6 +20,8 @@ extraction reusable for future vision-enriched PPTX processing.
 """
 
 import logging
+import xml.etree.ElementTree as ET
+import zipfile
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -156,6 +158,116 @@ class PptxMarkdownProcessor(BaseMarkdownProcessor):
 
     def _select_slides_for_vision(self, visual_preanalysis) -> list[int]:
         return [slide_summary.slide_number for slide_summary in visual_preanalysis.slides if slide_summary.needs_vision]
+
+    def _extract_slide_text_lines(self, slide: Any) -> list[str]:
+        lines: list[str] = []
+
+        for shape in getattr(slide, "shapes", []):
+            has_text_frame = bool(getattr(shape, "has_text_frame", False))
+            text_frame = getattr(shape, "text_frame", None)
+
+            if has_text_frame and text_frame is not None:
+                for para in getattr(text_frame, "paragraphs", []):
+                    text = " ".join((getattr(para, "text", "") or "").replace("\r", " ").replace("\n", " ").split()).strip()
+                    if text:
+                        lines.append(text)
+                continue
+
+            text = " ".join((getattr(shape, "text", "") or "").replace("\r", " ").replace("\n", " ").split()).strip()
+            if text:
+                lines.append(text)
+
+        return lines
+    
+    def _extract_text_from_pptx_xml_part(self, pptx_zip: zipfile.ZipFile, part_name: str) -> list[str]:
+        try:
+            xml_bytes = pptx_zip.read(part_name)
+            root = ET.fromstring(xml_bytes)
+        except Exception as e:
+            logger.warning("[PPTX][GUARDRAIL] Failed to parse %s: %s", part_name, e)
+            return []
+
+        lines: list[str] = []
+        for elem in root.iter():
+            if elem.tag.endswith("}t") and elem.text:
+                text = " ".join(elem.text.replace("\r", " ").replace("\n", " ").split()).strip()
+                if text:
+                    lines.append(text)
+
+        return lines
+
+    def _extract_master_layout_xml_lines(self, file_path: Path) -> tuple[list[str], list[str]]:
+        master_lines: list[str] = []
+        layout_lines: list[str] = []
+
+        try:
+            with zipfile.ZipFile(file_path, "r") as pptx_zip:
+                for part_name in pptx_zip.namelist():
+                    if part_name.startswith("ppt/slideMasters/") and part_name.endswith(".xml"):
+                        master_lines.extend(self._extract_text_from_pptx_xml_part(pptx_zip, part_name))
+                    elif part_name.startswith("ppt/slideLayouts/") and part_name.endswith(".xml"):
+                        layout_lines.extend(self._extract_text_from_pptx_xml_part(pptx_zip, part_name))
+        except Exception as e:
+            logger.warning("[PPTX][GUARDRAIL] Failed to inspect PPTX xml parts for %s: %s", file_path, e)
+
+        return master_lines, layout_lines
+
+    def extract_guardrail_text(self, file_path: Path) -> str | None:
+        try:
+            presentation = Presentation(str(file_path))
+        except Exception as e:
+            logger.warning("[PPTX][GUARDRAIL] Failed to open %s: %s", file_path, e)
+            return None
+
+        slides = list(presentation.slides)
+        if not slides:
+            return None
+
+        repeated_noise_texts = detect_repeated_noise_texts(slides)
+        master_xml_lines, layout_xml_lines = self._extract_master_layout_xml_lines(file_path)
+
+        parts: list[str] = []
+
+        if repeated_noise_texts:
+            parts.append("REPEATED_TEXT:")
+            parts.extend(sorted(repeated_noise_texts))
+
+        if master_xml_lines:
+            if parts:
+                parts.append("")
+            parts.append("MASTER_XML:")
+            parts.extend(dict.fromkeys(master_xml_lines))
+
+        if layout_xml_lines:
+            if parts:
+                parts.append("")
+            parts.append("LAYOUT_XML:")
+            parts.extend(dict.fromkeys(layout_xml_lines))
+
+        slide_indexes: list[int] = [0]
+        if len(slides) > 1:
+            slide_indexes.append(len(slides) - 1)
+
+        for slide_index in slide_indexes:
+            slide_lines = self._extract_slide_text_lines(slides[slide_index])
+            if not slide_lines:
+                continue
+
+            if parts:
+                parts.append("")
+            parts.append(f"SLIDE_{slide_index + 1}:")
+            parts.extend(slide_lines[:12])
+
+        result = "\n".join(parts).strip()
+
+        if result:
+            logger.info(
+                "[PPTX][GUARDRAIL] Extracted guardrail text for %s:\n%s",
+                file_path.name,
+                result,
+            )
+
+        return result or None
 
     def check_file_validity(self, file_path: Path) -> bool:
         """Checks if the PPTX file is valid and can be opened."""

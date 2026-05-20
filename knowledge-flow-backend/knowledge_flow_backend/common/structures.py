@@ -890,6 +890,37 @@ class WorkspaceLayoutConfig(BaseModel):
                     raise ValueError(f"{field_name} must contain placeholder {{{req}}}")
         return self
 
+class DocumentMarkingPatternConfig(BaseModel):
+    label: str = Field(..., min_length=1, description="Normalized label returned when the regex matches.")
+    pattern: str = Field(..., min_length=1, description="Regex used to detect the marking in extracted guardrail text.")
+
+
+class DocumentGuardrailConfig(BaseModel):
+    enabled: bool = Field(default=False, description="Enable ingestion-time document marking guardrails.")
+    source_tags: list[str] = Field(
+        default_factory=list,
+        description="Optional source tags this guardrail applies to. Empty means all sources.",
+    )
+    allowed_labels: list[str] = Field(
+        default_factory=list,
+        description="Optional allow-list of labels accepted by the guardrail. Empty means detection-only.",
+    )
+    on_no_label: Literal["allow", "warn", "reject"] = Field(
+        default="allow",
+        description="Behavior when no explicit document marking is detected.",
+    )
+    patterns: list[DocumentMarkingPatternConfig] = Field(
+        default_factory=list,
+        description="Regex patterns used to recognize explicit document markings.",
+    )
+
+    @model_validator(mode="after")
+    def validate_guardrail(self) -> "DocumentGuardrailConfig":
+        if not self.enabled:
+            return self
+        if not self.patterns:
+            raise ValueError("document_guardrail.patterns must not be empty when the guardrail is enabled")
+        return self
 
 class Configuration(BaseModel):
     app: AppConfig
@@ -908,8 +939,12 @@ class Configuration(BaseModel):
     security: SecurityConfiguration
     attachment_processors: Optional[List[ProcessorConfig]] = Field(
         default=None,
+        description="Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+    )
+    document_guardrail: DocumentGuardrailConfig = Field(
+        default=None,
         description=(
-            "Optional fast-text processors for attachments. Uses the same ProcessorConfig structure, but classes must subclass BaseFastTextProcessor. If omitted, the default fast processor is used."
+            "Optional ingestion-time guardrail for explicit document markings.",
         ),
     )
     output_processors: Optional[List[ProcessorConfig]] = None
