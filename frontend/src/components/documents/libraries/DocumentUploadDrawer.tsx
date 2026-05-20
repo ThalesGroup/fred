@@ -31,7 +31,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { usePermissions } from "../../../security/usePermissions";
-import { useFrontendProperties } from "../../../hooks/useFrontendProperties";
+import { useLocalizedUploadWarning } from "../../../hooks/useLocalizedUploadWarning";
 import { SimpleTooltip } from "../../../shared/ui/tooltips/Tooltips";
 import { UploadProcessProgressSummary, streamUploadOrProcessDocument } from "../../../slices/streamDocumentUpload";
 import {
@@ -56,25 +56,31 @@ interface DocumentUploadDrawerProps {
   metadata?: Record<string, any>;
 }
 
+/**
+ * Render the document upload drawer with ingestion controls, progress tracking,
+ * and platform-level upload guidance.
+ *
+ * Why: document upload is a multi-step flow and this component keeps the file
+ * selection, processing, and warning banner behavior in one place.
+ *
+ * How to use: mount it from a document library view, control visibility with
+ * `isOpen`, and react to lifecycle events with `onClose` and
+ * `onUploadComplete`.
+ */
 export const DocumentUploadDrawer: React.FC<DocumentUploadDrawerProps> = ({
   isOpen,
   onClose,
   onUploadComplete,
   metadata,
 }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { showError, showInfo } = useToast();
   const theme = useTheme();
   const { can } = usePermissions();
   // TODO(security): replace this temporary gate with a dedicated permission for profile selection.
   const canSelectProcessingProfile = can("document", "update");
 
-  const { uploadWarning } = useFrontendProperties();
-  const uploadWarningMessage = uploadWarning?.messages
-    ? (uploadWarning.messages[i18n.language?.split("-")[0] ?? "en"] ??
-        uploadWarning.messages["en"] ??
-        null)
-    : null;
+  const { uploadWarning, uploadWarningMessage } = useLocalizedUploadWarning();
 
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
   const [processingProfile, setProcessingProfile] = useState<IngestionProcessingProfile>("fast");
