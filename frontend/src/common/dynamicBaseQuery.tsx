@@ -55,7 +55,7 @@ export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknow
     let result = await raw(requestArgs, api, extraOptions);
 
     // If request is rate limited, retry after delay
-    while (result.error && result.error.originalStatus === 503 && !api.signal.aborted) {
+    while (result.error && result.error.status === 503 && !api.signal.aborted) {
       try {
         await wait(RETRY_503_DELAY_MS, api.signal);
         result = await raw(requestArgs, api, extraOptions);

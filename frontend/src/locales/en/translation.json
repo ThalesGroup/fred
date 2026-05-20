@@ -25,6 +25,14 @@
     "contactSupport": "Contact support team.",
     "failToLoad": "Fail to load resources"
   },
+  "bootstrapFailure": {
+    "backendUnavailableTitle": "Service temporarily busy",
+    "backendUnavailableDescription": "The service is currently experiencing a short load spike or is temporarily unreachable. Please try again in a few moments.",
+    "genericTitle": "Service temporarily unavailable",
+    "genericDescription": "The backend is currently experiencing a short load spike or is temporarily unreachable. Please try again in a few moments.",
+    "retry": "Retry",
+    "home": "Open home"
+  },
   "dataHub": {
     "title": "Data Hub - Document Lineage",
     "refresh": "Refresh",
