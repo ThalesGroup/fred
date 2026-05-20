@@ -80,8 +80,7 @@ async function fetchJsonOrThrow<T>(
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      const isBackendUnavailable =
-        treatUnavailableAsBackendDown && BACKEND_UNAVAILABLE_STATUSES.has(response.status);
+      const isBackendUnavailable = treatUnavailableAsBackendDown && BACKEND_UNAVAILABLE_STATUSES.has(response.status);
       throw new ConfigLoadError({
         kind: isBackendUnavailable ? "backend_unavailable" : "bootstrap_failed",
         url,
