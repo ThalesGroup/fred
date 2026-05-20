@@ -1,0 +1,112 @@
+.btn {
+  cursor: var(--btn-cursor, pointer);
+  margin: 0;
+  outline: 2px solid var(--btn-outline, transparent);
+  border: 1px solid var(--btn-border, transparent);
+  border-radius: var(--radius-s);
+  background-color: var(--btn-background, transparent);
+  padding: 0;
+  overflow: hidden;
+}
+
+.stateLayer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--gap);
+  background-color: var(--btn-background-surface);
+  padding: 0 var(--spacing-right) 0 var(--spacing-left);
+  height: 100%;
+  color: var(--btn-text-color);
+  font: var(--font-title-small);
+}
+
+.btn[data-variant="filled"] {
+  --btn-background: var(--main-color);
+  --btn-text-color: var(--on-main-color);
+
+  &:hover:not(:disabled) {
+    --btn-background-surface: var(--hover-color);
+  }
+
+  &:active:not(:disabled) {
+    --btn-background-surface: var(--pressed-color);
+  }
+}
+
+.btn[data-variant="outlined"] {
+  --btn-border: var(--main-color);
+  --btn-text-color: var(--main-color);
+
+  &:hover:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-hover);
+  }
+
+  &:active:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-pressed);
+  }
+}
+
+.btn[data-variant="text"] {
+  --btn-text-color: var(--main-color);
+
+  &:hover:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-hover);
+  }
+
+  &:active:not(:disabled) {
+    --btn-background-surface: var(--state-on-surface-pressed);
+  }
+}
+
+.btn:focus-visible {
+  --btn-outline: var(--on-surface);
+}
+
+.btn[data-size="small"] {
+  height: 2rem;
+  --gap: var(--spacing-2xs);
+}
+
+.btn[data-size="medium"] {
+  height: 2.5rem;
+  --gap: var(--spacing-xs);
+}
+
+.btn[data-size="small"] .stateLayer[data-icon="none"] {
+  --spacing-right: var(--spacing-s);
+  --spacing-left: var(--spacing-s);
+}
+
+.btn[data-size="medium"] .stateLayer[data-icon="none"] {
+  --spacing-right: var(--spacing-m);
+  --spacing-left: var(--spacing-m);
+}
+
+.btn[data-size="small"] .stateLayer[data-icon="left"] {
+  --spacing-right: var(--spacing-s);
+  --spacing-left: var(--spacing-xs);
+}
+
+.btn[data-size="medium"] .stateLayer[data-icon="left"] {
+  --spacing-right: var(--spacing-m);
+  --spacing-left: var(--spacing-s);
+}
+
+.btnIcon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+.btn:disabled {
+  --btn-background-surface: transparent;
+  --btn-background: var(--state-on-surface-disabled);
+  --btn-text-color: var(--state-text-disabled);
+  --btn-cursor: default;
+
+  &.btn-outlined {
+    --btn-border: var(--state-on-surface-disabled);
+  }
+}

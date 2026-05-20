@@ -1,5 +1,5 @@
 import TeamSelectionItem from "@shared/organisms/Sidebar/TeamSelectionNavbar/TeamSelectionItem/TeamSelectionItem.tsx";
-import styles from "./TeamSelectionNavbar.module.scss";
+import styles from "./TeamSelectionNavbar.module.css";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";

@@ -1,4 +1,4 @@
-import styles from "./ImageFileInput.module.scss";
+import styles from "./ImageFileInput.module.css";
 import { ComponentPropsWithRef, CSSProperties } from "react";
 
 interface ImageFileInputProps extends Omit<ComponentPropsWithRef<"input">, "type"> {
@@ -10,10 +10,10 @@ interface ImageFileInputProps extends Omit<ComponentPropsWithRef<"input">, "type
 }
 export default function ImageFileInput({ imageUrl, width, height, alt, ref, ...props }: ImageFileInputProps) {
   return (
-    <label className={styles["image-file-input-container"]}>
-      <input type="file" ref={ref} className={styles["native-input"]} {...props} />
+    <label className={styles.imageFileInputContainer}>
+      <input type="file" ref={ref} className={styles.nativeInput} {...props} />
       <div
-        className={styles["image-wrapper"]}
+        className={styles.imageWrapper}
         style={
           {
             "--image-width": width,
@@ -21,7 +21,7 @@ export default function ImageFileInput({ imageUrl, width, height, alt, ref, ...p
           } as CSSProperties
         }
       >
-        <img className={styles["image-file-input-image"]} src={imageUrl} alt={alt} />
+        <img className={styles.imageFileInputImage} src={imageUrl} alt={alt} />
       </div>
     </label>
   );

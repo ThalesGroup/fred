@@ -1,4 +1,4 @@
-import styles from "./NavigationMenu.module.scss";
+import styles from "./NavigationMenu.module.css";
 import NavigationMenuItem, {
   NavigationMenuItemProps,
 } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
@@ -9,7 +9,7 @@ export interface NavigationMenuProps {
 
 export default function NavigationMenu({ items }: NavigationMenuProps) {
   return (
-    <div className={styles["navigation-menu-container"]}>
+    <div className={styles.navigationMenuContainer}>
       {items.map((item) => {
         const key = item.type === "link" ? String(item.linkProps.to) : item.label;
         return <NavigationMenuItem key={key} {...item} />;

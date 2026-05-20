@@ -1,4 +1,4 @@
-import styles from "./MarketplaceNavbar.module.scss";
+import styles from "./MarketplaceNavbar.module.css";
 import { useTranslation } from "react-i18next";
 import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
 import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
@@ -24,8 +24,8 @@ export default function MarketplaceNavbar() {
   ];
 
   return (
-    <div className={styles["marketplace-navbar-container"]}>
-      <div className={styles["marketplace-navbar-title"]}>{t("rework.sidebar.marketplace.title")}</div>
+    <div className={styles.marketplaceNavbarContainer}>
+      <div className={styles.marketplaceNavbarTitle}>{t("rework.sidebar.marketplace.title")}</div>
       <NavigationMenu items={navigationItems}></NavigationMenu>
     </div>
   );

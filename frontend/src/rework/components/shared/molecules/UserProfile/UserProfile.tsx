@@ -1,4 +1,4 @@
-import styles from "./UserProfile.module.scss";
+import styles from "./UserProfile.module.css";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";

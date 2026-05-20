@@ -1,5 +1,5 @@
 import { cloneElement, CSSProperties, HTMLAttributes, ReactElement, useId, useRef } from "react";
-import styles from "./Tooltip.module.scss";
+import styles from "./Tooltip.module.css";
 
 interface TooltipProps {
   text: string;
@@ -33,7 +33,7 @@ export const Tooltip = ({ text, children }: TooltipProps) => {
         id={tooltipId}
         popover="manual"
         style={{ positionAnchor: anchorName } as CSSProperties}
-        className={styles["tooltip-content"]}
+        className={styles.tooltipContent}
       >
         {text}
       </div>

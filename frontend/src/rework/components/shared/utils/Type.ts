@@ -1,13 +1,4 @@
-export type ColorTheme =
-  | "primary"
-  | "secondary"
-  | "tertiary"
-  | "error"
-  | "success"
-  | "warning"
-  | "info"
-  | "on-surface"
-  | "on-surface-retreat";
+export type ColorTheme = "primary" | "secondary" | "tertiary" | "error" | "success" | "warning" | "info" | "on-surface";
 export type ButtonVariant = "filled" | "outlined" | "text";
 
 /**

@@ -1,5 +1,5 @@
 import { memo, useRef, useEffect, ReactElement } from "react";
-import styles from "./Menu.module.scss";
+import styles from "./Menu.module.css";
 import { OptionModel } from "@models/Option.model.ts";
 import MenuItem from "@shared/atoms/MenuItem/MenuItem.tsx";
 
@@ -36,7 +36,7 @@ const MenuInternal = <T,>({
 
   if (options.length === 0) {
     return (
-      <div className={`${styles["menu"]} ${styles["menuEmpty"]}`} role="status">
+      <div className={`${styles.menu} ${styles.menuEmpty}`} role="status">
         {noOptionsMessage}
       </div>
     );

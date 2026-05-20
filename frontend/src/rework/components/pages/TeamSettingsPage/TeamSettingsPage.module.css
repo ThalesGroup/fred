@@ -1,4 +1,4 @@
-.team-settings-page {
+.teamSettingsPage {
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: var(--spacing-m);
