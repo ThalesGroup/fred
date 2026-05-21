@@ -32,21 +32,6 @@ from fred_runtime.app import load_agent_pod_config
 
 
 def main() -> None:
-    """
-    Start the standalone pod with Uvicorn using YAML-configured runtime limits.
-
-    Why this function exists:
-    - local pod startup should keep using the same `ENV_FILE` / `CONFIG_FILE`
-      contract as the other Fred backends
-    - the optional Uvicorn concurrency cap belongs in `configuration.yaml`,
-      not in `make run` arguments
-
-    How to use it:
-    - call via `python -m fred_agents`
-    - set `app.limit_concurrency` in `configuration.yaml` only when you want
-      Uvicorn to reject excess concurrent connections with HTTP 503
-    """
-
     config = load_agent_pod_config()
     uvicorn.run(
         "fred_agents.main:app",
