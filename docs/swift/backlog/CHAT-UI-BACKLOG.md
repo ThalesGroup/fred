@@ -839,6 +839,77 @@ change.
 
 ---
 
+## 7 Phase CHAT-06 — test_assistant rich content scenarios
+
+> **ID:** `CHAT-06` — `docs/swift/data/id-legend.yaml`
+> **Scope:** backend only — `apps/fred-agents/fred_agents/test_assistant/`
+> **Purpose:** make `fred.github.test_assistant` a complete rendering test harness for the chat UI,
+> covering every content type the new `MarkdownRenderer` must handle without requiring a live LLM.
+
+---
+
+### 7.1 Current gaps
+
+The test agent covers SSE events (streaming, HITL, error, sources) and all FieldSpec form types.
+It does **not** exercise rich content rendering. No existing scenario produces:
+
+| Content type | Needed for |
+|---|---|
+| Fenced code block with language (`python`, `bash`, …) | Syntax highlighting |
+| Mermaid diagram | `Mermaid` renderer |
+| GFM table | Table rendering |
+| GeoJSON `FeatureCollection` | Leaflet map renderer |
+| KaTeX inline math | Math rendering |
+| KaTeX block math | Math rendering |
+| `:::details` collapsible | remark-directive plugin |
+
+---
+
+### 7.2 New scenario: `markdown`
+
+Add a `markdown_step` triggered by the keyword prefix `markdown`.
+The step emits a single static assistant message that contains one well-formed
+example of each content type listed in §7.1.
+
+**Content requirements per block:**
+
+| Block | Minimum content |
+|---|---|
+| Code | A short Python function (5–8 lines), fenced ` ```python ` |
+| Mermaid | A 4-node flowchart (`graph TD`), fenced ` ```mermaid ` |
+| Table | 3 columns × 3 data rows, GFM pipe syntax |
+| GeoJSON | Inline JSON literal: `FeatureCollection` with 2 `Point` features and 1 `Polygon` |
+| Math inline | One expression rendered with `$…$` |
+| Math block | One expression rendered with `$$…$$` |
+| Details | One `:::details[Title]` block wrapping a short paragraph |
+
+**Routing wiring:**
+- `dispatch_step`: add `elif text.startswith("markdown"): scenario = "markdown"`
+- `graph_agent.py` workflow: add node `"markdown": markdown_step` and edge `"markdown": "finalize"`
+- `_SCENARIO_TABLE` in `fallback_step`: add the `markdown` row
+
+---
+
+### 7.3 Tasks
+
+- [ ] Add `markdown_step` to `graph_steps.py` with static rich content payload
+- [ ] Wire `markdown` route in `dispatch_step`
+- [ ] Register node + edge in `GraphWorkflow` in `graph_agent.py`
+- [ ] Add `markdown` row to `_SCENARIO_TABLE` fallback menu
+- [ ] Run `make code-quality` in `apps/fred-agents` — passes
+- [ ] Manual verification: send `markdown` to the agent, confirm all 7 content blocks appear in the reply
+
+---
+
+### 7.4 Acceptance criteria
+
+- Sending `markdown` to `fred.github.test_assistant` produces a reply containing all 7 content types
+- No LLM or MCP server required
+- `make code-quality` passes in `apps/fred-agents`
+- `_SCENARIO_TABLE` in the fallback help menu includes the `markdown` row
+
+---
+
 ## 6 Progress
 
 | Phase | Status | Notes |
