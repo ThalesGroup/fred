@@ -34,6 +34,6 @@ dev: $(TARGET)/.compiled ## Install from compiled lock
 
 
 .PHONY: update
-update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies
-	$(UV) sync
+update: $(TARGET)/.uv-installed ## Re-resolve and update all dependencies for the dev environment
+	$(UV) sync --extra dev
 	touch $(TARGET)/.compiled
