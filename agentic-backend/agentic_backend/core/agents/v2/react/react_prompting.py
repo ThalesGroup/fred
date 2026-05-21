@@ -31,6 +31,7 @@ Example:
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from ..contracts.context import BoundRuntimeContext
@@ -108,9 +109,45 @@ def render_prompt_template(
     - `render_prompt_template(template, binding=binding, agent_id="custodian")`
     """
 
-    return template.format_map(
-        _LiteralFriendlyDict(safe_prompt_token_map(binding, agent_id=agent_id))
+    # Use regex substitution instead of str.format_map so that code-like braces
+    # in the template (e.g. `{}`, `{key.attr}`) are left verbatim rather than
+    # raising IndexError / AttributeError.  Only simple `{word}` placeholders
+    # that appear in the known token map are substituted.
+    token_map = safe_prompt_token_map(binding, agent_id=agent_id)
+    return re.sub(
+        r"\{(\w+)\}",
+        lambda m: token_map.get(m.group(1), m.group(0)),
+        template,
     )
+
+
+_SAFE_PLACEHOLDER_RE = re.compile(r"^\w+$")
+
+
+def find_invalid_prompt_placeholders(template: str) -> list[str]:
+    """
+    Return any {…} placeholders that cannot be substituted safely.
+
+    Why this exists:
+    - `render_prompt_template` only substitutes simple `{word}` placeholders
+    - other patterns (`{}`, `{key.attr}`, `{key[0]}`) are left verbatim but look
+      like template variables to users, who may have introduced them accidentally
+      from pasted code snippets
+    - surfacing them at write time lets callers return a clear 422 rather than
+      silently leaving the prompt with unexpected literal braces
+
+    How to use:
+    - call before persisting a system prompt template and raise if the result is
+      non-empty
+
+    Example:
+    - `find_invalid_prompt_placeholders("main() { ... }")` → `["{ ... }"]`
+    """
+    bad = []
+    for content in re.findall(r"\{([^}]*)\}", template):
+        if not _SAFE_PLACEHOLDER_RE.match(content):
+            bad.append("{" + content + "}")
+    return bad
 
 
 def normalize_response_language(language: str | None) -> str:
