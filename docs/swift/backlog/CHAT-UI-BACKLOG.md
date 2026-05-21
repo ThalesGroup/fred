@@ -892,11 +892,11 @@ example of each content type listed in §7.1.
 
 ### 7.3 Tasks
 
-- [ ] Add `markdown_step` to `graph_steps.py` with static rich content payload
-- [ ] Wire `markdown` route in `dispatch_step`
-- [ ] Register node + edge in `GraphWorkflow` in `graph_agent.py`
-- [ ] Add `markdown` row to `_SCENARIO_TABLE` fallback menu
-- [ ] Run `make code-quality` in `apps/fred-agents` — passes
+- [x] Add `markdown_step` to `graph_steps.py` with static rich content payload
+- [x] Wire `markdown` route in `dispatch_step`
+- [x] Register node + edge in `GraphWorkflow` in `graph_agent.py`
+- [x] Add `markdown` row to `_SCENARIO_TABLE` fallback menu
+- [x] Run `make code-quality` in `apps/fred-agents` — passes (0 errors, 0 warnings)
 - [ ] Manual verification: send `markdown` to the agent, confirm all 7 content blocks appear in the reply
 
 ---

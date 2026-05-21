@@ -196,6 +196,8 @@ async def dispatch_step(
         scenario = "trace"
     elif text.startswith("error"):
         scenario = "error"
+    elif text.startswith("markdown"):
+        scenario = "markdown"
     elif text.startswith("long"):
         scenario = "long"
     else:
@@ -612,6 +614,132 @@ async def long_step(
     )
 
 
+# ── Step: markdown ────────────────────────────────────────────────────────────
+
+_MARKDOWN_PAYLOAD = """\
+## Rich Content Rendering Test
+
+This reply exercises every content type the chat renderer must handle.
+No LLM required — content is static.
+
+---
+
+### 1 — Fenced code block
+
+```python
+def fibonacci(n: int) -> list[int]:
+    '''Return the first n Fibonacci numbers.'''
+    seq: list[int] = [0, 1]
+    while len(seq) < n:
+        seq.append(seq[-1] + seq[-2])
+    return seq[:n]
+
+print(fibonacci(10))  # [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+```
+
+---
+
+### 2 — Mermaid diagram
+
+```mermaid
+graph TD
+    A[User message] --> B{dispatch_step}
+    B -->|markdown| C[markdown_step]
+    B -->|echo| D[echo_step]
+    C --> E[finalize_step]
+    D --> E
+```
+
+---
+
+### 3 — GFM table
+
+| Scenario | Keyword | Events exercised |
+|---|---|---|
+| Echo | `echo` | status × 3, assistant_delta, final |
+| HITL choice | `hitl choice` | status, awaiting_human, final |
+| Long stream | `long` | status, assistant_delta × 30, final |
+
+---
+
+### 4 — GeoJSON (map)
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.3522, 48.8566] },
+      "properties": { "name": "Paris" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [13.4050, 52.5200] },
+      "properties": { "name": "Berlin" }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[2.33,48.85],[2.37,48.85],[2.37,48.87],[2.33,48.87],[2.33,48.85]]]
+      },
+      "properties": { "name": "Test zone", "color": "#6366f1", "fillOpacity": 0.2 }
+    }
+  ]
+}
+```
+
+---
+
+### 5 — Inline math
+
+The quadratic formula: $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$ for $ax^2 + bx + c = 0$.
+
+---
+
+### 6 — Block math
+
+$$
+\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}
+$$
+
+---
+
+### 7 — Details / collapsible
+
+:::details[Implementation notes]
+Rendered by `remark-directive`. Hidden by default; expands on click.
+Until wired into `MarkdownRenderer`, this block renders as plain text.
+:::
+"""
+
+
+@typed_node(TestState)
+async def markdown_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Emit a static reply containing all rich content types the renderer must handle.
+
+    Content: fenced code (Python), Mermaid diagram, GFM table, GeoJSON
+    FeatureCollection, KaTeX inline math, KaTeX block math, :::details collapsible.
+
+    SSE events exercised: status, final.
+    No LLM required.
+    """
+    delay = _delay_seconds(context)
+    context.emit_status("markdown", "Emitting rich content rendering test payload.")
+    await asyncio.sleep(0.05 + delay)
+    return StepResult(
+        state_update={
+            "final_text": _MARKDOWN_PAYLOAD,
+            "done_reason": "markdown_complete",
+        }
+    )
+
+
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
 _SCENARIO_TABLE = """\
@@ -624,6 +752,7 @@ _SCENARIO_TABLE = """\
 | `hitl text` | HITL free-text input gate |
 | `trace` | Status events + streamed text + mock sources (SourcesPanel) |
 | `error` | Deliberate node error → on_error route |
+| `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `long` | 30-sentence word-by-word streaming reply |"""
 
 

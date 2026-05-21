@@ -78,6 +78,7 @@ from .graph_steps import (
     hitl_choice_step,
     hitl_text_step,
     long_step,
+    markdown_step,
     model_probe_step,
     trace_step,
 )
@@ -112,7 +113,7 @@ class TestAssistantGraphAgent(GraphAgent):
         "text-multiline, array, secret, url). Also declares tool refs to validate "
         "form rendering of those sections. "
         "Keyword-prefix routing: echo | model routing | model planning | "
-        "hitl choice | hitl text | trace | error | long."
+        "hitl choice | hitl text | trace | error | markdown | long."
     )
     tags: tuple[str, ...] = ("test", "graph", "hitl", "streaming", "no-llm", "dev")
 
@@ -322,6 +323,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "hitl_text": hitl_text_step,
             "trace": trace_step,
             "error": error_step,
+            "markdown": markdown_step,
             "long": long_step,
             "fallback": fallback_step,
             "finalize": finalize_step,
@@ -332,6 +334,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "hitl_choice": "finalize",
             "hitl_text": "finalize",
             "trace": "finalize",
+            "markdown": "finalize",
             "long": "finalize",
             "fallback": "finalize",
         },
@@ -347,6 +350,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "hitl_text": "hitl_text",
                 "trace": "trace",
                 "error": "error",
+                "markdown": "markdown",
                 "long": "long",
                 "fallback": "fallback",
             },
