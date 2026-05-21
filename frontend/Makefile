@@ -2,28 +2,39 @@ include ../scripts/makefiles/config/INFO-frontend.mk
 
 .DEFAULT_GOAL := help
 
-NODE_VERSION=22.13.0
+NODE_VERSION=24.15.0
+NPM_VERSION=11.0.0
+NVMRC_PATH=../.nvmrc
+NVM_USE=if [ -s "$$HOME/.nvm/nvm.sh" ] && [ -f "$(NVMRC_PATH)" ]; then . "$$HOME/.nvm/nvm.sh" >/dev/null 2>&1 && nvm use --silent "$$(cat $(NVMRC_PATH))" >/dev/null; fi;
 
 ##@ Build
 
 .PHONY: check-node
-check-node: ## Check if Node.js version is at least the required version
-	@REQUIRED=$(NODE_VERSION); \
-	CURRENT=$$(node -v | sed 's/^v//'); \
-	verlte() { [ "$$1" = "$$2" ] && return 0 || [  "$$(printf '%s\n' "$$1" "$$2" | sort -V | head -n1)" = "$$1" ]; }; \
-	if ! verlte "$$REQUIRED" "$$CURRENT"; then \
-		echo "Node.js v$$REQUIRED or higher is required, but found v$$CURRENT. Please use the correct version."; \
+check-node: ## Check if Node.js and npm versions satisfy the frontend requirements
+	@$(NVM_USE) \
+	NODE_REQUIRED=$(NODE_VERSION); \
+	NPM_REQUIRED=$(NPM_VERSION); \
+	NODE_CURRENT=$$(node -v | sed 's/^v//'); \
+	NPM_CURRENT=$$(npm -v); \
+	verlte() { [ "$$1" = "$$2" ] && return 0 || [ "$$(printf '%s\n' "$$1" "$$2" | sort -V | head -n1)" = "$$1" ]; }; \
+	if ! verlte "$$NODE_REQUIRED" "$$NODE_CURRENT"; then \
+		echo "Node.js v$$NODE_REQUIRED or higher is required, but found v$$NODE_CURRENT. Install nvm or run 'nvm use' from the repo root to load .nvmrc."; \
+		exit 1; \
+	fi; \
+	if ! verlte "$$NPM_REQUIRED" "$$NPM_CURRENT"; then \
+		echo "npm v$$NPM_REQUIRED or higher is required, but found v$$NPM_CURRENT. Install nvm or run 'nvm use' from the repo root to load .nvmrc."; \
 		exit 1; \
 	fi
 
 
 .PHONY: regen-lockfile
-regen-lockfile: check-node ## Regenerate package-lock.json inside Docker
-	docker run --rm -it -v $(CURDIR):/src -w /src node:22.13.0 bash -c "rm -rf node_modules package-lock.json && npm install"
+regen-lockfile: ## Regenerate package-lock.json inside Docker
+	docker run --rm -it -v $(CURDIR):/src -w /src node:24.15.0 bash -c "rm -rf node_modules package-lock.json && npm install"
 
 .PHONY: node_modules
 node_modules: check-node package.json
-	@if [ -f package-lock.json ]; then \
+	@$(NVM_USE) \
+	if [ -f package-lock.json ]; then \
 		npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
 	else \
 		npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
@@ -31,7 +42,7 @@ node_modules: check-node package.json
 
 .PHONY: build
 build: check-node node_modules ## Build the ui using npm run build
-	npm run build
+	@$(NVM_USE) npm run build
 
 .PHONY: helm-package
 helm-package: ## Package the Helm chart into a chart archive
@@ -70,40 +81,40 @@ docker-run: run-docker ## Backward-compatible alias for run-docker
 
 .PHONY: run
 run: check-node node_modules ## Run frontend locally (Vite proxy handles backend routing)
-	npm run dev
+	@$(NVM_USE) npm run dev
 
 ##@ Dev
 
 .PHONY: format
-format: ## Use prettier to format all codebase
-	npx prettier . --write
+format: check-node ## Use prettier to format all codebase
+	@$(NVM_USE) npx prettier . --write
 
 .PHONY: update-agentic-api
-update-agentic-api: ## update the generated hooks used in UI based on agentic backend openApi spec
+update-agentic-api: check-node ## update the generated hooks used in UI based on agentic backend openApi spec
 	@echo "🔧 Installing frontend dependencies..."
-	npm ci
+	@$(NVM_USE) npm ci
 	@echo "🔧 Generating agentic backend OpenAPI specification..."
 	cd ../agentic-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for agentic backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
+	@$(NVM_USE) npx -y @rtk-query/codegen-openapi src/slices/agentic/agenticOpenApiConfig.json
 
 .PHONY: update-knowledge-flow-api
-update-knowledge-flow-api: ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
+update-knowledge-flow-api: check-node ## update the generated hooks used in UI based on knowledge-flow backend openApi spec
 	@echo "🔧 Installing frontend dependencies..."
-	npm ci
+	@$(NVM_USE) npm ci
 	@echo "🔧 Generating knowledge-flow backend OpenAPI specification..."
 	cd ../knowledge-flow-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for knowledge-flow backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
+	@$(NVM_USE) npx -y @rtk-query/codegen-openapi src/slices/knowledgeFlow/knowledgeFlowOpenApiConfig.json
 
 .PHONY: update-control-plane-api
-update-control-plane-api: ## update the generated hooks used in UI based on control-plane backend openApi spec
+update-control-plane-api: check-node ## update the generated hooks used in UI based on control-plane backend openApi spec
 	@echo "🔧 Installing frontend dependencies..."
-	npm ci
+	@$(NVM_USE) npm ci
 	@echo "🔧 Generating control-plane backend OpenAPI specification..."
 	cd ../control-plane-backend && make generate-openapi
 	@echo "🎯 Generating RTK Query hooks for control-plane backend..."
-	npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
+	@$(NVM_USE) npx -y @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json
 
 ##@ Clean
 

@@ -114,7 +114,7 @@ When the terminal prompt appears, the workspace is ready but you still need to r
 | Python       | Programming language       | 3.12.8                                                                                              | Use `pyenv install 3.12.8`                                                                  |
 | python3-venv | Python venv module/package | matching                                                                                            | Bundled with Python 3 on most systems; otherwise `apt install python3-venv` (Debian/Ubuntu) |
 | nvm          | Node installer             | latest                                                                                              | [nvm installation instructions](https://github.com/nvm-sh/nvm#installing-and-updating)      |
-| Node.js      | Programming language       | 22.13.0                                                                                             | Use `nvm install 22.13.0`                                                                   |
+| Node.js      | Programming language       | 24.15.0                                                                                             | Use `nvm install 24.15.0`                                                                   |
 | Make         | Utility                    | system                                                                                              | Install via system package manager (e.g., `apt install make`, `brew install make`)          |
 | yq           | Utility                    | system                                                                                              | Install via system package manager                                                          |
 | SQLite       | Local RDBMS engine         | ≥ 3.35.0                                                                                            | Install via system package manager                                                          |
@@ -142,7 +142,7 @@ graph TD
         Pandoc["Pandoc"]
         libmagic["libmagic"]
         Pyenv["Pyenv (Python installer)"]
-        Node["Node 22.13.0"]
+        Node["Node 24.15.0"]
         NVM["nvm (Node installer)"]
     end
 
