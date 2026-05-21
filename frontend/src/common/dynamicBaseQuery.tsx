@@ -4,14 +4,30 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // ...
 
-import { fetchBaseQuery, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn } from "@reduxjs/toolkit/query";
+import { FetchArgs, fetchBaseQuery, FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import { KeyCloakService } from "../security/KeycloakService";
 
-const RETRY_503_DELAY_MS = 2000;
+const RETRY_DELAY_MS = 2000;
 
+/**
+ * Returns true when RTK Query preserved an original HTTP status on the fetch error.
+ * Use this before reading `error.originalStatus` in retry conditions.
+ */
 const hasOriginalStatus = (error: FetchBaseQueryError): error is FetchBaseQueryError & { originalStatus: number } => {
   return "originalStatus" in error && typeof error.originalStatus === "number";
+};
+
+/**
+ * Returns true for transient backend errors that should be retried.
+ * We currently retry `502` and `503`.
+ */
+const isRetryableBackendError = (error: FetchBaseQueryError): boolean => {
+  return (
+    error.status === 502 ||
+    error.status === 503 ||
+    (hasOriginalStatus(error) && (error.originalStatus === 502 || error.originalStatus === 503))
+  );
 };
 
 const wait = (ms: number, signal?: AbortSignal): Promise<void> =>
@@ -58,14 +74,10 @@ export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknow
     // 2) First attempt
     let result = await raw(requestArgs, api, extraOptions);
 
-    // If request is rate limited, retry after delay
-    while (
-      result.error &&
-      (result.error.status === 503 || (hasOriginalStatus(result.error) && result.error.originalStatus === 503)) &&
-      !api.signal.aborted
-    ) {
+    // Retry briefly when the backend is saturated or temporarily has no ready pod.
+    while (result.error && isRetryableBackendError(result.error) && !api.signal.aborted) {
       try {
-        await wait(RETRY_503_DELAY_MS, api.signal);
+        await wait(RETRY_DELAY_MS, api.signal);
         result = await raw(requestArgs, api, extraOptions);
       } catch {
         break;
