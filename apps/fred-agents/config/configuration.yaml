@@ -4,6 +4,9 @@ app:
   host: "0.0.0.0"
   port: 8000
   log_level: "debug"
+  # Optional hard ceiling on concurrent HTTP/WebSocket connections accepted by
+  # Uvicorn. Set to null to disable the limit.
+  limit_concurrency: null
   openai_compat: true
 
 
