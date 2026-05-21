@@ -10,6 +10,10 @@ import { KeyCloakService } from "../security/KeycloakService";
 
 const RETRY_503_DELAY_MS = 2000;
 
+const hasOriginalStatus = (error: FetchBaseQueryError): error is FetchBaseQueryError & { originalStatus: number } => {
+  return "originalStatus" in error && typeof error.originalStatus === "number";
+};
+
 const wait = (ms: number, signal?: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -55,7 +59,11 @@ export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknow
     let result = await raw(requestArgs, api, extraOptions);
 
     // If request is rate limited, retry after delay
-    while (result.error && result.error.originalStatus === 503 && !api.signal.aborted) {
+    while (
+      result.error &&
+      (result.error.status === 503 || (hasOriginalStatus(result.error) && result.error.originalStatus === 503)) &&
+      !api.signal.aborted
+    ) {
       try {
         await wait(RETRY_503_DELAY_MS, api.signal);
         result = await raw(requestArgs, api, extraOptions);
