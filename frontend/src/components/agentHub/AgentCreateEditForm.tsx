@@ -250,7 +250,16 @@ export function AgentCreateEditForm({
         fields,
       };
 
-      await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
+      try {
+        await updateTuning({ ...targetAgent, name: trimmedName, class_path: classPath }, newTuning);
+      } catch {
+        // useAgentUpdater already showed the error toast.
+        // If we just created the agent, roll it back so no orphan remains.
+        if (isCreateMode) {
+          await triggerDeleteAgent({ agentId: targetAgent.id }).unwrap().catch(() => {});
+        }
+        return;
+      }
       onSaved?.();
     } catch (e: any) {
       showError({
