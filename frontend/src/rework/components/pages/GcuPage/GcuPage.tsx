@@ -21,7 +21,7 @@ import {
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi.ts";
-import MarkdownRenderer from "../../../../components/markdown/MarkdownRenderer";
+import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { getProperty } from "../../../../common/config.tsx";
 import styles from "./GcuPage.module.css";
 
@@ -85,7 +85,7 @@ export default function GcuPage() {
     <div className={styles.gcuContainer}>
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
       <div className={styles.gcuContent}>
-        <MarkdownRenderer content={gcuMarkdown} />
+        <MarkdownRenderer text={gcuMarkdown} />
         <div ref={bottomRef} />
       </div>
       <div className={styles.gcuActions}>

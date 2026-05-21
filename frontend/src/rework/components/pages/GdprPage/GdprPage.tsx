@@ -16,7 +16,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import MarkdownRenderer from "../../../../components/markdown/MarkdownRenderer";
+import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { getProperty } from "../../../../common/config.tsx";
 import styles from "./GdprPage.module.css";
 
@@ -46,7 +46,7 @@ export default function GdprPage() {
     <div className={styles.gdprContainer}>
       <div className={styles.gdprTitle}>{t("rework.gcu.title")}</div>
       <div className={styles.gdprContent}>
-        <MarkdownRenderer content={gdprMarkdown} />
+        <MarkdownRenderer text={gdprMarkdown} />
       </div>
       <div className={styles.gdprActions}>
         <Link to={"/"}>

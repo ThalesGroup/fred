@@ -1,4 +1,4 @@
-// Copyright Thales 2025
+// Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
 import { useCallback, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
-import { upsertOne } from "../components/chatbot/ChatBotUtils";
-import { KeyCloakService } from "../security/KeycloakService";
-import type { AwaitingHumanEvent, ChatMessage } from "../slices/agentic/agenticOpenApi";
-import type { EffectiveChatOptions } from "../slices/controlPlane/controlPlaneOpenApi";
-import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../slices/controlPlane/controlPlaneOpenApi";
+import { KeyCloakService } from "../../../security/KeycloakService";
+import type { AwaitingHumanEvent, ChatMessage } from "../../../slices/agentic/agenticOpenApi";
+import type { EffectiveChatOptions } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type {
   AssistantDeltaRuntimeEvent,
   AwaitingHumanRuntimeEvent,
@@ -30,7 +29,80 @@ import type {
   ToolCallRuntimeEvent,
   ToolResultRuntimeEvent,
   TurnPersistedEvent,
-} from "../slices/runtime/runtimeOpenApi";
+} from "../../../slices/runtime/runtimeOpenApi";
+
+// ── ChatMessage list helpers ──────────────────────────────────────────────────
+// Private to this module: the rest of the rework works with the Conversation
+// model (see rework/utils/conversationUtils.ts). These helpers only exist to
+// maintain the raw ChatMessage[] stream before it is mapped to Conversation.
+
+const keyOf = (m: ChatMessage) =>
+  `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
+
+const exchangeKeyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;
+
+const stableConversationKeyOf = (m: ChatMessage) =>
+  `${exchangeKeyOf(m)}|${m.role}|${m.channel}`;
+
+const isOptimisticUserMessage = (m: ChatMessage) =>
+  m.role === "user" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { optimistic_user?: unknown } | undefined)?.optimistic_user === true;
+
+const hasStreamingDeltaFlag = (m: ChatMessage) =>
+  m.role === "assistant" &&
+  m.channel === "final" &&
+  (m.metadata?.extras as { streaming_delta?: unknown } | undefined)?.streaming_delta === true;
+
+const shouldClearStreamingDeltas = (m: ChatMessage) =>
+  exchangeKeyOf(m) &&
+  (m.channel === "tool_call" ||
+    m.channel === "tool_result" ||
+    (m.role === "assistant" && m.channel === "final" && !hasStreamingDeltaFlag(m)));
+
+const sortMessages = (arr: ChatMessage[]) =>
+  [...arr].sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    const ta = a.timestamp ?? "";
+    const tb = b.timestamp ?? "";
+    return ta.localeCompare(tb);
+  });
+
+// Replace-or-insert one message, then keep the array sorted by (rank asc, timestamp asc).
+// Streaming delta frames accumulate text onto the existing message rather than replacing it.
+const upsertOne = (all: ChatMessage[], m: ChatMessage): ChatMessage[] => {
+  const exchangeKey = exchangeKeyOf(m);
+  const base = shouldClearStreamingDeltas(m)
+    ? all.filter((x) => !(exchangeKeyOf(x) === exchangeKey && hasStreamingDeltaFlag(x)))
+    : all;
+  const k = keyOf(m);
+  const stableConversationKey = stableConversationKeyOf(m);
+  const idx = base.findIndex((x) => {
+    if (keyOf(x) === k) return true;
+    if (isOptimisticUserMessage(x) && m.role === "user" && m.channel === "final") {
+      return stableConversationKeyOf(x) === stableConversationKey;
+    }
+    return false;
+  });
+  if (idx >= 0) {
+    const updated = [...base];
+    if (hasStreamingDeltaFlag(m)) {
+      const existing = updated[idx];
+      const deltaText = (m.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
+      const existingText = (existing.parts?.[0] as { type: string; text?: string } | undefined)?.text ?? "";
+      updated[idx] = {
+        ...m,
+        parts: [{ type: "text" as const, text: existingText + deltaText }],
+      };
+    } else {
+      updated[idx] = m;
+    }
+    return sortMessages(updated);
+  }
+  return sortMessages([...base, m]);
+};
+
+// ── SSE event union ───────────────────────────────────────────────────────────
 
 type AnyRuntimeEvent =
   | ({ kind: "assistant_delta" } & AssistantDeltaRuntimeEvent)
@@ -42,6 +114,8 @@ type AnyRuntimeEvent =
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent);
 
+// ── Public API ────────────────────────────────────────────────────────────────
+
 export type ChatSseCallbacks = {
   onBindDraftAgentToSessionId?: (sessionId: string) => void;
   onTurnPersisted?: (sessionId: string) => void;
@@ -52,11 +126,10 @@ export type ChatSseCallbacks = {
 /**
  * SSE chat transport for managed agent instances.
  *
- * Unlike useChatSocket (WebSocket), this hook:
- * - Calls control-plane /prepare-execution before each send to get a short-lived ExecutionGrant
- * - POSTs to the runtime execute_stream_url using fetch() with SSE response parsing
- * - Maps RuntimeEvent frames (assistant_delta, final, tool_call, etc.) to ChatMessage[]
- * - Supports HITL resume via sendHitlResume()
+ * - Calls control-plane /prepare-execution before each send to obtain a short-lived ExecutionGrant.
+ * - POSTs to the runtime execute_stream_url using fetch() with SSE response parsing.
+ * - Maps RuntimeEvent frames (assistant_delta, final, tool_call, …) onto a flat ChatMessage[].
+ * - Supports HITL resume via sendHitlResume().
  */
 export function useChatSse(
   params: {
@@ -90,7 +163,7 @@ export function useChatSse(
   }, []);
 
   // Parse one SSE block and dispatch to ChatMessage state + callbacks.
-  // Uses stable refs so this function itself stays stable across renders.
+  // Captures stable refs so this function itself stays stable across renders.
   const processEvent = useCallback(
     (
       event: AnyRuntimeEvent,
@@ -131,7 +204,6 @@ export function useChatSse(
           // Authoritative frame — replaces any accumulated delta at the same rank.
           const rank = deltaRankRef.current ?? rankRef.current++;
           const parts: ChatMessage["parts"] = [{ type: "text", text: event.content ?? "" }];
-          // Append geo/link ui_parts as native ChatMessage parts.
           if (event.ui_parts?.length) {
             for (const p of event.ui_parts) {
               parts.push(p as ChatMessage["parts"][number]);
@@ -333,7 +405,7 @@ export function useChatSse(
       const exchangeId = uuidv4();
       const effectiveSessionId = sessionId ?? "draft";
 
-      // Optimistic user message for immediate UI feedback.
+      // Optimistic user message for immediate UI feedback before the first SSE frame.
       const userMsg: ChatMessage = {
         session_id: effectiveSessionId,
         exchange_id: exchangeId,
