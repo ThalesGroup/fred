@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
-import { UserInputSearchPolicy } from "src/components/chatbot/user_input/UserInputSearchPolicy";
+import { SearchPolicySelect } from "@shared/molecules/SearchPolicySelect/SearchPolicySelect";
 import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
 import { SearchPolicyName, TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { SwitchRow } from "../SwitchRow/SwitchRow.tsx";
@@ -119,7 +119,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
             <span>{t("agentTuning.fields.chat_options_default_search_policy.title")}</span>
             <span className={styles.fieldDescription}>{t("agentTuning.fields.chat_options_default_search_policy.description")}</span>
           </div>
-          <UserInputSearchPolicy
+          <SearchPolicySelect
             value={(params.search_policy as SearchPolicyName) ?? "hybrid"}
             onChange={(next) => onParamsChange({ ...params, search_policy: next })}
           />
