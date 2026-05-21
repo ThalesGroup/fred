@@ -1,9 +1,9 @@
-.switch-container {
+.switchContainer {
   display: inline-block;
   vertical-align: middle;
 }
 
-.native-input {
+.nativeInput {
   position: absolute;
   margin: -1px;
   padding: 0;
@@ -28,13 +28,13 @@
     --switch-border-color: var(--primary);
     --switch-background-color: var(--primary);
 
-    .switch-handle {
+    .switchHandle {
       --switch-handle-background-color: var(--on-primary);
       left: 0;
       transform: translateY(-50%) translateX(100%);
     }
 
-    .state-layer:hover {
+    .stateLayer:hover {
       --switch-state-layer-background-color: var(--state-on-primary-hover);
     }
   }
@@ -58,13 +58,13 @@
   overflow: hidden;
 }
 
-.state-layer {
+.stateLayer {
   background-color: var(--switch-state-layer-background-color);
   width: 100%;
   height: 100%;
 }
 
-.switch-handle {
+.switchHandle {
   position: absolute;
   top: 50%;
   left: var(--switch-padding);

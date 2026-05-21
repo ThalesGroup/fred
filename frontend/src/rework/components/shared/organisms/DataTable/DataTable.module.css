@@ -1,4 +1,4 @@
-.datatable-container {
+.datatableContainer {
   display: grid;
   grid-template-columns: var(--grid-layout);
   grid-auto-rows: minmax(min-content, auto);
@@ -10,19 +10,19 @@
   overflow: auto;
 }
 
-.datatable-row {
+.datatableRow {
   display: contents;
 
-  &:hover .datatable-cell {
+  &:hover .datatableCell {
     background-color: var(--state-on-surface-hover);
   }
 
-  .datatable-cell {
+  .datatableCell {
     height: 3.75rem;
   }
 }
 
-.datatable-cell {
+.datatableCell {
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--surface-container-highest);
@@ -42,7 +42,7 @@
   }
 }
 
-.datatable-cell-header {
+.datatableCellHeader {
   position: sticky;
   top: 0;
   background-color: var(--datatable-background-color);

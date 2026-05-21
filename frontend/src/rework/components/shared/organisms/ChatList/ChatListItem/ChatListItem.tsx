@@ -1,4 +1,4 @@
-import styles from "./ChatListItem.module.scss";
+import styles from "./ChatListItem.module.css";
 import {
   SessionWithFiles,
   useDeleteSessionAgenticV1ChatbotSessionSessionIdDeleteMutation,

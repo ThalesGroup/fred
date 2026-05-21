@@ -1,6 +1,3 @@
-@use "sass:map";
-@use "src/index.scss" as *;
-
 .buttonGroupItem {
   display: flex;
   align-items: center;
@@ -73,27 +70,22 @@
     }
   }
 
-  @each $name, $scheme in $color-schemes {
-    &[data-color="#{$name}"] {
-      &:active .stateLayer:not([data-selected="true"]) {
-        --item-background-color: #{map.get($scheme, "on-container-pressed")};
-      }
+  &:hover:not(:active) .stateLayer:not([data-selected="true"]) {
+    --item-background-color: var(--on-container-hover-color);
+  }
+  &:active .stateLayer:not([data-selected="true"]) {
+    --item-background-color: var(--on-container-pressed-color);
+  }
 
-      &:hover:not(:active) .stateLayer:not([data-selected="true"]) {
-        --item-background-color: #{map.get($scheme, "on-container-hover")};
-      }
+  [data-selected="true"] {
+    --item-background-color: var(--container-color);
+  }
 
-      [data-selected="true"] {
-        --item-background-color: #{map.get($scheme, "container")};
-      }
+  .label {
+    --label-color: var(--on-container-color);
+  }
 
-      .label {
-        --label-color: #{map.get($scheme, "on-container")};
-      }
-
-      .icon {
-        --icon-color: #{map.get($scheme, "on-container")};
-      }
-    }
+  .icon {
+    --icon-color: var(--on-container-color);
   }
 }

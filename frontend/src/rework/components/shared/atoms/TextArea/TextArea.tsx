@@ -1,5 +1,5 @@
 import { ComponentPropsWithRef, useId } from "react";
-import styles from "./TextArea.module.scss";
+import styles from "./TextArea.module.css";
 
 export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   label: string;

@@ -1,21 +1,19 @@
-.team-settings-members-container {
+.teamSettingsMembersContainer {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
   overflow: hidden;
 }
 
-.team-settings-members-header {
+.teamSettingsMembersHeader {
   display: flex;
   justify-content: space-between;
+  padding: var(--spacing-2xs);
 }
 
-.team-settings-members-header-title {
+.teamSettingsMembersHeaderTitle {
   display: flex;
   align-items: center;
   color: var(--on-surface);
   font: var(--font-title-large);
-}
-
-.team-settings-members-content {
 }

@@ -1,4 +1,4 @@
-import styles from "./AgentCard.module.scss";
+import styles from "./AgentCard.module.css";
 import { Agent } from "../../../../../slices/agentic/agenticOpenApi.ts";
 import Icon from "@components/shared/atoms/Icon/Icon.tsx";
 import IconButton from "@components/shared/atoms/IconButton/IconButton.tsx";

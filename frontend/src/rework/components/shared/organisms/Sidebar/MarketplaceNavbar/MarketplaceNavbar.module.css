@@ -1,8 +1,8 @@
-.marketplace-navbar-container {
+.marketplaceNavbarContainer {
   width: 240px;
 }
 
-.marketplace-navbar-title {
+.marketplaceNavbarTitle {
   display: flex;
   align-items: end;
   padding: 0 0 var(--spacing-xs) var(--spacing-m);

@@ -1,4 +1,4 @@
-import styles from "./ButtonGroup.module.scss";
+import styles from "./ButtonGroup.module.css";
 import ButtonGroupItem, { ButtonGroupItemProps } from "@shared/atoms/ButtonGroup/ButtonGroupItem/ButtonGroupItem.tsx";
 import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
 import { useState } from "react";
@@ -14,7 +14,7 @@ export default function ButtonGroup({ items, size, color, defaultSelectedIndex =
   const [selectedIndex, setSelectedIndex] = useState(defaultSelectedIndex);
 
   return (
-    <div className={styles["button-group"]}>
+    <div className={styles.buttonGroup}>
       {items.map((item, index) => (
         <ButtonGroupItem
           key={index}

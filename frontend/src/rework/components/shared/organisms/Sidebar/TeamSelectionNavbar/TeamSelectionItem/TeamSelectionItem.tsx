@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import styles from "./TeamSelectionItem.module.scss";
+import styles from "./TeamSelectionItem.module.css";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import React, { useId } from "react";
 import { Link, To } from "react-router-dom";

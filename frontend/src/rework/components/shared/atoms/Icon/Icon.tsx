@@ -1,5 +1,5 @@
 import { IconCategory, IconType, isCustomIcon } from "@shared/utils/Type.ts";
-import styles from "./Icon.module.scss";
+import styles from "./Icon.module.css";
 
 export interface IconProps {
   category: IconCategory;

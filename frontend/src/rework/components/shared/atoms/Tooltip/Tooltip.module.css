@@ -1,4 +1,4 @@
-.tooltip-content {
+.tooltipContent {
   position: absolute;
   top: auto;
   bottom: anchor(0%);
@@ -11,6 +11,5 @@
   background-color: var(--surface-container-highest);
   padding: var(--spacing-2xs) var(--spacing-s);
   color: var(--on-surface);
-
   font: var(--font-label-large);
 }
