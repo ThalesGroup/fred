@@ -1,40 +1,80 @@
-/* Root: inherits message bubble font/color */
+/* Root container — prose reading width capped at 65ch for comfortable line length */
 .root {
+  max-width: var(--content-prose-max-width);
   color: var(--on-surface);
-  font: var(--font-body-large, 400 1rem/1.6 sans-serif);
+  font: var(--font-body-large, 400 1rem/1.5 sans-serif);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
 
-/* ---- Block elements ---- */
+/* ---- Vertical rhythm — lobotomized owl on direct children ---- */
 
-.root :global(p) {
-  margin: 0 0 var(--spacing-s, 12px);
-}
-
-.root :global(p:last-child) {
+/* 1. Zero browser default margins on all direct-child block elements.
+      Specificity 0-1-0: same as the owl rules below, so source order arbitrates.
+      Must come BEFORE the owl rules so they can override margin-top. */
+.root > :global(*) {
+  margin-top: 0;
   margin-bottom: 0;
 }
+
+/* 2. Standard gap between consecutive blocks: 16px.
+      Same specificity as rule 1 (0-1-0) — comes after so it wins for siblings. */
+.root > :global(* + *) {
+  margin-top: var(--spacing-m);
+}
+
+/* 3. More air before major headings: 24px.
+      Specificity 0-1-1 — wins over the universal rules above. */
+.root > :global(* + h1),
+.root > :global(* + h2),
+.root > :global(* + h3) {
+  margin-top: var(--spacing-l);
+}
+
+/* 4. Moderate air before minor headings: 24px */
+.root > :global(* + h4),
+.root > :global(* + h5),
+.root > :global(* + h6) {
+  margin-top: var(--spacing-l);
+}
+
+/* 5. Tight gap after major headings — heading belongs to what follows: 8px */
+.root > :global(h1 + *),
+.root > :global(h2 + *),
+.root > :global(h3 + *) {
+  margin-top: var(--spacing-xs);
+}
+
+/* 6. Even tighter after minor headings: 4px */
+.root > :global(h4 + *),
+.root > :global(h5 + *),
+.root > :global(h6 + *) {
+  margin-top: var(--spacing-2xs);
+}
+
+/* ---- Headings ---- */
 
 .root :global(h1),
 .root :global(h2),
 .root :global(h3) {
-  margin: var(--spacing-m, 16px) 0 var(--spacing-xs, 8px);
   color: var(--on-surface);
-  font: var(--font-headline-small, 400 1.5rem/1.33 sans-serif);
 }
+
+.root :global(h1) { font: 400 1.4rem/1.33 var(--font-family-base); }
+.root :global(h2) { font: 400 1.2rem/1.33 var(--font-family-base); }
+.root :global(h3) { font: 400 1.05rem/1.4 var(--font-family-base); }
 
 .root :global(h4),
 .root :global(h5),
 .root :global(h6) {
-  margin: var(--spacing-s, 12px) 0 var(--spacing-2xs, 4px);
   color: var(--on-surface);
   font: var(--font-title-medium, 500 1rem/1.5 sans-serif);
 }
 
+/* ---- Lists ---- */
+
 .root :global(ul),
 .root :global(ol) {
-  margin: 0 0 var(--spacing-s, 12px);
   padding-left: var(--spacing-l, 24px);
 }
 
@@ -46,8 +86,9 @@
   margin-bottom: 0;
 }
 
+/* ---- Blockquote ---- */
+
 .root :global(blockquote) {
-  margin: var(--spacing-s, 12px) 0;
   border-left: 3px solid var(--outline-muted);
   padding: var(--spacing-2xs, 4px) var(--spacing-m, 16px);
   color: var(--on-surface-retreat);
@@ -57,18 +98,21 @@
   margin-bottom: 0;
 }
 
+/* ---- Divider ---- */
+
 .root :global(hr) {
-  margin: var(--spacing-m, 16px) 0;
   border: none;
   border-top: 0.5px solid var(--outline-muted);
 }
 
-/* ---- Tables (remark-gfm) ---- */
+/* ---- Tables — horizontal scroll on overflow ---- */
 
 .root :global(table) {
-  margin: var(--spacing-s, 12px) 0;
+  display: block;
+  overflow-x: auto;
   border-collapse: collapse;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   font: var(--font-body-medium, 400 0.875rem/1.42 sans-serif);
 }
 
@@ -88,7 +132,7 @@
   background: var(--surface-container-lowest);
 }
 
-/* ---- Inline ---- */
+/* ---- Inline elements ---- */
 
 .root :global(a) {
   color: var(--primary);
@@ -106,3 +150,50 @@
 
 /* Inline code is styled by CodeBlock.module.css */
 /* Citation badges are styled by SourceBadge.module.css */
+
+/* ---- KaTeX display math — overflow scroll for long formulae ---- */
+
+.root :global(.katex-display) {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--spacing-2xs);
+}
+
+/* ---- Details / collapsible (remark-directive :::details) ---- */
+
+.root :global(details) {
+  border: 0.5px solid var(--outline-muted);
+  border-radius: var(--radius-s, 6px);
+  background: var(--surface-container-low);
+  padding: 0 var(--spacing-m, 16px);
+}
+
+.root :global(details[open]) {
+  padding-bottom: var(--spacing-s, 12px);
+}
+
+.root :global(summary) {
+  cursor: pointer;
+  padding: var(--spacing-xs, 8px) 0;
+  font: var(--font-label-large, 500 0.875rem/1.42 sans-serif);
+  color: var(--on-surface-retreat);
+  user-select: none;
+  list-style: none;
+}
+
+.root :global(summary::before) {
+  content: "▶";
+  display: inline-block;
+  margin-right: var(--spacing-xs, 8px);
+  font-size: 0.6em;
+  transition: transform 120ms ease;
+  vertical-align: middle;
+}
+
+.root :global(details[open] summary::before) {
+  transform: rotate(90deg);
+}
+
+.root :global(summary::-webkit-details-marker) {
+  display: none;
+}

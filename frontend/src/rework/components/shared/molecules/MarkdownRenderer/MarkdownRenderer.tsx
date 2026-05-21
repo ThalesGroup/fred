@@ -14,14 +14,43 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import remarkDirective from "remark-directive";
+import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CodeBlock } from "../CodeBlock/CodeBlock";
+import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
 
 interface MarkdownRendererProps {
   text: string;
   onSourceClick?: (index: number) => void;
+}
+
+/**
+ * Remark plugin: map :::details[Title] container directives to native
+ * <details><summary> elements via hast data properties.
+ * Must run after remarkDirective (which parses the directive syntax).
+ */
+function remarkDetailsDirective() {
+  return (tree: any) => {
+    walkMdast(tree, (node: any) => {
+      if (node.type !== "containerDirective" || node.name !== "details") return;
+      node.data = { ...node.data, hName: "details" };
+      const label = node.children?.find((c: any) => c.type === "directiveLabel");
+      if (label) {
+        label.data = { ...label.data, hName: "summary" };
+      }
+    });
+  };
+}
+
+function walkMdast(node: any, visitor: (n: any) => void) {
+  visitor(node);
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) walkMdast(child, visitor);
+  }
 }
 
 /**
@@ -74,29 +103,57 @@ function rehypeCitations() {
   };
 }
 
-// Extend default sanitize schema to allow data-n on sup (used by citation badges).
+// Sanitize schema extended once at module level — never recreated.
+// - className added to global (*): rehype-sanitize strips it by default, which
+//   breaks KaTeX layout (CSS targets .katex/.base/… class selectors) and
+//   language detection on fenced code blocks (language-python class stripped).
+// - style on span: KaTeX uses inline styles for vertical positioning
+// - data-n on sup: citation badges injected by rehypeCitations
+// - details + summary: native collapsible from :::details directives
 const sanitizeSchema = {
   ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary"],
   attributes: {
     ...defaultSchema.attributes,
+    "*": [...(defaultSchema.attributes?.["*"] ?? []), "className"],
+    span: [...(defaultSchema.attributes?.span ?? []), "style"],
     sup: [...(defaultSchema.attributes?.sup ?? []), "data-n"],
   },
 };
+
+// Plugin arrays are module-level constants so ReactMarkdown receives stable
+// references across renders — avoids re-parsing the full content on every
+// streaming delta.
+const REMARK_PLUGINS: Parameters<typeof ReactMarkdown>[0]["remarkPlugins"] = [
+  remarkMath,
+  remarkGfm,
+  remarkDirective,
+  remarkDetailsDirective,
+];
+
+const REHYPE_PLUGINS: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [
+  rehypeCitations,
+  [rehypeKatex, { output: "html" }],
+  [rehypeSanitize, sanitizeSchema],
+];
 
 export function MarkdownRenderer({ text, onSourceClick }: MarkdownRendererProps) {
   return (
     <div className={styles.root}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeCitations, [rehypeSanitize, sanitizeSchema]]}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
         components={{
           // Pass-through pre: CodeBlock provides its own wrapper
           pre({ children }) {
             return <>{children}</>;
           },
-          // code: fenced blocks (have className) → CodeBlock; inline → CodeBlock inline
+          // code: mermaid fences → MermaidBlock; other fenced blocks → CodeBlock; inline → CodeBlock inline
           code({ className, children }) {
             const lang = /language-(\w+)/.exec(className || "")?.[1];
+            if (lang === "mermaid") {
+              return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
+            }
             if (className) {
               return <CodeBlock code={String(children).replace(/\n$/, "")} language={lang} />;
             }

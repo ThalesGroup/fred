@@ -18,6 +18,7 @@ import "./styles.css";
 import "./styles/utils.css";
 import "./styles/index.css";
 import "./index.scss";
+import "katex/dist/katex.min.css";
 import { createRoot } from "react-dom/client";
 import FredUi from "./app/App.tsx";
 import { store } from "./common/store.tsx";

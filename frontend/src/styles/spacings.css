@@ -9,4 +9,9 @@
   --spacing-xs: 8px;
   --spacing-2xs: 4px;
   --spacing-3xs: 2px;
+
+  /* Optimal prose reading width — ~65-75 characters per line.
+     min() hard-caps at 680px (safe at any font-size) while 68ch
+     keeps it responsive on narrow screens. */
+  --content-prose-max-width: min(680px, 68ch);
 }

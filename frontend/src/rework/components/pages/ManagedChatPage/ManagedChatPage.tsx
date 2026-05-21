@@ -15,7 +15,6 @@
 import { useParams } from "react-router-dom";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { AgentOptionsPanel } from "@shared/organisms/AgentOptionsPanel/AgentOptionsPanel";
-import { ConversationHeader } from "@shared/organisms/ConversationHeader/ConversationHeader";
 import { ConversationThread } from "@shared/organisms/ConversationThread/ConversationThread";
 import { useManagedChat } from "./useManagedChat";
 import styles from "./ManagedChatPage.module.css";
@@ -31,16 +30,6 @@ export default function ManagedChatPage() {
 
   return (
     <div className={styles.page}>
-      <ConversationHeader
-        agentDisplayName={chat.agentDisplayName}
-        sessionId={chat.sessionId}
-        sessionTitle={chat.sessionTitle}
-        rightPanelOpen={chat.rightPanelOpen}
-        onTitleCommit={chat.commitTitle}
-        onNewConversation={chat.startNewConversation}
-        onToggleRightPanel={() => chat.setRightPanelOpen((p) => !p)}
-      />
-
       <div className={styles.body}>
         <div className={styles.chatColumn}>
           <ConversationThread

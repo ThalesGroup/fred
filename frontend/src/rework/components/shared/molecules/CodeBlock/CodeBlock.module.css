@@ -55,19 +55,4 @@
   color: var(--on-surface);
 }
 
-/* Code area */
-.pre {
-  margin: 0;
-  background: var(--surface-container-lowest);
-  padding: var(--spacing-m, 16px);
-  overflow-x: auto;
-}
-
-.code {
-  display: block;
-  color: var(--on-surface);
-  font-size: 0.875rem;
-  line-height: 1.6;
-  font-family: "Geist Mono", "Fira Code", ui-monospace, monospace;
-  white-space: pre;
-}
+/* Code area background and font are set via SyntaxHighlighter customStyle */

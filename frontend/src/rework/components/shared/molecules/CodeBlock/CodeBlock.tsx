@@ -13,6 +13,9 @@
 // limitations under the License.
 
 import { useState } from "react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useIsDark } from "../../../../core/hooks/useIsDark";
 import styles from "./CodeBlock.module.css";
 
 interface CodeBlockProps {
@@ -23,6 +26,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({ code, language, inline = false }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const isDark = useIsDark();
 
   if (inline) {
     return <code className={styles.inline}>{code}</code>;
@@ -38,14 +42,28 @@ export function CodeBlock({ code, language, inline = false }: CodeBlockProps) {
   return (
     <div className={styles.block}>
       <div className={styles.header}>
-        <span className={styles.lang}>{language || "code"}</span>
+        <span className={styles.lang}>{language ?? "plaintext"}</span>
         <button className={styles.copy} onClick={handleCopy} aria-label="Copy code">
           {copied ? "✓ Copied" : "Copy"}
         </button>
       </div>
-      <pre className={styles.pre}>
-        <code className={styles.code}>{code}</code>
-      </pre>
+      <SyntaxHighlighter
+        language={language ?? "plaintext"}
+        style={isDark ? oneDark : oneLight}
+        customStyle={{
+          margin: 0,
+          padding: "var(--spacing-m, 16px)",
+          background: "var(--surface-container-lowest)",
+          fontSize: "0.875rem",
+          lineHeight: "1.6",
+          fontFamily: '"Geist Mono", "Fira Code", ui-monospace, monospace',
+          overflowX: "auto",
+          borderRadius: 0,
+        }}
+        codeTagProps={{ style: { fontFamily: "inherit" } }}
+      >
+        {code}
+      </SyntaxHighlighter>
     </div>
   );
 }

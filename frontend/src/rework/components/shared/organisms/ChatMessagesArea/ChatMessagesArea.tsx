@@ -25,30 +25,65 @@ interface ChatMessagesAreaProps {
   isStreaming: boolean;
 }
 
-// Pixels from the bottom within which we consider the user "at the bottom".
-// Keeps auto-scroll active for small rounding differences without fighting the user.
-const BOTTOM_THRESHOLD_PX = 120;
+// How close to the bottom (in px) re-enables tail mode after the user scrolls back down.
+// Large enough to trigger even when streaming is adding content faster than the user
+// can scroll — otherwise the "moving floor" prevents the threshold from ever firing.
+const NEAR_BOTTOM_PX = 200;
 
 export function ChatMessagesArea({ children, isEmpty, isLoading, scrollVersion, isStreaming }: ChatMessagesAreaProps) {
   const areaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Smooth jump when a new turn starts (message count changes).
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [scrollVersion]);
+  // Tracks user scroll INTENT, not absolute scroll position.
+  // Only scrolling UP (decreasing scrollTop) sets this to false.
+  // Programmatic auto-scrolls go DOWN, so they never flip this flag.
+  const isAtBottomRef = useRef(true);
+  // Previous scrollTop — used to detect direction, not magnitude.
+  const prevScrollTopRef = useRef(0);
 
-  // During streaming, pin the bottom only when the user is already near it.
-  // If they have scrolled up to read history, this is a no-op — they stay put.
-  // No dependency array — intentionally runs after every render, no-op when not streaming.
-  useLayoutEffect(() => {
-    if (!isStreaming) return;
+  // Attach scroll listener once. Updates intent based on direction:
+  //   scrolling UP   → user is reading history → disable auto-scroll
+  //   scrolling DOWN → if near bottom, re-enable auto-scroll
+  useEffect(() => {
     const scrollEl = areaRef.current?.parentElement;
     if (!scrollEl) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollEl;
-    if (scrollHeight - scrollTop - clientHeight < BOTTOM_THRESHOLD_PX) {
-      bottomRef.current?.scrollIntoView({ behavior: "instant" });
+
+    function onScroll() {
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl!;
+      const scrollingUp = scrollTop < prevScrollTopRef.current;
+      prevScrollTopRef.current = scrollTop;
+
+      if (scrollingUp) {
+        isAtBottomRef.current = false;
+      } else if (scrollHeight - scrollTop - clientHeight < NEAR_BOTTOM_PX) {
+        // User scrolled back down to near the bottom — re-enable auto-scroll.
+        isAtBottomRef.current = true;
+      }
     }
+
+    scrollEl.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollEl.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // New turn: always jump to bottom and declare intent "at bottom".
+  // block:"end" — bottomRef lands at the viewport's bottom edge, preventing
+  // the blank-space artifact when content is shorter than the viewport.
+  useEffect(() => {
+    isAtBottomRef.current = true;
+    prevScrollTopRef.current = areaRef.current?.parentElement?.scrollTop ?? 0;
+    bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
+  }, [scrollVersion]);
+
+  // Streaming ended: reset for the next exchange.
+  useEffect(() => {
+    if (!isStreaming) isAtBottomRef.current = true;
+  }, [isStreaming]);
+
+  // During streaming: follow the bottom only when the user hasn't scrolled up.
+  // No dep array — runs after every render; no-op otherwise.
+  useLayoutEffect(() => {
+    if (!isStreaming || !isAtBottomRef.current) return;
+    bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
   });
 
   return (
