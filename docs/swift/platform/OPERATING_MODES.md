@@ -16,7 +16,8 @@ operating modes for the Fred platform.
 | **Teams** | Single implicit personal team | Multi-team, RBAC-enforced |
 | **Data storage** | SQLite + in-memory | PostgreSQL (control-plane) + SQLite (runtime history) |
 | **Primary interface** | `fred-agents-cli` (`make cli`) | Frontend + CLI |
-| **Key env var** | `KEYCLOAK_ENABLED=false` | `KEYCLOAK_ENABLED=true` + Keycloak config |
+| **Backend auth** | `KEYCLOAK_ENABLED=false` | `KEYCLOAK_ENABLED=true` + Keycloak config |
+| **Frontend auth** | `user_auth.enabled: false` in `config.json` | `user_auth.enabled: true` + `realm_url` + `client_id` in `config.json` |
 
 ---
 
@@ -190,6 +191,29 @@ FRED_RUNTIME_POD_URLS=http://fred-agents:8000   # comma-separated pod base URLs
 ```
 
 See [`ENV_VARIABLES.md`](ENV_VARIABLES.md) for the full reference.
+
+**Frontend:**
+
+The frontend security toggle is **not** an environment variable — it lives in `frontend/public/config.json`:
+
+```json
+{
+  "user_auth": {
+    "enabled": true,
+    "realm_url": "http://keycloak:8080/realms/fred",
+    "client_id": "fred-frontend"
+  }
+}
+```
+
+| `user_auth.enabled` | Behaviour |
+|---|---|
+| `false` (default for local dev) | No Keycloak. The frontend mints unsigned local dev tokens with `admin` role. All auth code paths still run — the app is production-shaped. |
+| `true` | Real Keycloak OIDC (PKCE flow). `realm_url` and `client_id` must match your Keycloak deployment. |
+
+In Kubernetes this file is rendered from `deploy/charts/fred/templates/configmap-frontend.yaml` via Helm values — no image rebuild required. For local `make run`, edit `frontend/public/config.json` directly.
+
+> Note: the backend `KEYCLOAK_ENABLED` flag and the frontend `user_auth.enabled` flag are **independent**. In a real deployment both must be set to `true`; in local dev both default to disabled.
 
 ---
 

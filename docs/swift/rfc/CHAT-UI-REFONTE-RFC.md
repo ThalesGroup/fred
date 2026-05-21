@@ -3,7 +3,8 @@
 **Status:** in-progress — design validation underway  
 **Author:** Dimitri Tombroff  
 **Date:** 2026-05-14  
-**Backlog ref:** `docs/swift/backlog/CHAT-UI-BACKLOG.md §5`
+**Backlog ref:** `docs/swift/backlog/CHAT-UI-BACKLOG.md §5`  
+**Rendering spec:** `docs/swift/rfc/CHAT-RENDERING-SPEC.md`
 
 ---
 

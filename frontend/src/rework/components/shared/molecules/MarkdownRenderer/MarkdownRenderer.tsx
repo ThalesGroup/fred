@@ -159,6 +159,8 @@ export function MarkdownRenderer({ text, onSourceClick }: MarkdownRendererProps)
             }
             return <CodeBlock code={String(children)} inline />;
           },
+          // hr: suppress horizontal rules — visual noise in a chat context
+          hr: () => null,
           // sup: citation badges injected by rehypeCitations → SourceBadge
           sup({ children, ...props }) {
             const n = (props as Record<string, unknown>)["data-n"];

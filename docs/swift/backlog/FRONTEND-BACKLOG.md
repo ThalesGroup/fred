@@ -668,14 +668,17 @@ formally deprecated when the rework path is complete.
 - `rework/utils/traceUtils.ts`
 
 **Shared hooks (used by both rework and legacy):**
+- ~~`hooks/useChatSse.ts`~~ — **deleted (2026-05-21); migrated to `rework/core/hooks/useChatSse.ts`**
 - `hooks/useAgentSelector.ts` — `ChatMessage`
-- `hooks/useGroupMessages.ts` — `ChatMessage`
+- ~~`hooks/useGroupMessages.ts`~~ — **deleted (2026-05-21)**
 - `common/agent.ts` — `Agent`
 
 **Legacy surfaces (lower priority — deprecate with the surface):**
-- `pages/Chat.tsx` — `useListAgentsAgenticV1AgentsGetQuery` (live API call)
+- ~~`pages/Chat.tsx`~~ — **deleted (2026-05-21)**
+- ~~`hooks/useChatSocket.ts`~~ — **deleted (2026-05-21)**
 - `hooks/useAgentUpdater.ts` — `Agent2`, live API call
-- `components/chatbot/` — 10 files (`ChatBotUtils`, `citations`, `HitlInlineCard`, `MessageRuntimeContextHeader`, `MessageRuntimeContextPopover`, `MessagesArea`, `ReasoningStepBadge`, `ReasoningStepsAccordion`, `SourceDetailsDialog`, `Sources`, `SourceTile`, `tokenUsage`, `TraceDetailDialog`)
+- ~~`components/chatbot/`~~ — **deleted (2026-05-21)** (~40 files: `ChatBot`, `ChatBotUtils`, `citations`, `HitlInlineCard`, `MessageRuntimeContextHeader`, `MessageRuntimeContextPopover`, `MessagesArea`, `ReasoningStepBadge`, `ReasoningStepsAccordion`, `SourceDetailsDialog`, `Sources`, `SourceTile`, `tokenUsage`, `TraceDetailDialog`, etc.)
+- ~~`features/libraries/ChatDocumentLibrariesWidget`, `ChatDocumentLibrariesSelectionCard`~~ — **deleted (2026-05-21)**
 - `components/agentHub/` — `AgentToolsSelection`, `TuningForm`, `toolParamsRegistry`
 - `components/mcpHub/` — `McpServerCard`, `McpServerForm`
 - `components/monitoring/` — `KpiDashboard`, `TokenUsageChart`, `LogConsoleTile`
@@ -684,9 +687,11 @@ formally deprecated when the rework path is complete.
 
 ### 7.3 Tasks
 
-- [ ] Migrate rework path files (11 files above) to `runtimeOpenApi` types
-- [ ] Migrate shared hooks (3 files above)
-- [ ] Formally deprecate legacy `pages/Chat.tsx` and `components/chatbot/` surfaces
+- [ ] Migrate rework path files (11 files listed in §7.2) to `runtimeOpenApi` types
+- [ ] Migrate remaining shared hooks (`useAgentSelector.ts`, `common/agent.ts`) to `runtimeOpenApi`
+- [x] Delete legacy `pages/Chat.tsx`, `components/chatbot/`, `hooks/useChatSocket.ts`, `hooks/useGroupMessages.ts`, `features/libraries/ChatDocument*` (done 2026-05-21)
+- [x] Migrate `hooks/useChatSse.ts` to `rework/core/hooks/useChatSse.ts` and delete old file (done 2026-05-21)
+- [x] Migrate `UserInputSearchPolicy` → `rework/…/SearchPolicySelect` and remove old component (done 2026-05-21)
 - [ ] Delete `agenticOpenApi.ts` once all imports are cleared
 - [ ] Delete `agenticInspectionApi.ts` and `agenticSourceApi.ts` once consumers are removed
 
@@ -711,11 +716,8 @@ These are concrete migration signals still visible in the codebase (updated afte
 - `frontend/src/common/config.tsx` now only handles the tiny pre-auth
   `/config.json` bootstrap, but bootstrap failure handling is still not
   converged into one typed recovery path (open FRONT-01 task)
-- `frontend/src/pages/Chat.tsx` still lists legacy raw agents from
-  `agentic-backend` — this is the legacy chat path, not the managed path; intentionally
-  left until the old chat surfaces are formally deprecated
-- `frontend/src/components/chatbot/ChatBot.tsx` still reads legacy session
-  metadata from `agentic-backend` — same as above, legacy surface
+- ~~`frontend/src/pages/Chat.tsx` still lists legacy raw agents from `agentic-backend`~~ **Deleted (2026-05-21)** — legacy chat path fully removed.
+- ~~`frontend/src/components/chatbot/ChatBot.tsx` still reads legacy session metadata from `agentic-backend`~~ **Deleted (2026-05-21)** — entire `components/chatbot/` tree removed.
 - ~~the managed sidebar uses an intentional placeholder for session metadata~~
   **done**: `ChatList.tsx` now fetches from `GET /teams/{team_id}/sessions` (Phase FRONT-04)
 - the personal-only shell still leaves some collaborative/discovery UI decisions
@@ -764,6 +766,6 @@ we can answer "yes" to all of the following:
 | Backend readiness gates | Partial | Bootstrap permissions for route guards; personal-team doc; offline test |
 | FRONT-03 – Managed agent surface | ✓ Complete | Legacy authoring decision (intentionally deferred) |
 | FRONT-04 – Session and chat shell convergence | ✓ Complete | PATCH/DELETE session endpoints (deferred to Phase 6) |
-| FRONT-05 – Knowledge-flow and shared shell alignment | Planned | — |
+| FRONT-05 – Agentic-backend removal from frontend | 🔄 Partial (2026-05-21) | Legacy chatbot tree deleted (`components/chatbot/`, `pages/Chat.tsx`, `hooks/useChatSocket`, `hooks/useGroupMessages`, `features/libraries/Chat*`). `useChatSse` migrated to rework. `SearchPolicySelect` extracted to rework. Old chat routes removed from router. Remaining: rework path files (11) + shared hooks still importing `agenticOpenApi`; `agenticOpenApi.ts` deletion pending. |
 
 Security-enabled hardening should come after the no-security baseline is clean.

@@ -13,8 +13,8 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-11"
-  sprint_week: "2026-05-11"
+  last_updated: "2026-05-21"
+  sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
 
@@ -201,6 +201,17 @@ next_up:
 # ─── RECENTLY CLOSED (last 2 weeks) — legacy IDs préservés ───────────────────
 
 recently_closed:
+  - id: CHAT-06
+    title: "test_assistant rich content scenarios + MarkdownRenderer math/mermaid extension"
+    owner: Dimitri
+    closed: "2026-05-21"
+    notes: >
+      Backend: markdown_step in apps/fred-agents with 7 content types. Frontend: remark-math,
+      rehype-katex, remark-directive, MermaidBlock, hr suppression added to MarkdownRenderer.
+      Old chatbot tree (components/chatbot/, pages/Chat.tsx, useChatSocket, useGroupMessages,
+      features/libraries/) deleted. useChatSse migrated to rework/core/hooks/. SearchPolicySelect
+      extracted to rework/shared/molecules/. Rendering spec RFC: CHAT-RENDERING-SPEC.md.
+
   - id: RUNTIME-02
     title: "Typed ChatContext contract (RuntimeContext, search_policy, context_prompt_text)"
     owner: Dimitri
@@ -297,12 +308,13 @@ blockers:
 # ─── VELOCITY ─────────────────────────────────────────────────────────────────
 
 velocity:
-  period: "2026-04-25 → 2026-05-11"
-  items_closed: 14
+  period: "2026-04-25 → 2026-05-21"
+  items_closed: 15
   items_opened_net: 2
   items_deferred: 2
   assessment: "on_track"
   note: >
-    Forte vélocité backend. RUNTIME-02 + FRONT-06 (ChatContext typé) fermés le 2026-05-11.
-    Branches MEM-* et EVAL-HARNESS démarrent cette semaine.
-    RT-E2E reste le gate principal pour la Phase 3.
+    CHAT-06 fermé le 2026-05-21 : test_assistant rich content + MarkdownRenderer étendu (math,
+    mermaid, katex, hr suppression). Ancien arbre chatbot supprimé (composants legacy, routes,
+    hooks). useChatSse migré dans rework/. CHAT-RENDERING-SPEC.md RFC créé. Docs mis à jour
+    (README, FEATURES, OPERATING_MODES, frontend/README). RT-E2E reste le gate principal Phase 3.

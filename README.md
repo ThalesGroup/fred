@@ -17,7 +17,7 @@ Fred is built around three platform applications and a publishable SDK stack:
 |-------|---------|------|
 | Platform | `apps/control-plane-backend` | Teams, sessions, agent enrollment, product APIs, `ExecutionGrant` issuance |
 | Platform | `apps/knowledge-flow-backend` | Document ingestion, vectorization, retrieval |
-| Platform | `frontend` | React chat interface and agent management UI |
+| Platform | `frontend` | React chat UI (SSE streaming, rich markdown, math, Mermaid) and agent management UI |
 | Agent pods | `apps/fred-agents` | First-party agent pod — the reference implementation and production execution surface |
 | Agent pods | [fred-samples](https://github.com/ThalesGroup/fred-samples) | Example third-party pods — ship your own agents independently |
 | Libraries | `libs/fred-sdk` | Agent authoring SDK — ReAct and graph agents, tools, HITL, execution contracts |
@@ -612,7 +612,7 @@ The [academy](./academy/README.md) contains sample MCP servers and standalone ap
 
 | Component              | Location                         | Role                                                                 |
 | ---------------------- | -------------------------------- | -------------------------------------------------------------------- |
-| Frontend UI            | `./frontend`                     | React chat interface and agent management UI                         |
+| Frontend UI            | `./frontend`                     | React chat UI (SSE streaming, rich markdown/math/Mermaid) and agent management UI |
 | Knowledge Flow backend | `./knowledge-flow-backend`       | Document ingestion, vectorization, and retrieval                     |
 | Control Plane backend  | `./apps/control-plane-backend`   | Teams, users, agent enrollment, session metadata, `ExecutionGrant` issuance |
 
@@ -659,6 +659,10 @@ See `apps/fred-agents/config/models_catalog.yaml` and `knowledge-flow-backend/co
 ### Advanced Integrations
 
 - Enable Keycloak or another OIDC provider for authentication
+
+  > **Frontend security is configured independently of the backend.**  
+  > The frontend reads `frontend/public/config.json` at startup. Set `user_auth.enabled: true` (plus `realm_url` and `client_id`) to enable real Keycloak OIDC. When `enabled: false` (the default for local dev), the frontend mints local dev tokens — the same code paths run in both modes, so the app stays production-shaped in development. See [`frontend/README.md`](./frontend/README.md#security-configuration) for details.
+
 - Persistence options:
   - **Laptop / dev (default):** SQLite for metadata + ChromaDB for vectors (embedded, no external services)
   - **Production:** PostgreSQL + pgvector for metadata/vectors, and optionally MinIO/S3 + OpenSearch if you prefer that stack

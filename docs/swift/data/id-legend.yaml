@@ -8,7 +8,7 @@
 # are listed in meta.domains. See CLAUDE.md § Task IDs for the full rule.
 
 meta:
-  last_updated: "2026-05-11"
+  last_updated: "2026-05-21"
   id_format: "DOMAIN-NN where DOMAIN is a 4-7 letter code, NN is two-digit sequential"
   status_values: [open, in_progress, done, deferred, not_started]
   domains:
@@ -71,16 +71,18 @@ items:
 
   - id: CHAT-06
     title: "test_assistant — rich content rendering scenarios (markdown, code, mermaid, geo, math)"
-    status: open
+    status: done
     owner: Dimitri
+    closed: "2026-05-21"
     refs:
       backlog: "docs/swift/backlog/CHAT-UI-BACKLOG.md §7"
+      rfc: "docs/swift/rfc/CHAT-RENDERING-SPEC.md"
     notes: >
-      Backend-only work in apps/fred-agents. Adds a `markdown` keyword scenario to
-      fred.github.test_assistant that emits every rich content type the new MarkdownRenderer
-      must handle: fenced code with language, mermaid diagram, GFM table, GeoJSON feature
-      collection, KaTeX math (inline + block), details/summary collapsible.
-      Prerequisite for validating CHAT-04 (advanced parts) without a live LLM.
+      Backend work in apps/fred-agents complete: markdown_step emits all 7 rich content types
+      (fenced code, mermaid, GFM table, GeoJSON, KaTeX inline+block, details collapsible).
+      Frontend MarkdownRenderer extended: remark-math + rehype-katex + remark-directive +
+      MermaidBlock + hr suppression. Rendering spec RFC created: CHAT-RENDERING-SPEC.md.
+      Manual end-to-end verification pending live pod.
 
   # ── CTRLP ─────────────────────────────────────────────────────────────
 
