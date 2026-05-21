@@ -6,6 +6,14 @@ DOCKER_BUILD_DIRS := agentic-backend knowledge-flow-backend control-plane-backen
 
 ##@ Code quality
 
+.PHONY: update-uv-locks
+update-uv-locks: ## Update uv lock state in fred-core, then in each backend
+	@set -e; \
+	for dir in $(CODE_QUALITY_DIRS); do \
+		echo "************ Refreshing uv lock state in $$dir ************"; \
+		env -u VIRTUAL_ENV $(MAKE) -C $$dir update; \
+	done
+
 .PHONY: code-quality
 code-quality: ## Run code quality checks in all submodules
 	@set -e; \

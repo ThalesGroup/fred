@@ -264,7 +264,7 @@ embedding_model:
     check_embedding_ctx_length: false
 vision_model:
   provider: openai
-  name: mistral-medium-2508 # or gpt-4o if you want higher fidelity
+  name: pixtral-12b-2409  # mistral-medium-latest is NOT vision-capable; pixtral-12b-2409 or mistral-small-3.1 required
   settings:
     base_url: https://api.mistral.ai/v1
 # ocr_model:
