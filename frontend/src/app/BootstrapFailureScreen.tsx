@@ -14,7 +14,7 @@
 
 import ErrorOutlineRoundedIcon from "@mui/icons-material/ErrorOutlineRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
-import { Box, Button, CssBaseline } from "@mui/material";
+import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { useContext, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -41,7 +41,6 @@ function BootstrapFailureScreenContent({ failure, onRetry }: BootstrapFailureScr
   const { t } = useTranslation();
   const { darkMode } = useContext(ApplicationContext);
   const isBackendUnavailable = failure.kind === "backend_unavailable";
-  const homeUrl = import.meta.env.BASE_URL ?? "/";
   const theme = useMemo(() => {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
     return darkMode ? createDarkTheme() : createLightTheme();
@@ -90,14 +89,9 @@ function BootstrapFailureScreenContent({ failure, onRetry }: BootstrapFailureScr
               label: t("bootstrapFailure.retry", "Retry"),
               onClick: onRetry,
               startIcon: <RefreshRoundedIcon />,
-              variant: "outlined",
+              variant: "contained",
             }}
           />
-          <Box sx={{ display: "flex", justifyContent: "center", mt: 1 }}>
-            <Button variant="text" size="small" onClick={() => window.location.assign(homeUrl)}>
-              {t("bootstrapFailure.home", "Open home")}
-            </Button>
-          </Box>
         </Box>
       </Box>
     </ThemeProvider>
