@@ -24,7 +24,6 @@ import { createBrowserRouter, Navigate, RouteObject } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import RendererPlayground from "../components/markdown/RenderedPlayground";
 import { ProtectedRoute } from "../components/ProtectedRoute";
-import Chat from "../pages/Chat";
 import { ComingSoon } from "../pages/ComingSoon.tsx";
 import { KnowledgeHub } from "../pages/KnowledgeHub";
 import { KnowledgePage } from "../pages/KnowledgePage.tsx";
@@ -58,14 +57,6 @@ export const routes: RouteObject[] = [
       {
         index: true,
         element: <Navigate to="/team/personal/agents" replace />,
-      },
-      {
-        path: "team/:teamId/new-chat/:agent-id",
-        element: <Chat />,
-      },
-      {
-        path: "team/:teamId/chat/:sessionId",
-        element: <Chat />,
       },
       {
         path: "knowledge",
