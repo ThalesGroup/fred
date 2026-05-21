@@ -1,5 +1,5 @@
 import Icon from "@components/shared/atoms/Icon/Icon";
-import styles from "./TeamAgentEmptyState.module.scss";
+import styles from "./TeamAgentEmptyState.module.css";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useTranslation } from "react-i18next";

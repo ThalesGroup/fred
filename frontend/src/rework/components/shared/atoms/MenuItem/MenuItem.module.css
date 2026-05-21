@@ -1,4 +1,4 @@
-.menu-item {
+.menuItem {
   display: block;
   cursor: pointer;
 
@@ -6,7 +6,7 @@
   --item-color: var(--on-surface);
   --padding-left: var(--spacing-m);
 
-  &:has(.icon-wrapper) {
+  &:has(.iconWrapper) {
     --padding-left: var(--spacing-xs);
   }
 
@@ -25,7 +25,7 @@
   }
 }
 
-.state-layer {
+.stateLayer {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -36,7 +36,7 @@
   color: var(--item-color);
 }
 
-.icon-wrapper {
+.iconWrapper {
   display: flex;
   justify-content: center;
   align-items: center;

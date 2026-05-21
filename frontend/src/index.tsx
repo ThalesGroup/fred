@@ -14,10 +14,7 @@
 
 import { StrictMode } from "react";
 import { Provider } from "react-redux";
-import "./styles.css";
-import "./styles/utils.css";
 import "./styles/index.css";
-import "./index.scss";
 import { createRoot } from "react-dom/client";
 import FredUi from "./app/App.tsx";
 import { BootstrapFailureScreen } from "./app/BootstrapFailureScreen.tsx";
@@ -25,12 +22,6 @@ import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
 import { getConfigLoadFailureDetails, loadConfig } from "./common/config.tsx";
 import "./i18n";
-import "@fontsource/inter/100.css";
-import "@fontsource/inter/200.css";
-import "@fontsource/inter/300.css";
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
 
 /**
  * Renders one fatal startup screen when the application cannot bootstrap normally.

@@ -1,15 +1,12 @@
-@use "src/index.scss" as *;
-@use "src/styles/reset" as *;
-
-.navigation-menu-item {
-  @include reset-button();
-
+.navigationMenuItem {
   display: flex;
   justify-content: flex-start;
   align-items: center;
   gap: var(--spacing-s);
   cursor: pointer;
+  border: none;
   border-radius: var(--spacing-xs);
+  background-color: transparent;
   padding: 0 var(--spacing-xs);
   height: 2rem;
   color: var(--on-surface-retreat);

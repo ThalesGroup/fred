@@ -4,7 +4,7 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import { useTranslation } from "react-i18next";
 import { AnyAgent } from "../../../../../common/agent.ts";
 import AgentCard from "@shared/organisms/AgentCard/AgentCard.tsx";
-import styles from "./TeamAgentContent.module.scss";
+import styles from "./TeamAgentContent.module.css";
 
 interface TeamAgentContentProps {
   agents: AnyAgent[];

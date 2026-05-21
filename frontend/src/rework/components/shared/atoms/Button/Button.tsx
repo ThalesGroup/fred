@@ -1,4 +1,4 @@
-import styles from "./Button.module.scss";
+import styles from "./Button.module.css";
 import { ComponentSize, ButtonVariant, ColorTheme } from "../../utils/Type.ts";
 import React, { ComponentPropsWithoutRef } from "react";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
@@ -11,14 +11,11 @@ interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
   icon?: IconProps;
 }
 export default function Button({ children, color, variant, size, icon, className, ...props }: ButtonProps) {
-  const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
-  const layerClasses = [styles["state-layer"], styles[`icon-${icon ? "left" : "none"}`]];
-
   return (
-    <button className={buttonClasses.join(" ")} {...props}>
-      <div className={layerClasses.join(" ")}>
+    <button className={styles.btn} data-color={color} data-size={size} data-variant={variant} {...props}>
+      <div className={styles.stateLayer} data-icon={icon ? "left" : "none"}>
         {icon && (
-          <span className={styles["btn-icon"]}>
+          <span className={styles.btnIcon}>
             <Icon {...icon} />
           </span>
         )}

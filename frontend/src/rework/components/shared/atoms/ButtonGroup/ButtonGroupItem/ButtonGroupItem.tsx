@@ -1,4 +1,4 @@
-import styles from "./ButtonGroupItem.module.scss";
+import styles from "./ButtonGroupItem.module.css";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
 import { ComponentPropsWithoutRef } from "react";

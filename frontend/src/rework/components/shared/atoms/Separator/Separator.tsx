@@ -1,4 +1,4 @@
-import styles from "./Separator.module.scss";
+import styles from "./Separator.module.css";
 import React from "react";
 
 interface SeparatorProps {
@@ -6,5 +6,5 @@ interface SeparatorProps {
 }
 
 export default function Separator({ margin }: SeparatorProps) {
-  return <div className={styles["separator"]} style={{ "--separator-margin": margin } as React.CSSProperties}></div>;
+  return <div className={styles.separator} style={{ "--separator-margin": margin } as React.CSSProperties}></div>;
 }
