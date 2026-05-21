@@ -43,6 +43,7 @@ from agentic_backend.core.agents.agent_service import (
     AgentService,
     ImmutableTeamIdError,
     InvalidClassPathError,
+    InvalidPromptTemplateError,
     MissingTeamIdError,
 )
 from agentic_backend.core.agents.agent_spec import AgentTuning, MCPServerConfiguration
@@ -106,6 +107,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: ImmutableTeamIdError
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidPromptTemplateError)
+    async def invalid_prompt_template_handler(
+        request: Request, exc: InvalidPromptTemplateError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 def get_agent_manager(request: Request) -> AgentManager:

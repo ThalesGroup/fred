@@ -165,7 +165,8 @@ class KfWorkspaceClient(KfBaseClient):
             return bytes(content).decode("utf-8")
 
         except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
-            status = e.response.status_code
+            response = e.response
+            status = response.status_code if response is not None else None
             logger.error(
                 f"HTTP error ({status}) reading asset at {path}: {e}", exc_info=True
             )
@@ -174,7 +175,7 @@ class KfWorkspaceClient(KfBaseClient):
                     f"Asset path '{path}' not found (404).", status_code=status
                 ) from e
             raise WorkspaceRetrievalError(
-                f"HTTP failure retrieving asset '{path}' (Status: {status}).",
+                f"HTTP failure retrieving asset '{path}' (Status: {status if status is not None else 'unknown'}).",
                 status_code=status,
             ) from e
         except Exception as e:
@@ -254,7 +255,8 @@ class KfWorkspaceClient(KfBaseClient):
             )
 
         except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
-            status = e.response.status_code
+            response = e.response
+            status = response.status_code if response is not None else None
             logger.error(
                 f"HTTP error ({status}) reading asset {path}: {e}", exc_info=True
             )
@@ -263,7 +265,7 @@ class KfWorkspaceClient(KfBaseClient):
                     f"Asset path '{path}' not found (404).", status_code=404
                 ) from e
             raise WorkspaceRetrievalError(
-                f"HTTP failure retrieving asset '{path}' (Status: {status}).",
+                f"HTTP failure retrieving asset '{path}' (Status: {status if status is not None else 'unknown'}).",
                 status_code=status,
             ) from e
         except Exception as e:
@@ -342,18 +344,39 @@ class KfWorkspaceClient(KfBaseClient):
                 document_uid=_coerce_optional_document_uid(meta.get("document_uid")),
                 download_url=meta.get("download_url"),
             )
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code
-            detail = (
-                e.response.json().get("detail", "No detail provided")
-                if e.response.content
-                else e.response.reason
-            )
+        except (requests.exceptions.HTTPError, httpx.HTTPStatusError) as e:
+            response = e.response
+            status = response.status_code if response is not None else None
+            detail = "No detail provided"
+            if response is None:
+                detail = str(e)
+            elif response.content:
+                try:
+                    detail_payload: Any = response.json()
+                except ValueError:
+                    detail = (
+                        getattr(response, "text", "")
+                        or getattr(response, "reason_phrase", None)
+                        or getattr(response, "reason", None)
+                        or "No detail provided"
+                    )
+                else:
+                    detail = (
+                        str(detail_payload.get("detail", "No detail provided"))
+                        if isinstance(detail_payload, dict)
+                        else str(detail_payload)
+                    )
+            else:
+                detail = (
+                    getattr(response, "reason_phrase", None)
+                    or getattr(response, "reason", None)
+                    or "No detail provided"
+                )
             logger.error(
                 f"HTTP error ({status}) uploading asset {key}: {detail}", exc_info=True
             )
             raise WorkspaceUploadError(
-                f"HTTP failure uploading asset '{key}' (Status: {status}, Detail: {detail}).",
+                f"HTTP failure uploading asset '{key}' (Status: {status if status is not None else 'unknown'}, Detail: {detail}).",
                 status_code=status,
             ) from e
         except Exception as e:

@@ -5,10 +5,10 @@ Guidance for AI coding assistants working in the Fred repository. Follow these n
 ## Project Snapshot
 - Fred is a production-ready, multi-agent AI platform.
 - Three top-level services: `agentic-backend/` (LangGraph orchestration), `knowledge_flow_backend/` (document ingestion + vector search), `frontend/` (React UI).
-- Python services target Python 3.12.8 with `pyenv` + `python3-venv`; frontend targets Node.js 22.13.0 via `nvm`.
+- Python services target Python 3.12.8 with `pyenv` + `python3-venv`; frontend targets Node.js 24.15.0 via `nvm`.
 
 ## Getting Started
-1. Ensure prerequisites: Python 3.12.8, Node 22.13.0, Make, optional Temporal for ingestion workers.
+1. Ensure prerequisites: Python 3.12.8, Node 24.15.0, Make, optional Temporal for ingestion workers.
 2. Copy `OPENAI_API_KEY=...` into both backends under `config/.env`.
 3. Launch services (separate terminals):
    ```bash

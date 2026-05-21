@@ -1,9 +1,12 @@
 import httpx
 import pytest
+import requests
 
 from agentic_backend.common.kf_workspace_client import (
     KfWorkspaceClient,
     UserStorageResourceInfo,
+    WorkspaceRetrievalError,
+    WorkspaceUploadError,
 )
 from agentic_backend.core.chatbot.session_orchestrator import (
     _workspace_file_keys_for_session_cleanup,
@@ -101,3 +104,51 @@ def test_workspace_cleanup_ignores_directories_and_deduplicates() -> None:
         "session-1/report.md",
         "session-1/slides.pptx",
     ]
+
+
+@pytest.mark.asyncio
+async def test_fetch_text_at_path_handles_http_error_without_response() -> None:
+    class _Client(KfWorkspaceClient):
+        async def _get_file_stream(self, *_args, **_kwargs):
+            raise requests.exceptions.HTTPError("network edge case")
+
+    client = object.__new__(_Client)
+
+    with pytest.raises(WorkspaceRetrievalError) as exc_info:
+        await KfWorkspaceClient._fetch_text_at_path(
+            client, "/storage/user/session-1/report.md"
+        )
+
+    assert exc_info.value.status_code is None
+    assert "Status: unknown" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_upload_blob_maps_httpx_status_error_to_workspace_upload_error() -> None:
+    class _Client(KfWorkspaceClient):
+        async def _request_with_token_refresh(self, *_args, **_kwargs):
+            request = httpx.Request("POST", "http://example.test/storage/user/upload")
+            response = httpx.Response(
+                413,
+                json={"detail": "payload too large"},
+                request=request,
+            )
+            raise httpx.HTTPStatusError(
+                "upload failed",
+                request=request,
+                response=response,
+            )
+
+    client = object.__new__(_Client)
+
+    with pytest.raises(WorkspaceUploadError) as exc_info:
+        await KfWorkspaceClient._upload_blob(
+            client,
+            "/storage/user/upload",
+            "session-1/report.md",
+            b"hello",
+            "report.md",
+        )
+
+    assert exc_info.value.status_code == 413
+    assert "payload too large" in str(exc_info.value)
