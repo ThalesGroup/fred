@@ -14,12 +14,14 @@
 
 import ErrorOutlineRoundedIcon from "@mui/icons-material/ErrorOutlineRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
-import { Box, Button, CssBaseline, ThemeProvider, useMediaQuery } from "@mui/material";
-import { useMemo } from "react";
+import { Box, Button, CssBaseline } from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
+import { useContext, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ConfigLoadFailureDetails } from "../common/config";
 import { EmptyState } from "../components/EmptyState";
 import { createDarkTheme, createLightTheme } from "../styles/theme";
+import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
 
 type BootstrapFailureScreenProps = {
   failure: ConfigLoadFailureDetails;
@@ -27,24 +29,23 @@ type BootstrapFailureScreenProps = {
 };
 
 /**
- * Shows one full-page startup fallback when the UI cannot even finish loading its config.
+ * Renders the fallback content with the same theme selection rules as the app shell.
  *
- * Why: without this screen, a bootstrap-time 502/503 leaves the browser on a white page
- * because the router and normal in-app error handling are not mounted yet.
+ * Why: the bootstrap error screen is mounted before the normal application tree,
+ * but it still needs the shared light/dark resolution from `ApplicationContextProvider`.
  *
- * How: render it directly from `index.tsx` when `loadConfig()` fails before the app starts.
- * The component mirrors the application's light/dark look from `prefers-color-scheme`
- * because the normal app-level theme providers do not exist yet at bootstrap time.
+ * How: mount this only inside `ApplicationContextProvider`, then it can derive
+ * `darkMode` from the shared context before creating the MUI theme.
  */
-export function BootstrapFailureScreen({ failure, onRetry }: BootstrapFailureScreenProps) {
+function BootstrapFailureScreenContent({ failure, onRetry }: BootstrapFailureScreenProps) {
   const { t } = useTranslation();
-  const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)", { noSsr: true });
+  const { darkMode } = useContext(ApplicationContext);
   const isBackendUnavailable = failure.kind === "backend_unavailable";
   const homeUrl = import.meta.env.BASE_URL ?? "/";
   const theme = useMemo(() => {
-    document.documentElement.setAttribute("data-theme", prefersDarkMode ? "dark" : "light");
-    return prefersDarkMode ? createDarkTheme() : createLightTheme();
-  }, [prefersDarkMode]);
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    return darkMode ? createDarkTheme() : createLightTheme();
+  }, [darkMode]);
   const title = isBackendUnavailable
     ? t("bootstrapFailure.backendUnavailableTitle", "Service temporarily unavailable")
     : t("bootstrapFailure.genericTitle", "Application could not start");
@@ -69,6 +70,8 @@ export function BootstrapFailureScreen({ failure, onRetry }: BootstrapFailureScr
           justifyContent: "center",
           px: 3,
           width: "100vw",
+          backgroundColor: "background.default",
+          color: "text.primary",
         }}
       >
         <Box sx={{ width: "100%", maxWidth: 720 }}>
@@ -98,5 +101,21 @@ export function BootstrapFailureScreen({ failure, onRetry }: BootstrapFailureScr
         </Box>
       </Box>
     </ThemeProvider>
+  );
+}
+
+/**
+ * Shows one full-page startup fallback when the UI cannot even finish loading its config.
+ *
+ * Why: without this screen, a bootstrap-time 502/503 leaves the browser on a white page
+ * because the router and normal in-app error handling are not mounted yet.
+ *
+ * How: render it directly from `index.tsx` when `loadConfig()` fails before the app starts.
+ */
+export function BootstrapFailureScreen({ failure, onRetry }: BootstrapFailureScreenProps) {
+  return (
+    <ApplicationContextProvider>
+      <BootstrapFailureScreenContent failure={failure} onRetry={onRetry} />
+    </ApplicationContextProvider>
   );
 }
