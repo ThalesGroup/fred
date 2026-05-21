@@ -18,10 +18,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "b5393ea7a65d"  # pragma: allowlist secret
-down_revision: Union[str, Sequence[str], None] = (
-    "5978e4ad3e1b"  # pragma: allowlist secret
-)
+revision: str = "b5393ea7a65d"
+down_revision: Union[str, Sequence[str], None] = "5978e4ad3e1b"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
