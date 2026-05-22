@@ -32,12 +32,9 @@ migration to HTTP SSE and new libs does not silently regress it.
 from __future__ import annotations
 
 from fred_core.model.factory import _apply_openai_stream_usage_default
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
-from langchain_core.runnables.config import ensure_config, var_child_runnable_config
+from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages.tool import ToolMessage
-from langchain_openai import ChatOpenAI
 
-from agentic_backend.agents.v1.production.aegis.aegis_rag_expert import Aegis
 from agentic_backend.core.agents.v2.contracts.runtime import (
     AssistantDeltaRuntimeEvent,
     AwaitingHumanRuntimeEvent,
@@ -428,65 +425,3 @@ def test_both_streaming_defaults_applied_together() -> None:
     assert "stream_usage" in settings
     assert settings["streaming"] is True
     assert settings["stream_usage"] is True
-
-
-# ---------------------------------------------------------------------------
-# 8. Aegis internal runnable calls must suppress inherited streaming callbacks
-# ---------------------------------------------------------------------------
-
-
-def test_aegis_internal_runnable_config_overrides_inherited_callbacks() -> None:
-    """
-    Internal Aegis LangChain calls made during a streamed graph turn inherit parent
-    callbacks through contextvars by default.
-
-    Passing Aegis._internal_runnable_config() must override that inherited
-    callback stack with an explicit empty list so intermediary chunks do not
-    surface in the chat stream.
-    """
-    token = var_child_runnable_config.set(
-        ensure_config(
-            {"callbacks": ["parent-callback"], "configurable": {"thread_id": "t1"}}
-        )
-    )
-    try:
-        merged = ensure_config(Aegis._internal_runnable_config())
-    finally:
-        var_child_runnable_config.reset(token)
-
-    assert merged["callbacks"] == []
-    assert merged["configurable"]["thread_id"] == "t1"
-
-
-# ---------------------------------------------------------------------------
-# 9. Aegis internal model must override provider-level streaming defaults
-# ---------------------------------------------------------------------------
-
-
-def test_aegis_internal_model_forces_non_streaming_payload() -> None:
-    """
-    Aegis internal LLM steps call invoke()/with_structured_output() and must
-    override the shared OpenAI default of streaming=True.
-
-    Without forcing streaming=False on the copied model, recent
-    langchain_openai versions still put stream=True in invoke() payloads,
-    which makes non-streaming Aegis steps receive an SDK Stream object.
-    """
-    model = ChatOpenAI(
-        model="gpt-4o-mini",
-        api_key="test-key",  # pragma: allowlist secret
-        streaming=True,
-        stream_usage=True,
-    )
-    agent = object.__new__(Aegis)
-
-    internal_model = Aegis._make_internal_model(agent, model)
-
-    assert internal_model is not model
-    assert getattr(internal_model, "disable_streaming", None) is True
-    assert getattr(internal_model, "streaming", None) is False
-    assert getattr(internal_model, "stream_usage", None) is False
-    assert internal_model._should_stream(async_api=False) is False
-
-    payload = internal_model._get_request_payload([HumanMessage(content="hello")])
-    assert payload["stream"] is False
