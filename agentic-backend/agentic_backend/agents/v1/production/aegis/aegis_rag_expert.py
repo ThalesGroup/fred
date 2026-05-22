@@ -347,24 +347,33 @@ class Aegis(AgentFlow):
         How to use:
             Pass the shared default chat model and use the returned copy for
             grading, self-check, draft generation, and fallback answer steps.
+            The copy must force both `disable_streaming=True` and
+            `streaming=False` because recent LangChain/OpenAI wrappers still
+            include `stream=self.streaming` in non-streaming `invoke()` payloads.
         """
+        update: dict[str, Any] = {"disable_streaming": True}
+        if hasattr(model, "streaming"):
+            update["streaming"] = False
+        if hasattr(model, "stream_usage"):
+            update["stream_usage"] = False
+
         try:
             if hasattr(model, "model_copy"):
-                return model.model_copy(update={"disable_streaming": True})
+                return model.model_copy(update=update)
         except Exception:
             logger.debug(
-                "Aegis: model_copy(disable_streaming=True) failed", exc_info=True
+                "Aegis: model_copy(non-streaming update) failed", exc_info=True
             )
 
         try:
             if hasattr(model, "copy"):
-                return model.copy(update={"disable_streaming": True})
+                return model.copy(update=update)
         except Exception:
-            logger.debug("Aegis: copy(disable_streaming=True) failed", exc_info=True)
+            logger.debug("Aegis: copy(non-streaming update) failed", exc_info=True)
 
         try:
             if hasattr(model, "bind"):
-                return model.bind(stream=False)
+                return model.bind(stream=False, stream_usage=False)
         except Exception:
             logger.debug("Aegis: bind(stream=False) failed", exc_info=True)
 
@@ -460,8 +469,12 @@ class Aegis(AgentFlow):
         How to use:
             Pass the prepared message list for internal business steps such as
             draft generation or no-results fallback generation.
+            This passes `stream=False` explicitly because the OpenAI wrapper can
+            still derive a streaming payload from instance defaults.
         """
-        response = await asyncio.to_thread(self.internal_model.invoke, messages)
+        response = await asyncio.to_thread(
+            self.internal_model.invoke, messages, stream=False
+        )
         return cast(AIMessage, response)
 
     async def _ainvoke_internal_chain(self, chain: Any, payload: dict[str, Any]) -> Any:
