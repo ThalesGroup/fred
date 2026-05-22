@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Backend development image
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/python:3.12.8-slim
+FROM mirror.gcr.io/python:3.12.13-slim
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000
