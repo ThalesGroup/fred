@@ -765,6 +765,8 @@ export type McpServerConfiguration = {
 };
 export type McpServerRef = {
   id: string;
+  /** When True the server is displayed in the enrollment form but its toggle is read-only. The operator can see and configure the server but cannot remove it. Used by specialized templates to protect their canonical tool set. */
+  locked?: boolean;
   require_tools?: string[];
 };
 export type AgentTuning = {
