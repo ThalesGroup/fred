@@ -15,7 +15,7 @@ app:
   base_url: "/knowledge-flow/v1"
   address: "0.0.0.0"
   port: 8111
-  log_level: "info"
+  log_level: "debug"
   reload: false
   reload_dir: "."
   metrics_enabled: false
@@ -226,8 +226,10 @@ document_sources:
 
 embedding_model:
   provider: openai
-  name: text-embedding-3-large
+  name: mistral-embed
   settings:
+    base_url: https://api.mistral.ai/v1
+    check_embedding_ctx_length: false
     max_retries: 0
     timeout:
       connect: 10.0
