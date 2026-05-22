@@ -211,6 +211,203 @@ frontend/runtime affordances. Phase 1 of that resolution is
 
 ---
 
-## 7. Open questions
+## 7. Locked MCP servers on specialized templates (decided 2026-05-22)
+
+See `SDK-V2-RFC.md §18` for the full agent template taxonomy. This section records
+the MCP-layer contract consequences.
+
+### 7.1 Problem
+
+Specialized templates (e.g. Sentinel, react_rag_mcp) pre-wire specific MCP servers
+that define their identity. Allowing operators to toggle these servers off in the
+enrollment form breaks the template's semantic contract — a Monitoring assistant
+without its OpenSearch MCP is not a Monitoring assistant.
+
+### 7.2 Decision
+
+`MCPServerRef` gains a `locked: bool = False` field. When `True`:
+
+- the server is displayed in the Tools tab with its `config_fields` fully visible
+- its enable/disable toggle is rendered as **disabled (read-only)**
+- the value is excluded from operator input in create/update requests; the
+  control-plane treats it as always-active regardless of `selected_mcp_server_ids`
+
+### 7.3 Schema changes
+
+```python
+# fred-sdk MCPServerRef
+class MCPServerRef(BaseModel):
+    id: str
+    require_tools: list[str] = []
+    locked: bool = False          # NEW — template declares this server as non-toggleable
+```
+
+```python
+# control_plane_backend ManagedMcpServerRef — propagated from template
+class ManagedMcpServerRef(BaseModel):
+    ...
+    locked: bool = False          # NEW — forwarded from MCPServerRef; frontend reads this
+```
+
+### 7.4 Impact table addition
+
+| Layer | Change | Required? |
+|---|---|---|
+| `fred-sdk` `MCPServerRef` | Add `locked: bool = False` | Yes |
+| `ManagedMcpServerRef` in control-plane `config/models.py` | Add `locked: bool = False` | Yes |
+| Control-plane product service enrichment loop | Forward `locked` from `MCPServerRef` into `ManagedMcpServerRef` | Yes |
+| Control-plane create/update validation | Always-include locked servers; reject attempts to exclude them via `mcp_server_ids` | Yes |
+| Frontend `McpServerCard` | Render toggle as disabled when `server.locked === true` | Yes |
+| `fred-agents` specialized templates | Set `locked=True` on all `MCPServerRef` entries | Yes |
+| `controlPlaneOpenApi.ts` | Regenerate after `ManagedMcpServerRef.locked` is added | Yes |
+
+### 7.5 Config fields on locked servers
+
+Locked servers still expose their `config_fields`. The operator can configure
+library selection, search policy, or any other tool-owned option — they just
+cannot remove the tool itself. Read-only toggle ≠ read-only configuration.
+
+---
+
+## 8. Tool-declared behavioral contracts (`agent_instructions`)
+
+**Status:** RFC — not yet implemented.
+
+### 8.1 Problem
+
+Citation behavior (and any other behavior that is intrinsic to a tool being
+active) is currently encoded in the agent template's system prompt. This has
+three serious consequences:
+
+1. **Fragility** — an operator who writes a custom `prompts.system` silently
+   overrides all citation rules. The agent stops citing. No warning, no test
+   failure, no signal.
+2. **Duplication** — every template that activates a search server must copy
+   the same citation rules. Adding a new rule requires touching every template.
+3. **Wrong ownership** — citation is a contract of the *search tool*, not of
+   any individual agent. Placing it in the agent prompt inverts the ownership
+   that §2 of this RFC establishes for `config_fields`.
+
+This is exactly the same structural problem that motivated `config_fields`: tool
+capabilities declared in agent code instead of in the tool's catalog entry.
+
+### 8.2 Principle extension
+
+§2 states: *"The tool declares its user-facing capabilities."*
+
+This extends to behavioral contracts: if activating a tool implies a mandatory
+behavioral constraint on the agent (e.g., cite retrieved results, never invent
+URLs, always disclose retrieval failure), that constraint belongs in the tool's
+catalog entry — not in any system prompt.
+
+**The operator's `prompts.system` sets the role and focus of the agent.
+The tool's `agent_instructions` enforces the behavioral contract of that tool.
+These are orthogonal. Neither should override the other.**
+
+### 8.3 Proposed solution
+
+#### 8.3.1 Catalog format extension
+
+Each server entry in `mcp_catalog.yaml` may declare an optional
+`agent_instructions` field — a plain text block that the runtime appends to
+the effective system prompt whenever that server is active:
+
+```yaml
+- id: "mcp-knowledge-flow-mcp-text"
+  name: "mcp.servers.search_documents.name"
+  transport: "streamable_http"
+  url: "http://localhost:8111/knowledge-flow/v1/mcp-text"
+  enabled: true
+  config_fields: [...]   # existing
+  agent_instructions: |  # NEW
+    ## Citation contract (enforced by the search tool — non-negotiable)
+
+    Every claim derived from a search result MUST carry an inline citation
+    immediately after the claim: **[Title, p. X]** where Title is the `title`
+    field and X is `page`, then `section`, then `file_name` in that priority.
+
+    End every response that cites a document with a **Sources** section.
+    List each document once: title, file_name, page or section.
+
+    NEVER generate, fabricate, or include any URL, hyperlink, or document ID.
+    If the search tool returns no relevant results, say so explicitly before
+    answering from general knowledge and label the claim accordingly.
+```
+
+`McpServerEntry` already uses `model_config = ConfigDict(extra="allow")`, so
+this field passes through the catalog loader without any model change.
+
+#### 8.3.2 Runtime injection
+
+In `agent_app.py`, `_apply_runtime_tuning`, after resolving the operator's
+`system_prompt_template` (current lines 887–891), append the `agent_instructions`
+of every active MCP server:
+
+```python
+# Behavioral contracts from active tools — non-negotiable, always appended.
+fragments = [
+    catalog_entry.agent_instructions
+    for server_ref in mcp_servers          # already filtered to active subset
+    for catalog_entry in available_catalog  # pod-local MCPServerConfiguration list
+    if catalog_entry.id == server_ref.id
+    and catalog_entry.agent_instructions
+]
+if fragments:
+    injected = "\n\n".join(fragments)
+    base = update.get("system_prompt_template", definition.system_prompt_template)
+    update["system_prompt_template"] = f"{base}\n\n{injected}"
+```
+
+The `available_catalog` (the loaded `MCPServerConfiguration` list) must be
+passed into `_apply_runtime_tuning` as an additional parameter. The call sites
+at lines 955 and 1011 already have access to it via `_available_mcp_servers_for_definition`.
+
+#### 8.3.3 Contract guarantees
+
+| Property | Guaranteed by |
+|---|---|
+| Instructions are always present when the tool is active | Runtime injection, not prompt authoring |
+| Operator's custom prompt is respected | Injected fragment is appended, not prepended |
+| Adding a new instruction requires one catalog edit | Single source of truth in `mcp_catalog.yaml` |
+| Removing the tool removes its instructions | Injection is conditional on the server being active |
+| No template duplication | `agent_instructions` lives in the catalog, not in agent code |
+
+### 8.4 Impact
+
+| Layer | Change | Notes |
+|---|---|---|
+| `mcp_catalog.yaml` | Add `agent_instructions` to `mcp-knowledge-flow-mcp-text` (and any other tool with behavioral requirements) | No schema change needed — `extra="allow"` |
+| `MCPServerConfiguration` (fred-sdk) | Add `agent_instructions: str \| None = None` | Typed access for runtime |
+| `_apply_runtime_tuning` (fred-runtime) | Inject active servers' `agent_instructions` after operator's system prompt | Core change |
+| `fred-agents` templates | Remove citation rules from `_SYSTEM_PROMPT` in `react_rag_mcp.py`; they move to the catalog | Simplification |
+| Control-plane | No change required — `agent_instructions` is a runtime concern, not a form field | Intentional |
+| Frontend | No change required — `agent_instructions` is never shown or edited by operators | Intentional |
+
+### 8.5 Alternatives rejected
+
+**Putting `agent_instructions` on `MCPServerRef` (fred-sdk authoring model) rather
+than in the catalog:** `MCPServerRef` is an authoring-time reference. Behavioral
+contracts belong to the catalog entry — the runtime source of truth — not to every
+agent that references the server.
+
+**Tool-level MCP protocol description fields:** The MCP `description` field on a
+tool is what the model reads when deciding whether to call the tool. It is not
+a behavioral instruction to the model as an agent. These are different things.
+
+**Post-processing the model output to inject citations:** Fragile, changes the
+model's context on the next turn, and doesn't help with partial streaming output.
+
+### 8.6 What this does NOT change
+
+- The operator's `prompts.system` field remains fully editable. It sets role,
+  tone, and focus. It is prepended to — not replaced by — tool instructions.
+- Templates that do not activate a search tool are unaffected.
+- `config_fields` (user-configurable tool options) are unrelated to
+  `agent_instructions` (non-negotiable behavioral contracts). Both can coexist
+  on the same server entry.
+
+---
+
+## 9. Open questions
 
 None. The design is agreed. This RFC records the decision for traceability.

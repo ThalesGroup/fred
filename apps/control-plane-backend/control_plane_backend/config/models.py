@@ -99,6 +99,14 @@ class ManagedMcpServerRef(BaseModel):
     display_name: str = ""
     require_tools: list[str] = Field(default_factory=list)
     config_fields: list[ManagedAgentFieldSpec] = Field(default_factory=list)
+    locked: bool = Field(
+        default=False,
+        description=(
+            "When True the server is part of the template's canonical tool set. "
+            "The frontend renders its toggle as read-only; the operator can "
+            "configure its config_fields but cannot remove the server."
+        ),
+    )
 
 
 class ManagedAgentTuning(BaseModel):

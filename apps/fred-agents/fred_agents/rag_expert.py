@@ -65,7 +65,7 @@ class RagExpertReActDefinition(ReActAgentDefinition):
     """
 
     agent_id: str = "fred.github.rag_expert"
-    role: str = "Document-grounded RAG expert"
+    role: str = "Rico"
     description: str = (
         "A retrieval-augmented assistant that answers from selected document "
         "libraries and clearly distinguishes grounded evidence from uncertainty."

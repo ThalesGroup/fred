@@ -76,6 +76,14 @@ item. If no backlog covers the area, ask the developer before proceeding.
 touched, which tests added, which docs updated. **Do not begin until confirmed.**
 One sentence of approval is enough.
 
+**Step 3.5 — GitHub issue (execution handoff).** After confirmation and before
+implementation, a GitHub issue must exist that links the task ID, RFC, and
+backlog entry. This is the team's execution handoff — it is how the developer
+picks up the work and how the code assistant knows the task is authorised.
+If no issue exists, offer to create one. Do not implement without it unless the
+developer explicitly waives this step. The issue does not replace the RFC or
+backlog entry — it references them.
+
 **Step 4 — Implementation.** Write the code. Coding constraints: `docs/CONVENTIONS.md`.
 
 **Step 5 — Verification.** In the touched project root:
