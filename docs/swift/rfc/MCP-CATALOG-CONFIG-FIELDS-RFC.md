@@ -1,6 +1,6 @@
 # RFC: MCP Catalog config_fields — Tool-Declared Capability Options
 
-**Status:** Partially implemented (2026-05-06) — backend complete, frontend AgentFormBody rendering pending
+**Status:** Partially implemented (2026-05-22) — backend/tooling complete through §8, frontend AgentFormBody rendering still pending
 **Author:** Architecture
 **Scope:** `fred-sdk` `MCPServerConfiguration`, `mcp_catalog.yaml` format, control-plane
 product service enrichment, `AgentFormBody` Tools tab, `fred-agents` agent templates
@@ -271,7 +271,7 @@ cannot remove the tool itself. Read-only toggle ≠ read-only configuration.
 
 ## 8. Tool-declared behavioral contracts (`agent_instructions`)
 
-**Status:** RFC — not yet implemented.
+**Status:** Implemented (2026-05-22).
 
 ### 8.1 Problem
 

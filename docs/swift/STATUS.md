@@ -10,7 +10,7 @@ first — it is faster than scanning prose. For sprint-level structured data, re
 Ask Claude Code directly: *"What is Simon working on?"* · *"What tests cover MCP config?"*
 · *"What is the next backend task for Dimitri?"* · *"What's blocking Félix?"*
 
-Last updated: 2026-05-11
+Last updated: 2026-05-22
 
 ---
 
@@ -89,6 +89,7 @@ Last updated: 2026-05-11
 
 | ID | Nom | Owner | Fermé |
 |---|---|---|---|
+| CTRLP-08 | Contrats comportementaux tool-level (`agent_instructions` MCP catalog + injection runtime) | Simon | 2026-05-22 |
 | CHAT-02 | Markdown rendering (react-markdown, CodeBlock, SourceBadge) | Dimitri | 2026-05-04 |
 | MEMORY-01 | Mémoire multi-agent conversationnelle — core (phases A–E) | Dimitri | 2026-05-05 |
 | — | Agent FieldSpec declarations (3 agents de production) | Dimitri | 2026-05-04 |
@@ -135,7 +136,7 @@ Last updated: 2026-05-11
 | Control-plane developer CLI commands | `test_cli.py` | `control-plane-backend` |
 | Session lifecycle, purge policies | `test_lifecycle_actions.py` | `control-plane-backend` |
 | ReBAC policy engine | `test_policy_engine.py` | `control-plane-backend` |
-| Agent runtime (tuning, MCP selection, KPI) | `test_agent_app.py` | `fred-runtime` |
+| Agent runtime (tuning, MCP selection, `agent_instructions`, KPI) | `test_agent_app.py` | `fred-runtime` |
 | MCP catalog loading + tri-state selection (CTRLP-03) | `test_mcp_config.py` | `fred-runtime` |
 | Mémoire multi-agent — runtime wiring (MEMORY-01 phases C+D) | `test_conversational_memory.py` | `fred-runtime` |
 | Prompt safety token registry + validation (PROMPT-01) | `test_prompt_utils.py` | `fred-sdk` |
