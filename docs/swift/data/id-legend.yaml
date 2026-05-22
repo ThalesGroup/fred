@@ -283,7 +283,7 @@ items:
   - id: OPS-01
     title: "fred-agents chart wiring for Uvicorn limit_concurrency and saturation-safe probes"
     status: open
-    owner: Simon
+    owner: Sebastien
     blocked_on: "A dedicated fred-agents chart must exist on this branch"
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
