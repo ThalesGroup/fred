@@ -58,7 +58,7 @@ _JWT_CACHE: ThreadSafeLRUCache[str, tuple[float, KeycloakUser]] = ThreadSafeLRUC
 )
 
 
-def _mock_user() -> KeycloakUser:
+def mock_admin_user() -> KeycloakUser:
     """
     Return a stable mock user for offline/dev runs when Keycloak auth is disabled.
 
@@ -69,7 +69,7 @@ def _mock_user() -> KeycloakUser:
     How: return a deterministic UUID-like `uid` plus fixed admin-ish identity fields.
 
     Usage:
-        user = _mock_user()
+        user = mock_admin_user()
     """
     return KeycloakUser(
         uid=MOCK_USER_UID,
@@ -255,7 +255,7 @@ def decode_jwt(token: str) -> KeycloakUser:
     """
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
-        return _mock_user()
+        return mock_admin_user()
 
     cached_user = _get_cached_user(token)
     if cached_user:
@@ -416,7 +416,7 @@ async def get_current_user_without_gcu(
     """
     if not KEYCLOAK_ENABLED:
         logger.debug("[SECURITY] Authentication is DISABLED. Returning a mock user.")
-        return _mock_user()
+        return mock_admin_user()
 
     if not token:
         logger.warning("No Bearer token provided on secured endpoint")
