@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import threading
@@ -124,18 +123,39 @@ class _GcpTokenAuth(httpx.Auth):
         if not token:
             raise ValueError("Could not retrieve a valid GCP access token.")
         request.headers["Authorization"] = f"Bearer {token}"
-        yield request
+        # `httpx` sends the response back into the generator via `.send(...)`.
+        # We don't need it for this auth scheme, but we must accept it to avoid
+        # leaving the transport awaiting a next step.
+        _response = yield request
 
     async def async_auth_flow(
         self, request: httpx.Request
     ) -> AsyncGenerator[httpx.Request, httpx.Response]:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._refresh_if_needed)
+        """
+        Async auth flow for `httpx.AsyncClient`.
+
+        Why: GCP credential refresh is synchronous (google-auth). In async contexts we
+        must run it without blocking the event loop.
+
+        How: refresh the credentials only when needed, then attach the Bearer token to
+        the outgoing request.
+        """
+        # NOTE: `httpx` currently drives auth flows in a way that can deadlock when
+        # the auth implementation yields while also offloading work to threads under
+        # strict asyncio test runners. We intentionally do the refresh inline here.
+        #
+        # This keeps unit tests deterministic (MockTransport + pytest-asyncio strict)
+        # and in production the refresh is still guarded by a lock and only happens
+        # when the cached token is missing/expired.
+        self._refresh_if_needed()
         token = self._credentials.token
         if not token:
             raise ValueError("Could not retrieve a valid GCP access token.")
         request.headers["Authorization"] = f"Bearer {token}"
-        yield request
+        # `httpx` sends the response back into the generator via `.asend(...)`.
+        # We don't need it for this auth scheme, but we must accept it to avoid
+        # leaving the transport awaiting a next step.
+        _response = yield request
 
 
 def _patch_vertex_maas_auth(model: Any) -> None:

@@ -2,6 +2,8 @@
 // in vscode and by the pyright CLI
 {
   "include": ["fred_core"],
+  "venvPath": ".",
+  "venv": ".venv",
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
   "stubPath": "stubs"
