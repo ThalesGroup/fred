@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from fred_sdk.contracts.execution import ExecutionGrantAction
 from fastapi.responses import Response
 from fred_core import KeycloakUser, get_current_user, require_admin
 from fred_core.common import TeamId
+from fred_sdk.contracts.execution import ExecutionGrantAction
 
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
