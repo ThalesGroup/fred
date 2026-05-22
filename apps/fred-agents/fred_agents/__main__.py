@@ -37,6 +37,7 @@ def main() -> None:
         "fred_agents.main:app",
         host="127.0.0.1",
         port=config.app.port,
+        limit_concurrency=config.app.limit_concurrency,
         reload=True,
     )
 

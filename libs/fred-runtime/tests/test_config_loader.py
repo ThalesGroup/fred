@@ -7,8 +7,12 @@ import pytest
 
 from fred_runtime.app import load_agent_pod_config
 
+_MISSING = object()
 
-def _write_configuration_yaml(config_dir: Path) -> None:
+
+def _write_configuration_yaml(
+    config_dir: Path, *, limit_concurrency: int | None | object = None
+) -> None:
     """
     Write one minimal pod `configuration.yaml` fixture.
 
@@ -19,19 +23,26 @@ def _write_configuration_yaml(config_dir: Path) -> None:
     How to use it:
     - pass the temporary `config/` directory for a minimal pod config whose MCP
       truth comes only from the external catalog file
+    - pass `limit_concurrency=<int>` to exercise the optional Uvicorn cap
+    - pass `limit_concurrency=_MISSING` to omit the field entirely
 
     Example:
     - `_write_configuration_yaml(config_dir)`
     """
 
+    limit_concurrency_block = ""
+    if limit_concurrency is not _MISSING:
+        literal = "null" if limit_concurrency is None else str(limit_concurrency)
+        limit_concurrency_block = f"\n              limit_concurrency: {literal}"
+
     (config_dir / "configuration.yaml").write_text(
         dedent(
-            """
+            f"""
             app:
               name: "Test Pod"
               base_url: "/pod/v1"
               port: 8000
-              log_level: "info"
+              log_level: "info"{limit_concurrency_block}
 
             security:
               m2m:
@@ -173,6 +184,7 @@ def test_load_agent_pod_config_loads_default_external_catalogs(
     assert Path(config.get_models_catalog_path() or "") == Path(
         "config/models_catalog.yaml"
     )
+    assert config.app.limit_concurrency is None
     assert config.ai.timeout.connect == 5.0
     assert config.ai.timeout.read == 30.0
     mcp_configuration = config.get_mcp_configuration()
@@ -297,3 +309,69 @@ def test_load_agent_pod_config_keeps_mcp_out_of_public_model(
     mcp_configuration = config.get_mcp_configuration()
     assert mcp_configuration is not None
     assert [server.id for server in mcp_configuration.servers] == ["mcp-override"]
+
+
+def test_load_agent_pod_config_loads_app_limit_concurrency(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    Ensure pod startup preserves the optional Uvicorn connection cap setting.
+
+    Why this test exists:
+    - pod authors now configure the runtime-side Uvicorn concurrency cap in the
+      shared YAML contract
+
+    How to use it:
+    - run via the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_config_loader.py -q`
+    """
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_configuration_yaml(config_dir, limit_concurrency=37)
+    _write_models_catalog(config_dir / "models_catalog.yaml")
+    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
+    (config_dir / ".env").write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    config = load_agent_pod_config()
+
+    assert config.app.limit_concurrency == 37
+
+
+def test_load_agent_pod_config_defaults_app_limit_concurrency_when_omitted(
+    tmp_path, monkeypatch
+) -> None:
+    """
+    Ensure older pod configs still load when the Uvicorn cap field is absent.
+
+    Why this test exists:
+    - adding `app.limit_concurrency` must remain backward compatible with
+      existing configuration files that omit the new field entirely
+
+    How to use it:
+    - run via the default offline `fred-runtime` test suite
+
+    Example:
+    - `pytest tests/test_config_loader.py -q`
+    """
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    _write_configuration_yaml(config_dir, limit_concurrency=_MISSING)
+    _write_models_catalog(config_dir / "models_catalog.yaml")
+    _write_mcp_catalog(config_dir / "mcp_catalog.yaml", server_id="mcp-default")
+    (config_dir / ".env").write_text("", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
+    monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
+
+    config = load_agent_pod_config()
+
+    assert config.app.limit_concurrency is None

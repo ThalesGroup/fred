@@ -155,6 +155,7 @@ app:
   host: "0.0.0.0"
   port: 8010
   log_level: "info"
+  limit_concurrency: 200
   metrics_address: "127.0.0.1"
   metrics_port: 9115
   kpi_process_metrics_interval_sec: 10
@@ -172,6 +173,10 @@ Full schema: `fred_runtime.app.config.AgentPodConfig`.
 When `observability.metrics: prometheus` is enabled, `create_agent_app(...)`
 starts a dedicated Prometheus exporter on `app.metrics_address:app.metrics_port`
 and restores the shared Fred KPI pipeline, including process and SQL pool KPIs.
+
+Set `app.limit_concurrency: null` to disable Uvicorn connection limiting, or a
+positive integer to reject excess concurrent HTTP and WebSocket connections
+with `503` before application code runs.
 
 ---
 
@@ -209,7 +214,13 @@ from fred_runtime.app import load_agent_pod_config
 
 def main():
     config = load_agent_pod_config()
-    uvicorn.run("myapp.main:app", host=config.app.host, port=config.app.port, reload=True)
+    uvicorn.run(
+        "myapp.main:app",
+        host=config.app.host,
+        port=config.app.port,
+        limit_concurrency=config.app.limit_concurrency,
+        reload=True,
+    )
 
 if __name__ == "__main__":
     main()

@@ -110,6 +110,15 @@ class PodAppConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
+    limit_concurrency: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Optional maximum number of concurrent HTTP or WebSocket "
+            "connections accepted by Uvicorn. Leave unset to disable the "
+            "limit."
+        ),
+    )
     gcu_version: str | None = None
     metrics_address: str = "127.0.0.1"
     metrics_port: int = 9000

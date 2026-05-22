@@ -1141,6 +1141,33 @@ implementation until the TTL policy is agreed.
 - [ ] Implement background sweeper in `create_agent_app` lifespan
 - [ ] Expose `/agents/checkpoints/purge` (dry_run=true by default) for ops teams
 
+#### 3b.10 Standalone pod Uvicorn concurrency cap (`RUNTIME-03`) — ✅ Done 2026-05-21
+
+Small mechanical parity port from the historical `1534` branch, scoped only to
+the modern runtime pod (`apps/fred-agents` + `libs/fred-runtime`).
+
+This is **not** a new public execution contract and does **not** require a new
+RFC. It only exposes one optional Uvicorn startup knob through the existing pod
+configuration schema.
+
+- [x] Add `app.limit_concurrency: int | null` to `PodAppConfig`
+- [x] Add `limit_concurrency: null` to `apps/fred-agents/config/configuration*.yaml`
+- [x] Pass `config.app.limit_concurrency` to `uvicorn.run(...)` in `python -m fred_agents`
+- [x] Cover config loading for explicit value and omitted-field default
+- [x] Add an offline entrypoint test proving `main()` forwards `limit_concurrency`
+- [x] Document the config knob in `libs/fred-runtime/README.md`
+
+**Deferred follow-up (not part of `RUNTIME-03`):**
+When a dedicated `fred-agents` chart exists on this branch, add the Helm-side
+`--limit-concurrency` wiring there and re-evaluate TCP probes under saturation.
+
+#### 3b.11 fred-agents chart follow-up (`OPS-01`)
+
+- [ ] Add `RUNTIME-03` support to the future `fred-agents` chart: expose the
+  `app.limit_concurrency` value in chart values, inject `--limit-concurrency`
+  into the Uvicorn startup command, and re-evaluate liveness/readiness probe
+  strategy under saturation (TCP probes if HTTP probes become unreliable).
+
 ### 3b.7 Validation
 
 - [ ] one managed execution works end-to-end from `fred-agents-cli`

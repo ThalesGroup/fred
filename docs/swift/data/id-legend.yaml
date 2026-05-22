@@ -278,6 +278,16 @@ items:
     refs:
       backlog: "docs/swift/backlog/BACKLOG.md §7.3"
 
+  # ── OPS ───────────────────────────────────────────────────────────────
+
+  - id: OPS-01
+    title: "fred-agents chart wiring for Uvicorn limit_concurrency and saturation-safe probes"
+    status: open
+    owner: Sebastien
+    blocked_on: "A dedicated fred-agents chart must exist on this branch"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.11"
+
   # ── PROMPT ────────────────────────────────────────────────────────────
 
   - id: PROMPT-01
@@ -374,6 +384,18 @@ items:
     closed: "2026-05-11"
     refs:
       rfc: "docs/swift/rfc/EXECUTION-CONTEXT-RFC.md"
+
+  - id: RUNTIME-03
+    title: "Standalone pod Uvicorn concurrency cap config"
+    status: done
+    owner: Simon
+    closed: "2026-05-21"
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §3b.10"
+    notes: >
+      Mechanical parity port from legacy branch 1534, scoped to apps/fred-agents
+      and libs/fred-runtime only. Chart wiring and TCP probe follow-up are
+      explicitly deferred until a fred-agents chart exists on this branch.
 
   # ── UX ────────────────────────────────────────────────────────────────
 
