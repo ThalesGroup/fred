@@ -13,7 +13,7 @@
 # Registre complet : docs/data/id-legend.yaml
 
 meta:
-  last_updated: "2026-05-21"
+  last_updated: "2026-05-22"
   sprint_week: "2026-05-21"
   status_doc: "docs/swift/STATUS.md"
   id_legend: "docs/swift/data/id-legend.yaml"
@@ -189,6 +189,33 @@ next_up:
     depends_on: [PROMPT-02, PROMPT-FORM]
     milestone: MS-prompt-library
     backlog_ref: "docs/backlog/BACKLOG.md §3d.10"
+
+  - id: UX-AUDIT
+    legacy_id: "UX-01"
+    title: "UI/UX consolidation — full visual audit, all rework surfaces"
+    owner: Félix
+    reviewer: Maxime
+    blocked: false
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §UX-1"
+    notes: >
+      Félix implémente. Maxime valide — aucune issue ne peut être marquée résolue
+      sans son sign-off. Démarre par une session de revue design (Félix + Maxime).
+      Issues tracées dans docs/swift/ux/COMPONENT-UX.md.
+      Premier problème connu: tooltip overflow sur search policy / RAG scope selects.
+
+  - id: MCP-BEHAV
+    legacy_id: "CTRLP-08"
+    title: "Tool-declared behavioral contracts — agent_instructions runtime injection"
+    owner: Simon
+    blocked: false
+    backlog_ref: "docs/swift/backlog/BACKLOG.md §3.14"
+    rfc_ref: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8"
+    notes: >
+      Citation rules and other mandatory tool behaviors move from agent prompts
+      into the MCP catalog (agent_instructions field). The runtime injects them
+      unconditionally when the server is active. Operator prompts cannot override.
+      Three-file change: mcp_catalog.yaml, MCPServerConfiguration (fred-sdk),
+      _apply_runtime_tuning (fred-runtime). See RFC §8 for full spec.
 
   - id: FE-CLEANUP
     legacy_id: "FRONT-05"

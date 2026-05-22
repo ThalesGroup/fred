@@ -22,6 +22,7 @@ meta:
     PROMPT:  "Prompt safety, library, context picker, marketplace"
     QUALITY: "Quality refactors — typing, file size, test coverage"
     RUNTIME: "Execution contracts, SDK, ChatContext, runtime CLI"
+    UX:      "UX audit, design system compliance, visual polish — all surfaces"
     VALID:   "End-to-end validation, live-stack scenarios"
   rules:
     - "One ID = one tracked unit of work (has or could have owner/status/blockers)."
@@ -139,6 +140,38 @@ items:
       (1) collect all validation errors across tuning fields, MCP server IDs, and MCP config values
       instead of failing on the first one; (2) return a structured 422 body listing every
       {field, message} pair so the frontend can surface all problems in one round trip.
+
+  - id: CTRLP-07
+    title: "Locked MCP servers on specialized agent templates"
+    status: done
+    owner: Dimitri
+    closed: "2026-05-22"
+    refs:
+      rfc: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §7"
+      backlog: "docs/swift/backlog/BACKLOG.md §3.11"
+    notes: >
+      Adds locked: bool to MCPServerRef (fred-sdk) and ManagedMcpServerRef (control-plane).
+      Specialized templates set locked=True on their MCPServerRef entries so the enrollment
+      form shows the server but renders its toggle as read-only. Sentinel is the first template
+      to use this. General assistant keeps all servers unlocked.
+
+  - id: CTRLP-08
+    title: "Tool-declared behavioral contracts — agent_instructions in mcp_catalog.yaml"
+    status: open
+    owner: Simon
+    parent: CTRLP-03
+    refs:
+      rfc: "docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8"
+      backlog: "docs/swift/backlog/BACKLOG.md §3.14"
+    notes: >
+      Mandatory behavioral constraints (e.g., citation rules for search tools) declared
+      in the MCP catalog entry as agent_instructions and injected by the runtime into the
+      effective system prompt whenever that server is active. Operator prompts cannot
+      override these — they are appended after. Removes the fragility of encoding tool
+      behavior in agent-level prompts. Three changes: (1) agent_instructions field in
+      mcp_catalog.yaml for mcp-knowledge-flow-mcp-text; (2) agent_instructions: str | None
+      on MCPServerConfiguration in fred-sdk; (3) injection block in _apply_runtime_tuning
+      in agent_app.py.
 
   # ── EVAL ──────────────────────────────────────────────────────────────
 
@@ -363,6 +396,24 @@ items:
       Mechanical parity port from legacy branch 1534, scoped to apps/fred-agents
       and libs/fred-runtime only. Chart wiring and TCP probe follow-up are
       explicitly deferred until a fred-agents chart exists on this branch.
+
+  # ── UX ────────────────────────────────────────────────────────────────
+
+  - id: UX-01
+    title: "UI/UX consolidation — full visual audit and design review across all surfaces"
+    status: open
+    owner: Félix
+    reviewer: Maxime
+    refs:
+      backlog: "docs/swift/backlog/BACKLOG.md §UX-1"
+      ux_tracker: "docs/swift/ux/COMPONENT-UX.md"
+    notes: >
+      Systematic UX audit of all implemented rework surfaces (agent creation form,
+      chat UI, team page, agent card, options panel, MCP tool cards). Maxime leads
+      as UX referent; developers fix issues he identifies. Starts with a design review
+      session. Known first issue: search policy and RAG scope select options show
+      long description strings as single truncated tooltip lines — needs a proper
+      multi-line tooltip or description placement (McpServerCard + TuningFieldRenderer).
 
   # ── VALID ─────────────────────────────────────────────────────────────
 

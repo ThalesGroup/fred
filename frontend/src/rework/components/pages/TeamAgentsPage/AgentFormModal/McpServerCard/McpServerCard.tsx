@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Switch from "@shared/atoms/Switch/Switch.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { SwitchRow } from "@components/pages/TeamAgentsPage/AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import { useTranslation } from "react-i18next";
 import type {
@@ -41,22 +41,6 @@ function resolveValue(field: ManagedAgentFieldSpec, configValues: Record<string,
   return "";
 }
 
-function useEnumOptionDescriptions(): Record<string, Record<string, string>> {
-  const { t } = useTranslation();
-  return {
-    "chat_options.search_policy": {
-      strict: t("search.strictDescription"),
-      hybrid: t("search.hybridDescription"),
-      semantic: t("search.semanticDescription"),
-    },
-    "chat_options.search_rag_scope": {
-      corpus_only: t("chatbot.ragScope.tooltipCorpus"),
-      hybrid: t("chatbot.ragScope.tooltipHybrid"),
-      general_only: t("chatbot.ragScope.tooltipGeneral"),
-    },
-  };
-}
-
 export function McpServerCard({
   server,
   checked,
@@ -65,20 +49,36 @@ export function McpServerCard({
   onToggle,
   onConfigChange,
 }: McpServerCardProps) {
-  const enumOptionDescriptions = useEnumOptionDescriptions();
+  const { t } = useTranslation();
   const configFields = server.config_fields ?? [];
   const hasOptions = checked && configFields.length > 0;
+  const isLocked = server.locked === true;
+  const displayLabel = server.display_name ? t(server.display_name) : server.id;
+
+  const enumOptionLabels: Record<string, Record<string, string>> = {
+    "chat_options.search_policy": {
+      strict: t("search.strict", "Strict"),
+      hybrid: t("search.hybrid", "Hybrid"),
+      semantic: t("search.semantic", "Semantic"),
+    },
+    "chat_options.search_rag_scope": {
+      corpus_only: t("chatbot.ragScope.corpusOnly", "Corpus only"),
+      hybrid: t("chatbot.ragScope.hybrid", "Hybrid"),
+      general_only: t("chatbot.ragScope.generalOnly", "General only"),
+    },
+  };
 
   return (
     <li className={`${styles.card} ${checked ? styles.cardActive : ""}`}>
-      <div className={styles.header} onClick={onToggle}>
+      <div className={styles.header} onClick={isLocked ? undefined : onToggle}>
         <span className={styles.switchWrapper} onClick={(e) => e.stopPropagation()}>
-          <Switch checked={checked} onChange={onToggle} disabled={disabled} />
+          <Switch checked={checked} onChange={onToggle} disabled={disabled || isLocked} />
         </span>
         <div className={styles.meta}>
           <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>
-            {server.display_name || server.id}
+            {displayLabel}
           </span>
+          {isLocked && <span className={styles.lockedBadge}>required</span>}
           {server.require_tools && server.require_tools.length > 0 && (
             <span className={styles.requireTools}>{server.require_tools.join(", ")}</span>
           )}
@@ -103,24 +103,24 @@ export function McpServerCard({
             }
 
             if (field.enum && field.enum.length > 0) {
+              const labels = enumOptionLabels[field.key] ?? {};
+              const selectedIndex = Math.max(0, field.enum.indexOf(value as string));
               return (
                 <div key={field.key} className={styles.fieldRow}>
                   <div className={styles.fieldLabel}>
                     <span className={styles.fieldTitle}>{field.title}</span>
-                    {field.description && <span className={styles.fieldDescription}>{field.description}</span>}
+                    {field.description && (
+                      <span className={styles.fieldDescription}>{field.description}</span>
+                    )}
                   </div>
-                  <Select
-                    size="xs"
-                    compact
-                    value={value as string}
-                    options={field.enum.map((opt) => ({
-                      value: opt,
-                      label: opt,
-                      key: opt,
-                      description: enumOptionDescriptions[field.key]?.[opt],
+                  <ButtonGroup
+                    size="small"
+                    color="secondary"
+                    selectedIndex={selectedIndex}
+                    onSelectedIndexChange={(i) => onConfigChange(field.key, field.enum![i])}
+                    items={field.enum.map((opt) => ({
+                      label: labels[opt] ?? opt.replace(/_/g, " "),
                     }))}
-                    onChange={(v) => onConfigChange(field.key, v)}
-                    disabled={disabled}
                   />
                 </div>
               );

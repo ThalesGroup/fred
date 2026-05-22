@@ -68,7 +68,7 @@ class SentinelReActDefinition(ReActAgentDefinition):
         file_name="basic_react_sentinel_system_prompt.md",
     )
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
+        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS, locked=True),
     )
 
     fields: tuple[FieldSpec, ...] = (

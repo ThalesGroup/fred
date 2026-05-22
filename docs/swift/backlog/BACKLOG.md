@@ -854,7 +854,20 @@ via `/agents/templates`; the control-plane discovers it dynamically. Tenant enro
 - [ ] Add MCP server CRUD endpoints (→ Phase 3b)
 - [ ] Decide whether attachment upload is proxied by control-plane or remains direct to another backend
 
-### 3.11 Important note
+### 3.11 Locked MCP servers on specialized agent templates — **CTRLP-07**
+
+**Status:** done 2026-05-22
+
+- [x] Add `locked: bool = False` to `MCPServerRef` in `fred-sdk` contracts
+- [x] Add `locked: bool = False` to `ManagedMcpServerRef` in `control_plane_backend/config/models.py`
+- [x] Forward `locked` in the MCP catalog enrichment loop (`product/service.py`)
+- [x] Set `locked=True` on the Sentinel (Monitoring assistant) `MCPServerRef`
+- [x] Regenerate `controlPlaneOpenApi.ts`
+- [x] Render toggle as disabled in `McpServerCard` when `server.locked === true`; show "required" badge
+
+RFC: `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §7`
+
+### 3.12 Important note
 
 Do **not** move runtime execution itself to control-plane.
 Control-plane should orchestrate metadata and ownership, while execution stays in `fred-runtime`.
@@ -880,6 +893,49 @@ Additional Phase 3 guardrails:
 
 - [x] `make code-quality` in `control-plane-backend`
 - [x] `make test` in `control-plane-backend`
+
+### 3.14 Tool-declared behavioral contracts (agent_instructions) — **CTRLP-08**
+
+**Status:** open — owner: Simon
+**RFC:** `docs/swift/rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md §8`
+
+**Problem:** Citation rules and other mandatory tool behaviors are currently
+encoded in agent template system prompts. An operator who writes a custom
+`prompts.system` silently removes them. This is fragile, duplicated across
+templates, and assigns ownership to the wrong layer — behavior that belongs
+to the tool lives in the agent prompt.
+
+**Solution:** Each MCP server catalog entry can declare an `agent_instructions`
+field. The runtime appends these fragments to the effective system prompt
+whenever that server is active, after the operator's custom prompt, unconditionally.
+
+**Implementation tasks:**
+
+*`mcp_catalog.yaml` (fred-agents):*
+- [ ] Add `agent_instructions` block to the `mcp-knowledge-flow-mcp-text` entry
+      with citation rules (inline format, Sources section, no URLs/links/IDs)
+
+*`fred-sdk` (`MCPServerConfiguration`):*
+- [ ] Add `agent_instructions: str | None = None` to `MCPServerConfiguration`
+      in `fred_sdk/contracts/models.py`
+
+*`fred-runtime` (`agent_app.py`):*
+- [ ] Pass the loaded catalog (`list[MCPServerConfiguration]`) into
+      `_apply_runtime_tuning` as an additional parameter
+- [ ] After resolving `system_prompt_template` (current lines 887–891), iterate
+      active `mcp_servers`; for each server with a non-empty `agent_instructions`
+      in the catalog, append the fragment to the effective system prompt
+- [ ] Update the two call sites (lines ~955 and ~1011) to pass the catalog
+
+*`fred-agents` (`react_rag_mcp.py`):*
+- [ ] Remove citation rules from `_SYSTEM_PROMPT` — they now live in the catalog
+
+*Validation:*
+- [ ] Offline unit test: `_apply_runtime_tuning` with a catalog entry that has
+      `agent_instructions`; assert fragment is present in `system_prompt_template`
+      regardless of the operator's custom prompt
+- [ ] Offline unit test: server inactive → fragment absent
+- [ ] `make code-quality && make test` in `fred-runtime` and `fred-sdk`
 
 ---
 
@@ -3091,6 +3147,61 @@ revamp on OTLP. Open a dedicated backlog phase when needed.
   KPI log for every model invocation within that turn (deferred — `log_llm()` not yet called)
 - [ ] Structured JSON logs confirm `agent.turn_completed` and security audit events
   appear in the log-based trace path (verifiable via local log grep)
+
+---
+
+## Phase UX — UI/UX Consolidation
+
+### UX-1 Full visual audit and design review — **UX-01**
+
+**Status:** open — owner: Félix — reviewer: Maxime (UX referent, mandatory sign-off)
+**Tracker:** `docs/swift/ux/COMPONENT-UX.md`
+
+**Scope:** Every implemented page and component in `frontend/src/rework/`:
+agent creation form, team agents page, agent card grid, MCP tool cards,
+chat UI (all molecules and organisms), agent options panel, search policy
+and RAG scope controls, session sidebar.
+
+**Ownership model:** Félix implements all fixes. Maxime reviews and validates —
+no issue can move to `Resolved` in `COMPONENT-UX.md` without Maxime's explicit
+sign-off. Design decisions belong to Maxime; implementation decisions to Félix.
+
+**What this is not:** A code refactor or migration task. Félix touches code only
+to fix issues that Maxime identifies or validates. Design decisions first,
+implementation second.
+
+**Process:**
+
+1. **Design review session** — Félix + Maxime walk through every rework page
+   live. Issues are noted directly in `COMPONENT-UX.md` under the relevant
+   component with severity (blocking / minor / polish).
+2. **Triage** — Félix sorts issues into: quick fix (< 1h), component redesign
+   (needs Figma update first), product decision (needs PM alignment).
+3. **Fix iterations** — Félix picks up quick fixes; Maxime signs off each one
+   before it moves to `Resolved`. Redesigns are scheduled as sub-items.
+
+**Known issues to bring to the review session (non-exhaustive):**
+
+- [ ] **Tooltip overflow — search policy select** (`McpServerCard.tsx`,
+      `useEnumOptionDescriptions`): option descriptions (`t("search.strictDescription")` etc.)
+      render as single long lines inside a tooltip or select dropdown. Long text
+      is truncated with no wrapping. Fix: multi-line description placement below the
+      option label, or a proper tooltip with `white-space: normal` and a `max-width`.
+
+- [ ] **Tooltip overflow — RAG scope select** (`McpServerCard.tsx`): same issue for
+      `chatbot.ragScope.tooltipCorpus` / `tooltipHybrid` / `tooltipGeneral` values.
+      Long French strings overflow the select option description area.
+
+- [ ] **All open issues in `COMPONENT-UX.md`** — 20+ items flagged across
+      `ThoughtTrace`, `TraceEntryRow`, `SourcesPanel`, `AgentCard`,
+      `AgentFormModal`, `InlineDrawer`, `ContextualPicker`, `RichInputField`,
+      `SourceCard` — review and prioritise each.
+
+**Validation:**
+- [ ] All `COMPONENT-UX.md` items have a status: `Approved`, `Needs revision`
+      (with a fix scheduled), or `Deferred` (with a reason).
+- [ ] Tooltip issues above are resolved and verified in browser (both themes,
+      both languages if i18n is in scope).
 
 ---
 

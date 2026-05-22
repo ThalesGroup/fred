@@ -624,6 +624,9 @@
   "chatbot": {
     "ragScope": {
       "label": "Portée RAG",
+      "corpusOnly": "Documents seuls",
+      "hybrid": "Hybride",
+      "generalOnly": "Général seul",
       "tooltipCorpus": "Utiliser seulement le corpus documentaire pour répondre",
       "tooltipHybrid": "Utiliser le corpus documentaire et les connaissances générales du modèle pour répondre",
       "tooltipGeneral": "Utiliser seulement les connaissances générales du modèle pour répondre"

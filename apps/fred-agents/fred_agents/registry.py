@@ -30,6 +30,7 @@ from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 
 from fred_agents.general_assistant import GENERAL_ASSISTANT_AGENT
 from fred_agents.rag_expert import RAG_EXPERT_AGENT
+from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
 from fred_agents.sentinel import SENTINEL_AGENT
 from fred_agents.sql_expert import SQL_EXPERT_AGENT
 from fred_agents.test_assistant.graph_agent import TEST_ASSISTANT_AGENT
@@ -47,9 +48,14 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
     - fred.github.sentinel     Monitoring ReAct agent. Requires OpenSearch MCP.
                                Expected to fail gracefully in standalone mode —
                                useful for validating error detection and handling.
-    - fred.github.rag_expert   Document-grounded ReAct agent. Uses the Fred
+    - fred.github.rag_expert   Document-grounded ReAct agent (Rico). Uses the Fred
                                built-in knowledge.search declared_tool_ref (not
                                MCP). Reference for ReAct/built-in-tool pattern.
+    - fred.github.react_rag_mcp  Document-grounded ReAct template backed by the
+                               Knowledge Flow MCP text-search server. Exposes
+                               library picker, search policy, and RAG scope in
+                               the Tools tab. Operator sets the name at
+                               enrollment time.
     - fred.github.test_assistant  No-LLM graph agent. Exercises every SSE event
                                type without any external service. Used for UI
                                validation and integration scenario testing.
@@ -60,6 +66,7 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
         GENERAL_ASSISTANT_AGENT.agent_id: GENERAL_ASSISTANT_AGENT,
         SENTINEL_AGENT.agent_id: SENTINEL_AGENT,
         RAG_EXPERT_AGENT.agent_id: RAG_EXPERT_AGENT,
+        REACT_RAG_MCP_AGENT.agent_id: REACT_RAG_MCP_AGENT,
         SQL_EXPERT_AGENT.agent_id: SQL_EXPERT_AGENT,
         TEST_ASSISTANT_AGENT.agent_id: TEST_ASSISTANT_AGENT,
     }

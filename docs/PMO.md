@@ -111,7 +111,43 @@ If something looks wrong, say so — Claude will correct it.
 
 ---
 
-## 7. What this guide does not cover
+## 7. How work gets done — the team workflow
+
+This team follows a **repo-first, issue-second** development process.
+Every feature, fix, or improvement goes through these steps in order:
+
+```
+1. RFC (or RFC amendment)     docs/swift/rfc/
+      ↓ design agreed
+2. Backlog entry              docs/swift/backlog/BACKLOG.md (or sub-backlog)
+      ↓ scope confirmed
+3. Sprint entry + owner       docs/swift/data/sprint.yaml + id-legend.yaml
+      ↓ developer confirms
+4. GitHub issue created       links to RFC, backlog ref, and task ID
+      ↓ execution handoff
+5. Implementation             developer + code assistant (Claude Code)
+      ↓ code quality + tests green
+6. Close-out                  backlog ✓, sprint → recently_closed, STATUS.md updated
+```
+
+**Why this order matters:**
+- Planning happens in the repository, not in issue trackers. The RFC and backlog
+  are the source of truth for *what* and *why*.
+- The GitHub issue is the **execution handoff** — it signals that the work is
+  scoped, assigned, and ready to implement. It references the repo docs; it does
+  not replace them.
+- A developer and their code assistant pick up the GitHub issue and implement it.
+  The code assistant reads the RFC and backlog to understand the full context.
+
+**As PMO, your role in this workflow:**
+- Confirm that new tracked items appear in `sprint.yaml` and `id-legend.yaml`
+  before a developer starts work.
+- Ask Claude: *"Is there a GitHub issue for MCP-BEHAV?"* to check step 4.
+- If an item is being implemented but has no RFC, flag it to Dimitri.
+
+---
+
+## 8. What this guide does not cover
 
 - **Writing code** — handled by the development team.
 - **Architecture decisions** — see `docs/ARCHITECTURE.md` for orientation,

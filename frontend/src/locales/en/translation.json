@@ -623,6 +623,9 @@
   "chatbot": {
     "ragScope": {
       "label": "RAG scope",
+      "corpusOnly": "Corpus only",
+      "hybrid": "Hybrid",
+      "generalOnly": "General only",
       "tooltipCorpus": "Use only the selected document libraries to answer",
       "tooltipHybrid": "Use both the selected document libraries and the model general knowledge to answer",
       "tooltipGeneral": "Use only the model general knowledge to answer"

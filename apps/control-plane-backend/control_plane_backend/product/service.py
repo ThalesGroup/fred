@@ -131,6 +131,7 @@ class _RuntimeTemplatePayload:
                                     )
                                     if isinstance(f, dict)
                                 ],
+                                "locked": ref.locked,
                             }
                         )
                         for ref in tuning.mcp_servers

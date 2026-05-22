@@ -502,7 +502,7 @@ export type PostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInst
   teamId: string;
   agentInstanceId: string;
   sessionId?: string | null;
-  action?: "execute" | "resume";
+  action?: ExecutionGrantAction;
 };
 export type HealthResponse = {
   status?: "ok";
@@ -703,6 +703,8 @@ export type ManagedMcpServerRef = {
   display_name?: string;
   require_tools?: string[];
   config_fields?: ManagedAgentFieldSpec[];
+  /** When True the server is part of the template's canonical tool set. The frontend renders its toggle as read-only; the operator can configure its config_fields but cannot remove the server. */
+  locked?: boolean;
 };
 export type AgentTemplateSummary = {
   template_id: string;

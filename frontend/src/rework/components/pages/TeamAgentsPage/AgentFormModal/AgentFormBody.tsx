@@ -236,7 +236,7 @@ export function AgentFormBody({
                 {effectiveSection === "tools" && (
                   <ul className={styles.mcpList}>
                     {mcpServers.map((server) => {
-                      const checked = selectedMcpServerIds === null || selectedMcpServerIds.includes(server.id);
+                      const checked = server.locked === true || selectedMcpServerIds === null || selectedMcpServerIds.includes(server.id);
                       const toggle = () => {
                         const current = selectedMcpServerIds ?? mcpServers.map((s) => s.id);
                         const next = checked

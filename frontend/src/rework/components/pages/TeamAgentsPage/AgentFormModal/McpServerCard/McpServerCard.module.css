@@ -52,6 +52,17 @@
   font: var(--font-body-small);
 }
 
+.lockedBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-container-high);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* Sub-form revealed when the server is active and has config_fields */
 .subForm {
   display: flex;

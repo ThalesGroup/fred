@@ -90,7 +90,7 @@ export default function AgentFormModal({
     displayName: "",
     description: "",
     tuningValues: {},
-    selectedMcpServerIds: null,
+    selectedMcpServerIds: [],
     mcpConfigValues: {},
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -119,7 +119,7 @@ export default function AgentFormModal({
         displayName: "",
         description: "",
         tuningValues: {},
-        selectedMcpServerIds: null,
+        selectedMcpServerIds: [],
         mcpConfigValues: {},
       });
       setStep(1);
@@ -133,7 +133,7 @@ export default function AgentFormModal({
       displayName: tpl?.display_name ?? "",
       description: tpl?.description ?? "",
       tuningValues: {},
-      selectedMcpServerIds: null,
+      selectedMcpServerIds: [],
       mcpConfigValues: {},
     });
     setActiveSection("settings");
@@ -173,12 +173,19 @@ export default function AgentFormModal({
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
+    // Locked servers are always active regardless of user toggle state.
+    const lockedIds = (selectedTemplate?.mcp_servers ?? []).filter((s) => s.locked).map((s) => s.id);
+    const effectiveSelection =
+      form.selectedMcpServerIds === null
+        ? null
+        : [...new Set([...form.selectedMcpServerIds, ...lockedIds])];
+
     await onSubmit({
       templateId: form.templateId,
       displayName: form.displayName.trim(),
       description: form.description.trim(),
       tuningFieldValues: form.tuningValues,
-      selectedMcpServerIds: form.selectedMcpServerIds,
+      selectedMcpServerIds: effectiveSelection,
       mcpConfigValues: form.mcpConfigValues,
     });
   };

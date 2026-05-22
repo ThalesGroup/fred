@@ -467,7 +467,71 @@ Fred SDK V2 should continue toward:
 
 ---
 
-## 18. Open Questions
+## 18. Agent template taxonomy (decided 2026-05-22)
+
+Fred distinguishes two categories of ReAct agents exposed in an agentic pod. This
+distinction is user-facing and must be reflected in naming, UX, and documentation.
+
+### 18.1 Generic assistant
+
+One generic assistant per pod. It carries no pre-wired MCP servers and no
+opinionated system prompt. Its purpose is to give operators a blank slate they can
+configure freely at enrollment time: pick the tools they want from the full catalog,
+write or import any system prompt.
+
+Properties in code:
+- `default_mcp_servers = ()` — no servers pre-selected
+- `system_prompt_template` — minimal default, fully overridable via `prompts.system` FieldSpec
+- all catalog servers are available for the operator to activate at enrollment
+
+The `fred.github.assistant` (General-purpose assistant) is the canonical generic
+assistant for the `fred-agents` pod.
+
+### 18.2 Specialized templates
+
+Specialized templates are ready-to-use agents pre-wired for a specific operational
+domain. They come with:
+
+- a non-empty `default_mcp_servers` tuple declaring the tools the template needs
+- a curated default system prompt that the operator may override via FieldSpec
+- a descriptive `role` string that communicates the template's domain clearly
+
+The MCP servers declared by a specialized template are **locked**: they appear in
+the Tools tab of the enrollment form but their toggle is read-only. The operator
+can see which tools the template uses but cannot remove them. This is intentional:
+the template's identity and correctness depend on its canonical tool set.
+
+There is no extension mechanism. A specialized template is defined as-is. If an
+operator needs a different combination of tools they should use the generic assistant
+and configure it from scratch.
+
+Examples in the `fred-agents` pod:
+- `fred.github.sentinel` — Monitoring assistant, locked to OpenSearch MCP
+- `fred.github.rag_expert` — Rico, locked to the built-in knowledge.search tool ref
+- `fred.github.react_rag_mcp` — Document search assistant, locked to KF text-search MCP
+
+### 18.3 User-chosen name
+
+Both categories require the operator to provide a display name at enrollment time.
+The template's `role` field is the catalog label (what the operator sees when
+browsing templates). The `display_name` entered at enrollment becomes the instance's
+identity within the team. These are two separate fields and must never be conflated.
+
+### 18.4 Implementation contract for locked MCP servers
+
+The `locked: bool = False` field on `MCPServerRef` (fred-sdk) marks a server as
+non-toggleable. A locked server:
+- appears in the Tools tab of the enrollment form
+- has its toggle rendered as disabled (read-only, not greyed out)
+- is always included in `selected_mcp_server_ids` regardless of operator input
+- cannot be removed via `UpdateAgentInstanceRequest`
+
+Specialized templates set `locked=True` on all their `MCPServerRef` entries.
+The generic assistant declares no servers, so the question does not arise.
+
+---
+
+## 19. Open Questions
 
 The following questions remain open and should guide implementation:
 

@@ -184,6 +184,15 @@ class MCPServerRef(BaseModel):
 
     id: str = Field(..., validation_alias=AliasChoices("id", "name"))
     require_tools: list[str] = []
+    locked: bool = Field(
+        default=False,
+        description=(
+            "When True the server is displayed in the enrollment form but its "
+            "toggle is read-only. The operator can see and configure the server "
+            "but cannot remove it. Used by specialized templates to protect their "
+            "canonical tool set."
+        ),
+    )
 
 
 class AgentTuning(BaseModel):

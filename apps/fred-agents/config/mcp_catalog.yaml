@@ -15,16 +15,26 @@ servers:
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
         default: false
+      - key: "chat_options.search_policy_enabled"
+        type: "boolean"
+        title: "Search policy picker in chat"
+        description: "Allow users to switch the search policy from the chat interface."
+        default: false
       - key: "chat_options.search_policy"
         type: "string"
         title: "Default search policy"
-        description: "Search strategy applied when querying document libraries."
+        description: "Search strategy used when the user has not overridden it."
         enum: ["strict", "hybrid", "semantic"]
         default: "hybrid"
+      - key: "chat_options.search_rag_scope_enabled"
+        type: "boolean"
+        title: "RAG scope picker in chat"
+        description: "Allow users to switch the RAG scope from the chat interface."
+        default: false
       - key: "chat_options.search_rag_scope"
         type: "string"
         title: "Default RAG scope"
-        description: "Whether to search corpus only, general knowledge only, or both."
+        description: "Scope used when the user has not overridden it."
         enum: ["corpus_only", "hybrid", "general_only"]
         default: "hybrid"
 
@@ -88,16 +98,26 @@ servers:
         title: "Document library picker"
         description: "Show a document library selector in the chat interface."
         default: false
+      - key: "chat_options.search_policy_enabled"
+        type: "boolean"
+        title: "Search policy picker in chat"
+        description: "Allow users to switch the search policy from the chat interface."
+        default: false
       - key: "chat_options.search_policy"
         type: "string"
         title: "Default search policy"
-        description: "Search strategy applied when querying document libraries."
+        description: "Search strategy used when the user has not overridden it."
         enum: ["strict", "hybrid", "semantic"]
         default: "hybrid"
+      - key: "chat_options.search_rag_scope_enabled"
+        type: "boolean"
+        title: "RAG scope picker in chat"
+        description: "Allow users to switch the RAG scope from the chat interface."
+        default: false
       - key: "chat_options.search_rag_scope"
         type: "string"
         title: "Default RAG scope"
-        description: "Whether to search corpus only, general knowledge only, or both."
+        description: "Scope used when the user has not overridden it."
         enum: ["corpus_only", "hybrid", "general_only"]
         default: "hybrid"
 

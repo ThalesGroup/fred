@@ -12,6 +12,12 @@ list of those issues, organized per component. It feeds the UX review session ag
 
 **Related:** implementation tasks → [`docs/backlog/CHAT-UI-BACKLOG.md`](../backlog/CHAT-UI-BACKLOG.md)
 | visual specs → [`docs/design/CHAT-COMPONENT-SPECS.md`](../design/CHAT-COMPONENT-SPECS.md)
+| **full UX consolidation task → [`BACKLOG.md §UX-1`](../backlog/BACKLOG.md) — owner: Félix, reviewer: Maxime (UX-01)**
+
+> **Scope note:** This file tracks chat UI components (CHAT-0x tracks).
+> The consolidation task UX-01 extends the audit to all rework surfaces:
+> agent creation form, team page, MCP tool cards, options panel. New issues
+> found outside chat UI should still be recorded here under the relevant component section.
 
 ---
 
@@ -913,6 +919,41 @@ Renders `ThreadMessage[]` as `UserTurn` / `AssistantTurn` / `HitlPrompt`. Wraps 
 
 - **Empty state** — when `messages.length === 0` and not loading, no empty state is shown. Confirm whether a welcome message, agent description, or "Start a conversation" placeholder is needed.
 - **Loading skeleton** — `isLoading` state shows nothing while history fetches. A message skeleton (3 alternating user/assistant placeholder rows) would reduce layout shift on history load.
+
+#### Resolved
+
+_(none yet)_
+
+---
+
+---
+
+### `McpServerCard` + option selects (agent form Tools tab)
+
+**Location:** `src/rework/components/pages/TeamAgentsPage/AgentFormModal/McpServerCard/McpServerCard.tsx`
+**Status:** `Needs revision`
+
+Renders each MCP server as a toggleable card. When active, exposes `config_fields` as
+inline form controls: boolean fields as `SwitchRow`, enum fields as `Select` with per-option
+descriptions sourced from `useEnumOptionDescriptions()`.
+
+#### Open UX issues
+
+- **Search policy option descriptions overflow** — `useEnumOptionDescriptions` returns long
+  prose strings for `chat_options.search_policy` (`strict`, `hybrid`, `semantic`). These are
+  passed as `description` to each `Select` option and render as a single non-wrapping line
+  inside the dropdown. On typical viewport widths the text is clipped with no ellipsis or
+  tooltip fallback. Fix: render descriptions below the option label with `white-space: normal`
+  and a constrained `max-width`, or move to a separate tooltip with wrapping enabled.
+
+- **RAG scope option descriptions overflow** — same issue for `chat_options.search_rag_scope`
+  (`corpus_only`, `hybrid`, `general_only`). Translation values like
+  `chatbot.ragScope.tooltipCorpus` are full French sentences; they overflow identically.
+
+- **Card toggle area vs. description area** — the entire card header is clickable to toggle
+  the server. With config fields expanded below, the boundary between "click to toggle" and
+  "interact with a field" is not visually clear. Validate with Maxime whether a separator or
+  explicit toggle zone is needed.
 
 #### Resolved
 
