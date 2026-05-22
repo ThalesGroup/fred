@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from fred_core.model.factory import _apply_openai_stream_usage_default
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.runnables.config import ensure_config, var_child_runnable_config
 from langchain_core.messages.tool import ToolMessage
 from langchain_openai import ChatOpenAI
 
@@ -430,7 +431,35 @@ def test_both_streaming_defaults_applied_together() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. Aegis internal model must override provider-level streaming defaults
+# 8. Aegis internal runnable calls must suppress inherited streaming callbacks
+# ---------------------------------------------------------------------------
+
+
+def test_aegis_internal_runnable_config_overrides_inherited_callbacks() -> None:
+    """
+    Internal Aegis LangChain calls made during a streamed graph turn inherit parent
+    callbacks through contextvars by default.
+
+    Passing Aegis._internal_runnable_config() must override that inherited
+    callback stack with an explicit empty list so intermediary chunks do not
+    surface in the chat stream.
+    """
+    token = var_child_runnable_config.set(
+        ensure_config(
+            {"callbacks": ["parent-callback"], "configurable": {"thread_id": "t1"}}
+        )
+    )
+    try:
+        merged = ensure_config(Aegis._internal_runnable_config())
+    finally:
+        var_child_runnable_config.reset(token)
+
+    assert merged["callbacks"] == []
+    assert merged["configurable"]["thread_id"] == "t1"
+
+
+# ---------------------------------------------------------------------------
+# 9. Aegis internal model must override provider-level streaming defaults
 # ---------------------------------------------------------------------------
 
 

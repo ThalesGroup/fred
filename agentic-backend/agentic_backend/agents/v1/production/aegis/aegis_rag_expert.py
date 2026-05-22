@@ -19,6 +19,7 @@ from typing import Any, List, Optional, Sequence, cast
 from fred_core.store import VectorSearchHit
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 
 from agentic_backend.agents.v1.production.rags.structures import GradeDocumentsOutput
@@ -469,13 +470,73 @@ class Aegis(AgentFlow):
         How to use:
             Pass the prepared message list for internal business steps such as
             draft generation or no-results fallback generation.
-            This passes `stream=False` explicitly because the OpenAI wrapper can
-            still derive a streaming payload from instance defaults.
+            This passes `stream=False` and a silent runnable config so the
+            current streamed graph turn does not surface intermediary output.
         """
-        response = await asyncio.to_thread(
-            self.internal_model.invoke, messages, stream=False
+        response = await self._invoke_internal_runnable(
+            self.internal_model,
+            messages,
+            stream=False,
         )
         return cast(AIMessage, response)
+
+    @staticmethod
+    def _internal_runnable_config() -> RunnableConfig:
+        """
+        Why this exists:
+            Internal Aegis chains inherit the parent LangGraph callback stack by
+            default during a streamed turn.
+            That inherited callback stack can expose intermediary grading/self-check
+            payloads in the chat stream, which must stay internal to Aegis.
+
+        How to use:
+            Pass the returned config to internal `invoke(...)` or `ainvoke(...)`
+            calls that are part of Aegis control logic rather than user-visible output.
+        """
+        return cast(RunnableConfig, {"callbacks": []})
+
+    async def _ainvoke_internal_runnable(
+        self,
+        runnable: Any,
+        payload: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Why this exists:
+            Execute an internal Aegis runnable while muting inherited streaming
+            callbacks from the parent graph run.
+
+        How to use:
+            Call this for internal async-compatible chains such as grading,
+            self-check, and corrective planning steps.
+        """
+        return await runnable.ainvoke(
+            payload,
+            config=self._internal_runnable_config(),
+            **kwargs,
+        )
+
+    async def _invoke_internal_runnable(
+        self,
+        runnable: Any,
+        payload: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Why this exists:
+            Run a synchronous internal Aegis runnable on a worker thread while
+            keeping intermediary output out of the shared chat stream.
+
+        How to use:
+            Call this for sync `invoke(...)` paths such as the direct internal
+            chat-model invocation used for draft generation and fallbacks.
+        """
+        return await asyncio.to_thread(
+            runnable.invoke,
+            payload,
+            self._internal_runnable_config(),
+            **kwargs,
+        )
 
     async def _ainvoke_internal_chain(self, chain: Any, payload: dict[str, Any]) -> Any:
         """
@@ -486,7 +547,7 @@ class Aegis(AgentFlow):
             Pass a LangChain runnable plus its input payload for grading,
             self-check, and corrective query generation steps.
         """
-        return await asyncio.to_thread(chain.invoke, payload)
+        return await self._ainvoke_internal_runnable(chain, payload)
 
     # -----------------------------
     # Nodes
