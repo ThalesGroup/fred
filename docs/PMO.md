@@ -150,7 +150,7 @@ Every feature, fix, or improvement goes through these steps in order:
 ## 8. What this guide does not cover
 
 - **Writing code** — handled by the development team.
-- **Architecture decisions** — see `docs/ARCHITECTURE.md` for orientation,
+- **Architecture decisions** — see `docs/ARCHITECTURE.html` for orientation,
   then ask a developer.
 - **Feature specifications** — tracked in `docs/swift/backlog/`. Ask Claude to
   summarise a spec; ask a developer to change it.

@@ -58,7 +58,7 @@ Decision tree for every piece of new content:
     Code style, typing, or testing rule?
       → docs/CONVENTIONS.md
     Architecture overview or component map?
-      → docs/ARCHITECTURE.md (entry point only — point to platform/ and design/)
+      → docs/ARCHITECTURE.html (entry point only — point to platform/ and design/)
     Operational guidance for the assistant?
       → this file (CLAUDE.md)
 
@@ -214,7 +214,7 @@ Do not silently expand scope. Do not silently delete content.
 | Execution contracts (frozen) | `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` |
 | Product/session/admin contracts (frozen) | `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` |
 | Technical proposals | `docs/swift/rfc/` |
-| Architecture entry point | `docs/ARCHITECTURE.md` |
+| Architecture entry point | `docs/ARCHITECTURE.html` |
 | Platform topology detail | `docs/swift/platform/PLATFORM_RUNTIME_MAP.md` |
 | Coding style, typing, testing rules | `docs/CONVENTIONS.md` |
 | Chat UI UX status | `docs/swift/ux/COMPONENT-UX.md` |

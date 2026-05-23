@@ -24,6 +24,8 @@ Fred is built around three platform applications and a publishable SDK stack:
 | Libraries | `libs/fred-runtime` | Pod factory — FastAPI, SSE streaming, checkpointing, CLI (`fred-agents-cli`) |
 | Libraries | `libs/fred-core` | Shared infrastructure — SQL, KPI, security, config |
 
+**New to the codebase?** Open [`docs/ARCHITECTURE.html`](docs/ARCHITECTURE.html) in your browser for a guided architecture walkthrough — mental models, a 20-minute reading path, and the design decisions that explain everything else. *(GitHub shows raw HTML; open it locally or via VSCode Live Preview.)*
+
 **The key design principle**: the control plane, knowledge flow backend, and frontend are the stable platform. Agent pods — `fred-agents` or any team's own pod built with `fred-sdk` + `fred-runtime` — are independently deployable and register themselves with the control plane. You can ship new agents without touching the platform.
 
 > `agentic-backend` is still present during migration but no new features go there. Execution moves to `fred-agents` / `fred-runtime`; product/session/admin moves to `control-plane-backend`. See [`docs/backlog/BACKLOG.md`](./docs/swift/backlog/BACKLOG.md) for migration status.
