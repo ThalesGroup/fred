@@ -98,7 +98,15 @@ from fred_sdk.contracts.models import (
     TuningScalar,
     TuningValue,
 )
-from fred_sdk.contracts.runtime import HumanChoiceOption, HumanInputRequest
+from fred_sdk.contracts.runtime import (
+    HumanChoiceOption,
+    HumanInputRequest,
+    ThoughtDeltaEvent,
+    ThoughtEndEvent,
+    ThoughtKind,
+    ThoughtRecord,
+    ThoughtStartEvent,
+)
 
 # ---------------------------------------------------------------------------
 # Graph agent authoring
@@ -134,6 +142,7 @@ from fred_sdk.graph.runtime import (
     GraphExecutionOutput,
     GraphNodeContext,
     GraphNodeResult,
+    ThoughtWriter,
 )
 
 # ---------------------------------------------------------------------------
@@ -206,6 +215,12 @@ __all__ = [
     "PublishedArtifact",
     "HumanInputRequest",
     "HumanChoiceOption",
+    "ThoughtKind",
+    "ThoughtStartEvent",
+    "ThoughtDeltaEvent",
+    "ThoughtEndEvent",
+    "ThoughtRecord",
+    "ThoughtWriter",
     # Agent definition metadata and policies (used when subclassing GraphAgent/ReActAgent)
     "ExecutionCategory",
     "DeepAgentDefinition",

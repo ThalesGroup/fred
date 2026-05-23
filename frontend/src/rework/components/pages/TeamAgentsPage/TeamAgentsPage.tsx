@@ -39,6 +39,22 @@ import styles from "./TeamAgentsPage.module.css";
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
 type AgentRequestMcpConfigValues = NonNullable<CreateAgentInstanceRequest["mcp_config_values"]>;
 
+function extractApiErrorDetail(error: unknown): string {
+  if (typeof error !== "object" || error === null) return String(error);
+  const data = (error as Record<string, unknown>).data;
+  if (typeof data === "object" && data !== null) {
+    const detail = (data as Record<string, unknown>).detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((e) => (typeof e === "object" && e !== null ? String((e as Record<string, unknown>).msg ?? JSON.stringify(e)) : String(e)))
+        .join("; ");
+    }
+  }
+  const msg = (error as Record<string, unknown>).message;
+  return typeof msg === "string" ? msg : "An unexpected error occurred.";
+}
+
 /**
  * Lists the managed agent instances for the current team and exposes
  * create / edit / delete operations for team admins.
@@ -108,10 +124,9 @@ export default function TeamAgentsPage() {
       setIsEnrollOpen(false);
       await refetchInstances();
     } catch (error: unknown) {
-      const err = error as { data?: { detail?: string }; message?: string };
       showError({
         summary: `Failed to create ${agentsNicknameSingular.toLowerCase()}`,
-        detail: err?.data?.detail || err?.message || String(error),
+        detail: extractApiErrorDetail(error),
       });
     }
   };
@@ -140,10 +155,9 @@ export default function TeamAgentsPage() {
       setEditingInstance(null);
       await refetchInstances();
     } catch (error: unknown) {
-      const err = error as { data?: { detail?: string }; message?: string };
       showError({
         summary: `Failed to update ${agentsNicknameSingular.toLowerCase()}`,
-        detail: err?.data?.detail || err?.message || String(error),
+        detail: extractApiErrorDetail(error),
       });
     }
   };

@@ -25,6 +25,7 @@ Scenario routing (handled by dispatch_step):
   "trace"       → dispatch routes "trace"        → trace_step       → finalize
   "error"       → dispatch routes "error"        → error_step
                                                    (raises)         → finalize via on_error
+  "think"       → dispatch routes "think"        → think_step       → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
   (other)       → dispatch routes "fallback"     → fallback_step    → finalize
 """
@@ -196,6 +197,8 @@ async def dispatch_step(
         scenario = "trace"
     elif text.startswith("error"):
         scenario = "error"
+    elif text.startswith("think"):
+        scenario = "think"
     elif text.startswith("markdown"):
         scenario = "markdown"
     elif text.startswith("long"):
@@ -740,6 +743,136 @@ async def markdown_step(
     )
 
 
+# ── Step: think ───────────────────────────────────────────────────────────────
+
+_THINK_FINAL = """\
+**Chain-of-thought test complete.**
+
+This scenario exercised all five `ThoughtKind` phases using the structured
+`context.thinking()` / `context.emit_thought()` authoring API:
+
+| Phase | Meaning | Emitted via |
+|---|---|---|
+| `planning` | Agent deciding what to do and which tools to call | `context.thinking()` streaming block |
+| `tool_use` | Reasoning immediately before a tool invocation | `context.thinking()` streaming block |
+| `observation` | Interpreting what a tool result means | `context.emit_thought()` one-shot |
+| `reflection` | Self-correction or re-planning after an observation | `context.thinking()` streaming block |
+| `synthesis` | Assembling the final answer from collected evidence | `context.thinking()` streaming block |
+
+**Open WebUI:** each block arrives as `<think>…</think>` tags in the content
+stream and is rendered natively as a collapsible Thought accordion — no plugin
+or configuration needed.
+
+**Fred chat UI:** each block additionally carries `fred.thought` metadata
+(phase, title, duration_ms, conclusion) for richer per-phase visual treatment.
+
+**Mistral and all other models:** the thinking content is entirely authored —
+the model sees none of it. The wire format is identical regardless of the
+underlying LLM.
+"""
+
+
+@typed_node(TestState)
+async def think_step(
+    state: TestState,
+    context: GraphNodeContext,
+) -> StepResult:
+    """
+    Exercise all five ThoughtKind phases using the structured thinking API.
+
+    Mixes context.thinking() (streaming, with conclude()) and
+    context.emit_thought() (one-shot) to demonstrate both authoring styles.
+
+    SSE events exercised:
+      THOUGHT_START / THOUGHT_DELTA / THOUGHT_END  (×4 streaming blocks)
+      THOUGHT_START / THOUGHT_DELTA / THOUGHT_END  (×1 one-shot via emit_thought)
+      STATUS (generic progress)
+      FINAL
+    """
+    delay = _delay_seconds(context)
+    context.emit_status("think", "Running chain-of-thought scenario.")
+
+    # ── Phase 1: planning (streaming) ─────────────────────────────────────────
+    async with context.thinking(
+        "planning", title="Deciding which tools to call"
+    ) as thought:
+        await asyncio.sleep(0.2 + delay)
+        await thought.write("The user is asking about topic X.")
+        await asyncio.sleep(0.15 + delay)
+        await thought.write(
+            "Relevant tools available: knowledge_search, sql_query, summarizer."
+        )
+        await asyncio.sleep(0.15 + delay)
+        await thought.write(
+            "knowledge_search is the best fit for an open-domain question."
+        )
+        await thought.conclude("Will call knowledge_search with the user query.")
+
+    await asyncio.sleep(0.1 + delay)
+
+    # ── Phase 2: tool_use (streaming) ─────────────────────────────────────────
+    async with context.thinking(
+        "tool_use", title="Preparing knowledge_search call"
+    ) as thought:
+        await asyncio.sleep(0.15 + delay)
+        await thought.write(
+            'Composing query: "What are the main characteristics of X?"'
+        )
+        await asyncio.sleep(0.1 + delay)
+        await thought.write("Setting top_k=5, min_score=0.7.")
+        await thought.conclude("Query ready. Invoking knowledge_search.")
+
+    await asyncio.sleep(0.1 + delay)
+
+    # ── Phase 3: observation (one-shot via emit_thought) ──────────────────────
+    context.emit_thought(
+        "observation",
+        "Retrieved 3 documents. Scores: 0.97, 0.84, 0.71. "
+        "Top result covers the core question directly. "
+        "Doc #2 provides supporting context. Doc #3 is tangential.",
+        title="knowledge_search result",
+        conclusion="Top two documents are sufficient. Proceeding with synthesis.",
+    )
+
+    await asyncio.sleep(0.15 + delay)
+
+    # ── Phase 4: reflection (streaming) ──────────────────────────────────────
+    async with context.thinking(
+        "reflection", title="Checking source consistency"
+    ) as thought:
+        await asyncio.sleep(0.15 + delay)
+        await thought.write("Doc #1 cites date 2023-04-12; doc #2 cites 2022-11-30.")
+        await asyncio.sleep(0.1 + delay)
+        await thought.write(
+            "The discrepancy is minor and does not affect the core answer. "
+            "Prioritising doc #1 as the more recent source."
+        )
+        await thought.conclude("Inconsistency noted; prioritising most recent source.")
+
+    await asyncio.sleep(0.1 + delay)
+
+    # ── Phase 5: synthesis (streaming) ───────────────────────────────────────
+    async with context.thinking(
+        "synthesis", title="Composing the final answer"
+    ) as thought:
+        await asyncio.sleep(0.15 + delay)
+        await thought.write(
+            "Combining verified facts from docs #1 and #2 into a coherent summary."
+        )
+        await asyncio.sleep(0.1 + delay)
+        await thought.write("Adding citation markers for transparency.")
+        await thought.conclude("Answer composed. Ready to deliver.")
+
+    await asyncio.sleep(0.1 + delay)
+
+    return StepResult(
+        state_update={
+            "final_text": _THINK_FINAL,
+            "done_reason": "think_complete",
+        }
+    )
+
+
 # ── Step: fallback ────────────────────────────────────────────────────────────
 
 _SCENARIO_TABLE = """\
@@ -752,6 +885,7 @@ _SCENARIO_TABLE = """\
 | `hitl text` | HITL free-text input gate |
 | `trace` | Status events + streamed text + mock sources (SourcesPanel) |
 | `error` | Deliberate node error → on_error route |
+| `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
 | `long` | 30-sentence word-by-word streaming reply |"""
 

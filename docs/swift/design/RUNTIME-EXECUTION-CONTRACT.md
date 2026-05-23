@@ -493,6 +493,35 @@ is now correct: UI picker → `RuntimeExecuteRequest.runtime_context` →
 `to_legacy_context()` → `ctx` dict → `RuntimeContext` → `ContextAwareTool` injection
 → KF `VectorSearchClient.search()` params.
 
+### 8.6 ✅ `ThoughtKind` discriminator added to `StatusRuntimeEvent` — May 2026
+
+**Was**: All chain-of-thought signals arrived as generic `STATUS` events. The chat
+UI could not distinguish planning from tool reasoning, observation, reflection, or
+synthesis — preventing per-phase visual treatments (accordion colours, icons, labels).
+
+**Fix**: `ThoughtKind` Literal type added to `fred_sdk.contracts.runtime`:
+
+```python
+ThoughtKind = Literal[
+    "planning",     # deciding what to do / which tools to call
+    "tool_use",     # reasoning immediately before a tool invocation
+    "observation",  # interpreting a tool result
+    "reflection",   # self-correction or re-planning after an observation
+    "synthesis",    # assembling the final answer from collected evidence
+]
+```
+
+`StatusRuntimeEvent` gains `thought_kind: ThoughtKind | None = None` (backward
+compatible — existing callers passing no `thought_kind` are unaffected).
+
+`GraphNodeContext.emit_status` signature updated in both the abstract Protocol
+(`fred_sdk.graph.runtime`) and the concrete implementation
+(`fred_runtime.graph.graph_runtime`).
+
+`ThoughtKind` is exported from `fred_sdk.__init__` so agent authors can import it
+directly. The `think` scenario in `fred.github.test_assistant` exercises all five
+values in sequence to enable UI design validation.
+
 ---
 
 ## 8. Developer CLI — `fred-agents-cli`

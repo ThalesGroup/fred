@@ -46,6 +46,7 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ hitl_text   ──► hitl_text_step   ──► finalize
      ├─ trace       ──► trace_step       ──► finalize
      ├─ error       ──► error_step  (raises) → finalize (via on_error)
+     ├─ think       ──► think_step        ──► finalize
      ├─ long        ──► long_step         ──► finalize
      └─ fallback    ──► fallback_step     ──► finalize
 
@@ -80,6 +81,7 @@ from .graph_steps import (
     long_step,
     markdown_step,
     model_probe_step,
+    think_step,
     trace_step,
 )
 
@@ -106,14 +108,13 @@ class TestAssistantGraphAgent(GraphAgent):
     agent_id: str = "fred.github.test_assistant"
     role: str = "Test Assistant (no LLM)"
     description: str = (
-        "A no-LLM-by-default, no-MCP graph agent for UI and form testing. "
-        "Exercises every SSE event type (status, HITL choice, HITL free-text, "
-        "streaming text, mock sources, node errors, long streaming) and every "
-        "FieldSpec type (prompt, boolean, integer, string, select, number, "
-        "text-multiline, array, secret, url). Also declares tool refs to validate "
-        "form rendering of those sections. "
-        "Keyword-prefix routing: echo | model routing | model planning | "
-        "hitl choice | hitl text | trace | error | markdown | long."
+        "Graph agent for UI and form testing (no LLM by default). "
+        "Exercises every SSE event type (status, HITL choice, HITL text, "
+        "streaming, sources, node errors, chain-of-thought) "
+        "and every FieldSpec type (prompt, boolean, integer, string, select, "
+        "number, text-multiline, array, secret, url). "
+        "Routing by keyword prefix: echo | model | planning | "
+        "hitl choice | hitl text | trace | error | think | markdown | long."
     )
     tags: tuple[str, ...] = ("test", "graph", "hitl", "streaming", "no-llm", "dev")
 
@@ -323,6 +324,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "hitl_text": hitl_text_step,
             "trace": trace_step,
             "error": error_step,
+            "think": think_step,
             "markdown": markdown_step,
             "long": long_step,
             "fallback": fallback_step,
@@ -334,6 +336,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "hitl_choice": "finalize",
             "hitl_text": "finalize",
             "trace": "finalize",
+            "think": "finalize",
             "markdown": "finalize",
             "long": "finalize",
             "fallback": "finalize",
@@ -350,6 +353,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "hitl_text": "hitl_text",
                 "trace": "trace",
                 "error": "error",
+                "think": "think",
                 "markdown": "markdown",
                 "long": "long",
                 "fallback": "fallback",

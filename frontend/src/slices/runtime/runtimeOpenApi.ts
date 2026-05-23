@@ -174,6 +174,15 @@ export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful
           kind: "status";
         } & StatusRuntimeEvent)
       | ({
+          kind: "thought_delta";
+        } & ThoughtDeltaEvent)
+      | ({
+          kind: "thought_end";
+        } & ThoughtEndEvent)
+      | ({
+          kind: "thought_start";
+        } & ThoughtStartEvent)
+      | ({
           kind: "tool_call";
         } & ToolCallRuntimeEvent)
       | ({
@@ -509,6 +518,27 @@ export type StatusRuntimeEvent = {
   kind?: "status";
   sequence?: number;
   status: string;
+};
+export type ThoughtDeltaEvent = {
+  delta: string;
+  kind?: "thought_delta";
+  sequence?: number;
+  thought_id: string;
+};
+export type ThoughtEndEvent = {
+  conclusion?: string | null;
+  duration_ms?: number | null;
+  kind?: "thought_end";
+  sequence?: number;
+  thought_id: string;
+};
+export type ThoughtStartEvent = {
+  kind?: "thought_start";
+  phase: "planning" | "tool_use" | "observation" | "reflection" | "synthesis";
+  sequence?: number;
+  source?: "authored" | "model_native";
+  thought_id: string;
+  title?: string | null;
 };
 export type ToolCallRuntimeEvent = {
   arguments?: {

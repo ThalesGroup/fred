@@ -108,12 +108,37 @@ export function summarizeToolResultCompact(result: ChatMessage, maxLen = 120): s
   return single.length > maxLen ? single.slice(0, maxLen) + "…" : single;
 }
 
+type ThoughtExtras = {
+  thought_id?: string;
+  phase?: string;
+  title?: string | null;
+  conclusion?: string | null;
+  duration_ms?: number | null;
+  streaming_delta?: boolean;
+};
+
+function thoughtExtras(msg: ChatMessage): ThoughtExtras {
+  return (msg.metadata?.extras as ThoughtExtras | undefined) ?? {};
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  planning: "Planning",
+  tool_use: "Tool use",
+  observation: "Observation",
+  reflection: "Reflection",
+  synthesis: "Synthesis",
+};
+
 // Primary label shown in the row (channel-based)
 export function entryLabel(entry: TraceEntry): string {
   const channel = entry.kind === "combo" ? entry.call.channel : entry.message.channel;
   switch (channel) {
-    case "thought":
-      return "Thought";
+    case "thought": {
+      const msg = entry.kind === "solo" ? entry.message : null;
+      const extras = msg ? thoughtExtras(msg) : {};
+      const phase = extras.phase ? (PHASE_LABELS[extras.phase] ?? extras.phase) : null;
+      return phase ?? "Thought";
+    }
     case "plan":
       return "Plan";
     case "observation":
@@ -133,7 +158,13 @@ export function entryLabel(entry: TraceEntry): string {
 
 // Short preview text shown inline in the row
 export function primaryTextForEntry(entry: TraceEntry): string {
-  if (entry.kind === "solo") return textOf(entry.message);
+  if (entry.kind === "solo") {
+    if (entry.message.channel === "thought") {
+      const extras = thoughtExtras(entry.message);
+      return extras.title || textOf(entry.message);
+    }
+    return textOf(entry.message);
+  }
   // combo: show tool name + compact args preview
   const name = toolName(entry.call);
   const args = toolArgs(entry.call);
@@ -146,8 +177,13 @@ export function primaryTextForEntry(entry: TraceEntry): string {
   return argStr ? `${name}(${argStr})` : name;
 }
 
-// Secondary text shown below primary (e.g., tool result summary)
+// Secondary text shown below primary (e.g., tool result summary, thought conclusion)
 export function secondaryTextForEntry(entry: TraceEntry): string {
+  if (entry.kind === "solo" && entry.message.channel === "thought") {
+    const extras = thoughtExtras(entry.message);
+    if (extras.conclusion) return extras.conclusion;
+    if (extras.duration_ms != null) return formatLatencyMs(extras.duration_ms);
+  }
   if (entry.kind === "combo" && entry.result) {
     return summarizeToolResultCompact(entry.result);
   }

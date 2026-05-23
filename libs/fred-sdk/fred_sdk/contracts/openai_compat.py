@@ -40,7 +40,7 @@ from typing import Any, Literal  # Any retained for event dict and token_usage
 from pydantic import BaseModel, Field
 
 from .context import UiPart
-from .runtime import HumanInputRequest
+from .runtime import HumanInputRequest, ThoughtKind
 
 # ---------------------------------------------------------------------------
 # Tool call models (OpenAI streaming shape)
@@ -170,6 +170,33 @@ class FredSourceRef(BaseModel):
     citation_url: str | None = None
 
 
+class FredThoughtMeta(BaseModel):
+    """
+    Structured thought metadata carried in `fred.thought` on THOUGHT_* chunks.
+
+    Standard OpenAI clients ignore this field. Fred-aware clients (e.g. the Fred
+    chat UI) use it for richer per-phase rendering: phase icons, colour coding,
+    timing badges, conclusions — beyond what the bare `<think>` tags convey.
+
+    Fields:
+    - thought_id: UUID correlating START / DELTA / END chunks for one block
+    - phase: ThoughtKind discriminator (planning / tool_use / observation / ...)
+    - title: optional short user-facing label for the block
+    - event: which lifecycle event this chunk represents
+    - conclusion: summary of what was decided (only on "end" chunks)
+    - duration_ms: wall-clock time of the block in ms (only on "end" chunks)
+    - source: "authored" (via context.thinking()) or "model_native" (extended thinking)
+    """
+
+    thought_id: str
+    phase: ThoughtKind | None = None
+    title: str | None = None
+    event: Literal["start", "delta", "end"]
+    conclusion: str | None = None
+    duration_ms: int | None = None
+    source: Literal["authored", "model_native"] = "authored"
+
+
 class FredChunkMetadata(BaseModel):
     """
     Fred-specific metadata carried in the top-level `fred` field of each SSE chunk.
@@ -179,14 +206,13 @@ class FredChunkMetadata(BaseModel):
     display citations, HITL prompts, and error banners inline.
 
     Fields:
-    - sources: knowledge citations attached to the answer (populated on
-      tool_result and final events)
-    - awaiting_human: present on the final chunk when the agent is paused and
-      needs user input to resume (HITL); typed as HumanInputRequest
-    - node_error: short error description when a graph node failed with on_error
-      routing; the UI should render this as a warning banner, not an answer
+    - sources: knowledge citations attached to the answer
+    - awaiting_human: HITL pause payload (present on the final chunk)
+    - node_error: graph node error description (render as warning banner)
     - token_usage: input/output token counts from the final event
-    - ui_parts: structured UI rendering parts (links, maps) from tool or final events
+    - ui_parts: structured UI rendering parts (links, maps)
+    - thought: structured thought metadata for THOUGHT_START/DELTA/END chunks;
+      standard clients rely on the `<think>` tags in `delta.content` instead
     """
 
     sources: list[FredSourceRef] = Field(default_factory=list)
@@ -194,6 +220,7 @@ class FredChunkMetadata(BaseModel):
     node_error: str | None = None
     token_usage: dict[str, int] | None = None
     ui_parts: list[UiPart] = Field(default_factory=list)
+    thought: FredThoughtMeta | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +288,9 @@ def fred_event_to_openai_chunk(
 
     Event-to-chunk mapping:
     - assistant_delta  → content delta chunk
+    - thought_start    → content delta "<think>" + fred.thought (phase/title metadata)
+    - thought_delta    → content delta with reasoning text + fred.thought (thought_id)
+    - thought_end      → content delta "</think>" + fred.thought (conclusion/duration)
     - tool_call        → tool_calls chunk (full call in one shot, not streamed)
     - tool_result      → zero-content chunk carrying fred.sources when present
     - final            → finish_reason="stop" chunk with fred.sources + token_usage
@@ -281,6 +311,63 @@ def fred_event_to_openai_chunk(
             model,
             created,
             delta=OpenAIDelta(content=event.get("delta", "")),
+        )
+
+    if kind == "thought_start":
+        thought_id = event.get("thought_id", "")
+        phase = event.get("phase")
+        title = event.get("title")
+        source = event.get("source", "authored")
+        return _make_chunk(
+            completion_id,
+            model,
+            created,
+            delta=OpenAIDelta(content="<think>"),
+            fred=FredChunkMetadata(
+                thought=FredThoughtMeta(
+                    thought_id=thought_id,
+                    phase=phase,
+                    title=title,
+                    event="start",
+                    source=source,
+                )
+            ),
+        )
+
+    if kind == "thought_delta":
+        thought_id = event.get("thought_id", "")
+        return _make_chunk(
+            completion_id,
+            model,
+            created,
+            delta=OpenAIDelta(content=event.get("delta", "")),
+            fred=FredChunkMetadata(
+                thought=FredThoughtMeta(
+                    thought_id=thought_id,
+                    event="delta",
+                )
+            ),
+        )
+
+    if kind == "thought_end":
+        thought_id = event.get("thought_id", "")
+        conclusion = event.get("conclusion")
+        duration_ms = event.get("duration_ms")
+        source = event.get("source", "authored")
+        return _make_chunk(
+            completion_id,
+            model,
+            created,
+            delta=OpenAIDelta(content="</think>"),
+            fred=FredChunkMetadata(
+                thought=FredThoughtMeta(
+                    thought_id=thought_id,
+                    event="end",
+                    conclusion=conclusion,
+                    duration_ms=duration_ms,
+                    source=source,
+                )
+            ),
         )
 
     if kind == "tool_call":

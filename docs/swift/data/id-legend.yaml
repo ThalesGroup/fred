@@ -468,6 +468,18 @@ items:
       and libs/fred-runtime only. Chart wiring and TCP probe follow-up are
       explicitly deferred until a fred-agents chart exists on this branch.
 
+  - id: RUNTIME-04
+    title: "Agent Thinking API — structured chain-of-thought SSE events and authoring primitive"
+    status: open
+    owner: Dimitri
+    refs:
+      rfc: "docs/swift/rfc/AGENT-THINKING-API-RFC.md"
+    notes: >
+      Adds THOUGHT_START / THOUGHT_DELTA / THOUGHT_END SSE event types and the
+      context.thinking() authoring context manager. Reverts the thought_kind field
+      added to StatusRuntimeEvent (wrong abstraction). Includes model-native
+      passthrough for Anthropic extended thinking and graceful no-op on Mistral.
+
   # ── UX ────────────────────────────────────────────────────────────────
 
   - id: UX-01

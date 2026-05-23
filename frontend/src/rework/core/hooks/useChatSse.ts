@@ -26,6 +26,9 @@ import type {
   NodeErrorRuntimeEvent,
   RuntimeContext,
   StatusRuntimeEvent,
+  ThoughtDeltaEvent,
+  ThoughtEndEvent,
+  ThoughtStartEvent,
   ToolCallRuntimeEvent,
   ToolResultRuntimeEvent,
   TurnPersistedEvent,
@@ -36,13 +39,11 @@ import type {
 // model (see rework/utils/conversationUtils.ts). These helpers only exist to
 // maintain the raw ChatMessage[] stream before it is mapped to Conversation.
 
-const keyOf = (m: ChatMessage) =>
-  `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
+const keyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}|${m.rank}|${m.role}|${m.channel}`;
 
 const exchangeKeyOf = (m: ChatMessage) => `${m.session_id}|${m.exchange_id}`;
 
-const stableConversationKeyOf = (m: ChatMessage) =>
-  `${exchangeKeyOf(m)}|${m.role}|${m.channel}`;
+const stableConversationKeyOf = (m: ChatMessage) => `${exchangeKeyOf(m)}|${m.role}|${m.channel}`;
 
 const isOptimisticUserMessage = (m: ChatMessage) =>
   m.role === "user" &&
@@ -110,6 +111,9 @@ type AnyRuntimeEvent =
   | ({ kind: "final" } & FinalRuntimeEvent)
   | ({ kind: "node_error" } & NodeErrorRuntimeEvent)
   | ({ kind: "status" } & StatusRuntimeEvent)
+  | ({ kind: "thought_start" } & ThoughtStartEvent)
+  | ({ kind: "thought_delta" } & ThoughtDeltaEvent)
+  | ({ kind: "thought_end" } & ThoughtEndEvent)
   | ({ kind: "tool_call" } & ToolCallRuntimeEvent)
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent);
@@ -144,6 +148,9 @@ export function useChatSse(
 
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const thoughtBufsRef = useRef<
+    Map<string, { rank: number; text: string; phase: string; title: string | null | undefined }>
+  >(new Map());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [waitResponse, setWaitResponse] = useState(false);
   const [effectiveChatOptions, setEffectiveChatOptions] = useState<EffectiveChatOptions | null>(null);
@@ -153,7 +160,10 @@ export function useChatSse(
     setMessages(next);
   }, []);
 
-  const reset = useCallback(() => setAll([]), [setAll]);
+  const reset = useCallback(() => {
+    thoughtBufsRef.current.clear();
+    setAll([]);
+  }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
 
   const abort = useCallback(() => {
@@ -312,6 +322,83 @@ export function useChatSse(
 
         case "node_error": {
           onError?.(`Agent error in ${event.routed_to}/${event.node_id}: ${event.error_message}`);
+          break;
+        }
+
+        case "thought_start": {
+          const rank = rankRef.current++;
+          thoughtBufsRef.current.set(event.thought_id, {
+            rank,
+            text: "",
+            phase: event.phase,
+            title: event.title,
+          });
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank,
+            timestamp: ts,
+            role: "assistant",
+            channel: "thought",
+            parts: [{ type: "text", text: "" }],
+            metadata: {
+              extras: {
+                thought_id: event.thought_id,
+                phase: event.phase,
+                title: event.title ?? null,
+                streaming_delta: true,
+              },
+            },
+          });
+          break;
+        }
+
+        case "thought_delta": {
+          const buf = thoughtBufsRef.current.get(event.thought_id);
+          if (!buf) break;
+          buf.text += event.delta;
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: buf.rank,
+            timestamp: ts,
+            role: "assistant",
+            channel: "thought",
+            parts: [{ type: "text", text: buf.text }],
+            metadata: {
+              extras: {
+                thought_id: event.thought_id,
+                phase: buf.phase,
+                title: buf.title ?? null,
+                streaming_delta: true,
+              },
+            },
+          });
+          break;
+        }
+
+        case "thought_end": {
+          const buf = thoughtBufsRef.current.get(event.thought_id);
+          if (!buf) break;
+          thoughtBufsRef.current.delete(event.thought_id);
+          emit({
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            rank: buf.rank,
+            timestamp: ts,
+            role: "assistant",
+            channel: "thought",
+            parts: [{ type: "text", text: buf.text }],
+            metadata: {
+              extras: {
+                thought_id: event.thought_id,
+                phase: buf.phase,
+                title: buf.title ?? null,
+                conclusion: event.conclusion ?? null,
+                duration_ms: event.duration_ms ?? null,
+              },
+            },
+          });
           break;
         }
 
