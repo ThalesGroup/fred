@@ -1,7 +1,7 @@
 # RFC: Multi-Turn Conversational Memory for Graph Agents
 
 - Status: Implemented (2026-05-05) — post-implementation hardening tracked in `docs/backlog/MULTI-AGENT-MEMORY-BACKLOG.md`
-- Authors: Fred core team
+- Authors: Dimitri Tombroff
 - Intended audience: Fred maintainers, SDK contributors, agent authors
 - Scope: Cross-turn memory contract for graph agents, `invoke_agent` context propagation, `TeamAgent` multi-turn behaviour
 - Non-goals: Long-term cross-session memory, vector-store semantic recall, user preference persistence

@@ -107,6 +107,11 @@ Permissions are exposed via:
   - flattened booleans such as `can_manage_team_agents`
   - no raw RBAC/REBAC graph internals
 
+Permission booleans must reflect the product actor model defined in
+`docs/swift/platform/REBAC.md §Product authorization model`. In particular:
+the owner/manager split is orthogonal — a flag that is true for owner must not
+imply it is also true for manager, and vice versa.
+
 Keep this contract small and frontend-oriented. If it becomes insufficient,
 extend `FrontendBootstrap`; do not add parallel bootstrap DTOs.
 

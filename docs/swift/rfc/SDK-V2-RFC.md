@@ -1,7 +1,7 @@
 # RFC: Fred SDK V2 for Industrial-Grade Agent Authoring
 
 - Status: Draft
-- Authors: Fred core team
+- Authors: Dimitri Tombroff
 - Intended audience: Fred maintainers, SDK contributors, agent authors, platform architects
 - Scope: Agent authoring model, runtime constraints, author-facing abstractions
 - Non-goals: LLM benchmark strategy, model provider comparison, prompt optimization framework

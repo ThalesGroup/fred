@@ -1,7 +1,7 @@
 # RFC: MCP Catalog config_fields — Tool-Declared Capability Options
 
 **Status:** Partially implemented (2026-05-06) — backend complete, frontend AgentFormBody rendering pending
-**Author:** Architecture
+**Author:** Simon Cariou
 **Scope:** `fred-sdk` `MCPServerConfiguration`, `mcp_catalog.yaml` format, control-plane
 product service enrichment, `AgentFormBody` Tools tab, `fred-agents` agent templates
 **Related:** `docs/rfc/AGENT-INSTANCE-FORM-RFC.md §3`, `docs/backlog/BACKLOG.md §3.7`,

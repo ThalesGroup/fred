@@ -8,7 +8,7 @@ Proposed
 
 ## Authors
 
-Fred Open Source (ThalesGroup)
+Dimitri Tombroff
 
 ## Version
 

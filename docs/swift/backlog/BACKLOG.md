@@ -2332,6 +2332,118 @@ team library records and marketplace records.
 
 ---
 
+### 3d.11 Fred Team Configuration — RFC-First Track
+
+**Goal**: define team configuration as a first-class Fred product surface before
+starting implementation work. This track must freeze ownership, policy objects,
+routing semantics, prompt-library scope, and implementation sequencing first.
+
+**Direction RFC set**:
+
+- `docs/swift/rfc/FRED-TEAM-CONFIG-RFC.md`
+- `docs/swift/rfc/TEAM-PLATFORM-POLICY-RFC.md`
+- `docs/swift/rfc/TEAM-ROUTING-POLICY-RFC.md`
+- `docs/swift/rfc/PROMPT-LIBRARY-TEAM-SCOPE-AMENDMENT-RFC.md`
+
+#### TEAM-01 — RFC set and backlog sequencing
+
+**Owner**: Dimitri
+
+- [x] Create one umbrella RFC for team configuration ownership, product objects,
+  authorization boundaries, and sequencing
+- [x] Create one RFC for team platform policy
+- [x] Create one RFC for team routing policy
+- [x] Create one prompt-library amendment RFC for personal scope, shared team
+  governance, and `prompt_refs`
+- [x] Add the implementation breakdown below before any product work starts
+
+**Hard rule**: TEAM-02 through TEAM-07 do not start until TEAM-01 is reviewed by
+the team.
+
+#### TEAM-02 — Authorization hardening prerequisites
+
+**Goal**: fix the existing team-scoped authorization gaps before layering new
+configuration UI and policy writes on top.
+
+- [ ] Require explicit team write permissions on agent-instance writes
+- [ ] Require explicit team write permissions on prompt CRUD, prompt score, and
+  prompt promotion
+- [ ] Require explicit team authorization on session list/detail routes
+- [ ] Remove unscoped personal-prompt lookups from auth-sensitive paths
+- [ ] Add owner / manager / member / public-team tests for the corrected
+  behavior
+
+#### TEAM-03 — Team platform policy product surface
+
+**Goal**: store platform-enforced team guardrails as a typed control-plane
+object.
+
+- [ ] Add `TeamPlatformPolicy` persistence and typed store
+- [ ] Add `GET /teams/{team_id}/platform-policy`
+- [ ] Add `PATCH /teams/{team_id}/platform-policy`
+- [ ] Validate positive limits, unique allowlists, and deployment-ceiling
+  constraints
+- [ ] Reject policy writes that would invalidate already stored team
+  configuration without remediation
+
+#### TEAM-04 — Platform policy enforcement
+
+**Goal**: make team platform policy effective at runtime and upload boundaries.
+
+- [ ] Enforce `storage.max_object_upload_bytes` on team-scoped object uploads
+- [ ] Enforce `storage.max_user_object_bytes_total` before persisting new
+  objects
+- [ ] Enforce `ingestion.max_source_file_bytes` before ingestion temp-file
+  creation
+- [ ] Enforce `ingestion.max_batch_file_count` on multi-file ingestion requests
+- [ ] Enforce model-profile and MCP-server allowlists during managed-agent
+  configuration
+- [ ] Return explicit product errors for policy violations
+
+#### TEAM-05 — Team routing policy
+
+**Goal**: expose one simple team-owned routing surface based on team defaults
+and operation overrides.
+
+- [ ] Add `TeamRoutingPolicy` persistence and typed store
+- [ ] Add `GET /teams/{team_id}/routing-policy`
+- [ ] Add `PATCH /teams/{team_id}/routing-policy`
+- [ ] Validate all referenced profiles against `TeamPlatformPolicy`
+- [ ] Extend execution preparation with a team routing snapshot
+- [ ] Extend runtime resolution to merge team snapshot over pod deployment
+  defaults
+- [ ] Fail closed on unknown or drifted profile IDs
+
+#### TEAM-06 — Prompt-library scope and governance realignment
+
+**Goal**: make personal prompts truly personal and shared team prompts truly
+team-governed.
+
+- [ ] Add personal prompt ownership semantics to persistence
+- [ ] Keep `/teams/personal/prompts` route family while scoping records by user
+- [ ] Align prompt CRUD write rules with team resource governance
+- [ ] Align prompt score and promotion authorization with manager / owner curation
+- [ ] Implement `prompt_refs` write / clear semantics on agent import
+- [ ] Increment `import_count` when a library prompt is imported into an agent
+- [ ] Add full tests for personal-versus-team prompt visibility and writes
+
+#### TEAM-07 — Frontend team configuration and prompt UX
+
+**Goal**: expose the frozen backend contracts through explicit UI only after the
+policy and authorization layers are stable.
+
+- [ ] Add owner-only team settings UI for platform policy
+- [ ] Add manager-owned team settings UI for routing policy
+- [ ] Add prompt-library improvements in agent creation (`prompt_refs`, drift,
+  import/save ergonomics)
+- [ ] Align session context picker with personal-plus-team prompt visibility
+- [ ] Ensure frontend permissions match backend-enforced role boundaries
+
+**Do not start** until TEAM-02 through TEAM-06 have frozen the backend
+contracts.
+
+---
+
 ## Phase 4 - Frontend SSE Connector
 
 ### Goal
