@@ -204,7 +204,9 @@ Do not silently expand scope. Do not silently delete content.
 
 | Content type | Canonical location |
 |---|---|
-| AI operational rules | `CLAUDE.md` (this file) |
+| AI operational rules (Claude Code) | `CLAUDE.md` (this file) |
+| OpenAI/Codex agent instructions | `AGENT.md`, `AGENTS.md` |
+| Gemini agent instructions | `GEMINI.md` |
 | Team activity, sprint status, blockers | `docs/swift/STATUS.md` |
 | Feature IDs and registry | `docs/swift/data/id-legend.yaml` |
 | Sprint-level structured data | `docs/swift/data/sprint.yaml` |

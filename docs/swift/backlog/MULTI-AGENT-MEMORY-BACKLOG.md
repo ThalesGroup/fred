@@ -1,6 +1,6 @@
 # Multi-Agent Conversational Memory — Implementation Backlog
 
-**RFC**: [`docs/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
+**RFC**: [`docs/swift/rfc/MULTI-AGENT-MEMORY-RFC.md`](../rfc/MULTI-AGENT-MEMORY-RFC.md)
 
 **Status**: Core implementation landed (2026-05-05) — post-implementation hardening pending before final closeout
 

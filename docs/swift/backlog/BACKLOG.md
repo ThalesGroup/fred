@@ -2478,7 +2478,7 @@ Make every active conversation fully observable and manageable from the CLI
 and control-plane without the frontend. This phase is the prerequisite for
 any future retention policy, audit, or compliance work.
 
-Source of truth: [`docs/design/SESSION-IDENTITY-CONTRACT.md`](./docs/design/SESSION-IDENTITY-CONTRACT.md)
+Source of truth: `docs/swift/design/SESSION-IDENTITY-CONTRACT.md` *(planned — file not yet written)*
 
 ### 6.2 Core Rule
 

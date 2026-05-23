@@ -19,7 +19,7 @@ Start here, then follow the links to the relevant section.
 | **Writing an agent** with the SDK | [`authoring/`](#authoring--agent-sdk) |
 | **Choosing how to run Fred** (standalone vs teams) | [`platform/OPERATING_MODES.md`](platform/OPERATING_MODES.md) |
 | **Deploying** the platform | [`platform/DEPLOYMENT_GUIDE.md`](platform/DEPLOYMENT_GUIDE.md) |
-| **An AI assistant** (Claude Code) | See [`../CLAUDE.md`](../CLAUDE.md) — mandatory read order defined there |
+| **An AI assistant** (Claude Code) | See [`../../CLAUDE.md`](../../CLAUDE.md) — mandatory read order defined there |
 
 ---
 
@@ -70,14 +70,14 @@ execution path, or session/team concern.
 |---|---|
 | [`RUNTIME-EXECUTION-CONTRACT.md`](design/RUNTIME-EXECUTION-CONTRACT.md) | SSE execution contract, event types, grant lifecycle — read before touching fred-runtime or the frontend SSE connector |
 | [`CONTROL-PLANE-PRODUCT-CONTRACT.md`](design/CONTROL-PLANE-PRODUCT-CONTRACT.md) | Product/session/admin API boundary — read before touching control-plane-backend |
-| [`SESSION-IDENTITY-CONTRACT.md`](design/SESSION-IDENTITY-CONTRACT.md) | `session_id` ownership rules, thread_id ban, history vs metadata split |
+| `SESSION-IDENTITY-CONTRACT.md` *(planned)* | `session_id` ownership rules, thread_id ban, history vs metadata split |
 | [`ARCHITECTURAL-SECURITY-REPORT.md`](design/ARCHITECTURAL-SECURITY-REPORT.md) | Security posture, grant trust, correlation check, planned hardening |
 | [`AGENT_DESIGN.md`](design/AGENT_DESIGN.md) | Agent graph and authoring design |
 | [`DESIGN.md`](design/DESIGN.md) | General system design overview |
 | [`FILESYSTEM.md`](design/FILESYSTEM.md) | File system layout conventions |
-| [`TABULAR_DATA_STORE.md`](design/TABULAR_DATA_STORE.md) | Tabular data store design |
-| [`history-persistence.md`](design/history-persistence.md) | History persistence model |
-| [`token-refresh.md`](design/token-refresh.md) | Token refresh flow |
+| `TABULAR_DATA_STORE.md` *(planned)* | Tabular data store design |
+| `history-persistence.md` *(planned)* | History persistence model |
+| `token-refresh.md` *(planned)* | Token refresh flow |
 
 ---
 
@@ -119,7 +119,6 @@ guides. Read the developer contract first.
 | [`PROCESSING_GUIDE.md`](platform/PROCESSING_GUIDE.md) | Document processing pipeline |
 | [`BENCHMARKS.md`](platform/BENCHMARKS.md) | Performance benchmarks |
 | [`VERSIONING.md`](platform/VERSIONING.md) | Versioning policy |
-| [`ROADMAP.md`](platform/ROADMAP.md) | Long-term product roadmap |
 
 ---
 
@@ -187,7 +186,11 @@ the resulting decisions get encoded in the `design/` contracts.
 |---|---|
 | [`AGENTIC-POD-RFC.md`](rfc/AGENTIC-POD-RFC.md) | Agentic pod architecture and migration direction |
 | [`AGENT-EVALUATION-RFC.md`](rfc/AGENT-EVALUATION-RFC.md) | Agent evaluation framework (deepeval) — EVAL-01 track |
-| [`AGENT-INSTANCE-FORM-RFC.md`](rfc/AGENT-INSTANCE-FORM-RFC.md) | Agent instance management form — template browser, tuning fields, MCP tools |
+| [`CHAT-RENDERING-SPEC.md`](rfc/CHAT-RENDERING-SPEC.md) | Chat message rendering specification — SSE, tool calls, attachments |
+| [`CHAT-UI-REFONTE-RFC.md`](rfc/CHAT-UI-REFONTE-RFC.md) | Chat UI refonte — ManagedChatPage, session lifecycle, option panel |
+| [`EXECUTION-CONTEXT-RFC.md`](rfc/EXECUTION-CONTEXT-RFC.md) | Execution context — ChatContext, runtime grants, agent handoff |
+| [`MCP-CATALOG-CONFIG-FIELDS-RFC.md`](rfc/MCP-CATALOG-CONFIG-FIELDS-RFC.md) | MCP catalog config fields + tool-declared behavioral contracts (CTRLP-08) |
+| `AGENT-INSTANCE-FORM-RFC.md` *(RFC pending — not yet written)* | Agent instance management form — template browser, tuning fields, MCP tools |
 | [`MULTI-AGENT-MEMORY-RFC.md`](rfc/MULTI-AGENT-MEMORY-RFC.md) | Cross-turn conversational memory for graph agents — MEMORY-01 track |
 | [`PROMPT-LIBRARY-RFC.md`](rfc/PROMPT-LIBRARY-RFC.md) | Prompt library — versioning, analytics, 3-level hierarchy, chat context picker — PROMPT-03..D3 |
 | [`SDK-V2-RFC.md`](rfc/SDK-V2-RFC.md) | SDK v2 design proposal |

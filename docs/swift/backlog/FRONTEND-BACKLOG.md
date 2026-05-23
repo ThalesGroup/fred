@@ -525,7 +525,7 @@ and raw MCP server selection are explicitly out-of-scope. Per `docs/rfc/AGENT-IN
 Make session list, chat entry, and managed runtime history follow the same
 ownership model as the execution path.
 
-Source of truth for session identity: [`docs/design/SESSION-IDENTITY-CONTRACT.md`](../docs/design/SESSION-IDENTITY-CONTRACT.md)
+Source of truth for session identity: `docs/swift/design/SESSION-IDENTITY-CONTRACT.md` *(planned — file not yet written)*
 
 ---
 
