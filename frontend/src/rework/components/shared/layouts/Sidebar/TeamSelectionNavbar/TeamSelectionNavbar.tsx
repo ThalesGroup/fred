@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import TeamSelectionItem from "@shared/organisms/Sidebar/TeamSelectionNavbar/TeamSelectionItem/TeamSelectionItem.tsx";
+import TeamSelectionItem from "./TeamSelectionItem/TeamSelectionItem.tsx";
 import styles from "./TeamSelectionNavbar.module.scss";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useTranslation } from "react-i18next";
@@ -21,17 +21,14 @@ import { useFrontendProperties } from "../../../../../../hooks/useFrontendProper
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 
 /**
- * Render the left-side team selector from the bootstrap-owned team list.
+ * Left-side team selector.
  *
- * Why this component exists:
- * - the shell needs one navigation surface that works in the personal-team-only
- *   baseline without relying on the temporary user-details endpoint
+ * Derives the team list exclusively from `useFrontendBootstrap` — no
+ * per-team API fetches at load time. Renders the personal team, the
+ * marketplace entry (when collaborative teams exist), and all collaborative
+ * teams as `TeamSelectionItem` rows.
  *
- * How to use it:
- * - mount it inside the main sidebar layout
- *
- * Example:
- * - `<TeamSelectionNavbar />`
+ * Mount inside the main sidebar layout.
  */
 export default function TeamSelectionNavbar() {
   const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();

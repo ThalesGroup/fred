@@ -489,7 +489,9 @@ _TRACE_STREAM = (
     "and mock source documents attached to the final event. "
     "This validates the SourcesPanel component "
     "and the streaming cursor behavior. "
-    "Three mock source cards are included."
+    "See the test assistant reference [1] for details on what is exercised. "
+    "The SSE event contract [2] describes the wire format used. "
+    "Each VectorSearchHit [3] carries uid, title, content and score."
 )
 
 
@@ -883,7 +885,7 @@ _SCENARIO_TABLE = """\
 | `model planning` | Optional model call using operation label `planning` |
 | `hitl choice` | HITL binary choice gate (3 options) |
 | `hitl text` | HITL free-text input gate |
-| `trace` | Status events + streamed text + mock sources (SourcesPanel) |
+| `trace` | Status events + streamed text + inline citations [1][2][3] + mock sources + mock token usage |
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
 | `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |

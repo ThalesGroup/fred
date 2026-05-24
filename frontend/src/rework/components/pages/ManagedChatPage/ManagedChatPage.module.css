@@ -1,105 +1,57 @@
-/* Page shell */
+/* ── Page shell ────────────────────────────────────────────────────────── */
 .page {
+  position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--surface-container-lowest);
   height: 100%;
-  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-container-lowest);
 }
 
-/* ── Header ────────────────────────────────────────────────────────────── */
-.header {
+/* ── Floating session title — top-left, overlays thread ────────────────── */
+.topBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   display: flex;
-  flex-shrink: 0;
   align-items: center;
-  gap: var(--spacing-s, 0.75rem);
-  border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-s, 0.75rem) var(--spacing-m, 1rem);
+  padding: var(--spacing-xs) var(--spacing-s);
+  background: var(--surface-container-lowest);
+  pointer-events: none;
 }
 
-/* ── Header identity block ─────────────────────────────────────────────── */
-.headerMeta {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-  min-width: 0;
-}
-
-.headerAgentName {
-  overflow: hidden;
-  color: var(--on-surface);
-  font: var(--font-title-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.headerSessionTitle {
-  cursor: pointer;
-  max-width: 320px;
-  overflow: hidden;
-  color: var(--on-surface-muted);
-  font: var(--font-body-small);
-  user-select: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.headerSessionTitle:hover {
-  color: var(--on-surface);
-}
-
-.headerSessionInput {
-  outline: none;
-  border: none;
-  border-bottom: 1px solid var(--outline);
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  width: 100%;
-  max-width: 320px;
-  color: var(--on-surface);
-  font: var(--font-body-small);
-}
-
-.headerSessionInput:focus {
-  border-bottom-color: var(--primary);
-}
-
-/* ── Body: chat column + optional right panel ──────────────────────────── */
-.body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-/* Centre column — the single scroll container for the whole chat area.
-   Block internally so the sticky input and the message area stack naturally.
-   The scrollbar therefore spans the full column height. */
-.chatColumn {
+.topBarTitle {
   flex: 1;
   min-width: 0;
+  pointer-events: auto;
+  font: var(--font-body-medium);
+}
+
+/* ── Single scroll container ───────────────────────────────────────────── */
+/* padding-top: space under the floating topBar (~52px).
+   padding-bottom: space so the last message scrolls fully above the input overlay. */
+.chatArea {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding-top: 52px;
+  padding-bottom: 160px;
 }
 
-/* Right panel slot — Phase 6C (AgentOptionsPanel) fills this */
-.rightPanel {
-  flex-shrink: 0;
-  border-left: 1px solid var(--outline-muted);
-  width: 320px;
-}
-
-/* ── One exchange (user + optional agent turn) ─────────────────────────── */
-.turn {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s, 0.75rem);
+/* ── Floating input bar — sits above the scroll container, never in flow ── */
+.inputOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
 }
 
 /* ── Error state ───────────────────────────────────────────────────────── */
 .error {
-  padding: var(--spacing-m, 1rem);
+  padding: var(--spacing-m);
   color: var(--error);
-  font: var(--font-body-large, 1rem/1.5 sans-serif);
+  font: var(--font-body-large);
 }

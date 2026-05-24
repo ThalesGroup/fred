@@ -17,19 +17,19 @@ import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import { OptionModel } from "@models/Option.model.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
-import DataTable, { DataTableColumn } from "@shared/organisms/DataTable/DataTable.tsx";
+import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TeamMember,
   TeamWithPermissions,
   UserTeamRelation,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+} from "../../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useListTeamMembersQuery,
   useRemoveTeamMemberMutation,
   useUpdateTeamMemberMutation,
-} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 
 const TEAM_ROLES: UserTeamRelation[] = ["owner", "manager", "member"];
 const ROLE_PRIORITY: Record<UserTeamRelation, number> = {

@@ -19,12 +19,12 @@ import Switch from "@shared/atoms/Switch/Switch.tsx";
 import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import ImageFileInput from "@shared/atoms/ImageFileInput/ImageFileInput.tsx";
-import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useUpdateTeamMutation,
   useUploadTeamBannerMutation,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 
 interface TeamSettingsParametersProps {
   team: TeamWithPermissions;

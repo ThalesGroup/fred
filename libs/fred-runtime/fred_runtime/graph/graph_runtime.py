@@ -1981,7 +1981,7 @@ def _final_event_from_output(
             sources=output_model.sources,
             ui_parts=output_model.ui_parts,
             model_name=model_name,
-            token_usage=token_usage,
+            token_usage=token_usage or output_model.token_usage,
             finish_reason=finish_reason,
         )
 

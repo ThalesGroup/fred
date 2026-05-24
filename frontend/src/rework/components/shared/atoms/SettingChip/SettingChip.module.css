@@ -1,0 +1,40 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-2xl);
+  background: none;
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.chip:hover {
+  background: var(--state-on-surface-hover);
+  color: var(--on-surface);
+}
+
+.chip[data-open="true"] {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--state-on-surface-hover);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.label {
+  line-height: 1;
+}

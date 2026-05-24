@@ -2285,7 +2285,7 @@ at save time — the agent was created successfully but broke on the first messa
 
 *Depends on: PROMPT-03*
 
-- [ ] Replace free textarea in `AgentOptionsPanel` / session init surface with a library picker
+- [ ] Replace free textarea in session init surface / `ComposerSettingsControls` topSlot with a library picker (`AgentOptionsPanel` retired 2026-05-24 — see PROMPT-LIBRARY-RFC §PROMPT-05)
 - [ ] Source: `GET /teams/{team_id}/prompts/context` (union personal + team)
 - [ ] Display: personal group + team group, ordered by `session_count DESC`, score stars when non-null
 - [ ] Selection → `PATCH /sessions/{id} { context_prompt_id }` → increments `session_count`

@@ -172,7 +172,7 @@ Alignment convention (OpenWebUI / OpenAI):
 |---|---|---|
 | `ChatMessagesArea` | `organisms/ChatMessagesArea/` | Scrollable message list, auto-scroll, empty state |
 | `AssistantTurn` | `organisms/AssistantTurn/` | Groups ThoughtTrace + AssistantMessage + SourcesPanel for one exchange |
-| `AgentOptionsPanel` | `organisms/AgentOptionsPanel/` | Right-side collapsible panel: agent-specific options + admin debug tools (Phase CHAT-03) |
+| `AgentOptionsPanel` | `organisms/AgentOptionsPanel/` | Right-side collapsible panel: agent-specific options + admin debug tools (Phase CHAT-03). **Retired (2026-05-24) for routine controls** — search policy, RAG scope, and library selection moved to `ComposerSettingsControls` chips in `RichInputField` `topSlot`. Debug/admin tools will use `InlineDrawer` when implemented. |
 
 ---
 
@@ -706,8 +706,8 @@ Additional per-message controls:
 
 #### Header Controls
 
-- [ ] Add inline-editable session title to chat header
-- [ ] Wire `PATCH /teams/{team_id}/sessions/{session_id}` for title save
+- [x] Add inline-editable session title to chat header — `SessionTitleEditor` molecule, rendered in `ManagedChatPage` top bar (2026-05-24)
+- [x] Wire `PATCH /teams/{team_id}/sessions/{session_id}` for title save — `commitTitle` in `useManagedChat`, uses `refreshSession` mutation (2026-05-24)
 - [ ] Add "New chat" button (clears state, new `session_id`)
 - [ ] Add per-message copy button on `AssistantMessage`
 
@@ -716,13 +716,13 @@ Additional per-message controls:
 ### 3.10 Validation
 
 - [ ] Toggling the right panel does not reflow or scroll `ChatMessagesArea`
-- [ ] `AgentOptionsPanel` renders `null` cleanly when no options and no `debug_tools` permission
+- [ ] ~~`AgentOptionsPanel` renders `null` cleanly when no options and no `debug_tools` permission~~ **Superseded (2026-05-24)** — routine controls moved to `ComposerSettingsControls`; debug tools will use `InlineDrawer`
 - [ ] `DebugToolsSection` is fully absent for users without `debug_tools` permission
 - [ ] Opening a debug drawer injects nothing into `ChatMessagesArea`
 - [ ] "Response detail" drawer shows raw `ChatMessage[]` in Monaco for the active session
 - [ ] "Session performance" drawer shows a table or graceful "no KPI data" fallback
 - [ ] "Log Genius" drawer shows spinner while in-flight, result on completion
-- [ ] `DebugDrawer` and `AgentOptionsPanel` coexist without z-index conflicts
+- [ ] ~~`DebugDrawer` and `AgentOptionsPanel` coexist without z-index conflicts~~ **Superseded (2026-05-24)** — `InlineDrawer` replaces `AgentOptionsPanel` for debug; verify `InlineDrawer` z-index does not conflict with `ComposerSettingsControls` popovers
 - [ ] All new components use design tokens only — no hardcoded colours or spacing
 - [ ] `make code-quality` passes on the frontend
 
@@ -804,7 +804,7 @@ _Signatures to be defined in Step 2._
 - [x] `SessionTitleEditor` — inline editable title, extracted from `ManagedChatPage` — `molecules/SessionTitleEditor/`
 - [x] `UserTurn` — `UserMessage` + `ActionBar` (copy, edit) — `organisms/UserTurn/`
 - [x] `AssistantTurn` — refactored: `CollapsibleBlock` wrapping `ThoughtTrace` + `HorizontalScrollRow` of `SourceCard`s + `ActionBar` — `organisms/AssistantTurn/`
-- [x] `ConversationThread` — maps `ThreadMessage[]` to `UserTurn` / `AssistantTurn` / `HitlPrompt` — `organisms/ConversationThread/`
+- [x] `ConversationThread` — maps `ThreadMessage[]` to `UserTurn` / `AssistantTurn` / `HitlPrompt` — page-local `pages/ManagedChatPage/ConversationThread/` (moved from `organisms/` 2026-05-24 to fix hierarchy)
 - [ ] Sidebar — history grouped by date, fixed-bottom sections (Libraries, Files, Agents, Settings)
 
 ### 5.7 Hooks and utilities (pending Step 3 validation)
@@ -816,6 +816,28 @@ _Signatures to be defined in Step 2._
 ### 5.8 Page refactor (pending Step 4 validation)
 
 - [x] `ManagedChatPage` — reduced to 80 lines (66 code + 14 license header); `useManagedChat` hook extracts all business logic
+
+### 5.9 UX correction — routine options stay in the composer
+
+The CHAT-05 layout originally allowed `AgentOptionsPanel` to expose libraries,
+search policy, and RAG scope in a full-height right overlay. UX review on
+2026-05-24 found that this makes routine turn settings compete with the
+assistant reply body.
+
+Target correction:
+
+- [x] Replace the routine `AgentOptionsPanel` interaction with compact
+  composer-adjacent setting chips — `SettingChip` atom + `ComposerSettingsControls` organism (2026-05-24)
+- [x] Render composer setting chips in a dedicated row above the textarea via `topSlot`
+  of `RichInputField`; textarea never compressed (2026-05-24)
+- [x] Use anchored popovers for search policy and RAG scope selection (2026-05-24)
+- [x] Use an anchored multi-select popover for library selection, with selected
+  libraries summarized as count chip (2026-05-24)
+- [x] Popovers support Escape, click-outside close, and valid ARIA semantics
+  (`role="dialog"`, `role="group"`) (2026-05-24)
+- [x] Bound libraries: inspectable in a read-only popover (chip always clickable) (2026-05-24)
+- [x] Right-side drawers removed for routine options; right panel gone from `useManagedChat` (2026-05-24)
+- [x] Active policy/scope/library count visible in chips while user reads/types (2026-05-24)
 
 ---
 
@@ -834,8 +856,9 @@ change.
 | `mcp_servers` pass-through | Control plane dropped `available_mcp_servers` from runtime's `/agents/templates` response. | **Fixed.** `ManagedMcpServerRef` extended with `display_name` + `config_fields`. `AgentTemplateSummary` now includes `mcp_servers`. Runtime's `available_mcp_servers` mapped to `ManagedMcpServerRef` with `display_name` enriched from catalog. Frontend renders read-only MCP tools section. | ~~Backend + frontend~~ Done |
 | Orphaned components | `AgentCreateEditModal/KfVectorSearchForm` and `SwitchRow` exist. `KfVectorSearchForm` imports from `agenticOpenApi` (legacy). `SwitchRow` now re-used by `TuningFieldRenderer`. | `KfVectorSearchForm` is still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY` — cannot delete until that old component is migrated. | None — defer until `AgentToolsSelection` migrates |
 | File attachments | No file attachment UI in `ManagedChatPage`. Old UI used `POST /agentic/v1/chatbot/upload` (deprecated). | Agreed direction: attachments upload directly to knowledge-flow. Spec needed: endpoint selection (new KF upload route vs. existing), returned document UID flow into `RuntimeContext.selected_document_uids`, UI as paperclip icon in `ChatInputBar`. | Spec + KF endpoint decision |
-| Agent-library hard binding indicator | `AgentOptionsPanel` library picker is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the picker should switch to read-only (lock icon) showing the bound libraries. | Backend contract is now in place: `ManagedAgentInstanceSummary.mcp_config_values` is exposed and `prepare-execution` resolves typed `effective_chat_options`. **Remaining:** frontend must derive/read the bound-library state from that data instead of leaving the picker always interactive. | Frontend only |
-| `chat_options.*` in wrong form tab | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active. | **Partially fixed (2026-05-06):** `McpServerCard` now reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and tri-state selection is preserved (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls. `ManagedChatPage` now consumes `effective_chat_options` from `useChatSse` and passes it to `AgentOptionsPanel` which gates its sections. **Remaining:** move MCP `config_fields` controls to the "Tools" tab (currently rendered inline inside `McpServerCard` in the Tools tab — layout is correct, but they are not yet in a dedicated sub-section per server). | Frontend only |
+| Agent-library hard binding indicator | `ComposerSettingsControls` library chip is always interactive. When an agent's MCP server declares `document_library_tags_ids`, the chip should switch to read-only (lock icon) showing the bound libraries. | Backend contract is now in place: `ManagedAgentInstanceSummary.mcp_config_values` is exposed and `prepare-execution` resolves typed `effective_chat_options`. **Remaining:** frontend must derive/read the bound-library state from that data instead of leaving the chip always interactive. (`AgentOptionsPanel` retired 2026-05-24 — this gap now targets `ComposerSettingsControls`.) | Frontend only |
+| `chat_options.*` in wrong form tab | Library picker, search policy, RAG scope appear in "Settings" tab of `AgentFormBody`. They belong in the "Tools" tab, rendered beneath the KF search server checkbox when that server is active. | **Partially fixed (2026-05-06):** `McpServerCard` now reads/writes per-server `configValues` (not flat `tuningFieldValues`); `AgentFormBody` passes server-scoped slices; `AgentFormModal` stores `mcpConfigValues` separately and tri-state selection is preserved (`[]` ≠ `null`); `TeamAgentsPage` forwards `mcp_config_values` to create/update API calls. `ManagedChatPage` now consumes `effective_chat_options` from `useChatSse` and passes it to `ComposerSettingsControls` which gates its sections. **Remaining:** move MCP `config_fields` controls to the "Tools" tab (currently rendered inline inside `McpServerCard` in the Tools tab — layout is correct, but they are not yet in a dedicated sub-section per server). | Frontend only |
+| Stream abort — backend gap | Frontend abort is fully wired: `useChatSse.abort()` closes the `AbortController`, `waitResponse` resets to false, `ManagedChatPage` surfaces the stop button via `RichInputField.onInterrupt`. | **Backend has no abort endpoint.** After the client disconnects, the agent/LLM execution continues to completion. The full response may appear in session history on next load. Partial streaming message is not cleaned up in the UI on abort. Needed: (1) `POST /control-plane/v1/teams/{team_id}/sessions/{session_id}/abort` or equivalent cancel signal on the runtime side; (2) frontend cleanup of the partial assistant message bubble on abort. | Backend (no abort endpoint in `agent_app.py`) |
 
 ---
 
@@ -918,7 +941,7 @@ example of each content type listed in §7.1.
 | CHAT-01 – Architecture & layout | ✅ Done (2026-04-27) | All atoms + molecules + organisms created; three-column layout; `ConversationMessage` state model + `toConversationMessages`; HITL history channels (hitl_request frozen card, hitl_response user bubble); sources from `assistant/final` metadata. Prettier + `tsc` pass. |
 | CHAT-02 – Markdown & content | ✅ Done (2026-05-04) | `MarkdownRenderer` (react-markdown + remark-gfm + rehype-sanitize + rehypeCitations plugin); `CodeBlock` (monospace + copy); `SourceBadge` atom; wired into `AssistantMessage`; `AssistantTurn` threads `onSourceClick` → `SourcesPanel` activeIndex highlight. Prettier + `tsc` pass. |
 | Code quality audit | ✅ Done (2026-05-04) | MUI removed from `Breadcrumb` (→ `Icon` atom) and `MainLayout` (`CssBaseline` dropped); `Menu` moved from `organisms/` → `molecules/`; hex fallbacks removed from `HitlPrompt.module.css`; Apache 2.0 license headers added to all 51 rework `.tsx` files. `KfVectorSearchForm` kept (still used by old-tree `AgentToolsSelection` via `TOOL_PARAMS_REGISTRY`). |
-| CHAT-03 – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. Remaining: debug tools section (`DebugDrawer`). |
+| CHAT-03 – Agent options & debug tools | 🔄 In progress | `AgentOptionsPanel` organism done (2026-05-06): library picker + search-policy/scope controls wired to `RuntimeContext`. Backend contract freeze done (2026-05-06). Frontend wiring done (2026-05-06): `mcp_config_values` correctly separated from `tuning_field_values` in form + API calls; tri-state MCP selection preserved through form round-trip; `useChatSse` exposes `effectiveChatOptions`; `AgentOptionsPanel` gates sections on `options` prop; `ManagedChatPage` syncs search defaults from agent config. **Routine controls retired (2026-05-24):** library picker, search policy, RAG scope moved to `ComposerSettingsControls` chips (CHAT-05). Remaining: debug tools section (`DebugDrawer` via `InlineDrawer`). |
 | CHAT-04 – Advanced parts | Deferred | After CHAT-03 |
 | CHAT-05 – DS enrichment & refonte | 🔄 In progress | Steps 1–5 validated (2026-05-14). Waves 0–8 implemented (2026-05-18): types, 5 atoms, 8 molecules, 6 organisms, 4 hooks/utils. `ManagedChatPage` reduced to 80 lines. MarkdownRenderer extended (2026-05-21): `remark-math`, `rehype-katex`, `remark-directive`, `MermaidBlock`, `hr` suppression. Rendering spec RFC: `docs/swift/rfc/CHAT-RENDERING-SPEC.md`. Remaining: `ConversationSidebar`, `SourceDetailDrawer`, `DebugDrawer`. |
 | CHAT-06 – test_assistant rich content | ✅ Done (2026-05-21) | Backend: `markdown_step` in `apps/fred-agents` with 7 content types (code, mermaid, table, GeoJSON, math inline+block, details). Manual live verification pending pod. |

@@ -876,6 +876,7 @@ The chat header sits at the top of `.chatColumn`.
 ## 11. AgentOptionsPanel (Right Sidebar)
 
 **Path:** `src/rework/components/shared/organisms/AgentOptionsPanel/AgentOptionsPanel.tsx`
+**Status: Retired (2026-05-24)** — routine controls (search policy, RAG scope, library selection) moved to `ComposerSettingsControls` chips in `RichInputField` `topSlot`. Debug and admin tools will use `InlineDrawer` when implemented (CHAT-03 remaining work). This spec is preserved as historical reference.
 
 ### 11.1 Concept
 

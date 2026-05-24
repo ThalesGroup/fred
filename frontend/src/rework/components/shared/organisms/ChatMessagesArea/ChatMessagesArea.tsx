@@ -12,87 +12,98 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ChatMessagesArea.module.css";
 
 interface ChatMessagesAreaProps {
   children: ReactNode;
   isEmpty: boolean;
   isLoading: boolean;
-  /** Bumped by parent whenever a new message is added — triggers the initial smooth scroll. */
-  scrollVersion: number;
-  /** True while the assistant is streaming — keeps the bottom pinned on every delta. */
+  /** Explicit scroll container passed from ManagedChatPage — never use parentElement. */
+  scrollContainerRef: RefObject<HTMLDivElement>;
+  /**
+   * Increments when a new user exchange starts. Resets tail mode and jumps to
+   * bottom. Must NOT change on every streaming token — only on new turns.
+   */
+  turnKey: number;
   isStreaming: boolean;
 }
 
-// How close to the bottom (in px) re-enables tail mode after the user scrolls back down.
-// Large enough to trigger even when streaming is adding content faster than the user
-// can scroll — otherwise the "moving floor" prevents the threshold from ever firing.
-const NEAR_BOTTOM_PX = 200;
+const BOTTOM_THRESHOLD_PX = 120;
 
-export function ChatMessagesArea({ children, isEmpty, isLoading, scrollVersion, isStreaming }: ChatMessagesAreaProps) {
-  const areaRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+function distanceFromBottom(el: HTMLElement): number {
+  return el.scrollHeight - el.scrollTop - el.clientHeight;
+}
 
-  // Tracks user scroll INTENT, not absolute scroll position.
-  // Only scrolling UP (decreasing scrollTop) sets this to false.
-  // Programmatic auto-scrolls go DOWN, so they never flip this flag.
-  const isAtBottomRef = useRef(true);
-  // Previous scrollTop — used to detect direction, not magnitude.
-  const prevScrollTopRef = useRef(0);
+export function ChatMessagesArea({
+  children,
+  isEmpty,
+  isLoading,
+  scrollContainerRef,
+  turnKey,
+  isStreaming,
+}: ChatMessagesAreaProps) {
+  const { t } = useTranslation();
 
-  // Attach scroll listener once. Updates intent based on direction:
-  //   scrolling UP   → user is reading history → disable auto-scroll
-  //   scrolling DOWN → if near bottom, re-enable auto-scroll
+  // true  → follow the bottom during streaming (tail -f behaviour)
+  // false → user scrolled up to read history; stop moving the viewport
+  const tailModeRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
+
+  function scrollToBottomInstant() {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    lastScrollTopRef.current = el.scrollTop;
+  }
+
+  // Attach scroll listener to the external container once.
+  // Scrolling UP  → disable tail mode immediately.
+  // Scrolling DOWN + near bottom → re-enable tail mode.
   useEffect(() => {
-    const scrollEl = areaRef.current?.parentElement;
-    if (!scrollEl) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
 
-    function onScroll() {
-      const { scrollTop, scrollHeight, clientHeight } = scrollEl!;
-      const scrollingUp = scrollTop < prevScrollTopRef.current;
-      prevScrollTopRef.current = scrollTop;
+    const onScroll = () => {
+      const scrollingUp = el.scrollTop < lastScrollTopRef.current;
+      lastScrollTopRef.current = el.scrollTop;
 
       if (scrollingUp) {
-        isAtBottomRef.current = false;
-      } else if (scrollHeight - scrollTop - clientHeight < NEAR_BOTTOM_PX) {
-        // User scrolled back down to near the bottom — re-enable auto-scroll.
-        isAtBottomRef.current = true;
+        tailModeRef.current = false;
+        return;
       }
-    }
 
-    scrollEl.addEventListener("scroll", onScroll, { passive: true });
-    return () => scrollEl.removeEventListener("scroll", onScroll);
-  }, []);
+      if (distanceFromBottom(el) <= BOTTOM_THRESHOLD_PX) {
+        tailModeRef.current = true;
+      }
+    };
 
-  // New turn: always jump to bottom and declare intent "at bottom".
-  // block:"end" — bottomRef lands at the viewport's bottom edge, preventing
-  // the blank-space artifact when content is shorter than the viewport.
-  useEffect(() => {
-    isAtBottomRef.current = true;
-    prevScrollTopRef.current = areaRef.current?.parentElement?.scrollTop ?? 0;
-    bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
-  }, [scrollVersion]);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [scrollContainerRef]);
 
-  // Streaming ended: reset for the next exchange.
-  useEffect(() => {
-    if (!isStreaming) isAtBottomRef.current = true;
-  }, [isStreaming]);
-
-  // During streaming: follow the bottom only when the user hasn't scrolled up.
-  // No dep array — runs after every render; no-op otherwise.
+  // New user turn → always reset tail mode and jump to bottom.
+  // Deliberately NOT triggered by streaming tokens.
   useLayoutEffect(() => {
-    if (!isStreaming || !isAtBottomRef.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
-  });
+    tailModeRef.current = true;
+    scrollToBottomInstant();
+  }, [turnKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // During streaming: follow the bottom on every render, but only when tail
+  // mode is active (i.e. user hasn't scrolled up).
+  // No dep array — intentionally runs after every render.
+  useLayoutEffect(() => {
+    if (!isStreaming || !tailModeRef.current) return;
+    scrollToBottomInstant();
+  }); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div ref={areaRef} className={styles.area} role="log" aria-live="polite" aria-label="Conversation">
+    <div className={styles.area} role="log" aria-live="polite" aria-label={t("chatbot.conversationAriaLabel")}>
       <div className={styles.lane}>
-        {isLoading && <p className={styles.hint}>Loading conversation history…</p>}
-        {!isLoading && isEmpty && <p className={styles.empty}>Send a message to start the conversation.</p>}
+        {isLoading && <p className={styles.hint}>{t("chatbot.loadingHistory")}</p>}
+        {!isLoading && isEmpty && <p className={styles.empty}>{t("chatbot.startConversationHint")}</p>}
         {children}
-        <div ref={bottomRef} />
       </div>
     </div>
   );

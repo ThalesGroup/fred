@@ -121,8 +121,8 @@ rag_scope_selection: bool = False          # show scope picker?
 default_search_rag_scope: Literal[...]     # initial value
 ```
 
-Missing: `bound_library_ids` (locked library list — `AgentOptionsPanel` has UI code
-for it but nothing populates it from the backend).
+Missing: `bound_library_ids` (locked library list — `ComposerSettingsControls` has UI code
+for it but nothing populates it from the backend; `AgentOptionsPanel` retired 2026-05-24).
 
 ### 2.5 `ExecutionPreparation` — the full preparation response
 
@@ -185,7 +185,7 @@ The symmetry exists only in the code:
 
 ### 3.6 Two things missing
 
-- `bound_library_ids` — absent from `EffectiveChatOptions`; `AgentOptionsPanel` has dead UI code for it
+- `bound_library_ids` — absent from `EffectiveChatOptions`; `ComposerSettingsControls` has UI code for it (bound-library read-only chip); `AgentOptionsPanel` retired 2026-05-24
 - `context_prompt_text` wire — `ExecutionPreparation` computes it; frontend ignores it; `RuntimeContext.selected_chat_context_ids` exists but holds IDs not text
 
 ---
@@ -325,11 +325,12 @@ After OpenAPI regeneration from the fred-runtime schema (not the agentic-backend
    `runtimeOpenApi.ts` instead of the legacy type from `agenticOpenApi.ts`. Read
    `context_prompt_text` from the prep response and include it in the context object.
 
-2. **`ManagedChatPage.tsx`**: read `effective_chat_options.bound_library_ids` and
-   pass it to `AgentOptionsPanel` as `boundLibraryIds`.
+2. **`useManagedChat.ts`**: read `effective_chat_options.bound_library_ids` and
+   expose it as `boundLibraryIds` to `ManagedChatPage`.
 
-3. **`AgentOptionsPanel.tsx`**: `boundLibraryIds` prop is already wired in the UI
-   code — it just needs a real value from the backend (this is dead code becoming live).
+3. **`ComposerSettingsControls`**: `boundLibraryIds` prop is already wired in the UI
+   code (bound-library read-only chip) — it just needs a real value from the backend
+   (this is dead code becoming live). `AgentOptionsPanel` retired 2026-05-24.
 
 ---
 
@@ -385,7 +386,7 @@ fields to `RuntimeContext` Group C and a corresponding declaration to
 | `runtimeOpenApi.ts` | Regenerated — `RuntimeContext` type now correct and authoritative | Required |
 | `controlPlaneOpenApi.ts` | Regenerated — `EffectiveChatOptions` gains `bound_library_ids` | Required |
 | `useChatSse.ts` | Switch `RuntimeContext` import source; add `context_prompt_text` forwarding | Required |
-| `ManagedChatPage.tsx` | Read `bound_library_ids`, pass to `AgentOptionsPanel` | Required |
+| `useManagedChat.ts` | Read `bound_library_ids`, expose as `boundLibraryIds` → `ComposerSettingsControls` | Required |
 
 ---
 
@@ -440,7 +441,7 @@ useChatSse.ts:
 
 ManagedChatPage.tsx:
   - read effective_chat_options.bound_library_ids
-  - pass as boundLibraryIds to AgentOptionsPanel
+  - pass as boundLibraryIds to ComposerSettingsControls (via useManagedChat)
 
 tsc --noEmit + prettier
 ```

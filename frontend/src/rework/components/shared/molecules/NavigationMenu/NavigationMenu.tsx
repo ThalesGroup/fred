@@ -15,13 +15,11 @@
 import styles from "./NavigationMenu.module.scss";
 import NavigationMenuItem, {
   NavigationMenuItemProps,
-} from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+} from "./NavigationMenuItem/NavigationMenuItem.tsx";
 
-export interface NavigationMenuProps {
-  items: NavigationMenuItemProps[];
-}
+export type { NavigationMenuItemProps };
 
-export default function NavigationMenu({ items }: NavigationMenuProps) {
+export default function NavigationMenu({ items }: { items: NavigationMenuItemProps[] }) {
   return (
     <div className={styles["navigation-menu-container"]}>
       {items.map((item) => {

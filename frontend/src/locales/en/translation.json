@@ -739,7 +739,24 @@
       "documents": "Documents ({{count}})",
       "prompts": "Prompts ({{count}})",
       "templates": "Templates ({{count}})"
-    }
+    },
+    "composerSettings": {
+      "searchPolicyTitle": "Search policy",
+      "scopeTitle": "Search scope",
+      "librariesTitle": "Libraries",
+      "boundLibrariesTitle": "Bound libraries",
+      "noLibrariesAvailable": "No libraries available.",
+      "loading": "Loading…",
+      "librariesCount_one": "{{count}} library",
+      "librariesCount_other": "{{count}} libraries",
+      "scopeCorpus": "Corpus",
+      "scopeCorpusAndWeb": "Corpus + web",
+      "scopeGeneral": "General",
+      "librariesCount": "{{count}} libraries"
+    },
+    "loadingHistory": "Loading conversation history…",
+    "startConversationHint": "Send a message to start the conversation.",
+    "conversationAriaLabel": "Conversation"
   },
   "settings": {
     "assistants": "Assistants",

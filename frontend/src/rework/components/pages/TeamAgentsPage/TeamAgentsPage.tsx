@@ -133,6 +133,16 @@ export default function TeamAgentsPage() {
 
   const handleEdit = async (payload: AgentFormPayload) => {
     if (!teamId || !editingInstance) return;
+    // When selectedMcpServerIds is an explicit list, drop config for servers
+    // that are no longer selected so the backend doesn't reject the request.
+    const activeMcpConfig =
+      payload.selectedMcpServerIds === null
+        ? payload.mcpConfigValues
+        : Object.fromEntries(
+            Object.entries(payload.mcpConfigValues).filter(([id]) =>
+              payload.selectedMcpServerIds!.includes(id),
+            ),
+          );
     try {
       await patchManagedInstance({
         teamId,
@@ -146,8 +156,8 @@ export default function TeamAgentsPage() {
               : undefined,
           mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
           mcp_config_values:
-            Object.keys(payload.mcpConfigValues).length > 0
-              ? (payload.mcpConfigValues as AgentRequestMcpConfigValues)
+            Object.keys(activeMcpConfig).length > 0
+              ? (activeMcpConfig as AgentRequestMcpConfigValues)
               : undefined,
         },
       }).unwrap();

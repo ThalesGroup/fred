@@ -26,7 +26,8 @@ import {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { isTraceChannel, textOf } from "../../../../rework/utils/traceUtils";
-import type { ThreadMessage } from "../../shared/organisms/ConversationThread/ConversationThread";
+import type { ThreadMessage } from "@rework/types/thread";
+import type { TokenUsage } from "@rework/types/conversation";
 import { useSessionHistory } from "./useSessionHistory";
 
 // ── Local view model builder ──────────────────────────────────────────────────
@@ -53,21 +54,44 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
 
     const userMsg = msgs.find((m) => m.role === "user" && (m.channel as string) !== "hitl_response");
     if (userMsg) {
-      result.push({ id: `${eid}:user`, role: "user", text: textOf(userMsg), isStreaming: false, traceMessages: [], sources: [] });
+      result.push({
+        id: `${eid}:user`,
+        role: "user",
+        text: textOf(userMsg),
+        isStreaming: false,
+        traceMessages: [],
+        sources: [],
+      });
     }
 
     const hitlReqMsg = msgs.find((m) => (m.channel as string) === "hitl_request");
     if (hitlReqMsg) {
       type ReqPart = { question?: string; choices?: Array<{ id: string; label: string }>; title?: string | null };
       const part = hitlReqMsg.parts?.[0] as unknown as ReqPart | undefined;
-      result.push({ id: `${eid}:hitl_req`, role: "hitl_request", text: part?.question ?? "", isStreaming: false, traceMessages: [], sources: [], hitlChoices: part?.choices ?? [], hitlTitle: part?.title });
+      result.push({
+        id: `${eid}:hitl_req`,
+        role: "hitl_request",
+        text: part?.question ?? "",
+        isStreaming: false,
+        traceMessages: [],
+        sources: [],
+        hitlChoices: part?.choices ?? [],
+        hitlTitle: part?.title,
+      });
     }
 
     const hitlRespMsg = msgs.find((m) => (m.channel as string) === "hitl_response");
     if (hitlRespMsg) {
       type RespPart = { label?: string | null; choice_id?: string };
       const part = hitlRespMsg.parts?.[0] as unknown as RespPart | undefined;
-      result.push({ id: `${eid}:hitl_resp`, role: "hitl_response", text: part?.label ?? part?.choice_id ?? "", isStreaming: false, traceMessages: [], sources: [] });
+      result.push({
+        id: `${eid}:hitl_resp`,
+        role: "hitl_response",
+        text: part?.label ?? part?.choice_id ?? "",
+        isStreaming: false,
+        traceMessages: [],
+        sources: [],
+      });
     }
 
     const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));
@@ -78,12 +102,22 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
 
     if (traceMessages.length > 0 || finalMessages.length > 0 || (isStreaming && isLast)) {
       const sources: VectorSearchHit[] = [];
+      let tokenUsage: TokenUsage | null = null;
       for (let i = finalMessages.length - 1; i >= 0; i--) {
-        const srcs = finalMessages[i].metadata?.sources;
-        if (srcs && srcs.length > 0) {
-          sources.push(...srcs);
-          break;
+        const meta = finalMessages[i].metadata as Record<string, unknown> | undefined;
+        if (!tokenUsage && meta?.token_usage) {
+          const tu = meta.token_usage as Record<string, number>;
+          tokenUsage = {
+            input_tokens: tu.input_tokens ?? 0,
+            output_tokens: tu.output_tokens ?? 0,
+            total_tokens: tu.total_tokens ?? 0,
+          };
         }
+        if (sources.length === 0) {
+          const srcs = meta?.sources as VectorSearchHit[] | undefined;
+          if (srcs && srcs.length > 0) sources.push(...srcs);
+        }
+        if (tokenUsage && sources.length > 0) break;
       }
       result.push({
         id: `${eid}:assistant`,
@@ -92,6 +126,7 @@ function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): Thread
         isStreaming: isStreaming && isLast,
         traceMessages,
         sources,
+        tokenUsage,
       });
     }
   }
@@ -113,40 +148,48 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
   const [pendingHitl, setPendingHitl] = useState<AwaitingHumanEvent | null>(null);
-  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [searchPolicy, setSearchPolicy] = useState<SearchPolicyName>("hybrid");
   const [ragScope, setRagScope] = useState<"corpus_only" | "hybrid" | "general_only">("hybrid");
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
 
   const { data: agentInstances } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId }, { skip: !teamId },
+    { teamId },
+    { skip: !teamId },
   );
-  const agentDisplayName = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId)?.display_name ?? "Agent";
+  const agentDisplayName =
+    agentInstances?.find((i) => i.agent_instance_id === agentInstanceId)?.display_name ?? "Agent";
 
   const { data: sessionData } = useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery(
-    { teamId, sessionId: sessionId ?? "" }, { skip: !teamId || !sessionId },
+    { teamId, sessionId: sessionId ?? "" },
+    { skip: !teamId || !sessionId },
   );
 
   const [registerSession] = usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation();
   const [refreshSession] = usePatchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatchMutation();
 
-  const bindSessionId = useCallback((sid: string) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("session", sid);
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
+  const bindSessionId = useCallback(
+    (sid: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("session", sid);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
-  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, reset, replaceAllMessages } = useChatSse({
-    agentInstanceId, teamId,
+  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, abort, reset, replaceAllMessages } = useChatSse({
+    agentInstanceId,
+    teamId,
     onBindDraftAgentToSessionId: bindSessionId,
     onTurnPersisted: (sid) => {
-      refreshSession({ teamId, sessionId: sid, updateSessionRequest: { updated_at: new Date().toISOString() } }).catch(() => {});
+      refreshSession({ teamId, sessionId: sid, updateSessionRequest: { updated_at: new Date().toISOString() } }).catch(
+        () => {},
+      );
     },
     onAwaitingHuman: (event) => setPendingHitl(event),
     onError: (msg) => showError({ summary: "Agent error", detail: msg }),
@@ -157,7 +200,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setPendingHitl(null);
     setInput("");
     setSessionTitle(null);
-  }, [sessionId, reset]);
+    setSelectedLibraryIds([]);
+  }, [agentInstanceId, sessionId, reset]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -171,7 +215,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const threadMessages = useMemo(() => toThreadMessages(messages, waitResponse), [messages, waitResponse]);
 
-  const { isLoading: isLoadingHistory } = useSessionHistory({ sessionId, teamId, agentInstanceId, onLoaded: replaceAllMessages });
+  const { isLoading: isLoadingHistory } = useSessionHistory({
+    sessionId,
+    teamId,
+    agentInstanceId,
+    onLoaded: replaceAllMessages,
+  });
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -182,16 +231,38 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     if (!sid) {
       sid = uuidv4();
       bindSessionId(sid);
-      registerSession({ teamId, createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: text.slice(0, 120) } }).catch(() => {});
+      registerSession({
+        teamId,
+        createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title: text.slice(0, 120) },
+      }).catch(() => {});
     }
-    send(text, sid, { selected_document_libraries_ids: selectedLibraryIds.length > 0 ? selectedLibraryIds : null, search_policy: searchPolicy, search_rag_scope: ragScope });
-  }, [input, waitResponse, sessionId, teamId, agentInstanceId, selectedLibraryIds, searchPolicy, ragScope, bindSessionId, registerSession, send]);
+    send(text, sid, {
+      selected_document_libraries_ids: selectedLibraryIds.length > 0 ? selectedLibraryIds : null,
+      search_policy: searchPolicy,
+      search_rag_scope: ragScope,
+    });
+  }, [
+    input,
+    waitResponse,
+    sessionId,
+    teamId,
+    agentInstanceId,
+    selectedLibraryIds,
+    searchPolicy,
+    ragScope,
+    bindSessionId,
+    registerSession,
+    send,
+  ]);
 
-  const handleHitlAnswer = useCallback((answer: string | boolean, freeText?: string) => {
-    if (!pendingHitl) return;
-    setPendingHitl(null);
-    sendHitlResume(pendingHitl, answer, freeText);
-  }, [pendingHitl, sendHitlResume]);
+  const handleHitlAnswer = useCallback(
+    (answer: string | boolean, freeText?: string) => {
+      if (!pendingHitl) return;
+      setPendingHitl(null);
+      sendHitlResume(pendingHitl, answer, freeText);
+    },
+    [pendingHitl, sendHitlResume],
+  );
 
   const startNewConversation = useCallback(() => {
     setPendingHitl(null);
@@ -205,20 +276,28 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     );
   }, [setSearchParams]);
 
-  const commitTitle = useCallback((title: string) => {
-    if (!sessionId) return;
-    setSessionTitle(title);
-    refreshSession({ teamId, sessionId, updateSessionRequest: { title } }).catch(() => {});
-  }, [teamId, sessionId, refreshSession]);
+  const commitTitle = useCallback(
+    (title: string) => {
+      if (!sessionId) return;
+      setSessionTitle(title);
+      refreshSession({ teamId, sessionId, updateSessionRequest: { title } }).catch(() => {});
+    },
+    [teamId, sessionId, refreshSession],
+  );
 
   return {
-    sessionId, sessionTitle, agentDisplayName,
-    input, setInput,
+    sessionId,
+    sessionTitle,
+    agentDisplayName,
+    input,
+    setInput,
     pendingHitl,
-    rightPanelOpen, setRightPanelOpen,
-    selectedLibraryIds, setSelectedLibraryIds,
-    searchPolicy, setSearchPolicy,
-    ragScope, setRagScope,
+    selectedLibraryIds,
+    setSelectedLibraryIds,
+    searchPolicy,
+    setSearchPolicy,
+    ragScope,
+    setRagScope,
     threadMessages,
     messages,
     waitResponse,
@@ -226,6 +305,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     isLoadingHistory,
     handleSend,
     handleHitlAnswer,
+    handleAbort: abort,
     startNewConversation,
     commitTitle,
   };

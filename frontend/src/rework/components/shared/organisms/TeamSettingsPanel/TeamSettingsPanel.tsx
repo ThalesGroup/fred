@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import styles from "./TeamSettingsPage.module.scss";
+import styles from "./TeamSettingsPanel.module.scss";
 import { ModalInteractionProps } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import TeamSettingsNavbar from "@components/pages/TeamSettingsPage/TeamSettingsNavbar/TeamSettingsNavbar.tsx";
-import { TeamWithPermissions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import TeamSettingsMembers from "@components/pages/TeamSettingsPage/TeamSettingsMembers/TeamSettingsMembers.tsx";
+import TeamSettingsNavbar from "./TeamSettingsNavbar/TeamSettingsNavbar.tsx";
+import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import TeamSettingsMembers from "./TeamSettingsMembers/TeamSettingsMembers.tsx";
 import { useState } from "react";
-import TeamSettingsParameters from "@components/pages/TeamSettingsPage/TeamSettingsParameters/TeamSettingsParameters.tsx";
+import TeamSettingsParameters from "./TeamSettingsParameters/TeamSettingsParameters.tsx";
 
-interface TeamSettingsPageProps {
+interface TeamSettingsPanelProps {
   modalInteraction: ModalInteractionProps;
   team: TeamWithPermissions;
 }
 
-export default function TeamSettingsPage({ modalInteraction, team }: TeamSettingsPageProps) {
+export default function TeamSettingsPanel({ modalInteraction, team }: TeamSettingsPanelProps) {
   const [settingsPanelSelection, setSettingsPanelSelection] = useState<TeamSettingsMenuPanels>(
     TeamSettingsMenuPanels.MEMBERS,
   );

@@ -12,31 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { AwaitingHumanEvent, ChatMessage, VectorSearchHit } from "../../../../../slices/agentic/agenticOpenApi";
+// Page-local composition of organisms for ManagedChatPage.
+// Lives under pages/ so it may import from shared/organisms freely.
+
+import type { RefObject } from "react";
+import type { AwaitingHumanEvent } from "../../../../../slices/agentic/agenticOpenApi";
+import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
-
-// Local view model — same shape produced by toConversationMessages in ManagedChatPage.
-// Kept here so ConversationThread owns the rendering contract without importing page internals.
-export interface ThreadMessage {
-  id: string;
-  role: "user" | "assistant" | "hitl_request" | "hitl_response";
-  text: string;
-  isStreaming: boolean;
-  traceMessages: ChatMessage[];
-  sources: VectorSearchHit[];
-  hitlChoices?: Array<{ id: string; label: string }>;
-  hitlTitle?: string | null;
-}
 
 interface ConversationThreadProps {
   messages: ThreadMessage[];
   pendingHitl: AwaitingHumanEvent | null;
   isLoading: boolean;
   isStreaming: boolean;
-  scrollVersion: number;
+  scrollContainerRef: RefObject<HTMLDivElement>;
   onHitlAnswer: (answer: string | boolean, freeText?: string) => void;
 }
 
@@ -45,14 +37,17 @@ export function ConversationThread({
   pendingHitl,
   isLoading,
   isStreaming,
-  scrollVersion,
+  scrollContainerRef,
   onHitlAnswer,
 }: ConversationThreadProps) {
+  const turnKey = messages.filter((m) => m.role === "user").length;
+
   return (
     <ChatMessagesArea
       isEmpty={messages.length === 0 && !isStreaming}
       isLoading={isLoading}
-      scrollVersion={scrollVersion}
+      scrollContainerRef={scrollContainerRef}
+      turnKey={turnKey}
       isStreaming={isStreaming}
     >
       {messages.map((msg) => {
@@ -73,6 +68,7 @@ export function ConversationThread({
             text={msg.text}
             traceMessages={msg.traceMessages}
             sources={msg.sources}
+            tokenUsage={msg.tokenUsage}
             isStreaming={msg.isStreaming}
           />
         );

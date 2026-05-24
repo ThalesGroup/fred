@@ -675,7 +675,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "2.0.6"
+version = "2.0.7"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "deepagents" },
@@ -731,7 +731,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "2.0.5"
+version = "2.0.6"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-core" },

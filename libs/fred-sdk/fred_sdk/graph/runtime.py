@@ -62,6 +62,7 @@ class GraphExecutionOutput(FrozenModel):
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
     thought_trace: tuple[ThoughtRecord, ...] = ()
+    token_usage: dict[str, int] | None = None
 
 
 class GraphNodeResult(FrozenModel):

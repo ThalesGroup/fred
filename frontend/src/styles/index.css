@@ -212,3 +212,27 @@ body {
   --on-container-focused-color: var(--state-on-surface-focused);
   --on-container-selected-color: var(--state-on-surface-selected);
 }
+
+/* ── Global scrollbar — thin, matches claude.com aesthetic ─────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline-retreat) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--outline-retreat);
+  border-radius: var(--radius-2xl);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--outline);
+}

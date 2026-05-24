@@ -16,31 +16,27 @@ import styles from "./TeamContentNavbar.module.scss";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { useGetTeamQuery } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
-import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
+import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import React, { useState } from "react";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal.tsx";
-import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import TeamSettingsPanel from "@shared/organisms/TeamSettingsPanel/TeamSettingsPanel.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { IconType } from "@shared/utils/Type.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 
 /**
- * Render one team-scoped sidebar section using the bootstrap active team as the
- * personal-team source of truth.
+ * Team-scoped sidebar section.
  *
- * Why this component exists:
- * - the shell still needs a team-aware navigation block while the frontend
- *   moves away from the temporary user-details bootstrap path
+ * Uses `useFrontendBootstrap` for the personal-team identity and
+ * `useGetTeamQuery` for collaborative-team data. The bootstrap hook is the
+ * authoritative source for the active team; the RTK query fills in full
+ * `TeamWithPermissions` when the route is a collaborative team.
  *
- * How to use it:
- * - mount it in the sidebar for routes under `/team/:teamId/...`
- *
- * Example:
- * - `<TeamContentNavbar />`
+ * Mount inside the main sidebar layout for routes under `/team/:teamId/...`
  */
 export default function TeamContentNavbar() {
   const { defaultTeamBannerFile, defaultPersonalBannerFile, agentIconName, agentsNicknamePlural } =
@@ -119,10 +115,10 @@ export default function TeamContentNavbar() {
       <FullPageModal
         isOpen={isTeamSettingsOpen && canOpenTeamSettings}
         onClose={() => setIsTeamSettingsOpen(false)}
-        id={"user-settings-modal"}
+        id="user-settings-modal"
       >
         {selectedTeam && (
-          <TeamSettingsPage modalInteraction={{ close: () => setIsTeamSettingsOpen(false) }} team={selectedTeam} />
+          <TeamSettingsPanel modalInteraction={{ close: () => setIsTeamSettingsOpen(false) }} team={selectedTeam} />
         )}
       </FullPageModal>
     </>

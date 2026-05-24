@@ -215,7 +215,7 @@ When a user opens a conversation with a team agent, she has no way to apply a pe
 
 #### 7.3 Chat context is a free textarea
 
-The current `AgentOptionsPanel` exposes a free textarea for conversation context. Without curation or a quality signal, every user invents their own version of the same prompt.
+The current session init surface exposes a free textarea for conversation context (`AgentOptionsPanel` was retired 2026-05-24; context input is not yet surfaced in `ComposerSettingsControls`). Without curation or a quality signal, every user invents their own version of the same prompt.
 
 #### 7.4 No token cost visibility
 
@@ -598,8 +598,9 @@ AgentFormModal:
 **Owner**: Félix | **Depends on**: PROMPT-03
 
 ```
-AgentOptionsPanel or session init surface:
+ComposerSettingsControls chip + popover (or session init surface):
   Replace free textarea with library picker
+  (AgentOptionsPanel retired 2026-05-24 — this feature targets ComposerSettingsControls topSlot chip)
   Source: GET /teams/{team_id}/prompts/context
   Personal prompts (grouped) + team prompts (grouped), ordered by session_count DESC
   Score stars when non-null

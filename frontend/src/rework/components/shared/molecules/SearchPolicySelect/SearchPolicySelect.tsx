@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ListItemText, MenuItem, Select } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import type { SearchPolicyName } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import type { OptionModel } from "@models/Option.model";
+import Select from "@shared/molecules/Select/Select.tsx";
 
 type Props = {
   value: SearchPolicyName;
@@ -25,61 +26,19 @@ type Props = {
 export function SearchPolicySelect({ value, onChange, disabled }: Props) {
   const { t } = useTranslation();
 
-  const labels: Record<SearchPolicyName, string> = {
-    hybrid: t("search.hybrid", "Hybrid"),
-    semantic: t("search.semantic", "Semantic"),
-    strict: t("search.strict", "Strict"),
-  };
-
-  const tooltipByValue: Record<SearchPolicyName, string> = {
-    hybrid: t("search.hybridDescription"),
-    semantic: t("search.semanticDescription"),
-    strict: t("search.strictDescription"),
-  };
-
-  const options = [
-    { value: "strict" as const, label: labels.strict, description: tooltipByValue.strict },
-    { value: "hybrid" as const, label: labels.hybrid, description: tooltipByValue.hybrid },
-    { value: "semantic" as const, label: labels.semantic, description: tooltipByValue.semantic },
+  const options: OptionModel<SearchPolicyName>[] = [
+    { key: "strict", value: "strict", label: t("search.strict"), description: t("search.strictDescription") },
+    { key: "hybrid", value: "hybrid", label: t("search.hybrid"), description: t("search.hybridDescription") },
+    { key: "semantic", value: "semantic", label: t("search.semantic"), description: t("search.semanticDescription") },
   ];
 
   return (
     <Select
+      options={options}
       value={value}
-      disabled={disabled}
+      onChange={onChange}
       size="small"
-      onChange={(event) => onChange(event.target.value as SearchPolicyName)}
-      renderValue={(selected) => labels[selected as SearchPolicyName]}
-      sx={{
-        borderRadius: 999,
-        minWidth: 150,
-        fontSize: "0.78rem",
-        "& .MuiSelect-select": { py: 0.35, pl: 1.25, pr: 3.25, display: "flex", alignItems: "center" },
-        "& .MuiOutlinedInput-notchedOutline": { borderColor: "divider" },
-      }}
-      MenuProps={{
-        PaperProps: { sx: { mt: 0.75, maxWidth: 360 } },
-        MenuListProps: { dense: true },
-      }}
-      inputProps={{ "aria-label": "search-policy" }}
-    >
-      {options.map((option) => (
-        <MenuItem
-          key={option.value}
-          value={option.value}
-          dense
-          sx={{ alignItems: "flex-start", whiteSpace: "normal", py: 0.75 }}
-        >
-          <ListItemText
-            primary={option.label}
-            secondary={option.description}
-            slotProps={{
-              primary: { sx: { fontSize: "0.78rem", fontWeight: 600 } },
-              secondary: { sx: { fontSize: "0.72rem", color: "text.secondary" } },
-            }}
-          />
-        </MenuItem>
-      ))}
-    </Select>
+      disabled={disabled}
+    />
   );
 }

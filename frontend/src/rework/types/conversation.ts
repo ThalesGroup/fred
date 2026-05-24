@@ -86,6 +86,12 @@ export interface ConversationSettings {
   agentInstanceId: string;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
 export const DEFAULT_CONVERSATION_SETTINGS: ConversationSettings = {
   searchPolicy: "hybrid",
   ragScope: "all",

@@ -17,13 +17,23 @@ may import:
 
 | Level | Folder | May import from |
 |---|---|---|
-| Atom | `shared/atoms/` | Nothing from rework (only tokens + external libs) |
-| Molecule | `shared/molecules/` | Atoms only |
+| Atom | `shared/atoms/` | Other atoms; nothing else from rework (only tokens + external libs) |
+| Molecule | `shared/molecules/` | Atoms + other molecules |
 | Organism | `shared/organisms/` | Atoms + Molecules |
-| Page | `pages/` | Atoms + Molecules + Organisms |
+| Layout | `shared/layouts/` | Atoms + Molecules + Organisms |
+| Page | `pages/` | Atoms + Molecules + Organisms + Layouts |
 
-**Violation:** importing an organism from a molecule, or a molecule from an atom,
-breaks the hierarchy and creates circular dependency risk.
+**Ruling — atom→atom:** a composite atom (e.g. `SettingChip` using `Icon`) may import
+sibling atoms. This is an explicit allowance, not a violation.
+
+**Ruling — molecule→molecule:** composable molecules (e.g. `Autocomplete`, `Select`,
+`IconButtonMenu`) may import `Menu` and other molecules. Prefer direction: simpler →
+more complex; never circular.
+
+**Violation:** importing an organism from a molecule, a molecule from an atom,
+or an organism from a shared organism breaks the hierarchy and creates circular
+dependency risk.
+
 
 ### No MUI in the rework tree
 
@@ -210,7 +220,44 @@ When adding a token:
 
 ---
 
-## 6. Pre-Merge Checklist
+## 6. UX Design Standard — Claude.com as canonical reference
+
+`claude.com` (Claude AI chat) is the canonical visual reference for all chat page UX decisions.
+
+### Principle: conversation-first sizing
+
+The conversation is the product. Every chrome element (titles, labels, controls) must have minimal visual weight so the user's attention stays on the replies.
+
+| Element type | Maximum font | Rationale |
+|---|---|---|
+| Page-shell title (session name, agent name) | `--font-body-medium` | Not a content heading — never uses `--font-title-*` |
+| Icon buttons in the top bar | 20px icon, `--spacing-2xs` padding | Compact; not a primary action |
+| Section labels in panels | `--font-label-large` | Panels are secondary to the thread |
+
+### Audit before reuse
+
+Before using any existing atom, molecule, or organism:
+
+1. **Read its CSS.** Describe its visual states — including open/edit/hover states — before wiring it in.
+2. **Flag design system gaps.** If the component uses raw HTML elements (native `<input>`, `<select>`) or hardcoded font sizes instead of tokens, fix those gaps first.
+3. **Never let the user discover a visual problem in the browser.** The audit happens before the PR, not after.
+
+### Inline edit → popup card
+
+When a user needs to edit a short value (e.g., session title, item name), use the popup card pattern — **not** an inline input that deforms the layout:
+
+- Trigger: a subtle `<button>` with `font: inherit`, pencil icon appears on hover
+- Popup: `position: absolute`, `background: var(--surface-container-high)`, `border-radius: var(--radius-l)`, subtle `box-shadow`
+- Content: label (`--font-label-large`) + `TextInput` atom + `Button` atoms (Cancel / Save)
+- Dismiss: click outside, Escape, or Save
+
+### No dedicated header bar
+
+The chat page has no persistent header bar. Session title and panel controls float as `position: absolute` elements over the conversation (`pointer-events: none` on the container; `pointer-events: auto` on interactive children). The scrollbar always runs the full height of the column.
+
+---
+
+## 7. Pre-Merge Checklist
 
 Before marking any frontend PR ready for review, verify:
 
@@ -224,3 +271,5 @@ Before marking any frontend PR ready for review, verify:
 - [ ] Component placed at the correct hierarchy level (atom/molecule/organism)
 - [ ] No experimental browser API used as the sole implementation path
 - [ ] `src/styles/` token files updated if a new token was needed
+- [ ] Any reused component was audited (CSS read, visual states described) before wiring in
+- [ ] Chat page chrome elements use `--font-body-medium` or smaller — never `--font-title-*`

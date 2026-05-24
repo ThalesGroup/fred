@@ -1,15 +1,21 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
 .display {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  max-width: 400px;
+  gap: var(--spacing-2xs);
+  max-width: 320px;
   background: none;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-s);
   padding: var(--spacing-2xs) var(--spacing-xs);
   cursor: pointer;
   color: var(--on-surface);
-  font: var(--font-title-large);
+  font: inherit;
   transition: background-color 120ms ease;
 }
 
@@ -29,7 +35,7 @@
 }
 
 .editIcon {
-  font-size: 18px;
+  font-size: 14px;
   color: var(--on-surface-retreat);
   opacity: 0;
   transition: opacity 120ms ease;
@@ -40,19 +46,30 @@
   opacity: 1;
 }
 
-.input {
-  font: var(--font-title-large);
-  color: var(--on-surface);
+/* ── Rename popup ────────────────────────────────────────────────────── */
+.popup {
+  position: absolute;
+  top: calc(100% + var(--spacing-xs));
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 280px;
+  padding: var(--spacing-m);
   background: var(--surface-container-high);
-  border: 1px solid var(--primary);
-  border-radius: var(--radius-xs);
-  padding: var(--spacing-2xs) var(--spacing-xs);
-  outline: none;
-  width: 300px;
-  max-width: 400px;
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-m);
 }
 
-.input:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
+.popupLabel {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
+.popupActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
 }

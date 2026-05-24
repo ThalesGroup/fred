@@ -20,18 +20,21 @@ import { HorizontalScrollRow } from "@shared/molecules/HorizontalScrollRow/Horiz
 import { SourceCard } from "@shared/molecules/SourceCard/SourceCard";
 import { SourceDetailModal } from "@shared/molecules/SourcesPanel/SourceDetailModal/SourceDetailModal";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
+import { TokenUsageBadge } from "@shared/molecules/TokenUsageBadge/TokenUsageBadge";
 import { hitToSource } from "../../../../utils/conversationUtils";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
+import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./AssistantTurn.module.css";
 
 interface AssistantTurnProps {
   text: string;
   traceMessages: ChatMessage[];
   sources: VectorSearchHit[];
+  tokenUsage?: TokenUsage | null;
   isStreaming: boolean;
 }
 
-export function AssistantTurn({ text, traceMessages, sources, isStreaming }: AssistantTurnProps) {
+export function AssistantTurn({ text, traceMessages, sources, tokenUsage, isStreaming }: AssistantTurnProps) {
   const [activeSourceIndex, setActiveSourceIndex] = useState<number | null>(null);
   const [selected, setSelected] = useState<{ source: VectorSearchHit; index: number } | null>(null);
 
@@ -61,9 +64,7 @@ export function AssistantTurn({ text, traceMessages, sources, isStreaming }: Ass
   return (
     <div className={styles.turn}>
       {/* ThoughtTrace owns its own expand/collapse — no wrapper needed */}
-      {traceMessages.length > 0 && (
-        <ThoughtTrace messages={traceMessages} done={!isStreaming} />
-      )}
+      {traceMessages.length > 0 && <ThoughtTrace messages={traceMessages} done={!isStreaming} />}
 
       <AssistantMessage
         text={text}
@@ -88,7 +89,10 @@ export function AssistantTurn({ text, traceMessages, sources, isStreaming }: Ass
       )}
 
       {!isStreaming && text && (
-        <ActionBar actions={actions} className={styles.actions} />
+        <div className={styles.footer}>
+          <ActionBar actions={actions} />
+          {tokenUsage && <TokenUsageBadge usage={tokenUsage} />}
+        </div>
       )}
 
       {selected && (

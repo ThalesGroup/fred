@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import TeamSettingsMembersTable from "@components/pages/TeamSettingsPage/TeamSettingsMembers/TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
+import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TeamWithPermissions, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { TeamWithPermissions, UserSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useAddTeamMemberMutation,
   useListTeamMembersQuery,
   useListUsersQuery,
-} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+} from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamSettingsMembers.module.scss";
 
 interface TeamSettingsMembersProps {

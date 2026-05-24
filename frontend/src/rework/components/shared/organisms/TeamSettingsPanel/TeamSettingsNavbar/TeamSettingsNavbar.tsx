@@ -13,12 +13,12 @@
 // limitations under the License.
 
 import styles from "./TeamSettingsNavbar.module.scss";
-import { NavigationMenuItemProps } from "@shared/organisms/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
-import NavigationMenu from "@shared/organisms/NavigationMenu/NavigationMenu.tsx";
+import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
+import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
 import { useTranslation } from "react-i18next";
-import { TeamWithPermissions } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import Button from "@shared/atoms/Button/Button.tsx";
-import { TeamSettingsMenuPanels } from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import { TeamSettingsMenuPanels } from "../TeamSettingsPanel.tsx";
 
 interface TeamSettingsNavbarProps {
   team: TeamWithPermissions;

@@ -363,10 +363,8 @@ class TestAssistantGraphAgent(GraphAgent):
 
     def build_output(self, state: BaseModel) -> BaseModel:
         """
-        Override to attach mock VectorSearchHit sources when the trace scenario ran.
-
-        The default GraphAgent.build_output only sets content; this override also
-        populates sources from state.sources_data so SourcesPanel is exercised.
+        Override to attach mock VectorSearchHit sources and token_usage when
+        the trace scenario ran, exercising SourcesPanel and token badge rendering.
         """
         assert isinstance(state, TestState)
         content = state.final_text or ""
@@ -376,7 +374,17 @@ class TestAssistantGraphAgent(GraphAgent):
             hit = VectorSearchHit.model_validate(raw)
             sources = (*sources, hit)
 
-        return GraphExecutionOutput(content=content, sources=sources)
+        token_usage: dict[str, int] | None = None
+        if state.scenario == "trace" and sources:
+            token_usage = {
+                "input_tokens": 312,
+                "output_tokens": 87,
+                "total_tokens": 399,
+            }
+
+        return GraphExecutionOutput(
+            content=content, sources=sources, token_usage=token_usage
+        )
 
 
 TEST_ASSISTANT_AGENT = TestAssistantGraphAgent()

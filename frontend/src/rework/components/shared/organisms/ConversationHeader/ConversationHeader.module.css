@@ -3,8 +3,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-s);
-  border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-s) var(--spacing-m);
+  padding: var(--spacing-xs) var(--spacing-m);
 }
 
 .meta {
@@ -17,8 +16,8 @@
 
 .agentName {
   overflow: hidden;
-  color: var(--on-surface);
-  font: var(--font-title-small);
+  color: var(--on-surface-muted);
+  font: var(--font-label-large);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

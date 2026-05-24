@@ -163,6 +163,7 @@ export function useChatSse(
   const reset = useCallback(() => {
     thoughtBufsRef.current.clear();
     setAll([]);
+    setEffectiveChatOptions(null);
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
 

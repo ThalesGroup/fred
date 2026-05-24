@@ -8,13 +8,15 @@
  * All states are defined here; JS only sets height and overflowY. */
 
 .bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
   display: flex;
   justify-content: center;
-  padding: var(--spacing-s) var(--spacing-l) var(--spacing-xl);
-  background: var(--surface-container-lowest);
+  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-xl);
+  /* Fade from transparent so the field appears to float above the thread */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--surface-container-lowest) 40%
+  );
 }
 
 .field {
@@ -22,12 +24,12 @@
   max-width: 720px;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2xs);
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-xl);
   background: var(--surface-container);
-  padding: var(--spacing-xs) var(--spacing-m);
-  transition: border-color 120ms ease, background-color 120ms ease;
+  padding: var(--spacing-s) var(--spacing-m);
+  box-shadow: var(--shadow-s);
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .field:focus-within:not(:has(.textarea:disabled)) {
@@ -43,38 +45,16 @@
   background: var(--state-surface-main-disabled);
 }
 
-.topSlot {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2xs);
-  padding-bottom: var(--spacing-2xs);
-  border-bottom: 1px solid var(--outline-retreat);
-}
-
-.inputRow {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--spacing-xs);
-}
-
-.leftSlot {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--spacing-2xs);
-  flex-shrink: 0;
-  padding-bottom: 10px; /* aligns with single-line textarea baseline */
-}
-
 .textarea {
-  flex: 1;
   display: block;
+  width: 100%;
   resize: none;
   overflow-y: hidden; /* JS switches to auto at maxHeight */
   background: transparent;
   border: none;
   outline: none;
-  padding: var(--spacing-xs) 0;
-  min-height: 40px;
+  padding: var(--spacing-2xs) 0;
+  min-height: 36px;
   max-height: 200px;
   color: var(--on-surface);
   font: var(--font-body-large);
@@ -85,11 +65,33 @@
   color: var(--state-on-surface-disabled);
 }
 
+/* Bottom row: options (left, flex-1) + send button (right) */
+.bottomRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding-top: var(--spacing-2xs);
+  min-height: 36px;
+}
+
+.bottomLeft {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
 .rightSlot {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   flex-shrink: 0;
-  padding-bottom: 6px;
+  margin-left: auto; /* pushes to right edge whether or not bottomLeft is present */
+}
+
+@keyframes sendBtnIn {
+  from { opacity: 0; transform: scale(0.7); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .sendBtn {
@@ -98,21 +100,18 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  flex-shrink: 0;
+  border-radius: var(--radius-s);
   border: none;
   background: var(--primary);
   color: var(--on-primary);
   cursor: pointer;
-  transition: opacity 120ms ease, background-color 120ms ease;
+  animation: sendBtnIn 120ms ease;
+  transition: opacity 120ms ease;
 }
 
-.sendBtn:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-}
-
-.sendBtn:not(:disabled):hover {
-  opacity: 0.92;
+.sendBtn:hover {
+  opacity: 0.85;
 }
 
 .sendBtn:focus-visible {
@@ -122,4 +121,13 @@
 
 .sendBtn .material-symbols-outlined {
   font-size: 18px;
+}
+
+/* Filled square rendered via CSS — guaranteed fill regardless of icon font variant */
+.stopIcon {
+  display: block;
+  width: 11px;
+  height: 11px;
+  background: currentColor;
+  border-radius: 2px;
 }

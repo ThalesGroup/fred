@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { Outlet } from "react-router-dom";
-import Sidebar from "@shared/organisms/Sidebar/Sidebar.tsx";
+import Sidebar from "@shared/layouts/Sidebar/Sidebar.tsx";
 import styles from "./MainLayout.module.css";
 
 export default function MainLayout() {

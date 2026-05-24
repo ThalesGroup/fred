@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import TeamSelectionNavbar from "@shared/organisms/Sidebar/TeamSelectionNavbar/TeamSelectionNavbar.tsx";
-import TeamContentNavbar from "@shared/organisms/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx";
+import TeamSelectionNavbar from "./TeamSelectionNavbar/TeamSelectionNavbar.tsx";
+import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation } from "react-router-dom";
-import MarketplaceNavbar from "@shared/organisms/Sidebar/MarketplaceNavbar/MarketplaceNavbar.tsx";
+import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 
 export default function Sidebar() {
   const { pathname } = useLocation();
