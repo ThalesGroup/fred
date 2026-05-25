@@ -1,24 +1,24 @@
 /* ── Page shell ────────────────────────────────────────────────────────── */
 .page {
-  position: relative;
   display: flex;
+  position: relative;
   flex-direction: column;
+  background: var(--surface-container-lowest);
   height: 100%;
   overflow: hidden;
-  background: var(--surface-container-lowest);
 }
 
 /* ── Floating session title — top-left, overlays thread ────────────────── */
 .topBar {
+  display: flex;
   position: absolute;
   top: 0;
-  left: 0;
   right: 0;
-  z-index: 2;
-  display: flex;
+  left: 0;
   align-items: center;
-  padding: var(--spacing-xs) var(--spacing-s);
+  z-index: 2;
   background: var(--surface-container-lowest);
+  padding: var(--spacing-xs) var(--spacing-s);
   pointer-events: none;
 }
 
@@ -30,10 +30,10 @@
 }
 
 .topBarActions {
-  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  pointer-events: auto;
 }
 
 /* ── Single scroll container ───────────────────────────────────────────── */
@@ -41,18 +41,18 @@
    padding-bottom: space so the last message scrolls fully above the input overlay. */
 .chatArea {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding-top: 52px;
   padding-bottom: 160px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ── Floating input bar — sits above the scroll container, never in flow ── */
 .inputOverlay {
   position: absolute;
+  right: 0;
   bottom: 0;
   left: 0;
-  right: 0;
   z-index: 1;
 }
 

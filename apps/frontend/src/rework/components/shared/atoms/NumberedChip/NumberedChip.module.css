@@ -1,22 +1,24 @@
 .chip {
   display: inline-flex;
-  align-items: center;
   justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 var(--spacing-2xs);
+  align-items: center;
+  border: none;
   border-radius: var(--radius-xs);
   background: var(--surface-container-high);
+  padding: 0 var(--spacing-2xs);
+  min-width: 20px;
+  height: 20px;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
   line-height: 1;
   user-select: none;
-  border: none;
 }
 
 .clickable {
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .clickable:hover {

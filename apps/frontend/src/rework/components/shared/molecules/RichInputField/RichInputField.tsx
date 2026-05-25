@@ -79,12 +79,15 @@ export function RichInputField({
     }
   }, [disabled]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey && !disabled && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      onSend();
-    }
-  }, [disabled, onSend]);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey && !disabled && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        onSend();
+      }
+    },
+    [disabled, onSend],
+  );
 
   const hasText = value.trim().length > 0;
   const showStop = showSendButton && disabled && !!onInterrupt;
@@ -114,8 +117,8 @@ export function RichInputField({
 
             {(rightSlot || showStop || showSend) && (
               <div className={styles.rightSlot}>
-                {rightSlot ?? (
-                  showStop ? (
+                {rightSlot ??
+                  (showStop ? (
                     <button
                       type="button"
                       className={styles.sendBtn}
@@ -135,8 +138,7 @@ export function RichInputField({
                         arrow_upward
                       </span>
                     </button>
-                  )
-                )}
+                  ))}
               </div>
             )}
           </div>

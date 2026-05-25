@@ -9,6 +9,8 @@
 
   --radius: 50%;
   --background-color: var(--surface-container-highest);
+  --brightness: 0.9;
+  --saturate: 0.9;
 
   &:hover,
   &[data-selected="true"] {
@@ -53,7 +55,8 @@
   width: 40px;
   height: 40px;
   overflow: hidden;
-  corner-shape: var(--corner-shape, rounded);
+  --corner-shape: rounded;
+  corner-shape: var(--corner-shape);
 }
 
 .teamAvatarContainer[data-selected="true"] .stateLayer {
@@ -75,7 +78,7 @@
 
 .teamAvatar {
   position: relative;
-  filter: brightness(var(--brightness, 0.9)) saturate(var(--saturate, 0.9));
+  filter: brightness(var(--brightness)) saturate(var(--saturate));
   width: 40px;
   height: 40px;
   object-fit: cover;
@@ -86,8 +89,8 @@
   position: absolute;
   top: 50%;
   left: calc(100% + var(--spacing-xs));
-  transform: translateY(-50%);
   align-items: center;
+  transform: translateY(-50%);
   z-index: 1;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline);

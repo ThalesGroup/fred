@@ -1,17 +1,19 @@
 .drawer {
+  display: flex;
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  width: var(--drawer-width);
-  background: var(--surface-container);
-  border-left: 1px solid var(--outline-retreat);
-  display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 250ms ease-out, visibility 250ms;
   visibility: hidden;
   z-index: 10;
+  transition:
+    transform 250ms ease-out,
+    visibility 250ms;
+  border-left: 1px solid var(--outline-retreat);
+  background: var(--surface-container);
+  width: var(--drawer-width);
   /* No overflow:hidden here — keep main content interactive at all times */
 }
 
@@ -22,21 +24,20 @@
 
 .header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
-  border-bottom: 1px solid var(--outline-retreat);
   flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--outline-retreat);
+  padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
 }
 
 .title {
-  font: var(--font-title-small);
   color: var(--on-surface);
+  font: var(--font-title-small);
 }
-
 
 .body {
   flex: 1;
-  overflow-y: auto;
   padding: var(--spacing-m);
+  overflow-y: auto;
 }

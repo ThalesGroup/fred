@@ -27,11 +27,7 @@ export function AssistantMessage({ text, isStreaming, onSourceClick }: Assistant
 
   return (
     <MessageBubble role="assistant">
-      {text ? (
-        <MarkdownRenderer text={text} onSourceClick={onSourceClick} />
-      ) : (
-        <ThinkingDots />
-      )}
+      {text ? <MarkdownRenderer text={text} onSourceClick={onSourceClick} /> : <ThinkingDots />}
     </MessageBubble>
   );
 }

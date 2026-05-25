@@ -52,12 +52,8 @@ export default function AgentCard({
             <div className={styles.agentIdentity}>
               <div className={styles.agentName}>{instance.display_name}</div>
               <div className={styles.agentMeta}>
-                {templateCategory && (
-                  <span className={styles.agentCategory}>{templateCategory}</span>
-                )}
-                {templateDisplayName && (
-                  <span className={styles.agentTemplate}>{templateDisplayName}</span>
-                )}
+                {templateCategory && <span className={styles.agentCategory}>{templateCategory}</span>}
+                {templateDisplayName && <span className={styles.agentTemplate}>{templateDisplayName}</span>}
               </div>
             </div>
           </div>

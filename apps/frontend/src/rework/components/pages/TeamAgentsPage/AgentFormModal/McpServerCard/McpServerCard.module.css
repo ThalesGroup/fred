@@ -54,13 +54,13 @@
 
 .lockedBadge {
   display: inline-block;
-  padding: 1px 6px;
   border-radius: var(--radius-xs);
   background: var(--surface-container-high);
+  padding: 1px 6px;
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* Sub-form revealed when the server is active and has config_fields */

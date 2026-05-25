@@ -47,7 +47,11 @@ function extractApiErrorDetail(error: unknown): string {
     if (typeof detail === "string") return detail;
     if (Array.isArray(detail)) {
       return detail
-        .map((e) => (typeof e === "object" && e !== null ? String((e as Record<string, unknown>).msg ?? JSON.stringify(e)) : String(e)))
+        .map((e) =>
+          typeof e === "object" && e !== null
+            ? String((e as Record<string, unknown>).msg ?? JSON.stringify(e))
+            : String(e),
+        )
         .join("; ");
     }
   }
@@ -139,9 +143,7 @@ export default function TeamAgentsPage() {
       payload.selectedMcpServerIds === null
         ? payload.mcpConfigValues
         : Object.fromEntries(
-            Object.entries(payload.mcpConfigValues).filter(([id]) =>
-              payload.selectedMcpServerIds!.includes(id),
-            ),
+            Object.entries(payload.mcpConfigValues).filter(([id]) => payload.selectedMcpServerIds!.includes(id)),
           );
     try {
       await patchManagedInstance({
@@ -156,9 +158,7 @@ export default function TeamAgentsPage() {
               : undefined,
           mcp_server_ids: payload.selectedMcpServerIds ?? undefined,
           mcp_config_values:
-            Object.keys(activeMcpConfig).length > 0
-              ? (activeMcpConfig as AgentRequestMcpConfigValues)
-              : undefined,
+            Object.keys(activeMcpConfig).length > 0 ? (activeMcpConfig as AgentRequestMcpConfigValues) : undefined,
         },
       }).unwrap();
       showSuccess({ summary: `${agentsNicknameSingular} updated` });

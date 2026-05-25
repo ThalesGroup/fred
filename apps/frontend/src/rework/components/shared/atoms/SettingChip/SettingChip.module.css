@@ -2,15 +2,18 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  padding: var(--spacing-2xs) var(--spacing-s);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+  cursor: pointer;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-2xl);
   background: none;
+  padding: var(--spacing-2xs) var(--spacing-s);
   color: var(--on-surface-muted);
   font: var(--font-label-small);
-  cursor: pointer;
   white-space: nowrap;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .chip:hover {
@@ -20,8 +23,8 @@
 
 .chip[data-open="true"] {
   border-color: var(--primary);
-  color: var(--primary);
   background: var(--state-on-surface-hover);
+  color: var(--primary);
 }
 
 .chip:focus-visible {

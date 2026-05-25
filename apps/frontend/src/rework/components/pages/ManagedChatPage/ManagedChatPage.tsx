@@ -39,15 +39,14 @@ export default function ManagedChatPage() {
   const isPersonalTeam = teamId === activeTeam?.id;
   const { data: fetchedTeam } = useGetTeamQuery({ teamId }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
-  const isAdmin = isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_owners"));
+  const isAdmin =
+    isPersonalTeam || (Array.isArray(team?.permissions) && team.permissions.includes("can_administer_owners"));
 
   const chat = useManagedChat({ teamId, agentInstanceId });
 
   const opts = chat.effectiveChatOptions;
   const hasComposerControls =
-    opts?.libraries_selection === true ||
-    opts?.search_policy_selection === true ||
-    opts?.rag_scope_selection === true;
+    opts?.libraries_selection === true || opts?.search_policy_selection === true || opts?.rag_scope_selection === true;
 
   return (
     <div className={styles.page}>
@@ -110,9 +109,7 @@ export default function ManagedChatPage() {
           }
         />
       </div>
-      {isAdmin && (
-        <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />
-      )}
+      {isAdmin && <DebugRawDrawer open={debugOpen} onClose={() => setDebugOpen(false)} messages={chat.messages} />}
     </div>
   );
 }

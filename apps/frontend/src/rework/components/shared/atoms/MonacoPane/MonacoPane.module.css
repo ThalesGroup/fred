@@ -1,5 +1,5 @@
 .fallback {
-  padding: var(--spacing-m, 1rem);
+  padding: var(--spacing-m);
   height: 100%;
   overflow: auto;
   color: var(--on-surface);

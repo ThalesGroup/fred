@@ -158,7 +158,14 @@ export function DetailedTooltip({
 }
 
 // A simple tooltip component that shows a title.
-export function SimpleTooltip({ title, placement = "top", maxWidth = 320, children, open: controlledOpen, onClose: controlledOnClose }: SimpleTooltipProps) {
+export function SimpleTooltip({
+  title,
+  placement = "top",
+  maxWidth = 320,
+  children,
+  open: controlledOpen,
+  onClose: controlledOnClose,
+}: SimpleTooltipProps) {
   const theme = useTheme();
   const { background, border, boxShadow } = getFloatingSurfaceTokens(theme);
   const { open: internalOpen, handleOpen, handleClose } = useDelayedTooltip();

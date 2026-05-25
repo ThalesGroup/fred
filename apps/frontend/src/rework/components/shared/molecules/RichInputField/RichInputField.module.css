@@ -10,26 +10,25 @@
 .bar {
   display: flex;
   justify-content: center;
-  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-xl);
   /* Fade from transparent so the field appears to float above the thread */
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    var(--surface-container-lowest) 40%
-  );
+  background: linear-gradient(to bottom, transparent 0%, var(--surface-container-lowest) 40%);
+  padding: var(--spacing-xl) var(--spacing-l) var(--spacing-xl);
 }
 
 .field {
-  width: 100%;
-  max-width: 720px;
   display: flex;
   flex-direction: column;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+  box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-xl);
   background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
-  box-shadow: var(--shadow-s);
-  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  width: 100%;
+  max-width: 720px;
 }
 
 .field:focus-within:not(:has(.textarea:disabled)) {
@@ -47,15 +46,15 @@
 
 .textarea {
   display: block;
-  width: 100%;
-  resize: none;
-  overflow-y: hidden; /* JS switches to auto at maxHeight */
-  background: transparent;
-  border: none;
   outline: none;
+  border: none;
+  background: transparent;
   padding: var(--spacing-2xs) 0;
+  width: 100%;
   min-height: 36px;
   max-height: 200px;
+  overflow-y: hidden; /* JS switches to auto at maxHeight */
+  resize: none;
   color: var(--on-surface);
   font: var(--font-body-large);
   line-height: 1.5;
@@ -75,8 +74,8 @@
 }
 
 .bottomLeft {
-  flex: 1;
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-2xs);
@@ -84,30 +83,36 @@
 
 .rightSlot {
   display: flex;
-  align-items: center;
   flex-shrink: 0;
+  align-items: center;
   margin-left: auto; /* pushes to right edge whether or not bottomLeft is present */
 }
 
 @keyframes sendBtnIn {
-  from { opacity: 0; transform: scale(0.7); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .sendBtn {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
   flex-shrink: 0;
-  border-radius: var(--radius-s);
-  border: none;
-  background: var(--primary);
-  color: var(--on-primary);
-  cursor: pointer;
+  justify-content: center;
+  align-items: center;
   animation: sendBtnIn 120ms ease;
   transition: opacity 120ms ease;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--primary);
+  width: 32px;
+  height: 32px;
+  color: var(--on-primary);
 }
 
 .sendBtn:hover {
@@ -126,8 +131,8 @@
 /* Filled square rendered via CSS — guaranteed fill regardless of icon font variant */
 .stopIcon {
   display: block;
+  border-radius: 2px;
+  background: currentColor;
   width: 11px;
   height: 11px;
-  background: currentColor;
-  border-radius: 2px;
 }

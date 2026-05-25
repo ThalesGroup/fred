@@ -52,8 +52,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
         if (!cancelled) setSvg(rendered);
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Diagram could not be rendered.");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Diagram could not be rendered.");
       });
 
     return () => {

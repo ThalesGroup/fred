@@ -2,12 +2,16 @@
 @use "src/index.scss" as *;
 
 .btn {
-  cursor: var(--btn-cursor, pointer);
+  --btn-cursor: pointer;
+  --btn-outline: transparent;
+  --btn-border: transparent;
+  --btn-background: transparent;
+  cursor: var(--btn-cursor);
   margin: 0;
-  outline: 2px solid var(--btn-outline, transparent);
-  border: 1px solid var(--btn-border, transparent);
+  outline: 2px solid var(--btn-outline);
+  border: 1px solid var(--btn-border);
   border-radius: var(--radius-s);
-  background-color: var(--btn-background, transparent);
+  background-color: var(--btn-background);
   padding: 0;
   overflow: hidden;
 }

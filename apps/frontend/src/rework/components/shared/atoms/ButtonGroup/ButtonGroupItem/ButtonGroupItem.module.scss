@@ -13,12 +13,13 @@
   text-wrap: nowrap;
 
   .stateLayer {
+    --item-background-color: var(--surface-container);
     corner-shape: round;
     display: flex;
     justify-content: center;
     align-items: center;
     border-radius: var(--spacing-2xl);
-    background-color: var(--item-background-color, var(--surface-container));
+    background-color: var(--item-background-color);
     padding: 0 var(--lateral-padding);
     height: 100%;
   }

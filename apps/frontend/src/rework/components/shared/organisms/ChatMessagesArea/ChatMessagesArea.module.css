@@ -9,20 +9,20 @@
 /* Centered content lane — the only place where width is constrained.
    flex: 1 so it expands to fill .area, keeping the empty-state text centred. */
 .lane {
-  flex: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: var(--spacing-m, 1rem);
+  gap: var(--spacing-m);
+  margin: 0 auto;
+  padding: var(--spacing-xl) var(--spacing-l);
   width: 100%;
   max-width: 720px;
-  margin: 0 auto;
-  padding: var(--spacing-xl, 2rem) var(--spacing-l, 1.5rem);
 }
 
 .empty {
   margin: auto;
   color: var(--on-surface-retreat);
-  font: var(--font-body-large, 1rem/1.5 sans-serif);
+  font: var(--font-body-large);
   text-align: center;
 }
 
@@ -30,7 +30,7 @@
   align-self: flex-start;
   animation: pulse 1.2s ease-in-out infinite;
   color: var(--on-surface-retreat);
-  font: var(--font-body-medium, 0.875rem/1.5 sans-serif);
+  font: var(--font-body-medium);
   font-style: italic;
 }
 

@@ -1,10 +1,10 @@
 .dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: var(--dot-color);
-  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
 }
 
 .dot[data-status="streaming"] {
@@ -12,6 +12,13 @@
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.75); }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.75);
+    opacity: 0.5;
+  }
 }

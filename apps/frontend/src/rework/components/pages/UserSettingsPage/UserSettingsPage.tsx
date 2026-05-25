@@ -36,41 +36,41 @@ export default function UserSettingsPage() {
 
   return (
     <div className={styles.userSettingsPageRoot}>
-    <div className={styles.userSettingsPage}>
-      <div className={styles.userSettingsHeader}>
-        <Button
-          color={"primary"}
-          variant={"text"}
-          size={"medium"}
-          icon={{ category: "outlined", type: "arrow_back", filled: true }}
-          onClick={() => navigate(-1)}
-        >
-          {t("rework.back")}
-        </Button>
-        <span className={styles.userSettingsHeaderTitle}>{t("rework.userSettings.title")}</span>
-        <Button
-          color={"error"}
-          variant={"filled"}
-          size={"medium"}
-          icon={{ category: "outlined", type: "logout", filled: true }}
-          onClick={KeyCloakService.CallLogout}
-        >
-          {t("rework.userSettings.disconnect")}
-        </Button>
-      </div>
-      <div className={styles.userSettingsDescription}>
-        <UserAvatar name={userFullName} size={"large"} />
-        <div className={styles.userSettingsIdentity}>
-          <span className={styles.userSettingsIdentityName}>{username}</span>
-          <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>
-          <span className={styles.userSettingsIdentityEmail}>{userEmail}</span>
-          {userRoles.includes("admin") && (
-            <span className={styles.userSettingsIdentityRole}>{userRoles.join(", ")}</span>
-          )}
+      <div className={styles.userSettingsPage}>
+        <div className={styles.userSettingsHeader}>
+          <Button
+            color={"primary"}
+            variant={"text"}
+            size={"medium"}
+            icon={{ category: "outlined", type: "arrow_back", filled: true }}
+            onClick={() => navigate(-1)}
+          >
+            {t("rework.back")}
+          </Button>
+          <span className={styles.userSettingsHeaderTitle}>{t("rework.userSettings.title")}</span>
+          <Button
+            color={"error"}
+            variant={"filled"}
+            size={"medium"}
+            icon={{ category: "outlined", type: "logout", filled: true }}
+            onClick={KeyCloakService.CallLogout}
+          >
+            {t("rework.userSettings.disconnect")}
+          </Button>
         </div>
-      </div>
-      <div className={styles.userSettingsApplication}>
-        {/*
+        <div className={styles.userSettingsDescription}>
+          <UserAvatar name={userFullName} size={"large"} />
+          <div className={styles.userSettingsIdentity}>
+            <span className={styles.userSettingsIdentityName}>{username}</span>
+            <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>
+            <span className={styles.userSettingsIdentityEmail}>{userEmail}</span>
+            {userRoles.includes("admin") && (
+              <span className={styles.userSettingsIdentityRole}>{userRoles.join(", ")}</span>
+            )}
+          </div>
+        </div>
+        <div className={styles.userSettingsApplication}>
+          {/*
                 TODO Enable when Light mode is complete
                 <ButtonGroup
           defaultSelectedIndex={themeMode === "dark" ? 0 : themeMode === "light" ? 1 : 2}
@@ -94,23 +94,23 @@ export default function UserSettingsPage() {
           size={"medium"}
           color={"secondary"}
         ></ButtonGroup>*/}
-        <ButtonGroup
-          defaultSelectedIndex={i18n.language === "fr" ? 0 : 1}
-          items={[
-            {
-              label: t("rework.userSettings.app.french"),
-              onClick: () => i18n.changeLanguage("fr"),
-            },
-            {
-              label: t("rework.userSettings.app.english"),
-              onClick: () => i18n.changeLanguage("en"),
-            },
-          ]}
-          size={"medium"}
-          color={"secondary"}
-        ></ButtonGroup>
-      </div>
-      {/*  <div className={styles.userSettingsConversation}>
+          <ButtonGroup
+            defaultSelectedIndex={i18n.language === "fr" ? 0 : 1}
+            items={[
+              {
+                label: t("rework.userSettings.app.french"),
+                onClick: () => i18n.changeLanguage("fr"),
+              },
+              {
+                label: t("rework.userSettings.app.english"),
+                onClick: () => i18n.changeLanguage("en"),
+              },
+            ]}
+            size={"medium"}
+            color={"secondary"}
+          ></ButtonGroup>
+        </div>
+        {/*  <div className={styles.userSettingsConversation}>
         <TextArea
           disabled={true}
           label={t("rework.userSettings.conversationProfile.title")}
@@ -118,24 +118,24 @@ export default function UserSettingsPage() {
           maxLength={300}
         ></TextArea>
       </div>*/}
-      <div className={styles.userSettingsLegals}>
-        <Link to={"/gdpr"}>
-          <Button color={"primary"} variant={"text"} size={"medium"}>
-            {t("rework.userSettings.accessGdpr", { siteTitle, siteSubtitle })}
-          </Button>
-        </Link>
-        <Link to={"/gcu"}>
-          <Button color={"primary"} variant={"text"} size={"medium"}>
-            {t("rework.userSettings.accessGcu")}
-          </Button>
-        </Link>
-        <Link to={"/release-notes"}>
-          <Button color={"primary"} variant={"text"} size={"medium"}>
-            {t("rework.userSettings.accessReleaseNotes")}
-          </Button>
-        </Link>
+        <div className={styles.userSettingsLegals}>
+          <Link to={"/gdpr"}>
+            <Button color={"primary"} variant={"text"} size={"medium"}>
+              {t("rework.userSettings.accessGdpr", { siteTitle, siteSubtitle })}
+            </Button>
+          </Link>
+          <Link to={"/gcu"}>
+            <Button color={"primary"} variant={"text"} size={"medium"}>
+              {t("rework.userSettings.accessGcu")}
+            </Button>
+          </Link>
+          <Link to={"/release-notes"}>
+            <Button color={"primary"} variant={"text"} size={"medium"}>
+              {t("rework.userSettings.accessReleaseNotes")}
+            </Button>
+          </Link>
+        </div>
       </div>
-    </div>
     </div>
   );
 }

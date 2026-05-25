@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { EffectiveChatOptions } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
@@ -70,13 +70,16 @@ function buildInitial(sessionId: string | null, agentOptions: EffectiveChatOptio
 export function useComposerSettings(sessionId: string | null, agentOptions: EffectiveChatOptions | null) {
   const [state, setState] = useState<ComposerState>(() => buildInitial(sessionId, agentOptions));
 
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
   // agentOptions arrives async (RTK Query). If it was null at mount and no
   // sessionStorage data exists for this session, apply the agent defaults now.
   useEffect(() => {
     if (!agentOptions) return;
-    if (Object.keys(readStorage(sessionId)).length > 0) return;
-    setState(buildInitial(sessionId, agentOptions));
-  }, [agentOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (Object.keys(readStorage(sessionIdRef.current)).length > 0) return;
+    setState(buildInitial(sessionIdRef.current, agentOptions));
+  }, [agentOptions]);
 
   const update = useCallback(
     (patch: Partial<ComposerState>) => {

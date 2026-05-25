@@ -48,8 +48,7 @@
     /* decorative: animated rainbow border — intentional hue-specific gradient, design spec: AgentCard hover animation */
     background:
       linear-gradient(var(--surface-container), var(--surface-container)) padding-box,
-      conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff)
-        border-box;
+      conic-gradient(from var(--angle), #ffffff, #65e0f6, #9299ff, #e1c39c, #d665b4, #ffffff) border-box;
   }
 }
 
@@ -74,8 +73,8 @@
   flex-direction: column;
   gap: var(--spacing-s);
   filter: blur(var(--blur));
-  padding: var(--spacing-m) var(--spacing-m) var(--spacing-2xs);
   transition: filter 150ms ease;
+  padding: var(--spacing-m) var(--spacing-m) var(--spacing-2xs);
 }
 
 .agentPresentation {
@@ -89,13 +88,13 @@
   justify-content: center;
   align-items: center;
   opacity: var(--agent-icon-opacity);
+  transition: opacity 150ms ease;
   border-radius: var(--radius-m);
   background-color: var(--agent-icon-background-color);
   width: 4rem;
   height: 4rem;
   color: var(--agent-icon-color);
   font-size: 1.875rem;
-  transition: opacity 150ms ease;
 }
 
 .agentIdentity {

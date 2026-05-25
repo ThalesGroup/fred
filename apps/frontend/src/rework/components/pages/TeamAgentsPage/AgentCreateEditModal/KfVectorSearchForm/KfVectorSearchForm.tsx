@@ -17,7 +17,11 @@ import { useTranslation } from "react-i18next";
 import { ToolParamsProps } from "src/components/agentHub/toolParams/toolParamsRegistry";
 import { SearchPolicySelect } from "@shared/molecules/SearchPolicySelect/SearchPolicySelect";
 import { KfVectorSearchParams } from "src/slices/agentic/agenticOpenApi";
-import { SearchPolicyName, TagType, useListAllTagsKnowledgeFlowV1TagsGetQuery } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
+import {
+  SearchPolicyName,
+  TagType,
+  useListAllTagsKnowledgeFlowV1TagsGetQuery,
+} from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { SwitchRow } from "../SwitchRow/SwitchRow.tsx";
 import styles from "./KfVectorSearchForm.module.css";
 
@@ -79,9 +83,7 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
                 />
                 <div className={styles.libraryInfo}>
                   <span className={styles.libraryName}>{lib.name}</span>
-                  {lib.description && (
-                    <span className={styles.fieldDescription}>{lib.description}</span>
-                  )}
+                  {lib.description && <span className={styles.fieldDescription}>{lib.description}</span>}
                 </div>
               </label>
             );
@@ -117,7 +119,9 @@ export function KfVectorSearchForm({ params, onParamsChange, teamId }: ToolParam
         <div className={styles.fieldRow}>
           <div className={styles.fieldLabel}>
             <span>{t("agentTuning.fields.chat_options_default_search_policy.title")}</span>
-            <span className={styles.fieldDescription}>{t("agentTuning.fields.chat_options_default_search_policy.description")}</span>
+            <span className={styles.fieldDescription}>
+              {t("agentTuning.fields.chat_options_default_search_policy.description")}
+            </span>
           </div>
           <SearchPolicySelect
             value={(params.search_policy as SearchPolicyName) ?? "hybrid"}

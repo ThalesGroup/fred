@@ -96,7 +96,7 @@ export function ChatMessagesArea({
   useLayoutEffect(() => {
     if (!isStreaming || !tailModeRef.current) return;
     scrollToBottomInstant();
-  }); // eslint-disable-line react-hooks/exhaustive-deps
+  });
 
   return (
     <div className={styles.area} role="log" aria-live="polite" aria-label={t("chatbot.conversationAriaLabel")}>

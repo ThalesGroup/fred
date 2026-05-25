@@ -1,4 +1,5 @@
 .wrapper {
+  --scroll-fade-bg: var(--surface-container-lowest);
   position: relative;
   overflow: hidden;
 }
@@ -6,10 +7,11 @@
 .row {
   display: flex;
   flex-direction: row;
-  gap: var(--row-gap, var(--spacing-s));
+  --row-gap: var(--spacing-s);
+  gap: var(--row-gap);
+  padding-bottom: 2px; /* prevent clip of focus rings */
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 2px; /* prevent clip of focus rings */
 }
 
 .row::-webkit-scrollbar {
@@ -18,33 +20,33 @@
 
 /* Arrow controls (discoverability for mouse users) */
 .arrowBtn {
+  display: grid;
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
-  height: 32px;
-  width: 32px;
-  border-radius: 999px;
-  border: 1px solid var(--outline-variant);
-  background: color-mix(in srgb, var(--surface-container) 75%, transparent);
-  color: var(--on-surface);
-  display: grid;
   place-items: center;
-  cursor: pointer;
+  transform: translateY(-50%);
+  opacity: 0;
   z-index: 2;
   transition:
     opacity 150ms ease,
     background 150ms ease,
     border-color 150ms ease;
-  opacity: 0;
+  cursor: pointer;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-container) 75%, transparent);
+  width: 32px;
+  height: 32px;
   pointer-events: none;
-  user-select: none;
-  line-height: 1;
+  color: var(--on-surface);
   font-size: 20px;
+  line-height: 1;
+  user-select: none;
 }
 
 .arrowBtn:hover {
-  background: color-mix(in srgb, var(--surface-container) 88%, transparent);
   border-color: var(--outline);
+  background: color-mix(in srgb, var(--surface-container) 88%, transparent);
 }
 
 .arrowBtn:focus-visible {
@@ -63,25 +65,25 @@
 /* Gradient fade overlays — controlled by data attributes set by JS */
 .wrapper::before,
 .wrapper::after {
-  content: "";
   position: absolute;
   top: 0;
   bottom: 0;
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 150ms ease;
   width: 32px;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 150ms ease;
-  z-index: 1;
+  content: "";
 }
 
 .wrapper::before {
   left: 0;
-  background: linear-gradient(to right, var(--scroll-fade-bg, var(--surface-container-lowest)), transparent);
+  background: linear-gradient(to right, var(--scroll-fade-bg), transparent);
 }
 
 .wrapper::after {
   right: 0;
-  background: linear-gradient(to left, var(--scroll-fade-bg, var(--surface-container-lowest)), transparent);
+  background: linear-gradient(to left, var(--scroll-fade-bg), transparent);
 }
 
 .wrapper[data-fade-left="true"]::before {

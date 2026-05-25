@@ -26,7 +26,7 @@ export default function GcuGuard({ children }: PropsWithChildren) {
 
   if (result.isLoading || result.isUninitialized) {
     const fetchUserDetailsAction = controlPlaneApi.endpoints["getUserDetailsControlPlaneV1UserGet"].initiate(undefined);
-    throw dispatch(fetchUserDetailsAction as any);
+    throw dispatch(fetchUserDetailsAction as unknown as Parameters<typeof dispatch>[0]);
   }
   const userDetails: UserDetails = result.data;
 

@@ -2,7 +2,7 @@
 .root {
   max-width: var(--content-prose-max-width);
   color: var(--on-surface);
-  font: var(--font-body-large, 400 1rem/1.5 sans-serif);
+  font: var(--font-body-large);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -60,26 +60,32 @@
   color: var(--on-surface);
 }
 
-.root :global(h1) { font: 400 1.4rem/1.33 var(--font-family-base); }
-.root :global(h2) { font: 400 1.2rem/1.33 var(--font-family-base); }
-.root :global(h3) { font: 400 1.05rem/1.4 var(--font-family-base); }
+.root :global(h1) {
+  font: 400 1.4rem/1.33 var(--font-family-base);
+}
+.root :global(h2) {
+  font: 400 1.2rem/1.33 var(--font-family-base);
+}
+.root :global(h3) {
+  font: 400 1.05rem/1.4 var(--font-family-base);
+}
 
 .root :global(h4),
 .root :global(h5),
 .root :global(h6) {
   color: var(--on-surface);
-  font: var(--font-title-medium, 500 1rem/1.5 sans-serif);
+  font: var(--font-title-medium);
 }
 
 /* ---- Lists ---- */
 
 .root :global(ul),
 .root :global(ol) {
-  padding-left: var(--spacing-l, 24px);
+  padding-left: var(--spacing-l);
 }
 
 .root :global(li) {
-  margin-bottom: var(--spacing-2xs, 4px);
+  margin-bottom: var(--spacing-2xs);
 }
 
 .root :global(li:last-child) {
@@ -90,7 +96,7 @@
 
 .root :global(blockquote) {
   border-left: 3px solid var(--outline-muted);
-  padding: var(--spacing-2xs, 4px) var(--spacing-m, 16px);
+  padding: var(--spacing-2xs) var(--spacing-m);
   color: var(--on-surface-retreat);
 }
 
@@ -109,17 +115,17 @@
 
 .root :global(table) {
   display: block;
-  overflow-x: auto;
   border-collapse: collapse;
   width: max-content;
   max-width: 100%;
-  font: var(--font-body-medium, 400 0.875rem/1.42 sans-serif);
+  overflow-x: auto;
+  font: var(--font-body-medium);
 }
 
 .root :global(th),
 .root :global(td) {
   border: 0.5px solid var(--outline-muted);
-  padding: var(--spacing-xs, 8px) var(--spacing-s, 12px);
+  padding: var(--spacing-xs) var(--spacing-s);
   text-align: left;
 }
 
@@ -154,40 +160,40 @@
 /* ---- KaTeX display math — overflow scroll for long formulae ---- */
 
 .root :global(.katex-display) {
+  padding-bottom: var(--spacing-2xs);
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: var(--spacing-2xs);
 }
 
 /* ---- Details / collapsible (remark-directive :::details) ---- */
 
 .root :global(details) {
   border: 0.5px solid var(--outline-muted);
-  border-radius: var(--radius-s, 6px);
+  border-radius: var(--radius-s);
   background: var(--surface-container-low);
-  padding: 0 var(--spacing-m, 16px);
+  padding: 0 var(--spacing-m);
 }
 
 .root :global(details[open]) {
-  padding-bottom: var(--spacing-s, 12px);
+  padding-bottom: var(--spacing-s);
 }
 
 .root :global(summary) {
   cursor: pointer;
-  padding: var(--spacing-xs, 8px) 0;
-  font: var(--font-label-large, 500 0.875rem/1.42 sans-serif);
+  padding: var(--spacing-xs) 0;
   color: var(--on-surface-retreat);
-  user-select: none;
+  font: var(--font-label-large);
   list-style: none;
+  user-select: none;
 }
 
 .root :global(summary::before) {
-  content: "▶";
   display: inline-block;
-  margin-right: var(--spacing-xs, 8px);
-  font-size: 0.6em;
-  transition: transform 120ms ease;
   vertical-align: middle;
+  transition: transform 120ms ease;
+  margin-right: var(--spacing-xs);
+  content: "▶";
+  font-size: 0.6em;
 }
 
 .root :global(details[open] summary::before) {

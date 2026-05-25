@@ -24,13 +24,7 @@ export interface SettingChipProps extends Omit<ComponentPropsWithoutRef<"button"
 
 export function SettingChip({ label, open = false, icon, ...props }: SettingChipProps) {
   return (
-    <button
-      type="button"
-      className={styles.chip}
-      data-open={open}
-      aria-expanded={open}
-      {...props}
-    >
+    <button type="button" className={styles.chip} data-open={open} aria-expanded={open} {...props}>
       {icon && (
         <span className={styles.icon}>
           <Icon {...icon} />

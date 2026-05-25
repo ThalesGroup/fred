@@ -12,8 +12,10 @@
   }
 
   input {
-    outline: 2px solid var(--input-outline, transparent);
-    border: 1px solid var(--input-border, var(--outline-retreat));
+    --input-outline: transparent;
+    --input-border: var(--outline-retreat);
+    outline: 2px solid var(--input-outline);
+    border: 1px solid var(--input-border);
     border-radius: var(--spacing-xs);
     background-color: var(--surface-container-lowest);
     padding: 0 var(--spacing-xs) 0 var(--spacing-s);
@@ -54,8 +56,9 @@
 }
 
 .label {
+  --label-color: var(--on-surface-retreat);
   padding-left: var(--spacing-xs);
-  color: var(--label-color, var(--on-surface-retreat));
+  color: var(--label-color);
 
   font: var(--font-label-large);
 }

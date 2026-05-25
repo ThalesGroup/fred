@@ -1,11 +1,11 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2xs, 0.25rem);
-  border-radius: var(--radius-s, 6px);
-  padding: 0.125rem var(--spacing-xs, 0.375rem);
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-s);
+  padding: 0.125rem var(--spacing-xs);
   max-width: 200px;
-  font: var(--font-label-small, 600 0.6875rem/1.25 sans-serif);
+  font: var(--font-label-small);
 }
 
 .dot {

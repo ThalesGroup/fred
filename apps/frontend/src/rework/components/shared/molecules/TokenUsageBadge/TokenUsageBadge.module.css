@@ -2,8 +2,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font: var(--font-label-small);
   color: var(--on-surface-retreat);
+  font: var(--font-label-small);
   font-variant-numeric: tabular-nums;
   user-select: none;
 }
@@ -17,6 +17,6 @@
 }
 
 .total {
-  font-weight: 500;
   opacity: 0.9;
+  font-weight: 500;
 }

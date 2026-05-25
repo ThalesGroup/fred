@@ -30,7 +30,10 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   const [copied, setCopied] = useState(false);
 
   // Last exchange = the exchange_id that appears latest in the message list.
-  const lastExchangeId = messages.reduce<string | null>((last, m) => (last === null ? m.exchange_id : m.exchange_id), null);
+  const lastExchangeId = messages.reduce<string | null>(
+    (last, m) => (last === null ? m.exchange_id : m.exchange_id),
+    null,
+  );
 
   const displayed = scopeIndex === 0 ? messages.filter((m) => m.exchange_id === lastExchangeId) : messages;
   const json = JSON.stringify(displayed, null, 2);

@@ -47,11 +47,13 @@
 }
 
 .switch {
+  --switch-border-color: var(--outline-retreat);
+  --switch-background-color: var(--surface-container-high);
   position: relative;
   cursor: pointer;
-  border: 1px solid var(--switch-border-color, var(--outline-retreat));
+  border: 1px solid var(--switch-border-color);
   border-radius: var(--radius-2xl);
-  background-color: var(--switch-background-color, var(--surface-container-high));
+  background-color: var(--switch-background-color);
   width: 52px;
   height: 2rem;
   --switch-padding: var(--spacing-2xs);
@@ -65,13 +67,14 @@
 }
 
 .switch-handle {
+  --switch-handle-background-color: var(--on-surface-retreat);
   position: absolute;
   top: 50%;
   left: var(--switch-padding);
   transform: translateY(-50%);
   transition: transform 0.2s;
   border-radius: var(--radius-2xl);
-  background-color: var(--switch-handle-background-color, var(--on-surface-retreat));
+  background-color: var(--switch-handle-background-color);
   width: 1.5rem;
   height: 1.5rem;
 }

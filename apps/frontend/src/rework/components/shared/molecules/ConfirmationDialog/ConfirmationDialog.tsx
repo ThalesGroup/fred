@@ -60,19 +60,16 @@ export function ConfirmationDialog({
           onClick={(e) => e.stopPropagation()}
         >
           <div className={styles.body}>
-            <p id="confirm-dialog-title" className={styles.title}>{title}</p>
+            <p id="confirm-dialog-title" className={styles.title}>
+              {title}
+            </p>
             {message && <p className={styles.message}>{message}</p>}
           </div>
           <div className={styles.actions}>
             <Button color="on-surface" variant="outlined" size="medium" onClick={onCancel}>
               {cancelLabel}
             </Button>
-            <Button
-              color={criticalAction ? "error" : "primary"}
-              variant="filled"
-              size="medium"
-              onClick={onConfirm}
-            >
+            <Button color={criticalAction ? "error" : "primary"} variant="filled" size="medium" onClick={onConfirm}>
               {confirmLabel}
             </Button>
           </div>

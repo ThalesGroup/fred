@@ -72,7 +72,9 @@ export default function TeamSettingsNavbar({ team, close, changePanel, panelSele
           {t("rework.back")}
         </Button>
       </span>
-      <span className={styles["team-name"]}>{team.id === "personal" ? t("rework.sidebar.team.userTeam") : team.name}</span>
+      <span className={styles["team-name"]}>
+        {team.id === "personal" ? t("rework.sidebar.team.userTeam") : team.name}
+      </span>
       <NavigationMenu items={navigationMenu}></NavigationMenu>
       <div className={styles["team-settings-navbar-disconnect"]}>
         <Button

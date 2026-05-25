@@ -81,7 +81,8 @@ export default function ReleaseNotesContent() {
 
         const loaded: ReleaseCard[] = [];
         if (baseDoc) loaded.push({ label: t("rework.releaseNotes.baseRelease"), content: baseDoc });
-        if (brandDoc) loaded.push({ label: t("rework.releaseNotes.brandRelease", { brand: releaseBrand }), content: brandDoc });
+        if (brandDoc)
+          loaded.push({ label: t("rework.releaseNotes.brandRelease", { brand: releaseBrand }), content: brandDoc });
 
         if (loaded.length === 0) {
           setHasError(true);
@@ -121,11 +122,7 @@ export default function ReleaseNotesContent() {
       <div className={styles.toolbar}>
         {cards.length > 1 && <ButtonGroup items={tabItems} size="small" color="primary" />}
         <div className={styles.actions}>
-          <button
-            className={styles.codenameBadge}
-            type="button"
-            onClick={() => setCodenameOpen(true)}
-          >
+          <button className={styles.codenameBadge} type="button" onClick={() => setCodenameOpen(true)}>
             {CODENAME.codename} · {CODENAME.version}
           </button>
           {!isLoading && !hasError && (
@@ -138,9 +135,7 @@ export default function ReleaseNotesContent() {
 
       <div className={styles.scrollArea}>
         {!isLoading && !hasError && <MarkdownRenderer text={selectedContent} />}
-        {!isLoading && hasError && (
-          <p className={styles.empty}>{t("rework.releaseNotes.empty")}</p>
-        )}
+        {!isLoading && hasError && <p className={styles.empty}>{t("rework.releaseNotes.empty")}</p>}
       </div>
 
       <CodenameModal open={codenameOpen} onClose={() => setCodenameOpen(false)} data={CODENAME} />

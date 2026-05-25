@@ -38,8 +38,8 @@
 /* Enabled cards are wrapped in <Link> — remove link decoration and fill the cell height */
 .chatLink {
   display: block;
-  text-decoration: none;
   height: 100%;
+  text-decoration: none;
 }
 
 /* Disabled card wrapper — same cell sizing, no link */

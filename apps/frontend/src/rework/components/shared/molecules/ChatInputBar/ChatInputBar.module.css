@@ -1,9 +1,9 @@
 .bar {
-  flex-shrink: 0;
   display: flex;
+  flex-shrink: 0;
   justify-content: center;
-  padding: var(--spacing-s) var(--spacing-l) var(--spacing-xl);
   background: var(--surface-container-lowest);
+  padding: var(--spacing-s) var(--spacing-l) var(--spacing-xl);
 }
 
 .field {
@@ -13,9 +13,11 @@
 
 .textarea {
   display: block;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
   box-sizing: border-box;
-  resize: none;
-  overflow-y: hidden;
+  outline: none;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-xl);
   background: var(--surface-container);
@@ -23,11 +25,11 @@
   width: 100%;
   min-height: 48px;
   max-height: 200px;
+  overflow-y: hidden;
+  resize: none;
   color: var(--on-surface);
   font: var(--font-body-large);
   line-height: 1.5;
-  outline: none;
-  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .textarea:hover:not(:disabled) {

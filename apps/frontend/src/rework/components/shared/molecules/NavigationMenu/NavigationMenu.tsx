@@ -13,9 +13,7 @@
 // limitations under the License.
 
 import styles from "./NavigationMenu.module.scss";
-import NavigationMenuItem, {
-  NavigationMenuItemProps,
-} from "./NavigationMenuItem/NavigationMenuItem.tsx";
+import NavigationMenuItem, { NavigationMenuItemProps } from "./NavigationMenuItem/NavigationMenuItem.tsx";
 
 export type { NavigationMenuItemProps };
 

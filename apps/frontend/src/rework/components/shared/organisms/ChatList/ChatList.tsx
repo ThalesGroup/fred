@@ -42,7 +42,11 @@ export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const { data: sessions, isLoading, refetch } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
+  const {
+    data: sessions,
+    isLoading,
+    refetch,
+  } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
     { teamId: teamId! },
     { skip: !teamId, pollingInterval: 30_000 },
   );
@@ -54,7 +58,9 @@ export default function ChatList({ teamId }: ChatListProps) {
   const handleDelete = (sessionId: string, href: string) => async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    await deleteSession({ teamId: teamId!, sessionId }).unwrap().catch(() => {});
+    await deleteSession({ teamId: teamId!, sessionId })
+      .unwrap()
+      .catch(() => {});
     refetch();
     const sessionPath = href.split("?")[0];
     if (window.location.pathname === sessionPath) {

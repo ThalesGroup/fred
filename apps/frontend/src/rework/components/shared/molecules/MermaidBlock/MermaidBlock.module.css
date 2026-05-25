@@ -1,6 +1,6 @@
 /* Outer block — same border/radius treatment as CodeBlock */
 .block {
-  margin: var(--spacing-s, 12px) 0;
+  margin: var(--spacing-s) 0;
   border: 0.5px solid var(--outline-muted);
   border-radius: var(--radius-s);
   overflow: hidden;
@@ -13,7 +13,7 @@
   align-items: center;
   border-bottom: 0.5px solid var(--outline-muted);
   background: var(--surface-container);
-  padding: var(--spacing-2xs, 4px) var(--spacing-s, 12px);
+  padding: var(--spacing-2xs) var(--spacing-s);
   min-height: 32px;
 }
 
@@ -35,7 +35,7 @@
   border: 0.5px solid var(--outline-muted);
   border-radius: var(--radius-xs);
   background: transparent;
-  padding: 2px var(--spacing-xs, 8px);
+  padding: 2px var(--spacing-xs);
   color: var(--on-surface-retreat);
   font-size: 0.6875rem;
 }
@@ -49,8 +49,8 @@
 .body {
   display: flex;
   justify-content: center;
-  padding: var(--spacing-m);
   background: var(--surface-container-low);
+  padding: var(--spacing-m);
   overflow-x: auto;
 }
 
@@ -62,29 +62,29 @@
 
 .loading {
   color: var(--on-surface-muted);
-  font: var(--font-body-medium, 0.875rem/1.42 sans-serif);
+  font: var(--font-body-medium);
   font-style: italic;
 }
 
 /* Error state */
 .error {
-  width: 100%;
-  padding: var(--spacing-s) var(--spacing-m);
   background: var(--error-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  width: 100%;
 }
 
 .errorLabel {
   display: block;
   margin-bottom: var(--spacing-2xs);
   color: var(--on-error-container);
-  font: var(--font-label-large, 500 0.875rem/1.42 sans-serif);
+  font: var(--font-label-large);
 }
 
 .errorDetail {
   margin: 0;
   color: var(--on-error-container);
-  font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 0.75rem;
+  font-family: "Geist Mono", ui-monospace, monospace;
   white-space: pre-wrap;
   word-break: break-all;
 }

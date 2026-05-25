@@ -269,7 +269,9 @@ export function useChatSse(
 
         case "thought_start": {
           const rank = rankRef.current++;
-          console.debug(`[useChatSse] thought_start id=${event.thought_id} phase=${event.phase} title="${event.title ?? ""}"`);
+          console.debug(
+            `[useChatSse] thought_start id=${event.thought_id} phase=${event.phase} title="${event.title ?? ""}"`,
+          );
           thoughtBufsRef.current.set(event.thought_id, {
             rank,
             text: "",
@@ -322,7 +324,9 @@ export function useChatSse(
 
         case "thought_end": {
           const buf = thoughtBufsRef.current.get(event.thought_id);
-          console.debug(`[useChatSse] thought_end id=${event.thought_id} buf_found=${!!buf} open_ids=[${[...thoughtBufsRef.current.keys()].join(",")}]`);
+          console.debug(
+            `[useChatSse] thought_end id=${event.thought_id} buf_found=${!!buf} open_ids=[${[...thoughtBufsRef.current.keys()].join(",")}]`,
+          );
           if (!buf) break;
           thoughtBufsRef.current.delete(event.thought_id);
           emit({
@@ -392,7 +396,9 @@ export function useChatSse(
       signal: AbortSignal,
     ): Promise<void> => {
       const url = new URL(executeStreamUrl, window.location.origin);
-      console.debug(`[useChatSse] streamToMessages — resolved URL="${url.toString()}" signal.aborted=${signal.aborted}`);
+      console.debug(
+        `[useChatSse] streamToMessages — resolved URL="${url.toString()}" signal.aborted=${signal.aborted}`,
+      );
       const response = await fetch(url.toString(), {
         method: "POST",
         headers: {
@@ -449,7 +455,9 @@ export function useChatSse(
   const send = useCallback(
     async (input: string, sessionId: string | null, runtimeContext?: RuntimeContext) => {
       const sendId = Math.random().toString(36).slice(2, 8);
-      console.debug(`[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} input="${input.slice(0, 40)}"`);
+      console.debug(
+        `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} input="${input.slice(0, 40)}"`,
+      );
 
       if (abortRef.current) {
         console.debug(`[useChatSse][${sendId}] aborting previous in-flight request`);
@@ -463,7 +471,9 @@ export function useChatSse(
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
       const prep = await prepareExecution({ teamId, agentInstanceId }).unwrap();
-      console.debug(`[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`);
+      console.debug(
+        `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
+      );
       setEffectiveChatOptions(prep.effective_chat_options ?? null);
 
       const effectiveContext: RuntimeContext = {
@@ -516,7 +526,9 @@ export function useChatSse(
           onError?.(`Streaming failed: ${msg}`);
         }
       } finally {
-        console.debug(`[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} → will ${ac.signal.aborted ? "NOT" : ""} clear waitResponse`);
+        console.debug(
+          `[useChatSse][${sendId}] finally — ac.signal.aborted=${ac.signal.aborted} → will ${ac.signal.aborted ? "NOT" : ""} clear waitResponse`,
+        );
         if (!ac.signal.aborted) {
           setWaitResponse(false);
         }

@@ -1,19 +1,21 @@
 .card {
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  padding: var(--spacing-s);
+  border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-s);
   background: var(--surface-container);
-  border: 1px solid var(--outline-retreat);
+  padding: var(--spacing-s);
   width: 180px;
-  flex-shrink: 0;
   text-align: left;
 }
 
 .clickable {
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .clickable:hover {
@@ -33,27 +35,27 @@
 }
 
 .index {
-  font: var(--font-label-small);
-  color: var(--on-surface-retreat);
   margin-left: auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
 }
 
 .title {
-  font: var(--font-body-small);
-  color: var(--on-surface);
-  margin: 0;
   /* clamp to 2 lines */
   display: -webkit-box;
+  margin: 0;
   -webkit-line-clamp: 2;
+  color: var(--on-surface);
+  font: var(--font-body-small);
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .domain {
-  font: var(--font-label-small);
-  color: var(--on-surface-retreat);
   margin: 0;
-  white-space: nowrap;
   overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
   text-overflow: ellipsis;
+  white-space: nowrap;
 }

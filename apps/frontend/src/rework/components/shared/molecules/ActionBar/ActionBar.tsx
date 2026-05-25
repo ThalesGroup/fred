@@ -31,10 +31,7 @@ interface ActionBarProps {
 
 export function ActionBar({ actions, alwaysVisible = false, className }: ActionBarProps) {
   return (
-    <div
-      className={`${styles.bar} ${alwaysVisible ? styles.alwaysVisible : ""} ${className ?? ""}`}
-      role="toolbar"
-    >
+    <div className={`${styles.bar} ${alwaysVisible ? styles.alwaysVisible : ""} ${className ?? ""}`} role="toolbar">
       {actions.map((action) => (
         <button
           key={action.id}

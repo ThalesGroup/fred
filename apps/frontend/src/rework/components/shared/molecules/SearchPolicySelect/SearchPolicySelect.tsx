@@ -32,13 +32,5 @@ export function SearchPolicySelect({ value, onChange, disabled }: Props) {
     { key: "semantic", value: "semantic", label: t("search.semantic"), description: t("search.semanticDescription") },
   ];
 
-  return (
-    <Select
-      options={options}
-      value={value}
-      onChange={onChange}
-      size="small"
-      disabled={disabled}
-    />
-  );
+  return <Select options={options} value={value} onChange={onChange} size="small" disabled={disabled} />;
 }

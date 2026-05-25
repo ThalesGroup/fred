@@ -20,16 +20,18 @@
 
 .action {
   display: flex;
-  align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  align-items: center;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+  cursor: pointer;
+  border: none;
   border-radius: var(--radius-xs);
   background: none;
-  border: none;
-  cursor: pointer;
+  width: 28px;
+  height: 28px;
   color: var(--on-surface-retreat);
-  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .action:hover:not(:disabled) {

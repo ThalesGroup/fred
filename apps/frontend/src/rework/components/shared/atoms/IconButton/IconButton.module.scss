@@ -2,11 +2,13 @@
 @use "src/index.scss" as *;
 
 .btn {
+  --btn-cursor: pointer;
+  --btn-border: transparent;
   display: flex;
   justify-content: center;
   align-items: center;
-  cursor: var(--btn-cursor, pointer);
-  border: 1px solid var(--btn-border, transparent);
+  cursor: var(--btn-cursor);
+  border: 1px solid var(--btn-border);
   border-radius: 50%;
   background-color: var(--btn-background);
   padding: 0;

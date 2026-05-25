@@ -40,9 +40,7 @@ export function ConversationHeader({
     <header className={styles.header}>
       <div className={styles.meta}>
         <span className={styles.agentName}>{agentDisplayName}</span>
-        {sessionId && sessionTitle != null && (
-          <SessionTitleEditor title={sessionTitle} onCommit={onTitleCommit} />
-        )}
+        {sessionId && sessionTitle != null && <SessionTitleEditor title={sessionTitle} onCommit={onTitleCommit} />}
       </div>
       <Button color="on-surface" variant="text" size="small" onClick={onNewConversation}>
         New conversation

@@ -29,14 +29,20 @@ export function UserTurn({ text, onEdit }: UserTurnProps) {
       id: "copy",
       icon: "content_copy",
       label: "Copy message",
-      onClick: () => { navigator.clipboard.writeText(text).catch(() => {}); },
+      onClick: () => {
+        navigator.clipboard.writeText(text).catch(() => {});
+      },
     },
-    ...(onEdit ? [{
-      id: "edit",
-      icon: "edit",
-      label: "Edit message",
-      onClick: () => onEdit(text),
-    }] : []),
+    ...(onEdit
+      ? [
+          {
+            id: "edit",
+            icon: "edit",
+            label: "Edit message",
+            onClick: () => onEdit(text),
+          },
+        ]
+      : []),
   ];
 
   return (

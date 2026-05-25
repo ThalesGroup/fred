@@ -26,12 +26,7 @@ export function NumberedChip({ value, onClick, label }: NumberedChipProps) {
 
   if (onClick) {
     return (
-      <button
-        type="button"
-        className={`${styles.chip} ${styles.clickable}`}
-        onClick={onClick}
-        aria-label={ariaLabel}
-      >
+      <button type="button" className={`${styles.chip} ${styles.clickable}`} onClick={onClick} aria-label={ariaLabel}>
         {value}
       </button>
     );

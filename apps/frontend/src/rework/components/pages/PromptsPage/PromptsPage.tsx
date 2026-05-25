@@ -184,12 +184,7 @@ export default function PromptsPage() {
       ) : (
         <div className={styles.promptList}>
           {prompts.map((prompt) => (
-            <PromptCard
-              key={prompt.id}
-              prompt={prompt}
-              canManage={true}
-              onEdit={() => openEdit(prompt)}
-            />
+            <PromptCard key={prompt.id} prompt={prompt} canManage={true} onEdit={() => openEdit(prompt)} />
           ))}
         </div>
       )}

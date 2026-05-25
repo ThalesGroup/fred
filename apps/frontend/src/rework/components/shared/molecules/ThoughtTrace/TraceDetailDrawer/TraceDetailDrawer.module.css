@@ -1,8 +1,8 @@
 .toolbar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   padding: var(--spacing-xs) var(--spacing-s);
-  flex-shrink: 0;
 }
 
 .spacer {
@@ -15,7 +15,7 @@
   overflow: auto;
   color: var(--on-surface);
   font: var(--font-body-small);
-  font-family: monospace;
   line-height: 1.5;
+  font-family: monospace;
   white-space: pre-wrap;
 }

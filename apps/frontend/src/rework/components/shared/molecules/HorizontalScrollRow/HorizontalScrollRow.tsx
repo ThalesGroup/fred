@@ -20,11 +20,7 @@ interface HorizontalScrollRowProps {
   className?: string;
 }
 
-export function HorizontalScrollRow({
-  gap,
-  className,
-  children,
-}: PropsWithChildren<HorizontalScrollRowProps>) {
+export function HorizontalScrollRow({ gap, className, children }: PropsWithChildren<HorizontalScrollRowProps>) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [fadeLeft, setFadeLeft] = useState(false);
   const [fadeRight, setFadeRight] = useState(false);
@@ -58,11 +54,7 @@ export function HorizontalScrollRow({
   }, []);
 
   return (
-    <div
-      className={`${styles.wrapper} ${className ?? ""}`}
-      data-fade-left={fadeLeft}
-      data-fade-right={fadeRight}
-    >
+    <div className={`${styles.wrapper} ${className ?? ""}`} data-fade-left={fadeLeft} data-fade-right={fadeRight}>
       {fadeLeft && (
         <button
           type="button"
@@ -73,11 +65,7 @@ export function HorizontalScrollRow({
           ‹
         </button>
       )}
-      <div
-        ref={rowRef}
-        className={styles.row}
-        style={gap ? ({ "--row-gap": gap } as React.CSSProperties) : undefined}
-      >
+      <div ref={rowRef} className={styles.row} style={gap ? ({ "--row-gap": gap } as React.CSSProperties) : undefined}>
         {children}
       </div>
       {fadeRight && (

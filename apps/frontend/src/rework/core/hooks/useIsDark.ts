@@ -19,14 +19,10 @@ import { useState, useEffect } from "react";
  * Updates reactively when the user toggles the theme.
  */
 export function useIsDark(): boolean {
-  const [isDark, setIsDark] = useState(
-    () => document.documentElement.dataset.theme === "dark",
-  );
+  const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === "dark");
 
   useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setIsDark(document.documentElement.dataset.theme === "dark"),
-    );
+    const obs = new MutationObserver(() => setIsDark(document.documentElement.dataset.theme === "dark"));
     obs.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],

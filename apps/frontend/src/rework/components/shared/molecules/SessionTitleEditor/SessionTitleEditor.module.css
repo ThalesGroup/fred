@@ -1,6 +1,6 @@
 .wrapper {
-  position: relative;
   display: inline-flex;
+  position: relative;
   min-width: 0;
 }
 
@@ -8,15 +8,15 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2xs);
-  max-width: 320px;
-  background: none;
+  transition: background-color 120ms ease;
+  cursor: pointer;
   border: none;
   border-radius: var(--radius-s);
+  background: none;
   padding: var(--spacing-2xs) var(--spacing-xs);
-  cursor: pointer;
+  max-width: 320px;
   color: var(--on-surface);
   font: inherit;
-  transition: background-color 120ms ease;
 }
 
 .display:hover {
@@ -29,17 +29,17 @@
 }
 
 .text {
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editIcon {
-  font-size: 14px;
-  color: var(--on-surface-retreat);
+  flex-shrink: 0;
   opacity: 0;
   transition: opacity 120ms ease;
-  flex-shrink: 0;
+  color: var(--on-surface-retreat);
+  font-size: 14px;
 }
 
 .display:hover .editIcon {
@@ -48,18 +48,18 @@
 
 /* ── Rename popup ────────────────────────────────────────────────────── */
 .popup {
+  display: flex;
   position: absolute;
   top: calc(100% + var(--spacing-xs));
   left: 0;
-  z-index: 10;
-  display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  min-width: 280px;
-  padding: var(--spacing-m);
-  background: var(--surface-container-high);
-  border-radius: var(--radius-l);
+  z-index: 10;
   box-shadow: var(--shadow-m);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+  min-width: 280px;
 }
 
 .popupLabel {

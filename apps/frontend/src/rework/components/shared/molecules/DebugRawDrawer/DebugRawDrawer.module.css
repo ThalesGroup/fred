@@ -1,11 +1,11 @@
 .toolbar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-s);
-  padding-bottom: var(--spacing-s);
-  border-bottom: 1px solid var(--outline-retreat);
   margin-bottom: var(--spacing-s);
-  flex-shrink: 0;
+  border-bottom: 1px solid var(--outline-retreat);
+  padding-bottom: var(--spacing-s);
 }
 
 .spacer {
@@ -13,15 +13,15 @@
 }
 
 .count {
-  font: var(--font-label-small);
   color: var(--on-surface-variant);
+  font: var(--font-label-small);
 }
 
 .json {
-  font: 0.72rem/1.6 monospace;
-  color: var(--on-surface);
-  white-space: pre;
-  overflow-x: auto;
   margin: 0;
+  overflow-x: auto;
+  color: var(--on-surface);
+  font: 0.72rem/1.6 monospace;
+  white-space: pre;
   word-break: normal;
 }

@@ -124,11 +124,7 @@ export function ComposerSettingsControls({
             aria-label={`${t("chatbot.composerSettings.searchPolicyTitle")}: ${policyLabel}`}
           />
           {open === "policy" && (
-            <div
-              className={styles.popover}
-              role="dialog"
-              aria-label={t("chatbot.composerSettings.searchPolicyTitle")}
-            >
+            <div className={styles.popover} role="dialog" aria-label={t("chatbot.composerSettings.searchPolicyTitle")}>
               <p className={styles.popoverLabel}>{t("chatbot.composerSettings.searchPolicyTitle")}</p>
               <div className={styles.pillGroup} role="group">
                 {SEARCH_POLICIES.map((opt) => (
@@ -159,11 +155,7 @@ export function ComposerSettingsControls({
             aria-label={`${t("chatbot.composerSettings.scopeTitle")}: ${scopeLabel}`}
           />
           {open === "scope" && (
-            <div
-              className={styles.popover}
-              role="dialog"
-              aria-label={t("chatbot.composerSettings.scopeTitle")}
-            >
+            <div className={styles.popover} role="dialog" aria-label={t("chatbot.composerSettings.scopeTitle")}>
               <p className={styles.popoverLabel}>{t("chatbot.composerSettings.scopeTitle")}</p>
               <div className={styles.pillGroup} role="group">
                 {RAG_SCOPES.map((opt) => (
@@ -201,9 +193,7 @@ export function ComposerSettingsControls({
           {open === "libraries" && !isBound && (
             <div className={styles.popover} role="dialog" aria-label={t("chatbot.composerSettings.librariesTitle")}>
               <p className={styles.popoverLabel}>{t("chatbot.composerSettings.librariesTitle")}</p>
-              {isLoading && (
-                <p className={styles.popoverNote}>{t("chatbot.composerSettings.loading")}</p>
-              )}
+              {isLoading && <p className={styles.popoverNote}>{t("chatbot.composerSettings.loading")}</p>}
               {!isLoading && allTags.length === 0 && (
                 <p className={styles.popoverNote}>{t("chatbot.composerSettings.noLibrariesAvailable")}</p>
               )}

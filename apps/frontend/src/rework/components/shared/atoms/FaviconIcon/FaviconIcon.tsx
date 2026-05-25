@@ -39,24 +39,13 @@ export function FaviconIcon({ pageUrl, faviconUrl, alt = "", size = 16 }: Favico
 
   if (!src || failed) {
     return (
-      <span
-        className={`${styles.fallback} material-symbols-outlined`}
-        style={{ fontSize: size }}
-        aria-hidden
-      >
+      <span className={`${styles.fallback} material-symbols-outlined`} style={{ fontSize: size }} aria-hidden>
         description
       </span>
     );
   }
 
   return (
-    <img
-      src={src}
-      alt={alt}
-      width={size}
-      height={size}
-      className={styles.favicon}
-      onError={() => setFailed(true)}
-    />
+    <img src={src} alt={alt} width={size} height={size} className={styles.favicon} onError={() => setFailed(true)} />
   );
 }

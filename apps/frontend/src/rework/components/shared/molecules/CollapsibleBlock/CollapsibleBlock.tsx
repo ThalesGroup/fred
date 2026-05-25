@@ -63,21 +63,13 @@ export function CollapsibleBlock({
         aria-controls={contentId}
         onClick={toggle}
       >
-        <span
-          className={`${styles.chevron} material-symbols-outlined`}
-          aria-hidden
-        >
+        <span className={`${styles.chevron} material-symbols-outlined`} aria-hidden>
           chevron_right
         </span>
         <span className={styles.summary}>{summary}</span>
       </button>
 
-      <div
-        id={contentId}
-        ref={contentRef}
-        className={styles.content}
-        aria-hidden={!isOpen}
-      >
+      <div id={contentId} ref={contentRef} className={styles.content} aria-hidden={!isOpen}>
         <div className={styles.inner}>{children}</div>
       </div>
     </div>

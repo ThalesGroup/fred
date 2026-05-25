@@ -28,9 +28,7 @@ export function SourceCard({ source, index, onClick }: SourceCardProps) {
     <>
       <div className={styles.header}>
         <FaviconIcon faviconUrl={source.faviconUrl} pageUrl={source.url} size={14} />
-        {index !== undefined && (
-          <span className={styles.index}>{index}</span>
-        )}
+        {index !== undefined && <span className={styles.index}>{index}</span>}
         {source.restricted && <RestrictedBadge />}
       </div>
       <p className={styles.title}>{source.title}</p>

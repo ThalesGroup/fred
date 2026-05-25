@@ -1,6 +1,6 @@
 .tooltip-wrapper {
-  position: relative;
   display: inline-flex;
+  position: relative;
 }
 
 .tooltip-content {
@@ -8,20 +8,20 @@
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
+  visibility: hidden;
+  opacity: 0;
+  z-index: 10;
+  transition: opacity 100ms ease;
   margin: 0 0 var(--spacing-2xs) 0;
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background-color: var(--surface-container-highest);
   padding: var(--spacing-2xs) var(--spacing-s);
+  pointer-events: none;
   color: var(--on-surface);
   font: var(--font-label-large);
   white-space: nowrap;
-  pointer-events: none;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 100ms ease;
-  z-index: 10;
 }
 
 .tooltip-wrapper:hover .tooltip-content,

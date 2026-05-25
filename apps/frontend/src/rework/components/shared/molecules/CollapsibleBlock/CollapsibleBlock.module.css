@@ -6,15 +6,15 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  width: 100%;
-  background: none;
-  border: none;
-  padding: var(--spacing-xs) 0;
+  transition: color 120ms ease;
   cursor: pointer;
+  border: none;
+  background: none;
+  padding: var(--spacing-xs) 0;
+  width: 100%;
   color: var(--on-surface-retreat);
   font: var(--font-label-medium);
   text-align: left;
-  transition: color 120ms ease;
 }
 
 .trigger:hover {
@@ -28,9 +28,9 @@
 }
 
 .chevron {
-  font-size: 18px;
-  transition: transform 200ms ease-out;
   flex-shrink: 0;
+  transition: transform 200ms ease-out;
+  font-size: 18px;
 }
 
 .block[data-open="true"] .chevron {
@@ -42,9 +42,9 @@
 }
 
 .content {
+  transition: height 220ms ease-out;
   height: 0;
   overflow: hidden;
-  transition: height 220ms ease-out;
 }
 
 .block[data-open="true"] .content {

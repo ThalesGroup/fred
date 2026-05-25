@@ -82,22 +82,13 @@ export function ContextualPicker<T extends string = string>({
           {triggerPrefix && <span className={styles.prefix}>{triggerPrefix}</span>}
           {selected?.label}
         </span>
-        <span
-          className={`${styles.chevron} material-symbols-outlined`}
-          data-open={open}
-          aria-hidden
-        >
+        <span className={`${styles.chevron} material-symbols-outlined`} data-open={open} aria-hidden>
           expand_more
         </span>
       </button>
 
       {open && (
-        <ul
-          id={listId}
-          role="listbox"
-          className={styles.popover}
-          aria-label={triggerPrefix ?? "Options"}
-        >
+        <ul id={listId} role="listbox" className={styles.popover} aria-label={triggerPrefix ?? "Options"}>
           {options.map((opt) => (
             <li
               key={opt.value}
@@ -125,9 +116,7 @@ export function ContextualPicker<T extends string = string>({
               )}
               <span className={styles.optText}>
                 <span className={styles.optLabel}>{opt.label}</span>
-                {opt.description && (
-                  <span className={styles.optDesc}>{opt.description}</span>
-                )}
+                {opt.description && <span className={styles.optDesc}>{opt.description}</span>}
               </span>
               {opt.value === value && (
                 <span className={`${styles.check} material-symbols-outlined`} aria-hidden>

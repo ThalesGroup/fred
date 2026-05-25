@@ -1,8 +1,8 @@
 .controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-xs);
-  flex-wrap: wrap;
 }
 
 /* ── Chip + popover anchor ─────────────────────────────────────────────── */
@@ -12,18 +12,18 @@
 
 /* ── Popover — opens upward from the chip ──────────────────────────────── */
 .popover {
+  display: flex;
   position: absolute;
   bottom: calc(100% + var(--spacing-xs));
   left: 0;
-  z-index: 10;
-  display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-  min-width: 200px;
-  padding: var(--spacing-m);
-  background: var(--surface-container-high);
-  border-radius: var(--radius-l);
+  z-index: 10;
   box-shadow: var(--shadow-m);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-high);
+  padding: var(--spacing-m);
+  min-width: 200px;
   color: var(--on-surface);
 }
 
@@ -41,8 +41,8 @@
 
 .pillGroup {
   display: flex;
-  gap: var(--spacing-2xs);
   flex-wrap: wrap;
+  gap: var(--spacing-2xs);
 }
 
 /* ── Library list ──────────────────────────────────────────────────────── */
@@ -50,10 +50,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  max-height: 200px;
-  overflow-y: auto;
   margin: 0;
   padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
   list-style: none;
 }
 

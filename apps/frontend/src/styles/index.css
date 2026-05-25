@@ -215,8 +215,8 @@ body {
 
 /* ── Global scrollbar — thin, matches claude.com aesthetic ─────────────── */
 * {
-  scrollbar-width: thin;
   scrollbar-color: var(--outline-retreat) transparent;
+  scrollbar-width: thin;
 }
 
 *::-webkit-scrollbar {
@@ -229,8 +229,8 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--outline-retreat);
   border-radius: var(--radius-2xl);
+  background: var(--outline-retreat);
 }
 
 *::-webkit-scrollbar-thumb:hover {

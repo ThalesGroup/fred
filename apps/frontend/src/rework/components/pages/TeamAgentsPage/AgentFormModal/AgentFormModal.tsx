@@ -177,9 +177,7 @@ export default function AgentFormModal({
     // Locked servers are always active regardless of user toggle state.
     const lockedIds = (selectedTemplate?.mcp_servers ?? []).filter((s) => s.locked).map((s) => s.id);
     const effectiveSelection =
-      form.selectedMcpServerIds === null
-        ? null
-        : [...new Set([...form.selectedMcpServerIds, ...lockedIds])];
+      form.selectedMcpServerIds === null ? null : [...new Set([...form.selectedMcpServerIds, ...lockedIds])];
 
     await onSubmit({
       templateId: form.templateId,

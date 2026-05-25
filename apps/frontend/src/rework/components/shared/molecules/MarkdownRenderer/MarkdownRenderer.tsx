@@ -28,17 +28,32 @@ interface MarkdownRendererProps {
   onSourceClick?: (index: number) => void;
 }
 
+interface MdastNode {
+  type: string;
+  name?: string;
+  children?: MdastNode[];
+  data?: Record<string, unknown>;
+}
+
+interface HastNode {
+  type: string;
+  tagName?: string;
+  children?: HastNode[];
+  properties?: Record<string, unknown>;
+  value?: string;
+}
+
 /**
  * Remark plugin: map :::details[Title] container directives to native
  * <details><summary> elements via hast data properties.
  * Must run after remarkDirective (which parses the directive syntax).
  */
 function remarkDetailsDirective() {
-  return (tree: any) => {
-    walkMdast(tree, (node: any) => {
+  return (tree: MdastNode) => {
+    walkMdast(tree, (node: MdastNode) => {
       if (node.type !== "containerDirective" || node.name !== "details") return;
       node.data = { ...node.data, hName: "details" };
-      const label = node.children?.find((c: any) => c.type === "directiveLabel");
+      const label = node.children?.find((c: MdastNode) => c.type === "directiveLabel");
       if (label) {
         label.data = { ...label.data, hName: "summary" };
       }
@@ -46,7 +61,7 @@ function remarkDetailsDirective() {
   };
 }
 
-function walkMdast(node: any, visitor: (n: any) => void) {
+function walkMdast(node: MdastNode, visitor: (n: MdastNode) => void) {
   visitor(node);
   if (Array.isArray(node.children)) {
     for (const child of node.children) walkMdast(child, visitor);
@@ -62,10 +77,10 @@ function rehypeCitations() {
   const SKIP_TAGS = new Set(["code", "pre", "kbd", "samp"]);
   const RE = /\[(\d+)\]/g;
 
-  function processChildren(children: any[], parentTagName?: string): any[] {
+  function processChildren(children: HastNode[], parentTagName?: string): HastNode[] {
     if (parentTagName && SKIP_TAGS.has(parentTagName)) return children;
 
-    const result: any[] = [];
+    const result: HastNode[] = [];
     for (const child of children) {
       if (child.type === "element" && child.children) {
         result.push({ ...child, children: processChildren(child.children, child.tagName) });
@@ -96,7 +111,7 @@ function rehypeCitations() {
     return result;
   }
 
-  return (tree: any) => {
+  return (tree: { children?: HastNode[] }) => {
     if (tree.children) {
       tree.children = processChildren(tree.children);
     }

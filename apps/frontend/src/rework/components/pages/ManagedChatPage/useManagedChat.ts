@@ -160,6 +160,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const agentDisplayName = agentInstance?.display_name ?? "Agent";
   // Baseline capabilities available at mount — no message needed.
   const agentChatOptions = agentInstance?.effective_chat_options ?? null;
+  const agentChatOptionsRef = useRef(agentChatOptions);
+  agentChatOptionsRef.current = agentChatOptions;
 
   const composer = useComposerSettings(sessionId, agentChatOptions);
 
@@ -185,22 +187,27 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [setSearchParams],
   );
 
-  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, abort, reset, replaceAllMessages } = useChatSse({
-    agentInstanceId,
-    teamId,
-    onBindDraftAgentToSessionId: bindSessionId,
-    onTurnPersisted: (sid) => {
-      refreshSession({ teamId, sessionId: sid, updateSessionRequest: { updated_at: new Date().toISOString() } }).catch(
-        () => {},
-      );
-    },
-    onAwaitingHuman: (event) => setPendingHitl(event),
-    onError: (msg) => showError({ summary: "Agent error", detail: msg }),
-  });
+  const { messages, waitResponse, effectiveChatOptions, send, sendHitlResume, abort, reset, replaceAllMessages } =
+    useChatSse({
+      agentInstanceId,
+      teamId,
+      onBindDraftAgentToSessionId: bindSessionId,
+      onTurnPersisted: (sid) => {
+        refreshSession({
+          teamId,
+          sessionId: sid,
+          updateSessionRequest: { updated_at: new Date().toISOString() },
+        }).catch(() => {});
+      },
+      onAwaitingHuman: (event) => setPendingHitl(event),
+      onError: (msg) => showError({ summary: "Agent error", detail: msg }),
+    });
 
   useEffect(() => {
     if (skipResetOnSessionBindRef.current) {
-      console.debug(`[useManagedChat] sessionId changed → skipping reset (bound by handleSend) — sessionId=${sessionId ?? "null"}`);
+      console.debug(
+        `[useManagedChat] sessionId changed → skipping reset (bound by handleSend) — sessionId=${sessionId ?? "null"}`,
+      );
       skipResetOnSessionBindRef.current = false;
       return;
     }
@@ -209,8 +216,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setPendingHitl(null);
     setInput("");
     setSessionTitle(null);
-    composer.reset(sessionId, agentChatOptions);
-  }, [sessionId, reset]); // eslint-disable-line react-hooks/exhaustive-deps
+    composer.reset(sessionId, agentChatOptionsRef.current);
+  }, [sessionId, reset, composer.reset]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -227,7 +234,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const handleSend = useCallback(() => {
     const text = input.trim();
-    console.debug(`[useManagedChat] handleSend() — text="${text.slice(0, 40)}" waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`);
+    console.debug(
+      `[useManagedChat] handleSend() — text="${text.slice(0, 40)}" waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
+    );
     if (!text || waitResponse) {
       console.debug(`[useManagedChat] handleSend() BLOCKED — text=${!!text} waitResponse=${waitResponse}`);
       return;

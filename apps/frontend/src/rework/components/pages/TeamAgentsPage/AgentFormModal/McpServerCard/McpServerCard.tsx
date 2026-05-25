@@ -75,9 +75,7 @@ export function McpServerCard({
           <Switch checked={checked} onChange={onToggle} disabled={disabled || isLocked} />
         </span>
         <div className={styles.meta}>
-          <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>
-            {displayLabel}
-          </span>
+          <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{displayLabel}</span>
           {isLocked && <span className={styles.lockedBadge}>required</span>}
           {server.require_tools && server.require_tools.length > 0 && (
             <span className={styles.requireTools}>{server.require_tools.join(", ")}</span>
@@ -109,9 +107,7 @@ export function McpServerCard({
                 <div key={field.key} className={styles.fieldRow}>
                   <div className={styles.fieldLabel}>
                     <span className={styles.fieldTitle}>{field.title}</span>
-                    {field.description && (
-                      <span className={styles.fieldDescription}>{field.description}</span>
-                    )}
+                    {field.description && <span className={styles.fieldDescription}>{field.description}</span>}
                   </div>
                   <ButtonGroup
                     size="small"
